@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import http.client
-import io
 import json
 import math
 import socket
@@ -15,10 +14,10 @@ from contextlib import closing, suppress
 from http.client import HTTPConnection, HTTPException
 from pathlib import Path
 from threading import Timer
-from typing import Protocol, TypeGuard, cast
+from typing import TypeGuard, cast
 from urllib.parse import urlsplit
 
-from ..runtime.extension_control_limits import MAX_CATALOG_PAYLOAD_BYTES
+from ..runtime.extension_control_limits import MAX_DAEMON_CATALOG_RESPONSE_BYTES, MAX_DAEMON_GET_RESPONSE_BYTES
 from .manager import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
@@ -26,6 +25,7 @@ from .manager import (
     load_guard_daemon_url,
     load_running_guard_daemon_identity,
 )
+from .response_bounds import _bound_response_read, _ReadableResponse, _response_is_closed
 
 _HEALTH_PROBE_DEADLINE_SECONDS = 1.0
 
@@ -128,54 +128,7 @@ class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
-_MAX_GET_RESPONSE_BYTES: int = 1_048_576
-
-
-class _ReadableResponse(Protocol):
-    def read(self, n: int = -1) -> bytes: ...
-
-
-def _bound_response_read(response: object, timeout: float) -> bool:
-    """Apply a socket deadline before a blocking urllib response read."""
-
-    if isinstance(response, io.BytesIO):
-        return True
-    candidates: list[object] = [response]
-    seen: set[int] = set()
-    while candidates and len(seen) < 12:
-        candidate = candidates.pop(0)
-        if id(candidate) in seen:
-            continue
-        seen.add(id(candidate))
-        if isinstance(candidate, io.BytesIO):
-            return True
-        set_timeout = getattr(candidate, "settimeout", None)
-        if callable(set_timeout):
-            set_timeout(timeout)
-            return True
-        for attribute in ("fp", "raw", "_sock", "sock", "socket"):
-            nested = getattr(candidate, attribute, None)
-            if nested is not None:
-                candidates.append(nested)
-    return False
-
-
-def _response_is_closed(response: object) -> bool:
-    candidates: list[object] = [response]
-    seen: set[int] = set()
-    while candidates and len(seen) < 12:
-        candidate = candidates.pop(0)
-        if id(candidate) in seen:
-            continue
-        seen.add(id(candidate))
-        is_closed = getattr(candidate, "isclosed", None)
-        if callable(is_closed) and is_closed() is True:
-            return True
-        for attribute in ("fp", "raw"):
-            nested = getattr(candidate, attribute, None)
-            if nested is not None:
-                candidates.append(nested)
-    return False
+_MAX_GET_RESPONSE_BYTES: int = MAX_DAEMON_GET_RESPONSE_BYTES
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -279,11 +232,11 @@ class GuardSurfaceDaemonClient:
         return dict(operation) if _is_string_object_dict(operation) else response
 
     def extension_control_catalog(self) -> dict[str, object]:
-        # The catalog enumerates every built-in extension and has its own contract cap.
+        # The legacy full catalog enumerates every built-in extension and has its own local budget.
         return self._get(
             "/v1/extension-controls/catalog",
             timeout=_DEFAULT_REQUEST_TIMEOUT_S,
-            max_bytes=MAX_CATALOG_PAYLOAD_BYTES,
+            max_bytes=MAX_DAEMON_CATALOG_RESPONSE_BYTES,
         )
 
     def effective_extension_controls(self) -> dict[str, object]:
@@ -392,6 +345,8 @@ class GuardSurfaceDaemonClient:
         deadline: float,
         max_bytes: int = _MAX_GET_RESPONSE_BYTES,
     ) -> bytes:
+        if type(max_bytes) is not int or not 0 < max_bytes <= MAX_DAEMON_CATALOG_RESPONSE_BYTES:
+            raise ValueError("Guard daemon response limit must be a positive bounded integer")
         remaining = deadline - time.monotonic()
         if remaining <= 0.0:
             raise GuardDaemonTimeoutError("Guard daemon request timed out")

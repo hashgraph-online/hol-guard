@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import contextlib
 import json
+import math
 import os
 import signal
 import sys
@@ -38,7 +39,7 @@ def main() -> int:
         "--native-luna-route",
         action="store_true",
         help="Run OpenAI Luna (openai-codex/gpt-5.6-luna) through the existing Oh My Pi ChatGPT login; "
-        "medium effort unless --reasoning-effort high",
+        "medium effort unless --reasoning-effort high or low",
     )
     run.add_argument("--sdk-root", type=Path, help="Pinned SDK directory for --native-luna-route (default: from omp)")
     run.add_argument("--case", action="append", dest="cases", help="Targeted runs are never full-profile qualification")
@@ -50,6 +51,35 @@ def main() -> int:
         help="Concurrent isolated case workers (1-8; default 1 runs cases sequentially in-process)",
     )
     run.add_argument("--max-inference-rounds", type=int, default=32)
+    run.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Stop scheduling new cases after the first non-pass outcome; in-flight cases finish normally",
+    )
+    run.add_argument(
+        "--host-slots",
+        type=int,
+        default=os.environ.get("GUARD_GAUNTLET_HOST_SLOTS"),
+        help="Host-wide cap on running cases via shared slot files (1-64; POSIX only)",
+    )
+    run.add_argument(
+        "--slot-dir",
+        type=Path,
+        default=os.environ.get("GUARD_GAUNTLET_SLOT_DIR"),
+        help="Directory of host slot files (default ~/.cache/hol-guard-gauntlet/slots)",
+    )
+    run.add_argument(
+        "--max-load",
+        type=float,
+        default=os.environ.get("GUARD_GAUNTLET_MAX_LOAD"),
+        help="Start new cases only while the 1-minute host load average is at or below this (POSIX only)",
+    )
+    run.add_argument(
+        "--max-load-wait",
+        type=float,
+        default=os.environ.get("GUARD_GAUNTLET_MAX_LOAD_WAIT"),
+        help="Total seconds to wait on host load before proceeding anyway (default 180; requires --max-load)",
+    )
     run.add_argument("--omp", help="Path to the repository-pinned Oh My Pi executable")
     run.add_argument(
         "--harness",
@@ -87,6 +117,48 @@ def main() -> int:
     verify.add_argument(
         "--exploratory", action="store_true", help="Do not treat old-runtime exploration as merge proof"
     )
+    qualify = sub.add_parser(
+        "qualify", help="Cached build-and-run qualification driver; run it from a trusted main checkout"
+    )
+    qualify.add_argument("--sha", required=True, help="Full commit of the tested source or test merge")
+    qualify.add_argument("--candidate-sha", help="PR head when qualifying its exact two-parent test merge")
+    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-3)")
+    qualify.add_argument("--jobs", type=int, default=4)
+    qualify.add_argument(
+        "--host-slots",
+        type=int,
+        default=os.environ.get("GUARD_GAUNTLET_HOST_SLOTS") or 8,
+        help="Host-wide cap on running cases (1-64)",
+    )
+    qualify.add_argument(
+        "--max-load",
+        type=float,
+        default=2.0 * (os.cpu_count() or 1),
+        help="Start new cases only while the 1-minute host load average is at or below this",
+    )
+    qualify.add_argument(
+        "--max-load-wait",
+        type=float,
+        default=180.0,
+        help="Total seconds to wait on host load before proceeding anyway",
+    )
+    qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
+    qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
+    qualify.add_argument(
+        "--run-root",
+        type=Path,
+        help="New directory for this driver's work and evidence (default /tmp/hol-guard-gauntlet-<uid>/<sha>-<stamp>)",
+    )
+    qualify.add_argument(
+        "--work-parent",
+        type=Path,
+        help="Parent for the short per-attempt fixture work directories (default /tmp/hol-guard-gauntlet-<uid>/w)",
+    )
+    qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
+    qualify.add_argument("--sdk-root", type=Path, help="Pinned SDK directory; skips the lock-keyed SDK cache")
+    qualify.add_argument("--keep-work", action="store_true", help="Keep passing attempts' work roots")
+    qualify.add_argument("--timeout", type=float, default=300)
+    qualify.add_argument("--max-inference-rounds", type=int, default=32)
     args = parser.parse_args()
     try:
         if args.command == "list":
@@ -131,6 +203,10 @@ def main() -> int:
                 )
             )
             return 0
+        if args.command == "qualify":
+            from .qualify import main as qualify_main
+
+            return qualify_main(args)
         if args.harness != "omp":
             return _run_harness(args)
         if args.harness_cli or args.harness_model:
@@ -150,7 +226,7 @@ def main() -> int:
         # argparse does not apply choices to an environment-supplied default.
         if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
             raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
-        from .parallel import validate_jobs
+        from .parallel import MAX_SLOTS, validate_jobs
 
         validate_jobs(args.jobs)
         if args.profile == "contained-bun-vitest" and args.jobs != 1:
@@ -161,6 +237,24 @@ def main() -> int:
             raise ValueError("--profile contained-bun-vitest requires --contained-test-project")
         if args.profile == "contained-bun-vitest" and args.cases:
             raise ValueError("--case is only supported by the core profile")
+        if args.profile == "contained-bun-vitest" and (
+            args.fail_fast or args.host_slots is not None or args.max_load is not None
+        ):
+            raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the core profile")
+        if args.slot_dir is not None and args.host_slots is None:
+            raise ValueError("--slot-dir requires --host-slots")
+        if args.host_slots is not None and not 1 <= args.host_slots <= MAX_SLOTS:
+            raise ValueError(f"--host-slots must be an integer from 1 to {MAX_SLOTS}")
+        if args.host_slots is not None and os.name == "nt":
+            raise ValueError("--host-slots requires a POSIX host")
+        if args.max_load is not None and not (math.isfinite(args.max_load) and args.max_load > 0):
+            raise ValueError("--max-load must be a positive finite number")
+        if args.max_load is not None and os.name == "nt":
+            raise ValueError("--max-load requires a POSIX host")
+        if args.max_load_wait is not None and not (math.isfinite(args.max_load_wait) and args.max_load_wait >= 0):
+            raise ValueError("--max-load-wait must be a finite number >= 0")
+        if args.max_load_wait is not None and args.max_load is None:
+            raise ValueError("--max-load-wait requires --max-load")
         api_key = os.environ.pop(args.api_key_env, None)
         if not api_key and not args.allow_loopback_provider and not args.native_luna_route:
             raise ValueError("configure a dedicated inference API key; missing inference cannot pass")
@@ -214,6 +308,11 @@ def main() -> int:
                     work_root=args.work_root,
                     candidate_sha=args.candidate_sha,
                     jobs=args.jobs,
+                    fail_fast=args.fail_fast,
+                    host_slots=args.host_slots,
+                    slot_dir=args.slot_dir,
+                    max_load=args.max_load,
+                    max_load_wait=args.max_load_wait if args.max_load_wait is not None else 180.0,
                 )
         print(
             json.dumps(
@@ -244,6 +343,8 @@ def _run_harness(args: argparse.Namespace) -> int:
         or args.omp
     ):
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
+    if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
+        raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
     if args.profile != "core":
         raise ValueError("--harness supports only the core profile")
     if not 30 <= args.timeout <= 1800:

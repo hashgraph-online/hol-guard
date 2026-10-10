@@ -22,7 +22,7 @@ def test_scenario_labels_do_not_influence_fixture_path_risk():
 
     names = [scenario_fixture_name(scenario.id) for scenario in load_catalog()]
     assert len(names) == len(set(names))
-    assert all(re.fullmatch(r"case-[0-9a-f]{16}", name) for name in names)
+    assert all(re.fullmatch(r"case-[0-9]{2,}", name) for name in names)
 
 
 def test_compact_fixture_paths_preserve_absolute_command_operands(tmp_path):

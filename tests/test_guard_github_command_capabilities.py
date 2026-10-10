@@ -1070,3 +1070,30 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
     assert match is not None
     assert match.action_class == action_class
     assert "confirm" in match.reason.lower()
+
+
+def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_github_cli
+    from codex_plugin_scanner.guard.runtime import github_command_capabilities as bridge
+
+    answers: list[native_github_cli.NativeGitHubCliClassification | None] = [
+        None,
+        native_github_cli.NativeGitHubCliClassification("read_remote", "github.read", "ok", ("read_remote",), None),
+    ]
+    calls: list[tuple[str, ...]] = []
+
+    def fake(
+        args: tuple[str, ...] | list[str], **_kwargs: object
+    ) -> native_github_cli.NativeGitHubCliClassification | None:
+        calls.append(tuple(args))
+        return answers[min(len(calls), len(answers)) - 1]
+
+    monkeypatch.setattr(native_github_cli, "github_cli_classify_native", fake)
+    monkeypatch.setattr(bridge, "_NATIVE_CACHE", {})
+    args = ("pr", "view", "1")
+
+    assert bridge.classify_github_cli(args).capability == "unknown"
+    assert bridge.classify_github_cli(args).capability == "read_remote"
+    assert bridge.classify_github_cli(args).capability == "read_remote"
+    assert bridge.static_markdown_pr_body_file_operand(args) is None
+    assert len(calls) == 2
