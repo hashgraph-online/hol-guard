@@ -66,6 +66,35 @@ _PAYLOAD_KEYS = frozenset(
     }
 )
 
+_TEXT = (str,)
+_OPTIONAL_TEXT = (str, type(None))
+# Required fields (and accepted types) of each effect the resident may name.
+_NEED_FIELDS: dict[str, dict[str, tuple[type, ...]]] = {
+    "provider_choices": {},
+    "provider_authority_hash": {},
+    "extension_decision": {"action": _TEXT},
+    "grant_lookup": {"harness": _TEXT, "selector": _TEXT},
+    "policy_lookup": {
+        "harness": _TEXT,
+        "artifact_id": _TEXT,
+        "artifact_hash": _TEXT,
+        "workspace": _OPTIONAL_TEXT,
+        "publisher": _OPTIONAL_TEXT,
+        "runtime_exact_match_context": _OPTIONAL_TEXT,
+        "memory_command": _OPTIONAL_TEXT,
+        "memory_artifact_type": _OPTIONAL_TEXT,
+        "memory_artifact_name": _OPTIONAL_TEXT,
+    },
+    "reuse_diagnostic": {
+        "harness": _TEXT,
+        "artifact_id": _TEXT,
+        "artifact_hash": _TEXT,
+        "workspace": _OPTIONAL_TEXT,
+        "publisher": _OPTIONAL_TEXT,
+    },
+    "claim": {"decision": (dict,)},
+}
+
 FreshAuthority = tuple["GuardConfig", "GuardArtifact", str, object]
 FreshAuthorityProvider = Callable[[], FreshAuthority | None]
 
@@ -195,23 +224,21 @@ class _Effects:
         self.artifact = artifact
         self.stack = ExitStack()
         self.stack.enter_context(store.connection_scope())
-        # A claim failure is decided (uncertain) by Rust and never retried; its
-        # poisoned scope re-raise must not turn that decision into an exception.
-        self.uncertain: BaseException | None = None
 
     def close(self) -> None:
-        try:
-            self.stack.close()
-        except BaseException as error:
-            if error is not self.uncertain:
-                raise
+        # A fatal or I/O storage failure poisons the connection scope and is
+        # re-raised here so storage recovery runs; it is never swallowed.
+        self.stack.close()
 
     def run(self, need: Mapping[str, Any]) -> object:
         kind = need.get("kind")
-        handler = getattr(self, f"_need_{kind}", None) if isinstance(kind, str) else None
-        if handler is None:
+        fields = _NEED_FIELDS.get(kind) if isinstance(kind, str) else None
+        if fields is None:
             raise NativeMcpToolPolicyError("need_unknown")
-        return handler(need)
+        for key, types in fields.items():
+            if key not in need or not isinstance(need[key], types):
+                raise NativeMcpToolPolicyError("need_invalid")
+        return getattr(self, f"_need_{kind}")(need)
 
     def _need_provider_choices(self, _need: Mapping[str, Any]) -> object:
         return _json_value(dict(self.store.read_mcp_provider_choices()))
@@ -265,8 +292,9 @@ class _Effects:
     def _need_claim(self, need: Mapping[str, Any]) -> object:
         try:
             claimed = self.store.claim_approval_reuse_decision(need["decision"])
-        except Exception as error:
-            self.uncertain = error
+        except Exception:
+            # Rust decides an uncertain claim and it is never retried. A fatal
+            # storage error still poisons the scope and surfaces from close().
             return {"outcome": "uncertain"}
         return {"outcome": "claimed" if claimed is True else "declined"}
 

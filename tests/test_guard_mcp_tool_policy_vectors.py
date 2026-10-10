@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import copy
 import json
+import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -218,10 +219,7 @@ def test_resident_reproduces_recorded_python_decision(vector, monkeypatch, nativ
         if provided:
             assert decision.post_claim_authority.artifact_hash == provided[-1][2]
         else:
-            assert decision.post_claim_authority.artifact_hash in {
-                artifact_hash,
-                decision.post_claim_authority.artifact_hash,
-            }
+            assert decision.post_claim_authority.artifact_hash == artifact_hash
 
 
 def test_uncertain_claim_is_terminal_and_never_retried(monkeypatch, native_context_digest: Path) -> None:
@@ -284,3 +282,64 @@ def test_storage_read_failure_fails_closed(monkeypatch, native_context_digest: P
             artifact_hash=artifact_hash,
             arguments=arguments,
         )
+
+
+class _ScopeStore:
+    """Minimal store whose connection scope re-raises a poisoned failure on exit."""
+
+    def __init__(self, failure: BaseException | None = None) -> None:
+        self.failure = failure
+        self.claims = 0
+
+    @contextmanager
+    def connection_scope(self):
+        try:
+            yield
+        finally:
+            if self.failure is not None:
+                raise self.failure
+
+    def claim_approval_reuse_decision(self, _decision):
+        self.claims += 1
+        raise self.failure or RuntimeError("claim failed")
+
+
+@pytest.mark.parametrize(
+    "need",
+    [
+        {"kind": "extension_decision"},
+        {"kind": "extension_decision", "action": 3},
+        {"kind": "grant_lookup", "harness": "codex"},
+        {"kind": "policy_lookup", "harness": "codex", "artifact_id": "a", "artifact_hash": "h"},
+        {"kind": "reuse_diagnostic", "harness": "codex", "artifact_id": 1, "artifact_hash": "h"},
+        {"kind": "claim"},
+        {"kind": "claim", "decision": "row"},
+    ],
+)
+def test_malformed_need_fails_closed_with_typed_error(need) -> None:
+    effects = native_mcp_tool_policy._Effects(_ScopeStore(), artifact=None)  # type: ignore[arg-type]
+    try:
+        with pytest.raises(native_mcp_tool_policy.NativeMcpToolPolicyError) as raised:
+            effects.run(need)
+    finally:
+        effects.close()
+    assert raised.value.code == "need_invalid"
+
+
+def test_unknown_need_kind_is_rejected() -> None:
+    effects = native_mcp_tool_policy._Effects(_ScopeStore(), artifact=None)  # type: ignore[arg-type]
+    try:
+        with pytest.raises(native_mcp_tool_policy.NativeMcpToolPolicyError) as raised:
+            effects.run({"kind": "bogus"})
+    finally:
+        effects.close()
+    assert raised.value.code == "need_unknown"
+
+
+def test_fatal_claim_failure_reaches_storage_recovery() -> None:
+    failure = sqlite3.DatabaseError("database disk image is malformed")
+    effects = native_mcp_tool_policy._Effects(_ScopeStore(failure), artifact=None)  # type: ignore[arg-type]
+    assert effects.run({"kind": "claim", "decision": {"action": "allow"}}) == {"outcome": "uncertain"}
+    with pytest.raises(sqlite3.DatabaseError) as raised:
+        effects.close()
+    assert raised.value is failure

@@ -7,6 +7,7 @@
 use serde_json::{Map, Value};
 
 use crate::context_digest::python_strip;
+use crate::skill_identity_canon::casefold;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Role {
@@ -15,28 +16,6 @@ pub(crate) enum Role {
     Workbench,
     Connections,
     Unknown,
-}
-
-/// Case folding relevant to ASCII identifiers: every code point whose full
-/// Unicode case fold is ASCII is mapped here, so equality against an ASCII
-/// string matches Python `str.casefold`.
-pub(crate) fn casefold(text: &str) -> String {
-    let mut folded = String::with_capacity(text.len());
-    for ch in text.chars() {
-        match ch {
-            '\u{17f}' => folded.push('s'),
-            '\u{212a}' => folded.push('k'),
-            '\u{df}' | '\u{1e9e}' => folded.push_str("ss"),
-            '\u{fb00}' => folded.push_str("ff"),
-            '\u{fb01}' => folded.push_str("fi"),
-            '\u{fb02}' => folded.push_str("fl"),
-            '\u{fb03}' => folded.push_str("ffi"),
-            '\u{fb04}' => folded.push_str("ffl"),
-            '\u{fb05}' | '\u{fb06}' => folded.push_str("st"),
-            other => folded.extend(other.to_lowercase()),
-        }
-    }
-    folded
 }
 
 pub(crate) fn tool_role(tool_name: &str) -> Option<Role> {

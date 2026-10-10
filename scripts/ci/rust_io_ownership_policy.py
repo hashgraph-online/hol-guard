@@ -75,8 +75,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
-        # Same correlation-only digest for the approval-proof resident op.
-        "src/codex_plugin_scanner/guard/native_approval_proof.py",
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
@@ -110,9 +108,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
-        # Decodes the bounded resident approval-proof response; the answer is
-        # strictly validated and never reinterpreted into a decision.
-        "src/codex_plugin_scanner/guard/native_approval_proof.py",
         # Decodes the bounded resident MCP tool-policy envelope; the decision
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
