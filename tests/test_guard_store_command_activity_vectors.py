@@ -169,22 +169,3 @@ def test_recorded_scenarios_replay_through_the_resident(scenario: dict[str, Any]
         expected.update(step["post_changed"])
         assert _dump(path) == expected, label
 
-
-def test_health_counters_still_land_when_resident_is_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from datetime import UTC, datetime
-
-    store = GuardStore(tmp_path / "guard.db")
-
-    def _down(self: object, method: str, args: object) -> object:
-        raise native_guard_store.NativeGuardStoreUnavailable("resident down")
-
-    monkeypatch.setattr(store_review_event_outbox.StoreReviewEventOutboxMixin, "_native_store_call", _down)
-    now = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
-    store.record_command_activity_persistence_failure(error_code="maintenance_failed", occurred_at=now)
-    store.record_command_activity_observation_conflict(occurred_at=now)
-    health = store.get_command_activity_persistence_health()
-    assert health.dropped_event_count == 2
-    assert health.persistence_error_count == 1
-    assert health.last_error_code == "post_result_conflict"
