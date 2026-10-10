@@ -306,7 +306,7 @@ fn is_python_space(ch: char) -> bool {
     )
 }
 
-fn python_strip(text: &str) -> &str {
+pub(crate) fn python_strip(text: &str) -> &str {
     text.trim_matches(|ch: char| is_python_space(ch))
 }
 
