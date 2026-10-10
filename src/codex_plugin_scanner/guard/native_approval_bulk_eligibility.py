@@ -9,6 +9,7 @@ recomputed in Python, so an unavailable resident can never approve a request.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from uuid import uuid4
@@ -56,6 +57,59 @@ def _item(request: Mapping[str, object]) -> dict[str, object]:
     return {field: _json_value(request.get(field)) for field in _FIELDS}
 
 
+def _wire_bytes(items: Sequence[Mapping[str, object]], *, home_dir: str) -> int:
+    """Byte length of the envelope `_resident_request` actually sends."""
+
+    envelope = {
+        "operation": "approval_bulk_eligibility",
+        "request": {
+            "schema": _REQUEST_SCHEMA,
+            "request_id": "approval-bulk-eligibility-" + ("0" * 32),
+            "home_dir": home_dir,
+            "items": [dict(item) for item in items],
+        },
+        "deadline_budget_ms": max(1, int(_TIMEOUT_SECONDS * 1000)),
+    }
+    try:
+        encoded = json.dumps(envelope).encode("utf-8")
+    except (TypeError, ValueError):
+        raise ApprovalBulkEligibilityUnavailableError from None
+    return len(encoded)
+
+
+def _eligible_chunks(
+    items: Sequence[Mapping[str, object]], *, home_dir: str
+) -> tuple[list[bool | None], list[list[int]]]:
+    """Pack items under the count and byte caps.
+
+    An item that cannot fit in a call by itself is ineligible. The other items
+    are still sent. A resident outage is not invented here.
+    """
+
+    verdicts: list[bool | None] = [None] * len(items)
+    chunks: list[list[int]] = []
+    current: list[int] = []
+    for index, item in enumerate(items):
+        if _wire_bytes([item], home_dir=home_dir) > _MAX_REQUEST_BYTES:
+            verdicts[index] = False
+            continue
+        if not current:
+            current = [index]
+            continue
+        proposed = [*current, index]
+        over_count = len(proposed) > _MAX_ITEMS
+        proposed_items = [items[item_index] for item_index in proposed]
+        over_bytes = _wire_bytes(proposed_items, home_dir=home_dir) > _MAX_REQUEST_BYTES
+        if over_count or over_bytes:
+            chunks.append(current)
+            current = [index]
+        else:
+            current = proposed
+    if current:
+        chunks.append(current)
+    return verdicts, chunks
+
+
 def native_bulk_allow_once_eligibility(
     requests: Sequence[Mapping[str, object]],
     *,
@@ -68,14 +122,15 @@ def native_bulk_allow_once_eligibility(
     home = Path(guard_home)
     if not ensure_resident_prerequisite(home):
         raise ApprovalBulkEligibilityUnavailableError
-    results: list[bool] = []
-    for start in range(0, len(requests), _MAX_ITEMS):
-        chunk = requests[start : start + _MAX_ITEMS]
+    prepared = [_item(request) for request in requests]
+    home_dir = str(Path.home())
+    verdicts, chunks = _eligible_chunks(prepared, home_dir=home_dir)
+    for chunk in chunks:
         wire: dict[str, object] = {
             "schema": _REQUEST_SCHEMA,
             "request_id": f"approval-bulk-eligibility-{uuid4().hex}",
-            "home_dir": str(Path.home()),
-            "items": [_item(request) for request in chunk],
+            "home_dir": home_dir,
+            "items": [dict(prepared[index]) for index in chunk],
         }
         try:
             response = _resident_request(
@@ -94,9 +149,11 @@ def native_bulk_allow_once_eligibility(
         reply = payload.get("items") if payload is not None else None
         if not isinstance(reply, list) or len(reply) != len(chunk):
             raise ApprovalBulkEligibilityUnavailableError
-        for entry in reply:
+        for index, entry in zip(chunk, reply, strict=True):
             eligible = entry.get("eligible") if isinstance(entry, dict) else None
             if not isinstance(eligible, bool):
                 raise ApprovalBulkEligibilityUnavailableError
-            results.append(eligible)
-    return results
+            verdicts[index] = eligible
+    if any(verdict is None for verdict in verdicts):
+        raise ApprovalBulkEligibilityUnavailableError
+    return [verdict is True for verdict in verdicts]

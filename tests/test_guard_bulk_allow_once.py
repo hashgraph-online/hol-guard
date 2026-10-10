@@ -24,6 +24,12 @@ from codex_plugin_scanner.guard.approvals import (
 )
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_bulk_eligibility import (
+    _MAX_REQUEST_BYTES,
+    _item,
+    _wire_bytes,
+    native_bulk_allow_once_eligibility,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import totp_code_at_counter
 
@@ -630,3 +636,50 @@ def test_bulk_allow_read_once_daemon_route(tmp_path: Path) -> None:
         assert store.get_approval_request("req-plain")["status"] == "resolved"
     finally:
         daemon.stop()
+
+
+def test_bulk_allow_splits_large_prompts_and_skips_one_that_cannot_fit(tmp_path: Path) -> None:
+    """Prompts that exceed one resident call still approve.
+
+    A prompt that cannot fit in a call by itself is ineligible and is not sent.
+    The other request in that call is still judged.
+    """
+
+    store = _store(tmp_path)
+    _enable_gate(store)
+    bulky = "routine context " * 50_000
+    request_ids = [f"req-large-{index}" for index in range(6)]
+    for request_id in request_ids:
+        store.add_approval_request(
+            _shell_request(request_id, command="npm test", prompt_text=bulky),
+            "2026-06-16T00:00:00+00:00",
+        )
+    stored = [store.get_approval_request(request_id) for request_id in request_ids]
+    assert all(row is not None for row in stored)
+    together = [_item(row) for row in stored]
+    assert _wire_bytes(together, home_dir=str(Path.home())) > _MAX_REQUEST_BYTES
+
+    oversized = dict(stored[0])
+    envelope = oversized["action_envelope_json"]
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    envelope = dict(envelope)
+    envelope["prompt_text"] = "routine context " * 300_000
+    oversized["action_envelope_json"] = envelope
+    verdicts = native_bulk_allow_once_eligibility(
+        [oversized, stored[1]],
+        guard_home=store.guard_home,
+    )
+    assert verdicts == [False, True]
+
+    split = bulk_allow_read_only_once(
+        store=store,
+        request_ids=request_ids,
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        now="2026-06-16T00:01:00+00:00",
+    )
+
+    assert split["resolved_count"] == 6
+    assert split["failed"] == []
+    for request_id in request_ids:
+        assert store.get_approval_request(request_id)["status"] == "resolved"

@@ -20,6 +20,7 @@ use serde_json::{json, Map, Value};
 
 use crate::approval_queue_identity_op::{is_truthy, py_str};
 use crate::package_authority_op::request_digest_with_limit;
+use crate::policy_bundle_py::is_py_space;
 
 const SECRET_TEXT_HINTS: [&str; 11] = [
     "credential",
@@ -249,11 +250,6 @@ fn is_word_char(character: char) -> bool {
     let mut buffer = [0_u8; 4];
     WORD.get_or_init(|| Regex::new(r"^[\p{L}\p{N}_]$").expect("static pattern"))
         .is_match(character.encode_utf8(&mut buffer))
-}
-
-/// Python `\s`: Unicode white space plus the C0 separators `str.isspace` adds.
-fn is_py_space(character: char) -> bool {
-    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
 }
 
 fn keyword_at(chars: &[char], start: usize, keyword: &str) -> Option<usize> {
