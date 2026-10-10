@@ -1,7 +1,7 @@
-"""Bounded browser proof-envelope validators for native approval V4.
+"""V4 browser-envelope key sets for native approval.
 
-This module mirrors the Portal transport shape only. Rust remains authoritative
-for WebAuthn semantics, cryptography, policy, replay, and approval decisions.
+Rust remains authoritative for WebAuthn semantics, cryptography, policy,
+replay, and approval decisions.
 """
 
 from __future__ import annotations

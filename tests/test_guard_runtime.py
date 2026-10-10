@@ -60,6 +60,8 @@ from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAutho
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
 from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from codex_plugin_scanner.guard.policy_bundle_parser import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
     validated_policy_bundle_payload,
 )
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
@@ -22272,6 +22274,74 @@ def test_cached_policy_bundle_revalidation_rejects_expired_last_known_good(tmp_p
 
     assert validated is None
     assert reason == "bundle_expired"
+
+
+def test_materialized_policy_bundle_decision_requires_current_cached_signature(tmp_path):
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-04-19T00:00:00Z")
+    store.replace_remote_policies(
+        [
+            PolicyDecision(
+                harness="codex",
+                scope="harness",
+                action="allow",
+                artifact_id="family:package-request",
+                source="policy-bundle",
+                owner="signed-package-allow",
+                reason="Test-only signed policy decision.",
+            )
+        ],
+        "2026-04-19T00:00:00Z",
+        remote_write_authorized=True,
+    )
+    policy_bundle = sign_policy_bundle(
+        {
+            "contractVersion": "guard-policy-bundle.v1",
+            "bundleVersion": "policy-2026-04-19.1",
+            "issuedAt": "2026-04-19T00:00:00Z",
+            "expiresAt": None,
+            "verifier": {},
+            "rolloutState": "enforcing",
+            "policyDefaults": {
+                "mode": "enforce",
+                "defaultAction": "block",
+                "unknownPublisherAction": "block",
+                "changedHashAction": "block",
+                "newNetworkDomainAction": "block",
+                "subprocessAction": "block",
+                "telemetryEnabled": False,
+                "syncEnabled": True,
+            },
+            "rules": [
+                {
+                    "ruleId": "signed-package-allow",
+                    "action": "allow",
+                    "reason": "Test-only signed policy decision.",
+                    "artifactType": "package_request",
+                    "matcherFamilies": ["package-request"],
+                    "scope": {"harnesses": ["codex"], "ecosystems": []},
+                }
+            ],
+            "acknowledgements": [],
+        }
+    )
+    digest_bundle = dict(policy_bundle)
+    digest_bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "legacy-digest-only",
+        "signature": None,
+    }
+    digest_bundle["bundleHash"] = computed_policy_bundle_hash(digest_bundle)
+    digest_bundle["payloadHash"] = payload_hash_for_policy_bundle(digest_bundle)
+    digest_bundle["verifier"]["signature"] = digest_bundle["payloadHash"]
+    store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-19T00:00:00Z")
+
+    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") is None
+
+    store.set_sync_payload("policy_bundle", policy_bundle, "2026-04-19T00:00:01Z")
+
+    assert store.resolve_policy("codex", "codex:project:package-request:test", "sha256:test") == "allow"
 
 
 def test_cached_and_last_good_policy_bundle_preserve_signed_empty_optional_fields(tmp_path):

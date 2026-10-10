@@ -1,7 +1,7 @@
-"""Bounded Portal-compatible transport validators for native approval V4.
+"""V4 transport key sets for native approval.
 
-This module only validates browser-envelope shape. Rust remains authoritative
-for WebAuthn parsing, cryptography, policy, replay, and approval semantics.
+Rust remains authoritative for WebAuthn parsing, cryptography, policy,
+replay, and approval semantics.
 """
 
 from __future__ import annotations
