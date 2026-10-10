@@ -3,10 +3,25 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
+
+
+@pytest.fixture(autouse=True)
+def _claude_on_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Hook health is only meaningful when the app binary resolves, as on a real install."""
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    claude = bin_dir / "claude"
+    claude.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    claude.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}")
 
 
 def _installed(tmp_path: Path) -> tuple[ClaudeCodeHarnessAdapter, HarnessContext, Path]:
