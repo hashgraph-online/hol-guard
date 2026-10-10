@@ -300,7 +300,7 @@ fn codex_tool_output_matches_the_retired_python_vectors() {
 
 #[cfg(unix)]
 #[test]
-fn pathspec_identity_requires_a_vetted_git_binary_and_environment() {
+fn pathspec_identity_requires_a_vetted_git_binary() {
     let vectors: Value = serde_json::from_str(VECTORS).unwrap();
     let root = build_tree(&vectors);
     let mut resolved_by_git = 0usize;

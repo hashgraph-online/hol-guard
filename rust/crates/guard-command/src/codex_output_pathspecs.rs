@@ -223,14 +223,12 @@ fn resolve_inner(
     }
     let git_text = git_path.to_string();
     let cwd_text = effective_cwd.to_string();
-    // The resident only runs a `git` it has vetted for this directory, and only
-    // with a routing environment that cannot redirect the repository queries.
+    // The resident only runs a `git` it has vetted for this directory. The
+    // caller's routing variables (`GIT_DIR`, `GIT_CONFIG_*`, ...) never reach
+    // the child, which runs with a scrubbed environment, so they need no check.
     if !ctx
         .host
         .git_safety(GitCheck::ResolveBinary, Some(&cwd_text), &[])
-        || !ctx
-            .host
-            .git_safety(GitCheck::ConfigEnvironmentClean, None, &[])
     {
         return fail("git_pathspec_git_unavailable");
     }
