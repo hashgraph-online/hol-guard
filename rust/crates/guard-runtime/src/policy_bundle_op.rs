@@ -94,11 +94,41 @@ pub(crate) fn object_document(input: &Obj, name: &str) -> Result<Obj, Fail> {
     }
 }
 
+/// Counts bytes without keeping them.
+struct Counter(usize);
+
+impl std::io::Write for Counter {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0 = self.0.saturating_add(buf.len());
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Worst-case growth of the ASCII-escaped canonical text over the compact wire
+/// text: a control character (1 byte) becomes a 6-byte `\u00XX` escape.
+const ESCAPE_GROWTH: usize = 6;
+
 fn request_digest(request: &PolicyBundleAuthorityRequestV1) -> Result<String, &'static str> {
     let material = serde_json::to_value(request).map_err(|_| INVALID)?;
+    // The cap is on the request as sent, not on the ASCII-escaped text the
+    // digest is taken over: non-ASCII text escapes to up to 12 bytes per
+    // character and must not turn a valid request into an invalid one.
+    let mut wire = Counter(0);
+    serde_json::to_writer(&mut wire, &material).map_err(|_| INVALID)?;
+    if wire.0 > POLICY_BUNDLE_AUTHORITY_MAX_BYTES {
+        return Err(INVALID);
+    }
     let mut bytes = Vec::new();
-    write_canonical_json_with_limit(&material, &mut bytes, POLICY_BUNDLE_AUTHORITY_MAX_BYTES)
-        .map_err(|_| INVALID)?;
+    write_canonical_json_with_limit(
+        &material,
+        &mut bytes,
+        POLICY_BUNDLE_AUTHORITY_MAX_BYTES * ESCAPE_GROWTH,
+    )
+    .map_err(|_| INVALID)?;
     Ok(format!("sha256:{}", digest_bytes(&bytes)))
 }
 

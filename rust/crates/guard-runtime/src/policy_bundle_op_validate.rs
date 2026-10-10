@@ -7,6 +7,7 @@ use crate::policy_bundle_op::{
     document, field, keys_field, number_field, object_document, optional_text, text_field, Fail,
     Handled,
 };
+use crate::policy_bundle_op_page::{page_offset, page_text};
 use crate::policy_bundle_py::{obj, Obj};
 use crate::policy_bundle_v1 as v1;
 use crate::policy_bundle_v2 as v2;
@@ -62,11 +63,6 @@ fn validate_v2(input: &Obj) -> Handled {
     }
 }
 
-fn utf8(bytes: Vec<u8>) -> Handled {
-    let text = String::from_utf8(bytes).map_err(|_| Fail::from("invalid_json_value"))?;
-    Ok(json!({ "value": text }))
-}
-
 fn transition(input: &Obj) -> Handled {
     let bundle = object_document(input, "bundle_chunks")?;
     let present = |name: &str| input.get(name).filter(|value| !value.is_null());
@@ -115,7 +111,7 @@ pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
         }),
         "v1_canonical_payload" => object_document(input, "bundle_chunks")
             .and_then(|bundle| Ok(v1::canonical_payload(&bundle)?))
-            .and_then(utf8),
+            .and_then(|bytes| page_text(bytes, page_offset(input)?)),
         "v1_payload_hash" => object_document(input, "bundle_chunks").and_then(|bundle| {
             let hash = v1::payload_hash(&bundle)?;
             Ok(json!({ "value": hash }))
@@ -126,7 +122,7 @@ pub(crate) fn handle(kind: &str, input: &Obj) -> Option<Handled> {
         }),
         "v2_canonical_payload" => object_document(input, "bundle_chunks")
             .and_then(|bundle| Ok(v2::canonical_payload(&bundle)?))
-            .and_then(utf8),
+            .and_then(|bytes| page_text(bytes, page_offset(input)?)),
         "v2_transition" => transition(input),
         "v2_acknowledgement" => acknowledgement(input),
         "is_downgrade" => downgrade(input),

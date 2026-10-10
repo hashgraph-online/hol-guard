@@ -44,3 +44,14 @@ fn timestamp_vectors_match_recorded_python() {
         &failures[..failures.len().min(25)]
     );
 }
+
+#[test]
+fn strict_utc_requires_a_zero_offset() {
+    assert!(strict_utc_micros("2026-01-01T12:00:00Z").is_some());
+    for value in [
+        "2026-01-01T12:00:00+01:00:00.000000\0Z",
+        "2026-01-01T12:00:00-05:00:00.000000\0Z",
+    ] {
+        assert_eq!(strict_utc_micros(value), None, "{value:?}");
+    }
+}

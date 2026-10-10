@@ -16,7 +16,9 @@ from typing import Protocol, cast
 
 from .native_policy_bundle import (
     PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
     native_policy_bundle,
+    native_rejection_code,
     policy_bundle_chunks,
     policy_bundle_verdict,
 )
@@ -25,6 +27,7 @@ from .stable_digest import sha256_content_digest
 POLICY_BUNDLE_KEY_PURPOSE = "policy_bundle"
 POLICY_BUNDLE_KEYRING_CONTRACT_VERSION = "guard-policy-keyring.v1"
 MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY = "managed_policy_bundle_keyring_provenance"
+_POLICY_BUNDLE_V2_CONTRACT = "guard-policy-bundle.v2"
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
@@ -72,7 +75,7 @@ def _policy_bundle_v2_module() -> _PolicyBundleV2Module:
 
 def _keys_from_wire(items: object) -> tuple[PolicyBundleVerificationKey, ...]:
     if not isinstance(items, list):
-        raise PolicyBundleNativeError("native_policy_bundle_authority_schema_mismatch")
+        raise PolicyBundleNativeUnavailableError("native_policy_bundle_authority_schema_mismatch")
     try:
         return tuple(
             PolicyBundleVerificationKey(
@@ -88,7 +91,7 @@ def _keys_from_wire(items: object) -> tuple[PolicyBundleVerificationKey, ...]:
             for item in items
         )
     except (KeyError, TypeError) as error:
-        raise PolicyBundleNativeError("native_policy_bundle_authority_schema_mismatch") from error
+        raise PolicyBundleNativeUnavailableError("native_policy_bundle_authority_schema_mismatch") from error
 
 
 def _wire(keys: tuple[PolicyBundleVerificationKey, ...]) -> list[dict[str, object]]:
@@ -152,6 +155,9 @@ def safe_load_policy_bundle_verification_keys(
 ) -> tuple[PolicyBundleVerificationKey, ...]:
     try:
         return _load_keys(raw, require_keyring_contract=require_keyring_contract, safe=True)
+    except PolicyBundleNativeUnavailableError:
+        # An outage is not "no keys": callers must not read it as an empty keyring.
+        raise
     except ValueError:
         return ()
 
@@ -212,6 +218,8 @@ def managed_policy_bundle_verification_keys() -> tuple[
             managed_keyring,
             require_keyring_contract=True,
         )
+    except PolicyBundleNativeUnavailableError:
+        raise
     except ValueError:
         return True, ()
     return True, keys
@@ -245,6 +253,8 @@ def signing_key_is_trusted(
         result = native_policy_bundle(
             "key_is_trusted", {"key": signing_key.to_dict(), "anchored_keys": _wire(anchored_keys)}
         )
+    except PolicyBundleNativeUnavailableError:
+        raise
     except ValueError:
         return False
     return result.get("value") is True
@@ -265,6 +275,9 @@ def signing_key_is_current(
                 "require_active": require_active,
             },
         )
+    except PolicyBundleNativeUnavailableError:
+        # Not an expired key: let callers report the outage distinctly.
+        raise
     except ValueError:
         return False
     return result.get("value") is True
@@ -292,7 +305,9 @@ def resolve_authorized_policy_bundle_signing_key(
             },
         )
         (key,) = _keys_from_wire([result.get("key")])
-    except (PolicyBundleNativeError, ValueError) as error:
+    except PolicyBundleNativeError as error:
+        return None, native_rejection_code(error)
+    except ValueError as error:
         return None, getattr(error, "code", "native_policy_bundle_authority_invalid")
     return key, None
 
@@ -324,6 +339,8 @@ def migrate_legacy_policy_bundle_anchors(
             },
         )
         return _keys_from_wire(result.get("keys"))
+    except PolicyBundleNativeUnavailableError:
+        raise
     except ValueError:
         return ()
 
@@ -390,6 +407,8 @@ def _policy_bundle_verification_context_with_source(
             _keys_from_wire(result.get("anchored_keys")),
             result.get("managed_configured") is True,
         )
+    except PolicyBundleNativeUnavailableError:
+        raise
     except ValueError:
         return (), (), request["managed_configured"] is True
 
@@ -410,6 +429,18 @@ def policy_bundle_verification_context(
     return trusted_keys, anchored_keys
 
 
+def _synced_rejection_code(policy_bundle: dict[str, object], error: PolicyBundleNativeError) -> str:
+    """Map a bridge failure to the rejection code the contract's own validator used."""
+
+    if error.code == "non_finite_number":
+        return (
+            "unsupported_number"
+            if policy_bundle.get("contractVersion") == _POLICY_BUNDLE_V2_CONTRACT
+            else ("invalid_json_value")
+        )
+    return native_rejection_code(error)
+
+
 def validate_synced_policy_bundle(
     policy_bundle: dict[str, object],
     *,
@@ -421,20 +452,20 @@ def validate_synced_policy_bundle(
     now: float | None = None,
 ) -> tuple[dict[str, object] | None, str | None, tuple[PolicyBundleVerificationKey, ...]]:
     del supply_chain_keyring
-    request = _context_request(
-        stored_keyring=stored_keyring,
-        sync_payload=sync_payload,
-        managed_keyring_provenance=managed_keyring_provenance,
-        expected_workspace_id=expected_workspace_id,
-    )
     v2_module = _policy_bundle_v2_module()
-    request["now"] = now if now is not None else time.time()
-    request["key_now"] = time.time()
-    request["now_micros"] = v2_module.policy_bundle_v2_now_micros(None)
     from . import policy_bundle_parser
 
-    request["daemon_version"] = policy_bundle_parser.__version__
     try:
+        request = _context_request(
+            stored_keyring=stored_keyring,
+            sync_payload=sync_payload,
+            managed_keyring_provenance=managed_keyring_provenance,
+            expected_workspace_id=expected_workspace_id,
+        )
+        request["now"] = now if now is not None else time.time()
+        request["key_now"] = time.time()
+        request["now_micros"] = v2_module.policy_bundle_v2_now_micros(None)
+        request["daemon_version"] = policy_bundle_parser.__version__
         request["bundle_chunks"] = policy_bundle_chunks(policy_bundle)
         result = native_policy_bundle("validate_synced", request)
         if result.get("needs_evidence") is True:
@@ -442,13 +473,16 @@ def validate_synced_policy_bundle(
             result = native_policy_bundle("validate_synced", request)
         anchored = _keys_from_wire(result.get("anchored_keys"))
     except PolicyBundleNativeError as error:
-        return None, error.code, ()
+        return None, _synced_rejection_code(policy_bundle, error), ()
     reason = result.get("error")
     if isinstance(reason, str):
         return None, reason, anchored
     if result.get("ok") is not True:
         return None, "native_policy_bundle_authority_schema_mismatch", anchored
-    updated = _keys_from_wire(result.get("updated_keys"))
+    try:
+        updated = _keys_from_wire(result.get("updated_keys"))
+    except PolicyBundleNativeError as error:
+        return None, native_rejection_code(error), anchored
     if result.get("contract") == "v2":
         return policy_bundle, None, updated
     payload_keys = result.get("payload_keys")
@@ -471,5 +505,7 @@ def persistable_policy_bundle_keyring(
             {"anchored_keys": _wire(anchored_keys), "bundle_chunks": policy_bundle_chunks(policy_bundle)},
         )
         return _keys_from_wire(result.get("keys"))
+    except PolicyBundleNativeUnavailableError:
+        raise
     except ValueError:
         return ()

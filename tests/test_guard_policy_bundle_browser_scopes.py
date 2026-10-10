@@ -7,6 +7,8 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     validated_policy_bundle_payload,
 )
+from tests.policy_bundle_rule_validity_helpers import VALIDATION_NOW
+from tests.policy_bundle_rule_validity_helpers import policy_bundle_rule_is_valid as _policy_bundle_rule_is_valid
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
@@ -29,39 +31,6 @@ def _valid_base_rule() -> dict[str, object]:
             "locations": ["us-east-1"],
         },
     }
-
-
-def _policy_bundle_rule_is_valid(rule: dict[str, object]) -> bool:
-    """Whether a signed bundle carrying only this rule passes full native validation."""
-
-    bundle = {
-        "contractVersion": "guard-policy-bundle.v1",
-        "bundleVersion": "1.0",
-        "issuedAt": "2026-01-01T00:00:00Z",
-        "expiresAt": "2027-01-01T00:00:00Z",
-        "verifier": {"algorithm": "rsa-pss-sha256", "keyId": "key-1", "signature": "sig"},
-        "rolloutState": "enforced",
-        "policyDefaults": {
-            "mode": "enforce",
-            "defaultAction": "block",
-            "unknownPublisherAction": "review",
-            "changedHashAction": "require-reapproval",
-            "newNetworkDomainAction": "block",
-            "subprocessAction": "block",
-            "telemetryEnabled": False,
-            "syncEnabled": False,
-        },
-        "rules": [rule],
-        "acknowledgements": [],
-    }
-    signing_key = policy_bundle_test_verification_key()
-    payload, _ = validated_policy_bundle_payload(
-        sign_policy_bundle(bundle, key=signing_key),
-        trusted_verification_keys=(signing_key,),
-        anchored_verification_keys=(signing_key,),
-        expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-    return payload is not None
 
 
 class TestBrowserScopeValidation:
@@ -184,6 +153,7 @@ class TestBrowserScopeValidation:
             trusted_verification_keys=(signing_key,),
             anchored_verification_keys=(signing_key,),
             expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
+            now=VALIDATION_NOW,
         )
         assert payload is not None
         assert error is None

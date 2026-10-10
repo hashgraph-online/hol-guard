@@ -12,9 +12,13 @@ import time
 
 from ..version import __version__
 from .native_policy_bundle import (
+    NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
     native_policy_bundle,
+    native_rejection_code,
     policy_bundle_chunks,
+    policy_bundle_paged_text,
     policy_bundle_verdict,
 )
 from .policy_bundle_trusted_keys import PolicyBundleVerificationKey
@@ -88,12 +92,16 @@ def _bundle_value(kind: str, policy_bundle: dict[str, object]) -> str:
     return str(result["value"])
 
 
+def _bundle_text(kind: str, policy_bundle: dict[str, object]) -> str:
+    return policy_bundle_paged_text(kind, {"bundle_chunks": policy_bundle_chunks(policy_bundle)})
+
+
 def computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
     return _bundle_value("v1_bundle_hash", policy_bundle)
 
 
 def canonical_policy_bundle_payload(policy_bundle: dict[str, object]) -> bytes:
-    return _bundle_value("v1_canonical_payload", policy_bundle).encode("utf-8")
+    return _bundle_text("v1_canonical_payload", policy_bundle).encode("utf-8")
 
 
 def payload_hash_for_policy_bundle(policy_bundle: dict[str, object]) -> str:
@@ -101,10 +109,23 @@ def payload_hash_for_policy_bundle(policy_bundle: dict[str, object]) -> str:
 
 
 def _flag(kind: str, request: dict[str, object], *, otherwise: bool) -> bool:
+    """Return one Rust boolean verdict.
+
+    ``otherwise`` is the fail-closed answer when Rust rejects the request as
+    malformed or answers with an error verdict. An outage of the resident is not
+    a verdict: ``PolicyBundleNativeUnavailableError`` propagates so callers report it
+    as unavailable rather than as an inactive, unsupported or downgraded bundle.
+    """
+
     try:
-        return native_policy_bundle(kind, request).get("value") is True
+        result = native_policy_bundle(kind, request)
+    except PolicyBundleNativeUnavailableError:
+        raise
     except ValueError:
         return otherwise
+    if isinstance(result.get("error"), str):
+        return otherwise
+    return result.get("value") is True
 
 
 def policy_bundle_daemon_version_supported(policy_bundle: dict[str, object]) -> bool:
@@ -164,6 +185,11 @@ def policy_bundle_rejection_message(reason: str | None) -> str | None:
             "The authenticated policy bundle is not active for local enforcement. "
             "Approve or publish the rollout in Guard Cloud, then sync again."
         )
+    if reason == NATIVE_UNAVAILABLE_REJECTION:
+        return (
+            "The policy bundle was not applied because the Guard native runtime could not be reached. "
+            "Check that Guard is healthy, then sync again."
+        )
     if reason in _POLICY_BUNDLE_TRUST_REMEDIATION_REASONS | _POLICY_BUNDLE_SIGNATURE_REMEDIATION_REASONS:
         return (
             "The policy bundle was not applied because its signing authority could not be verified. "
@@ -218,7 +244,7 @@ def validated_policy_bundle_payload(
             },
         )
     except PolicyBundleNativeError as error:
-        return None, "invalid_json_value" if error.code == "non_finite_number" else error.code
+        return None, "invalid_json_value" if error.code == "non_finite_number" else native_rejection_code(error)
     keys = result.get("payload_keys")
     payload_hash = result.get("payload_hash")
     if not isinstance(keys, list) or not isinstance(payload_hash, str):

@@ -371,6 +371,11 @@ impl Parsed {
         self.offset_micros.is_some()
     }
 
+    /// `utcoffset() == timedelta(0)`: aware and exactly UTC.
+    pub(crate) fn is_utc(&self) -> bool {
+        self.offset_micros == Some(0)
+    }
+
     /// Microseconds since the Unix epoch after `astimezone(utc)` (naive is UTC);
     /// `None` where Python raises `OverflowError`.
     pub(crate) fn utc_micros(&self) -> Option<i64> {
@@ -435,7 +440,10 @@ pub(crate) fn replaced_timestamp(value: &str) -> Option<f64> {
 pub(crate) fn strict_utc_micros(value: &str) -> Option<i64> {
     let prefix = value.strip_suffix('Z')?;
     let parsed = from_isoformat(&format!("{prefix}+00:00"))?;
-    if !parsed.is_aware() {
+    // Python: `tzinfo is None or utcoffset() != timezone.utc.utcoffset(...)`.
+    // A trailing `Z` is not proof of UTC: the parser can stop at an embedded
+    // character and keep an explicit non-zero offset typed before it.
+    if !parsed.is_aware() || !parsed.is_utc() {
         return None;
     }
     parsed.utc_micros()

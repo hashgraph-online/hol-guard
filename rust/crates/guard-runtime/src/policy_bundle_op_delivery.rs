@@ -12,6 +12,7 @@ use crate::policy_bundle_families::saved_families;
 use crate::policy_bundle_op::{
     field, flag, object_document, optional_text, text_field, Fail, Handled,
 };
+use crate::policy_bundle_op_page::{page_offset, page_rows};
 use crate::policy_bundle_py::{obj, Obj};
 
 fn decisions(input: &Obj) -> Handled {
@@ -21,7 +22,7 @@ fn decisions(input: &Obj) -> Handled {
         text_field(input, "device_id")?,
         text_field(input, "device_name")?,
     );
-    Ok(json!({ "decisions": rows }))
+    page_rows(&rows, page_offset(input)?)
 }
 
 fn families(input: &Obj) -> Handled {

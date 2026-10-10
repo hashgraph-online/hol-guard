@@ -28,7 +28,8 @@ fn load() -> Vec<Value> {
     }
 }
 
-pub(crate) fn run(kind: &str, input: Value) -> Value {
+/// One resident call, exactly as the transport sees it.
+pub(crate) fn run_page(kind: &str, input: Value) -> Value {
     let request = PolicyBundleAuthorityRequestV1 {
         schema: POLICY_BUNDLE_AUTHORITY_REQUEST_SCHEMA.to_owned(),
         request_id: "vector".to_owned(),
@@ -41,6 +42,50 @@ pub(crate) fn run(kind: &str, input: Value) -> Value {
     assert_eq!(response["request_id"], "vector");
     assert_eq!(response["status"], "ok", "{kind}: {response}");
     response["result"].clone()
+}
+
+/// The verdict document the retired Python returned: paged kinds are followed
+/// to their last page and reassembled, so recorded expectations stay verbatim.
+pub(crate) fn run(kind: &str, input: Value) -> Value {
+    let (field, text) = match kind {
+        "build_decisions" => ("decisions", false),
+        "v1_canonical_payload" | "v2_canonical_payload" => ("value", true),
+        _ => return run_page(kind, input),
+    };
+    let mut merged: Option<Value> = None;
+    let mut offset = 0;
+    loop {
+        let mut request = input.clone();
+        request["offset"] = Value::from(offset);
+        let page = run_page(kind, request);
+        if page.get("error").is_some() {
+            return page;
+        }
+        let next = page["next"].as_u64();
+        merged = Some(match merged.take() {
+            None => serde_json::json!({ field: page[field].clone() }),
+            Some(mut whole) => {
+                if text {
+                    let joined = format!(
+                        "{}{}",
+                        whole[field].as_str().unwrap(),
+                        page[field].as_str().unwrap()
+                    );
+                    whole[field] = Value::String(joined);
+                } else {
+                    whole[field]
+                        .as_array_mut()
+                        .unwrap()
+                        .extend(page[field].as_array().unwrap().iter().cloned());
+                }
+                whole
+            }
+        });
+        match next {
+            Some(position) => offset = position,
+            None => return merged.unwrap(),
+        }
+    }
 }
 
 fn normalized(mut value: Value) -> Value {

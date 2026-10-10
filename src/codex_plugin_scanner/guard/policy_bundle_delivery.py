@@ -11,7 +11,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Literal
 
-from .native_policy_bundle import PolicyBundleNativeError, policy_bundle_chunks, policy_bundle_verdict
+from .native_policy_bundle import (
+    PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
+    native_rejection_code,
+    policy_bundle_chunks,
+    policy_bundle_verdict,
+)
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
@@ -59,7 +65,7 @@ def validate_policy_bundle_delivery(
             },
         )
     except PolicyBundleNativeError as error:
-        return None, error.code
+        return None, native_rejection_code(error)
     return (dict(value) if isinstance(value, dict) else {}), None
 
 
@@ -89,7 +95,7 @@ def validated_managed_policy_delivery(
             },
         )
     except PolicyBundleNativeError as error:
-        return None, error.code
+        return None, native_rejection_code(error)
     if result.get("applicable") is True and isinstance(delivery_payload, dict):
         return dict(delivery_payload), None
     return None, None
@@ -98,7 +104,7 @@ def validated_managed_policy_delivery(
 def _acknowledgement(result: dict[str, object]) -> dict[str, object]:
     ack = result.get("ack")
     if not isinstance(ack, dict):
-        raise ValueError("native_policy_bundle_authority_schema_mismatch")
+        raise PolicyBundleNativeUnavailableError("native_policy_bundle_authority_schema_mismatch")
     return ack
 
 

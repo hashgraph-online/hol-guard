@@ -105,6 +105,9 @@ mod policy_bundle_keys_ctx;
 mod policy_bundle_op;
 mod policy_bundle_op_delivery;
 mod policy_bundle_op_keys;
+mod policy_bundle_op_page;
+#[cfg(test)]
+mod policy_bundle_op_page_tests;
 mod policy_bundle_op_synced;
 #[cfg(test)]
 mod policy_bundle_op_tests;
