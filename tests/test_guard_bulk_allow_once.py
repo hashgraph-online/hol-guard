@@ -6,6 +6,7 @@ import json
 import urllib.request
 from collections.abc import Sequence
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import cast
 from urllib.parse import parse_qs, urlparse
@@ -26,6 +27,7 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_bulk_eligibility import (
     _MAX_REQUEST_BYTES,
+    _eligible_chunks,
     _item,
     _wire_bytes,
     native_bulk_allow_once_eligibility,
@@ -636,6 +638,62 @@ def test_bulk_allow_read_once_daemon_route(tmp_path: Path) -> None:
         assert store.get_approval_request("req-plain")["status"] == "resolved"
     finally:
         daemon.stop()
+
+
+def test_bulk_chunks_encode_each_item_once_and_match_the_wire() -> None:
+    """Chunk bounds come from one encoding per item plus the array separator.
+
+    The packed calls stay within the resident byte cap, and a packed call is
+    not split while the next item still fits.
+    """
+
+    from codex_plugin_scanner.guard import native_approval_bulk_eligibility as bulk
+
+    home = str(Path.home())
+    text = "routine context " * 20_000
+    fitting = [
+        _item(
+            {
+                "policy_action": "allow",
+                "action_envelope_json": {"prompt_text": text, "note": "café"},
+            }
+        )
+        for _ in range(24)
+    ]
+    huge = _item(
+        {
+            "policy_action": "allow",
+            "action_envelope_json": {"prompt_text": "routine context " * 300_000},
+        }
+    )
+    items = [huge, *fitting]
+    calls = 0
+    real = bulk._wire_bytes
+
+    def _counting(encoded: Sequence[object], *, home_dir: str) -> int:
+        nonlocal calls
+        calls += 1
+        return real(encoded, home_dir=home_dir)
+
+    bulk._wire_bytes = _counting
+    try:
+        verdicts, chunks = _eligible_chunks(items, home_dir=home)
+    finally:
+        bulk._wire_bytes = real
+
+    assert calls == len(items) + 1
+    assert verdicts[0] is False
+    assert verdicts[1:] == [None] * len(fitting)
+    assert [index for chunk in chunks for index in chunk] == list(range(1, len(items)))
+    assert len(chunks) > 1
+    assert _wire_bytes([huge], home_dir=home) > _MAX_REQUEST_BYTES
+    for earlier, nxt in pairwise(chunks):
+        packed = [items[index] for index in earlier]
+        assert _wire_bytes(packed, home_dir=home) <= _MAX_REQUEST_BYTES
+        overflow = [items[index] for index in [*earlier, nxt[0]]]
+        assert _wire_bytes(overflow, home_dir=home) > _MAX_REQUEST_BYTES
+    last = [items[index] for index in chunks[-1]]
+    assert _wire_bytes(last, home_dir=home) <= _MAX_REQUEST_BYTES
 
 
 def test_bulk_allow_splits_large_prompts_and_skips_one_that_cannot_fit(tmp_path: Path) -> None:

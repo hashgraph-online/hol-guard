@@ -77,34 +77,40 @@ def _wire_bytes(items: Sequence[Mapping[str, object]], *, home_dir: str) -> int:
     return len(encoded)
 
 
+# json.dumps joins array elements with ", " (comma, space).
+_ARRAY_SEPARATOR_BYTES = 2
+
+
 def _eligible_chunks(
     items: Sequence[Mapping[str, object]], *, home_dir: str
 ) -> tuple[list[bool | None], list[list[int]]]:
     """Pack items under the count and byte caps.
 
     An item that cannot fit in a call by itself is ineligible. The other items
-    are still sent. A resident outage is not invented here.
+    are still sent. A resident outage is not invented here. Each item is
+    encoded once; the chunk length is the empty envelope plus those encodings
+    and one separator between neighbors. That matches ``json.dumps`` of the
+    envelope `_resident_request` sends.
     """
 
     verdicts: list[bool | None] = [None] * len(items)
     chunks: list[list[int]] = []
+    base = _wire_bytes([], home_dir=home_dir)
+    sizes = [_wire_bytes([item], home_dir=home_dir) - base for item in items]
     current: list[int] = []
-    for index, item in enumerate(items):
-        if _wire_bytes([item], home_dir=home_dir) > _MAX_REQUEST_BYTES:
+    current_bytes = base
+    for index, size in enumerate(sizes):
+        if base + size > _MAX_REQUEST_BYTES:
             verdicts[index] = False
             continue
-        if not current:
-            current = [index]
-            continue
-        proposed = [*current, index]
-        over_count = len(proposed) > _MAX_ITEMS
-        proposed_items = [items[item_index] for item_index in proposed]
-        over_bytes = _wire_bytes(proposed_items, home_dir=home_dir) > _MAX_REQUEST_BYTES
-        if over_count or over_bytes:
+        added = size if not current else size + _ARRAY_SEPARATOR_BYTES
+        if current and (len(current) + 1 > _MAX_ITEMS or current_bytes + added > _MAX_REQUEST_BYTES):
             chunks.append(current)
             current = [index]
-        else:
-            current = proposed
+            current_bytes = base + size
+            continue
+        current.append(index)
+        current_bytes += added
     if current:
         chunks.append(current)
     return verdicts, chunks
