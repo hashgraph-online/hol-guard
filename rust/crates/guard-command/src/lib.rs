@@ -100,8 +100,9 @@ pub mod pretool;
 #[cfg(unix)]
 mod runtime_read_paths;
 mod shell_command_wrappers;
-mod shell_execution_context;
+pub mod shell_execution_context;
 mod shell_execution_context_support;
+mod shell_model_limits;
 mod shell_read_literal_wrapper;
 mod shell_secret_read_flow;
 mod shell_secret_read_support;

@@ -86,6 +86,8 @@ mod policy_integrity_resolver;
 mod policy_snapshot_build;
 mod policy_store;
 mod prompt_analyze_op;
+mod request_context_op;
+mod request_context_shell;
 mod resident_client;
 mod resident_diagnostics;
 mod resident_endpoint;
