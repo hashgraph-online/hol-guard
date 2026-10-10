@@ -42,6 +42,9 @@ def test_resident_answers_match_shared_vectors(native_approval_reuse_runtime: Pa
     assert mismatches == []
 
 
+_TRUSTED_OVERRIDE_FIELDS = dict.fromkeys(compose._FIELDS["trusted_override"])
+
+
 def _resident_returning(monkeypatch: pytest.MonkeyPatch, reply) -> None:
     monkeypatch.setattr(compose, "_resolve_digest_home", lambda _home: Path("/tmp/hook-compose-home"))
     monkeypatch.setattr(compose, "ensure_resident_prerequisite", lambda _home: True)
@@ -52,6 +55,13 @@ def _resident_returning(monkeypatch: pytest.MonkeyPatch, reply) -> None:
     monkeypatch.setattr(compose, "_resident_request", fake)
 
 
+_TOOL_GRANT_ANSWER = {
+    "approval_context_policy_action": "allow",
+    "current_policy_action": "allow",
+    "policy_action": "allow",
+}
+
+
 def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
     reply: dict[str, object] = {
         "schema": "guard-hook-artifact-compose-result.v1",
@@ -59,7 +69,7 @@ def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
         "request_sha256": "sha256:" + compose._canonical_request_sha256(request),
         "status": "ok",
         "code": "ok",
-        "payload": {"current_policy_action": "allow"},
+        "payload": dict(_TOOL_GRANT_ANSWER),
     }
     reply.update(overrides)
     return reply
@@ -67,7 +77,7 @@ def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
 
 def test_bound_answer_is_returned(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident_returning(monkeypatch, lambda request: _good(request))
-    assert compose.native_hook_compose("tool_grant_apply", {}, guard_home=None) == {"current_policy_action": "allow"}
+    assert compose.native_hook_compose("tool_grant_apply", {}, guard_home=None) == _TOOL_GRANT_ANSWER
 
 
 @pytest.mark.parametrize(
@@ -87,6 +97,30 @@ def test_unbound_or_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, ove
     _resident_returning(monkeypatch, lambda request: _good(request, **overrides))
     with pytest.raises(compose.NativeHookComposeError):
         compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"current_policy_action": "allow"},
+        {**_TOOL_GRANT_ANSWER, "extra": 1},
+        {**_TOOL_GRANT_ANSWER, "policy_action": "bogus"},
+        {**_TOOL_GRANT_ANSWER, "policy_action": None},
+        {**_TOOL_GRANT_ANSWER, "current_policy_action": 1},
+    ],
+)
+def test_incomplete_or_mistyped_payloads_raise(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> None:
+    _resident_returning(monkeypatch, lambda request: _good(request, payload=payload))
+    with pytest.raises(compose.NativeHookComposeError) as error:
+        compose.native_hook_compose("tool_grant_apply", {}, guard_home=None)
+    assert error.value.code == "native_hook_artifact_compose_payload_invalid"
+
+
+def test_boolean_fields_reject_integers(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = {"claim_required": 1, "evidence": None, "reason_code": None}
+    _resident_returning(monkeypatch, lambda request: _good(request, payload=payload))
+    with pytest.raises(compose.NativeHookComposeError):
+        compose.native_hook_compose("trusted_override", _TRUSTED_OVERRIDE_FIELDS, guard_home=None)
 
 
 def test_error_codes_are_sanitised(monkeypatch: pytest.MonkeyPatch) -> None:

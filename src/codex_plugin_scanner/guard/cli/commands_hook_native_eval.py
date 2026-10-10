@@ -35,7 +35,7 @@ if TYPE_CHECKING:
     )
 
 
-from ..action_lattice import coerce_guard_action, guard_action_severity
+from ..action_lattice import coerce_guard_action, guard_action_severity, most_restrictive_guard_action
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
@@ -499,20 +499,20 @@ def evaluate_native_artifact_hook(
     current_config_action = cast(GuardAction, stack["current_config_action"])
     trusted_cli_action = cast("GuardAction | None", stack["trusted_cli_action"])
     untrusted_payload_action = cast("GuardAction | None", stack["untrusted_payload_action"])
-    requested_policy_action = stack["requested_policy_action"]
+    requested_policy_action = cast("str | None", stack["requested_policy_action"])
     package_policy_action = cast("GuardAction | None", stack["package_policy_action"])
     data_flow_action = cast("GuardAction | None", stack["data_flow_action"])
     approval_context_data_flow_action = cast("GuardAction | None", stack["approval_context_data_flow_action"])
     scanner_action = cast("GuardAction | None", stack["scanner_action"])
     scanner_raised_to_block = bool(stack["scanner_raised_to_block"])
     risk_signals = stack["risk_signals"]
-    risk_summary = stack["risk_summary"]
+    risk_summary = cast(str, stack["risk_summary"])
     scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
     if action_envelope is not None and isinstance(action_envelope.command, str):
         scanner_evidence_payload.extend(_embedded_script_evidence(action_envelope.command))
     if workflow_state.approval_record is not None:
         scanner_evidence_payload.append(github_workflow_approval_evidence(workflow_state.approval_record))
-    scanner_evidence_payload.extend(stack["normalizer_evidence"])
+    scanner_evidence_payload.extend(cast("list[dict[str, object]]", stack["normalizer_evidence"]))
     if package_execution_context is not None:
         scanner_evidence_payload.append(package_execution_context.to_evidence())
     artifact_decision_signals = artifact_risk_signals_v2(runtime_artifact)
@@ -538,7 +538,7 @@ def evaluate_native_artifact_hook(
     current_policy_action = policy_action
     local_tool_eligibility: LocalToolApprovalEligibility | None = None
     raw_runtime_command = _runtime_package_raw_command(payload_map, action_envelope)
-    local_grants_allowed = stack["local_grants_allowed"]
+    local_grants_allowed = bool(stack["local_grants_allowed"])
     if (
         event_name == "PreToolUse"
         and runtime_artifact.artifact_type in {"tool_action_request", "package_request"}
@@ -582,7 +582,7 @@ def evaluate_native_artifact_hook(
         approval_context_policy_action=approval_context_policy_action,
         grant_allowed=local_grants_allowed,
         tool_grant_applied=tool_grant_applied,
-        native_floor=stack["native_floor"],
+        native_floor=cast("GuardAction | None", stack["native_floor"]),
     )
     runtime_artifact_hash = _runtime_hook_approval_context_token(
         artifact=approval_context_artifact,
@@ -817,6 +817,9 @@ def evaluate_native_artifact_hook(
             )
             if block_answer is not None:
                 policy_action = cast(GuardAction, block_answer["policy_action"])
+            else:
+                # Resident unreachable: never end weaker than the recomputed action.
+                policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
             approval_reuse_source = approval_reuse_source or "saved_policy_decision"
             if not package_reuse_applied:
                 scanner_evidence_payload.append(

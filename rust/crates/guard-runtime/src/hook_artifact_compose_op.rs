@@ -78,13 +78,7 @@ pub(crate) fn name(action: GuardAction) -> Value {
     Value::String(action.as_str().to_owned())
 }
 
-pub(crate) fn stricter(left: GuardAction, right: GuardAction) -> GuardAction {
-    if right.severity() > left.severity() {
-        right
-    } else {
-        left
-    }
-}
+pub(crate) use guard_contracts::most_restrictive_of as stricter;
 
 fn present(value: &Value) -> Option<GuardAction> {
     (!value.is_null()).then(|| act(value))

@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from uuid import uuid4
 
+from .models import GUARD_ACTION_VALUES
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 
@@ -121,6 +122,67 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
 }
 
+# The exact answer shape of each query kind. Spec letters: a action,
+# A action or null, b bool, s string, S string or null, d dict, D dict or null,
+# l list.
+_ANSWERS: dict[str, dict[str, str]] = {
+    "policy_stack": {
+        "approval_context_config_action": "a",
+        "approval_context_data_flow_action": "A",
+        "approval_context_policy_action": "a",
+        "current_config_action": "a",
+        "data_flow_action": "A",
+        "local_grants_allowed": "b",
+        "native_floor": "A",
+        "normalizer_evidence": "l",
+        "package_policy_action": "A",
+        "policy_action": "a",
+        "requested_policy_action": "S",
+        "risk_signals": "l",
+        "risk_summary": "s",
+        "scanner_action": "A",
+        "scanner_raised_to_block": "b",
+        "trusted_cli_action": "A",
+        "untrusted_payload_action": "A",
+    },
+    "tool_grant_apply": {"approval_context_policy_action": "a", "current_policy_action": "a", "policy_action": "a"},
+    "grant_settle": {"approval_context_policy_action": "a", "current_policy_action": "a", "policy_action": "a"},
+    "saved_reuse": {"approval_reuse": "d", "approval_reuse_source": "S", "policy_action": "a"},
+    "saved_block_reuse": {"approval_reuse": "d", "policy_action": "a"},
+    "trusted_override": {"claim_required": "b", "evidence": "D", "reason_code": "S"},
+    "claimed_reuse": {
+        "approval_reuse": "d",
+        "approval_reuse_source": "s",
+        "evidence": "d",
+        "policy_action": "a",
+        "trusted_request_override_applied": "b",
+        "trusted_request_override_reason": "S",
+    },
+    "decision_copy": {"decision_overrides": "d", "risk_headline": "S"},
+}
+
+
+def _field_valid(spec: str, value: object) -> bool:
+    if spec.isupper() and value is None:
+        return True
+    match spec.lower():
+        case "a":
+            return isinstance(value, str) and value in GUARD_ACTION_VALUES
+        case "b":
+            return isinstance(value, bool)
+        case "s":
+            return isinstance(value, str)
+        case "d":
+            return isinstance(value, dict)
+        case "l":
+            return isinstance(value, list)
+    return False
+
+
+def _answer_valid(kind: str, payload: dict[str, object]) -> bool:
+    shape = _ANSWERS[kind]
+    return set(payload) == set(shape) and all(_field_valid(spec, payload[name]) for name, spec in shape.items())
+
 
 class NativeHookComposeError(RuntimeError):
     """No authoritative composition answer; ``code`` says why, for diagnostics."""
@@ -172,6 +234,8 @@ def native_hook_compose(kind: str, fields: Mapping[str, object], *, guard_home: 
         raise NativeHookComposeError(reason)
     payload = response.get("payload")
     if status != "ok" or code != "ok" or not isinstance(payload, dict):
+        raise NativeHookComposeError("native_hook_artifact_compose_payload_invalid")
+    if not _answer_valid(kind, payload):
         raise NativeHookComposeError("native_hook_artifact_compose_payload_invalid")
     return payload
 
