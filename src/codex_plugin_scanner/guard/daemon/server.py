@@ -2978,7 +2978,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=404,
                 )
                 return
-            self._write_json(approval)
+            self._write_json(self._approval_with_extension_recommendation(approval))
             return
         if parsed.path == "/v1/receipts":
             query = parse_qs(parsed.query)
@@ -7979,6 +7979,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         ):
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
+
+    def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
+        from .approval_extension_recommendation import with_approval_extension_recommendation
+
+        include = not self._is_hosted_dashboard_origin()
+        api = getattr(self._daemon_server(), "extension_control_api", None)
+        if not include or api is None:
+            return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
+        registry, snapshot = api.recommendation_inputs()
+        hint = self._daemon_server().store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
+        return with_approval_extension_recommendation(
+            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
+        )
 
     def _is_hosted_dashboard_origin(self) -> bool:
         origin = self._normalize_origin(self.headers.get("Origin"))

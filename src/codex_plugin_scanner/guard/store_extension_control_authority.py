@@ -7,7 +7,9 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import secrets
+import sqlite3
 from typing import cast
 
 from .managed_controls_policy_bundle import (
@@ -33,6 +35,9 @@ from .store_extension_control_authority_support import (
     _row_str,
 )
 from .store_extension_control_authority_transitions import _ExtensionControlAuthorityTransitionMixin
+from .store_extension_control_last_good import ExtensionControlLastGoodMixin, _count_controls
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def _canonical_contract_value(value: object) -> object:
@@ -43,6 +48,7 @@ def _canonical_contract_value(value: object) -> object:
 
 
 class StoreExtensionControlAuthorityMixin(
+    ExtensionControlLastGoodMixin,
     ExtensionControlAuthorityReadsMixin,
     ExtensionControlAuthorityCommitMixin,
     ExtensionControlAuthorityCatalogMixin,
@@ -69,6 +75,12 @@ class StoreExtensionControlAuthorityMixin(
                     catalog_digest, key=None, reason="authentication-key-missing"
                 )
             anchor = self._read_anchor(key=key)
+            if anchor is not None:
+                restored_view = self._restore_missing_snapshot_before_recovery(
+                    anchor, key=key, catalog_digest=catalog_digest, migration_registry=migration_registry
+                )
+                if restored_view is not None:
+                    return restored_view
             with self._connect() as connection:
                 ensure_extension_control_authority_schema(connection)
                 snapshot = connection.execute(
@@ -163,6 +175,63 @@ class StoreExtensionControlAuthorityMixin(
                 reason="authenticated-recovery-unverifiable",
             )
 
+    def _restore_missing_snapshot_before_recovery(
+        self,
+        anchor: AuthorityAnchor,
+        *,
+        key: bytes,
+        catalog_digest: str,
+        migration_registry: CommandSafetyExtensionRegistry | None,
+    ) -> ExtensionControlAuthorityView | None:
+        with self._connect() as connection:
+            ensure_extension_control_authority_schema(connection)
+            snapshot_missing = (
+                connection.execute("select 1 from extension_control_authority_snapshot where singleton = 1").fetchone()
+                is None
+            )
+        if not snapshot_missing:
+            return None
+        try:
+            restored = self._restore_last_good_authority(anchor, key=key)
+        except (sqlite3.Error, ExtensionControlAuthorityError):
+            # Leftover rows can conflict with the restore; fall back to the
+            # explicit reset, which archives them.
+            return None
+        if not restored:
+            return None
+        view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=migration_registry)
+        return view if view.health is AuthorityHealth.PROTECTED else None
+
+    def _note_controls_lost_by_reset(self, reason: str) -> None:
+        """Preserve and announce any control state that a reset cannot carry over."""
+
+        warnings: list[str] = []
+        with self._connect() as connection:
+            ensure_extension_control_authority_schema(connection)
+            row = connection.execute(
+                "select layers_json from extension_control_authority_snapshot where singleton = 1"
+            ).fetchone()
+        lost = _count_controls(str(row["layers_json"])) if row is not None else 0
+        if lost:
+            warnings.append(
+                f"Authority reset ({reason}) dropped {lost} extension control(s); "
+                "the previous snapshot is kept in the local recovery archive."
+            )
+        if self._last_good_path().is_file():
+            if self._quarantine_unusable_last_good_export():
+                warnings.append(
+                    "A saved copy of the previous extension controls could not be verified against the current "
+                    "authority and was set aside as extension-control-last-good.unapplied-*.json in the Guard home."
+                )
+            else:
+                warnings.append(
+                    "A saved copy of the previous extension controls could not be verified against the current "
+                    "authority and could not be set aside; it remains as extension-control-last-good.json."
+                )
+        self.extension_control_recovery_warnings = tuple(warnings)
+        for warning in warnings:
+            _LOGGER.warning(warning)
+
     def _reset_extension_control_authority(
         self,
         catalog_digest: str,
@@ -174,6 +243,7 @@ class StoreExtensionControlAuthorityMixin(
         from .native_command_control_authority_store import begin_native_command_control_recovery
         from .store import GuardStore
 
+        self._note_controls_lost_by_reset(reason)
         recovered_key = key if key is not None else secrets.token_bytes(32)
         begin_native_command_control_recovery(cast(GuardStore, self), new_authority_key=recovered_key)
         if key is None:

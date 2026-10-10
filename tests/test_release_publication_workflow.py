@@ -372,3 +372,22 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     )
     assert "scripts/pypi_project_storage.py --fail-if-over-limit" in alpha_quota["run"]
     assert "packaging==25.0" in alpha_quota["run"]
+
+
+def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+    steps = jobs["assemble-native-guard-distributions"]["steps"]
+    names = [step.get("name") for step in steps]
+    reuse_name = "Reuse wheels already attested on the GitHub release"
+    assert names.index(reuse_name) < names.index("Validate exact native artifact set")
+    assert names.index(reuse_name) < names.index("Record aggregate immutable hashes")
+    step = steps[names.index(reuse_name)]
+    assert step["if"] == "needs.build.outputs.channel == 'stable'"
+    assert step["working-directory"] == "${{ runner.temp }}"
+    script = step["run"]
+    assert 'gh release download "$tag"' in script
+    assert 'gh attestation verify "$release_file"' in script
+    assert '--source-digest "$SOURCE_SHA"' in script
+    assert "refusing to publish unverified wheels" in script
+    assert "Release wheel set does not match" in script
+    assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" "$DIST_DIR/"')

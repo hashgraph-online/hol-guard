@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
 
+from .approval_scope_native_retry import native_retry_cannot_reuse_approval
 from .models import DECISION_SCOPE_VALUES, DecisionScope
 from .package_execution_context import (
     PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND,
@@ -170,6 +171,8 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
             block_scopes.append("publisher")
         block_scopes.extend(("harness", "global"))
     restrictions = ["reusable_allow_is_action_bound"]
+    if native_retry_cannot_reuse_approval(request):
+        restrictions.append("retry_cannot_reuse_approval")
     if _unverified_provider_execution(request):
         restrictions.append("provider_account_unverified_once_only")
     restrictions.append(
