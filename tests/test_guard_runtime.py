@@ -14601,7 +14601,24 @@ def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp
         "tool_input": {"command": "echo scope-matrix"},
         "source_scope": "project",
     }
+    # Warm the native resident for this fresh guard_home before the first real
+    # hook. The direct evaluator's PreToolUse floor has a 0.5s deadline; cold
+    # resident spawn + verifier-key provision (~440ms on py3.14) consumes it
+    # before evaluation, producing a fail-closed block instead of the saved
+    # review. Provisioning + a context_digest primes the resident outside the
+    # asserted hook call.
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+    from codex_plugin_scanner.guard.native_context import native_context_digest
 
+    provision_native_verifier_key_for_store(store)
+    native_context_digest(
+        "tool_action_request",
+        {"tool_name": "Bash"},
+        guard_home=home_dir,
+        timeout_seconds=10.0,
+    )
     first = guard_commands_module.evaluate_native_artifact_hook(
         args,
         action_envelope=None,
