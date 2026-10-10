@@ -286,6 +286,9 @@ fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
         "/etc/*",
         "~/missing/*",
         "src/$HOME/*",
+        "src/{safe,../clean}/*",
+        "src/*../clean/*",
+        "src/[.][.]/clean/*",
     ] {
         assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
     }

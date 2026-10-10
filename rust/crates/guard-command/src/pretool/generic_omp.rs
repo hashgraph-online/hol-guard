@@ -201,7 +201,13 @@ fn glob_directory(target: &str) -> Option<&str> {
         .strip_prefix("~/")
         .or_else(|| target.strip_prefix('/'))
         .unwrap_or(target);
-    if !contained_selector(selector) || target.starts_with("//") {
+    // Restrict this proof to simple globs. Alternatives and escaped syntax can
+    // synthesize traversal segments that are absent from the literal input.
+    if !contained_selector(selector)
+        || target.starts_with("//")
+        || selector.contains("..")
+        || selector.contains(['\\', '[', ']', '{', '}', '(', ')'])
+    {
         return None;
     }
     let prefix = &target[..index];
