@@ -22,6 +22,7 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod daemon_policy_authority;
+mod data_flow_analyze_op;
 mod edge;
 mod encrypted_secret_store;
 mod git_execution_safety_binary;

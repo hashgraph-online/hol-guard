@@ -430,3 +430,15 @@ def _close_native_policy_publishers_before_monkeypatch_restore(
             live_publishers.append(f"{publisher.guard_home}:{thread.name}")
     if live_publishers:
         raise AssertionError("native policy publisher thread(s) survived test teardown: " + ", ".join(live_publishers))
+
+
+@pytest.fixture
+def native_data_flow_runtime(
+    native_hook_force: Path, _native_context_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Serve data-flow analysis from the real resident; there is no Python fallback."""
+
+    from codex_plugin_scanner.guard import native_data_flow
+
+    monkeypatch.setattr(native_data_flow, "resolve_guard_home", lambda: _native_context_home)
+    return _native_context_home

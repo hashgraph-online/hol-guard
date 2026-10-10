@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
 from ..native_context import is_unbound_context_digest
+from ..native_data_flow import detect_data_flow_exfiltration
 from ..proxy._env import _build_scrubbed_env
 from ..runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -888,10 +889,11 @@ def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,
     *,
     workspace: Path | None,
+    guard_home: Path | None = None,
 ) -> tuple[RiskSignalV2, ...]:
     if action_envelope is None:
         return ()
-    return detect_data_flow_exfiltration(action_envelope, workspace=workspace)
+    return detect_data_flow_exfiltration(action_envelope, workspace=workspace, guard_home=guard_home)
 
 def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
     sink_type = _runtime_data_flow_sink_type(signals)
