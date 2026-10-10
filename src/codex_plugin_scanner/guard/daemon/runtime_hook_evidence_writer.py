@@ -19,6 +19,7 @@ from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
 from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
+from ..native_hook_adapter import NativeHookAdapterError, hook_adapter_memo
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, CorrelationHandle
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
@@ -153,7 +154,6 @@ class RuntimeHookEvidenceWriter:
             snapshot = deepcopy(dict(payload))
             encoded = json.dumps(snapshot, separators=(",", ":"), sort_keys=True).encode("utf-8")
             correlation = self._derive_correlation(harness=harness, event=event, payload=snapshot)
-            invocation_preview = build_invocation_preview_from_payload(snapshot)
         except Exception:
             with self._condition:
                 self._dropped += 1
@@ -171,7 +171,7 @@ class RuntimeHookEvidenceWriter:
             receipt_id=receipt_id,
             prompted=prompted,
             approval_reuse_status=approval_reuse_status,
-            invocation_preview=invocation_preview,
+            preview_source=snapshot,
         )
         if _CommandActivityRecord.from_json(json.loads(record.serialized())) is None:
             return False
@@ -324,6 +324,19 @@ class RuntimeHookEvidenceWriter:
                 self._degraded = True
         return not self._thread.is_alive()
 
+    def _with_invocation_preview(self, record: _CommandActivityRecord) -> _CommandActivityRecord:
+        """Derive the display preview here, so the hook never waits on it."""
+        source = record.preview_source
+        if source is None:
+            return record
+        preview: str | None = None
+        try:
+            with hook_adapter_memo(self._guard_home):
+                preview = build_invocation_preview_from_payload(source)
+        except NativeHookAdapterError:
+            pass  # display-only: an unavailable native adapter must not drop the evidence row
+        return replace(record, invocation_preview=preview, preview_source=None)
+
     def _run(self) -> None:
         while True:
             batch = self._next_batch()
@@ -332,6 +345,15 @@ class RuntimeHookEvidenceWriter:
             for record in batch:
                 with self._condition:
                     self._in_flight = True
+                if isinstance(record, _CommandActivityRecord) and record.preview_source is not None:
+                    try:
+                        record = self._with_invocation_preview(record)
+                    except Exception:
+                        with self._condition:
+                            self._dropped += 1
+                            self._degraded = True
+                            self._in_flight = False
+                        continue
                 with self._condition:
                     already_durable = record.record_id in self._durable
                 if not already_durable:

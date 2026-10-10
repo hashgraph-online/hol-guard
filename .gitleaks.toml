@@ -30,6 +30,15 @@ regexes = [
   '''^[\t\r\n ]*curl \-H "Authorization: Bearer hol\-fake\-docs\-token\-example\-0000" \\\\[\t\r\n ]*$''',
 ]
 
+[[rules.allowlists]]
+description = "Synthetic bearer token recorded in the hook adapter parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-command/testdata/hook_adapter_vectors\.json$''']
+regexes = [
+  '''^abcdefghijkl12345$''',
+]
+
 [[rules]]
 id = "generic-api-key"
 
@@ -251,3 +260,13 @@ regexes = [
   '''^[\t\r\n ]*output="token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz",[\t\r\n ]*$''',
   '''^[\t\r\n ]*content = "token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz\\n"[\t\r\n ]*$''',
 ]
+
+[[rules]]
+id = "private-key"
+
+[[rules.allowlists]]
+description = "Exact Rust rejection fixture: YWJjZA== is abcd, not a private key"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard-contained-process/src/runtime_resources/resource_tests\.rs$''']
+regexes = ['''^[\t\r\n ]*b"\-\-\-\-\-BEGIN PRIVATE KEY\-\-\-\-\-\\nYWJjZA==\\n\-\-\-\-\-END PRIVATE KEY\-\-\-\-\-"\.as_slice\(\),\n        b"\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-\\nYWJjZA==",\n        b"",\n        b"unframed private data",\n    \] \{\n        fs::write\(root\.join\("certifi/cacert\.pem"\), bytes\)\.unwrap\(\);\n        assert!\(capture_tree\(\&root\)\.is_err\(\)\);\n    \}\n    let mut mixed = CERT\.to_vec\(\);\n    mixed\.extend_from_slice\(b"\-\-\-\-\-BEGIN PRIVATE KEY\-\-\-\-\-\\nYWJjZA==\\n\-\-\-\-\-END PRIVATE KEY\-\-\-\-\-"\);[\t\r\n ]*$''']

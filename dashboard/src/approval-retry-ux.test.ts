@@ -1,9 +1,11 @@
 import { normalizeApprovalRequest } from "./guard-api";
+import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 import { buildBulkApproveConsequenceCopy, buildRetryAfterApprovalCopy, summarizeBulkApproveSelection } from "./approval-center-utils";
 import {
   bulkApproveConsequenceCopyForSelection,
   countRetryBlockedActions,
   receiptDescribesRequest,
+  retryBlockedApprovalCopy,
   retryCannotReuseApproval,
   retryCannotReuseApprovalHint,
 } from "./approval-retry-guidance";
@@ -72,7 +74,8 @@ assert(!retryCannotReuseApproval(bound), "bound native review is not flagged");
 const unboundCopy = buildRetryAfterApprovalCopy(unbound, "allow");
 assert(!unboundCopy.includes("within 15 minutes"), "unbound approval copy drops the retry window");
 assert(unboundCopy.includes("will still be blocked"), "unbound approval copy says the agent stays blocked");
-assert(unboundCopy.includes("Allow in Extensions"), "unbound approval copy points to the extension pattern");
+assert(!unboundCopy.includes("Extensions"), "approval copy without a verified allow hint never promises Extensions");
+assert(unboundCopy.includes("run it yourself"), "approval copy without a hint says to run the command yourself");
 assert(
   buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 5 minutes"),
   "bound native approval copy uses the native 5-minute retry window",
@@ -88,9 +91,58 @@ assert(
   retryCannotReuseApprovalHint(alwaysEligible, "Oh My Pi").includes("Always allow exact action"),
   "eligible pre-approval hint points to Always allow exact action",
 );
+const noHint = retryCannotReuseApprovalHint(unbound, "Oh My Pi");
+assert(!noHint.includes("Extensions"), "pre-approval hint without a verified allow hint never promises Extensions");
+assert(noHint.includes("Copy the command and run it yourself"), "pre-approval hint falls back to running it yourself");
+
+// #3942: only a daemon-verified recommendation names the Extensions permission to allow.
+function recommendation(status: string, labels: string[]) {
+  return normalizeApprovalExtensionRecommendation({
+    schema: "guard.approval-extension-recommendation.v1",
+    status,
+    caution: false,
+    revision: 1,
+    catalog_digest: "b".repeat(64),
+    permissions: labels.map((label, index) => ({
+      permission_id: `command.git.permission.p${index}`,
+      label,
+      description: null,
+      example_command: null,
+      extension_id: "command.git",
+      extension_name: "Git protection",
+      rule_id: null,
+      risk_tier: "high",
+      caution: false,
+      caution_reason: null,
+      caution_detail: null,
+      cli_command: "",
+    })),
+  });
+}
+const hinted = { ...unbound, extension_recommendation: recommendation("available", ["Git origin refresh"]) ?? undefined };
 assert(
-  retryCannotReuseApprovalHint(unbound, "Oh My Pi").includes("Allow in Extensions"),
-  "ineligible pre-approval hint points to extension patterns",
+  retryCannotReuseApprovalHint(hinted, "Oh My Pi").includes("set Git origin refresh to Allow in Extensions"),
+  "verified hint names the permission to allow",
+);
+assert(
+  retryBlockedApprovalCopy(hinted, "Oh My Pi").includes("set Git origin refresh to Allow in Extensions"),
+  "post-approval copy names the permission to allow",
+);
+const multiHinted = {
+  ...unbound,
+  extension_recommendation: recommendation("available", ["Git fetch", "Git origin refresh"]) ?? undefined,
+};
+assert(
+  retryCannotReuseApprovalHint(multiHinted, "Oh My Pi").includes("set Git fetch and Git origin refresh to Allow"),
+  "several permissions are listed once",
+);
+const unavailable = {
+  ...unbound,
+  extension_recommendation: recommendation("authority_unavailable", ["Git origin refresh"]) ?? undefined,
+};
+assert(
+  !retryCannotReuseApprovalHint(unavailable, "Oh My Pi").includes("Extensions"),
+  "an unavailable control authority never promises Extensions",
 );
 
 // #3855: a missing-code error refreshes the stale gate snapshot, like a lock does.

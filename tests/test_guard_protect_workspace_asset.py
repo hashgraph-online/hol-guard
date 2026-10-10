@@ -63,13 +63,12 @@ def test_degraded_protection_exposes_recovery_actions() -> None:
     assert "Restore local protection" in authoritative_source
 
 
-def test_protection_repair_requires_local_auth_token() -> None:
-    from codex_plugin_scanner.guard.daemon import server as daemon_server
+def test_protection_repair_requires_local_auth_token(native_approval_reuse_runtime: Path) -> None:
+    from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
-    assert daemon_server._GuardDaemonHandler._requires_header_token(
-        "/v1/protection/repair",
-        ["v1", "protection", "repair"],
-    )
+    assert native_route_facts(
+        "POST", "/v1/protection/repair", guard_home=native_approval_reuse_runtime
+    ).requires_header_token
 
 
 def test_protect_metrics_use_locale_grouping() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Callable
 from contextlib import suppress
+from functools import wraps
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -14,6 +15,7 @@ from ..daemon.hook_availability_policy import availability_harness_response
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.hook_worker import HookWorker
 from ..daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
+from ..native_hook_adapter import hook_adapter_memo
 from ..native_mode import native_mode_is_fail_safe_disabled
 from ..native_mode import (
     native_mode_requires_rust as _native_mode_requires_rust,
@@ -90,6 +92,21 @@ def try_native_hook_authority(
             _ = evidence_writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
 
 
+def _one_adapter_scope(route: Callable[..., int]) -> Callable[..., int]:
+    """Answer each repeated adapter query once per hook invocation (one resident round trip)."""
+
+    @wraps(route)
+    def scoped(*args: object, **kwargs: Any) -> int:
+        store = kwargs.get("store")
+        context = kwargs.get("context")
+        home = getattr(store, "guard_home", None) or getattr(context, "guard_home", None)
+        with hook_adapter_memo(home):
+            return route(*args, **kwargs)
+
+    return scoped
+
+
+@_one_adapter_scope
 def route_native_hook(
     args: argparse.Namespace,
     *,

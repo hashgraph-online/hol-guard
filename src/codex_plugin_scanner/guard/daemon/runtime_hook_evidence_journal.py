@@ -8,7 +8,7 @@ import re
 import stat
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
@@ -58,6 +58,9 @@ class _CommandActivityRecord:
     prompted: bool = False
     approval_reuse_status: str = "not-applicable"
     invocation_preview: str | None = None
+    # Display input only: the writer thread derives the preview from it off the
+    # hook's response path, then drops it. It is never journaled or compared.
+    preview_source: Mapping[str, object] | None = field(default=None, compare=False, repr=False)
 
     def serialized(self) -> bytes:
         return (

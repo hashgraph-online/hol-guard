@@ -257,6 +257,11 @@ def test_soak_baseline_does_not_accept_deferred_startup_floor(
 
 def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> None:
     script = Path(__file__).parents[1] / "scripts" / "stress_guard_daemon.py"
+    environment = dict(os.environ)
+    # The spawned daemon answers route policy through the resident, which has
+    # no Python fallback: hand it the same runtime the lane under test uses.
+    if environment.get("HOL_GUARD_NATIVE_BINARY"):
+        environment["HOL_GUARD_NATIVE"] = "force"
     completed = subprocess.run(
         [
             sys.executable,
@@ -268,6 +273,7 @@ def test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store() -> 
         check=False,
         capture_output=True,
         text=True,
+        env=environment,
         timeout=90,
     )
     loaded = cast(object, json.loads(completed.stdout))
