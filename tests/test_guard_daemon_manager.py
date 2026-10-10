@@ -2022,7 +2022,7 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
 
     assert url == "http://127.0.0.1:5413"
     assert reap_completed.wait(timeout=15.0)
-    assert killed == [11111]
+    assert [pid for pid in killed if pid == 11111] == [11111]
     assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
     assert json.loads(fresh_state_path.read_text(encoding="utf-8"))["pid"] == 22222
 

@@ -17,7 +17,12 @@ closed.
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
 import os
+import threading
+from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -37,6 +42,46 @@ _MAX_NEED_ROUNDS = 8
 _TIMEOUT_SECONDS = 10.0
 
 FactResolver = Callable[[str], object]
+
+# A verdict is a pure function of (platform, query, facts), so an identical
+# request needs no second round trip. ``_NEED_KEYS`` remembers which facts a
+# query asked for so a repeat sends them in the first request instead of
+# discovering them one round at a time; ``_VERDICTS`` replays a verdict only for
+# byte-identical inputs. Both are keyed by the resident binary identity, bounded,
+# and never hold failures. Time-bearing checks carry ``now`` in the query and
+# therefore never repeat; they are not cached at all.
+_UNCACHED_CHECKS = frozenset({"wake_claim", "recovery_claim", "start_progress_live", "ephemeral_inactive"})
+_CACHE_ENTRIES = 512
+_CACHE_QUERY_BYTES = 64 * 1024
+_cache_lock = threading.Lock()
+_NEED_KEYS: OrderedDict[str, tuple[str, ...]] = OrderedDict()
+_VERDICTS: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+
+def _digest(material: object) -> str | None:
+    try:
+        encoded = json.dumps(material, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
+    except (TypeError, ValueError):
+        return None
+    if len(encoded) > _CACHE_QUERY_BYTES:
+        return None
+    return hashlib.sha256(encoded.encode("ascii")).hexdigest()
+
+
+def _remember(cache: OrderedDict[str, Any], key: str, value: object) -> None:
+    with _cache_lock:
+        cache[key] = value
+        cache.move_to_end(key)
+        while len(cache) > _CACHE_ENTRIES:
+            cache.popitem(last=False)
+
+
+def _recall(cache: OrderedDict[str, Any], key: str) -> Any:
+    with _cache_lock:
+        value = cache.get(key)
+        if value is not None:
+            cache.move_to_end(key)
+        return value
 
 
 class NativeDaemonLifecycleError(ValueError):
@@ -119,11 +164,30 @@ def native_daemon_lifecycle(
     # The resident digests its typed decoding of the request, which omits unset
     # optional fields; omit them here too so both sides hash identical bytes.
     full_query = {"check": check, **{key: value for key, value in query.items() if value is not None}}
+    status = native_runtime_status()
+    identity = status.identity.sha256 if status.identity is not None else ""
+    query_key = None
+    if check not in _UNCACHED_CHECKS and identity:
+        query_digest = _digest({"platform": platform, "query": full_query})
+        query_key = None if query_digest is None else f"{identity}:{query_digest}"
     facts: dict[str, object] = {}
+    if query_key is not None and resolve_fact is not None:
+        for key in _recall(_NEED_KEYS, query_key) or ():
+            facts[key] = resolve_fact(key)
+        facts_digest = _digest(facts)
+        if facts_digest is not None:
+            cached = _recall(_VERDICTS, f"{query_key}:{facts_digest}")
+            if cached is not None:
+                return copy.deepcopy(cached)
     for _ in range(_MAX_NEED_ROUNDS):
         payload = _round_trip(full_query, facts, home, platform)
         if payload.get("need") != "facts":
             _record_success(home)
+            if query_key is not None:
+                _remember(_NEED_KEYS, query_key, tuple(sorted(facts)))
+                facts_digest = _digest(facts)
+                if facts_digest is not None:
+                    _remember(_VERDICTS, f"{query_key}:{facts_digest}", copy.deepcopy(payload))
             return payload
         keys = payload.get("keys")
         if resolve_fact is None or not isinstance(keys, list) or not keys:

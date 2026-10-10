@@ -136,8 +136,8 @@ def test_windows_venv_launcher_parent_matches_only_the_same_daemon_invocation(
     )
     monkeypatch.setattr(
         manager,
-        "_split_process_command",
-        lambda command: shlex.split(command, posix=False),
+        "windows_command_line_to_argv",
+        lambda command: [part.strip('"') for part in shlex.split(command, posix=False)],
     )
 
     assert manager._windows_venv_launcher_parent_pid() == 20
