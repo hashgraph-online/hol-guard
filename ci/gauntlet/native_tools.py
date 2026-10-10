@@ -54,7 +54,39 @@ def native_tools_scope_error(
     because the denial itself can stop the remaining steps and must surface as a false positive.
     """
     allowed = set(scenario.required_tools) | ({"bash"} if scenario.commands else set())
-    if any(call["name"] not in allowed for call in calls):
+    delegated = case.get("delegated_call_ids", [])
+    if (
+        not isinstance(delegated, list)
+        or any(not isinstance(key, str) for key in delegated)
+        or len(set(delegated)) != len(delegated)
+    ):
+        return "malformed delegated host inventory"
+    if set(delegated) - {call["id"] for call in calls}:
+        return "delegated host inventory names an absent call"
+    if delegated and scenario.id != "omp-native-task-readonly-lookup":
+        return "unexpected delegated work"
+    for call in calls:
+        if call["id"] not in delegated:
+            continue
+        if call["name"] == "read":
+            if _write_path(call["args"]) not in {"README.md", "{{workspace}}/README.md"}:
+                return "delegated lookup read outside its requested file"
+        elif call["name"] == "yield":
+            data = call["args"].get("data")
+            if not isinstance(data, (dict, str)):
+                return "delegated result report was missing"
+            if isinstance(data, dict):
+                if set(data) - {"summary", "report", "architecture", "files"}:
+                    return "delegated result report contained extra operations"
+                files = data.get("files", [])
+                if not isinstance(files, list) or any(
+                    not isinstance(file, dict) or file.get("path") not in {"README.md", "{{workspace}}/README.md"}
+                    for file in files
+                ):
+                    return "delegated report referenced an unexpected file"
+        else:
+            return "delegated work used an unexpected tool"
+    if any(call["name"] not in allowed for call in calls if call["id"] not in delegated):
         return "the model used a tool outside the scenario"
     listed = set(scenario.commands)
     for call in calls:
