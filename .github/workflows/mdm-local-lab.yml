@@ -62,6 +62,9 @@ jobs:
         if: runner.os == 'Windows'
         continue-on-error: true
         shell: bash
+        env:
+          HOL_GUARD_NATIVE: force
+          HOL_GUARD_NATIVE_DIAGNOSTIC: "1"
         run: |
           uv run --python 3.12 --no-sync python - <<'PY'
           import json, tempfile
