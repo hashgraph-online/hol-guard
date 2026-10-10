@@ -152,6 +152,31 @@ def test_remove_all_sweeps_unrecorded_hooks_with_backup(tmp_path: Path) -> None:
     assert again["status"] == "nothing_to_remove"
 
 
+def test_remove_all_reports_hooks_behind_a_symlinked_config(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    dotfiles = context.home_dir / "dotfiles"
+    dotfiles.mkdir()
+    target = dotfiles / "claude-settings.json"
+    target.write_text(json.dumps(_claude_settings()))
+    claude = context.home_dir / ".claude"
+    claude.mkdir()
+    link = claude / "settings.json"
+    link.symlink_to(target)
+    store = GuardStore(context.guard_home)
+
+    planned = remove_all_guard_hooks(context=context, store=store, dry_run=True)
+    assert planned["status"] == "planned"
+
+    report = remove_all_guard_hooks(context=context, store=store)
+    assert report["status"] == "partial"
+    assert report["remaining"] == [{"harness": "claude-code", "path": str(link), "hook_count": 2}]
+    entry = next(item for item in report["harnesses"] if item["harness"] == "claude-code")
+    assert entry["sweep_errors"] == ["settings.json:symlink_not_followed"]
+    # The sweep never edits through the link, so the hooks stay and are reported.
+    assert link.is_symlink()
+    assert GUARD_COMMAND in target.read_text()
+
+
 def test_remove_all_backs_up_before_editing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import hook_removal
 

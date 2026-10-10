@@ -253,8 +253,8 @@ def _inside(path: Path, roots: tuple[Path, ...]) -> bool:
     return any(resolved == root or root in resolved.parents for root in roots)
 
 
-def harness_hook_files(harness: str, context: HarnessContext) -> tuple[Path, ...]:
-    """Existing JSON/TOML config files that may hold hooks for ``harness``."""
+def _candidate_hook_files(harness: str, context: HarnessContext) -> tuple[list[Path], list[Path]]:
+    """Split existing config candidates into regular files and symlinks."""
 
     contract = contract_for(harness)
     raw: list[Path] = []
@@ -275,20 +275,60 @@ def harness_hook_files(harness: str, context: HarnessContext) -> tuple[Path, ...
         root.resolve() for root in (context.home_dir, context.workspace_dir) if root is not None and root.exists()
     )
     files: list[Path] = []
+    links: list[Path] = []
     for candidate in raw:
-        if candidate.suffix not in _SWEEPABLE_SUFFIXES or candidate in files:
+        if candidate.suffix not in _SWEEPABLE_SUFFIXES or candidate in files or candidate in links:
             continue
-        # lstat so a symlinked config is reported, not followed outside the
-        # user's own roots.
-        if not candidate.is_symlink() and candidate.is_file() and _inside(candidate, roots):
+        if candidate.is_symlink():
+            links.append(candidate)
+        elif candidate.is_file() and _inside(candidate, roots):
             files.append(candidate)
+    return files, links
+
+
+def harness_hook_files(harness: str, context: HarnessContext) -> tuple[Path, ...]:
+    """Existing regular JSON/TOML config files that may hold hooks for ``harness``."""
+
+    files, _links = _candidate_hook_files(harness, context)
     return tuple(files)
+
+
+def _inspect_symlinked_config(path: Path, *, dry_run: bool) -> SweepFileResult | None:
+    """Report Guard hooks behind a symlinked config without editing through the link.
+
+    Rewriting would replace the link (often into a dotfiles repo) with a plain
+    file, so the hooks are reported as remaining instead. In a dry run they
+    count as found, which keeps the plan and the post-removal re-scan honest.
+    """
+
+    try:
+        target = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
+    payload, _problem = _load(target)
+    if payload is None:
+        return None
+    _pruned, removed = prune_guard_hooks(payload)
+    if not removed:
+        return None
+    events = tuple(sorted({name for name in removed if name}))
+    return SweepFileResult(
+        path=path,
+        removed=len(removed) if dry_run else 0,
+        error="symlink_not_followed",
+        event_names=events,
+    )
 
 
 def sweep_harness(harness: str, context: HarnessContext, *, dry_run: bool) -> SweepTotals:
     totals = SweepTotals()
-    for path in harness_hook_files(harness, context):
+    files, links = _candidate_hook_files(harness, context)
+    for path in files:
         totals.files.append(sweep_config_file(path, dry_run=dry_run))
+    for path in links:
+        result = _inspect_symlinked_config(path, dry_run=dry_run)
+        if result is not None:
+            totals.files.append(result)
     return totals
 
 
