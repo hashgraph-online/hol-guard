@@ -123,20 +123,22 @@ def native_runner_authority(kind: str, args: Mapping[str, Any], guard_home: Path
             native_record_overload(status.identity.sha256, guard_home)
             raise NativeRunnerAuthorityError(error_code)
         raise _fail(status, guard_home, error_code)
-    if (
-        not isinstance(payload, dict)
-        or payload.get("schema") != _RESULT_SCHEMA
-        or payload.get("request_id") != request["request_id"]
-        or payload.get("request_sha256") != request_sha256
-        or payload.get("status") != "ok"
-        or payload.get("code") != "ok"
-        or not isinstance(payload.get("payload"), dict)
-    ):
-        code = payload.get("code") if isinstance(payload, dict) else None
-        raise _fail(
-            status,
-            guard_home,
-            code if isinstance(code, str) and code.startswith("native_runner_authority_") else _INVALID_RESULT,
-        )
+    bound = (
+        isinstance(payload, dict)
+        and payload.get("schema") == _RESULT_SCHEMA
+        and payload.get("request_id") == request["request_id"]
+        and payload.get("request_sha256") == request_sha256
+    )
+    if not bound or not isinstance(payload, dict):
+        raise _fail(status, guard_home, _INVALID_RESULT)
+    code = payload.get("code")
+    if payload.get("status") == "error" and isinstance(code, str) and code.startswith("native_runner_authority_"):
+        # A bound refusal is the resident answering, not an outage: the request
+        # is refused (callers fail closed) but the resident stays healthy, so a
+        # bad request can never open the shared availability circuit.
+        native_record_resident_success(status.identity.sha256, guard_home)
+        raise NativeRunnerAuthorityError(code)
+    if payload.get("status") != "ok" or code != "ok" or not isinstance(payload.get("payload"), dict):
+        raise _fail(status, guard_home, _INVALID_RESULT)
     native_record_resident_success(status.identity.sha256, guard_home)
     return payload["payload"]

@@ -106,7 +106,7 @@ def test_adapters_present_resident_answers() -> None:
     assert authority.exact_request_overrides({}) == {}
 
 
-def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
+def _force_available(monkeypatch: pytest.MonkeyPatch, *, keep_health: bool = False) -> None:
     class Features:
         features = frozenset({module._FEATURE, module._RESIDENT_PROTOCOL_FEATURE})
 
@@ -124,7 +124,8 @@ def _force_available(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(module, "_native_runtime_status_memo", lambda: Status())
     monkeypatch.setattr(module, "ensure_resident_prerequisite", lambda _home: True)
     monkeypatch.setattr(module, "native_resident_client_ready", lambda *_a, **_k: True)
-    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
+    if not keep_health:
+        monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: None)
 
 
 def _call(tmp_path: Path) -> dict[str, Any]:
@@ -184,6 +185,32 @@ def test_malformed_or_absent_reply_fails_closed(monkeypatch: pytest.MonkeyPatch,
         monkeypatch.setattr(module, "native_resident_client_request", lambda reply=reply, **_: reply)
         with pytest.raises(NativeRunnerAuthorityError):
             _call(tmp_path)
+
+
+def test_bound_refusals_never_open_the_availability_circuit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A resident that answers a bad request is healthy; only outages count toward the circuit."""
+
+    from codex_plugin_scanner.guard.native_runtime_resilience import native_runtime_health_snapshot
+
+    _force_available(monkeypatch, keep_health=True)
+
+    def refuse(*, payload: bytes, **_: object) -> bytes:
+        request = json.loads(payload)["request"]
+        return json.dumps(
+            {
+                "schema": module._RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": module._canonical_request_sha256(request),
+                "status": "error",
+                "code": "native_runner_authority_invalid",
+            }
+        ).encode()
+
+    monkeypatch.setattr(module, "native_resident_client_request", refuse)
+    for _ in range(5):
+        with pytest.raises(NativeRunnerAuthorityError, match="invalid"):
+            _call(tmp_path)
+    assert not native_runtime_health_snapshot("0" * 64, tmp_path).circuit_open
 
 
 def test_oversized_request_is_refused_before_the_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
