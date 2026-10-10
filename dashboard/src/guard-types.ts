@@ -672,6 +672,8 @@ export type GuardRuntimeSnapshot = {
   operator_health?: GuardOperatorHealth;
   security_level?: "balanced" | "strict" | "custom";
   protection_posture?: "protected" | "extra_careful" | "watch";
+  harness_postures?: Record<string, GuardProtectionPostureValue>;
+  harnesses_in_watch?: string[];
   protection_capabilities?: GuardProtectionCapability[];
   supply_chain?: SupplyChainSnapshot;
 };
@@ -969,6 +971,11 @@ export type GuardApprovalGatePublicConfig = {
   totp_pending?: boolean; totp_recent_satisfied?: boolean;
 };
 
+export type GuardProtectionPostureValue = "protected" | "extra_careful" | "watch";
+
+/** Merge-patch for per-app postures: `null` clears the override (inherit). */
+export type GuardHarnessPosturePatch = Record<string, GuardProtectionPostureValue | null>;
+
 export type GuardSettings = {
   mode: "observe" | "prompt" | "enforce";
   presentation_mode: GuardPresentationMode;
@@ -980,6 +987,15 @@ export type GuardSettings = {
   protection_posture?: "protected" | "extra_careful" | "watch";
   protection_posture_explicit?: boolean;
   watch_auto_revert_hours?: number;
+  /** Per-app overrides only; an app with no entry inherits `protection_posture`. */
+  harness_postures?: Record<string, GuardProtectionPostureValue>;
+  harness_watch_entered_at?: Record<string, string>;
+  /** Read-only: the posture each known app actually runs under. */
+  harness_postures_effective?: Record<string, GuardProtectionPostureValue>;
+  /** Read-only: true when managed policy blocks local Watch/Protected app overrides. */
+  harness_postures_locked?: boolean;
+  /** Draft-only: apps whose Watch timer should restart on the next save. Never sent as-is. */
+  harness_watch_restart?: string[];
   security_level: "relaxed" | "gentle" | "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;

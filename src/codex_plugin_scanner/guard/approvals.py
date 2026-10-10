@@ -48,6 +48,7 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
+from .harness_posture import harness_posture_summary
 from .incident import build_incident_context
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
@@ -1746,6 +1747,7 @@ def _build_runtime_snapshot(
         "protection_health": protection_health,
         "protection_capabilities": protection_capability_payloads(),
         "protection_posture": config.protection_posture,
+        **harness_posture_summary(config),
     }
 
 

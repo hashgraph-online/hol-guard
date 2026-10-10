@@ -946,6 +946,7 @@ def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
 
 
 def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import (
         posture_help,
         posture_label,
@@ -961,11 +962,13 @@ def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
         "description": posture_help(config.protection_posture),
         "security_level": config.security_level,
         "protection_off": status["protection_off"],
+        **harness_posture_summary(config),
         "effective_risk_actions": effective,
     }
 
 
 def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import protection_status_fields
 
     issues: list[dict[str, str]] = []
@@ -999,6 +1002,7 @@ def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
         "issues": issues,
         "healthy": len(issues) == 0,
         **protection_status_fields(posture=config.protection_posture, mode=config.mode),
+        **harness_posture_summary(config),
     }
 
 
