@@ -83,7 +83,7 @@ def test_installed_corpus_reports_malformed_json_clearly(tmp_path: Path, monkeyp
         _run_corpus(tmp_path)
 
 
-def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unavailable_native_harness_records_prevention(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # The runner must establish its outage even when the parent uses auto and
     # diagnostic shortcuts; none of these settings may leak into the child.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
@@ -98,7 +98,7 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
         is_hook = command[:3] == [sys.executable, "-m", "codex_plugin_scanner.cli"]
         if is_hook:
             assert kwargs["env"]["PYTHONPYCACHEPREFIX"] == cache_prefix
-            assert kwargs["env"]["HOL_GUARD_NATIVE"] == "off"
+            assert "HOL_GUARD_NATIVE" not in kwargs["env"]
             assert kwargs["env"]["PYTHONPATH"] == ""
             assert "HOL_GUARD_PYTHON_ORACLE" not in kwargs["env"]
             assert "HOL_GUARD_NATIVE_DIAGNOSTIC" not in kwargs["env"]
@@ -122,7 +122,6 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
     }
     assert len(hook_responses) == 1
     # Outage prevention is not evidence of healthy enforcement or execution.
-    assert hook_responses[0]["reason_code"] == "native_hook_disabled"
     assert hook_responses[0]["policy_action"] == "block"
 
 

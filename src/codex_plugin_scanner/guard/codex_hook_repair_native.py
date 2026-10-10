@@ -33,8 +33,6 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
 
     check_deadline()
     mode = native.native_mode()
-    if mode not in {"auto", "force"}:
-        raise TransitionError("authority_repair_native_mode_invalid")
     with inverse_recovery_budget(deadline_monotonic), hook_validation_deadline(deadline_monotonic):
         for candidate in native._runtime_candidates():
             check_deadline()

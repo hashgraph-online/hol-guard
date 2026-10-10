@@ -37,10 +37,6 @@ def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "force",
-    )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
         payload=_post_tool_payload(),
@@ -65,10 +61,6 @@ def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
@@ -105,10 +97,6 @@ def test_hook_worker_fails_closed_when_auto_native_is_unavailable(
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         _missing_native,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
@@ -164,10 +152,6 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     writer = _ActivityWriter()
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"), activity_writer=writer)
     result = worker.review_http_payload(
@@ -191,10 +175,6 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
         lambda: True,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",

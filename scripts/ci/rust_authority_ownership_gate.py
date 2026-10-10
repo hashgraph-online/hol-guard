@@ -237,17 +237,8 @@ def _pretool_gate() -> None:
     native_hook = _read(Path("src/codex_plugin_scanner/guard/daemon/hook_worker_native.py"))
     if "return self._review_native_edge(" not in hook:
         raise RuntimeError("PreToolUse hook path is not bound to the native runtime")
-    route = re.search(
-        r'if event_name\s*==\s*"PreToolUse":[\s\S]*?return self\._review_pre_tool_http',
-        hook,
-    )
-    region = re.search(r"def _review_pre_tool_http\([\s\S]*?(?=\n    def _review_native_edge)", native_hook)
-    if route is None or region is None:
-        raise RuntimeError("daemon has no Rust PreToolUse authority route")
-    if "self.engine.review(" in region.group(0):
-        raise RuntimeError("PreToolUse can reach the Python HookReviewEngine")
-    if "native_hook_disabled" not in region.group(0) or "native_shadow_diagnostic_disabled" not in region.group(0):
-        raise RuntimeError("PreToolUse non-native modes do not fail closed")
+    if "_review_pre_tool_http" in native_hook or "_mode_surface_response" in native_hook:
+        raise RuntimeError("retired non-native PreToolUse mode surfaces remain in the hook worker")
     edge_region = re.search(r"def _review_native_edge_with_snapshot\([\s\S]*?(?=\n    def _)", native_hook)
     if edge_region is None or "native_pre_tool_unavailable" not in edge_region.group(0):
         raise RuntimeError("PreToolUse does not fail closed when native is unavailable")
@@ -257,8 +248,8 @@ def _pretool_gate() -> None:
     command_model = Path("src/codex_plugin_scanner/guard/native_command_model.py")
     if command_model.exists():
         model = _read(command_model)
-        if 'status.mode not in {"shadow", "force"}' not in model:
-            raise RuntimeError("command-model bridge is not confined to shadow or force")
+        if 'status.mode != "force"' not in model:
+            raise RuntimeError("command-model bridge is not confined to force")
         if "Python remains authoritative" in model:
             raise RuntimeError("command-model bridge still declares Python authority")
 
@@ -282,10 +273,8 @@ def _posttool_gate() -> None:
         hook,
     ):
         raise RuntimeError("supported PostToolUse still spills into Python semantic evaluation")
-    if 'native_required = mode in {"auto", "force"}' not in hook:
-        raise RuntimeError("PostToolUse auto path is not native-required")
-    if re.search(r'mode == "auto" and native_runtime_status\(\)\.available', hook):
-        raise RuntimeError("PostToolUse still availability-gates native authority")
+    if "_review_post_tool_http" in hook or "native_mode()" in hook:
+        raise RuntimeError("PostToolUse still carries a retired non-native mode branch")
 
     native = _read(Path("src/codex_plugin_scanner/guard/native_runtime.py"))
     if "currently supported Python reference backend remains authoritative" in native:
@@ -390,9 +379,7 @@ def _workflow_gate() -> None:
     )
     missing_native_paths = [value for value in required_native_paths if f'- "{value}"' not in native_trigger]
     if missing_native_paths:
-        raise RuntimeError(
-            f"installed native-wheel protected path selection is incomplete: {missing_native_paths}"
-        )
+        raise RuntimeError(f"installed native-wheel protected path selection is incomplete: {missing_native_paths}")
     validate_installed_proof_environment(native_wheel)
 
 

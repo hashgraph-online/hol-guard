@@ -24,7 +24,6 @@ def test_native_worker_unavailable_preserves_explicit_protection_mode(
         else b'mode = "enforce"\nprotection_posture = "protected"\n'
     )
     config.write_bytes(config_bytes)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
     # The stub bypasses the transport that normally replaces each request's
     # failure code. Do not inherit a previous request's control-binding error.
     monkeypatch.setattr(
@@ -76,7 +75,6 @@ def test_missing_mode_authority_does_not_infer_watch_from_config(
     config = guard_home / "config.toml"
     config_bytes = b'mode = "observe"\nprotection_posture = "watch"\n'
     config.write_bytes(config_bytes)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native", lambda **_kwargs: None)
     worker = HookWorker(store=GuardStore(guard_home))
     monkeypatch.setattr(worker, "_native_policy_snapshot", lambda *_args, **_kwargs: None)

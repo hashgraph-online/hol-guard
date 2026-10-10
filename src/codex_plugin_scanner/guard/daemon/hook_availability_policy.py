@@ -88,8 +88,6 @@ _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw", "pi", "omp"}
 _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
 _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
     {
-        "native_hook_disabled",
-        "native_shadow_diagnostic_disabled",
         "native_policy_not_ready",
         "native_hook_event_unavailable",
         "native_pre_tool_unavailable",

@@ -30,7 +30,6 @@ _ROOTS: Final = (
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py", None, "run_native_hook_pipeline"),
     ("src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py", None, "_run_resident_hook_request"),
     ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "HookWorker", "review_http_payload"),
-    ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "HookWorker", "_review_post_tool_http"),
     ("src/codex_plugin_scanner/guard/daemon/server.py", "_GuardDaemonHandler", "_handle_runtime_hook_fast"),
     ("src/codex_plugin_scanner/guard/daemon/server.py", "_GuardDaemonHandler", "_execute_runtime_hook"),
     ("src/codex_plugin_scanner/guard/native_pretool.py", None, "review_pre_tool_native"),

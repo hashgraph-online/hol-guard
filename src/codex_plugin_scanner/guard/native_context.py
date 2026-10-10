@@ -644,8 +644,7 @@ def native_context_digest(
     _LAST_DIGEST_FAILURE.set(None)
     status = _native_runtime_status_memo()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None

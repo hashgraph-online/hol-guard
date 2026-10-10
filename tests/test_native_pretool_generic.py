@@ -213,10 +213,6 @@ def test_native_review_queues_approval_without_escaping_to_cli(
 ) -> None:
     edge = _edge("codex", "PreToolUse", "network")
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: edge,
     )

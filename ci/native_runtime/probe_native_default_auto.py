@@ -23,7 +23,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import (
@@ -260,10 +259,12 @@ def _exercise_mode_invariants(
             )
             if not isinstance(response, dict):
                 raise RuntimeError(f"native_default_auto_probe_failed: invalid mode response: {response}")
+            # Legacy values are accepted but resolve to auto: the native
+            # resident decides exactly as it does with the variable unset.
             _require(
                 response.get("continue") is True
                 and response.get("policy_action") == "allow"
-                and response.get("reason_code") in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
+                and response.get("reason_code") not in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
                 {"mode": mode, "response": response},
             )
             mode_invariants[mode] = {
@@ -377,7 +378,6 @@ def _require_clean_probe_environment() -> None:
     ):
         _require(environment_name not in os.environ, f"{environment_name} must be unset")
     _require(native_mode() == "auto", f"unexpected native mode: {native_mode()}")
-    _require(hook_fast_path_enabled(), "unset fast-path configuration must be enabled")
     os.environ["HOL_GUARD_NATIVE"] = "invalid"
     try:
         _require(native_mode() == "auto", "invalid native mode must resolve to auto")
@@ -468,15 +468,16 @@ def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
                 raise cleanup_error
 
 
-def _assert_native_disabled_mode() -> None:
-    os.environ["HOL_GUARD_NATIVE"] = "off"
-    try:
-        _require(native_mode() == "off", f"unexpected native mode: {native_mode()}")
-        disabled = native_runtime_status()
-        _require(disabled.mode == "off", disabled)
-        _require(disabled.reason == "native_disabled", disabled)
-    finally:
-        os.environ.pop("HOL_GUARD_NATIVE", None)
+def _assert_legacy_native_modes_resolve_to_auto() -> None:
+    for legacy in ("off", "shadow"):
+        os.environ["HOL_GUARD_NATIVE"] = legacy
+        try:
+            _require(native_mode() == "auto", f"legacy native mode {legacy} must resolve to auto: {native_mode()}")
+            resolved = native_runtime_status()
+            _require(resolved.mode == "auto", resolved)
+            _require(resolved.reason != "native_disabled", resolved)
+        finally:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
 
 
 def _build_probe_receipt(
@@ -491,7 +492,7 @@ def _build_probe_receipt(
         "fast_path": "enabled",
         "runtime_reason": status.reason,
         "target": capabilities.target,
-        "rollback": "off",
+        "legacy_modes": "accepted_as_auto",
         "corpus_decisions": installed_corpus["route_count"],
         "resident_decisions": installed_corpus["route_count"],
         "resident_share": 1.0,
@@ -517,7 +518,7 @@ def main(*, json_path: Path | None = None) -> int:
     status, identity, capabilities = _probe_native_identity()
     _assert_binary_override_ignored(identity)
     installed_corpus = _run_temporary_probe(identity)
-    _assert_native_disabled_mode()
+    _assert_legacy_native_modes_resolve_to_auto()
     receipt = _build_probe_receipt(status, capabilities, installed_corpus)
     rendered = json.dumps(receipt, sort_keys=True)
     if json_path is not None:

@@ -496,7 +496,7 @@
   {
    "old_node": "tests/test_rust_pretool_authority.py::test_hook_worker_returns_native_allow",
    "replacement_nodes": [
-    "tests/test_rust_pretool_authority.py::test_hook_worker_returns_fail_safe_when_native_off"
+    "tests/test_native_legacy_modes.py::test_legacy_values_fail_closed_without_a_native_runtime"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -2397,16 +2397,6 @@
   {
    "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
    "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_auto_fails_closed_when_native_unavailable",
-   "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
-  },
-  {
-   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_compares_explicit_python_oracle",
-   "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_compares_explicit_python_oracle",
-   "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
-  },
-  {
-   "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_hook_worker_shadow_ignores_native_exception",
-   "new_node": "ci/native_runtime/test_native_hook_worker_modes.py::test_hook_worker_shadow_ignores_native_exception",
    "reason": "Unrelated hook-worker behavior preserved unchanged until its own semantic cutover."
   },
   {
