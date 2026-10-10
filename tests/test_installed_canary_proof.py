@@ -115,10 +115,9 @@ def test_disabled_native_harness_records_prevention(tmp_path, monkeypatch: pytes
     assert _no_post_execution_proof_smoke() == {
         "harness": "opencode",
         "post_execution_surface": False,
-        "execution_status": "prevented",
-        "proof_level": "pre_hook",
         "policy_action": "block",
-        "decision_reason_code": "policy",
+        "reason_code": "native_hook_disabled",
+        "activity_evidence_persisted": False,
     }
     assert len(hook_responses) == 1
     # Outage prevention is not evidence of healthy enforcement or execution.

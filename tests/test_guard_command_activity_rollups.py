@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import os
 import sqlite3
 import time
 from dataclasses import replace
@@ -240,7 +241,12 @@ def test_rollup_failure_rolls_back_parent_and_children(tmp_path: Path) -> None:
     assert store.count_command_activity_rule_hits() == 0
 
 
-def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms(tmp_path: Path) -> None:
+def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not os.environ.get("HOL_GUARD_NATIVE_BINARY"):
+        pytest.skip("command-activity store authority needs the native runtime")
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     template = _evidence("activity:1")
     store.record_command_activity(template)

@@ -87,7 +87,7 @@ fn normalize(value: &Value) -> Value {
     }
 }
 
-fn object_of<'a>(value: &'a Value) -> StoreResult<&'a Map<String, Value>> {
+fn object_of(value: &Value) -> StoreResult<&Map<String, Value>> {
     value.as_object().ok_or(INVALID)
 }
 

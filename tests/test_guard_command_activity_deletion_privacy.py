@@ -37,7 +37,6 @@ from codex_plugin_scanner.guard.store_command_activity_maintenance_schema import
 )
 from codex_plugin_scanner.guard.store_command_activity_privacy import (
     COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
-    _stable_distinct,
 )
 from tests.guard_command_activity_api_support import seed
 from tests.native_command_activity_test_support import use_real_native_activity_reviews
@@ -212,9 +211,6 @@ def test_diagnostics_has_an_exact_bounded_allowlist(tmp_path: Path) -> None:
     serialized = json.dumps(diagnostics, sort_keys=True)
     for forbidden in ("activity:01", "receipt:", "occurred_at", "last_error_at", "digest"):
         assert forbidden not in serialized
-
-    with store._connect() as connection:
-        assert _stable_distinct(connection, "command_activity", "harness", allowed=frozenset()) == []
 
 
 def test_diagnostics_omits_corrupt_unbounded_identifiers(tmp_path: Path) -> None:

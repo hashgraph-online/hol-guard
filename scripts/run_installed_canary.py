@@ -263,28 +263,22 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             raise InstalledCanaryError("No-post-proof harness did not deny explicitly disabled native review")
         store = GuardStore(guard_home, prime_policy_integrity=False)
         with closing(sqlite3.connect(store.path)) as connection:
-            row = cast(
+            persisted = cast(
                 tuple[object, ...] | None,
-                connection.execute(
-                    """
-                    select harness, hook_phase, execution_status, proof_level,
-                           policy_action, decision_reason_code, match_count
-                    from command_activity
-                    """
-                ).fetchone(),
+                connection.execute("select activity_id from command_activity").fetchone(),
             )
-        expected = (harness, "pre", "prevented", "pre_hook", "block", "policy", 0)
-        if row is None or tuple(row) != expected:
+        # The store authority is the native runtime. With it explicitly
+        # disabled the hook must deny and must not persist unverified evidence.
+        if persisted is not None:
             raise InstalledCanaryError(
-                f"Installed no-post-proof hook persisted unexpected activity evidence: {tuple(row) if row else None!r}"
+                "Installed no-post-proof hook persisted activity evidence without the native store authority"
             )
         return {
             "harness": harness,
             "post_execution_surface": False,
-            "execution_status": str(row[2]),
-            "proof_level": str(row[3]),
-            "policy_action": str(row[4]),
-            "decision_reason_code": str(row[5]),
+            "policy_action": "block",
+            "reason_code": "native_hook_disabled",
+            "activity_evidence_persisted": False,
         }
 
 

@@ -78,8 +78,13 @@ mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod guard_store_args;
 mod guard_store_cmd_activity;
+mod guard_store_cmd_api;
+mod guard_store_cmd_feedback;
 mod guard_store_cmd_lifecycle;
 mod guard_store_cmd_maintenance;
+mod guard_store_cmd_privacy;
+#[cfg(test)]
+mod guard_store_cmd_read_vectors_tests;
 mod guard_store_cmd_rollups;
 #[cfg(test)]
 mod guard_store_cmd_vectors_tests;

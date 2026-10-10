@@ -14,7 +14,7 @@ use crate::guard_store_op::evaluate_guard_store_request;
 
 const VECTORS: &str = include_str!("../testdata/guard_store/command_activity_vectors.json");
 
-fn temp_home(tag: &str) -> PathBuf {
+pub(crate) fn temp_home(tag: &str) -> PathBuf {
     let nonce = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap()
@@ -27,7 +27,7 @@ fn temp_home(tag: &str) -> PathBuf {
     std::fs::canonicalize(home).unwrap()
 }
 
-fn insert_rows(connection: &Connection, table: &str, rows: &Value) {
+pub(crate) fn insert_rows(connection: &Connection, table: &str, rows: &Value) {
     for row in rows.as_array().unwrap() {
         let row = row.as_object().unwrap();
         let columns: Vec<&str> = row.keys().map(String::as_str).collect();
@@ -41,7 +41,7 @@ fn insert_rows(connection: &Connection, table: &str, rows: &Value) {
     }
 }
 
-fn dump(connection: &Connection, table: &str, order_by: &str) -> Value {
+pub(crate) fn dump(connection: &Connection, table: &str, order_by: &str) -> Value {
     let rows = query_all(
         connection,
         &format!("select * from {table} order by {order_by}"),
@@ -51,7 +51,7 @@ fn dump(connection: &Connection, table: &str, order_by: &str) -> Value {
     Value::Array(rows.into_iter().map(Value::Object).collect())
 }
 
-fn assert_rows(actual: &Value, expected: &Value, label: &str) {
+pub(crate) fn assert_rows(actual: &Value, expected: &Value, label: &str) {
     let (actual, expected) = (actual.as_array().unwrap(), expected.as_array().unwrap());
     assert_eq!(actual.len(), expected.len(), "{label}: row count");
     for (index, (left, right)) in actual.iter().zip(expected).enumerate() {
@@ -103,7 +103,7 @@ fn run_step(home: &Path, source: &str, step: &Value) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-fn apply_sql(home: &Path, step: &Value) {
+pub(crate) fn apply_sql(home: &Path, step: &Value) {
     let connection = Connection::open(home.join("guard.db")).unwrap();
     for pair in step["sql"].as_array().unwrap() {
         let params: Vec<Value> = pair[1].as_array().unwrap().clone();
@@ -111,7 +111,7 @@ fn apply_sql(home: &Path, step: &Value) {
     }
 }
 
-fn error_code(python_type: &str) -> &'static str {
+pub(crate) fn error_code(python_type: &str) -> &'static str {
     match python_type {
         "ValueError" => "native_guard_store_value_error",
         "IntegrityError" => "native_guard_store_integrity_error",
