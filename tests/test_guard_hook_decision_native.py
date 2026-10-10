@@ -61,7 +61,7 @@ def test_resident_matches_language_neutral_vectors() -> None:
     failures: list[str] = []
     for vector in _VECTORS:
         try:
-            payload = decision._decide(vector["query"], None)
+            payload = decision._decide(vector["query"], None, lambda _payload: None)
         except decision.NativeHookDecisionError as error:
             # A resident-side rejection never yields a decision; the transport
             # reports it as a failure (the exact code is asserted in Rust).

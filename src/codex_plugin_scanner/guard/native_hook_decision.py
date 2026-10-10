@@ -128,7 +128,18 @@ def _record_resident(guard_home: Path, *, success: bool, reason: str = "") -> No
         native_record_resident_failure(status.identity.sha256, guard_home, reason=reason)
 
 
-def _decide(query: Mapping[str, object], guard_home: Path | None) -> dict[str, Any]:
+def _decide(
+    query: Mapping[str, object],
+    guard_home: Path | None,
+    validate: Callable[[dict[str, Any]], None],
+) -> dict[str, Any]:
+    """Ask the resident and return its payload once ``validate`` accepts it.
+
+    Resident health is recorded only after binding and payload validation, so
+    a resident that keeps sending well-bound but malformed payloads opens the
+    circuit instead of resetting the failure streak on every reply.
+    """
+
     try:
         home = _resolve_digest_home(guard_home)
     except (OSError, RuntimeError, ValueError):
@@ -172,6 +183,11 @@ def _decide(query: Mapping[str, object], guard_home: Path | None) -> dict[str, A
     if status != "ok" or code != "ok" or not isinstance(payload, dict) or payload.get("kind") != query.get("kind"):
         _record_resident(home, success=False, reason="native_hook_decision_bad_status")
         raise NativeHookDecisionError(_UNAVAILABLE)
+    try:
+        validate(payload)
+    except NativeHookDecisionError:
+        _record_resident(home, success=False, reason="native_hook_decision_invalid")
+        raise
     _record_resident(home, success=True)
     return payload
 
@@ -191,11 +207,8 @@ def native_compose_current(
     """
 
     facts: dict[str, bool] = {}
-    for _ in range(_MAX_FACT_ROUNDS):
-        payload = _decide(
-            {"kind": "compose_current", "inputs": {**inputs, "facts": dict(facts)}},
-            guard_home,
-        )
+
+    def validate(payload: dict[str, Any]) -> None:
         if set(payload) != {"kind", "event_name", "needs_facts", "composition"}:
             raise NativeHookDecisionError(_INVALID)
         needs, composition, event_name = payload["needs_facts"], payload["composition"], payload["event_name"]
@@ -206,25 +219,38 @@ def native_compose_current(
             _shape(composition["token"], _TOKEN_FIELDS)
             for key in ("composed_action", "action_with_tool_grant", "action_without_tool_grant"):
                 _action(composition[key])
+            return
+        for name in needs:
+            if not isinstance(name, str) or name not in classifiers or name in facts:
+                raise NativeHookDecisionError(_INVALID)
+
+    for _ in range(_MAX_FACT_ROUNDS):
+        payload = _decide(
+            {"kind": "compose_current", "inputs": {**inputs, "facts": dict(facts)}},
+            guard_home,
+            validate,
+        )
+        needs, composition, event_name = payload["needs_facts"], payload["composition"], payload["event_name"]
+        if not needs:
             return composition, facts
         for name in needs:
-            provider = classifiers.get(name) if isinstance(name, str) else None
-            if provider is None or name in facts:
-                raise NativeHookDecisionError(_INVALID)
-            facts[name] = bool(provider(event_name))
+            facts[name] = bool(classifiers[name](event_name))
     raise NativeHookDecisionError(_INVALID)
 
 
 def native_post_claim_reuse(inputs: Mapping[str, object], *, guard_home: Path | None = None) -> tuple[str, str | None]:
     """The action and validation reason for re-evaluating a claimed saved approval."""
 
-    payload = _decide({"kind": "post_claim_reuse", "inputs": dict(inputs)}, guard_home)
-    if set(payload) != {"kind", "current_action", "validation_reason"}:
-        raise NativeHookDecisionError(_INVALID)
-    reason = payload["validation_reason"]
-    if reason is not None and not isinstance(reason, str):
-        raise NativeHookDecisionError(_INVALID)
-    return _action(payload["current_action"]), reason
+    def validate(payload: dict[str, Any]) -> None:
+        if set(payload) != {"kind", "current_action", "validation_reason"}:
+            raise NativeHookDecisionError(_INVALID)
+        reason = payload["validation_reason"]
+        if reason is not None and not isinstance(reason, str):
+            raise NativeHookDecisionError(_INVALID)
+        _action(payload["current_action"])
+
+    payload = _decide({"kind": "post_claim_reuse", "inputs": dict(inputs)}, guard_home, validate)
+    return _action(payload["current_action"]), payload["validation_reason"]
 
 
 def native_finalize(
@@ -235,19 +261,21 @@ def native_finalize(
 ) -> dict[str, Any]:
     """Settle the final action, dispositions and response directive."""
 
-    payload = _decide({"kind": "finalize", "inputs": dict(inputs), "settled": dict(settled)}, guard_home)
-    if set(payload) != {"kind", *_FINAL_FIELDS}:
-        raise NativeHookDecisionError(_INVALID)
-    final = _shape({key: payload[key] for key in _FINAL_FIELDS}, _FINAL_FIELDS)
-    _action(final["policy_action"])
-    _shape(final["activity"], _ACTIVITY_FIELDS)
-    _shape(final["directive"], _DIRECTIVE_FIELDS)
-    if not all(isinstance(entry, dict) for entry in final["evidence_tail"]):
-        raise NativeHookDecisionError(_INVALID)
-    review = final["silent_review"]
-    if review is not None:
-        _shape(review, {"action": str, "reason": str})
-    return final
+    def validate(payload: dict[str, Any]) -> None:
+        if set(payload) != {"kind", *_FINAL_FIELDS}:
+            raise NativeHookDecisionError(_INVALID)
+        final = _shape({key: payload[key] for key in _FINAL_FIELDS}, _FINAL_FIELDS)
+        _action(final["policy_action"])
+        _shape(final["activity"], _ACTIVITY_FIELDS)
+        _shape(final["directive"], _DIRECTIVE_FIELDS)
+        if not all(isinstance(entry, dict) for entry in final["evidence_tail"]):
+            raise NativeHookDecisionError(_INVALID)
+        review = final["silent_review"]
+        if review is not None:
+            _shape(review, {"action": str, "reason": str})
+
+    payload = _decide({"kind": "finalize", "inputs": dict(inputs), "settled": dict(settled)}, guard_home, validate)
+    return {key: payload[key] for key in _FINAL_FIELDS}
 
 
 __all__ = [
