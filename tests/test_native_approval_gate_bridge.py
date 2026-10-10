@@ -84,6 +84,25 @@ def test_unprovisioned_home_is_not_a_native_authority(
     assert bridge.approval_gate_native("public_config", tmp_path) is None
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        "native_resident_windows_private_ancestry_missing",
+        "native_resident_windows_access_denied",
+        "native_resident_windows_acl_not_private",
+    ],
+)
+def test_platform_specific_state_failures_stay_fail_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: str
+) -> None:
+    # The resident folds a missing state directory into the shared unprovisioned
+    # code; any other Windows state failure is a real fault, not "no authority".
+    _provision(monkeypatch, json.dumps({"error": error, "retryable": False}).encode())
+    with pytest.raises(ApprovalGateError) as caught:
+        bridge.approval_gate_native("public_config", tmp_path)
+    assert caught.value.code == "native_approval_gate_unavailable"
+
+
 def test_unprovisioned_spawn_failure_is_not_a_native_authority(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _provision(monkeypatch, None, failure_code="native_policy_verifier_key_missing")
     assert bridge.approval_gate_native("public_config", tmp_path) is None
