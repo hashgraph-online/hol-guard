@@ -168,8 +168,35 @@ def sensitive_read_reuse(
         },
         guard_home=guard_home,
     )
-    _text(payload, "policy_action")
+    _validate_reuse(payload)
     return payload
+
+
+_REUSE_BOOLS = ("claim_candidate", "terminal_saved_block")
+_REUSE_TEXT = ("event_status", "event_reason_code", "approval_source")
+_NON_FORWARD_BOOLS = ("wrap_safe_alternative", "record_unprompted_review", "queue_approvals")
+
+
+def _validate_reuse(payload: dict[str, Any]) -> None:
+    """Reject a bound answer that omits a field the caller indexes directly."""
+
+    _text(payload, "policy_action")
+    valid = (
+        all(isinstance(payload.get(key), bool) for key in _REUSE_BOOLS)
+        and all(isinstance(payload.get(key), str) for key in _REUSE_TEXT)
+        and isinstance(payload.get("reuse_evidence"), list)
+        and "non_forward" in payload
+    )
+    non_forward = payload.get("non_forward")
+    if valid and non_forward is not None:
+        valid = (
+            isinstance(non_forward, dict)
+            and isinstance(non_forward.get("message"), str)
+            and isinstance(non_forward.get("response_action"), str)
+            and all(isinstance(non_forward.get(key), bool) for key in _NON_FORWARD_BOOLS)
+        )
+    if not valid:
+        raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_payload_invalid")
 
 
 def sensitive_read_hint(

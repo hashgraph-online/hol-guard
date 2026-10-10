@@ -118,7 +118,9 @@ def _detection(proxy: StdioGuardProxy, artifact: GuardArtifact) -> HarnessDetect
     )
 
 
-def _fail_closed(event: dict[str, Any], tool_name: str) -> NotForwarded:
+def _fail_closed(event: dict[str, Any], tool_name: str, request: FileReadRequestMatch) -> NotForwarded:
+    event["path_summary"] = request.path_match.normalized_path
+    event["approval_reuse_reason_code"] = "native_unavailable"
     event["decision"] = "block"
     event["policy_action"] = "block"
     event["transport_outcome"] = "not-forwarded"
@@ -147,7 +149,7 @@ def evaluate_sensitive_read(
     try:
         return _evaluate(proxy, request, tool_name=tool_name, event=event)
     except NativeMcpProxyDecisionError:
-        return _fail_closed(event, tool_name)
+        return _fail_closed(event, tool_name, request)
 
 
 def _evaluate(
@@ -242,7 +244,7 @@ def _evaluate(
     if non_forward["wrap_safe_alternative"]:
         message = safe_alternative_reason(message)
     redaction = getattr(proxy.guard_config, "receipt_redaction_level", "full")
-    if non_forward["record_unprompted_review"]:
+    if non_forward["record_unprompted_review"] and store is not None:
         approvals_module.record_unprompted_review(
             detection=_detection(proxy, artifact),
             evaluation={"artifacts": [_approval_item(artifact, token, policy_action, evidence)]},
