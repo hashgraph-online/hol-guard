@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import json
 import os
@@ -305,6 +306,23 @@ def download_verified_release(
     return tuple(downloaded)
 
 
+def _wheels_only_remote_hashes(
+    local_distributions: dict[str, str],
+    remote_hashes: dict[str, str],
+    *,
+    registry: Registry,
+) -> dict[str, str]:
+    """Drop a registry sdist only when it is byte-identical to the locally built one."""
+
+    wheels: dict[str, str] = {}
+    for name, digest in remote_hashes.items():
+        if name.endswith(".whl"):
+            wheels[name] = digest
+        elif local_distributions.get(name) != digest:
+            raise RegistryVerificationError(f"{registry.value} carries an unverified source distribution: {name}")
+    return wheels
+
+
 def verify_registry_release(
     registry: Registry,
     version_text: str,
@@ -319,11 +337,16 @@ def verify_registry_release(
     sleep: release_registry_retry.Sleeper | None = None,
     wheels_only: bool = False,
 ) -> RegistryResult:
-    local_hashes = compute_local_distribution_hashes(
+    local_distributions = compute_local_distribution_hashes(
         dist_dir,
         version_text,
         project_name,
         require_sdist=not wheels_only,
+    )
+    local_hashes = (
+        {name: digest for name, digest in local_distributions.items() if name.endswith(".whl")}
+        if wheels_only
+        else local_distributions
     )
 
     def verify_once() -> RegistryResult:
@@ -338,9 +361,11 @@ def verify_registry_release(
 
         remote_hashes = inspection.digests
         if wheels_only:
-            # Wheels-only publication leaves the sdist on the GitHub release; releases published before
-            # that change may still carry one on the registry, which is immutable and not re-verified here.
-            remote_hashes = {name: digest for name, digest in remote_hashes.items() if name.endswith(".whl")}
+            remote_hashes = _wheels_only_remote_hashes(local_distributions, remote_hashes, registry=registry)
+            inspection = dataclasses.replace(
+                inspection,
+                files=tuple(item for item in inspection.files if item.filename in remote_hashes),
+            )
         release_registry_retry._compare_digest_sets(local_hashes, remote_hashes, registry=registry)
         downloaded = download_verified_release(inspection, download_dir, fetcher=fetcher) if download_dir else ()
         return RegistryResult(

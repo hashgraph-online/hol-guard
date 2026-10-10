@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from scripts.verify_native_runtime_release import (
-    NativeReleaseError,
-    _remote_for_artifact_set,
+from scripts.release_artifact_sets import (
+    ArtifactSetError,
+    remote_for_artifact_set,
     select_upload_artifacts,
 )
 
@@ -19,14 +19,14 @@ def test_wheels_artifact_set_leaves_out_only_the_sdist() -> None:
     assert select_upload_artifacts(LOCAL, version=VERSION, artifact_set="wheels") == {PURE: "pure", NATIVE: "native"}
     assert select_upload_artifacts(LOCAL, version=VERSION, artifact_set="full") == LOCAL
     assert select_upload_artifacts(LOCAL, version=VERSION, artifact_set="pure") == {PURE: "pure"}
-    with pytest.raises(NativeReleaseError):
+    with pytest.raises(ArtifactSetError):
         select_upload_artifacts(LOCAL, version=VERSION, artifact_set="sdist")
 
 
 def test_wheels_artifact_set_accepts_matching_earlier_registry_sdist() -> None:
     remote = {PURE: "pure", NATIVE: "native", SDIST: "sdist"}
 
-    assert _remote_for_artifact_set(remote, LOCAL, version=VERSION, artifact_set="wheels") == {
+    assert remote_for_artifact_set(remote, LOCAL, version=VERSION, artifact_set="wheels") == {
         PURE: "pure",
         NATIVE: "native",
     }
@@ -35,5 +35,5 @@ def test_wheels_artifact_set_accepts_matching_earlier_registry_sdist() -> None:
 def test_wheels_artifact_set_keeps_mismatched_registry_sdist_visible() -> None:
     remote = {PURE: "pure", NATIVE: "native", SDIST: "different"}
 
-    assert _remote_for_artifact_set(remote, LOCAL, version=VERSION, artifact_set="wheels") == remote
-    assert _remote_for_artifact_set(remote, LOCAL, version=VERSION, artifact_set="full") == remote
+    assert remote_for_artifact_set(remote, LOCAL, version=VERSION, artifact_set="wheels") == remote
+    assert remote_for_artifact_set(remote, LOCAL, version=VERSION, artifact_set="full") == remote

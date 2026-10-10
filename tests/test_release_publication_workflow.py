@@ -135,7 +135,10 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "--fail-if-over-limit --pending-dir pypi-hol-guard" in main_quota["run"]
     stage_wheels = next(step for step in main_steps if step.get("name") == "Stage wheels-only PyPI upload")
     assert "cp dist-hol-guard/*.whl pypi-hol-guard/" in stage_wheels["run"]
-    assert ".tar.gz" not in stage_wheels["run"]
+    assert "cp dist-hol-guard/*.whl dist-hol-guard/*.tar.gz pypi-hol-guard/" in stage_wheels["run"]
+    assert "wheels_only_flag=--wheels-only" in stage_wheels["run"]
+    assert "artifact_set=wheels" in stage_wheels["run"]
+    assert "artifact_set=full" in stage_wheels["run"]
     assert main_steps.index(native_validate) < main_steps.index(stage_wheels) < main_steps.index(main_quota)
     assert "jq -e '.over_limit == true'" in main_quota["run"]
     assert 'echo "blocked=true"' in main_quota["run"]
@@ -148,8 +151,9 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         "steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'"
     )
     assert jobs["publish-main-pypi"]["outputs"]["pypi_deferred"] == "${{ steps.pypi_quota.outputs.blocked }}"
-    assert "--dist-dir dist-hol-guard --artifact-set wheels" in main_verify["run"]
-    assert "--dist-dir pypi-hol-guard --wheels-only" in main_verify["run"]
+    assert '--dist-dir dist-hol-guard --artifact-set "$ARTIFACT_SET"' in main_verify["run"]
+    assert '--dist-dir dist-hol-guard ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}' in main_verify["run"]
+    assert main_verify["env"]["ARTIFACT_SET"] == "${{ steps.pypi_stage.outputs.artifact_set }}"
     assert (
         main_verify["run"].find("for attempt in {1..60}")
         < main_verify["run"].find("retry_verify_published.py")
@@ -327,7 +331,8 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
             "pypi-hol-guard/",
             "dist-plugin-scanner/",
         }
-        assert "--dist-dir pypi-hol-guard --wheels-only" in inspect_step["run"]
+        assert '${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}' in inspect_step["run"]
+        assert inspect_step["env"]["WHEELS_ONLY_FLAG"] == "${{ steps.pypi_stage.outputs.wheels_only_flag }}"
         assert "pypi-hol-guard/*.publish.attestation" in cleanup_step["run"]
         assert "dist-plugin-scanner/*.publish.attestation" in cleanup_step["run"]
         assert all(steps.index(step) < steps.index(cleanup_step) for step in publish_steps)
