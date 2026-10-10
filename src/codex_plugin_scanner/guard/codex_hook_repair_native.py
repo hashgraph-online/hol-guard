@@ -18,8 +18,8 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
     """Inspect existing selection without chmod, installation or launch override.
 
     Production auto mode retains bundled manifest/version admission. Force
-    mode remains the explicit developer fixture path. Shadow/off cannot prove
-    protection. The capabilities probe keeps its existing one-second stage cap
+    mode remains the explicit developer fixture path. Legacy shadow/off values
+    resolve to auto. The capabilities probe keeps its existing one-second stage cap
     within the parent's original deadline and process containment.
     """
 

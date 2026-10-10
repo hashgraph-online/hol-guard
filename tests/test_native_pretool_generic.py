@@ -350,7 +350,6 @@ def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     emitted: list[dict[str, object]] = []
-    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(
         commands_hook_native_authority,
         "try_native_hook_authority",
@@ -389,7 +388,6 @@ def test_supported_cli_pretool_worker_exception_is_fail_safe(
         def review_http_payload(self, **_kwargs: object) -> dict[str, object]:
             raise RuntimeError("worker fixture failure")
 
-    monkeypatch.setattr(commands_hook_native_authority, "_native_mode_requires_rust", lambda: True)
     monkeypatch.setattr(commands_hook_native_authority, "HookWorker", BrokenWorker)
     response = commands_hook_native_authority.try_native_hook_authority(
         payload={"hook_event_name": "PreToolUse", "tool_input": {"url": "https://example.test"}},

@@ -30,10 +30,6 @@ def test_hook_worker_fails_closed_when_forced_posttool_native_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
@@ -54,10 +50,6 @@ def test_hook_worker_fails_closed_when_available_native_posttool_returns_none(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -145,10 +137,6 @@ def test_hook_worker_records_activity_when_auto_native_is_unavailable(
     monkeypatch.delenv("HOL_GUARD_PYTHON_ORACLE", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_DIAGNOSTIC", raising=False)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
@@ -172,14 +160,6 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
-        lambda: True,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_post_tool_native",
-        lambda *_args, **_kwargs: None,
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -221,10 +201,6 @@ def test_cli_native_authority_drains_receipt_writer_before_exit(
             return None
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
-        lambda: True,
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.commands_hook_native_authority.RuntimeHookEvidenceWriter",
         _Writer,
     )
@@ -244,22 +220,6 @@ def test_cli_native_authority_drains_receipt_writer_before_exit(
 
     assert result == {"decision": "deny", "reason_code": "test_native_decision"}
     assert stop_timeouts == [pytest.approx(0.25)]
-
-
-def test_cli_off_mode_leaves_python_source_ref_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
-        lambda: False,
-    )
-    result = try_native_hook_authority(
-        payload=_post_tool_payload(),
-        harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path / "workspace",
-        store=GuardStore(tmp_path / "guard-home"),
-    )
-    assert result is None
 
 
 def test_native_policy_snapshot_generation_is_stable_for_same_policy(tmp_path: Path) -> None:

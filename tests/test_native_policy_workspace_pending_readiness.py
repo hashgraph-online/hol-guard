@@ -110,7 +110,6 @@ def test_hook_worker_admits_existing_workspace_and_holds_new_one(
 ) -> None:
     publisher, _resident, existing = _published(tmp_path, monkeypatch)
     monkeypatch.setattr(publisher, "start", lambda: None)
-    monkeypatch.setattr(worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     new = tmp_path / "new"
@@ -197,7 +196,6 @@ def test_new_workspace_waits_for_its_publish_despite_a_stale_error(
 ) -> None:
     publisher, _resident, _existing = _published(tmp_path, monkeypatch)
     monkeypatch.setattr(publisher, "start", lambda: None)
-    monkeypatch.setattr(worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(worker_module, "get_native_policy_snapshot_publisher", lambda store: publisher)
     worker = worker_module.HookWorker(store=publisher.store, wait_for_native_policy=False)
     publisher._record_error("native_policy_snapshot_runtime_unavailable")

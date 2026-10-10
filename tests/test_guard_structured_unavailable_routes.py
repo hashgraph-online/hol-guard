@@ -30,6 +30,9 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
             reason_code="structured_managed_authority_unavailable" if required else None,
         ),
     )
+    # Pin the native edge as unavailable so the result is independent of any
+    # runtime binary installed on the machine running the test.
+    monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_: None)
     try:
         result = worker.review_http_payload(
             payload={

@@ -89,7 +89,6 @@ def _daemon(*, prepared: dict[str, object] | None) -> SimpleNamespace:
 
 
 def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None:
-    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     server = _daemon(prepared=None)
     server.store = SimpleNamespace(get_managed_install=lambda _harness: {"active": False}, connection_scope=nullcontext)
     handler = _FakeHandler(server)
@@ -104,7 +103,6 @@ def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None
 
 
 def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = _daemon(prepared={"snapshot_generation": 1})
@@ -133,7 +131,6 @@ def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path:
 
 
 def test_workspace_readiness_stays_fail_closed_when_native_ack_is_unready(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = _daemon(prepared=None)
