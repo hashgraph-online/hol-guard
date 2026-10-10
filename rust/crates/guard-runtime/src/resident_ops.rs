@@ -206,6 +206,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
             }
+            ResidentOperationV1::GithubCliClassify(request) => {
+                crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
+            }
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
             }
@@ -230,8 +233,20 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
             }
+            ResidentOperationV1::GitExecutionSafety(request) => {
+                crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
+            }
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
+            }
+            ResidentOperationV1::LocalMcpGrantDecide(request) => {
+                crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
+            }
+            #[cfg(unix)]
+            ResidentOperationV1::SkillDirectoryIdentity(request) => {
+                crate::skill_directory_identity_op::evaluate_skill_directory_identity_request(
+                    &request,
+                )
             }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
@@ -292,8 +307,12 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::CatalogRead(request) => encode_response(
                 &guard_command::catalog_read_model::evaluate_catalog_read(&request),
             ),
+            ResidentOperationV1::DataFlowAnalyze(request) => {
+                crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
+            }
             #[cfg(not(unix))]
-            ResidentOperationV1::ContainedNodeExecute(_)
+            ResidentOperationV1::SkillDirectoryIdentity(_)
+            | ResidentOperationV1::ContainedNodeExecute(_)
             | ResidentOperationV1::ContainedTypescriptExecute(_)
             | ResidentOperationV1::ContainedPackageScriptExecute(_)
             | ResidentOperationV1::ContainedWorkspaceWriteExecute(_)
@@ -345,6 +364,8 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
         _ => None,
     }
 }
@@ -359,6 +380,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
         _ => None,
     }
 }

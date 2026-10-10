@@ -1,6 +1,7 @@
 import { test, expect } from 'bun:test';
 import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
-  requireTransportSelection, thinkingLevel, REQUEST_MODEL, THINKING_LEVELS } from './luna_adapter';
+  requireTransportSelection, thinkingLevel, promptCacheKey, usageChunk,
+  REQUEST_MODEL, THINKING_LEVELS } from './luna_adapter';
 
 test('native streaming tool argument bytes are preserved across arbitrary splits', () => {
   const indices = new Map<number, number>();
@@ -40,7 +41,7 @@ test('completion emits only missing bytes and rejects disagreement with delivere
 });
 
 test('conversation conversion drops system text, keeps call ids and rejects orphan results', () => {
-  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-5.6-luna' });
+  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-6-luna' });
   const converted = convertMessages([
     { role: 'system', content: 'ignored here' },
     { role: 'user', content: 'go' },
@@ -63,19 +64,20 @@ test('only the per-run bearer token is authorized', () => {
   expect(authorized('Bearer ', '')).toBe(false);
 });
 
-test('only medium or high thinking levels are accepted', () => {
+test('only medium, high or opt-in low thinking levels are accepted', () => {
   expect(thinkingLevel('medium')).toBe('medium');
   expect(thinkingLevel('high')).toBe('high');
-  for (const value of [undefined, '', 'low', 'xhigh', 'Medium', ' high'])
+  expect(thinkingLevel('low')).toBe('low');
+  for (const value of [undefined, '', 'xhigh', 'Medium', ' low'])
     expect(() => thinkingLevel(value)).toThrow('Unsupported Luna thinking level');
 });
 test('requests must select the adapter model, streaming and the configured effort', () => {
-  for (const thinking of ['medium', 'high']) {
+  for (const thinking of THINKING_LEVELS) {
     const body = { model: REQUEST_MODEL, stream: true, reasoning_effort: thinking };
     expect(() => requireTransportSelection(body, thinking)).not.toThrow();
     const other = thinking === 'medium' ? 'high' : 'medium';
     for (const bad of [{ ...body, reasoning_effort: other }, { ...body, reasoning_effort: undefined },
-      { ...body, model: 'gpt-5.6-luna' }, { ...body, stream: false }, null])
+      { ...body, model: 'gpt-6-luna' }, { ...body, stream: false }, null])
       expect(() => requireTransportSelection(bad, thinking)).toThrow('Unexpected transport selection');
   }
 });
@@ -85,6 +87,32 @@ test('finish reasons map without nesting', () => {
   expect(finishReason('stop')).toBe('stop');
 });
 
+test('only a session UUID becomes a prompt cache key', () => {
+  const session = '123e4567-e89b-42d3-a456-426614174000';
+  expect(promptCacheKey(session)).toBe(session);
+  for (const header of [null, '', 'not-a-uuid', session.toUpperCase(), ` ${session}`, `${session}x`])
+    expect(promptCacheKey(header)).toBeUndefined();
+});
+
+test('pi-ai usage folds cached tokens back into prompt_tokens', () => {
+  expect(usageChunk({ input: 100, output: 20, cacheRead: 40, cacheWrite: 10, totalTokens: 170,
+    reasoningTokens: 5, cost: { total: 0.01 } })).toEqual({
+    prompt_tokens: 150, completion_tokens: 20, total_tokens: 170,
+    prompt_tokens_details: { cached_tokens: 40 },
+    completion_tokens_details: { reasoning_tokens: 5 } });
+  expect(usageChunk({ input: 1, output: 2, cacheRead: 0, cacheWrite: 0, totalTokens: 3 }))
+    .toEqual({ prompt_tokens: 1, completion_tokens: 2, total_tokens: 3,
+      prompt_tokens_details: { cached_tokens: 0 },
+      completion_tokens_details: { reasoning_tokens: 0 } });
+});
+test('usage without the full counter set is not emitted', () => {
+  for (const usage of [undefined, null, 'x', { input: 1 }, { input: 1, output: 2, cacheRead: 0,
+    cacheWrite: 0, totalTokens: '3' }, { input: -1, output: 0, cacheRead: 0, cacheWrite: 0,
+    totalTokens: 0 }, { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2,
+    reasoningTokens: -1 }])
+    expect(usageChunk(usage)).toBeUndefined();
+});
+
 // Needs the pinned SDK; CI does not install it, so this runs only when pointed at one.
 test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna model and agent hooks', async () => {
   const root = process.env.GUARD_GAUNTLET_SDK_ROOT!;
@@ -92,8 +120,8 @@ test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna m
   const { Agent } = await load('@oh-my-pi/pi-agent-core');
   const { discoverAuthStorage, ModelRegistry } = await load('@oh-my-pi/pi-coding-agent');
   const registry = new ModelRegistry(await discoverAuthStorage());
-  const model = registry.find('openai-codex', 'gpt-5.6-luna');
-  expect(model?.id).toBe('gpt-5.6-luna');
+  const model = registry.find('openai-codex', 'gpt-6-luna');
+  expect(model?.id).toBe('gpt-6-luna');
   const seen: unknown[] = [];
   for (const thinkingLevel of THINKING_LEVELS) {
     const agent = new Agent({ initialState: { model, thinkingLevel, systemPrompt: '', tools: [], messages: [] },
@@ -106,7 +134,7 @@ test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna m
 });
 
 test('a conversation must end with a user or tool message', () => {
-  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-5.6-luna' });
+  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-6-luna' });
   expect(() => requirePromptable(convertMessages([{ role: 'system', content: 's' }]))).toThrow();
   expect(() => requirePromptable(convertMessages([{ role: 'user', content: 'u' },
     { role: 'assistant', content: 'a' }]))).toThrow();

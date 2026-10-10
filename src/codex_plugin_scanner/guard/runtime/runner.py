@@ -1509,6 +1509,7 @@ def _evaluation_with_detector_registry(
         prior_decisions={},
         threat_intel={},
         redaction_settings={},
+        guard_home=context.guard_home,
     )
     result = _get_default_detector_registry().run(
         action_envelope,
