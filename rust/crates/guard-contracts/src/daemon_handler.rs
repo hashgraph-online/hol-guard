@@ -92,6 +92,60 @@ pub enum DaemonHandlerQueryV1 {
     },
     /// The `cursor` integer of an events query string.
     EventsCursor { query: String },
+    /// The failure response of a headless app action.
+    HeadlessError {
+        operation: String,
+        error_code: String,
+    },
+    /// A headless Cursor action named an unsupported surface.
+    HeadlessCursorSurface,
+    /// The state summary of a completed headless app action.
+    HeadlessState {
+        harness: String,
+        operation: String,
+        managed_install: ManagedInstallFactV1,
+        verification: Option<VerificationFactV1>,
+    },
+    /// App statuses for `str()` of each detected harness status.
+    DetectionStatuses { values: Vec<String> },
+    /// The failure response of a supply-chain package action.
+    SupplyChainSyncError {
+        operation: String,
+        error: SyncErrorKindV1,
+        /// Raw `str(error)`; the resident strips it and supplies the default.
+        message: String,
+        retryable: bool,
+    },
+}
+
+/// What an action result said about its managed install.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ManagedInstallFactV1 {
+    /// The result held a managed-install object.
+    pub present: bool,
+    pub active_truthy: bool,
+    /// `active` was the boolean false.
+    pub active_is_false: bool,
+}
+
+/// What an action result said about verification.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct VerificationFactV1 {
+    pub installed: bool,
+    /// The command was available or config paths were found.
+    pub command_or_config: bool,
+}
+
+/// Which Guard sync failure a supply-chain action hit.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum SyncErrorKindV1 {
+    AuthorizationExpired,
+    NotConfigured,
+    NotAvailable,
+    Other,
 }
 
 /// The handler's decision. `kind` echoes the query kind; `outcome` is

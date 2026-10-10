@@ -24,9 +24,9 @@ from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeR
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
-from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_daemon_handler import native_headless_action_error
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
@@ -3175,11 +3175,8 @@ def test_headless_api_rejects_missing_harness_with_structured_error(tmp_path: Pa
     assert payload["error"]["retryable"] is False
 
 
-def test_headless_generic_action_error_omits_unstructured_detail() -> None:
-    status, payload = _headless_action_error_payload(
-        operation="repair",
-        error_code="unexpected daemon blowup",
-    )
+def test_headless_generic_action_error_omits_unstructured_detail(tmp_path: Path) -> None:
+    status, payload = native_headless_action_error("repair", "unexpected daemon blowup", guard_home=tmp_path)
 
     assert status == 400
     assert payload == {
