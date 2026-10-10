@@ -4,7 +4,7 @@
 use std::path::Path;
 
 use guard_contracts::write_canonical_json;
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
@@ -223,6 +223,40 @@ pub(crate) fn normalized_launch_cwd(cwd: Option<&Path>) -> std::path::PathBuf {
             .unwrap_or_else(|path| path.to_string_lossy().into_owned()),
     ));
     resolved
+}
+
+// `_package_launch_approval_identity` (local_supply_chain.py :3109-3124) —
+// ticket name `_package_request_launch_identity_material` (surface-map alias;
+// same argv_sha256 + wrapper_resolution material compose). Pure projection:
+// `None` -> `{"available": False}`; otherwise binds `argv_sha256` verbatim and
+// passes through a Mapping `wrapper_resolution`, degrading any other/missing
+// value to `{"status": "direct"}`.
+pub fn package_request_launch_identity_material(
+    launch_identity: Option<&Map<String, Value>>,
+) -> Map<String, Value> {
+    let mut out = Map::new();
+    let Some(launch_identity) = launch_identity else {
+        out.insert("available".into(), json!(false));
+        return out;
+    };
+    let wrapper_resolution = launch_identity
+        .get("wrapper_resolution")
+        .filter(|v| v.is_object())
+        .cloned()
+        .unwrap_or_else(|| {
+            let mut direct = Map::new();
+            direct.insert("status".into(), json!("direct"));
+            Value::Object(direct)
+        });
+    out.insert(
+        "argv_sha256".into(),
+        launch_identity
+            .get("argv_sha256")
+            .cloned()
+            .unwrap_or(Value::Null),
+    );
+    out.insert("wrapper_resolution".into(), wrapper_resolution);
+    out
 }
 
 #[cfg(test)]

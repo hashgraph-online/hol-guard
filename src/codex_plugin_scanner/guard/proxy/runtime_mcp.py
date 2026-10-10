@@ -34,10 +34,9 @@ from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
     _resolve_stored_package_policy_override,
     _verified_external_archive_replacements,
-    compose_current_package_policy_action,
     evaluate_package_request_artifact,
+    package_current_action_and_hash,
     package_external_archive_override,
-    package_request_policy_hash,
 )
 from ..mcp_tool_calls import (
     ToolCallDecision,
@@ -1635,18 +1634,13 @@ class RuntimeMcpGuardProxy:
             retain_external_archive_blob=external_archive_network_authorized,
         )
         try:
-            package_current_action = compose_current_package_policy_action(
-                artifact=artifact,
-                evaluation=package_evaluation,
-                config=self.config,
-            )
             package_workspace = self.context.workspace_dir or Path.cwd()
             package_context = build_package_execution_context(
                 workspace_dir=package_workspace,
                 artifact=artifact,
             )
-            artifact_digest = package_request_policy_hash(
-                artifact=artifact,
+            package_current_action, artifact_digest = package_current_action_and_hash(
+                artifact,
                 store=self.store,
                 workspace_dir=package_workspace,
                 evaluation=package_evaluation,

@@ -40,7 +40,7 @@ fn invalid() -> String {
     "native_package_evaluation_compose_invalid".to_owned()
 }
 
-fn parse_action(text: &str) -> Result<GuardAction, String> {
+pub(crate) fn parse_action(text: &str) -> Result<GuardAction, String> {
     [
         GuardAction::Allow,
         GuardAction::Warn,
@@ -102,7 +102,7 @@ fn parse_reuse(value: Option<&Value>) -> Result<ApprovalReuseDecision, String> {
 
 /// The evaluation subset must hold a valid action and dict-only lists; Python
 /// would raise on anything else, so the runtime rejects it rather than guess.
-fn parse_evaluation(value: &Value) -> Result<Map<String, Value>, String> {
+pub(crate) fn parse_evaluation(value: &Value) -> Result<Map<String, Value>, String> {
     let map = value.as_object().ok_or_else(invalid)?;
     if map
         .keys()
@@ -225,7 +225,9 @@ fn override_external_archive(
     ))
 }
 
-fn compose(request: &PackageEvaluationComposeRequestV1) -> Result<Map<String, Value>, String> {
+pub(crate) fn compose(
+    request: &PackageEvaluationComposeRequestV1,
+) -> Result<Map<String, Value>, String> {
     let eval = ResidentPackageEval;
     let map = parse_evaluation(&request.evaluation)?;
     let variant = request.variant.as_deref();
@@ -317,7 +319,7 @@ fn compose(request: &PackageEvaluationComposeRequestV1) -> Result<Map<String, Va
 }
 
 /// Fields a rewrite changed or introduced relative to the caller's subset.
-fn patch(input: &Value, output: Map<String, Value>) -> Value {
+pub(crate) fn patch(input: &Value, output: Map<String, Value>) -> Value {
     let mut patch = Map::new();
     for key in PATCH_KEYS {
         if let Some(value) = output.get(key) {

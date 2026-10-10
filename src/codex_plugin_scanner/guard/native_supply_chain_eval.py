@@ -317,6 +317,8 @@ def _saved_policy_decision(
 
     if workspace_dir is None:
         return None
+    from .native_package_approval_hash import NativePackageApprovalHashError
+
     try:
         from .local_supply_chain import package_request_policy_hash
 
@@ -326,7 +328,7 @@ def _saved_policy_decision(
             workspace_dir=workspace_dir,
             evaluation=evaluation_from_native_payload(cached_payload),
         )
-    except (ImportError, TypeError, ValueError, KeyError, AttributeError, OSError):
+    except (ImportError, TypeError, ValueError, KeyError, AttributeError, OSError, NativePackageApprovalHashError):
         return None
     lookup = store.resolve_policy_decision_lookup(
         artifact.harness,
