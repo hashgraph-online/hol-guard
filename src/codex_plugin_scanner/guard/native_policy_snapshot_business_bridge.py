@@ -16,7 +16,11 @@ from .native_policy_snapshot_codec import (
     _strict_json_loads_v3,
     _valid_digest_v3,
 )
-from .native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_BYTES, NativePolicySnapshotError
+from .native_policy_snapshot_constants import (
+    BUSINESS_NATIVE_TIMEOUT_SECONDS,
+    POLICY_SNAPSHOT_MAX_BYTES,
+    NativePolicySnapshotError,
+)
 
 if TYPE_CHECKING:
     from .native_runtime_values import NativeRuntimeStatus
@@ -46,7 +50,11 @@ def end_business_deadline(token: Token[float | None]) -> None:
 
 def _remaining_timeout() -> float:
     deadline = _DEADLINE.get()
-    remaining = 5.0 if deadline is None else min(5.0, deadline - time.monotonic())
+    remaining = (
+        BUSINESS_NATIVE_TIMEOUT_SECONDS
+        if deadline is None
+        else min(BUSINESS_NATIVE_TIMEOUT_SECONDS, deadline - time.monotonic())
+    )
     if remaining <= 0:
         raise NativePolicySnapshotError("native_policy_snapshot_deadline_exceeded")
     return remaining

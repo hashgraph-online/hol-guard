@@ -24,6 +24,7 @@ from typing import Protocol
 
 from .codex_hook_launch_runtime import isolated_hook_environment
 from .native_mode import non_production_diagnostic_enabled
+from .native_resident_reap import reap_exited_client
 from .native_resident_transport import write_frame
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,7 @@ class _PersistentNativeClient:
         self._diagnostic_lock: LockType | None = None
         self._diagnostic_tail = b""
         self._closing = False
+        self._retiring: subprocess.Popen[bytes] | None = None
         self._lock = threading.Lock()
         # Keep process teardown out of the response wait.  The process-state
         # lock protects snapshots; this lock protects the response queue and
@@ -305,8 +307,11 @@ class _PersistentNativeClient:
                     break
         except (OSError, ValueError):
             pass
+        # Decide before the failure is visible: a request that sees it may start closing.
+        retired = self._closing or self._retiring is process
         with suppress(Exception):
             responses.put_nowait(_StreamFailure())
+        reap_exited_client(process, retired=retired)
 
     @staticmethod
     def _write_frame(
@@ -500,6 +505,7 @@ class _PersistentNativeClient:
         def remaining() -> float:
             return min(_CLIENT_CLOSE_TIMEOUT_SECONDS, max(0.0, deadline - time.monotonic()))
 
+        self._retiring = process
         with suppress(Full):
             responses.put_nowait(_StreamFailure())
         if process.poll() is None:

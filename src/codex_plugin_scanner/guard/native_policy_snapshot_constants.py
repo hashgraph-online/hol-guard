@@ -63,6 +63,9 @@ _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
 _PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0
 _PUBLISH_STARTUP_TIMEOUT_SECONDS = 9.0
+# One business-policy native exchange: runtime probe plus compile or codec call.
+# A cold native start on a slow Windows host can use most of the 5 s budget alone.
+BUSINESS_NATIVE_TIMEOUT_SECONDS = 15.0 if sys.platform == "win32" else 5.0
 _MAX_ACK_BYTES = 4 * 1024
 _RENEWAL_LEAD_SECONDS = 5 * 60
 _RENEWAL_JITTER_MAX_SECONDS = 30.0

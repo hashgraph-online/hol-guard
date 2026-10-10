@@ -8,7 +8,7 @@ import os
 import stat
 import time
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 from .native_policy_snapshot_windows_support import _runtime_state_directory
@@ -151,20 +151,103 @@ def _unlock(descriptor: int) -> None:
     fcntl.flock(descriptor, fcntl.LOCK_UN)
 
 
+def _pwrite_all(descriptor: int, data: bytes) -> None:
+    _ = os.lseek(descriptor, 0, os.SEEK_SET)
+    offset = 0
+    while offset < len(data):
+        written = os.write(descriptor, data[offset:])
+        if written <= 0:
+            raise OSError("native resident update marker write failed")
+        offset += written
+
+
+def _read_marker_bytes(descriptor: int) -> bytes:
+    _ = os.lseek(descriptor, 0, os.SEEK_SET)
+    return os.read(descriptor, _MAX_MARKER_BYTES + 1)
+
+
 def _write_marker(descriptor: int, digest: str) -> None:
+    """Replace the marker without ever leaving it truncated.
+
+    The marker file is also the flock identity, so a tmp+rename swap would
+    detach the barrier from every process holding the old inode. Instead the
+    new value overwrites the old one in place, in one write, and the file is
+    only shrunk afterwards (shrinking cannot hit ENOSPC). A failed write
+    restores the previous bytes and length so a full disk cannot leave an
+    empty or torn marker behind.
+    """
+
     encoded = f"{digest}\n".encode("ascii") if digest else b""
+    previous: bytes | None = None
     try:
-        _ = os.lseek(descriptor, 0, os.SEEK_SET)
-        os.ftruncate(descriptor, 0)
-        offset = 0
-        while offset < len(encoded):
-            written = os.write(descriptor, encoded[offset:])
-            if written <= 0:
-                raise OSError("native resident update marker write failed")
-            offset += written
+        previous = _read_marker_bytes(descriptor)
+        _pwrite_all(descriptor, encoded)
+        if len(previous) > len(encoded):
+            os.ftruncate(descriptor, len(encoded))
         os.fsync(descriptor)
     except OSError as error:
+        if previous is not None and len(previous) <= _MAX_MARKER_BYTES:
+            try:
+                _pwrite_all(descriptor, previous)
+                os.ftruncate(descriptor, len(previous))
+                os.fsync(descriptor)
+            except OSError:
+                pass
         raise NativeResidentUpdateLockError("update_native_resident_lock_write_failed") from error
+
+
+def _valid_marker(raw: bytes) -> str | None:
+    text = raw[:-1] if raw.endswith(b"\n") else raw
+    if len(text) != 64 or not all(byte in b"0123456789abcdefABCDEF" for byte in text):
+        return None
+    return text.decode("ascii")
+
+
+def repair_stale_resident_update_marker(guard_home: Path, runtime_executable: Path) -> dict[str, object]:
+    """Re-point a marker left behind by an interrupted update at the installed runtime.
+
+    The marker is only touched while this process holds the exclusive updater
+    lease (non-blocking), so no update is in progress and no resident client
+    holds the shared lease. A marker that is empty or already names the
+    installed runtime is left alone. Otherwise it is rewritten to the installed
+    runtime digest, exactly what a completed update publishes, so runtimes
+    superseded by that update still fail closed; the marker is never cleared.
+    """
+
+    try:
+        descriptor = _open_lock_file(guard_home)
+    except NativeResidentUpdateLockError as error:
+        return {"status": "unavailable", "reason_code": error.reason_code}
+    try:
+        try:
+            _try_lock(descriptor)
+        except OSError as error:
+            if _is_lock_contention(error):
+                return {"status": "update_in_progress"}
+            return {"status": "unavailable", "reason_code": "update_native_resident_lock_failed"}
+        try:
+            installed = _runtime_digest(runtime_executable)
+            if installed is None:
+                return {"status": "unavailable", "reason_code": "update_native_resident_lock_finalize_failed"}
+            try:
+                observed = _read_marker_bytes(descriptor)
+            except OSError:
+                return {"status": "unavailable", "reason_code": "update_native_resident_lock_read_failed"}
+            if not observed.strip():
+                return {"status": "current"}
+            marker = _valid_marker(observed)
+            if marker is not None and marker.lower() == installed:
+                return {"status": "current"}
+            try:
+                _write_marker(descriptor, installed)
+            except NativeResidentUpdateLockError as error:
+                return {"status": "unavailable", "reason_code": error.reason_code}
+            return {"status": "repaired", "previous_marker_valid": marker is not None}
+        finally:
+            with suppress(OSError):
+                _unlock(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 @contextmanager
@@ -206,4 +289,5 @@ __all__ = [
     "NativeResidentUpdateLock",
     "NativeResidentUpdateLockError",
     "hold_native_resident_update_lock",
+    "repair_stale_resident_update_marker",
 ]

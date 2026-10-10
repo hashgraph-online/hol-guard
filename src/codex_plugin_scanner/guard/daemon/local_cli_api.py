@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import time
@@ -61,6 +62,7 @@ from ..runtime.local_skill_index import (
     public_skill_page,
 )
 from ..runtime.mcp_protection import build_mcp_server_identity
+from ..runtime.observed_local_clis import backfill_observed_local_clis
 from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
     _package_item_available,
@@ -75,12 +77,21 @@ from .local_cli_api_contract import LOCAL_CLI_API_SCHEMA as _LOCAL_CLI_API_SCHEM
 from .local_cli_api_contract import LocalCliApiError
 from .local_cli_continuity_api import decorate_local_cli_continuity
 from .local_cli_mcp_store import bound_mcp_observation, stored_mcp_recognition
+from .local_cli_profiles_api import (
+    annotate_cli_profiles,
+    merge_profile_commands,
+    profile_catalog_seed,
+    profiled_cli_package_launch,
+    seeded_profile_items,
+)
 from .local_cli_registry_setup import registry_setup as reviewed_registry_setup
 from .mcp_discovery_jobs import DiscoveryJobError, DiscoveryStageError, McpDiscoveryJobs
 from .mcp_registry_undo import RegistrySetupUndo
 
 if TYPE_CHECKING:
     from ..store import GuardStore
+
+_LOGGER = logging.getLogger(__name__)
 
 _VALID_STATES = frozenset({"allowed", "blocked", "unset"})
 _DISCOVERY_TTL_SECONDS = 30.0
@@ -93,6 +104,18 @@ def _client_discovery_job_id(payload: dict[str, object]) -> str | None:
     if not isinstance(value, str) or len(value) != 32 or any(c not in "0123456789abcdef" for c in value):
         raise LocalCliApiError(400, "invalid_discovery_job")
     return value
+
+
+_FORGET_ERRORS: dict[str, tuple[int, str]] = {
+    "invalid_cli_id": (400, "This connection id is not valid."),
+    "local_cli_not_found": (404, "Guard no longer lists this connection."),
+    "identity_changed": (409, "This connection changed. Reload and try again."),
+    "local_cli_enrolled": (409, "Remove this custom extension before forgetting it."),
+    "local_cli_shared_server_enrolled": (
+        409,
+        "Another enrolled connection uses the same server, so Guard keeps this one to scope that permission.",
+    ),
+}
 
 
 class LocalCliApiService:
@@ -335,6 +358,7 @@ class LocalCliApiService:
                             raise DiscoveryStageError("catalog_limit_reached") from None
                         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
                             raise DiscoveryStageError("observed_provider_scan_failed") from None
+                        backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
                         if saturated:
                             raise DiscoveryStageError("catalog_limit_reached")
 
@@ -476,11 +500,16 @@ class LocalCliApiService:
         # Connector history and configured launch discovery are independent.
         discovery_issue = None
         try:
+            _ = self._store.prune_inactive_local_cli_observations(throttle=True)
+        except sqlite3.Error:
+            _LOGGER.warning("observed record retention failed", exc_info=True)
+        try:
             saturated = discover_observed_mcp_tools(self._store, seen_at=utc_now())
             if saturated:
                 discovery_issue = "catalog_limit_reached"
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
             discovery_issue = "observed_provider_scan_failed"
+        backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
         try:
             labels = self._observe_harness_mcp_servers(strict=True)
         except DiscoveryStageError:
@@ -526,11 +555,13 @@ class LocalCliApiService:
         from ..native_policy_snapshot import local_cli_publication_status
 
         revision = self._store.read_local_cli_revision()
+        items = annotate_cli_profiles(items)
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": revision,
             "native_publication": local_cli_publication_status(self._store.guard_home, revision),
             "items": items,
+            "seeded_items": seeded_profile_items(items, authority_revision=revision),
             "host_inventory": self._codex_host_inventory.read(),
             "cloud": decorate_local_cli_continuity(self._store, items),
         }
@@ -598,6 +629,7 @@ class LocalCliApiService:
         if identity is None:
             raise LocalCliApiError(400, code, message)
         commands, help_status, source_path = _discover_from_command(command, identity, operator_cwd, home_dir)
+        commands = merge_profile_commands(identity.name, commands)
         self._store.record_local_cli_observation(
             identity,
             seen_at=utc_now(),
@@ -644,6 +676,8 @@ class LocalCliApiService:
             server_identity_hash=stored_server_hash if isinstance(stored_server_hash, str) else None,
             source_label=stored_source_label if isinstance(stored_source_label, str) else None,
         )
+        if selected_server is None and stored_observation is None and profiled_cli_package_launch(tokens):
+            return None
         # A known connection remains MCP even when its script no longer exists.
         if selected_server is None and not looks_like_mcp_launch(
             tokens, command_text=command, cwd=home_dir, home_dir=home_dir
@@ -880,7 +914,7 @@ class LocalCliApiService:
         return {
             "schema_version": _LOCAL_CLI_API_SCHEMA,
             "revision": self._store.read_local_cli_revision(),
-            "item": public_local_cli_item(listed or fallback),
+            "item": annotate_cli_profiles([public_local_cli_item(listed or fallback)])[0],
             "help_status": help_status,
             "summary": summary,
         }
@@ -932,6 +966,7 @@ class LocalCliApiService:
         except ApprovalGateError as exc:
             raise LocalCliApiError(exc.status, exc.code, str(exc)) from exc
         command_states = self._command_states_from_payload(payload)
+        catalog_seed = profile_catalog_seed(identity.cli_id, identity.name) if command_states else ()
         from ..native_policy_snapshot import local_cli_publication_status, notify_native_policy_mutation
 
         # Retire acknowledged authority before writing. The final notification
@@ -946,6 +981,7 @@ class LocalCliApiService:
                 command_states=command_states,
                 now=utc_now(),
                 provider_updates=provider_updates,
+                catalog_seed=catalog_seed,
             )
         except ValueError as exc:
             if str(exc) == "local_cli_revision_conflict":
@@ -963,6 +999,21 @@ class LocalCliApiService:
             "cli_id": identity.cli_id,
             "state": state,
         }
+
+    def forget(self, payload: dict[str, object]) -> dict[str, object]:
+        """Drop a detected record the user never enrolled; it returns if seen again."""
+
+        from ..store_local_cli_retention import LocalCliForgetError
+
+        cli_id = self._required_string(payload, "cli_id")
+        identity_hash = self._required_string(payload, "identity_hash")
+        try:
+            self._store.forget_local_cli_observation(cli_id, identity_hash=identity_hash)
+        except LocalCliForgetError as exc:
+            code = str(exc)
+            status, message = _FORGET_ERRORS.get(code, (409, "Guard could not forget this connection."))
+            raise LocalCliApiError(status, code, message) from exc
+        return {"schema_version": _LOCAL_CLI_API_SCHEMA, "status": "forgotten", "cli_id": cli_id}
 
     @staticmethod
     def _provider_updates_from_payload(payload: dict[str, object]) -> tuple[tuple[str, str, int], ...]:

@@ -310,7 +310,8 @@ fn valid_selector_key(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
 }
 
-fn normalized_harness_selector(value: &str) -> Option<String> {
+/// Canonical harness selector shared with the resident MCP policy composition.
+pub fn normalized_harness_selector(value: &str) -> Option<String> {
     if !valid_selector_key(value) {
         return None;
     }

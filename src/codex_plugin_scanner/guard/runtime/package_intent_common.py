@@ -558,40 +558,8 @@ def redact_package_request_token(value: str) -> str:
     return _sanitize_url(value)
 
 
-def flag_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    flags: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token.startswith("-"):
-            if token == "--location" and index + 1 < len(tokens) and not tokens[index + 1].startswith("-"):
-                flags.append(f"--location={tokens[index + 1]}")
-                index += 2
-                continue
-            if token.startswith(("--global=", "--location=")):
-                flags.append(token)
-            else:
-                flags.append(token.split("=", 1)[0] if token.startswith("--") and "=" in token else token)
-        index += 1
-    return tuple(dict.fromkeys(flags))
-
-
 def existing_relative_paths(workspace: Path | None, candidates: tuple[str, ...] | list[str]) -> tuple[str, ...]:
     return existing_paths_within_workspace(workspace, candidates)
-
-
-def first_positional(tokens: tuple[str, ...], *, skip_value_options: set[str]) -> str | None:
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token in skip_value_options and index + 1 < len(tokens):
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        return token
-    return None
 
 
 def option_value(tokens: tuple[str, ...], option: str) -> str | None:
@@ -600,14 +568,6 @@ def option_value(tokens: tuple[str, ...], option: str) -> str | None:
             return tokens[index + 1]
         if token.startswith(f"{option}="):
             return token.partition("=")[2]
-    return None
-
-
-def property_value(tokens: tuple[str, ...], property_name: str) -> str | None:
-    prefix = f"-D{property_name}="
-    for token in tokens:
-        if token.startswith(prefix):
-            return token[len(prefix) :]
     return None
 
 
@@ -720,15 +680,6 @@ def coordinate_target(ecosystem: str, spec: str) -> PackageIntentTarget:
 def composer_target(spec: str) -> PackageIntentTarget:
     package_name, requested_specifier = spec.split(":", 1) if ":" in spec else (spec, None)
     return PackageIntentTarget("packagist", package_name, spec, requested_specifier)
-
-
-def homebrew_target(spec: str, *, cask: bool = False) -> PackageIntentTarget:
-    ecosystem = "homebrew-cask" if cask else "homebrew"
-    return PackageIntentTarget(ecosystem, spec or None, spec, None)
-
-
-def homebrew_tap_target(spec: str, *, source_url: str | None = None) -> PackageIntentTarget:
-    return PackageIntentTarget("homebrew-tap", spec or None, spec, None, source_url=source_url)
 
 
 def split_python_specifier(spec: str) -> tuple[str, str | None]:

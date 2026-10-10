@@ -17,7 +17,6 @@ from urllib.parse import urlparse
 
 import requests
 
-from ..config import resolve_guard_home
 from ..daemon.manager import load_guard_daemon_auth_token
 from ..mdm.network import managed_requests_session
 from ..store import GuardStore
@@ -349,19 +348,3 @@ class GuardBridge:
     def stop(self) -> None:
         """Stop the polling loop."""
         self._running = False
-
-
-def run_bridge(
-    guard_url: str | None = None,
-    poll_interval: int = 10,
-    dry_run: bool = False,
-    store: GuardStore | None = None,
-    backend: NotificationBackend | None = None,
-) -> None:
-    """Run the Guard Bridge daemon."""
-    config = BridgeConfig(guard_url=guard_url, poll_interval=poll_interval, dry_run=dry_run)
-    if store is None:
-        store = GuardStore(resolve_guard_home())  # source defaults to "default"
-
-    bridge = GuardBridge(config=config, store=store, backend=backend)
-    bridge.run()

@@ -274,8 +274,10 @@ def main(argv: list[str] | None = None) -> int:
         # below then resolves inherited results to their actual source executions.
         # The change planner only runs on pull_request; on push a skipped planner
         # is expected and must not block coverage selection.
+        # Each inventory spans several API pages. Polling every second exhausts
+        # the repository's shared Actions quota while other shards are running.
         barrier.wait_for_shards(
-            repository, run_id, attempt, poll_seconds=1,
+            repository, run_id, attempt, poll_seconds=30,
             execution_validator=lambda _job, _label: None,
             plan_skippable=os.environ.get("GITHUB_EVENT_NAME", "") != "pull_request",
         )

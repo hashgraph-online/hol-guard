@@ -7,6 +7,15 @@ import urllib.parse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
+from .extension_catalog_sync import ExtensionCatalogLimitError
+from .extension_control_limits import CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES, CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES
+
+_CATALOG_OVER_CLOUD_LIMIT: dict[str, object] = {
+    "managedControlsCapabilities": [],
+    "extension_catalog_sync_status": "downgraded",
+    "extension_catalog_sync_reason": "catalog_upload_exceeds_cloud_limit",
+}
+
 
 @dataclass(frozen=True)
 class ExtensionCatalogUpload:
@@ -26,6 +35,12 @@ def prepare_extension_catalog_handshake(
 
     digest = session_payload.get("extensionCatalogDigest")
     if not isinstance(digest, str):
+        # Posture advertises capabilities without a digest only when the catalog
+        # build failed; name the Cloud limit when that was the cause.
+        if "managedControlsCapabilities" in session_payload and _exceeds_cloud_limit(
+            catalog_factory, fallback_generated_at
+        ):
+            return dict(_CATALOG_OVER_CLOUD_LIMIT), None
         return {}, None
     handshake = runtime_response.get("extensionCatalogSync")
     if handshake is None:
@@ -56,12 +71,20 @@ def prepare_extension_catalog_handshake(
     generated_at = session_payload.get("updatedAt")
     if not isinstance(generated_at, str) or not generated_at:
         generated_at = fallback_generated_at
-    catalog = catalog_factory(generated_at)
+    try:
+        catalog = catalog_factory(generated_at)
+    except ExtensionCatalogLimitError:
+        return dict(_CATALOG_OVER_CLOUD_LIMIT), None
     if catalog.get("catalogDigest") != digest:
         raise RuntimeError("Extension catalog changed during runtime synchronization")
+    catalog_bytes = len(_compact_json(catalog))
+    body = _compact_json({"idempotencyKey": f"catalog:{digest}", "catalog": catalog})
+    # Cloud enforces the catalog and the request body limits separately.
+    if catalog_bytes > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES or len(body) > CLOUD_V1_CATALOG_SYNC_MAX_BODY_BYTES:
+        return dict(_CATALOG_OVER_CLOUD_LIMIT), None
     upload = ExtensionCatalogUpload(
         url=_normalized_extension_catalog_sync_url(runtime_sync_url, upload_path=str(upload_path)),
-        body=json.dumps({"idempotencyKey": f"catalog:{digest}", "catalog": catalog}).encode("utf-8"),
+        body=body,
     )
     return {
         "extension_catalog_sync_status": "uploaded",
@@ -151,6 +174,20 @@ def runtime_summary_device_id(summary: object, fallback: str) -> str:
 
     value = summary.get("runtime_device_id") if isinstance(summary, dict) else None
     return value if isinstance(value, str) and value else fallback
+
+
+def _exceeds_cloud_limit(catalog_factory: Callable[[str], Mapping[str, object]], generated_at: str) -> bool:
+    try:
+        catalog_factory(generated_at)
+    except ExtensionCatalogLimitError:
+        return True
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+def _compact_json(value: object) -> bytes:
+    return json.dumps(value, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode("utf-8")
 
 
 def _normalized_extension_catalog_sync_url(runtime_sync_url: str, *, upload_path: str) -> str:

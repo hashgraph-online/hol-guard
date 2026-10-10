@@ -48,7 +48,10 @@ _VALID_ACTION_TYPES: frozenset[GuardActionType] = frozenset(
 _SCHEMA_VERSION = 1
 _SHELL_TOOL_NAMES = frozenset({"bash", "shell", "sh", "zsh", "terminal", "run_command", "run_terminal_command"})
 _FILE_READ_TOOL_NAMES = frozenset({"read", "read_file", "open_file", "view", "view_file", "cat_file"})
-_FILE_WRITE_TOOL_NAMES = frozenset({"write", "edit", "multiedit", "write_file", "edit_file", "apply_patch"})
+# Deletes change files too; strreplace and delete are Cursor's native edit and delete tools.
+_FILE_WRITE_TOOL_NAMES = frozenset(
+    {"write", "edit", "multiedit", "strreplace", "delete", "delete_file", "write_file", "edit_file", "apply_patch"}
+)
 _GROK_FILE_READ_TOOL_NAMES = frozenset({"grep", "glob", "list_dir", "listdir", "list_directory", "read"})
 _GROK_SUBAGENT_TOOL_NAMES = frozenset({"task", "spawn_subagent"})
 _GROK_LIFECYCLE_ENVELOPE_EVENTS = frozenset({"SessionStart", "SubagentStart"})

@@ -171,6 +171,9 @@ def cursor_hook_response_from_guard(
         if read_permission == "deny":
             response["user_message"] = reason
         return {key: value for key, value in response.items() if value is not None}
+    if raw_event == "pretooluse" and permission == "ask":
+        # Cursor's preToolUse only stops the tool on deny; ask would let the write run.
+        permission = "deny"
     response: dict[str, object] = {"permission": permission}
     if permission != "allow":
         response["user_message"] = reason

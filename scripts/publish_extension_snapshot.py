@@ -17,6 +17,8 @@ from extension_artifact_bundle import ARCHIVE, MANIFEST, source_sha, verify_bund
 from codex_plugin_scanner.no_redirect import RejectRedirects
 
 REPOSITORY = "hashgraph-online/hol-guard"
+PROVENANCE = "extension-artifacts.intoto.jsonl"
+WORKFLOW = REPOSITORY + "/.github/workflows/extension-artifact-regen.yml"
 
 
 def github_id(value: object) -> int:
@@ -85,9 +87,22 @@ def find_release(tag: str) -> dict | None:
     return matches[0] if matches else None
 
 
+def verify_provenance(directory: Path, expected_sha: str) -> None:
+    bundle = directory / PROVENANCE
+    if not bundle.is_file() or bundle.stat().st_size > 1024 * 1024:
+        raise ValueError("snapshot provenance is missing or exceeds byte limit")
+    for name in (ARCHIVE, MANIFEST):
+        github(
+            "attestation", "verify", str(directory / name), "--bundle", str(bundle),
+            "--repo", REPOSITORY, "--signer-workflow", WORKFLOW,
+            "--source-ref", "refs/heads/main", "--source-digest", expected_sha,
+        )
+
+
 def publish(directory: Path, expected_sha: str) -> None:
     expected_sha = source_sha(expected_sha)
     verify_bundle(directory, expected_sha)
+    verify_provenance(directory, expected_sha)
     tag = "extension-artifacts-" + expected_sha
     release = find_release(tag)
     if release is None:
@@ -122,7 +137,7 @@ def publish(directory: Path, expected_sha: str) -> None:
     assets = {asset["name"]: asset for asset in release["assets"]}
     if len(assets) != len(release["assets"]):
         raise ValueError("snapshot release has duplicate assets")
-    expected = {ARCHIVE, MANIFEST}
+    expected = {ARCHIVE, MANIFEST, PROVENANCE}
     if assets.keys() - expected:
         raise ValueError("snapshot release has unexpected assets")
     if not release["draft"] and assets.keys() != expected:
@@ -132,7 +147,8 @@ def publish(directory: Path, expected_sha: str) -> None:
         for name in sorted(assets):
             download_asset(assets[name], downloaded / name)
             if (
-                hashlib.sha256((downloaded / name).read_bytes()).digest()
+                name != PROVENANCE
+                and hashlib.sha256((downloaded / name).read_bytes()).digest()
                 != hashlib.sha256((directory / name).read_bytes()).digest()
             ):
                 raise ValueError("existing snapshot asset differs; refusing to overwrite")
@@ -140,9 +156,14 @@ def publish(directory: Path, expected_sha: str) -> None:
             asset = upload_asset(release_id, directory / name)
             download_asset(asset, downloaded / name)
         for name in expected:
+            # Attestations contain signing timestamps. A retry keeps the
+            # existing bundle and verifies its subjects instead of replacing it.
+            if name == PROVENANCE and name in assets:
+                continue
             if (downloaded / name).read_bytes() != (directory / name).read_bytes():
                 raise ValueError("uploaded snapshot differs from verified local assets")
         verify_bundle(downloaded, expected_sha)
+        verify_provenance(downloaded, expected_sha)
     if release["draft"]:
         published = json.loads(github("api", f"repos/{REPOSITORY}/releases/{release_id}",
                                       "--method", "PATCH", "-F", "draft=false", "-f", "make_latest=false"))

@@ -429,7 +429,7 @@ def test_generated_zcode_authority_block_stderr_appends_remediation(tmp_path: Pa
     )
 
     assert code == 2
-    assert "hol-guard command controls acknowledge-degraded" in stderr
+    assert "hol-guard command controls recover-authority" in stderr
 
 
 def test_generated_zcode_sandbox_required_denies_with_exit_two(tmp_path: Path) -> None:

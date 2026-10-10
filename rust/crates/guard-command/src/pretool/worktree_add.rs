@@ -32,6 +32,7 @@ pub(super) fn exact_safe_command(
         .and_then(|cd_index| verified_worktree_cwd_context(model, cd_index, context));
     let proof_context = super::PathContext {
         home_dir: context.home_dir,
+        cdpath_unset: context.cdpath_unset,
         cwd: cwd_proof
             .as_ref()
             .map(|proof| proof.cwd.as_str())

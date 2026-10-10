@@ -907,7 +907,9 @@ def test_ensure_guard_daemon_retires_authenticated_state_without_identity_before
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
     monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782")
+    monkeypatch.setattr(
+        daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782"
+    )
     monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
 
     assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
@@ -1658,6 +1660,34 @@ def test_runtime_fingerprint_reuses_content_hash_when_tree_signature_matches(tmp
         assert cache_path.is_file()
     finally:
         daemon_manager_module._runtime_fingerprint_cache = None
+
+
+def test_same_install_native_upgrade_rejects_live_previous_generation(tmp_path, monkeypatch):
+    package = tmp_path / "codex_plugin_scanner"
+    native = package / "_native"
+    native.mkdir(parents=True)
+    (package / "version.py").write_text('__version__ = "0.0.0"\n', encoding="utf-8")
+    manifest = native / "runtime-manifest.json"
+    manifest.write_text(json.dumps({"runtime_sha256": "a" * 64}), encoding="utf-8")
+    monkeypatch.setattr(daemon_manager_module, "_current_guard_daemon_source_root", lambda: str(tmp_path))
+    monkeypatch.setattr(
+        daemon_manager_module,
+        "_runtime_fingerprint_cache_path",
+        lambda _source_root: tmp_path / "fp-cache" / "runtime-fingerprint-cache.json",
+    )
+    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
+    previous_generation = {
+        "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
+        "package_version": daemon_manager_module.__version__,
+        "source_root": str(tmp_path),
+        "runtime_fingerprint": daemon_manager_module._current_guard_daemon_runtime_fingerprint(),
+    }
+    assert daemon_manager_module._guard_daemon_state_matches_current_runtime(previous_generation)
+
+    manifest.write_text(json.dumps({"runtime_sha256": "b" * 64}), encoding="utf-8")
+    monkeypatch.setattr(daemon_manager_module, "_runtime_fingerprint_cache", None)
+
+    assert not daemon_manager_module._guard_daemon_state_matches_current_runtime(previous_generation)
 
 
 def test_desktop_ensure_uses_post_update_timeout(monkeypatch):
@@ -3538,7 +3568,6 @@ def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, 
     ),
 )
 def test_malformed_frozen_guard_command_with_quoted_executable_fails_closed(command_line: str) -> None:
-
     assert daemon_manager_module._malformed_command_may_launch_guard(command_line)
 
 

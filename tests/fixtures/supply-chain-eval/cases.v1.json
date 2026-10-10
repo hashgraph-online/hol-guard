@@ -1,0 +1,768 @@
+{
+ "schema": "hol-guard.supply-chain-eval-vectors.v1",
+ "description": "Language-neutral expectations for resident package supply-chain evaluation on a workspace without Guard Cloud. No Python oracle.",
+ "lockfile_parse": [
+  {
+   "name": "clean_v3",
+   "path": "package-lock.json",
+   "text": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"name\": \"a\"}, \"node_modules/react\": {\"version\": \"18.0.0\"}}}",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "react",
+      "react",
+      "18.0.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "empty_object",
+   "path": "package-lock.json",
+   "text": "{}",
+   "expect": {
+    "complete": true,
+    "entries": []
+   }
+  },
+  {
+   "name": "syntax_error",
+   "path": "package-lock.json",
+   "text": "{",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "duplicate_key",
+   "path": "package-lock.json",
+   "text": "{\"packages\":{\"a\":{},\"a\":{}}}",
+   "expect": {
+    "complete": false,
+    "error_reason": "duplicate_key"
+   }
+  },
+  {
+   "name": "invalid_utf8",
+   "path": "package-lock.json",
+   "bytes_hex": "fffefd",
+   "expect": {
+    "complete": false,
+    "error_reason": "decode_error"
+   }
+  },
+  {
+   "name": "array_root",
+   "path": "package-lock.json",
+   "text": "[]",
+   "expect": {
+    "complete": false,
+    "error_reason": "unsupported_shape"
+   }
+  },
+  {
+   "name": "unsupported_format",
+   "path": "notes.lock",
+   "text": "{}",
+   "expect": {
+    "complete": false,
+    "error_reason": "unsupported_format"
+   }
+  },
+  {
+   "name": "depth_limit",
+   "path": "package-lock.json",
+   "generate": {
+    "prefix": "{\"packages\":",
+    "unit": "[",
+    "count": 300,
+    "closing_unit": "]",
+    "suffix": "}"
+   },
+   "expect": {
+    "complete": false,
+    "error_reason": "depth_limit_exceeded"
+   }
+  },
+  {
+   "name": "byte_limit",
+   "path": "package-lock.json",
+   "generate": {
+    "unit": " ",
+    "count": 8388609
+   },
+   "expect": {
+    "complete": false,
+    "error_reason": "byte_limit_exceeded"
+   }
+  },
+  {
+   "name": "cargo_lock_clean",
+   "path": "Cargo.lock",
+   "text": "version = 3\n\n[[package]]\nname = \"serde\"\nversion = \"1.0.200\"\n\n[[package]]\nname = \"itoa\"\nversion = \"1.0.11\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "itoa",
+      "itoa",
+      "1.0.11"
+     ],
+     [
+      "serde",
+      "serde",
+      "1.0.200"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "uv_lock_clean",
+   "path": "uv.lock",
+   "text": "version = 1\n\n[[package]]\nname = \"requests\"\nversion = \"2.32.3\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "requests",
+      "requests",
+      "2.32.3"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "poetry_lock_clean",
+   "path": "poetry.lock",
+   "text": "[[package]]\nname = \"click\"\nversion = \"8.1.7\"\n\n[metadata]\nlock-version = \"2.0\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "click",
+      "click",
+      "8.1.7"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "toml_lock_empty",
+   "path": "uv.lock",
+   "text": "",
+   "expect": {
+    "complete": true,
+    "entries": []
+   }
+  },
+  {
+   "name": "cargo_lock_syntax_error",
+   "path": "Cargo.lock",
+   "text": "[[package]\nname = \"serde\"\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "poetry_lock_duplicate_key",
+   "path": "poetry.lock",
+   "text": "[[package]]\nname = \"a\"\nname = \"b\"\nversion = \"1\"\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "uv_lock_unsupported_shape",
+   "path": "uv.lock",
+   "text": "package = \"requests\"\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "unsupported_shape"
+   }
+  },
+  {
+   "name": "cargo_lock_invalid_utf8",
+   "path": "Cargo.lock",
+   "text": "",
+   "expect": {
+    "complete": false,
+    "error_reason": "decode_error"
+   },
+   "bytes_hex": "fffefd"
+  },
+  {
+   "name": "bun_lock_jsonc_clean",
+   "path": "bun.lock",
+   "text": "{\n  // comment\n  \"lockfileVersion\": 1,\n  \"packages\": {\n    \"react\": [\"react@18.2.0\", \"\", {}, \"sha512-x\"],\n    \"@types/node\": [\"@types/node@20.1.0\", \"\", {}, \"sha512-y\"], /* trailing */\n  },\n}\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "@types/node",
+      "@types/node",
+      "20.1.0"
+     ],
+     [
+      "react",
+      "react",
+      "18.2.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "bun_lock_syntax_error",
+   "path": "bun.lock",
+   "text": "{\"packages\": ",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "bun_lock_duplicate_key",
+   "path": "bun.lock",
+   "text": "{\"packages\": {\"a\": [\"a@1.0.0\"], \"a\": [\"a@2.0.0\"]}}",
+   "expect": {
+    "complete": false,
+    "error_reason": "duplicate_key"
+   }
+  },
+  {
+   "name": "bun_lock_unsupported_version",
+   "path": "bun.lock",
+   "text": "{\"lockfileVersion\": 9, \"packages\": {}}",
+   "expect": {
+    "complete": false,
+    "error_reason": "unsupported_version"
+   }
+  },
+  {
+   "name": "bun_lock_array_root",
+   "path": "bun.lock",
+   "text": "[]",
+   "expect": {
+    "complete": false,
+    "error_reason": "unsupported_shape"
+   }
+  },
+  {
+   "name": "bun_lock_bad_package_entry",
+   "path": "bun.lock",
+   "text": "{\"packages\": {\"a\": \"a@1.0.0\"}}",
+   "expect": {
+    "complete": false,
+    "error_reason": "parse_error"
+   }
+  },
+  {
+   "name": "pnpm_lock_clean",
+   "path": "pnpm-lock.yaml",
+   "text": "lockfileVersion: '9.0'\n\npackages:\n\n  react@18.2.0:\n    resolution: {integrity: sha512-x}\n\nsnapshots:\n\n  react@18.2.0: {}\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "react",
+      "react",
+      "18.2.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "pnpm_lock_tab_indent",
+   "path": "pnpm-lock.yaml",
+   "text": "packages:\n\treact@18.2.0:\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "pnpm_lock_missing_colon",
+   "path": "pnpm-lock.yaml",
+   "text": "packages:\n  react@18.2.0\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "pnpm_lock_unbalanced_flow",
+   "path": "pnpm-lock.yaml",
+   "text": "packages:\n  react@18.2.0:\n    resolution: {integrity: sha512-x\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "yarn_lock_classic_clean",
+   "path": "yarn.lock",
+   "text": "# yarn lockfile v1\n\nlodash@^4.17.21:\n  version \"4.17.21\"\n  resolved \"https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "lodash",
+      "lodash",
+      "4.17.21"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "yarn_lock_berry_clean",
+   "path": "yarn.lock",
+   "text": "__metadata:\n  version: 8\n\n\"left-pad@npm:^1.3.0\":\n  version: 1.3.0\n  resolution: \"left-pad@npm:1.3.0\"\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "left-pad",
+      "left-pad",
+      "1.3.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "yarn_lock_unindented_junk",
+   "path": "yarn.lock",
+   "text": "lodash@^4.17.21:\n  version \"4.17.21\"\ngarbage line\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "yarn_lock_unbalanced_bracket",
+   "path": "yarn.lock",
+   "text": "lodash@^4.17.21:\n  version \"4.17.21\"\n  deps [\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "bundler_lock_clean",
+   "path": "Gemfile.lock",
+   "text": "GEM\n  remote: https://rubygems.org/\n  specs:\n    rack (2.2.8)\n    rake (13.1.0)\n\nPLATFORMS\n  ruby\n\nBUNDLED WITH\n   2.5.3\n",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "rack",
+      "rack",
+      "2.2.8"
+     ],
+     [
+      "rake",
+      "rake",
+      "13.1.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "bundler_lock_stray_close",
+   "path": "Gemfile.lock",
+   "text": "GEM\n  specs:\n    rack (2.2.8)\n]\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  },
+  {
+   "name": "bundler_lock_nul_byte",
+   "path": "Gemfile.lock",
+   "text": "GEM\n  specs:\n    rack (2.2.8)\n\u0000\n",
+   "expect": {
+    "complete": false,
+    "error_reason": "syntax_error"
+   }
+  }
+ ],
+ "evaluation": [
+  {
+   "name": "insecure_http",
+   "targets": [
+    "demo@http://packages.example.com/demo-1.0.0.tgz"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "block",
+    "policy_action": "block",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "insecure_source_url"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "block"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "scoped_insecure_http_upper",
+   "targets": [
+    "@scope/demo@HTTP://packages.example.com/demo-1.0.0.tgz"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "block",
+    "policy_action": "block",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "insecure_source_url"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "block"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "external_tarball",
+   "targets": [
+    "demo@https://packages.example.com/demo-1.0.0.tgz"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "ask",
+    "policy_action": "review",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "external_tarball_source"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "external_archive_mixed_request",
+   "targets": [
+    "demo@https://packages.example.com/demo-1.0.0.tgz",
+    "left-pad@1.0.0"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "block",
+    "policy_action": "block",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "external_archive_mixed_request_unsupported"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "block"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "git_dependency",
+   "targets": [
+    "demo@git+https://github.com/org/demo.git"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "git_dependency_source"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "unpinned_unknown",
+   "targets": [
+    "left-pad"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match",
+     "unidentified_package"
+    ],
+    "packages": [
+     [
+      "npm",
+      "left-pad",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "pinned_unknown",
+   "targets": [
+    "left-pad@1.0.0"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match",
+     "unidentified_package"
+    ],
+    "packages": [
+     [
+      "npm",
+      "left-pad",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_invalid_bytes",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "bytes_hex": "fffefd"
+    }
+   },
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "summary_contains": "so this package request is paused. Repair the lockfile, then retry.",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_invalid_bytes_paranoid",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "bytes_hex": "fffefd"
+    }
+   },
+   "expect": {
+    "decision": "block",
+    "policy_action": "block",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "summary_contains": "so this package request is blocked. Repair the lockfile, then retry.",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "block"
+     ]
+    ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "security_level = \"paranoid\"\n"
+    }
+   }
+  },
+  {
+   "name": "lockfile_invalid_bytes_strict",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "bytes_hex": "fffefd"
+    }
+   },
+   "expect": {
+    "decision": "block",
+    "policy_action": "block",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "summary_contains": "so this package request is blocked. Repair the lockfile, then retry.",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "block"
+     ]
+    ]
+   },
+   "home_files": {
+    "config.toml": {
+     "text": "security_level = \"strict\"\n"
+    }
+   }
+  },
+  {
+   "name": "lockfile_duplicate_key",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "text": "{\"packages\":{\"a\":{},\"a\":{}}}"
+    }
+   },
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "lockfile_parse_incomplete"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_clean",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {
+    "package-lock.json": {
+     "text": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"name\": \"a\"}, \"node_modules/react\": {\"version\": \"18.0.0\"}}}"
+    }
+   },
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match",
+     "unidentified_package"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "ask"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "lockfile_missing",
+   "targets": [
+    "react@18.0.0"
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "files": {},
+   "expect": {
+    "decision": "ask",
+    "policy_action": "require-reapproval",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "no_cached_match",
+     "unidentified_package"
+    ],
+    "packages": [
+     [
+      "npm",
+      "react",
+      "ask"
+     ]
+    ]
+   }
+  }
+ ]
+}

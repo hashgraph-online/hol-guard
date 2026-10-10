@@ -35,7 +35,14 @@ def _kill_group(pgid: int) -> None:
 class SubprocessCaseWorker:
     """Parent-side handle for one case running in its own session."""
 
-    def __init__(self, scenario_id: str, spec: dict[str, Any], workdir: Path, command: list[str] | None = None):
+    def __init__(
+        self,
+        scenario_id: str,
+        spec: dict[str, Any],
+        workdir: Path,
+        command: list[str] | None = None,
+        pass_fds: tuple[int, ...] = (),
+    ):
         self.scenario_id = scenario_id
         self._result = _result_path(workdir, scenario_id)
         self._groups = workdir / f"{scenario_id}.groups"
@@ -49,6 +56,9 @@ class SubprocessCaseWorker:
                 stdin=subprocess.PIPE,
                 stdout=out,
                 stderr=err,
+                # The slot lease fd survives here; the worker's own subprocesses use
+                # the close_fds default so its agent children do not inherit it.
+                pass_fds=pass_fds,
                 # On Windows the worker's kill-on-close job contains the agent instead.
                 start_new_session=os.name == "posix",
             )
@@ -158,15 +168,30 @@ def main() -> int:
         raise RuntimeError("installed Guard changed between runner and case worker")
     host_process.group_ledger = Path(spec["groups"])
     scenario = next(s for s in load_catalog() if s.id == spec["scenario_id"])
-    case = run_case(
-        scenario,
-        root=Path(spec["root"]),
-        public=Path(spec["public"]),
-        executable=spec["executable"],
-        identity=identity,
-        provider=spec["provider"],
-        timeout=float(spec["timeout"]),
-    )
+    if spec.get("harness", "omp") != "omp":
+        from .harness_case import run_harness_case
+
+        case = run_harness_case(
+            scenario,
+            harness=spec["harness"],
+            root=Path(spec["root"]),
+            public=Path(spec["public"]),
+            executable=spec["executable"],
+            identity=identity,
+            timeout=float(spec["timeout"]),
+            model=spec.get("harness_model"),
+        )
+        case.setdefault("guard_observations", [])
+    else:
+        case = run_case(
+            scenario,
+            root=Path(spec["root"]),
+            public=Path(spec["public"]),
+            executable=spec["executable"],
+            identity=identity,
+            provider=spec["provider"],
+            timeout=float(spec["timeout"]),
+        )
     result = Path(spec["result"])
     temporary = result.with_suffix(".tmp")
     temporary.write_text(

@@ -9,6 +9,7 @@ from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafe
 from .command_model import CommandSegment, parse_shell_command
 from .command_tokens import executable_name
 from .local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
+from .local_cli_runner import runner_name, runner_target
 
 _SOURCE_BUILTINS = frozenset({".", "source"})
 _INLINE_FLAGS = frozenset({"-c", "-lc"})
@@ -103,6 +104,19 @@ def _identity_from_segment(
             )
     if segment.executable is None:
         return None
+    runner = runner_name(segment.executable)
+    if runner is not None:
+        # Runner bins resolve from the working directory; skip after a ``cd``.
+        if not allow_relative or segment.environment_names:
+            return None
+        if runner_target(runner, segment.arguments) is None:
+            return None
+        return identify_unlisted_cli(
+            shlex.join((segment.executable, *segment.arguments)),
+            cwd=cwd,
+            home_dir=home_dir,
+            registry=registry,
+        )
     script = _resolve_existing_file(
         segment.executable,
         cwd=cwd,

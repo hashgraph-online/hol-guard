@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import shlex
 import sys
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
@@ -20,6 +19,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
 )
 from ..codex_config import dump_toml, read_toml_payload
+from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
 from ..codex_hook_file_integrity import validate_regular_file
 from ..codex_hook_integrity import (
     atomic_write_bytes,
@@ -78,6 +78,7 @@ from ..codex_hook_sources import (
 )
 from ..codex_hook_sources import strict_json_object as _strict_json_object
 from ..codex_hook_sources import strict_toml_object as _strict_toml_object
+from ..codex_hook_trust import apply_codex_hook_trust_doctor, codex_hook_trust_stale
 from ..codex_install_transaction import codex_install_transaction
 from ..config import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS, load_guard_config, resolve_guard_home
 from ..launcher import merge_guard_launcher_env
@@ -339,7 +340,8 @@ def _hook_command_parts_for_home_mode(
         },
     }
     bridge_path = Path(__file__).with_name("codex_daemon_hook_bridge.py").resolve()
-    return (python_executable, "-I", str(bridge_path), json.dumps(config, separators=(",", ":")))
+    config_argument = encode_hook_config_argument(json.dumps(config, separators=(",", ":")))
+    return (python_executable, "-I", str(bridge_path), config_argument)
 
 
 def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
@@ -351,7 +353,7 @@ def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
 
 
 def _hook_command(context: HarnessContext) -> str:
-    return shlex.join(_hook_command_parts(context))
+    return render_hook_command(_hook_command_parts(context))
 
 
 def _managed_hook_entry(
@@ -1214,6 +1216,7 @@ def codex_native_hook_state(context: HarnessContext) -> dict[str, object]:
             else _AUTHORITATIVE_HOOK_UNAVAILABLE_REASON
         ),
         "protection_active": hooks_feature_enabled and managed_hook_installed and integrity_valid,
+        "hook_trust_stale": codex_hook_trust_stale(config_payload, config_path),
         **{key: value for key, value in integrity.items() if key != "event_matches"},
     }
 
@@ -1854,6 +1857,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         warnings = finalize_codex_doctor_warnings([str(item) for item in items if isinstance(item, str)], hook_state)
         payload["warnings"] = warnings
         payload["setup_status"] = finalize_codex_doctor_setup_status(payload.get("setup_status"), hook_state, warnings)
+        apply_codex_hook_trust_doctor(payload, hook_state)
         payload["native_hook_state"] = hook_state
         return payload
 
@@ -2069,26 +2073,6 @@ class CodexHarnessAdapter(HarnessAdapter):
             raise
         return target_hooks_path
 
-    def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
-        target_hooks_path = self._hooks_path(context)
-        hook_payloads = payloads or self._load_hook_payloads(context)
-        for hooks_path in self._all_hook_paths(context):
-            original_payload = deepcopy(hook_payloads.get(hooks_path, {}))
-            payload = deepcopy(original_payload)
-            hooks = payload.get("hooks")
-            if not isinstance(hooks, dict):
-                hooks = {}
-            legacy_bindings = _current_install_legacy_bindings(context, hooks)
-            cleaned_hooks, managed_removed = _remove_manifest_bound_hook_events(hooks, legacy_bindings)
-            if not managed_removed:
-                payload = deepcopy(original_payload)
-            elif cleaned_hooks:
-                payload["hooks"] = cleaned_hooks
-            else:
-                payload.pop("hooks", None)
-            self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
-        return target_hooks_path
-
     @staticmethod
     def _install_config_hooks(
         payload: dict[str, object],
@@ -2270,28 +2254,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         for change in prepare_codex_shell_cleanup(context):
             _publish_codex_alternate_cleanup(change)
 
-    @staticmethod
-    def _remove_shell_guard_block(path: Path) -> None:
-        _publish_codex_alternate_cleanup(_prepare_codex_shell_cleanup_file(path))
-
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
         # JSON hook files created after install are foreign to the authenticated
         # TOML registration and must be preserved byte-for-byte on uninstall.
         del payloads
         return target_hooks_path
-
-    @staticmethod
-    def _write_hooks_payload(
-        hooks_path: Path,
-        payload: dict[str, object],
-        *,
-        original_payload: dict[str, object] | None = None,
-    ) -> None:
-        if original_payload is not None and payload == original_payload:
-            return
-        if payload:
-            hooks_path.parent.mkdir(parents=True, exist_ok=True)
-            hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        elif hooks_path.exists():
-            hooks_path.unlink()

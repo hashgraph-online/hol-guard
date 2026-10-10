@@ -11,6 +11,18 @@ from scripts.ci.verify_release_asset_inventory import verify_release_assets
 VERSION = "3.0.0a269"
 
 
+def test_package_verification_allows_only_known_core_assets_during_parallel_upload(tmp_path: Path) -> None:
+    release_dir, dist_dir = _directories(tmp_path)
+    partial = release_dir / f"hol-guard-core-{VERSION}-aarch64-apple-darwin.onedir.zip"
+    partial.write_bytes(b"upload in progress")
+    verify_release_assets(release_dir, dist_dir, VERSION, "stable", allow_core_in_progress=True)
+    with pytest.raises(ValueError, match="complete set"):
+        verify_release_assets(release_dir, dist_dir, VERSION, "stable")
+    (release_dir / "unowned.bin").write_bytes(b"unexpected")
+    with pytest.raises(ValueError, match="Unexpected release asset"):
+        verify_release_assets(release_dir, dist_dir, VERSION, "stable", allow_core_in_progress=True)
+
+
 def _directories(tmp_path: Path) -> tuple[Path, Path]:
     release_dir = tmp_path / "release"
     dist_dir = tmp_path / "dist"

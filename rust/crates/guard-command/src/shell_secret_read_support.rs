@@ -11,10 +11,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use fancy_regex::Regex as FancyRegex;
 use regex::Regex;
 
 use crate::command_model::CanonicalCommand;
 use crate::home_path_text::{expand_home, normalize_path};
+use crate::runtime_read_paths::path_is_relative_to;
 use crate::shell_execution_context_support::{
     split_shell_tokens, SHELL_CWD_MISSING_DIRECTORY, SHELL_CWD_NOT_DIRECTORY,
     SHELL_CWD_UNREADABLE_DIRECTORY,
@@ -40,24 +42,22 @@ pub(crate) const MAX_INLINE_SCRIPT_BYTES: usize = 64 * 1024;
 fn python_executable_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
+        Regex::new(r"^pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
     })
 }
-#[allow(clippy::invalid_regex)]
-fn literal_read_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
+fn literal_read_re() -> &'static FancyRegex {
+    static RE: OnceLock<FancyRegex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
+        FancyRegex::new(
             r#"(?:\bopen|\breadFile(?:Sync)?|\bcreateReadStream|\bBun\.file|\bload_dotenv)\s*\(\s*(['"])([^'"\n\x00]{1,4096})\1"#,
         )
         .expect("literal read")
     })
 }
-#[allow(clippy::invalid_regex)]
-fn path_read_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
+fn path_read_re() -> &'static FancyRegex {
+    static RE: OnceLock<FancyRegex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
+        FancyRegex::new(
             r#"\bPath\s*\(\s*(['"])([^'"\n\x00]{1,4096})\1\s*\)\s*\.\s*(?:read_text|read_bytes|open)\s*\("#,
         )
         .expect("path read")
@@ -72,15 +72,44 @@ const SHORT_CIRCUITING_CD_FAILURES: &[&str] = &[
 pub(crate) const FLOW_OPERATORS: &[&str] = &["&&", "||", "|", ";", "&"];
 
 /// `_literal_read_paths` (:68-71).
+///
+/// The patterns are `fancy_regex` (backreference on the quote), whose matcher
+/// can fail at run time (backtrack limit). A scan error must never read as "no
+/// literal read here": that would silently drop a secret read. It is treated
+/// as a match instead, by emitting [`FAIL_CLOSED_SENSITIVE_READ`], which the
+/// callers classify as a sensitive path like any other literal.
 pub(crate) fn literal_read_paths(source: &str) -> Vec<String> {
     let mut out = Vec::new();
     for re in [literal_read_re(), path_read_re()] {
-        for m in re.captures_iter(source) {
-            out.push(m[2].to_owned());
-        }
+        collect_literal_reads(
+            re.captures_iter(source)
+                .map(|captures| captures.map(|c| c.get(2).map(|path| path.as_str().to_owned()))),
+            &mut out,
+        );
     }
     out
 }
+
+fn collect_literal_reads(
+    matches: impl Iterator<Item = Result<Option<String>, fancy_regex::Error>>,
+    out: &mut Vec<String>,
+) {
+    for found in matches {
+        match found {
+            Ok(Some(path)) => out.push(path),
+            Ok(None) => {}
+            Err(_) => {
+                out.push(FAIL_CLOSED_SENSITIVE_READ.to_owned());
+                return;
+            }
+        }
+    }
+}
+
+/// Stand-in literal reported when a read-scan regex errors. `.env` is always
+/// classified as a sensitive local file, so the failure surfaces as a
+/// secret-read finding rather than a silent allow.
+pub(crate) const FAIL_CLOSED_SENSITIVE_READ: &str = ".env";
 
 /// `_python_executable` (:74-75). `re.IGNORECASE` is folded by lowercasing
 /// the candidate name; the Python pattern is unanchored `re.match`-style
@@ -116,6 +145,11 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
             (".pypirc", "Python package credentials"),
             (".netrc", "netrc credentials"),
             (".git-credentials", "Git credential store"),
+            (".terraform.tfvars", "Terraform variable secrets"),
+            ("terraform.tfvars", "Terraform variable secrets"),
+            ("private-key.pem", "wallet/private-key file"),
+            ("private.key", "wallet/private-key file"),
+            ("wallet.key", "wallet/private-key file"),
             (".wallet", "wallet/private-key file"),
             ("wallet.dat", "wallet/private-key file"),
             ("id_rsa", "SSH private key"),
@@ -127,7 +161,13 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
     })
 }
 fn sensitive_basename_keywords() -> &'static [&'static str] {
-    &["private_key", "private-key", "privatekey"]
+    &[
+        "private_key",
+        "private-key",
+        "privatekey",
+        "wallet_key",
+        "wallet-key",
+    ]
 }
 fn redacted_basename_labels() -> &'static BTreeMap<&'static str, &'static str> {
     static M: OnceLock<BTreeMap<&'static str, &'static str>> = OnceLock::new();
@@ -1440,7 +1480,7 @@ pub(crate) fn sensitive_path(
     }
     let lexical = PathBuf::from(normalize_path(&expand_home(value, home_dir), cwd));
     let roots: Vec<&Path> = [cwd, home_dir].into_iter().flatten().collect();
-    if !lexical.is_absolute() || !roots.iter().any(|r| lexical.starts_with(r)) {
+    if !lexical.is_absolute() || !roots.iter().any(|r| path_is_relative_to(&lexical, r)) {
         return None;
     }
     let resolved = match lexical.canonicalize() {
@@ -1695,7 +1735,11 @@ pub(crate) fn shell_command_string(executable: &str, args: &[String]) -> (Option
     (None, false)
 }
 
-/// `_script_operand` (:308-356). `(operand, is_path)`.
+/// `_script_operand` (:308-356). `(operand, is_shell)`.
+///
+/// Mirrors the retired Python exactly: an option scan that stops at `--`
+/// (the operand after it is still the script), the Python value-taking
+/// options, a `bun <script>` launch, and a path-qualified script executable.
 pub(crate) fn script_operand(executable: &str, args: &[String]) -> Option<(String, bool)> {
     let name = if executable == "." {
         ".".to_owned()
@@ -1703,48 +1747,75 @@ pub(crate) fn script_operand(executable: &str, args: &[String]) -> Option<(Strin
         basename_lower(executable)
     };
     let is_shell = SHELLS.contains(&name.as_str());
-    let is_interpreter =
-        ["node", "ruby", "perl"].contains(&name.as_str()) || python_executable(&name);
+    let is_python = python_executable(&name);
+    let is_interpreter = ["node", "ruby", "perl"].contains(&name.as_str()) || is_python;
     if is_shell || is_interpreter {
         let mut index = 0;
         while index < args.len() {
-            let arg = &args[index];
+            let arg = args[index].as_str();
+            if ["-c", "-e", "--eval", "-m", "--command"].contains(&arg)
+                || (is_shell && arg == "-s")
+                || (is_shell
+                    && arg.starts_with('-')
+                    && !arg.starts_with("--")
+                    && arg[1..].contains('c'))
+            {
+                return None;
+            }
             if arg == "--" {
-                return None;
+                index += 1;
+                break;
             }
-            if arg == "-s" && is_shell {
-                return None;
-            }
-            if is_shell && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('c')
-            {
-                return None;
-            }
-            if is_shell
-                && ["-o", "-O", "+o", "+O", "--rcfile", "--init-file"].contains(&arg.as_str())
-            {
+            if ["-o", "-O", "+o", "+O", "--rcfile", "--init-file"].contains(&arg) {
                 index += 2;
                 continue;
             }
-            if is_interpreter && ["-c", "-e", "--eval", "-p", "--print"].contains(&arg.as_str()) {
-                index += 2;
-                continue;
+            if is_interpreter && is_python {
+                if PYTHON_INTERPRETER_OPTIONS_WITH_VALUES.contains(&arg) {
+                    if index + 1 >= args.len() {
+                        return None;
+                    }
+                    index += 2;
+                    continue;
+                }
+                if PYTHON_INTERPRETER_OPTIONS_WITH_VALUES
+                    .iter()
+                    .any(|option| arg.starts_with(option) && arg.len() > option.len())
+                {
+                    index += 1;
+                    continue;
+                }
             }
-            if is_interpreter && (arg.starts_with("--eval=") || arg.starts_with("--print=")) {
-                index += 1;
-                continue;
+            if !arg.starts_with('-') && !arg.starts_with('+') {
+                break;
             }
-            if arg.starts_with('-') || arg.starts_with('+') {
-                index += 1;
-                continue;
+            index += 1;
+        }
+        if index < args.len() && args[index] != "-" {
+            let operand = &args[index];
+            if is_shell || is_python || script_like_operand(operand) {
+                return Some((operand.clone(), is_shell));
             }
-            if is_shell {
-                // `.`/`source` treat the first operand as the script.
-                return Some((arg.clone(), true));
-            }
-            return Some((arg.clone(), path_qualified(arg)));
+            return None;
         }
     }
+    if name == "bun" && args.first().is_some_and(|arg| ends_with_script_suffix(arg)) {
+        return Some((args[0].clone(), false));
+    }
+    if ends_with_script_suffix(executable)
+        && (executable.contains('/') || executable.starts_with('.'))
+    {
+        let is_shell_script = [".sh", ".bash", ".zsh", ".ksh", ".fish"]
+            .iter()
+            .any(|suffix| executable.ends_with(suffix));
+        return Some((executable.to_owned(), is_shell_script));
+    }
     None
+}
+
+/// Case-sensitive `str.endswith(_SCRIPT_SUFFIXES)`.
+fn ends_with_script_suffix(value: &str) -> bool {
+    SCRIPT_SUFFIXES.iter().any(|suffix| value.ends_with(suffix))
 }
 
 /// `_known_python_module_launch` (:359-370).
@@ -1847,16 +1918,16 @@ pub(crate) fn interpreter_inline_launch(executable: &str, args: &[String]) -> bo
 
 /// `_path_qualified` (:432-434).
 pub(crate) fn path_qualified(executable: &str) -> bool {
-    executable.contains('/') || executable.contains('\\')
+    !executable.is_empty()
+        && (executable.contains('/') || executable.contains('\\') || executable.starts_with('.'))
 }
 
 /// `_script_like_operand` (:436-443).
-#[allow(dead_code)]
 fn script_like_operand(operand: &str) -> bool {
-    if operand.is_empty() || operand.starts_with('-') {
+    if operand.is_empty() || operand == "-" {
         return false;
     }
-    if path_qualified(operand) {
+    if operand.to_lowercase().ends_with_any(SCRIPT_SUFFIXES) {
         return true;
     }
     unresolved_local_script_launch(operand)
@@ -1864,10 +1935,20 @@ fn script_like_operand(operand: &str) -> bool {
 
 /// `_unresolved_local_script_launch` (:446-458).
 pub(crate) fn unresolved_local_script_launch(executable: &str) -> bool {
-    if executable.is_empty() || executable.starts_with('-') {
+    if executable.is_empty() {
         return false;
     }
-    if path_qualified(executable) {
+    if executable.starts_with("./")
+        || executable.starts_with("../")
+        || executable.starts_with(".\\")
+        || executable.starts_with("..\\")
+    {
+        return true;
+    }
+    if !(executable.contains('/') || executable.contains('\\')) {
+        return false;
+    }
+    if !executable.starts_with('/') {
         return true;
     }
     executable.to_lowercase().ends_with_any(SCRIPT_SUFFIXES)
@@ -1902,7 +1983,7 @@ pub(crate) fn local_executable_operand(
         return None;
     }
     let lexical = PathBuf::from(normalize_path(&expand_home(executable, home_dir), cwd));
-    if !lexical.is_absolute() || !roots.iter().any(|r| lexical.starts_with(r)) {
+    if !lexical.is_absolute() || !roots.iter().any(|r| path_is_relative_to(&lexical, r)) {
         return None;
     }
     Some(executable.to_owned())
@@ -1911,4 +1992,54 @@ pub(crate) fn local_executable_operand(
 /// `_SHORT_CIRCUITING_CD_FAILURES` (:54-60).
 pub(crate) fn short_circuiting_cd_failures() -> &'static [&'static str] {
     SHORT_CIRCUITING_CD_FAILURES
+}
+
+#[cfg(test)]
+mod launch_parity_tests {
+    use super::*;
+
+    #[test]
+    fn unresolved_local_script_launch_matches_python_oracle() {
+        for (executable, expected) in [
+            ("", false),
+            ("./run", true),
+            ("../run", true),
+            (".\\run", true),
+            ("bin/run", true),
+            ("/usr/bin/stripe.exe", false),
+            ("/opt/tool/run.sh", true),
+            ("/opt/tool/RUN.PY", true),
+            ("git", false),
+            ("deploy.sh", false),
+        ] {
+            assert_eq!(
+                unresolved_local_script_launch(executable),
+                expected,
+                "{executable}"
+            );
+        }
+    }
+
+    #[test]
+    fn literal_read_paths_capture_quoted_reads() {
+        let source = "print(open(\".env\").read()); Path('a/b').read_text()";
+        assert_eq!(literal_read_paths(source), vec![".env", "a/b"]);
+    }
+
+    #[test]
+    fn literal_read_scan_error_fails_closed() {
+        use fancy_regex::{Error, RuntimeError};
+        let mut out = Vec::new();
+        collect_literal_reads(
+            vec![
+                Ok(Some("a/b".to_owned())),
+                Err(Error::RuntimeError(RuntimeError::BacktrackLimitExceeded)),
+                Ok(Some("c".to_owned())),
+            ]
+            .into_iter(),
+            &mut out,
+        );
+        assert_eq!(out, vec!["a/b", FAIL_CLOSED_SENSITIVE_READ]);
+        assert!(classify_secret_path(FAIL_CLOSED_SENSITIVE_READ, None, None).is_some());
+    }
 }

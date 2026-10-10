@@ -53,9 +53,7 @@ _ZCODE_BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-re
 # remediation command must travel with the message.
 _AUTHORITY_BLOCK_REASON_MARKER = "native command extension policy"
 _AUTHORITY_BLOCK_REMEDIATION = (
-    " Run `hol-guard command controls acknowledge-degraded` after reviewing the "
-    "degradation, or `hol-guard command controls recover-authority`, to restore the "
-    "protected control floor."
+    " Run `hol-guard command controls recover-authority` in a terminal to restore the protected control floor."
 )
 
 

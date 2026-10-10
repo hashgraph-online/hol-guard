@@ -23,7 +23,8 @@ export const businessOperationLabels = {
   mail_read: "Read email", mail_draft: "Prepare an email draft", mail_send: "Send email",
   mail_label: "Change email labels", mail_permanent_delete: "Permanently delete email",
   mail_settings: "Change email settings", drive_read: "Read Drive files", drive_edit: "Edit Drive files",
-  drive_share: "Share Drive files", calendar_read: "Read calendar events", calendar_invite: "Invite calendar attendees",
+  drive_share: "Share Drive files", drive_export: "Export Drive files", calendar_read: "Read calendar events",
+  calendar_invite: "Invite calendar attendees",
 } as const;
 
 export const businessServiceLabels = {

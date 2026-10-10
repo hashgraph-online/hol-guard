@@ -22,7 +22,7 @@ def test_scenario_labels_do_not_influence_fixture_path_risk():
 
     names = [scenario_fixture_name(scenario.id) for scenario in load_catalog()]
     assert len(names) == len(set(names))
-    assert all(re.fullmatch(r"case-[0-9a-f]{16}", name) for name in names)
+    assert all(re.fullmatch(r"case-[0-9]{2,}", name) for name in names)
 
 
 def test_compact_fixture_paths_preserve_absolute_command_operands(tmp_path):
@@ -282,6 +282,32 @@ def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
         "input": "[notes.md#3BE2]\nPUT 1.=1:\n+Verified settings change.",
     }
     assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
+
+
+@pytest.mark.parametrize(("before", "after"), [(" ", ""), ("\t", "\t"), (" \t", "  ")])
+def test_native_header_padding_keeps_exact_patch_bytes_and_reviewed_target(before, after):
+    from ci.gauntlet.input_evidence import input_matches
+    from ci.gauntlet.proofs import _edit_path
+
+    target = "src/a file.ts"
+    args = {"input": f"[{before}{target}{after}#3BE2]\nPUT 1.=1:\n+changed"}
+    reviewed = {**args, "path": target, "paths": [target]}
+    assert input_matches("edit", args, reviewed)
+    assert _edit_path(args) == target
+    assert not input_matches("edit", args, {**reviewed, "path": ".env", "paths": [".env"]})
+    assert not input_matches("edit", args, {**reviewed, "input": args["input"].replace("+changed", "+different")})
+    assert not input_matches("edit", {**args, "path": "other.ts"}, reviewed)
+
+
+@pytest.mark.parametrize("header", ["[ \t#3BE2]", "[ src/a.ts#3BE2]\n[src/b.ts#1B2C]"])
+def test_empty_or_multiple_native_edit_targets_cannot_borrow_one_review(header):
+    from ci.gauntlet.input_evidence import input_matches
+    from ci.gauntlet.proofs import _edit_path
+
+    args = {"input": header + "\nPUT 1.=1:\n+changed"}
+    reviewed = {**args, "path": "src/a.ts", "paths": ["src/a.ts"]}
+    assert not input_matches("edit", args, reviewed)
+    assert _edit_path(args) is None
 
 
 @pytest.mark.parametrize("path", ["src/one.ts", "./src/one.ts", "~/other-project/one.ts"])

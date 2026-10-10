@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
@@ -18,6 +19,7 @@ from ..approval_gate import (
     input_from_mapping,
     require_extension_control,
 )
+from ..json_transport import escape_json_for_html
 from ..runtime import command_inspection
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
@@ -33,10 +35,10 @@ from ..runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from ..runtime.extension_control_limits import (
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CONTROL_LAYERS,
     MAX_CONTROLS_PER_LAYER,
     MAX_CONTROLS_TOTAL,
+    MAX_DAEMON_CATALOG_RESPONSE_BYTES,
     advertised_extension_control_limits,
 )
 from ..runtime.extension_control_proof import (
@@ -46,7 +48,7 @@ from ..runtime.extension_control_proof import (
     issue_extension_control_proof,
 )
 from ..runtime.extension_control_resolver import compose_control_layers
-from ..runtime.extension_control_runtime import ExtensionControlRuntime
+from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from .extension_control_errors import ExtensionControlApiError
 from .extension_control_request import request_needs_proof, required_request_string
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
@@ -55,6 +57,7 @@ from .managed_controls_api import effective_controls_payload
 if TYPE_CHECKING:
     from ..store import GuardStore
 
+_LOGGER = logging.getLogger(__name__)
 _EXTENSION_CONTROL_API_SCHEMA = "guard.daemon.extension-controls.v1"
 _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
@@ -87,11 +90,15 @@ class ExtensionControlApiService:
     ) -> None:
         self._store = store
         self._registry = registry
+        self.catalog_digest = registry.catalog_digest
         self._runtime = runtime
         self._proof_lock = threading.Lock()
         self._apply_lock = threading.Lock()
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
+
+    def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
+        return self._registry, self._runtime.current()
 
     def catalog(self) -> dict[str, object]:
         limits = advertised_extension_control_limits()
@@ -102,12 +109,13 @@ class ExtensionControlApiService:
             "extensions": [extension.to_dict() for extension in self._registry.extensions],
             "limits": {
                 **limits,
-                "max_body_bytes": limits["max_catalog_payload_bytes"],
+                "max_body_bytes": MAX_DAEMON_CATALOG_RESPONSE_BYTES,
                 "max_controls": limits["max_controls_total"],
             },
         }
-        wire_body = json.dumps(payload).encode("utf-8")
-        if len(wire_body) > MAX_CATALOG_PAYLOAD_BYTES:
+        # Measure the exact bytes the daemon writes, including its HTML-safe escaping.
+        wire_body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
+        if len(wire_body) > MAX_DAEMON_CATALOG_RESPONSE_BYTES:
             raise ExtensionControlApiError(413, "catalog_payload_limit_exceeded")
         return payload
 
@@ -291,7 +299,14 @@ class ExtensionControlApiService:
 
     def apply(self, payload: dict[str, object]) -> dict[str, object]:
         with self._apply_lock:
-            return self._apply_locked(payload)
+            try:
+                return self._apply_locked(payload)
+            except ExtensionControlApiError:
+                raise
+            except Exception as exc:
+                # Report a stable error instead of dropping the connection.
+                _LOGGER.error("Extension-control apply failed: %s", type(exc).__name__, exc_info=exc)
+                raise ExtensionControlApiError(503, "authority_apply_failed") from exc
 
     def _apply_locked(self, payload: dict[str, object]) -> dict[str, object]:
         proof_id = required_request_string(payload, "proof_id")

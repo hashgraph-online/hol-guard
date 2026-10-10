@@ -104,6 +104,29 @@ class GitHubWorkflowAuthorization:
         receipt = getattr(self, "_receipt_sha256", "invalid")
         return f"GitHubWorkflowAuthorization(receipt_sha256={receipt!r})"
 
+    def to_wire(self) -> dict[str, object] | None:
+        """Return the resident wire form, or None when this object lost its claim seal.
+
+        The seal check is host-side object identity and cannot cross the wire,
+        so only a still-sealed authorization is ever serialized (``sealed`` true).
+        """
+        try:
+            if self._seal is not _AUTHORIZATION_SEAL:
+                return None
+            return {
+                "operation_identity": self._operation_identity,
+                "proof": {
+                    "route": self._proof.route.value,
+                    "binding_digest": self._proof.binding_digest,
+                    "satisfied_requirements": sorted(item.value for item in self._proof.satisfied_requirements),
+                    "enforced": self._proof.enforced,
+                },
+                "receipt_sha256": self._receipt_sha256,
+                "sealed": True,
+            }
+        except (AttributeError, TypeError, ValueError):
+            return None
+
     def evidence(self, *, command_identity: str) -> tuple[PositiveProof, str] | None:
         try:
             if self._seal is not _AUTHORIZATION_SEAL:

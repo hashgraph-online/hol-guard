@@ -35,7 +35,6 @@ from codex_plugin_scanner.guard.runtime.oci_plan_generator import (
     _build_digest_fields,
     _extract_all_capabilities,
     _is_dangerous_cap,
-    _is_forbidden_path,
     _is_forbidden_socket,
     _is_guard_state_path,
     _map_guarantees,
@@ -88,23 +87,6 @@ def minimal_bundle():
 
 
 class TestPathValidation:
-    def test_forbidden_path_root(self):
-        assert _is_forbidden_path("/") == "/"
-
-    def test_forbidden_path_etc(self):
-        # Prefix match: /etc/shadow -> /etc
-        assert _is_forbidden_path("/etc") == "/etc"
-        assert _is_forbidden_path("/etc/shadow") == "/etc"
-
-    def test_forbidden_path_proc(self):
-        assert _is_forbidden_path("/proc") == "/proc"
-
-    def test_non_forbidden_path(self):
-        assert _is_forbidden_path("/var/data") is None
-
-    def test_empty_path_not_forbidden(self):
-        assert _is_forbidden_path("") is None
-
     def test_forbidden_socket_docker(self):
         assert _is_forbidden_socket("/var/run/docker.sock") == "/var/run/docker.sock"
 

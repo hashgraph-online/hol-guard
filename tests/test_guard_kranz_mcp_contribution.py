@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants as grants
+from codex_plugin_scanner.guard.runtime import mcp_server_grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical
@@ -124,20 +125,18 @@ def test_canonical_native_compilation_contains_mcp_coverage(compiled: dict) -> N
 
 
 @pytest.mark.parametrize("tool", (*MUTATIONS, "future_mutation"))
-def test_locally_enabled_mutations_require_review(kranz_payload: dict, monkeypatch, tool: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (kranz_payload,))
+def test_locally_enabled_mutations_require_review(kranz_payload: dict, tool: str) -> None:
     assert mcp_tool_state(kranz_payload, tool) == "review"
-    decision = grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
+    decision = mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
     assert decision is not None
     assert decision[0:2] == ("review", "catalog-mcp-extension")
 
 
 @pytest.mark.parametrize("tool", OBSERVATIONS)
-def test_observation_tools_inherit_without_allow_grants(kranz_payload: dict, monkeypatch, tool: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (kranz_payload,))
+def test_observation_tools_inherit_without_allow_grants(kranz_payload: dict, tool: str) -> None:
     assert mcp_tool_state(kranz_payload, tool) == "inherit"
     for current in ("allow", "review", "block"):
-        assert grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
+        assert mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
 
 
 @pytest.mark.parametrize(
@@ -152,17 +151,28 @@ def test_observation_tools_inherit_without_allow_grants(kranz_payload: dict, mon
         ),
     ],
 )
-def test_contribution_stays_inert_without_effective_local_enable(kranz_payload: dict, monkeypatch, layers) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (kranz_payload,))
+def test_contribution_stays_inert_without_effective_local_enable(kranz_payload: dict, layers) -> None:
     store = _AuthorityStore(tuple(_layer(kind, CATALOG_ID, state) for kind, state in layers))
     for tool in MUTATIONS:
-        assert grants.apply_contributed_mcp_decision(store, artifact(tool), "allow") is None
+        assert mcp_server_grants.apply_contributed_mcp_decision(store, artifact(tool), "allow") is None
 
 
 @pytest.mark.parametrize("current", ["block", "require-reapproval", "review", "sandbox-required"])
-def test_review_default_preserves_stronger_floors(kranz_payload: dict, monkeypatch, current: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (kranz_payload,))
-    assert grants.apply_contributed_mcp_decision(enabled_store(), artifact("action_run"), current) is None
+def test_review_default_preserves_stronger_floors(kranz_payload: dict, current: str) -> None:
+    assert mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact("action_run"), current) is None
+
+
+def matched(candidate) -> bool:
+    """Whether the resident matched the bundled Kranz contribution for this artifact.
+
+    ``action_run`` carries the review default, so a match strengthens an allow to
+    review while a non-match decides nothing.
+    """
+    decision = mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), candidate, "allow")
+    if decision is None:
+        return False
+    assert decision[0:2] == ("review", "catalog-mcp-extension")
+    return True
 
 
 @pytest.mark.parametrize(
@@ -174,10 +184,9 @@ def test_review_default_preserves_stronger_floors(kranz_payload: dict, monkeypat
     ],
 )
 def test_launch_identity_matches_independent_of_server_alias_and_project_flags(
-    kranz_payload: dict, monkeypatch, command: str, args: tuple[str, ...]
+    kranz_payload: dict, command: str, args: tuple[str, ...]
 ) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (kranz_payload,))
-    assert grants.matching_mcp_contribution(artifact("action_run", command, args)) == kranz_payload
+    assert matched(artifact("action_run", command, args))
 
 
 @pytest.mark.parametrize(
@@ -191,32 +200,31 @@ def test_launch_identity_matches_independent_of_server_alias_and_project_flags(
     ],
 )
 def test_unrelated_launchers_and_remote_transport_do_not_match(
-    kranz_payload: dict, monkeypatch, command: str, args: tuple[str, ...], transport: str
+    kranz_payload: dict, command: str, args: tuple[str, ...], transport: str
 ) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (kranz_payload,))
-    assert grants.matching_mcp_contribution(artifact("action_run", command, args, transport)) is None
+    assert not matched(artifact("action_run", command, args, transport))
 
 
 @pytest.mark.parametrize("state,expected", [("allow", "allow"), ("review", "review"), ("block", "block")])
-def test_this_device_grant_precedes_catalog_defaults(monkeypatch, state: str, expected: str) -> None:
+def test_this_device_grant_precedes_catalog_defaults(monkeypatch, tmp_path: Path, state: str, expected: str) -> None:
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    from .test_guard_local_mcp_grants import _enroll
+
     tool = artifact("action_run")
-    identity = tool.metadata["mcp_server_identity"]
+    identity = build_mcp_server_identity(config_path="", command="kranz", args=("mcp",), transport="stdio")
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(
+        store,
+        identity,
+        states={"action_run": state},
+        commands=(LocalCliCommand("action_run", "Run action", "action_run", "Run action"),),
+    )
 
-    class Store:
-        def read_local_mcp_grant(self, identity_hash, **kwargs):
-            assert identity_hash == identity["identity_hash"]
-            assert kwargs["command"] == "kranz"
-            assert kwargs["args_hash"] == identity["args_hash"]
-            return {
-                "state": "allowed",
-                "commands": [LocalCliCommand("action_run", "Run action", "action_run", "Run action")],
-                "command_states": {"action_run": state},
-            }
-
-    def unexpected_catalog_read():
+    def unexpected_contributed_decision(**_kwargs):
         pytest.fail("A this-device grant must take precedence over contributed defaults")
 
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", unexpected_catalog_read)
-    decision = apply_local_mcp_extension_decision(Store(), tool, "review")
+    monkeypatch.setattr(mcp_server_grants, "native_contributed_mcp_decision", unexpected_contributed_decision)
+    decision = apply_local_mcp_extension_decision(store, tool, "review")
     assert decision is not None
     assert decision[0:2] == (expected, "local-mcp-extension")

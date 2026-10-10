@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.local_supply_chain import (
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
-    claim_deferred_tool_call_approval,
     evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
@@ -486,7 +485,9 @@ def _dangerous_tool_artifact() -> GuardArtifact:
     ],
 )
 def test_tool_call_hash_preserves_persisted_approval_identity(
-    native_context_digest: Path, include_authority: bool, expected: str,
+    native_context_digest: Path,
+    include_authority: bool,
+    expected: str,
 ) -> None:
     metadata = {
         "server_fingerprint": {"resolved_executable": "/opt/bin/server", "tool_catalog_fingerprint": "catalog"},
@@ -496,9 +497,14 @@ def test_tool_call_hash_preserves_persisted_approval_identity(
     if include_authority:
         metadata.update({"mcp_tool_authority_hash": {"revision": 1}, "mcp_provider_catalog_hash": False})
     artifact = GuardArtifact(
-        artifact_id="codex:mcp:filesystem:read_file", name="filesystem:read_file",
-        harness="codex", artifact_type="mcp_tool_call", source_scope="project",
-        config_path=".mcp.json", transport="stdio", metadata=metadata,
+        artifact_id="codex:mcp:filesystem:read_file",
+        name="filesystem:read_file",
+        harness="codex",
+        artifact_type="mcp_tool_call",
+        source_scope="project",
+        config_path=".mcp.json",
+        transport="stdio",
+        metadata=metadata,
     )
     arguments = {
         "path": "/opt/neutral/data/日本語.txt",
@@ -511,7 +517,9 @@ def test_tool_call_hash_preserves_persisted_approval_identity(
 
 @pytest.mark.parametrize("configured", [False, True])
 def test_tool_call_hash_cannot_mint_approval_when_native_digest_is_unavailable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: bool,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    configured: bool,
 ) -> None:
     from codex_plugin_scanner.guard import native_context
 
@@ -870,51 +878,6 @@ def test_tool_call_retained_policy_deleted_after_claim_requires_reapproval(
     assert decision.post_claim_revalidated is True
     assert decision.approval_reuse_claim_disposition == "retained"
     assert decision.approval_reuse_reason_code == "approval_reuse_context_changed_after_claim"
-
-
-def test_deferred_tool_claim_without_postclaim_authority_fails_closed(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    artifact = _dangerous_tool_artifact()
-    arguments = {"command": "rm deferred-target"}
-    config = GuardConfig(
-        guard_home=tmp_path / "guard-home",
-        workspace=workspace,
-        mode="prompt",
-    )
-    digest = build_tool_call_hash(artifact, arguments, workspace=workspace, config=config)
-    store = GuardStore(tmp_path / "guard-home")
-    store.upsert_policy(
-        PolicyDecision(
-            harness=artifact.harness,
-            scope="artifact",
-            action="allow",
-            artifact_id=artifact.artifact_id,
-            artifact_hash=digest,
-            workspace=str(workspace),
-            publisher=artifact.publisher,
-            source="approval-gate",
-        ),
-        "2026-07-17T00:00:00+00:00",
-    )
-    provisional = evaluate_tool_call(
-        store=store,
-        config=config,
-        artifact=artifact,
-        artifact_hash=digest,
-        arguments=arguments,
-        claim_saved_approval=False,
-    )
-
-    assert provisional.action == "allow"
-    assert provisional.pending_approval_reuse_decision is not None
-    assert provisional.approval_reuse_claim_disposition == "retained"
-
-    claimed = claim_deferred_tool_call_approval(store=store, decision=provisional)
-
-    assert claimed.action == "require-reapproval"
-    assert claimed.post_claim_revalidated is True
-    assert claimed.approval_reuse_reason_code == "approval_reuse_context_changed_after_claim"
 
 
 @pytest.mark.parametrize(

@@ -113,6 +113,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             guard_command::pretool::PathContext {
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
+                cdpath_unset: false,
             },
             Some(&context),
         );
@@ -140,6 +141,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             guard_command::pretool::PathContext {
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
+                cdpath_unset: false,
             },
             Some(&caller),
         );
@@ -182,12 +184,130 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
             guard_command::pretool::PathContext {
                 home_dir: home.to_str(),
                 cwd: repository.to_str(),
+                cdpath_unset: false,
             },
             Some(&caller),
         );
         assert_eq!(
             result.decision, expected,
             "disabled pager precedence: {settings}: {} / {}",
+            result.reason_code, result.reason
+        );
+    }
+}
+
+#[test]
+fn empty_git_pager_overrides_a_custom_pager_variable() {
+    let root = std::env::temp_dir().join(format!("guard-git-empty-pager-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    std::fs::write(repository.join(".git/config"), "[pager]\nstatus = true\n").unwrap();
+    let enabled = github_controls("enabled");
+    // GIT_PAGER="" (no pager) is present in the environment alongside PAGER=delta.
+    let caller = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: vec![
+            "GIT_CONFIG_NOSYSTEM".into(),
+            "GIT_PAGER".into(),
+            "PAGER".into(),
+        ],
+        environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: true,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: true,
+    };
+    let mut without_git_pager = caller.clone();
+    without_git_pager
+        .environment_names
+        .retain(|name| name != "GIT_PAGER");
+    without_git_pager.git_pager_disabled = false;
+    for (context, expected) in [(&caller, "allow"), (&without_git_pager, "deny")] {
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":"git status --short"}}),
+            Some(&enabled),
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: home.to_str(),
+                cwd: repository.to_str(),
+                cdpath_unset: false,
+            },
+            Some(context),
+        );
+        assert_eq!(result.decision, expected, "{:?}", context.environment_names);
+    }
+}
+
+#[test]
+fn piped_git_output_never_starts_a_configured_pager() {
+    let root = std::env::temp_dir().join(format!("guard-git-piped-{}", std::process::id()));
+    let home = root.join("home");
+    let repository = root.join("repository");
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::create_dir_all(&repository).unwrap();
+    assert!(std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()
+        .unwrap()
+        .success());
+    std::fs::write(
+        repository.join(".git/config"),
+        "[core]\npager = ./synthetic-never-execute\n[pager]\nshow = ./synthetic-never-execute\n",
+    )
+    .unwrap();
+    let enabled = github_controls("enabled");
+    let context = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
+        environment_digest: "0".repeat(64),
+        home: None,
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: true,
+    };
+    for (command, expected) in [
+        ("git log --oneline -2 | cat", "allow"),
+        ("git log --oneline -2 | head -5", "allow"),
+        ("git show --stat HEAD | head -20", "allow"),
+        ("git diff --no-ext-diff --no-textconv | cat", "allow"),
+        ("git log --oneline -2 2>&1 | cat", "allow"),
+        ("git log --oneline -2", "deny"),
+        ("git show --stat HEAD", "deny"),
+        ("echo HEAD | git log --oneline -2", "deny"),
+        ("git log --oneline -2 | cat && git log --oneline -1", "deny"),
+        ("git log --oneline -2 || cat", "deny"),
+    ] {
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+            Some(&enabled),
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: home.to_str(),
+                cwd: repository.to_str(),
+                cdpath_unset: false,
+            },
+            Some(&context),
+        );
+        assert_eq!(
+            result.decision, expected,
+            "{command}: {} / {}",
             result.reason_code, result.reason
         );
     }

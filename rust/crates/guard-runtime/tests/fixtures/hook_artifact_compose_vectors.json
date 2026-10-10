@@ -1,0 +1,3011 @@
+[
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "warn",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_defaults",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": "block",
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": "block",
+      "untrusted_payload_action": null
+    },
+    "name": "stack_cli_block_wins",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": "block",
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "require-reapproval",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [
+        {
+          "input_source": "trusted_cli_override",
+          "normalized_action": "require-reapproval",
+          "original_action": "nonsense",
+          "original_type": "str",
+          "reason_code": "guard_action_unknown",
+          "source": "guard_action_normalizer"
+        }
+      ],
+      "package_policy_action": null,
+      "policy_action": "require-reapproval",
+      "requested_policy_action": "nonsense",
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": "require-reapproval",
+      "untrusted_payload_action": null
+    },
+    "name": "stack_cli_unknown_requires_reapproval",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": "nonsense",
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "review",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "review",
+      "requested_policy_action": "ask",
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": "review",
+      "untrusted_payload_action": null
+    },
+    "name": "stack_cli_ask_aliases_review",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": "ask",
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "block",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": "allow",
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": "allow"
+    },
+    "name": "stack_payload_cannot_lower",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "block",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": "allow",
+      "payload_action_present": true,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "require-reapproval",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [
+        {
+          "input_source": "untrusted_hook_payload_hint",
+          "normalized_action": "require-reapproval",
+          "original_action": null,
+          "original_type": "int",
+          "reason_code": "guard_action_unknown",
+          "source": "guard_action_normalizer"
+        }
+      ],
+      "package_policy_action": null,
+      "policy_action": "require-reapproval",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": "require-reapproval"
+    },
+    "name": "stack_payload_unknown",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": 7,
+      "payload_action_present": true,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": "warn",
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": "warn",
+      "untrusted_payload_action": "block"
+    },
+    "name": "stack_cli_wins_requested_over_payload",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": "warn",
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": "block",
+      "payload_action_present": true,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "warn",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_unknown_config_warns",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "???",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "allow",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": "block",
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_native_floor_and_edge",
+    "query": {
+      "approval_context_config_action": "allow",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": "block",
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": "review",
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "warn",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_override_blocks_local_grants",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": true,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": "block",
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "pk1"
+      ],
+      "risk_summary": "pkg summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_package_block",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": true,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": "block",
+      "package_risk_signals": [
+        "pk1"
+      ],
+      "package_risk_summary": "pkg summary",
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "review",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": "review",
+      "policy_action": "review",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "pk1"
+      ],
+      "risk_summary": "pkg summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_package_review_controls_summary",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": true,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": "review",
+      "package_risk_signals": [
+        "pk1"
+      ],
+      "package_risk_summary": "pkg summary",
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "review",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": "warn",
+      "policy_action": "review",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_package_weaker_than_floor",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "review",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": true,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": "warn",
+      "package_risk_signals": [
+        "pk1"
+      ],
+      "package_risk_summary": "pkg summary",
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": "block",
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": "block",
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": "block",
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "pk1",
+        "a1",
+        "d1"
+      ],
+      "risk_summary": "pkg summary art summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_compound_package_controls",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [
+        "d1"
+      ],
+      "data_flow_summary": "df summary",
+      "edge_floor": null,
+      "has_compound_findings": true,
+      "has_data_flow": true,
+      "has_package": true,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": "block",
+      "package_risk_signals": [
+        "pk1"
+      ],
+      "package_risk_summary": "pkg summary",
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "block",
+      "data_flow_action": null,
+      "local_grants_allowed": true,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": "warn",
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "pk1"
+      ],
+      "risk_summary": "art summary pkg summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_compound_package_weaker",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "block",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": true,
+      "has_data_flow": false,
+      "has_package": true,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": "warn",
+      "package_risk_signals": [
+        "pk1"
+      ],
+      "package_risk_summary": "pkg summary",
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": "block",
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": "block",
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "d1"
+      ],
+      "risk_summary": "art summary df summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_data_flow_configured",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": "block",
+      "data_flow_reasons": [
+        "d1",
+        "a1"
+      ],
+      "data_flow_summary": "df summary",
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": true,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": "warn",
+      "approval_context_policy_action": "warn",
+      "current_config_action": "review",
+      "data_flow_action": "review",
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "review",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "d1"
+      ],
+      "risk_summary": "art summary df summary",
+      "scanner_action": null,
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_data_flow_unconfigured_uses_current",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "review",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [
+        "d1"
+      ],
+      "data_flow_summary": "df summary",
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": true,
+      "has_package": false,
+      "has_scanner": false,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": null,
+      "scanner_risk_signals": []
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "scan primary",
+        "scan two"
+      ],
+      "risk_summary": "scan primary",
+      "scanner_action": "block",
+      "scanner_raised_to_block": true,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_scanner_raises_to_block",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": true,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": "block",
+      "scanner_risk_signals": [
+        "scan primary",
+        "scan two"
+      ]
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "scan primary"
+      ],
+      "risk_summary": "scan primary art summary",
+      "scanner_action": "block",
+      "scanner_raised_to_block": true,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_scanner_raises_compound",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": true,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": true,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": "block",
+      "scanner_risk_signals": [
+        "scan primary"
+      ]
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "block",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "block",
+      "requested_policy_action": "block",
+      "risk_signals": [
+        "a1",
+        "scan primary"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": "block",
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": "block",
+      "untrusted_payload_action": null
+    },
+    "name": "stack_scanner_already_blocked",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": "block",
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": true,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": "block",
+      "scanner_risk_signals": [
+        "scan primary"
+      ]
+    }
+  },
+  {
+    "expected": {
+      "approval_context_config_action": "warn",
+      "approval_context_data_flow_action": null,
+      "approval_context_policy_action": "warn",
+      "current_config_action": "warn",
+      "data_flow_action": null,
+      "local_grants_allowed": false,
+      "native_floor": null,
+      "normalizer_evidence": [],
+      "package_policy_action": null,
+      "policy_action": "warn",
+      "requested_policy_action": null,
+      "risk_signals": [
+        "a1",
+        "scan primary"
+      ],
+      "risk_summary": "art summary",
+      "scanner_action": "warn",
+      "scanner_raised_to_block": false,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null
+    },
+    "name": "stack_scanner_warn_keeps_summary",
+    "query": {
+      "approval_context_config_action": "warn",
+      "artifact_risk_signals": [
+        "a1"
+      ],
+      "artifact_risk_summary": "art summary",
+      "cli_action": null,
+      "config_action": "warn",
+      "current_action_override_present": false,
+      "data_flow_configured_action": null,
+      "data_flow_reasons": [],
+      "data_flow_summary": null,
+      "edge_floor": null,
+      "has_compound_findings": false,
+      "has_data_flow": false,
+      "has_package": false,
+      "has_scanner": true,
+      "kind": "policy_stack",
+      "native_floor": null,
+      "package_policy_action": null,
+      "package_risk_signals": [],
+      "package_risk_summary": null,
+      "payload_action": null,
+      "payload_action_present": false,
+      "scanner_action": "warn",
+      "scanner_risk_signals": [
+        "scan primary"
+      ]
+    }
+  },
+  {
+    "expected": {
+      "approval_context_policy_action": "allow",
+      "current_policy_action": "allow",
+      "policy_action": "allow"
+    },
+    "name": "tool_grant_allows",
+    "query": {
+      "kind": "tool_grant_apply"
+    }
+  },
+  {
+    "expected": {
+      "approval_context_policy_action": "review",
+      "current_policy_action": "review",
+      "policy_action": "review"
+    },
+    "name": "settle_no_grant_no_floor",
+    "query": {
+      "approval_context_action": "review",
+      "current_action": "review",
+      "granted_action": "review",
+      "kind": "grant_settle",
+      "native_floor": null,
+      "policy_action": "review"
+    }
+  },
+  {
+    "expected": {
+      "approval_context_policy_action": "allow",
+      "current_policy_action": "allow",
+      "policy_action": "allow"
+    },
+    "name": "settle_grant_allows",
+    "query": {
+      "approval_context_action": "review",
+      "current_action": "review",
+      "granted_action": "allow",
+      "kind": "grant_settle",
+      "native_floor": null,
+      "policy_action": "review"
+    }
+  },
+  {
+    "expected": {
+      "approval_context_policy_action": "block",
+      "current_policy_action": "allow",
+      "policy_action": "allow"
+    },
+    "name": "settle_floor_refloors_context_only",
+    "query": {
+      "approval_context_action": "review",
+      "current_action": "review",
+      "granted_action": "allow",
+      "kind": "grant_settle",
+      "native_floor": "block",
+      "policy_action": "review"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "review",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "reason_code": "approval_reuse_no_saved_decision",
+        "should_claim": false,
+        "status": "not-applicable"
+      },
+      "approval_reuse_source": null,
+      "policy_action": "review"
+    },
+    "name": "saved_none_present",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": null,
+      "stored_artifact_hash": null,
+      "stored_present": false,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "saved_policy_decision",
+      "policy_action": "allow"
+    },
+    "name": "saved_exact_allow",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": "allow",
+      "stored_artifact_hash": "x",
+      "stored_present": true,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "block",
+        "current_action": "allow",
+        "original_current_action": "allow",
+        "original_current_type": "str",
+        "original_saved_action": "block",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_saved_block",
+        "saved_action": "block",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "saved_policy_decision",
+      "policy_action": "block"
+    },
+    "name": "saved_block",
+    "query": {
+      "current_action": "allow",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": "block",
+      "stored_artifact_hash": "x",
+      "stored_present": true,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "review",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_context_changed",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "saved_policy_decision",
+      "policy_action": "review"
+    },
+    "name": "saved_stored_validation_failure",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": "allow",
+      "stored_artifact_hash": "x",
+      "stored_present": true,
+      "stored_validation_reason": "approval_reuse_context_changed"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "saved_policy_decision",
+      "policy_action": "require-reapproval"
+    },
+    "name": "saved_integrity_failure_wins",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": true,
+      "kind": "saved_reuse",
+      "stored_action": "allow",
+      "stored_artifact_hash": "x",
+      "stored_present": true,
+      "stored_validation_reason": "approval_reuse_context_changed"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_type": "NoneType",
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "require-reapproval",
+        "saved_normalization_reason_code": "guard_action_unknown",
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "saved_policy_integrity",
+      "policy_action": "require-reapproval"
+    },
+    "name": "saved_integrity_failure_no_row",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": true,
+      "kind": "saved_reuse",
+      "stored_action": null,
+      "stored_artifact_hash": null,
+      "stored_present": false,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "cursor_native_approval",
+      "policy_action": "allow"
+    },
+    "name": "saved_cursor_native_valid",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": true,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": null,
+      "stored_artifact_hash": null,
+      "stored_present": false,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "review",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_context_changed",
+        "saved_action": "allow",
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "cursor_native_approval",
+      "policy_action": "review"
+    },
+    "name": "saved_cursor_native_invalid",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": true,
+      "cursor_validation_reason": "approval_reuse_context_changed",
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": null,
+      "stored_artifact_hash": null,
+      "stored_present": false,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "review",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_expired",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "invalidated_saved_policy",
+      "policy_action": "review"
+    },
+    "name": "saved_diagnostic_reason",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": "approval_reuse_expired",
+      "diagnostic_stored_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": null,
+      "stored_artifact_hash": null,
+      "stored_present": false,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "review",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "reason_code": "approval_reuse_no_saved_decision",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "not-applicable"
+      },
+      "approval_reuse_source": null,
+      "policy_action": "review"
+    },
+    "name": "saved_diagnostic_hash_no_reason",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": "legacy-hash",
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": null,
+      "stored_artifact_hash": null,
+      "stored_present": false,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "saved_policy_decision",
+      "policy_action": "allow"
+    },
+    "name": "saved_diagnostic_ignored_when_stored",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": "approval_reuse_expired",
+      "diagnostic_stored_hash": "other",
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": "allow",
+      "stored_artifact_hash": "x",
+      "stored_present": true,
+      "stored_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "review",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_claim_failed",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "saved_policy_decision",
+      "policy_action": "review"
+    },
+    "name": "saved_claim_failed_validation",
+    "query": {
+      "current_action": "review",
+      "cursor_native_present": false,
+      "cursor_validation_reason": null,
+      "diagnostic_reason": null,
+      "diagnostic_stored_hash": null,
+      "integrity_failure": false,
+      "kind": "saved_reuse",
+      "stored_action": "allow",
+      "stored_artifact_hash": "x",
+      "stored_present": true,
+      "stored_validation_reason": "approval_reuse_claim_failed"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "block",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "block",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_saved_block",
+        "saved_action": "block",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "accepted"
+      },
+      "policy_action": "block"
+    },
+    "name": "block_reuse_package",
+    "query": {
+      "current_action": "review",
+      "kind": "saved_block_reuse",
+      "policy_action": "warn",
+      "stored_artifact_hash": "x"
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "block",
+        "current_action": "allow",
+        "original_current_action": "allow",
+        "original_current_type": "str",
+        "original_saved_action": "block",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_saved_block",
+        "saved_action": "block",
+        "should_claim": false,
+        "status": "accepted"
+      },
+      "policy_action": "block"
+    },
+    "name": "block_reuse_no_hash",
+    "query": {
+      "current_action": "allow",
+      "kind": "saved_block_reuse",
+      "policy_action": "allow",
+      "stored_artifact_hash": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "approval_context_mismatch",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "approval_context_mismatch"
+    },
+    "name": "override_token_mismatch",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": "approval_context_mismatch"
+    }
+  },
+  {
+    "expected": {
+      "claim_required": true,
+      "evidence": null,
+      "reason_code": null
+    },
+    "name": "override_claim_required",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": true,
+      "evidence": null,
+      "reason_code": null
+    },
+    "name": "override_once_source_claim_required",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate-once",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_claim_failed",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_claim_failed"
+    },
+    "name": "override_claim_failed",
+    "query": {
+      "claim_succeeded": false,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_integrity_failure",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_integrity_failure"
+    },
+    "name": "override_integrity_remembered_rule",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": true,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_integrity_failure",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_integrity_failure"
+    },
+    "name": "override_integrity_prior_reuse",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": "approval_reuse_integrity_failure",
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_allow_missing",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_allow_missing"
+    },
+    "name": "override_allow_missing_no_row",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": null,
+      "stored_present": false,
+      "stored_source": null,
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_allow_missing",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_allow_missing"
+    },
+    "name": "override_allow_missing_other_source",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "local-cli",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_allow_missing",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_allow_missing"
+    },
+    "name": "override_allow_missing_stored_block",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "block",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "review",
+        "reason_code": "trusted_request_override_allow_missing",
+        "source": "trusted_request_override"
+      },
+      "reason_code": "trusted_request_override_allow_missing"
+    },
+    "name": "override_stored_invalid",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "review",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": "approval_reuse_context_changed",
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "allow",
+        "reason_code": null,
+        "source": "trusted_request_override"
+      },
+      "reason_code": null
+    },
+    "name": "override_not_in_review",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "allow",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "claim_required": false,
+      "evidence": {
+        "applied": false,
+        "authoritative_action": "block",
+        "reason_code": null,
+        "source": "trusted_request_override"
+      },
+      "reason_code": null
+    },
+    "name": "override_block_not_in_review",
+    "query": {
+      "claim_succeeded": null,
+      "kind": "trusted_override",
+      "policy_action": "block",
+      "prior_reuse_reason_code": null,
+      "remembered_rule_rejected": false,
+      "stored_action": "allow",
+      "stored_present": true,
+      "stored_source": "approval-gate",
+      "stored_validation_reason": null,
+      "token_validation_reason": null
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "allow",
+        "current_action": "review",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "source": "approval_reuse",
+        "status": "accepted"
+      },
+      "policy_action": "allow",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": null
+    },
+    "name": "claimed_saved_allow",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "allow",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": {
+        "action": "allow",
+        "reason_code": "approval_reuse_exact_match",
+        "saved_action": "allow"
+      },
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "allow",
+        "current_action": "review",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "source": "approval_reuse",
+        "status": "accepted"
+      },
+      "policy_action": "allow",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": null
+    },
+    "name": "claimed_no_prior_uses_policy",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "review",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": null,
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_context_changed_after_claim",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "post_claim_context_change_reason": "approval_context_mismatch",
+        "post_claim_refresh_failed": false,
+        "reason_code": "approval_reuse_context_changed_after_claim",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "require-reapproval",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": "approval_reuse_context_changed_after_claim"
+    },
+    "name": "claimed_context_changed",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "allow",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": {
+        "action": "allow",
+        "reason_code": "approval_reuse_exact_match",
+        "saved_action": "allow"
+      },
+      "remembered_rule_rejected": false,
+      "token_validation_reason": "approval_context_mismatch",
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_context_changed_after_claim",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "post_claim_context_change_reason": null,
+        "post_claim_refresh_failed": true,
+        "reason_code": "approval_reuse_context_changed_after_claim",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "require-reapproval",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": "approval_reuse_context_changed_after_claim"
+    },
+    "name": "claimed_refresh_failed",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "allow",
+      "post_claim_refresh_failed": true,
+      "prior_reuse": {
+        "action": "allow",
+        "reason_code": "approval_reuse_exact_match",
+        "saved_action": "allow"
+      },
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "post_claim_context_change_reason": null,
+        "post_claim_refresh_failed": false,
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "require-reapproval",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": "approval_reuse_integrity_failure"
+    },
+    "name": "claimed_integrity_remembered_rule",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "allow",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": {
+        "action": "allow",
+        "reason_code": "approval_reuse_exact_match",
+        "saved_action": "allow"
+      },
+      "remembered_rule_rejected": true,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "post_claim_context_change_reason": null,
+        "post_claim_refresh_failed": false,
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "require-reapproval",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": "approval_reuse_integrity_failure"
+    },
+    "name": "claimed_integrity_prior_reuse",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "allow",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": {
+        "action": "allow",
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow"
+      },
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "require-reapproval",
+        "current_action": "require-reapproval",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "require-reapproval",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "post_claim_context_change_reason": null,
+        "post_claim_refresh_failed": false,
+        "reason_code": "approval_reuse_integrity_failure",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "require-reapproval",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": "approval_reuse_integrity_failure"
+    },
+    "name": "claimed_workflow_unclaimed_integrity",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "allow",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": {
+        "action": "allow",
+        "reason_code": "approval_reuse_exact_match",
+        "saved_action": "allow"
+      },
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": true
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "claimed_github_workflow_capability",
+      "evidence": {
+        "action": "allow",
+        "current_action": "review",
+        "input_source": "claimed_github_workflow_capability",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "source": "approval_reuse",
+        "status": "accepted"
+      },
+      "policy_action": "allow",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": null
+    },
+    "name": "claimed_workflow_claimed_downgrades_reapproval",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "require-reapproval",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": null,
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": true,
+      "workflow_capability_required": true
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "claimed_trusted_request_override",
+      "evidence": {
+        "action": "allow",
+        "current_action": "review",
+        "input_source": "claimed_trusted_request_override",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "source": "approval_reuse",
+        "status": "accepted"
+      },
+      "policy_action": "allow",
+      "trusted_request_override_applied": true,
+      "trusted_request_override_reason": "trusted_request_override_exact_context"
+    },
+    "name": "claimed_trusted_override_exact",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": true,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "review",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": null,
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "block",
+        "current_action": "block",
+        "original_current_action": "block",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_current_block",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_trusted_request_override",
+      "evidence": {
+        "action": "block",
+        "current_action": "block",
+        "input_source": "claimed_trusted_request_override",
+        "original_current_action": "block",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_current_block",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "block",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": null
+    },
+    "name": "claimed_trusted_override_with_block",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": true,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": null,
+      "policy_action": "block",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": null,
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "allow",
+        "current_action": "review",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "status": "accepted"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "allow",
+        "current_action": "review",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "review",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_accepted",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": true,
+        "source": "approval_reuse",
+        "status": "accepted"
+      },
+      "policy_action": "allow",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": null
+    },
+    "name": "claimed_package_allow",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": true,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": "allow",
+      "policy_action": "allow",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": null,
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "approval_reuse": {
+        "action": "block",
+        "current_action": "block",
+        "original_current_action": "block",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_current_block",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "status": "rejected"
+      },
+      "approval_reuse_source": "claimed_saved_policy_decision",
+      "evidence": {
+        "action": "block",
+        "current_action": "block",
+        "input_source": "claimed_saved_policy_decision",
+        "original_current_action": "block",
+        "original_current_type": "str",
+        "original_saved_action": "allow",
+        "original_saved_type": "str",
+        "reason_code": "approval_reuse_current_block",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": false,
+        "should_claim": false,
+        "source": "approval_reuse",
+        "status": "rejected"
+      },
+      "policy_action": "block",
+      "trusted_request_override_applied": false,
+      "trusted_request_override_reason": null
+    },
+    "name": "claimed_package_allow_blocked_policy",
+    "query": {
+      "claimed_hash": "sha256:abc",
+      "claimed_package_approval_consumed": false,
+      "claimed_trusted_request_override": false,
+      "current_policy_action": "review",
+      "kind": "claimed_reuse",
+      "package_reuse_saved_action": "allow",
+      "policy_action": "block",
+      "post_claim_refresh_failed": false,
+      "prior_reuse": null,
+      "remembered_rule_rejected": false,
+      "token_validation_reason": null,
+      "workflow_authorization_claimed": false,
+      "workflow_capability_required": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {},
+      "risk_headline": null
+    },
+    "name": "copy_plain_review",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "Pkg summary",
+        "harness_message": "Pkg harness",
+        "user_body": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_package_matches",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "x"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "review",
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {},
+      "risk_headline": null
+    },
+    "name": "copy_package_mismatch_no_copy",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "x"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "warn",
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "Pkg summary",
+        "harness_message": "Pkg harness",
+        "package_review_cloud_reason_code": "cloud_http_error",
+        "user_body": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_package_cloud_reason",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "a",
+          "cloud_timeout",
+          "cloud_http_error"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "review",
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "Pkg summary Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install.",
+        "harness_message": "Pkg harness Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install.",
+        "package_review_cloud_reason_code": "cloud_auth_error",
+        "retry_instruction": "Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install.",
+        "user_body": "Pkg summary Run `hol-guard connect` to reconnect Guard Cloud, then retry the same install.",
+        "user_title": "Pkg title"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_package_cloud_auth_reconnect",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "cloud_auth_error"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "review",
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "Pkg summary",
+        "harness_message": "Pkg harness",
+        "package_review_cloud_reason_code": "cloud_auth_error",
+        "user_body": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_cloud_auth_blocked_no_reconnect",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "cloud_auth_error"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "block",
+      "policy_action": "block",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "scan primary",
+        "harness_message": "Pkg harness",
+        "user_body": "Pkg summary",
+        "user_title": "Critical install blocked"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_scanner_raised_with_package",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": true,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "x"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "review",
+      "policy_action": "block",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": "scan primary",
+      "scanner_raised_to_block": true
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "user_title": "Critical install blocked"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_scanner_raised_no_package",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "block",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": true
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "scan primary"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_scanner_block_detail",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": true,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "block",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": "scan primary",
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {},
+      "risk_headline": null
+    },
+    "name": "copy_scanner_non_block_keeps_detail",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": true,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": "scan primary",
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "harness_message": "HOL Guard allowed with a warning this complete command after combining 3 findings. risk text",
+        "user_body": "Guard combined 3 findings for the complete command. risk text"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_compound_allowed_phrase",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": 3,
+      "has_compound_findings": true,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "warn",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "harness_message": "HOL Guard blocked this complete command after combining 2 findings. risk text",
+        "user_body": "Guard combined 2 findings for the complete command. risk text"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_compound_block_phrase",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": 2,
+      "has_compound_findings": true,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "block",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "harness_message": "HOL Guard paused for one review this complete command after combining 2 findings. risk text",
+        "user_body": "Guard combined 2 findings for the complete command. risk text"
+      },
+      "risk_headline": null
+    },
+    "name": "copy_compound_blocks_package_copy",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": 2,
+      "has_compound_findings": true,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": {
+        "reason_codes": [
+          "x"
+        ],
+        "user_harness_message": "Pkg harness",
+        "user_summary": "Pkg summary",
+        "user_title": "Pkg title"
+      },
+      "package_policy_action": "review",
+      "policy_action": "review",
+      "remembered_rule_reason": null,
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {
+        "dashboard_primary_detail": "Remembered rule ignored.",
+        "detail_reason_code": "remembered_rule_ignored_degraded_trust",
+        "harness_message": "Remembered rule ignored."
+      },
+      "risk_headline": "Remembered rule ignored."
+    },
+    "name": "copy_remembered_rule_review",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "review",
+      "remembered_rule_reason": "Remembered rule ignored.",
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  },
+  {
+    "expected": {
+      "decision_overrides": {},
+      "risk_headline": null
+    },
+    "name": "copy_remembered_rule_allow_ignored",
+    "query": {
+      "base_dashboard_primary_detail": "base detail",
+      "base_harness_message": "base harness",
+      "base_user_body": "base body",
+      "compound_finding_count": null,
+      "has_compound_findings": false,
+      "has_scanner_evidence": false,
+      "kind": "decision_copy",
+      "package": null,
+      "package_policy_action": null,
+      "policy_action": "allow",
+      "remembered_rule_reason": "Remembered rule ignored.",
+      "risk_summary": "risk text",
+      "scanner_primary_signal": null,
+      "scanner_raised_to_block": false
+    }
+  }
+]

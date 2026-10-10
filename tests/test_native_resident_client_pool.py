@@ -71,7 +71,10 @@ def test_client_reader_keeps_response_binding_with_the_captured_generation_queue
     old_queue: Queue[bytes | client_module._StreamFailure] = Queue(maxsize=1)
     active_queue: Queue[bytes | client_module._StreamFailure] = Queue(maxsize=1)
     response = b"old-generation-response"
-    process = SimpleNamespace(stdout=io.BytesIO(struct.pack(">I", len(response)) + response))
+    process = SimpleNamespace(
+        stdout=io.BytesIO(struct.pack(">I", len(response)) + response),
+        wait=lambda timeout=None: 0,
+    )
 
     client._responses = active_queue  # pyright: ignore[reportPrivateUsage]
     client._read_responses(process, old_queue)  # pyright: ignore[reportArgumentType]

@@ -28,8 +28,11 @@ from .cursor_hook_config import (
     _managed_hook_entry,
     _managed_hooks_payload,
     _merge_hook_entries,
+    _retire_managed_hook_events,
     _strip_managed_hook_entries,
 )
+from .cursor_hook_entries import _remove_managed_hook_entries, _render_without_managed_hook_entries
+from .cursor_hook_events import unsupported_cursor_hook_events
 from .cursor_hook_guard_cli import HOOK_SCRIPT_TEMPLATE_RESOLVER
 from .cursor_hook_payload import (
     _validated_hol_guard_src_path,
@@ -140,12 +143,7 @@ def _prepare_cursor_hooks(context: HarnessContext) -> PreparedHarnessInstall:
             context, script_path=script_path, event_name=event, python_executable=python_executable
         )
         hooks[event] = _merge_hook_entries(hooks.get(event), entry, event_name=event)
-    if hooks.get("preToolUse") is not None:
-        stripped = _strip_managed_hook_entries(hooks["preToolUse"], script_path=script_path)
-        if stripped:
-            hooks["preToolUse"] = stripped
-        else:
-            hooks.pop("preToolUse", None)
+    _retire_managed_hook_events(hooks, script_path=script_path)
     payload["hooks"] = hooks
     source = cursor_hook_script_source(
         context, guard_cli=list(guard_cli.command), recovery_command=_cursor_recovery_command(context, guard_cli.python)
@@ -312,13 +310,7 @@ def install_cursor_hooks(context: HarnessContext) -> dict[str, object]:
             python_executable=python_executable,
         )
         hooks[event_name] = _merge_hook_entries(hooks.get(event_name), entry, event_name=event_name)
-    pre_tool_use = hooks.get("preToolUse")
-    if pre_tool_use is not None:
-        stripped = _strip_managed_hook_entries(pre_tool_use, script_path=script_path)
-        if stripped:
-            hooks["preToolUse"] = stripped
-        else:
-            hooks.pop("preToolUse", None)
+    _retire_managed_hook_events(hooks, script_path=script_path)
     payload["hooks"] = hooks
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
     write_text_at_authorized_path(hooks_path, json.dumps(payload, indent=2) + "\n")
@@ -453,57 +445,6 @@ def _cleanup_legacy_project_cursor_hooks(context: HarnessContext) -> None:
         remove_managed_copy=False,
     )
     prune_empty_project_cursor_dir(context.workspace_dir)
-
-
-def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool:
-    try:
-        payload = json.loads(hooks_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return False
-    cleaned, removed = _render_without_managed_hook_entries(payload, script_path=script_path)
-    if not removed:
-        return False
-    if cleaned is None:
-        hooks_path.unlink()
-    else:
-        write_text_at_authorized_path(hooks_path, json.dumps(cleaned, indent=2) + "\n")
-    return True
-
-
-def _render_without_managed_hook_entries(
-    payload: object,
-    *,
-    script_path: Path,
-) -> tuple[dict[str, object] | None, bool]:
-    if not isinstance(payload, dict):
-        return None, False
-    hooks = payload.get("hooks")
-    has_managed_hooks = False
-    has_other_hooks = False
-    if not isinstance(hooks, dict):
-        return payload, False
-    cleaned_hooks: dict[str, object] = {}
-    managed_command = str(script_path.resolve())
-    for event, entries in hooks.items():
-        if isinstance(entries, list):
-            filtered: list[object] = []
-            for entry in entries:
-                if _is_managed_hook_entry(entry, command=managed_command):
-                    has_managed_hooks = True
-                else:
-                    filtered.append(entry)
-            if filtered:
-                cleaned_hooks[str(event)] = filtered
-                has_other_hooks = True
-        else:
-            cleaned_hooks[str(event)] = entries
-            has_other_hooks = True
-    if not has_managed_hooks:
-        return payload, False
-    if has_other_hooks:
-        payload["hooks"] = cleaned_hooks
-        return payload, True
-    return None, True
 
 
 def _resolve_guard_cli_command(context: HarnessContext) -> list[str]:
@@ -651,6 +592,13 @@ def cursor_native_hook_state(context: HarnessContext) -> dict[str, object]:
             "protection_active": False,
             "integrity_status": "tampered",
             "reason": "guard_cursor_hook_registration_mismatch",
+        }
+    if unsupported_cursor_hook_events(hooks):
+        # Cursor ignores the whole file when it names an unknown event.
+        return {
+            "protection_active": False,
+            "integrity_status": "tampered",
+            "reason": "guard_cursor_hook_unsupported_event",
         }
     for event_name in _MANAGED_HOOK_EVENTS:
         entries = hooks.get(event_name)
