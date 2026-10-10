@@ -67,6 +67,16 @@ mod local_once_store;
 mod local_store_read;
 mod managed_resident;
 mod mcp_probe_op;
+mod mcp_proxy_actions;
+mod mcp_proxy_catalog;
+mod mcp_proxy_decision_op;
+#[cfg(test)]
+mod mcp_proxy_decision_tests;
+#[cfg(test)]
+mod mcp_proxy_decision_vectors_tests;
+mod mcp_proxy_package;
+mod mcp_proxy_postclaim;
+mod mcp_proxy_route;
 mod mcp_runtime_evidence_op;
 mod mcp_stdio_session_op;
 mod mcp_tool_evidence_op;
@@ -128,6 +138,10 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod runner_authority_detector;
+mod runner_authority_evaluation;
+mod runner_authority_op;
+mod runner_authority_signature;
 mod runtime_cli;
 mod shim_op;
 #[cfg(unix)]

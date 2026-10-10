@@ -2638,12 +2638,6 @@ def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, obj
     return not any("package-request" in policy_bundle_rule_saved_decision_families(rule) for rule in matching_rules)
 
 
-def _stored_package_policy_evaluation_requires_review(evaluation: Any) -> bool:
-    policy_action = _string_value(getattr(evaluation, "policy_action", None))
-    decision = _string_value(getattr(evaluation, "decision", None))
-    return policy_action in {"block", "require-reapproval"} or decision in {"block", "ask"}
-
-
 def _saved_package_policy_clear_command(
     *,
     artifact: GuardArtifact,
@@ -3172,32 +3166,6 @@ def _workspace_files(workspace_dir: Path) -> tuple[tuple[str, ...], tuple[str, .
         existing_relative_paths(workspace_dir, _MANIFEST_CANDIDATES),
         existing_relative_paths(workspace_dir, _LOCKFILE_CANDIDATES),
     )
-
-
-def _targets_from_workspace_manifests(
-    workspace_dir: Path,
-    manifest_paths: Sequence[str],
-) -> tuple[PackageIntentTarget, ...]:
-    seen: set[tuple[str, str | None, str, str | None]] = set()
-    targets: list[PackageIntentTarget] = []
-    for manifest_path in manifest_paths:
-        disk_path = workspace_dir / manifest_path
-        try:
-            manifest_text = disk_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        dependency_map = parse_manifest_dependencies(path=manifest_path, text=manifest_text)
-        ecosystem = _ECOSYSTEM_BY_MANIFEST.get(Path(manifest_path).name)
-        if ecosystem is None:
-            continue
-        for package_name, version in dependency_map.items():
-            target = _target_from_manifest_dependency(ecosystem, package_name, version)
-            fingerprint = (target.ecosystem, target.package_name, target.raw_spec, target.source_url)
-            if fingerprint in seen:
-                continue
-            seen.add(fingerprint)
-            targets.append(target)
-    return tuple(targets)
 
 
 def _workspace_audit_inventory(
@@ -4223,25 +4191,6 @@ def sync_supply_chain_cloud_state(
     payload["workspace_audits"] = workspace_audits
     payload.setdefault("synced_at", workspace_audits.get("synced_at"))
     return payload
-
-
-def _target_from_manifest_dependency(ecosystem: str, package_name: str, version: str) -> PackageIntentTarget:
-    clean_name = package_name.strip()
-    clean_version = version.strip()
-    if ecosystem == "npm":
-        spec = clean_name if not clean_version else f"{clean_name}@{clean_version}"
-        return js_target(spec)
-    if ecosystem == "pypi":
-        spec = clean_name if not clean_version else f"{clean_name}{clean_version}"
-        return python_target(spec)
-    if ecosystem == "maven":
-        spec = clean_name if not clean_version else f"{clean_name}:{clean_version}"
-        return coordinate_target(ecosystem, spec)
-    if ecosystem == "packagist":
-        spec = clean_name if not clean_version else f"{clean_name}:{clean_version}"
-        return composer_target(spec)
-    spec = clean_name if not clean_version else f"{clean_name}@{clean_version}"
-    return version_target(ecosystem, spec)
 
 
 def _target_for_package_spec(ecosystem: str, package_spec: str) -> PackageIntentTarget:
