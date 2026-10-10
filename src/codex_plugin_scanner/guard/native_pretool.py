@@ -208,17 +208,14 @@ def review_pre_tool_native(
     del cwd, home_dir
     status = native_runtime_status()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
         or _PRETOOL_AUTHORITY_FEATURE not in status.capabilities.features
         or timeout_seconds <= 0
     ):
-        if status.mode in {"auto", "force"}:
-            return record_native_hook_result("native_fail_safe", None)
-        return None
+        return record_native_hook_result("native_fail_safe", None)
     timeout_seconds = min(timeout_seconds, 1.0)
     deadline_started = time.monotonic()
     deadline_monotonic = deadline_started + timeout_seconds
@@ -292,9 +289,6 @@ def native_pre_tool_policy_floor(
         if action == "review" and native.get("reason_code") == "native_git_helper_context_review":
             return None
         return action if action in {"allow", "review", "block"} else "block"
-    status = native_runtime_status()
-    if status.mode in {"off", "shadow"}:
-        return None
     return "block"
 
 

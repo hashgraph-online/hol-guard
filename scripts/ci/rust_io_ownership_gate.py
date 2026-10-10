@@ -83,13 +83,7 @@ ROOTS: Final = (
         "review_http_payload",
         "HookWorker",
     ),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-        "_review_post_tool_http",
-        "HookWorker",
-    ),
     RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
-    RootSpec("src/codex_plugin_scanner/guard/native_runtime.py", "review_post_tool_native"),
     RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
     RootSpec(
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
@@ -293,20 +287,12 @@ def _native_branch(record: FunctionRecord, marker: str) -> ast.If | None:
 def _branch_failures(root: Path, records: dict[tuple[str, str], list[FunctionRecord]]) -> list[str]:
     failures: list[str] = []
     review = _root_record(root, ROOTS[0], records)
-    native = _native_branch(review, "auto")
-    if native is None or not _call_in_branch(native, "_review_native_edge"):
-        failures.append("HookWorker.review_http_payload has no direct auto/force native edge return")
+    if not _call_in(review.node, "_review_native_edge"):
+        failures.append("HookWorker.review_http_payload has no direct native edge return")
     elif any(
-        _call_in_branch(native, forbidden) for forbidden in ("load_guard_config", "review", "evaluate_source_file_ref")
+        _call_in(review.node, forbidden) for forbidden in ("load_guard_config", "review", "evaluate_source_file_ref")
     ):
-        failures.append("HookWorker native PostTool branch reaches Python semantic evaluation")
-
-    post = _root_record(root, ROOTS[1], records)
-    required = _native_branch(post, "native_required")
-    if required is None or not _call_in_branch(required, "review_post_tool_native"):
-        failures.append("HookWorker PostTool native-required branch is incomplete")
-    elif _call_in_branch(required, "review"):
-        failures.append("HookWorker native-required branch calls Python review")
+        failures.append("HookWorker hook review reaches Python semantic evaluation")
 
     publisher_path = "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py"
     publisher = records.get((publisher_path, "start"), [])

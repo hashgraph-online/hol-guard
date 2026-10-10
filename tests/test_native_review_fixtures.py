@@ -64,10 +64,6 @@ def request_digest_for_fixture(harness: str, payload: object, workspace: object)
 
 
 def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, object]) -> tuple[HookWorker, GuardStore]:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
 
     def review_raw_hook_native(*_args: object, **kwargs: object) -> dict[str, object]:
         rendered = copy.deepcopy(edge)

@@ -16,7 +16,7 @@ from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
 )
-from ..native_runtime import NativeRuntimeStatus, native_mode
+from ..native_runtime import NativeRuntimeStatus
 from ..runtime.structured_output_mediation import (
     StructuredContentMediation,
     StructuredOutputResolution,
@@ -366,67 +366,6 @@ class HookWorkerNativeMixin:
             ).to_harness_json(),
         }
 
-    def _mode_surface_response(
-        self: _HookWorkerNativeHost,
-        harness: str,
-        event_name: str,
-        mode: str,
-        *,
-        payload: dict[str, object],
-        workspace: Path | None,
-        home_dir: Path,
-        guard_home: Path,
-    ) -> dict[str, object] | None:
-        if event_name not in {"PreToolUse", "PostToolUse"}:
-            return availability_harness_response(
-                payload,
-                harness=harness,
-                event_name=event_name,
-                reason_code="native_hook_event_unavailable",
-                reason="HOL Guard could not classify this hook event safely.",
-                workspace=workspace,
-                home_dir=home_dir,
-                guard_home=guard_home,
-            )
-        reason_code = {"off": "native_hook_disabled", "shadow": "native_shadow_diagnostic_disabled"}.get(mode)
-        if reason_code is None:
-            return None
-        reason = {
-            "off": "HOL Guard native hook review is explicitly disabled; no trusted native decision is available.",
-            "shadow": "HOL Guard shadow comparison is unavailable outside its diagnostic surface.",
-        }[mode]
-        return availability_harness_response(
-            payload,
-            harness=harness,
-            event_name=event_name,
-            reason_code=reason_code,
-            reason=reason,
-            workspace=workspace,
-            home_dir=home_dir,
-            guard_home=guard_home,
-        )
-
-    def _review_pre_tool_http(
-        self: _HookWorkerNativeHost,
-        payload: dict[str, object],
-        *,
-        harness: str,
-        home_dir: Path,
-        guard_home: Path,
-        workspace: Path | None,
-    ) -> dict[str, object]:
-        reason_code = "native_hook_disabled" if native_mode() == "off" else "native_shadow_diagnostic_disabled"
-        return availability_harness_response(
-            payload,
-            harness=harness,
-            event_name="PreToolUse",
-            reason_code=reason_code,
-            reason="HOL Guard could not complete the native hook decision safely.",
-            workspace=workspace,
-            home_dir=home_dir,
-            guard_home=guard_home,
-        )
-
     def _review_native_edge(
         self: _HookWorkerNativeHost,
         *,
@@ -743,15 +682,6 @@ class HookWorkerNativeMixin:
         event is outside native scope.
         """
         event_name = self._hook_event_name(payload)
-        if native_mode() not in {"auto", "force"}:
-            return {
-                "event_name": event_name,
-                "harness": harness,
-                "result": None,
-                "receipt": None,
-                "recording_only": False,
-                "failure_reason_code": "native_runtime_unavailable",
-            }
         policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
         recording_only = recording_only_for_binding(policy_snapshot, harness)
         fenced: bool | None = None

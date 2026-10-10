@@ -112,7 +112,6 @@ def test_unicode_arguments_round_trip(harness: _Harness) -> None:
 @pytest.mark.parametrize(
     "status",
     [
-        _status(mode="off"),
         _status(available=False),
         _status(compatible=False),
         _status(identity=None),

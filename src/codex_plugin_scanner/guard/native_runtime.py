@@ -6,6 +6,7 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 
 from __future__ import annotations
 
+import functools
 import importlib.metadata
 import json
 import math
@@ -25,7 +26,6 @@ from .native_response_decoder import response_from_payload as _response_from_pay
 from .native_route_receipt import record_native_hook_result
 from .native_runtime_request_scope import (
     _resolved_candidate_path,
-    native_authority_forced,
     remember_scoped_status,
     scoped_status,
 )
@@ -52,6 +52,7 @@ from .native_runtime_values import (
     decode_runtime_manifest,
     native_output_sha256,  # noqa: F401
     parity_signature,  # noqa: F401
+    warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
 from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
@@ -69,21 +70,25 @@ _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
 
 def native_mode() -> NativeMode:
-    mode = _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
-    return "force" if mode == "off" and native_authority_forced() else mode
+    warn_legacy_hook_fast_path_once(os.environ.get("HOL_GUARD_HOOK_FAST_PATH"))
+    return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
+
+
+@functools.lru_cache(maxsize=1)
+def _installed_package_root() -> Path:
+    return Path(__file__).resolve().parents[1]
 
 
 def _bundled_runtime_candidate() -> Path:
     executable = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
-    package_root = Path(__file__).resolve().parents[1]
-    return package_root / "_native" / executable
+    return _installed_package_root() / "_native" / executable
 
 
 def _runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
     candidates: list[Path] = []
     override = os.environ.get(_NATIVE_BINARY_ENV)
-    if override and mode in {"shadow", "force"}:
+    if override and mode == "force":
         candidate = Path(override).expanduser()
         if candidate.is_absolute():
             candidates.append(candidate)
@@ -93,7 +98,7 @@ def _runtime_candidates() -> tuple[Path, ...]:
     # Developer compatibility: a separately installed runtime distribution is
     # validation-only. Automatic production selection must use the runtime
     # bundled inside the version-matched hol-guard wheel and its manifest.
-    if mode in {"shadow", "force"}:
+    if mode == "force":
         try:
             distribution = importlib.metadata.distribution("hol-guard-runtime")
         except importlib.metadata.PackageNotFoundError:
@@ -368,13 +373,6 @@ def _compute_runtime_status(
     deadline_monotonic: float | None = None,
 ) -> NativeRuntimeStatus:
     mode = native_mode()
-    if mode == "off":
-        return NativeRuntimeStatus(
-            mode=mode,
-            available=False,
-            compatible=False,
-            reason="native_disabled",
-        )
     for candidate in candidates:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             break
@@ -435,7 +433,7 @@ def _compute_runtime_status(
                 )
         expected_version = _python_package_version()
         version_compatible = expected_version is None or capabilities.runtime_version == expected_version
-        compatible = version_compatible or mode in {"shadow", "force"}
+        compatible = version_compatible or mode == "force"
         return NativeRuntimeStatus(
             mode=mode,
             available=True,

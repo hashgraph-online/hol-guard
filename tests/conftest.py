@@ -56,7 +56,7 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
 
     A caller's explicit mode is preserved, including deliberate unavailable
     runtime tests. Regression CI supplies an exact native binary; defaulting
-    those jobs to ``off`` would disable the implementation they must test.
+    those jobs to ``auto`` would not pin the implementation they must test.
     Ordinary isolated unit runs retain the explicit fail-safe surface.
     """
 
@@ -64,9 +64,9 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
     monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
-        mode = "force" if os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" else "off"
-        monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
-        return mode == "off"
+        regression = os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1"
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "force" if regression else "auto")
+        return not regression
     return False
 
 

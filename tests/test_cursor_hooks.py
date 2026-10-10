@@ -707,12 +707,8 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
 
 
 @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
-def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_cursor_hook_script_follows_a_live_daemon_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-
-    # The daemon fast path asserts the off-mode denial surface; pin the mode so
-    # a native-regression ambient env does not force a live native review.
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard"
@@ -750,10 +746,8 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     finally:
         daemon.stop()
 
-    assert proc.returncode == 2
-    response = json.loads(proc.stdout)
-    assert response["permission"] == "deny"
-    assert "explicitly disabled" in response["user_message"]
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {"permission": "allow"}
 
 
 @pytest.mark.parametrize(

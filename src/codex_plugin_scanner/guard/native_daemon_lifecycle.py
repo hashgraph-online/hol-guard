@@ -32,7 +32,6 @@ from .native_context import _canonical_request_sha256, _resolve_existing_digest_
 from .native_execution import _resident_request
 from .native_resident_client import native_resident_client_failure_code
 from .native_runtime import native_runtime_status
-from .native_runtime_request_scope import native_authority_scope
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 DAEMON_LIFECYCLE_FEATURE = "daemon-lifecycle-decision-v1"
@@ -162,8 +161,7 @@ def native_daemon_lifecycle(
 ) -> dict[str, Any]:
     """Return the resident's verdict for one ``check``, resolving fact requests."""
 
-    with native_authority_scope():
-        return _decide(check, query, resolve_fact, guard_home, platform)
+    return _decide(check, query, resolve_fact, guard_home, platform)
 
 
 def _decide(

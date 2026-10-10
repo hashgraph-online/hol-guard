@@ -11600,7 +11600,7 @@ def test_guard_hook_emits_claude_native_permission_request_for_package_notice(
     capsys,
     monkeypatch,
 ):
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )
@@ -11691,7 +11691,7 @@ def test_guard_hook_emits_claude_permission_request_terminal_notice_stderr(
     import io
     import sys
 
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )
@@ -11782,7 +11782,7 @@ def test_guard_hook_localizes_package_review_copy_with_local_approval_url(
     capsys,
     monkeypatch,
 ):
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )
@@ -11872,7 +11872,7 @@ def test_guard_hook_localizes_package_review_copy_with_daemon_client_approval_ur
     capsys,
     monkeypatch,
 ):
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )
@@ -11954,7 +11954,7 @@ def test_guard_hook_explains_ignored_remembered_rule_when_local_trust_is_degrade
     capsys,
     monkeypatch,
 ):
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )
@@ -15124,7 +15124,7 @@ def test_runtime_hook_package_without_workspace_rejects_legacy_exact_allow(
     capsys,
     monkeypatch,
 ):
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )
@@ -15222,7 +15222,7 @@ def test_runtime_hook_package_without_workspace_invalidates_allow_after_lockfile
     capsys,
     monkeypatch,
 ):
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
         PackageRequestEvaluation,
         SupplyChainUserCopy,
     )

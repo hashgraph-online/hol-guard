@@ -388,7 +388,10 @@ def test_interrupt_during_spawn_still_reaps_the_started_worker() -> None:
         return worker
 
     with pytest.raises(SystemExit):
-        parallel.run_scheduled(["a"], jobs=1, spawn=spawn, sleep=_no_sleep, grace=0.0)
+        # Yield to kernel signal delivery before the synthetic worker completes
+        # its 99 immediate polls; otherwise macOS may deliver SIGTERM only when
+        # the scheduler restores its outer signal handler after normal exit.
+        parallel.run_scheduled(["a"], jobs=1, spawn=spawn, sleep=time.sleep, poll_interval=0.001, grace=0.0)
     assert "kill:a" in log
 
 

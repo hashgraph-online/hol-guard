@@ -120,7 +120,6 @@
       "outcome": "blocked",
       "complete": false,
       "evidence": [
-        ".github/workflows/guard-network-remediation-proof.yml",
         "tests/test_guard_network_capability_reachability.py"
       ],
       "blockers": [
@@ -222,7 +221,7 @@
       "outcome": "partial",
       "complete": false,
       "evidence": [
-        ".github/workflows/guard-network-remediation-proof.yml"
+        "tests/test_guard_network_remediation_proof.py"
       ],
       "blockers": [
         "Review-loop completion is recorded only after the synchronized pull requests have no actionable unresolved findings."

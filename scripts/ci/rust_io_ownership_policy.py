@@ -218,6 +218,7 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_file_io.py",
         "src/codex_plugin_scanner/guard/directory_path_authority.py",
+        "src/codex_plugin_scanner/guard/path_resolution_cache.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_correlation.py",
     }
 )
@@ -272,7 +273,6 @@ _SERVICE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_support.py",
         "src/codex_plugin_scanner/guard/oauth_token_claims.py",
         "src/codex_plugin_scanner/guard/stable_guard_cli.py",
-        "src/codex_plugin_scanner/guard/runtime/supply_chain_package_services.py",
     }
 )
 _PENDING_AUTHORITY_PATHS: Final = frozenset(
@@ -333,7 +333,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
         "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
         "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/lockfile_evaluation_support.py",
         "src/codex_plugin_scanner/guard/runtime/lockfile_parse_result.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_protection.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
@@ -373,7 +372,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py",
         "src/codex_plugin_scanner/guard/runtime/skill_paths.py",
         "src/codex_plugin_scanner/guard/runtime/supply_chain_bundle_runtime.py",
-        "src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py",
         "src/codex_plugin_scanner/guard/runtime/typescript_launch_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/workspace_path_guard.py",
         "src/codex_plugin_scanner/guard/shims.py",

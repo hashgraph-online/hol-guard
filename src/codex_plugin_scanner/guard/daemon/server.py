@@ -121,7 +121,6 @@ from ..directory_path_authority import (
 )
 from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
-from ..harness_posture import harness_is_recording_only
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
@@ -167,7 +166,6 @@ from ..native_daemon_route import (
     native_strict_loopback_origin,
 )
 from ..native_guard_store import NativeGuardStoreUnavailable
-from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
@@ -186,6 +184,7 @@ from ..package_firewall_entitlement import (
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
+from ..path_resolution_cache import cached_realpath
 from ..policy_bundle_activation import activate_with_reason
 from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
@@ -450,7 +449,6 @@ _MAX_CONCURRENT_RUNTIME_HOOKS = 32
 _MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS = 24
 _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS = 3.0
 _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS = 1.45
-_RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS = 2.75
 _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS = WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 _DAEMON_REQUEST_READ_TIMEOUT_SECONDS = 0.4
 _DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS = 5.0
@@ -1350,33 +1348,6 @@ _ROOT_STATIC_FILES = {
     "/favicon-16x16.png",
     "/favicon-32x32.png",
 }
-
-
-_RUNTIME_HOOK_ENV_ALLOWLIST = frozenset(
-    {
-        "HOL_GUARD_MANAGED_CURSOR_HOOK",
-        "HOL_GUARD_CURSOR_APPROVAL_BINDING",
-        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF",
-        "CURSOR_PROJECT_DIR",
-        "CURSOR_VERSION",
-        "CURSOR_TRACE_ID",
-        "CURSOR_SESSION_ID",
-        "CURSOR_TRANSCRIPT_PATH",
-    }
-)
-
-
-def _runtime_hook_env_overlay_from_payload(payload: Mapping[str, object]) -> dict[str, str]:
-    raw_overlay = payload.get("hook_env")
-    if not isinstance(raw_overlay, Mapping):
-        return {}
-    overlay: dict[str, str] = {}
-    for key, value in raw_overlay.items():
-        if not isinstance(key, str) or key not in _RUNTIME_HOOK_ENV_ALLOWLIST:
-            continue
-        if isinstance(value, str) and value:
-            overlay[key] = value
-    return overlay
 
 
 _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
@@ -6223,18 +6194,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if not _native_mode_requires_rust():
-            self._write_json(
-                {
-                    "ready": True,
-                    "native_required": False,
-                    "workspace_acknowledged": False,
-                    "worker_ready": True,
-                },
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
-
         daemon_server = self._daemon_server()
         readiness_deadline = time.monotonic() + _RUNTIME_WORKSPACE_READINESS_TIMEOUT_SECONDS
         try:
@@ -6295,10 +6254,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             admission_seconds=admission_seconds,
             transport_deadline=transport_deadline,
         )
-        hook_env = _runtime_hook_env_overlay_from_payload(payload)
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
-        native_required = _native_mode_requires_rust()
         try:
             home_dir = self._validated_hook_directory_string(
                 "home",
@@ -6318,21 +6275,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 roots=self._hook_safe_roots(),
             )
         except _HookPathValidationError as error:
-            if native_required:
-                # The Rust edge still receives the complete raw payload. Use
-                # daemon-owned metadata when an optional caller context is
-                # missing or invalid; never turn metadata rejection into a
-                # Python semantic/source-ref fallback in auto/force.
-                self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
-                home_dir = str(daemon_server.home_dir)
-                guard_home = str(daemon_server.store.guard_home)
-                workspace = None
-            else:
-                self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
-                self._write_json({"error": error.code}, status=400)
-                return
+            # The Rust edge still receives the complete raw payload. Use
+            # daemon-owned metadata when an optional caller context is
+            # missing or invalid; never turn metadata rejection into a
+            # Python semantic/source-ref fallback.
+            self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
+            home_dir = str(daemon_server.home_dir)
+            guard_home = str(daemon_server.store.guard_home)
+            workspace = None
 
-        if native_required and not prepare_native_hook_policy(
+        if not prepare_native_hook_policy(
             self, daemon_server, payload, params, default_harness, workspace, hook_deadline.expires_at
         ):
             return
@@ -6360,7 +6312,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     default_harness=default_harness,
                     reason="HOL Guard could not authenticate the local hook payload.",
                     reason_code="invalid_hook_payload_reference",
-                    native_authoritative=native_required,
                 )
             )
             return
@@ -6377,7 +6328,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     params,
                     default_harness=default_harness,
                     reason_code=reservation_reason,
-                    native_authoritative=native_required,
                 )
             )
             return
@@ -6411,7 +6361,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                         params,
                         default_harness=default_harness,
                         reason_code=admission.reason_code,
-                        native_authoritative=native_required,
                     )
                 )
                 return
@@ -6425,7 +6374,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._execute_runtime_hook(
                     payload,
                     params,
-                    hook_env=hook_env,
                     default_harness=default_harness,
                     home_dir=home_dir,
                     guard_home=guard_home,
@@ -6489,7 +6437,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         *,
         default_harness: str,
         reason_code: RuntimeHookAdmissionReason | None = None,
-        native_authoritative: bool = False,
     ) -> dict[str, object]:
         resolved_reason_code = reason_code or "daemon_hook_queue_capacity"
         if resolved_reason_code == "daemon_hook_deadline_exhausted":
@@ -6502,7 +6449,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             default_harness=default_harness,
             reason=reason,
             reason_code=resolved_reason_code,
-            native_authoritative=native_authoritative,
         )
 
     def _runtime_hook_fail_safe_response(
@@ -6513,7 +6459,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         default_harness: str,
         reason: str,
         reason_code: str,
-        native_authoritative: bool = False,
     ) -> dict[str, object]:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
@@ -6521,29 +6466,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         daemon_server = getattr(self, "server", None)
         workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
         guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
-        try:
-            loaded = (
-                None
-                if guard_home is None
-                else load_guard_config(guard_home, workspace=workspace_path, require_canonical_workspace=True)
-            )
-            observe_mode = harness_is_recording_only(loaded, harness)
-        except (OSError, RuntimeError, TypeError, ValueError):
-            observe_mode = False
-        if observe_mode and not native_authoritative:
-            if harness in {"pi", "omp"}:
-                return {"decision": "allow", "reason_code": reason_code, "observed_review_failure": True}
-            if event == "PermissionRequest":
-                return {
-                    "reason_code": reason_code,
-                    "hookSpecificOutput": {"hookEventName": event, "decision": {"behavior": "allow"}},
-                }
-            if event == "PreToolUse":
-                return {
-                    "reason_code": reason_code,
-                    "hookSpecificOutput": {"hookEventName": event, "permissionDecision": "allow"},
-                }
-            return {"continue": True, "reason_code": reason_code, "observed_review_failure": True}
         from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
         from .hook_availability_policy import availability_harness_response
 
@@ -6557,11 +6479,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             workspace=workspace_path,
             home_dir=home_path,
             guard_home=guard_home,
-            recording_only=(
-                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None), harness)
-                if native_authoritative
-                else observe_mode
-            ),
+            recording_only=recording_only_from_acked_snapshot(getattr(daemon_server, "store", None), harness),
         )
 
     def _validated_fail_safe_hook_paths(
@@ -6598,7 +6516,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload: dict[str, object],
         params: Mapping[str, list[str]],
         *,
-        hook_env: dict[str, str],
         default_harness: str,
         home_dir: str | None,
         guard_home: str | None,
@@ -6606,63 +6523,40 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         payload_hydrated: bool = False,
         deadline: float | None = None,
     ) -> None:
-        if self._hook_fast_path_enabled() or _native_mode_requires_rust():
-            from contextlib import nullcontext
+        from contextlib import nullcontext
 
-            from ..sqlite_tuning import sqlite_operation_deadline
+        from ..sqlite_tuning import sqlite_operation_deadline
 
-            with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
-                result = self._handle_runtime_hook_fast(
+        with sqlite_operation_deadline(deadline) if deadline is not None else nullcontext():
+            result = self._handle_runtime_hook_fast(
+                payload,
+                params,
+                default_harness=default_harness,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                workspace=workspace,
+                deadline=deadline,
+            )
+            if result is not None:
+                if deadline is not None and time.monotonic() >= deadline:
+                    result = self._runtime_hook_fail_safe_response(
+                        payload,
+                        params,
+                        default_harness=default_harness,
+                        reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
+                        reason_code="daemon_hook_deadline_exhausted",
+                    )
+                self._write_json(result)
+                return
+            self._write_json(
+                self._runtime_hook_fail_safe_response(
                     payload,
                     params,
                     default_harness=default_harness,
-                    home_dir=home_dir,
-                    guard_home=guard_home,
-                    workspace=workspace,
-                    deadline=deadline,
+                    reason="HOL Guard could not complete the native hook decision safely.",
+                    reason_code="native_hook_worker_unavailable",
                 )
-                if result is not None:
-                    if deadline is not None and time.monotonic() >= deadline:
-                        result = self._runtime_hook_fail_safe_response(
-                            payload,
-                            params,
-                            default_harness=default_harness,
-                            reason=(
-                                "HOL Guard could not complete local review within the hook deadline. Retry this action."
-                            ),
-                            reason_code="daemon_hook_deadline_exhausted",
-                            native_authoritative=_native_mode_requires_rust(),
-                        )
-                    self._write_json(result)
-                    return
-                if _native_mode_requires_rust():
-                    self._write_json(
-                        self._runtime_hook_fail_safe_response(
-                            payload,
-                            params,
-                            default_harness=default_harness,
-                            reason="HOL Guard could not complete the native hook decision safely.",
-                            reason_code="native_hook_worker_unavailable",
-                            native_authoritative=True,
-                        )
-                    )
-                    return
-
-        self._handle_runtime_hook_compatibility_cli(
-            payload,
-            params,
-            hook_env=hook_env,
-            default_harness=default_harness,
-            home_dir=home_dir,
-            guard_home=guard_home,
-            workspace=workspace,
-            deadline=deadline,
-        )
-
-    def _hook_fast_path_enabled(self) -> bool:
-        from ..config import hook_fast_path_enabled
-
-        return hook_fast_path_enabled()
+            )
 
     def _handle_runtime_hook_fast(
         self,
@@ -6675,7 +6569,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         workspace: str | None,
         deadline: float | None,
     ) -> dict[str, object] | None:
-        """Try the resident hook worker; only explicit rollback may fall back."""
+        """Review through the resident hook worker; failures deny and never reach Python semantics."""
         from contextlib import nullcontext
 
         from ..sqlite_tuning import sqlite_operation_deadline
@@ -6698,8 +6592,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     deadline=deadline,
                 )
             except Exception as error:
-                # Fail safe: deny/block. Do not fall back to compatibility CLI for
-                # requests that omitted full output and supplied only guard_source_ref.
+                # Fail safe: deny/block; there is no Python semantic fallback.
                 self._daemon_server().hook_worker.metrics.record_failure(
                     stage="server",
                     exception_type=type(error).__name__,
@@ -6710,127 +6603,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     default_harness=default_harness,
                     reason="HOL Guard could not complete local hook review safely.",
                     reason_code="daemon_worker_exception",
-                    native_authoritative=_native_mode_requires_rust(),
                 )
-
-    def _handle_runtime_hook_compatibility_cli(
-        self,
-        payload: dict[str, object],
-        params: Mapping[str, list[str]],
-        *,
-        hook_env: dict[str, str],
-        default_harness: str,
-        home_dir: str | None,
-        guard_home: str | None,
-        workspace: str | None,
-        deadline: float | None,
-    ) -> None:
-        runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
-        harness = runtime_harness or default_harness
-        daemon_server = self._daemon_server()
-        workspace_path = Path(workspace) if workspace is not None else None
-        hook_event_name = payload.get("hook_event_name")
-        process_timeout_seconds = (
-            _RUNTIME_POST_HOOK_PROCESS_TIMEOUT_SECONDS
-            if isinstance(hook_event_name, str) and hook_event_name.strip().lower() == "posttooluse"
-            else _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS
-        )
-        process_deadline = min(
-            deadline if deadline is not None else float("inf"),
-            time.monotonic() + process_timeout_seconds,
-        )
-        admission = daemon_server.runtime_hook_process_scheduler.acquire(
-            harness=harness,
-            client_key=self._runtime_hook_client_key(payload, workspace),
-            lane=self._runtime_hook_lane(payload),
-            payload_bytes=0,
-            deadline=process_deadline,
-        )
-        if admission.permit is None:
-            self._write_json(
-                self._runtime_hook_fail_safe_response(
-                    payload,
-                    params,
-                    default_harness=default_harness,
-                    reason=(
-                        "HOL Guard blocked this action because isolated local review could not complete safely. "
-                        "The agent may continue with a different, lower-risk action. "
-                        "Retry this exact action after local review recovers."
-                    ),
-                    reason_code=admission.reason_code or "daemon_hook_process_not_ready",
-                )
-            )
-            return
-        with admission.permit:
-            review = daemon_server.hook_process_runner.review(
-                payload=payload,
-                harness=harness,
-                home_dir=Path(home_dir) if home_dir is not None else Path.home(),
-                guard_home=(Path(guard_home) if guard_home is not None else daemon_server.store.guard_home),
-                workspace=workspace_path,
-                hook_env=hook_env,
-                deadline=process_deadline,
-            )
-        scheduler_stats = daemon_server.runtime_hook_process_scheduler.stats()
-        daemon_server.hook_process_runner.observe_load(
-            queue_p95_ms=scheduler_stats["queue_wait_p95_ms"],
-            queued=scheduler_stats["queued"],
-        )
-        if review.payload is not None and time.monotonic() < process_deadline:
-            receipt_accepted = False
-            if review.receipt is not None:
-                with suppress(Exception):
-                    receipt_accepted = daemon_server.runtime_hook_evidence_writer.submit_native_decision_receipt(
-                        review.receipt
-                    )
-            with suppress(Exception):
-                activity_action = review.payload.get("policy_action")
-                event = payload.get("hook_event_name", payload.get("hookEventName"))
-                if (
-                    isinstance(event, str)
-                    and event.replace("_", "").lower() == "pretooluse"
-                    and _native_mode_requires_rust()
-                    and isinstance(activity_action, str)
-                ):
-                    _ = daemon_server.runtime_hook_evidence_writer.submit_command_activity(
-                        harness=harness,
-                        event="PreToolUse",
-                        payload=payload,
-                        succeeded=True,
-                        policy_action=activity_action,
-                        receipt_id=self._optional_string((review.receipt or {}).get("decision_id"))
-                        if receipt_accepted
-                        else None,
-                        prompted=review.payload.get("prompted") is True,
-                        approval_reuse_status=self._optional_string(review.payload.get("approval_reuse_status"))
-                        or "not-applicable",
-                    )
-            from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
-
-            observation = transition_hook_observation(payload, review.receipt)
-            response = dict(review.payload)
-            if observation is not None:
-                response[OBSERVATION_FIELD] = observation
-            self._write_json(response)
-            return
-        reason_code = (
-            "daemon_hook_process_deadline_exhausted"
-            if review.payload is not None
-            else review.reason_code or "daemon_hook_process_failed"
-        )
-        self._write_json(
-            self._runtime_hook_fail_safe_response(
-                payload,
-                params,
-                default_harness=default_harness,
-                reason=(
-                    "HOL Guard blocked this action because isolated local review could not complete safely. "
-                    "The agent may continue with a different, lower-risk action. "
-                    "Retry this exact action after local review recovers."
-                ),
-                reason_code=reason_code,
-            )
-        )
 
     def _query_has_guard_token(self, query: str) -> bool:
         return any(key == "token" for key, _value in parse_qsl(query, keep_blank_values=True))
@@ -7840,7 +7613,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_root = trusted_temporary_root_for_path(Path(candidate))
         except OSError:
             temporary_root = None
-        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
             return None
         return candidate
 
@@ -7863,7 +7636,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_root = trusted_temporary_root_for_path(Path(candidate))
         except OSError:
             temporary_root = None
-        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
             return True, None
         return True, candidate
 
@@ -7898,10 +7671,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not os.path.isabs(expanded):
             raise _HookPathValidationError("guard-home", "relative_path")
         try:
-            candidate = os.path.realpath(expanded)
+            candidate = cached_realpath(expanded)
         except OSError:
             raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
-        expected = os.path.realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
+        expected = cached_realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
         if candidate != expected:
             raise _HookPathValidationError("guard-home", "unexpected_guard_home")
         return expected
