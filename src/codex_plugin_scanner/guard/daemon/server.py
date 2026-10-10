@@ -147,6 +147,7 @@ from ..models import (
     PolicyDecision,
     format_local_http_origin,
 )
+from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
 from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION, PolicyBundleNativeError
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
@@ -9565,11 +9566,17 @@ class GuardDaemonServer:
                 )
                 cloud_profile = self._server.store.get_cloud_sync_profile()
                 workspace_id = cloud_profile.get("workspace_id") if isinstance(cloud_profile, dict) else None
-                outbox_status = self._server.store.review_event_outbox_status(
-                    now=_now(),
-                    workspace_id=workspace_id,
-                )
-                outbox_depth = outbox_status["depth"]
+                try:
+                    outbox_status = self._server.store.review_event_outbox_status(
+                        now=_now(),
+                        workspace_id=workspace_id,
+                    )
+                    outbox_depth = outbox_status["depth"]
+                except NativeGuardStoreUnavailable:
+                    # The native resident cannot answer, so no delivery can run and
+                    # the depth is unknown rather than transient-locked. Queued events
+                    # stay durable in guard.db; do not let this pin the daemon alive.
+                    outbox_depth = None
             except sqlite3.OperationalError:
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue

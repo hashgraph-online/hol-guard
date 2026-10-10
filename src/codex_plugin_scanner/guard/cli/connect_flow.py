@@ -25,6 +25,7 @@ from typing_extensions import Unpack
 from ...version import __version__
 from ..browser_opener import open_browser_url
 from ..mdm.network import managed_urlopen
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
 from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
@@ -1265,15 +1266,21 @@ def build_connect_status_payload(
     connect_url: str,
     action: str = "status",
 ) -> dict[str, object]:
-    review_event_binding = store.get_review_event_oauth_binding()
-    review_event_status = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(
-            {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
-            if review_event_binding is not None
-            else {}
-        ),
-    )
+    review_event_binding: dict[str, str] | None
+    review_event_status: dict[str, object]
+    try:
+        review_event_binding = store.get_review_event_oauth_binding()
+        review_event_status = store.review_event_outbox_status(
+            now=datetime.now(timezone.utc).isoformat(),
+            **(
+                {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
+                if review_event_binding is not None
+                else {}
+            ),
+        )
+    except NativeGuardStoreUnavailable as error:
+        review_event_binding = None
+        review_event_status = unavailable_outbox_status(error)
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()

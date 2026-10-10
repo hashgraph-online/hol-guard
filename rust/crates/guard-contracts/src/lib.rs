@@ -19,6 +19,8 @@ mod policy_bundle_authority;
 pub use policy_bundle_authority::*;
 mod claim_approval_reuse;
 pub use claim_approval_reuse::*;
+mod guard_store;
+pub use guard_store::*;
 mod policy_decision_lookup;
 pub use policy_decision_lookup::*;
 mod native_hook_receipt;
