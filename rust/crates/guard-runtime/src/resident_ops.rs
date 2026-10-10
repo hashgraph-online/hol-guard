@@ -242,6 +242,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ApprovalProofDecide(request) => {
                 crate::approval_proof_op::evaluate_approval_proof_request(&request)
             }
+            ResidentOperationV1::HookArtifactCompose(request) => {
+                crate::hook_artifact_compose_op::evaluate_hook_artifact_compose_request(&request)
+            }
             ResidentOperationV1::LocalMcpGrantDecide(request) => {
                 crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
             }

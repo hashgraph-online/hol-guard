@@ -39,6 +39,8 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod hardening;
+mod hook_artifact_compose_op;
+mod hook_artifact_compose_reuse;
 mod hook_process_spawn;
 mod local_cli_grant_op;
 mod local_mcp_grant_identity;

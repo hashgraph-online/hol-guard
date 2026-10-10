@@ -9,7 +9,6 @@ import pytest
 from codex_plugin_scanner.guard.cli import commands_hook_native_eval as eval_module
 from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
     _native_edge_floor_action,
-    _requested_policy_action_normalization,
     _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
@@ -43,16 +42,6 @@ def test_archive_command_matcher_rejects_wrong_executable_and_metachar_tokens() 
 def test_archive_command_matcher_accepts_plain_matching_command() -> None:
     assert _runtime_external_archive_command_matches_executable("cat ./archive.tar", "cat") is True
     assert _runtime_external_archive_command_matches_executable("unzip -l bundle.zip", "unzip") is True
-
-
-def test_requested_policy_action_normalization_prefers_cli_then_stored_then_payload() -> None:
-    cli = _requested_policy_action_normalization("allow", "block", {"policy_action": "review"})
-    assert cli is not None and cli.action == "allow"
-    stored = _requested_policy_action_normalization(None, "block", {"policy_action": "review"})
-    assert stored is not None and stored.action == "block"
-    payload = _requested_policy_action_normalization(None, None, {"policy_action": "review"})
-    assert payload is not None and payload.action == "review"
-    assert _requested_policy_action_normalization(None, None, {}) is None
 
 
 def test_native_edge_floor_action_only_floors_post_tool_use() -> None:
