@@ -38,10 +38,15 @@ jobs:
           set -euo pipefail
           gh cache list --ref refs/heads/main --limit 1000 --json id,key,ref,createdAt > "$RUNNER_TEMP/caches.json"
           python3 scripts/ci/prune_superseded_caches.py "$RUNNER_TEMP/caches.json" > "$RUNNER_TEMP/prune.txt"
-          count=0
+          deleted=0
+          failed=0
           while read -r id; do
             [ -n "$id" ] || continue
-            gh cache delete "$id" || echo "::warning::could not delete cache $id"
-            count=$((count + 1))
+            if gh cache delete "$id"; then
+              deleted=$((deleted + 1))
+            else
+              failed=$((failed + 1))
+              echo "::warning::could not delete cache $id"
+            fi
           done < "$RUNNER_TEMP/prune.txt"
-          echo "Deleted $count superseded cache entries" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deleted $deleted superseded cache entries; $failed failed" >> "$GITHUB_STEP_SUMMARY"
