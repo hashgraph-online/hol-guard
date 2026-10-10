@@ -15,6 +15,10 @@ pub struct SupplyChainBundleResponse {
     pub signature_algorithm: String,
     /// `SupplyChainVerificationKey.to_dict()` payloads.
     pub verification_keys: Vec<Map<String, Value>>,
+    /// The typed response the seam already validated. Offline decisions reuse
+    /// it instead of re-serialising and re-parsing the whole bundle per call;
+    /// `None` means a caller must parse from `to_dict()`.
+    pub parsed: Option<std::sync::Arc<crate::supply_chain_bundle::SupplyChainBundleResponse>>,
 }
 
 impl SupplyChainBundleResponse {

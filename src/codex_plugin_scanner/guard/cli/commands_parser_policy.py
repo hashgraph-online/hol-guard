@@ -192,7 +192,17 @@ def _configure_guard_policy_parsers(
     )
     settings_protection_parser.add_argument(
         "protection_posture",
+        nargs="?",
         choices=("protected", "extra-careful", "extra_careful", "watch"),
+    )
+    settings_protection_parser.add_argument(
+        "--harness",
+        help="Apply the posture to one app (harness id) instead of every app.",
+    )
+    settings_protection_parser.add_argument(
+        "--inherit",
+        action="store_true",
+        help="With --harness, clear that app's own posture so it follows the global one.",
     )
     _add_guard_common_args(settings_protection_parser, suppress_defaults=True)
     settings_protection_parser.add_argument("--json", action="store_true")

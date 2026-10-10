@@ -339,7 +339,6 @@ fn apply_seccomp_deny_list() -> Result<(), ()> {
             vec![SeccompRule::new(vec![condition]).expect("non-empty rule")],
         )
     }
-
     // ARM64 uses Linux's asm-generic syscall table. musl's libc bindings omit
     // this constant, but the syscall must remain in the containment deny list.
     // include/uapi/asm-generic/unistd.h defines __NR_kexec_file_load as 294.

@@ -7,7 +7,9 @@ This is local policy integrity, not provider credential custody or actor proof.
 
 from __future__ import annotations
 
+import hashlib
 import sqlite3
+import threading
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -66,6 +68,13 @@ _UNSPECIFIED_CURRENT = object()
 # process start (Windows on emulated x64, endpoint scanning) can exceed the
 # single-operation cap in total while every step is individually healthy.
 MUTATION_BUDGET_SECONDS = 30.0
+# Last verified installation per Guard home, keyed by the exact authenticated
+# inputs. Byte verification is a pure function of these bytes and the key, so an
+# unchanged installation does not need to re-verify anchor and record on every
+# database write the publisher observes. The runtime current-fence check still
+# runs on every read. Any changed byte re-verifies; failures are never retained.
+_VERIFIED_LOCK = threading.Lock()
+_VERIFIED: dict[str, tuple[tuple[bytes, bytes, bytes, bytes, bytes], KeyAuthenticatedBusinessSource]] = {}
 
 
 def _error(code: str = "native_business_source_installation_incoherent") -> NativePolicySnapshotError:
@@ -147,6 +156,13 @@ def _write_private(store: GuardStore, name: str, wire: bytes, limit: int, deadli
     _remaining(deadline)
 
 
+def _require_current_fence(deadline: float) -> None:
+    status = _consumer(deadline, anchor=True)
+    assert status.capabilities is not None
+    if CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
+        raise _error("native_business_source_current_fence_unavailable")
+
+
 def _verify_installed(
     record: bytes | None,
     marker: bytes | None,
@@ -159,10 +175,7 @@ def _verify_installed(
         return None
     if any(value is None for value in (record, marker, retained, witness)) or marker != retained:
         raise _error()
-    status = _consumer(deadline, anchor=True)
-    assert status.capabilities is not None
-    if CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
-        raise _error("native_business_source_current_fence_unavailable")
+    _require_current_fence(deadline)
     assert record is not None and marker is not None
     anchor = verify_business_source_anchor(marker, key, deadline_monotonic=deadline)
     if anchor.phase != "committed" or witness != _witness(anchor):
@@ -181,20 +194,71 @@ def read_installed_business_source(
     """Recompile the complete authenticated source off the synchronous hook path."""
     deadline = _deadline(deadline_monotonic)
     with hold_command_control_authority_lock(store.guard_home, shared=True, timeout_seconds=_remaining(deadline)):
-        result = _verify_installed(
-            read_private_state(store.guard_home, SOURCE_FILE_NAME, MAX_RECORD_BYTES),
-            read_private_state(store.guard_home, ANCHOR_FILE_NAME, MAX_ANCHOR_BYTES),
-            read_retained_business_source_anchor(store),
-            _database_witness(store),
-            verifier_key,
-            deadline,
-        )
+        record = read_private_state(store.guard_home, SOURCE_FILE_NAME, MAX_RECORD_BYTES)
+        marker = read_private_state(store.guard_home, ANCHOR_FILE_NAME, MAX_ANCHOR_BYTES)
+        retained = read_retained_business_source_anchor(store)
+        witness = _database_witness(store)
+        cached = _cached_verified(store, record, marker, retained, witness, verifier_key)
+        if cached is not None:
+            # The installed runtime is checked on every read: a memo hit only
+            # skips re-verifying bytes, never the current-fence requirement.
+            _require_current_fence(deadline)
+            return cached
+        result = _verify_installed(record, marker, retained, witness, verifier_key, deadline)
+        if result is not None:
+            _remember_verified(store, record, marker, retained, witness, verifier_key, result)
         if result is None:
             if read_private_state(store.guard_home, PREPARED_SOURCE_FILE_NAME, MAX_RECORD_BYTES) is not None:
                 raise _error("native_business_source_recovery_required")
             _refuse_native_business_floor_without_source(store, verifier_key)
         _remaining(deadline)
         return result
+
+
+def _verified_inputs(
+    record: bytes | None,
+    marker: bytes | None,
+    retained: bytes | None,
+    witness: bytes | None,
+    key: bytes,
+) -> tuple[bytes, bytes, bytes, bytes, bytes] | None:
+    if record is None or marker is None or retained is None or witness is None:
+        return None
+    return (record, marker, retained, witness, hashlib.sha256(key).digest())
+
+
+def _cached_verified(
+    store: GuardStore,
+    record: bytes | None,
+    marker: bytes | None,
+    retained: bytes | None,
+    witness: bytes | None,
+    key: bytes,
+) -> KeyAuthenticatedBusinessSource | None:
+    inputs = _verified_inputs(record, marker, retained, witness, key)
+    if inputs is None:
+        return None
+    with _VERIFIED_LOCK:
+        entry = _VERIFIED.get(str(store.guard_home))
+    if entry is None or entry[0] != inputs:
+        return None
+    return entry[1]
+
+
+def _remember_verified(
+    store: GuardStore,
+    record: bytes | None,
+    marker: bytes | None,
+    retained: bytes | None,
+    witness: bytes | None,
+    key: bytes,
+    source: KeyAuthenticatedBusinessSource,
+) -> None:
+    inputs = _verified_inputs(record, marker, retained, witness, key)
+    if inputs is None:
+        return
+    with _VERIFIED_LOCK:
+        _VERIFIED[str(store.guard_home)] = (inputs, source)
 
 
 @dataclass(frozen=True, slots=True, repr=False)

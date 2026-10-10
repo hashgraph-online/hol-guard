@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
 from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
+from ..native_runtime_request_scope import native_status_request_scope
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
     as_string_object_dict,
@@ -330,18 +331,21 @@ def _run_resident_hook_request(
         worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
         hook_workers[store_key] = worker
     try:
-        worker_payload = worker.review_http_payload(
-            payload=parsed.payload,
-            params={"runtime-harness": [parsed.harness]},
-            default_harness=parsed.harness,
-            home_dir=parsed.home_dir,
-            guard_home=parsed.guard_home,
-            workspace=parsed.workspace,
-            deadline=parsed.deadline,
-            claim_saved_approval=parsed.claim_saved_approval,
-            claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
-            claimed_approval_request_id=parsed.claimed_approval_request_id,
-        )
+        # The daemon's request scope cannot cross the process boundary, so the
+        # isolated worker opens its own around each hook evaluation.
+        with native_status_request_scope():
+            worker_payload = worker.review_http_payload(
+                payload=parsed.payload,
+                params={"runtime-harness": [parsed.harness]},
+                default_harness=parsed.harness,
+                home_dir=parsed.home_dir,
+                guard_home=parsed.guard_home,
+                workspace=parsed.workspace,
+                deadline=parsed.deadline,
+                claim_saved_approval=parsed.claim_saved_approval,
+                claimed_saved_allow_hash=parsed.claimed_saved_allow_hash,
+                claimed_approval_request_id=parsed.claimed_approval_request_id,
+            )
     except Exception:
         return _native_worker_fail_safe_result(
             parsed,

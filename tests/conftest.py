@@ -42,8 +42,15 @@ os.environ["HOL_GUARD_TEST_DISABLE_BROWSER_OPEN"] = "1"
 os.environ.pop("HOL_GUARD_TEST_ALLOW_BROWSER_OPEN", None)
 
 
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "native_route_unpinned: exercise the real route transport, skipping the default-off route pinning",
+    )
+
+
 @pytest.fixture(autouse=True)
-def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
     """Use the compiled authority in native regression jobs.
 
     A caller's explicit mode is preserved, including deliberate unavailable
@@ -54,9 +61,35 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
         mode = "force" if os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" else "off"
         monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
+        return mode == "off"
+    return False
+
+
+@pytest.fixture(autouse=True)
+def _default_off_daemon_route_policy(
+    request: pytest.FixtureRequest,
+    _default_unit_test_native_mode: bool,
+) -> None:
+    """Keep daemon route and Origin policy native in default-off local runs.
+
+    The daemon's route policy is resident-owned and fails closed without a
+    runtime, which is correct for production and for tests that pin ``off``
+    explicitly (those use ``native_route_policy_with_hooks_off`` themselves).
+    A local run that merely inherited the conftest ``off`` default and names a
+    runtime binary gets the same route-transport pinning, so daemon tests that
+    do not care about hook mode still reach their assertions. Without a
+    binary nothing is pinned and the gate still fails closed.
+    """
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    if request.node.get_closest_marker("native_route_unpinned"):
+        return
+    if _default_unit_test_native_mode and binary and os.path.isfile(binary):
+        request.getfixturevalue("native_route_policy_with_hooks_off")
 
 
 class _GuardCommandsProxy:

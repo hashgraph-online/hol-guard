@@ -270,35 +270,9 @@ def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | N
 
 
 def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
-    import json as _json
-    import os
-    import signal as _signal
+    from ..daemon_stop import stop_guard_daemon
 
-    state_path = guard_home / "daemon-state.json"
-    stopped = False
-    pid: int | None = None
-    if state_path.is_file():
-        try:
-            state = _json.loads(state_path.read_text())
-            pid = state.get("pid") if isinstance(state, dict) else None
-            if (
-                isinstance(pid, int)
-                and pid > 0
-                and _guard_daemon_pid_is_running(pid)
-                and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
-            ):
-                os.kill(pid, _signal.SIGTERM)
-                stopped = True
-        except (ProcessLookupError, PermissionError, OSError, _json.JSONDecodeError, ValueError):
-            pass
-    from codex_plugin_scanner.guard.daemon.manager import clear_guard_daemon_state
-
-    with suppress(OSError):
-        clear_guard_daemon_state(guard_home)
-    payload: dict[str, object] = {"stopped": stopped, "running": False}
-    if pid is not None:
-        payload["pid"] = pid
-    _emit("daemon", payload, as_json)
+    _emit("daemon", stop_guard_daemon(guard_home), as_json)
     return 0
 
 

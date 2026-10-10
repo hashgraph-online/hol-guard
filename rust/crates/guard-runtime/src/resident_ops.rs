@@ -247,6 +247,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::PolicyBundleAuthority(request) => {
+                crate::policy_bundle_op::evaluate_policy_bundle_authority_request(&request)
+            }
             ResidentOperationV1::McpProxyDecide(request) => {
                 crate::mcp_proxy_decision_op::evaluate_mcp_proxy_decision(&request)
             }
@@ -261,6 +264,12 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
+            }
+            ResidentOperationV1::DaemonRoute(request) => {
+                crate::daemon_route_op::evaluate_daemon_route_request(&request)
+            }
+            ResidentOperationV1::HookAdapter(request) => {
+                crate::hook_adapter_op::evaluate_hook_adapter_request(&request)
             }
             ResidentOperationV1::HookArtifactCompose(request) => {
                 crate::hook_artifact_compose_op::evaluate_hook_artifact_compose_request(&request)

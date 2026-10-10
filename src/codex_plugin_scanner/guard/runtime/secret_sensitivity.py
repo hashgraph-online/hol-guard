@@ -389,20 +389,6 @@ def _extract_secret_assignment_value(text: str) -> str | None:
     return stripped or None
 
 
-def redacted_secret_path_context(path: str) -> str | None:
-    segments = tuple(segment for segment in path.replace("\\", "/").split("/") if segment)
-    lowered_segments = tuple(segment.lower() for segment in segments)
-    if not lowered_segments:
-        return None
-    for suffix in _SENSITIVE_SUFFIX_LABELS:
-        if lowered_segments[-len(suffix) :] == suffix:
-            return ".../" + "/".join(suffix)
-    for directory in _SENSITIVE_DIRECTORY_LABELS:
-        if directory in lowered_segments and len(segments) > 1:
-            return f".../{directory}/{segments[-1]}"
-    return None
-
-
 def _match(
     *,
     requested_path: str,

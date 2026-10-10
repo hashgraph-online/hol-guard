@@ -23,6 +23,7 @@ from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_response_decoder import response_from_payload as _response_from_payload
 from .native_route_receipt import record_native_hook_result
+from .native_runtime_request_scope import _resolved_candidate_path, remember_scoped_status, scoped_status
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
     native_record_integrity_failure,
@@ -215,6 +216,9 @@ def _isolated_environment() -> dict[str, str]:
         "COMSPEC",
         "HOME",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        # Dedicated opt-in for the resident's supply-chain test seams; kept
+        # separate from diagnostics so diagnostics alone never enable them.
+        "HOL_GUARD_RESIDENT_TEST_SEAMS",
         "LANG",
         "PATHEXT",
         "SYSTEMROOT",
@@ -322,7 +326,41 @@ def _capabilities_for_identity(
     return capabilities
 
 
+def _scoped_manifest_still_valid(status: NativeRuntimeStatus) -> bool:
+    """True while a bundled status's manifest still decodes identically.
+
+    ``stat()`` metadata cannot see a manifest-only rewrite, so the bounded
+    manifest JSON (<= 16 KiB) is re-read on a hit rather than trusted blindly.
+    """
+
+    manifest = status.manifest
+    identity = status.identity
+    if manifest is None:
+        return True
+    if identity is None:
+        return False
+    current, error = _manifest_for_bundled_identity(identity)
+    return error is None and current == manifest
+
+
 def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+    candidates = _runtime_candidates()
+    key = (native_mode(), tuple(str(candidate) for candidate in candidates))
+    if (cached := scoped_status(key)) is not None:
+        identity = cached.identity
+        resolved = {_resolved_candidate_path(candidate) for candidate in candidates}
+        if identity is not None and identity.path in resolved and _scoped_manifest_still_valid(cached):
+            return cached
+    status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
+    remember_scoped_status(key, status)
+    return status
+
+
+def _compute_runtime_status(
+    candidates: tuple[Path, ...],
+    *,
+    deadline_monotonic: float | None = None,
+) -> NativeRuntimeStatus:
     mode = native_mode()
     if mode == "off":
         return NativeRuntimeStatus(
@@ -331,7 +369,7 @@ def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeR
             compatible=False,
             reason="native_disabled",
         )
-    for candidate in _runtime_candidates():
+    for candidate in candidates:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             break
         _restore_bundled_runtime_execute_bit(candidate)

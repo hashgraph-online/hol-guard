@@ -210,6 +210,9 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
                 _MAX_ACTIVE_REQUESTS,
             )
             self._guard_slots = threading.BoundedSemaphore(capacity)
+            # A request's lease is released against the metrics it was counted in,
+            # even when the module-level metrics are swapped while it is in flight.
+            self._guard_active_metrics = _METRICS
             self._guard_capacity_limit = capacity
             self._guard_socket_timeout = _bounded_float(
                 "HOL_GUARD_DAEMON_SOCKET_TIMEOUT_SECONDS",
@@ -317,7 +320,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
         if not self._guard_slots.acquire(blocking=False):
             self._guard_reject_overload(request)
             return False
-        _METRICS.acquired()
+        self._guard_active_metrics.acquired()
         try:
             request.settimeout(self._guard_socket_timeout)
         except Exception:
@@ -344,7 +347,7 @@ class BoundedThreadingHTTPServer(ThreadingHTTPServer):
 
     def _guard_release_request(self) -> None:
         self._guard_slots.release()
-        _METRICS.released()
+        self._guard_active_metrics.released()
 
     def handle_error(self, request: Any, client_address: Any) -> None:
         error = cast(BaseException | None, __import__("sys").exception())

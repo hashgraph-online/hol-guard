@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -876,7 +877,9 @@ class TestGuardCli:
         error_output = capsys.readouterr().err
 
         assert "Did you mean `update`?" in error_output
-        assert "hook" not in error_output
+        # The hidden `hook` and `daemon` entry points stay out of the listing;
+        # the public `hooks` command is allowed.
+        assert re.search(r"\bhook\b", error_output) is None
         assert "daemon" not in error_output
 
     def test_bare_hol_guard_shows_help_without_side_effects(self, tmp_path, monkeypatch, capsys):
