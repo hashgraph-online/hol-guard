@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_git_execution_safety import git_execution_safety_native
 from codex_plugin_scanner.guard.runtime import git_execution_safety, routine_setup_commands
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.benign_requests import (
     is_explicitly_benign_tool_action_request,
@@ -368,6 +370,12 @@ def test_worktree_add_is_refused_when_the_selected_ref_uses_a_filter(tmp_path: P
 
     _git(repository, "config", "filter.guard-test.clean", "cat")
 
+    answer = git_execution_safety_native("worktree_add", cwd=repository, reference="HEAD")
+    if answer is None:
+        if os.environ.get("HOL_GUARD_NATIVE_REGRESSION", "").strip().lower() in {"1", "true", "yes"}:
+            pytest.fail("the native resident did not answer the worktree filter check")
+        pytest.skip("the native resident is unavailable, so a refusal would not show filter detection")
+    assert answer.allowed is False
     assert not routine_setup_commands.git_worktree_add_has_execution_free_config(repository)
     assert not routine_setup_commands.git_worktree_add_has_execution_free_config(repository, ref="--help")
 
