@@ -69,10 +69,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_daemon_recovery_resilience.py",
         "tests/test_guard_provider_recovery.py",
     ),
-    "REM-127": (
-        ".github/workflows/guard-network-remediation-proof.yml",
-        "tests/test_guard_network_capability_reachability.py",
-    ),
+    "REM-127": ("tests/test_guard_network_capability_reachability.py",),
     "REM-128": (
         "tests/test_guard_linux_tcp_enforcement.py",
         "tests/test_guard_linux_udp_dns_enforcement.py",
@@ -105,7 +102,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_network_remediation_proof.py",
         "scripts/guard_network_remediation_proof.py",
     ),
-    "REM-135": (".github/workflows/guard-network-remediation-proof.yml",),
+    "REM-135": ("tests/test_guard_network_remediation_proof.py",),
     "REM-136": (
         "docs/guard/network-remediation-readiness.md",
         "ci/guard-network-remediation-proof.v1.json",
