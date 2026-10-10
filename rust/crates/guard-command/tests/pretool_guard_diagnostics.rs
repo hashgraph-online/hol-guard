@@ -1,7 +1,7 @@
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 
-fn evaluate(harness: &str, command: &str) -> (String, String) {
+fn evaluate_in(harness: &str, command: &str, cwd: Option<&str>) -> (String, String) {
     let result = evaluate_pre_tool_envelope_with_context(
         harness,
         "PreToolUse",
@@ -9,9 +9,23 @@ fn evaluate(harness: &str, command: &str) -> (String, String) {
         None,
         None,
         None,
-        None,
+        cwd,
     );
     (result.decision, result.minimum_action)
+}
+
+fn workspace(label: &str) -> std::path::PathBuf {
+    let path = std::env::temp_dir().join(format!(
+        "pretool-guard-diagnostics-{label}-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&path).unwrap();
+    path
+}
+
+fn evaluate(harness: &str, command: &str) -> (String, String) {
+    let cwd = workspace("clean");
+    evaluate_in(harness, command, cwd.to_str())
 }
 
 #[test]
@@ -65,4 +79,17 @@ fn guard_repairs_controls_and_unbound_launches_stay_reviewed() {
             assert_eq!(decision, "deny", "{harness}: {command}");
         }
     }
+}
+
+#[test]
+fn diagnostics_need_a_known_unshadowed_working_directory() {
+    let shadowed = workspace("shadowed");
+    std::fs::write(shadowed.join("hol-guard"), "#!/bin/sh\n").unwrap();
+    for harness in ["omp", "zcode"] {
+        let (no_cwd, _) = evaluate_in(harness, "hol-guard status", None);
+        assert_ne!(no_cwd, "allow", "{harness}: unknown cwd");
+        let (shadow, _) = evaluate_in(harness, "hol-guard status", shadowed.to_str());
+        assert_ne!(shadow, "allow", "{harness}: cwd launcher");
+    }
+    std::fs::remove_dir_all(&shadowed).unwrap();
 }

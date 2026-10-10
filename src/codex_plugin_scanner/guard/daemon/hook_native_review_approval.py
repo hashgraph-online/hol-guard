@@ -19,7 +19,6 @@ from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.actions import normalize_harness_payload
 from .hook_native_local_cli import native_local_cli_grant_response
-from .native_review_allow_hint import native_review_extension_allow_hint
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
@@ -37,6 +36,7 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
 )
+from .native_review_allow_hint import native_review_extension_allow_hint
 
 if TYPE_CHECKING:
     from ..store import GuardStore

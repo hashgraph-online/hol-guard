@@ -9,6 +9,7 @@ hint, so the dashboard never promises an Extensions change that would not work.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import time
 from collections.abc import Mapping
@@ -19,10 +20,47 @@ from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from .hook_native_saved_approval import _launch_cwd
-from .hook_request_parsing import pre_tool_command
+from .hook_request_parsing import pre_tool_command, pre_tool_input
 
 _LOGGER = logging.getLogger(__name__)
-_MIN_REMAINING_SECONDS = 0.6
+# Approval persistence and the hook response still need time after the hint.
+_SAFETY_MARGIN_SECONDS = 0.35
+_MIN_NATIVE_BUDGET_SECONDS = 0.15
+_MAX_NATIVE_BUDGET_SECONDS = 0.5
+# Tool-input keys that never carry a path, payload, or other content the
+# command-only re-review could miss. Any other key means the original decision
+# may hold an independent review floor, so no hint is stored.
+_COMMAND_ONLY_INPUT_KEYS = frozenset(
+    {
+        "command",
+        "cmd",
+        "shell_command",
+        "shellCommand",
+        "description",
+        "timeout",
+        "timeout_ms",
+        "timeoutMs",
+        "run_in_background",
+        "runInBackground",
+        "workdir",
+        "cwd",
+    }
+)
+
+
+def _command_only_payload(payload: Mapping[str, object]) -> bool:
+    """True when the shell command is the only content the tool call carries."""
+
+    tool_input = pre_tool_input(payload)
+    if tool_input is None:
+        return False
+    return all(isinstance(key, str) and key in _COMMAND_ONLY_INPUT_KEYS for key in tool_input)
+
+
+def _remaining_budget(deadline: float | None) -> float:
+    if deadline is None:
+        return _MAX_NATIVE_BUDGET_SECONDS
+    return min(_MAX_NATIVE_BUDGET_SECONDS, deadline - time.monotonic() - _SAFETY_MARGIN_SECONDS)
 
 
 def _evidence_binding(result: Mapping[str, object]) -> Mapping[str, object] | None:
@@ -59,7 +97,10 @@ def native_review_extension_allow_hint(
     """Return permission ids whose Allow state would let this paused command run, or None."""
 
     try:
-        return _native_review_extension_allow_hint(
+        # A copied context keeps the advisory re-review from rewriting the
+        # hook's recorded decision route.
+        return contextvars.copy_context().run(
+            _native_review_extension_allow_hint,
             store,
             payload=payload,
             native_result=native_result,
@@ -86,14 +127,20 @@ def _native_review_extension_allow_hint(
     command = pre_tool_command(payload)
     reader = getattr(store, "read_extension_control_authority_for_registry", None)
     guard_home = getattr(store, "guard_home", None)
-    if binding is None or command is None or not callable(reader) or not isinstance(guard_home, Path):
-        return None
-    if deadline is not None and deadline - time.monotonic() < _MIN_REMAINING_SECONDS:
+    if (
+        binding is None
+        or command is None
+        or not _command_only_payload(payload)
+        or not callable(reader)
+        or not isinstance(guard_home, Path)
+        or _remaining_budget(deadline) < _MIN_NATIVE_BUDGET_SECONDS
+    ):
         return None
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         reader(BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True)
     )
-    if snapshot.authority_failure is not None:
+    budget = _remaining_budget(deadline)
+    if snapshot.authority_failure is not None or budget < _MIN_NATIVE_BUDGET_SECONDS:
         return None
     cwd = _launch_cwd(payload, workspace)
     reviewed = review_command_native(
@@ -102,8 +149,10 @@ def _native_review_extension_allow_hint(
         cwd=cwd,
         home_dir=home_dir,
         extension_control_snapshot=snapshot,
+        timeout_seconds=budget,
+        record_health=False,
     )
-    if reviewed is None:
+    if reviewed is None or (deadline is not None and _remaining_budget(deadline) <= 0):
         return None
     return hint_for_reviewed_command(
         native_result=native_result,
@@ -112,6 +161,7 @@ def _native_review_extension_allow_hint(
         command=command,
         cwd=cwd,
         home_dir=home_dir,
+        deadline=None if deadline is None else deadline - _SAFETY_MARGIN_SECONDS,
     )
 
 
@@ -123,6 +173,7 @@ def hint_for_reviewed_command(
     command: str,
     cwd: Path | None,
     home_dir: Path | None,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Return the hint when the fresh evidence is exactly what Rust paused on."""
 
@@ -135,6 +186,7 @@ def hint_for_reviewed_command(
         or fresh.get("observations_digest") != binding.get("observations_digest")
         or fresh.get("control_effective_digest") != binding.get("control_effective_digest")
         or reviewed.payload.get("minimum_action") != native_result.get("minimum_action")
+        or reviewed.payload.get("reason_code") != native_result.get("reason_code")
     ):
         return None
     return compute_extension_allow_hint(
@@ -144,6 +196,7 @@ def hint_for_reviewed_command(
         native_evidence=reviewed.payload,
         cwd=cwd,
         home_dir=home_dir,
+        deadline=deadline,
     )
 
 

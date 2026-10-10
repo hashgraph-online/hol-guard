@@ -9,6 +9,7 @@ proof-bound extension-control mutation.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from .command_evaluation import evaluate_command
@@ -38,8 +39,13 @@ def compute_extension_allow_hint(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
-    """Return permission ids whose Allow state would let this command run, or None."""
+    """Return permission ids whose Allow state would let this command run, or None.
+
+    ``deadline`` (``time.monotonic()``) bounds the optional reduction pass: once
+    it passes, the already verified full permission set is returned as-is.
+    """
 
     if snapshot.authority_failure is not None or evaluation.decision_plane.action != "review":
         return None
@@ -83,6 +89,8 @@ def compute_extension_allow_hint(
     # A matched rule that does not gate (for example a disabled-by-default one)
     # must not be named: keep only the permissions the Allow actually needs.
     for permission_id in tuple(permission_ids):
+        if deadline is not None and time.monotonic() >= deadline:
+            break
         remaining = tuple(item for item in permission_ids if item != permission_id)
         if remaining and allows(remaining):
             permission_ids = list(remaining)
