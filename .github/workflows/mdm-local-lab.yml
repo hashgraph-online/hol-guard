@@ -59,6 +59,26 @@ jobs:
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime$suffix" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - run: uv run --python 3.12 --no-sync python scripts/mdm/run-local-lab.py --json --output mdm-local-conformance.json ${{ matrix.suites }}
+      - name: Diagnose approval gate on an unprovisioned home
+        if: failure() && runner.os == 'Windows'
+        shell: bash
+        run: |
+          uv run --python 3.12 --no-sync python - <<'PY'
+          import os, pathlib, tempfile
+          os.environ["HOL_GUARD_NATIVE"] = "force"
+          from codex_plugin_scanner.guard import native_approval_gate as gate
+          from codex_plugin_scanner.guard import native_resident_client as client
+          base = pathlib.Path(tempfile.mkdtemp())
+          for name, make in (("missing", False), ("existing", True)):
+              home = base / name
+              if make:
+                  home.mkdir()
+              try:
+                  print(name, "payload", gate.approval_gate_native("require_settings_write", home))
+              except Exception as error:
+                  print(name, "exception", type(error).__name__, error)
+              print(name, "code", client.native_resident_client_failure_code(), "tmp", base)
+          PY
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
