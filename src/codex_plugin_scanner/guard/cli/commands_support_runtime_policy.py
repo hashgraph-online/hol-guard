@@ -11,6 +11,7 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from ..runtime.data_flow_sink import data_flow_sink_type
+from ..runtime.package_request_evaluation import strip_review_evidence_tail as _strip_review_evidence_tail
 
 if TYPE_CHECKING:
     from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
@@ -248,14 +249,6 @@ def _terminalize_runtime_action_copy(response_payload: dict[str, object]) -> Non
             if harness_message is not None:
                 user_copy["harness_message"] = _terminal_action_message(harness_message)
             user_copy["dashboard_url"] = None
-
-def _strip_review_evidence_tail(message: str) -> str:
-    stripped = message.strip()
-    lower_stripped = stripped.lower()
-    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
-        if lower_stripped.endswith(suffix.lower()):
-            return stripped[: -len(suffix)].rstrip()
-    return stripped
 
 def _strip_legacy_approval_center_sentence(message: str) -> str:
     lower_message = message.lower()

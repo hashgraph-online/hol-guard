@@ -204,7 +204,7 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
         dashboard_url = None
     harness_message = _CLOUD_INBOX_URL_RE.sub("", user_copy.harness_message or "").strip()
     harness_message = " ".join(harness_message.split())
-    harness_message = _strip_review_evidence_tail(harness_message)
+    harness_message = strip_review_evidence_tail(harness_message)
     terminal_action = policy_action in {"sandbox-required", "block"}
     if terminal_action:
         dashboard_url = None
@@ -218,7 +218,7 @@ def _normalize_package_user_copy(user_copy: SupplyChainUserCopy, *, policy_actio
     return replace(user_copy, dashboard_url=dashboard_url, harness_message=harness_message)
 
 
-def _strip_review_evidence_tail(message: str) -> str:
+def strip_review_evidence_tail(message: str) -> str:
     stripped = message.strip()
     lower_stripped = stripped.lower()
     for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):

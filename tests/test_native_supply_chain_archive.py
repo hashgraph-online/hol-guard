@@ -77,6 +77,17 @@ def test_current_download_reduces_the_inspection_budget(tmp_path: Path, monkeypa
     assert timeouts == [1.0]
 
 
+def test_review_evidence_tail_has_one_implementation() -> None:
+    from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
+        _strip_review_evidence_tail as cli_strip,
+    )
+    from codex_plugin_scanner.guard.runtime.package_request_evaluation import strip_review_evidence_tail
+
+    assert cli_strip is strip_review_evidence_tail
+    assert strip_review_evidence_tail("Hold. Review evidence: .") == "Hold."
+    assert strip_review_evidence_tail("Hold. Review evidence:") == "Hold."
+
+
 def test_exhausted_aggregate_budget_fails_before_the_next_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
