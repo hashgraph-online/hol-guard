@@ -27,9 +27,6 @@ from .hook_process_request import (
     resident_hook_store_and_context,
 )
 
-_ResidentHookRequest = ResidentHookRequest
-_coerce_resident_hook_request = coerce_resident_hook_request
-
 if TYPE_CHECKING:
     from ..store import GuardStore
     from .hook_worker import HookWorker

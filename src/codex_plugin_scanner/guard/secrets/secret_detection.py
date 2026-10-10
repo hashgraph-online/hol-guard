@@ -240,7 +240,6 @@ _CODE_SUFFIXES = frozenset(
         ".zsh",
     }
 )
-_SHELL_SUFFIXES = frozenset({".bash", ".ps1", ".sh", ".zsh"})
 _DATABASE_URL = re.compile(
     r"(?i)\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis)://"
     r"[^\s:/@]{1,128}:(?P<secret>[^\s/@]{6,256})@[^\s]+"

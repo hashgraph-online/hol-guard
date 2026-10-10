@@ -13,7 +13,7 @@ pub(super) fn observe(
     index: usize,
     result: &mut CompatibilityObservations,
 ) {
-    match classify(&segment.arguments) {
+    match classify(&segment.arguments, dollars_single_quoted(&segment.text)) {
         Some(capabilities) => {
             for capability in capabilities {
                 let (owner, permission_only) = github_owner(capability);
@@ -32,7 +32,7 @@ fn one(capability: &'static str) -> Capabilities {
     Some(vec![capability])
 }
 
-pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
+pub(super) fn arguments_are_read_only(arguments: &[String], text: &str) -> bool {
     // A glued `-Rowner/repo` selector is an unproven content read and stays
     // on the review path. A separate `--repo` read keeps the benign floor.
     !arguments.iter().any(|argument| {
@@ -48,7 +48,7 @@ pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
                     .split('=')
                     .next()
                     .is_some_and(|flags| flags.contains('w')))
-    }) && classify(arguments).is_some_and(|capabilities| {
+    }) && classify(arguments, dollars_single_quoted(text)).is_some_and(|capabilities| {
         !capabilities.is_empty()
             && capabilities
                 .iter()
@@ -56,13 +56,45 @@ pub(super) fn arguments_are_read_only(arguments: &[String]) -> bool {
     })
 }
 
-fn classify(original: &[String]) -> Capabilities {
+/// True when every `$` in the raw segment text sits inside single quotes, so
+/// the shell passes it through literally instead of expanding a variable.
+fn dollars_single_quoted(text: &str) -> bool {
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    for character in text.chars() {
+        match quote {
+            Some('\'') => {
+                if character == '\'' {
+                    quote = None;
+                }
+            }
+            _ if escaped => escaped = false,
+            _ if character == '\\' => escaped = true,
+            _ if character == '$' => return false,
+            Some(_) if character == '"' => quote = None,
+            None if matches!(character, '\'' | '"') => quote = Some(character),
+            _ => {}
+        }
+    }
+    true
+}
+
+fn classify(original: &[String], literal_dollars: bool) -> Capabilities {
     // Quoted dynamic-looking values are deliberately outside this small native
     // grammar too. Distinguishing their expansion provenance needs literal proof.
-    if original
-        .iter()
-        .any(|value| value.contains(['$', '`', '\0']) || value.starts_with('@'))
-    {
+    // The one exception is a single-quoted `gh api graphql` document whose
+    // `$variables` it declares itself: the shell never expands those.
+    let graphql = original.len() > 1 && original[0] == "api" && original[1] == "graphql";
+    if original.iter().any(|value| {
+        value.contains(['`', '\0'])
+            || value.starts_with('@')
+            || (value.contains('$')
+                && !(graphql
+                    && literal_dollars
+                    && value
+                        .strip_prefix("query=")
+                        .is_some_and(api::graphql_text_is_static)))
+    }) {
         return None;
     }
     options::validate_selectors(original)?;
