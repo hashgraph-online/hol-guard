@@ -31,7 +31,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 
 from ...version import __version__
-from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.base import HarnessAdapter, HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..cli.oauth_client import (
@@ -48,13 +47,14 @@ from ..config import VALID_RECEIPT_REDACTION_LEVELS, GuardConfig
 from ..edge_events import build_runtime_session_event
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
-from ..models import GuardAction, GuardArtifact, HarnessDetection, PolicyDecision
+from ..models import GuardArtifact, HarnessDetection, PolicyDecision
 from ..native_prompt import NativePromptAnalysisError
 from ..native_prompt import analyze as _prompt_analyze_native
 from ..native_prompt import artifact_from_dict as _guard_artifact_from_dict
 from ..native_prompt import extract_prompt_requests as extract_prompt_requests
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
 from ..native_prompt import should_force_reapproval as should_force_reapproval
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
 from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
@@ -98,10 +98,10 @@ from ..shims import package_shim_cloud_coverage
 from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from ..types import PromptRequest
+from . import runner_native_authority as _authority
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .approval_context import (
     build_runtime_launch_identity,
-    parse_approval_context_token,
     resolved_runtime_launch_argv,
     runtime_launch_identity_is_reusable,
 )
@@ -109,13 +109,7 @@ from .approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
 )
-from .composition_rules import compose_action_from_signals
-from .decisions import (
-    AUTHORITATIVE_DECISION_INCONSISTENT,
-    build_authoritative_decision,
-    evaluation_authority_error,
-    rebuild_artifact_authority,
-)
+from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .extension_catalog_handshake import (
     prepare_extension_catalog_handshake,
@@ -151,7 +145,6 @@ from .receipt_sync_privacy import (
 from .receipt_sync_privacy import (
     cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
 )
-from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
     load_supply_chain_bundle_response,
@@ -285,192 +278,11 @@ _APPROVAL_METADATA_KEYS = (
     "review_hint",
 )
 
-_RUNTIME_DETECTOR_REVIEW_REASON = "runtime_detector_review"
-_RUNTIME_DETECTOR_WARN_REASON = "runtime_detector_warn"
-_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM = "approval_reuse_context_changed_after_claim"
 # Every prepared launch-environment entry is authority-hashed except this
 # explicit execution-boundary credential. Inherited values are removed before
 # hashing; only Guard's freshly resolved Hermes credential may be added later.
 _HERMES_GUARD_TOKEN_ENV_KEY = "HERMES_GUARD_TOKEN"
 _GUARD_RUN_LATE_CREDENTIAL_ENV_KEYS = frozenset({_HERMES_GUARD_TOKEN_ENV_KEY})
-
-
-def _resolved_exact_request_overrides(evaluation: Mapping[str, object]) -> dict[str, str]:
-    """Extract trusted allow results bound to the exact queued context token."""
-
-    wait_result = evaluation.get("approval_wait")
-    if not isinstance(wait_result, Mapping) or wait_result.get("resolved") is not True:
-        return {}
-    raw_items = wait_result.get("items")
-    if not isinstance(raw_items, list) or not raw_items:
-        return {}
-    items = [item for item in raw_items if isinstance(item, Mapping)]
-    if len(items) != len(raw_items) or any(
-        item.get("status") != "resolved" or item.get("resolution_action") != "allow" for item in items
-    ):
-        return {}
-    overrides: dict[str, str] = {}
-    for item in items:
-        artifact_id = item.get("artifact_id")
-        artifact_hash = item.get("artifact_hash")
-        if (
-            not isinstance(artifact_id, str)
-            or not artifact_id
-            or not isinstance(artifact_hash, str)
-            or parse_approval_context_token(artifact_hash) is None
-        ):
-            return {}
-        overrides[artifact_id] = artifact_hash
-    return overrides
-
-
-_INTERACTIVE_ALLOW_OVERRIDE_LABELS = frozenset({"allow-once", "allow-artifact", "allow-publisher", "allow-harness"})
-
-
-def _resolved_interactive_request_overrides(
-    evaluation: Mapping[str, object],
-) -> tuple[dict[str, str], dict[str, str]]:
-    """Extract exact allow intents returned by the trusted terminal resolver."""
-
-    raw_items = evaluation.get("artifacts")
-    if not isinstance(raw_items, list):
-        return {}, {}
-    overrides: dict[str, str] = {}
-    labels: dict[str, str] = {}
-    for item in raw_items:
-        if not isinstance(item, Mapping) or item.get("policy_action") != "allow":
-            continue
-        user_override = item.get("user_override")
-        artifact_id = item.get("artifact_id")
-        artifact_hash = item.get("approval_context_hash")
-        if (
-            not isinstance(user_override, str)
-            or user_override not in _INTERACTIVE_ALLOW_OVERRIDE_LABELS
-            or not isinstance(artifact_id, str)
-            or not artifact_id
-            or not isinstance(artifact_hash, str)
-            or parse_approval_context_token(artifact_hash) is None
-        ):
-            continue
-        overrides[artifact_id] = artifact_hash
-        labels[artifact_id] = user_override
-    return overrides, labels
-
-
-def _runtime_detector_authority(evaluation: Mapping[str, object]) -> tuple[GuardAction | None, str | None]:
-    composition = evaluation.get("runtime_detector_composition")
-    if not isinstance(composition, Mapping):
-        return None, None
-    action = composition.get("action")
-    reason = composition.get("reason")
-    if not is_guard_action(action) or action not in {"allow", "warn", "review", "block"}:
-        return None, None
-    return action, reason if isinstance(reason, str) and reason else None
-
-
-def _runtime_detector_context(evaluation: Mapping[str, object]) -> dict[str, object] | None:
-    """Return timing-free detector authority suitable for exact context hashing."""
-
-    raw_composition = evaluation.get("runtime_detector_composition")
-    composition = (
-        {
-            "action": raw_composition.get("action"),
-            "reason": raw_composition.get("reason"),
-            "downgraded": raw_composition.get("downgraded") is True,
-            "upgraded": raw_composition.get("upgraded") is True,
-        }
-        if isinstance(raw_composition, Mapping)
-        else {}
-    )
-    raw_signals = evaluation.get("runtime_detector_signals_v2")
-    signals = (
-        [dict(signal) for signal in raw_signals if isinstance(signal, Mapping)] if isinstance(raw_signals, list) else []
-    )
-    telemetry = _normalized_runtime_detector_telemetry(evaluation)
-    if not composition and not signals and not telemetry:
-        return None
-    return {"composition": composition, "signals_v2": signals, "telemetry": telemetry}
-
-
-def _normalized_runtime_detector_telemetry(evaluation: Mapping[str, object]) -> list[dict[str, object]]:
-    """Bind semantic detector outcomes while excluding nondeterministic duration."""
-
-    raw_telemetry = evaluation.get("runtime_detector_telemetry")
-    if not isinstance(raw_telemetry, list):
-        return []
-    telemetry: list[dict[str, object]] = []
-    for raw_item in raw_telemetry:
-        if not isinstance(raw_item, Mapping):
-            continue
-        item = {str(key): value for key, value in raw_item.items() if isinstance(key, str) and key != "elapsed_ms"}
-        categories = item.get("categories")
-        if isinstance(categories, (list, tuple)):
-            item["categories"] = sorted({category for category in categories if isinstance(category, str)})
-        telemetry.append(item)
-    return sorted(
-        telemetry,
-        key=lambda item: json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
-    )
-
-
-def _runtime_detector_nonterminal_evidence(
-    action: GuardAction | None,
-    reason: str | None,
-) -> dict[str, object] | None:
-    if action == "warn":
-        return {
-            "source": "runtime_detector_registry",
-            "status": "warning",
-            "reason_code": _RUNTIME_DETECTOR_WARN_REASON,
-            "reason": reason or "runtime detector signals require a warning",
-        }
-    if action == "review":
-        return {
-            "source": "runtime_detector_registry",
-            "status": "review-required",
-            "reason_code": _RUNTIME_DETECTOR_REVIEW_REASON,
-            "reason": reason or "runtime detector signals require review",
-        }
-    return None
-
-
-def _config_with_current_authority(
-    config: GuardConfig,
-    evaluation: Mapping[str, object],
-    authority_action: GuardAction,
-    *,
-    artifact_ids: set[str] | None = None,
-) -> GuardConfig:
-    """Bind runner-only authority into each artifact's current policy context.
-
-    Runtime detector composition happens outside the consumer service.  A
-    synthetic per-artifact override makes that current authority participate
-    in approval-context hashing and saved-decision composition before any
-    one-shot claim. Existing stronger current actions remain authoritative.
-    """
-
-    raw_artifacts = evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list) or not raw_artifacts:
-        return config
-    artifact_actions = dict(config.artifact_actions or {})
-    changed = False
-    for item in raw_artifacts:
-        if not isinstance(item, Mapping):
-            continue
-        artifact_id = item.get("artifact_id")
-        if not isinstance(artifact_id, str) or not artifact_id:
-            continue
-        if artifact_ids is not None and artifact_id not in artifact_ids:
-            continue
-        composition = item.get("policy_composition")
-        current_action = composition.get("current_action") if isinstance(composition, Mapping) else None
-        if not is_guard_action(current_action):
-            current_action = item.get("policy_action")
-        composed = most_restrictive_guard_action(current_action, authority_action, unknown_action="block")
-        if artifact_actions.get(artifact_id) != composed:
-            artifact_actions[artifact_id] = composed
-            changed = True
-    return replace(config, artifact_actions=artifact_actions) if changed else config
 
 
 @dataclass(frozen=True, slots=True)
@@ -622,80 +434,14 @@ def _guard_run_finalize_authorized_launch_plan(
     return None
 
 
-def _guard_run_launch_plan_signature(launch_plan: _GuardRunLaunchPlan) -> str | None:
-    if not launch_plan.reusable:
-        return None
-    return json.dumps(
-        {
-            "adapter_command": list(launch_plan.adapter_command),
-            "environment_sha256": launch_plan.environment_sha256,
-            "identity": launch_plan.identity,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
-
-
-def _guard_run_authority_signature(
-    detection: HarnessDetection,
-    evaluation: Mapping[str, object],
-    launch_previews: Sequence[_GuardRunLaunchPlan] = (),
-) -> tuple[object, ...] | None:
-    """Return the exact launch authority checked on both sides of a claim."""
-
-    raw_artifacts = evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list):
-        return None
-    contexts: dict[str, tuple[str, str]] = {}
-    for item in raw_artifacts:
-        if not isinstance(item, Mapping):
-            return None
-        artifact_id = item.get("artifact_id")
-        approval_context_hash = item.get("approval_context_hash")
-        policy_action = item.get("policy_action")
-        if (
-            not isinstance(artifact_id, str)
-            or not artifact_id
-            or artifact_id in contexts
-            or not isinstance(approval_context_hash, str)
-            or parse_approval_context_token(approval_context_hash) is None
-            or not is_guard_action(policy_action)
-        ):
-            return None
-        contexts[artifact_id] = (approval_context_hash, policy_action)
-    detector_payload = _runtime_detector_context(evaluation)
-    return (
-        detection.harness,
-        detection.installed,
-        detection.command_available,
-        tuple(detection.config_paths),
-        tuple(sorted(contexts.items())),
-        json.dumps(detector_payload, sort_keys=True, separators=(",", ":"), default=str),
-        tuple(_guard_run_launch_plan_signature(plan) for plan in launch_previews),
-    )
+_RECEIPT_PAGE_ROWS = 500
+_RECEIPT_BATCH_BYTES = 512 * 1024
 
 
 def _receipt_rowid_cursor(store: GuardStore) -> int:
     with store._connect() as connection:
         row = connection.execute("select coalesce(max(rowid), 0) as cursor from runtime_receipts").fetchone()
     return int(row["cursor"]) if row is not None else 0
-
-
-def _saved_decision_is_retained(decision: Mapping[str, object]) -> bool:
-    """Return whether a successful claim leaves the authority row in place."""
-
-    approval_id = decision.get("approval_id")
-    if isinstance(approval_id, str) and approval_id:
-        artifact_id = decision.get("artifact_id")
-        return isinstance(artifact_id, str) and ":package-request:" in artifact_id
-    decision_id = decision.get("decision_id")
-    if isinstance(decision_id, int) and not isinstance(decision_id, bool):
-        return not (decision.get("source") == "approval-gate" and decision.get("expires_at") is not None)
-    # The store rejects unknown claim identities. Classifying them as retained
-    # is the conservative fallback if an alternate store implementation ever
-    # accepts one: absence may not be treated as proof of consumption.
-    return True
 
 
 def _append_authority_evidence_to_receipts(
@@ -722,50 +468,66 @@ def _append_authority_evidence_to_receipts(
     }
     if not artifact_ids:
         return
-    reason_code = evidence.get("reason_code")
     # Runtime detector authority is composed in this aggregate, so its receipt
-    # evidence is amended in the same local transaction boundary.
+    # evidence is amended in the same local transaction boundary. Rust owns
+    # which rows change and how; this function only reads and writes the rows.
+    # Only rows of this evaluation's artifacts are projected, in batches that
+    # stay under the transport envelope, so unrelated receipts never count.
     with store._connect() as connection:
-        rows = connection.execute(
-            """
-            select rowid, artifact_id, policy_decision, scanner_evidence_json, approval_source
-            from runtime_receipts
-            where rowid > ?
-            order by rowid asc
-            """,
-            (after_rowid,),
-        ).fetchall()
-        for row in rows:
-            if str(row["artifact_id"]) not in artifact_ids:
-                continue
-            try:
-                raw_evidence = json.loads(str(row["scanner_evidence_json"]))
-            except (TypeError, ValueError):
-                raw_evidence = []
-            scanner_evidence = list(raw_evidence) if isinstance(raw_evidence, list) else []
-            if replace_existing_source:
-                scanner_evidence = [
-                    item
-                    for item in scanner_evidence
-                    if not isinstance(item, Mapping) or item.get("source") != evidence.get("source")
-                ]
-            if not any(
-                isinstance(item, Mapping)
-                and item.get("source") == evidence.get("source")
-                and item.get("reason_code") == reason_code
-                for item in scanner_evidence
-            ):
-                scanner_evidence.append(dict(evidence))
-            current_source = row["approval_source"]
-            next_source = approval_source if str(row["policy_decision"]) in source_actions else current_source
-            connection.execute(
-                """
-                update runtime_receipts
-                set scanner_evidence_json = ?, approval_source = ?
-                where rowid = ?
-                """,
-                (json.dumps(scanner_evidence, sort_keys=True), next_source, int(row["rowid"])),
+        batch: list[Mapping[str, object]] = []
+        batch_bytes = 0
+
+        def flush() -> None:
+            nonlocal batch, batch_bytes
+            if not batch:
+                return
+            updates = _authority.receipt_evidence_updates(
+                batch,
+                artifact_ids=artifact_ids,
+                evidence=evidence,
+                approval_source=approval_source,
+                source_actions=source_actions,
+                replace_existing_source=replace_existing_source,
             )
+            for update in updates:
+                connection.execute(
+                    """
+                    update runtime_receipts
+                    set scanner_evidence_json = ?, approval_source = ?
+                    where rowid = ?
+                    """,
+                    (
+                        json.dumps(update["scanner_evidence"], sort_keys=True),
+                        update["approval_source"],
+                        update["rowid"],
+                    ),
+                )
+            batch, batch_bytes = [], 0
+
+        cursor = after_rowid
+        while True:
+            page = connection.execute(
+                """
+                select rowid, artifact_id, policy_decision, scanner_evidence_json, approval_source
+                from runtime_receipts
+                where rowid > ?
+                order by rowid asc
+                limit ?
+                """,
+                (cursor, _RECEIPT_PAGE_ROWS),
+            ).fetchall()
+            if not page:
+                break
+            cursor = int(page[-1]["rowid"])
+            for row in page:
+                if row["artifact_id"] not in artifact_ids:
+                    continue
+                row_bytes = len(str(row["scanner_evidence_json"])) + 512
+                if batch and batch_bytes + row_bytes > _RECEIPT_BATCH_BYTES:
+                    flush()
+                batch.append(row)
+                batch_bytes += row_bytes
+        flush()
 
 
 _DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
@@ -927,15 +689,16 @@ def _guard_run_bound(
         context,
         config,
     )
-    detector_action, _detector_reason = _runtime_detector_authority(detector_evaluation)
-    detector_context = _runtime_detector_context(detector_evaluation)
+    detector_authority = _authority.detector_authority(detector_evaluation)
+    detector_action = detector_authority.action
+    detector_context = detector_authority.context
     authority_config = config
     if detector_action in {"warn", "review"}:
         # The first evaluation is deliberately non-consuming and exists only
         # to recover each artifact's current policy action. Re-evaluate with
         # nonterminal detector authority bound into the current authority
         # before trusting or scheduling any saved approval claim.
-        authority_config = _config_with_current_authority(config, base_evaluation, detector_action)
+        authority_config = _authority.config_with_current_authority(config, base_evaluation, detector_action)
     if detector_context is not None:
         pending_approval_claims = []
         evaluation = evaluate_detection(
@@ -947,13 +710,10 @@ def _guard_run_bound(
             pending_approval_claims=pending_approval_claims,
             runtime_detector_context=detector_context,
         )
-        evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
+        evaluation = _authority.with_recorded_detector_result(evaluation, detector_evaluation)
     else:
         evaluation = detector_evaluation
-    detector_block_reason = detector_evaluation.get("blocked_by_detector")
-    authoritative_detector_block = (
-        detector_block_reason if isinstance(detector_block_reason, str) and detector_block_reason else None
-    )
+    authoritative_detector_block = detector_authority.blocked_by_detector
     if evaluation["blocked"]:
         evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
 
@@ -967,14 +727,14 @@ def _guard_run_bound(
         and evaluation["blocked"]
     ):
         resolved_evaluation = interactive_resolver(detection, evaluation)
-        trusted_request_overrides, trusted_request_override_labels = _resolved_interactive_request_overrides(
+        trusted_request_overrides, trusted_request_override_labels = _authority.interactive_request_overrides(
             resolved_evaluation
         )
     elif (
         not dry_run and authoritative_detector_block is None and blocked_resolver is not None and evaluation["blocked"]
     ):
         resolved_evaluation = blocked_resolver(detection, evaluation)
-        trusted_request_overrides = _resolved_exact_request_overrides(resolved_evaluation)
+        trusted_request_overrides = _authority.exact_request_overrides(resolved_evaluation)
         trusted_request_override_labels = {artifact_id: "approval-center" for artifact_id in trusted_request_overrides}
     if resolved_evaluation is not None:
         # A terminal prompt or browser wait is an authority boundary even when
@@ -1009,11 +769,12 @@ def _guard_run_bound(
             context,
             config,
         )
-        detector_action, _detector_reason = _runtime_detector_authority(detector_evaluation)
-        detector_context = _runtime_detector_context(detector_evaluation)
+        detector_authority = _authority.detector_authority(detector_evaluation)
+        detector_action = detector_authority.action
+        detector_context = detector_authority.context
         authority_config = config
         if detector_action in {"warn", "review"}:
-            authority_config = _config_with_current_authority(config, base_evaluation, detector_action)
+            authority_config = _authority.config_with_current_authority(config, base_evaluation, detector_action)
         pending_approval_claims = []
         evaluation = evaluate_detection(
             detection,
@@ -1026,11 +787,8 @@ def _guard_run_bound(
             pending_approval_claims=pending_approval_claims,
             runtime_detector_context=detector_context,
         )
-        evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-        detector_block_reason = detector_evaluation.get("blocked_by_detector")
-        authoritative_detector_block = (
-            detector_block_reason if isinstance(detector_block_reason, str) and detector_block_reason else None
-        )
+        evaluation = _authority.with_recorded_detector_result(evaluation, detector_evaluation)
+        authoritative_detector_block = detector_authority.blocked_by_detector
         if evaluation["blocked"]:
             evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
         for key in _APPROVAL_METADATA_KEYS:
@@ -1051,8 +809,8 @@ def _guard_run_bound(
         )
         if persisted["blocked"]:
             persisted = _evaluation_with_action_envelope(persisted, action_envelope)
-        persisted = _evaluation_with_recorded_detector_result(persisted, detector_evaluation)
-        detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
+        persisted = _authority.with_recorded_detector_result(persisted, detector_evaluation)
+        detector_evidence = detector_authority.nonterminal_evidence
         if detector_evidence is not None and detector_action is not None:
             _append_authority_evidence_to_receipts(
                 store,
@@ -1070,19 +828,14 @@ def _guard_run_bound(
     else:
         decisions_to_claim = [decision for decision, _artifact_id, _artifact_hash in pending_approval_claims]
         preclaim_launch_previews: tuple[_GuardRunLaunchPlan, ...] = ()
-        preclaim_signature: tuple[object, ...] | None = None
+        preclaim_signature: dict[str, Any] | None = None
         preclaim_failure_reason: str | None = None
         if decisions_to_claim:
             try:
                 preclaim_launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
             except Exception:
                 preclaim_launch_previews = ()
-            if preclaim_launch_previews and all(plan.reusable for plan in preclaim_launch_previews):
-                preclaim_signature = _guard_run_authority_signature(
-                    detection,
-                    evaluation,
-                    preclaim_launch_previews,
-                )
+            preclaim_signature = _authority.authority_signature(detection, evaluation, preclaim_launch_previews)
             if preclaim_signature is None:
                 preclaim_failure_reason = APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED
             else:
@@ -1094,23 +847,12 @@ def _guard_run_bound(
                     preclaim_failure_reason = APPROVAL_REUSE_CLAIM_FAILED
         if decisions_to_claim and preclaim_failure_reason is not None:
             failed_ids = {artifact_id for _decision, artifact_id, _artifact_hash in pending_approval_claims}
-            failure_config = _config_with_current_authority(
+            failure_config = _authority.config_with_current_authority(
                 authority_config,
                 evaluation,
                 "require-reapproval",
                 artifact_ids=failed_ids,
             )
-            if preclaim_failure_reason == APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED:
-                failure_reason = (
-                    "saved approval could not be reused because the harness launch identity was not stable "
-                    "and path-pinned"
-                )
-                claim_status = "rejected"
-                revalidation_status = "unverified"
-            else:
-                failure_reason = "saved approval could not be atomically claimed"
-                claim_status = "failed"
-                revalidation_status = "claim-failed"
             receipt_cursor = _receipt_rowid_cursor(store)
             evaluation = evaluate_detection(
                 detection,
@@ -1123,16 +865,13 @@ def _guard_run_bound(
                 runtime_detector_context=detector_context,
                 runtime_detector_block_reason=authoritative_detector_block,
             )
-            evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-            evaluation = _evaluation_with_preclaim_failure(
+            evaluation = _authority.with_recorded_detector_result(evaluation, detector_evaluation)
+            evaluation, failure_evidence = _authority.with_preclaim_failure(
                 evaluation,
                 affected_artifact_ids=failed_ids,
                 reason_code=preclaim_failure_reason,
-                reason=failure_reason,
-                claim_status=claim_status,
-                revalidation_status=revalidation_status,
             )
-            detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
+            detector_evidence = detector_authority.nonterminal_evidence
             if detector_evidence is not None and detector_action is not None:
                 _append_authority_evidence_to_receipts(
                     store,
@@ -1146,12 +885,7 @@ def _guard_run_bound(
                 store,
                 after_rowid=receipt_cursor,
                 evaluation=evaluation,
-                evidence={
-                    "source": "approval_reuse",
-                    "status": "rejected",
-                    "reason_code": preclaim_failure_reason,
-                    "reason": failure_reason,
-                },
+                evidence=failure_evidence,
                 approval_source="approval-reuse",
                 source_actions=frozenset({"review", "require-reapproval", "sandbox-required", "block"}),
                 replace_existing_source=True,
@@ -1162,23 +896,9 @@ def _guard_run_bound(
                         evaluation[key] = resolved_evaluation[key]
             evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
         else:
-            consumed_claim_overrides = {
-                artifact_id: artifact_hash
-                for decision, artifact_id, artifact_hash in pending_approval_claims
-                if not _saved_decision_is_retained(decision)
-            }
-            retained_claim_overrides = {
-                artifact_id: artifact_hash
-                for decision, artifact_id, artifact_hash in pending_approval_claims
-                if _saved_decision_is_retained(decision)
-            }
-            saved_approval_qualifications = {
-                artifact_id: {
-                    "fresh_local_approval": decision.get("fresh_local_approval") is True,
-                    "durable_exact_approval": decision.get("durable_exact_approval") is True,
-                }
-                for decision, artifact_id, _artifact_hash in pending_approval_claims
-            }
+            consumed_claim_overrides, retained_claim_overrides, saved_approval_qualifications = (
+                _authority.claim_partition(pending_approval_claims)
+            )
             if decisions_to_claim:
                 config_refresh_failed = False
                 fresh_config = config
@@ -1210,11 +930,12 @@ def _guard_run_bound(
                     context,
                     fresh_config,
                 )
-                fresh_detector_action, fresh_detector_reason = _runtime_detector_authority(fresh_detector_evaluation)
-                fresh_detector_context = _runtime_detector_context(fresh_detector_evaluation)
+                fresh_detector_authority = _authority.detector_authority(fresh_detector_evaluation)
+                fresh_detector_action = fresh_detector_authority.action
+                fresh_detector_context = fresh_detector_authority.context
                 fresh_authority_config = fresh_config
                 if fresh_detector_action in {"warn", "review"}:
-                    fresh_authority_config = _config_with_current_authority(
+                    fresh_authority_config = _authority.config_with_current_authority(
                         fresh_config,
                         fresh_base_evaluation,
                         fresh_detector_action,
@@ -1232,7 +953,7 @@ def _guard_run_bound(
                     saved_approval_qualification_overrides=saved_approval_qualifications,
                     runtime_detector_context=fresh_detector_context,
                 )
-                fresh_evaluation = _evaluation_with_recorded_detector_result(
+                fresh_evaluation = _authority.with_recorded_detector_result(
                     fresh_evaluation,
                     fresh_detector_evaluation,
                 )
@@ -1240,11 +961,7 @@ def _guard_run_bound(
                     fresh_launch_previews = _guard_run_launch_previews(harness, context, passthrough_args)
                 except Exception:
                     fresh_launch_previews = ()
-                postclaim_signature = (
-                    _guard_run_authority_signature(detection, fresh_evaluation, fresh_launch_previews)
-                    if fresh_launch_previews and all(plan.reusable for plan in fresh_launch_previews)
-                    else None
-                )
+                postclaim_signature = _authority.authority_signature(detection, fresh_evaluation, fresh_launch_previews)
                 finalized_launch_plan: _GuardRunLaunchPlan | None = None
                 if (
                     not config_refresh_failed
@@ -1266,15 +983,12 @@ def _guard_run_bound(
                     or postclaim_signature != preclaim_signature
                     or finalized_launch_plan is None
                 ):
-                    stale_config = _config_with_current_authority(
+                    stale_config = _authority.config_with_current_authority(
                         fresh_authority_config,
                         fresh_evaluation,
                         "require-reapproval",
                     )
-                    fresh_block_reason = fresh_detector_evaluation.get("blocked_by_detector")
-                    authoritative_fresh_block = (
-                        fresh_block_reason if isinstance(fresh_block_reason, str) and fresh_block_reason else None
-                    )
+                    authoritative_fresh_block = fresh_detector_authority.blocked_by_detector
                     receipt_cursor = _receipt_rowid_cursor(store)
                     evaluation = evaluate_detection(
                         detection,
@@ -1285,20 +999,17 @@ def _guard_run_bound(
                         runtime_detector_context=fresh_detector_context,
                         runtime_detector_block_reason=authoritative_fresh_block,
                     )
-                    evaluation = _evaluation_with_recorded_detector_result(
+                    evaluation = _authority.with_recorded_detector_result(
                         evaluation,
                         fresh_detector_evaluation,
                     )
-                    evaluation = _evaluation_with_claim_context_failure(
+                    evaluation, context_failure_evidence = _authority.with_claim_context_failure(
                         evaluation,
                         claimed_artifact_ids={
                             artifact_id for _decision, artifact_id, _artifact_hash in pending_approval_claims
                         },
                     )
-                    fresh_detector_evidence = _runtime_detector_nonterminal_evidence(
-                        fresh_detector_action,
-                        fresh_detector_reason,
-                    )
+                    fresh_detector_evidence = fresh_detector_authority.nonterminal_evidence
                     if fresh_detector_evidence is not None:
                         _append_authority_evidence_to_receipts(
                             store,
@@ -1312,12 +1023,7 @@ def _guard_run_bound(
                         store,
                         after_rowid=receipt_cursor,
                         evaluation=evaluation,
-                        evidence={
-                            "source": "approval_reuse",
-                            "status": "rejected",
-                            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-                            "reason": "launch authority changed after the saved approval was claimed",
-                        },
+                        evidence=context_failure_evidence,
                         approval_source="approval-reuse",
                         source_actions=frozenset({"review", "require-reapproval", "sandbox-required", "block"}),
                         replace_existing_source=True,
@@ -1326,7 +1032,7 @@ def _guard_run_bound(
                 else:
                     detector_evaluation = fresh_detector_evaluation
                     detector_action = fresh_detector_action
-                    _detector_reason = fresh_detector_reason
+                    detector_authority = fresh_detector_authority
                     detector_context = fresh_detector_context
                     authority_config = fresh_authority_config
                     evaluation = fresh_evaluation
@@ -1349,8 +1055,8 @@ def _guard_run_bound(
                 )
                 if evaluation["blocked"]:
                     evaluation = _evaluation_with_action_envelope(evaluation, action_envelope)
-                evaluation = _evaluation_with_recorded_detector_result(evaluation, detector_evaluation)
-                detector_evidence = _runtime_detector_nonterminal_evidence(detector_action, _detector_reason)
+                evaluation = _authority.with_recorded_detector_result(evaluation, detector_evaluation)
+                detector_evidence = detector_authority.nonterminal_evidence
                 if detector_evidence is not None and detector_action is not None:
                     _append_authority_evidence_to_receipts(
                         store,
@@ -1370,7 +1076,7 @@ def _guard_run_bound(
             context=context,
             passthrough_args=passthrough_args,
         )
-    authority_error = evaluation_authority_error(
+    authority_error = _authority.authority_error(
         evaluation,
         require_launch_permitted=not dry_run and evaluation.get("blocked") is False,
     )
@@ -1533,279 +1239,13 @@ def _evaluation_with_detector_registry(
     # Otherwise an already-reviewable artifact makes every detector result
     # appear to be a block and prevents us from identifying a genuine terminal
     # detector block before entering the approval flow.
-    composition = compose_action_from_signals(result.signals, "allow")
-    next_evaluation["runtime_detector_composition"] = {
-        "action": composition.action,
-        "reason": composition.reason,
-        "downgraded": composition.downgraded,
-        "upgraded": composition.upgraded,
-    }
-    if composition.action == "block":
+    composition, blocks = _authority.detector_composition(next_evaluation["runtime_detector_signals_v2"])
+    next_evaluation["runtime_detector_composition"] = composition
+    if blocks:
         next_evaluation["blocked"] = True
-        next_evaluation["blocked_by_detector"] = composition.reason
+        next_evaluation["blocked_by_detector"] = composition["reason"]
     if trace_error is not None:
         next_evaluation["runtime_detector_trace_error"] = trace_error
-    return next_evaluation
-
-
-_RUNTIME_DETECTOR_RESULT_KEYS = (
-    "runtime_detector_signals_v2",
-    "runtime_detector_telemetry",
-    "runtime_detector_composition",
-    "runtime_detector_trace_error",
-)
-
-
-def _artifact_with_authority_updates(
-    item: Mapping[str, object],
-    *,
-    reason: str | None,
-    composition_updates: Mapping[str, object],
-    additional_signals: Sequence[RiskSignalV2] = (),
-) -> dict[str, object]:
-    """Apply runner trace changes without allowing serialized aliases to drift."""
-
-    try:
-        return rebuild_artifact_authority(
-            item,
-            reason=reason,
-            composition_updates=composition_updates,
-            additional_signals=additional_signals,
-        )
-    except (TypeError, ValueError):
-        # Preserve evidence for the final gate. The malformed decision remains
-        # intentionally unmodified so evaluation_authority_error fails closed.
-        return {**dict(item), "decision_contract_error": AUTHORITATIVE_DECISION_INCONSISTENT}
-
-
-def _runtime_detector_signals_from_evaluation(
-    evaluation: Mapping[str, object],
-) -> tuple[RiskSignalV2, ...]:
-    raw_signals = evaluation.get("runtime_detector_signals_v2")
-    if raw_signals is None:
-        return ()
-    if not isinstance(raw_signals, list):
-        raise ValueError("runtime_detector_signals_v2 must be a list")
-    signals: list[RiskSignalV2] = []
-    for raw_signal in raw_signals:
-        if not isinstance(raw_signal, Mapping):
-            raise ValueError("runtime detector signal must be an object")
-        signals.append(RiskSignalV2.from_dict(raw_signal))
-    return tuple(signals)
-
-
-def _evaluation_with_recorded_detector_result(
-    evaluation: dict[str, Any],
-    detector_evaluation: Mapping[str, object],
-) -> dict[str, Any]:
-    """Carry one pre-launch detector result across persistence without rerunning it."""
-
-    next_evaluation = dict(evaluation)
-    for key in _RUNTIME_DETECTOR_RESULT_KEYS:
-        if key in detector_evaluation:
-            next_evaluation[key] = detector_evaluation[key]
-    blocked_by_detector = detector_evaluation.get("blocked_by_detector")
-    if isinstance(blocked_by_detector, str) and blocked_by_detector:
-        next_evaluation["blocked"] = True
-        next_evaluation["blocked_by_detector"] = blocked_by_detector
-    detector_action, detector_reason = _runtime_detector_authority(detector_evaluation)
-    try:
-        detector_signals = _runtime_detector_signals_from_evaluation(detector_evaluation)
-    except (TypeError, ValueError):
-        next_evaluation["decision_contract_error"] = AUTHORITATIVE_DECISION_INCONSISTENT
-        return next_evaluation
-    evidence = _runtime_detector_nonterminal_evidence(detector_action, detector_reason)
-
-    raw_artifacts = next_evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list) or not raw_artifacts:
-        if detector_action is not None:
-            authority_reason = detector_reason or (
-                str(evidence["reason"]) if evidence is not None else "runtime detector blocked this launch"
-            )
-            run_decision = build_authoritative_decision(
-                detector_action,
-                reason=authority_reason,
-                composition_trace={"runtime_detector_action": detector_action},
-                signals=detector_signals,
-                authority_finalized=detector_action != "review",
-                source="runtime-detector-registry",
-            )
-            next_evaluation["run_authoritative_decision"] = run_decision.to_dict()
-            next_evaluation["blocked"] = bool(next_evaluation.get("blocked")) or run_decision.enforcement.blocking
-            if run_decision.enforcement.blocking:
-                next_evaluation["blocked_by_detector"] = authority_reason
-        return next_evaluation
-    artifacts: list[object] = []
-    for raw_item in raw_artifacts:
-        if not isinstance(raw_item, Mapping):
-            artifacts.append(raw_item)
-            continue
-        item = dict(raw_item)
-        raw_scanner_evidence = item.get("scanner_evidence")
-        scanner_evidence: list[object] = (
-            [
-                dict(raw_evidence) if isinstance(raw_evidence, Mapping) else raw_evidence
-                for raw_evidence in raw_scanner_evidence
-            ]
-            if isinstance(raw_scanner_evidence, list)
-            else []
-        )
-        if evidence is not None and not any(
-            isinstance(raw_evidence, Mapping)
-            and raw_evidence.get("source") == evidence["source"]
-            and raw_evidence.get("reason_code") == evidence["reason_code"]
-            for raw_evidence in scanner_evidence
-        ):
-            scanner_evidence.append(evidence)
-        item["scanner_evidence"] = scanner_evidence
-        composition_updates: dict[str, object] = {}
-        if detector_action is not None:
-            composition_updates = {
-                "runtime_detector_action": detector_action,
-                "runtime_detector_reason": detector_reason
-                or (str(evidence["reason"]) if evidence is not None else "runtime detector authority"),
-            }
-        item = _artifact_with_authority_updates(
-            item,
-            reason=(
-                str(evidence["reason_code"])
-                if evidence is not None and item.get("policy_action") == detector_action
-                else None
-            ),
-            composition_updates=composition_updates,
-            additional_signals=detector_signals,
-        )
-        artifacts.append(item)
-    next_evaluation["artifacts"] = artifacts
-    return next_evaluation
-
-
-def _evaluation_with_preclaim_failure(
-    evaluation: dict[str, Any],
-    *,
-    affected_artifact_ids: set[str],
-    reason_code: str,
-    reason: str,
-    claim_status: str,
-    revalidation_status: str,
-) -> dict[str, Any]:
-    """Record a terminal, auditable failure before approval authority is claimed."""
-
-    evidence = {
-        "source": "approval_reuse",
-        "status": "rejected",
-        "reason_code": reason_code,
-        "reason": reason,
-    }
-    artifacts: list[object] = []
-    for raw_item in evaluation.get("artifacts", []):
-        if not isinstance(raw_item, Mapping) or raw_item.get("artifact_id") not in affected_artifact_ids:
-            artifacts.append(raw_item)
-            continue
-        item = dict(raw_item)
-        raw_scanner_evidence = item.get("scanner_evidence")
-        scanner_evidence: list[object] = (
-            [
-                dict(raw_evidence)
-                for raw_evidence in raw_scanner_evidence
-                if isinstance(raw_evidence, Mapping) and raw_evidence.get("source") != "approval_reuse"
-            ]
-            if isinstance(raw_scanner_evidence, list)
-            else []
-        )
-        scanner_evidence.append(evidence)
-        item["scanner_evidence"] = scanner_evidence
-        item["approval_reuse_status"] = "rejected"
-        item["approval_reuse_reason_code"] = reason_code
-        approval_reuse = item.get("approval_reuse")
-        item["approval_reuse"] = {
-            **(dict(approval_reuse) if isinstance(approval_reuse, Mapping) else {}),
-            "action": item.get("policy_action"),
-            "status": "rejected",
-            "reason_code": reason_code,
-            "should_claim": False,
-        }
-        item = _artifact_with_authority_updates(
-            item,
-            reason=reason_code,
-            composition_updates={
-                "claim_revalidation": revalidation_status,
-                "claim_revalidation_reason": reason_code,
-            },
-        )
-        artifacts.append(item)
-    return {
-        **evaluation,
-        "artifacts": artifacts,
-        "blocked": True,
-        "approval_claim": {
-            "status": claim_status,
-            "reason_code": reason_code,
-            "artifact_ids": sorted(affected_artifact_ids),
-        },
-    }
-
-
-def _evaluation_with_claim_context_failure(
-    evaluation: dict[str, Any],
-    *,
-    claimed_artifact_ids: set[str],
-) -> dict[str, Any]:
-    """Make a changed post-claim authority terminal and auditable."""
-
-    evidence = {
-        "source": "approval_reuse",
-        "status": "rejected",
-        "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-        "reason": "launch authority changed after the saved approval was claimed",
-    }
-    artifacts: list[object] = []
-    for raw_item in evaluation.get("artifacts", []):
-        if not isinstance(raw_item, Mapping):
-            artifacts.append(raw_item)
-            continue
-        item = dict(raw_item)
-        raw_scanner_evidence = item.get("scanner_evidence")
-        scanner_evidence: list[object] = (
-            [
-                dict(raw_evidence)
-                for raw_evidence in raw_scanner_evidence
-                if isinstance(raw_evidence, Mapping) and raw_evidence.get("source") != "approval_reuse"
-            ]
-            if isinstance(raw_scanner_evidence, list)
-            else []
-        )
-        scanner_evidence.append(evidence)
-        item["scanner_evidence"] = scanner_evidence
-        item["approval_reuse_status"] = "rejected"
-        item["approval_reuse_reason_code"] = _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-        approval_reuse = item.get("approval_reuse")
-        item["approval_reuse"] = {
-            **(dict(approval_reuse) if isinstance(approval_reuse, Mapping) else {}),
-            "action": item.get("policy_action"),
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            "should_claim": False,
-        }
-        item = _artifact_with_authority_updates(
-            item,
-            reason=_APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            composition_updates={
-                "claim_revalidation": "changed",
-                "claim_revalidation_reason": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            },
-        )
-        artifacts.append(item)
-    next_evaluation = {
-        **evaluation,
-        "artifacts": artifacts,
-        "blocked": True,
-        "approval_claim": {
-            "status": "rejected",
-            "reason_code": _APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-            "artifact_ids": sorted(claimed_artifact_ids),
-        },
-    }
     return next_evaluation
 
 
@@ -2153,43 +1593,6 @@ def _build_policy_bundle_decisions(
         device_id=device_id,
         device_name=device_name,
     )
-
-
-def _policy_shadow_mismatch_reason_codes(
-    legacy: list[PolicyDecision],
-    canonical: list[PolicyDecision],
-) -> tuple[str, ...]:
-    if not legacy:
-        return ("legacy_unavailable",)
-
-    def keyed(
-        decisions: list[PolicyDecision],
-    ) -> dict[tuple[str, str, str | None, str | None, str | None, str | None], PolicyDecision]:
-        return {
-            (
-                decision.harness,
-                decision.scope,
-                decision.artifact_id,
-                decision.artifact_hash,
-                decision.workspace,
-                decision.publisher,
-            ): decision
-            for decision in decisions
-        }
-
-    reasons: list[str] = []
-    legacy_by_key = keyed(legacy)
-    canonical_by_key = keyed(canonical)
-    if len(legacy) != len(canonical):
-        reasons.append("row_count")
-    if legacy_by_key.keys() != canonical_by_key.keys():
-        reasons.append("selector_set")
-    shared_keys = legacy_by_key.keys() & canonical_by_key.keys()
-    if any(legacy_by_key[key].action != canonical_by_key[key].action for key in shared_keys):
-        reasons.append("action")
-    if any(legacy_by_key[key].expires_at != canonical_by_key[key].expires_at for key in shared_keys):
-        reasons.append("expiration")
-    return tuple(reasons[:4])
 
 
 def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
@@ -2585,10 +1988,19 @@ def sync_receipts(
                         if isinstance(legacy_payload, dict)
                         else []
                     )
-                    mismatch_reasons = _policy_shadow_mismatch_reason_codes(
-                        legacy_decisions,
-                        canonical_decisions,
-                    )
+                    native_shadow_unavailable = False
+                    try:
+                        mismatch_reasons = _authority.policy_shadow_mismatch(
+                            legacy_decisions,
+                            canonical_decisions,
+                        )
+                    except NativeRunnerAuthorityError:
+                        # Rust owns the shadow comparison. Without its verdict
+                        # the candidate cannot be proven equivalent, so treat it
+                        # as a blocking mismatch: keep the existing policy and
+                        # never activate the new bundle.
+                        native_shadow_unavailable = True
+                        mismatch_reasons = ("native_shadow_unavailable",)
                     blocking_mismatch_reasons = tuple(
                         reason for reason in mismatch_reasons if reason != "legacy_unavailable"
                     )
@@ -2608,7 +2020,10 @@ def sync_receipts(
                             },
                             now,
                         )
-                    if canonical_enforcement and blocking_mismatch_reasons:
+                    if native_shadow_unavailable:
+                        validated_policy_bundle = None
+                        policy_bundle_rejection_reason = "native_shadow_unavailable"
+                    elif canonical_enforcement and blocking_mismatch_reasons:
                         validated_policy_bundle = None
                         policy_bundle_rejection_reason = "canonical_shadow_mismatch"
                 else:
