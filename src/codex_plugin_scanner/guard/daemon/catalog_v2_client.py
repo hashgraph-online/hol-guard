@@ -13,7 +13,6 @@ import hashlib
 import http.client
 import time
 import urllib.error
-import urllib.request
 from collections import OrderedDict
 from dataclasses import dataclass
 from urllib.parse import quote, urlencode
@@ -166,10 +165,9 @@ class CatalogV2Client:
         headers = {"X-Guard-Token": client.auth_token}
         if if_none_match is not None:
             headers["If-None-Match"] = if_none_match
-        url = f"{client.daemon_url}{CATALOG_V2_PATH}{route}" + (f"?{query}" if query else "")
-        request = urllib.request.Request(url, headers=headers, method="GET")
+        path = f"{CATALOG_V2_PATH}{route}" + (f"?{query}" if query else "")
         try:
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+            with client.open_get(path, headers, timeout=self._timeout) as response:
                 raw = client._read_response_with_deadline(
                     response, deadline=deadline, max_bytes=MAX_CATALOG_V2_PAGE_BYTES
                 )
