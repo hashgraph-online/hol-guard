@@ -28,11 +28,12 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use guard_contracts::{
-    EgressNeedV1, EgressOutcomeV1, EgressSuppliedV1, EGRESS_MAX_HEADERS, EGRESS_MAX_NEEDS,
-    EGRESS_MAX_NEED_BODY_BYTES, EGRESS_MAX_SUPPLIED,
+    ArchiveInspectionSpecV1, ArchiveVerdictV1, EgressNeedV1, EgressOutcomeV1, EgressSuppliedV1,
+    EGRESS_MAX_HEADERS, EGRESS_MAX_NEEDS, EGRESS_MAX_NEED_BODY_BYTES, EGRESS_MAX_SUPPLIED,
 };
 use sha2::{Digest, Sha256};
 
+pub use crate::egress_archive::{exchange_archive, supplied_inspection, ArchiveExchange};
 use crate::egress_spool::response_body;
 use crate::guard_sync_transport::{SyncHttpError, SyncResponse};
 use crate::supply_chain_package_eval::GuardSyncRequest;
@@ -65,22 +66,6 @@ impl EgressClass {
     }
 }
 
-/// What the caller did with an external-archive need.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ArchiveExchange {
-    Downloaded {
-        sha256: String,
-        size: u64,
-        final_url: String,
-    },
-    Failed {
-        code: String,
-        message: String,
-    },
-    /// No answer is available: the need was recorded, deferred or refused.
-    Unavailable(String),
-}
-
 /// Reason reported when no caller is brokering the exchange (the scope denies all
 /// network access), as opposed to an exchange that was merely deferred or recorded.
 pub const NO_BROKERED_CALLER: &str = "egress unavailable: no brokered caller";
@@ -96,6 +81,9 @@ struct State {
     needs: Vec<EgressNeedV1>,
     pending: bool,
     pending_delay: f64,
+    /// Offline inspection verdicts the caller reported for archives it
+    /// downloaded, by archive digest.
+    inspections: HashMap<String, ArchiveVerdictV1>,
 }
 
 thread_local! {
@@ -155,6 +143,7 @@ impl EgressScope {
             needs: Vec::new(),
             pending: false,
             pending_delay: 0.0,
+            inspections: HashMap::new(),
         })
     }
 
@@ -169,6 +158,7 @@ impl EgressScope {
             needs: Vec::new(),
             pending: false,
             pending_delay: 0.0,
+            inspections: HashMap::new(),
         })
     }
 
@@ -206,6 +196,24 @@ pub fn needs_pending() -> bool {
     ACTIVE.with(|cell| cell.borrow().as_ref().is_some_and(|state| state.pending))
 }
 
+/// Keep the verdict the caller reported for the archive with this digest.
+pub(crate) fn record_inspection(sha256: &str, verdict: ArchiveVerdictV1) {
+    ACTIVE.with(|cell| {
+        if let Some(state) = cell.borrow_mut().as_mut() {
+            state.inspections.insert(sha256.to_owned(), verdict);
+        }
+    });
+}
+
+/// The verdict recorded for the archive with this digest, if any.
+pub(crate) fn recorded_inspection(sha256: &str) -> Option<ArchiveVerdictV1> {
+    ACTIVE.with(|cell| {
+        cell.borrow()
+            .as_ref()
+            .and_then(|state| state.inspections.get(sha256).cloned())
+    })
+}
+
 /// Record a retry pause. It is handed to the caller as a delay before the next
 /// exchange instead of being slept here.
 pub fn pause(seconds: f64) {
@@ -224,7 +232,7 @@ pub fn pause(seconds: f64) {
     let _ = recorded;
 }
 
-enum Resolution {
+pub(crate) enum Resolution {
     Supplied(EgressOutcomeV1, Option<PathBuf>),
     Unavailable(&'static str),
 }
@@ -277,21 +285,23 @@ impl State {
             max_redirects: spec.max_redirects,
             max_response_bytes: spec.max_response_bytes,
             delay_seconds: std::mem::take(&mut self.pending_delay),
+            inspect: spec.inspect.clone(),
         });
         self.pending = true;
         Resolution::Unavailable("egress pending the caller")
     }
 }
 
-struct NeedSpec<'a> {
-    method: &'a str,
-    url: &'a str,
-    headers: BTreeMap<String, String>,
-    body: Option<&'a [u8]>,
-    body_sha256: String,
-    timeout_seconds: f64,
-    max_redirects: u32,
-    max_response_bytes: u64,
+pub(crate) struct NeedSpec<'a> {
+    pub(crate) method: &'a str,
+    pub(crate) url: &'a str,
+    pub(crate) headers: BTreeMap<String, String>,
+    pub(crate) body: Option<&'a [u8]>,
+    pub(crate) body_sha256: String,
+    pub(crate) timeout_seconds: f64,
+    pub(crate) max_redirects: u32,
+    pub(crate) max_response_bytes: u64,
+    pub(crate) inspect: Option<ArchiveInspectionSpecV1>,
 }
 
 fn body_digest(body: Option<&[u8]>) -> String {
@@ -300,7 +310,7 @@ fn body_digest(body: Option<&[u8]>) -> String {
         .unwrap_or_default()
 }
 
-fn resolve(class: EgressClass, spec: &NeedSpec<'_>) -> Option<Resolution> {
+pub(crate) fn resolve(class: EgressClass, spec: &NeedSpec<'_>) -> Option<Resolution> {
     ACTIVE.with(|cell| {
         cell.borrow_mut()
             .as_mut()
@@ -325,6 +335,7 @@ pub(crate) fn exchange(
         timeout_seconds,
         max_redirects,
         max_response_bytes,
+        inspect: None,
     };
     match resolve(class, &spec) {
         Some(Resolution::Supplied(outcome, spool)) => {
@@ -361,53 +372,6 @@ fn no_scope(
         max_redirects,
         max_response_bytes,
     )
-}
-
-/// One external-archive download, answered by the caller.
-pub fn exchange_archive(
-    url: &str,
-    max_bytes: u64,
-    max_redirects: u32,
-    timeout_seconds: f64,
-) -> ArchiveExchange {
-    let spec = NeedSpec {
-        method: "GET",
-        url,
-        headers: BTreeMap::new(),
-        body: None,
-        body_sha256: String::new(),
-        timeout_seconds,
-        max_redirects,
-        max_response_bytes: max_bytes,
-    };
-    match resolve(EgressClass::Archive, &spec) {
-        Some(Resolution::Supplied(
-            EgressOutcomeV1::Archive {
-                sha256,
-                size,
-                final_url,
-            },
-            _,
-        )) => ArchiveExchange::Downloaded {
-            sha256,
-            size,
-            final_url,
-        },
-        Some(Resolution::Supplied(EgressOutcomeV1::ArchiveFailure { code, message }, _)) => {
-            ArchiveExchange::Failed { code, message }
-        }
-        Some(Resolution::Supplied(EgressOutcomeV1::Blocked { code }, _)) => {
-            ArchiveExchange::Failed {
-                message: "managed network policy refused the archive download".to_owned(),
-                code,
-            }
-        }
-        Some(Resolution::Supplied(..)) => {
-            ArchiveExchange::Unavailable("egress outcome does not match the request".to_owned())
-        }
-        Some(Resolution::Unavailable(reason)) => ArchiveExchange::Unavailable(reason.to_owned()),
-        None => ArchiveExchange::Unavailable(NO_BROKERED_CALLER.to_owned()),
-    }
 }
 
 fn replay_outcome(

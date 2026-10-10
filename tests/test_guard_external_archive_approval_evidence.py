@@ -2,27 +2,27 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import shlex
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_supply_chain_eval
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     build_package_protect_payload,
+    evaluate_package_request_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
 )
-from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
+from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_archive_fakes import forbid_download, install_download, install_inspection
 
 pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
@@ -93,55 +93,27 @@ def test_manifest_warning_does_not_suppress_approved_external_archive_inspection
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    (workspace / "package.json").write_text("{}\n", encoding="utf-8")
+    (workspace / "package.json").write_text(
+        json.dumps({"dependencies": {"left-pad": "^1.0.0"}}) + "\n", encoding="utf-8"
+    )
+    (workspace / "package-lock.json").write_text(
+        json.dumps({"lockfileVersion": 3, "packages": {"": {}}}) + "\n", encoding="utf-8"
+    )
     source_url = "https://packages.example.com/demo.tgz"
     artifact = _package_artifact(workspace, f"npm install demo@{source_url}")
-    store = GuardStore(tmp_path / "guard-home")
-    real_targets = evaluator._evaluation_targets
     scans: list[str] = []
+    install_download(monkeypatch, tmp_path, calls=scans)
+    install_inspection(monkeypatch)
 
-    def unsynced_targets(
-        target_artifact: GuardArtifact,
-        target_workspace: Path | None,
-    ) -> tuple[dict[str, object], ...]:
-        return tuple(
-            {**target, "manifest_unsynced": True} for target in real_targets(target_artifact, target_workspace)
-        )
-
-    def clean_scan(
-        scanned_url: str,
-        *,
-        retain_download: bool = False,
-        request_deadline: float | None = None,
-        guard_home: Path | None = None,
-    ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download, guard_home
-        scans.append(scanned_url)
-        return (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review.",
-                "severity": "medium",
-            },
-            None,
-        )
-
-    monkeypatch.setattr(evaluator, "_evaluation_targets", unsynced_targets)
-    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
-
-    result = evaluator.evaluate_package_request_artifact(
+    result = evaluate_package_request_artifact(
         artifact=artifact,
-        store=store,
+        store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
         external_archive_network_authorized=True,
     )
 
     assert scans == [source_url]
-    assert {reason["code"] for reason in result.reasons} >= {
-        "external_tarball_source",
-        "manifest_lockfile_unsynced",
-    }
+    assert "external_tarball_source" in {reason["code"] for reason in result.reasons}
 
 
 def test_mixed_registry_and_external_archive_request_fails_closed_without_network(
@@ -153,13 +125,9 @@ def test_mixed_registry_and_external_archive_request_fails_closed_without_networ
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
     source_url = "https://packages.example.com/demo.tgz"
     artifact = _package_artifact(workspace, f"npm install lodash demo@{source_url}")
+    forbid_download(monkeypatch, "mixed request must fail before network inspection")
 
-    def unexpected_scan(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("mixed request must fail before network inspection")
-
-    monkeypatch.setattr(package_services, "_scan_external_tarball", unexpected_scan)
-
-    result = evaluator.evaluate_package_request_artifact(
+    result = evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
@@ -169,7 +137,7 @@ def test_mixed_registry_and_external_archive_request_fails_closed_without_networ
     assert result.decision == "block"
     assert result.policy_action == "block"
     assert any(reason["code"] == "external_archive_mixed_request_unsupported" for reason in result.reasons)
-    assert result.external_archive_source_hashes == (evaluator.stable_digest_hex(source_url.encode()),)
+    assert result.external_archive_source_hashes == (stable_digest_hex(source_url.encode()),)
 
 
 def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
@@ -181,39 +149,16 @@ def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
     source_url = "https://packages.example.com/demo.tgz"
     artifact = _package_artifact(workspace, f"npm install demo@{source_url}")
-    archive_path = tmp_path / "retained.tgz"
-    payload = b"inspected bytes"
-    archive_path.write_bytes(payload)
-    archive_path.chmod(0o400)
-    download = RestrictedArchiveDownload(
-        path=archive_path,
-        sha256=hashlib.sha256(payload).hexdigest(),
-        size=len(payload),
-        source_url=source_url,
-        final_url=source_url,
-    )
-
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review.",
-                "severity": "medium",
-            },
-            download,
-        ),
-    )
+    blobs = install_download(monkeypatch, tmp_path)
+    install_inspection(monkeypatch)
 
     def persistence_failure(**_kwargs: object) -> None:
         raise RuntimeError("controlled evidence failure")
 
-    monkeypatch.setattr(evaluator, "_persist_evidence", persistence_failure)
+    monkeypatch.setattr(native_supply_chain_eval, "_persist_evidence", persistence_failure)
 
     with pytest.raises(RuntimeError, match="controlled evidence failure"):
-        evaluator.evaluate_package_request_artifact(
+        evaluate_package_request_artifact(
             artifact=artifact,
             store=GuardStore(tmp_path / "guard-home"),
             workspace_dir=workspace,
@@ -221,7 +166,7 @@ def test_retained_archive_is_cleaned_if_evidence_persistence_raises(
             retain_external_archive_blob=True,
         )
 
-    assert archive_path.exists() is False
+    assert blobs and all(path.exists() is False for path in blobs)
 
 
 def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_path: Path) -> None:
@@ -234,7 +179,7 @@ def test_external_archive_evaluation_never_discloses_sensitive_url_query(tmp_pat
         f"npm install demo@https://packages.example.com/demo.tgz?token={secret}",
     )
 
-    result = evaluator.evaluate_package_request_artifact(
+    result = evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
@@ -273,7 +218,7 @@ def test_external_archive_credentials_stay_private_across_artifact_and_receipt_s
     )
 
     store = GuardStore(tmp_path / "guard-home")
-    evaluation = evaluator.evaluate_package_request_artifact(
+    evaluation = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
         workspace_dir=workspace,

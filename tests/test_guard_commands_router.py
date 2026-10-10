@@ -38,7 +38,6 @@ def test_auto_hook_router_dispatches_before_request_config_load(
     guard_home = tmp_path / "guard-home"
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(commands_router, "native_mode", lambda: "auto")
     monkeypatch.setattr(commands_router, "resolve_guard_home", lambda _override: guard_home)
     monkeypatch.setattr(commands_router, "_resolve_guard_workspace", lambda _args, **_kwargs: None)
     monkeypatch.setattr(commands_router, "enforce_lifecycle_gate", lambda *_args, **_kwargs: None)

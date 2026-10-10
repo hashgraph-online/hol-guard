@@ -12,7 +12,6 @@ if TYPE_CHECKING:
     from .commands_support_workspace import _resolve_guard_workspace
 
 
-from ..native_runtime import native_mode
 from ._commands_shared import *
 from .approval_gate_prompt import print_approval_gate_error
 from .commands_lifecycle_gate import enforce_lifecycle_gate
@@ -219,7 +218,7 @@ def run_guard_command(
     except (TimeoutError, ValueError) as error:
         print(f"Error: {error}", file=sys.stderr)
         return 2
-    if args.guard_command == "hook" and native_mode() in {"auto", "force"}:
+    if args.guard_command == "hook":
         # Native hooks receive the raw envelope before any request-time
         # configuration or policy-file read.  HookWorker's startup publisher
         # owns the cached ACKed snapshot; a barrier miss returns fail-safe.

@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.supply_chain_bundle import (
     evaluate_cached_supply_chain_bundle,
     load_supply_chain_bundle_response,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_python_phase12_support import (
     WORKSPACE_ID as PYTHON_WORKSPACE_ID,
@@ -21,6 +21,7 @@ from tests.guard_python_phase12_support import (
     bundle_response_fixture,
     package_fixture,
 )
+from tests.native_workspace import bind_workspace
 from tests.test_guard_js_supply_chain_phase11 import WORKSPACE_ID, _artifact_from_command, _bundle_response, _write_text
 from tests.test_guard_supply_chain_bundle import _bundle_dict, _generate_key_pair, _sign_bundle_response
 
@@ -53,7 +54,7 @@ def test_maintainer_compromise_reason_blocks_high_risk_package(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -96,7 +97,7 @@ def test_yanked_release_blocks_requested_python_version_with_safer_fix_copy(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: PYTHON_WORKSPACE_ID)
+    bind_workspace(store, PYTHON_WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         PYTHON_WORKSPACE_ID,
         bundle_response_fixture(

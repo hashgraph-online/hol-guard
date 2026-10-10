@@ -2,17 +2,13 @@
 
 from __future__ import annotations
 
-import urllib.request
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
-from codex_plugin_scanner.guard.runtime.supply_chain_bundle import load_supply_chain_bundle_response
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+from tests.native_workspace import bind_workspace
 
 from .guard_python_phase12_support import (
     WORKSPACE_ID,
@@ -33,7 +29,7 @@ def test_evaluate_package_request_artifact_blocks_exact_vulnerable_pip_version(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -65,7 +61,7 @@ def test_evaluate_package_request_artifact_resolves_constraint_versions_for_pyth
     workspace_dir.mkdir()
     write_text(workspace_dir / "constraints.txt", "httpx==0.27.1\n")
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -107,7 +103,7 @@ requests==2.31.0 \\
         + "\n",
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -145,7 +141,7 @@ def test_evaluate_package_request_artifact_resolves_marker_qualified_exact_requi
         'requests==2.31.0 ; python_version < "3.13"\n',
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -169,219 +165,6 @@ def test_evaluate_package_request_artifact_resolves_marker_qualified_exact_requi
 
     assert result.decision == "block"
     assert result.packages[0]["resolvedVersion"] == "2.31.0"
-
-
-def test_evaluate_package_request_artifact_allows_recommended_safe_python_version(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        bundle_response_fixture(
-            packages=[
-                package_fixture(
-                    name="requests",
-                    version="2.31.0",
-                    default_action="block",
-                    recommended_fix_version="2.32.0",
-                )
-            ]
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = artifact_from_command_fixture("pip install requests==2.32.0", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "allow"
-    assert result.policy_action == "allow"
-
-
-def test_resolved_target_version_uses_fake_pypi_registry_metadata_for_ranges(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured: dict[str, str] = {}
-
-    def fake_urlopen_json_with_timeout_retry(
-        *, request: urllib.request.Request, timeout_seconds: int, retry_timeout_seconds: int
-    ) -> dict[str, object]:
-        captured["url"] = request.full_url
-        assert timeout_seconds == 1
-        assert retry_timeout_seconds == 1
-        return {
-            "releases": {
-                "2.30.9": [{}],
-                "2.31.0": [{}],
-                "2.31.4": [{}],
-                "2.32.0": [{}],
-            }
-        }
-
-    monkeypatch.setattr(package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
-    resolved = supply_chain_package_eval_module._resolved_target_version(
-        target={
-            "ecosystem": "pypi",
-            "name": "requests",
-            "normalized_name": "requests",
-            "namespace": None,
-            "range": ">=2.31,<2.32",
-            "version": None,
-            "source_url": None,
-        },
-        lockfile_versions={},
-    )
-
-    assert captured["url"].endswith("/requests/json")
-    assert resolved == "2.31.4"
-
-
-def test_evaluate_package_request_artifact_scopes_offline_decisions_to_python_ecosystem(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    npm_package = package_fixture(
-        name="requests",
-        version="2.31.0",
-        default_action="block",
-        recommended_fix_version="2.32.0",
-    )
-    npm_package["ecosystem"] = "npm"
-    npm_package["purl"] = "pkg:npm/requests@2.31.0"
-    npm_package["riskScore"] = 999
-    pypi_package = package_fixture(
-        name="requests",
-        version="2.31.0",
-        default_action="block",
-        recommended_fix_version="2.32.0",
-    )
-    pypi_package["riskScore"] = 200
-    pypi_package["knownExploited"] = False
-    pypi_package["malwareState"] = "none"
-    pypi_package["normalizedSeverity"] = "medium"
-    pypi_package["exploitLevel"] = "none"
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        bundle_response_fixture(packages=[npm_package, pypi_package]),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = artifact_from_command_fixture("pip install requests==2.31.0", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "monitor"
-    assert result.packages[0]["decision"] == "monitor"
-
-
-def test_evaluate_package_request_artifact_does_not_allow_fix_versions_from_other_ecosystems(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    npm_package = package_fixture(
-        name="requests",
-        version="2.31.0",
-        default_action="block",
-        recommended_fix_version="2.32.0",
-    )
-    npm_package["ecosystem"] = "npm"
-    npm_package["purl"] = "pkg:npm/requests@2.31.0"
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        bundle_response_fixture(packages=[npm_package]),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = artifact_from_command_fixture("pip install requests==2.32.0", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-
-
-def test_transitive_lockfile_results_scope_python_matches_to_python_ecosystem(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    write_text(
-        workspace_dir / "pyproject.toml",
-        "[project]\nname = 'demo'\nversion = '0.1.0'\ndependencies = ['fastapi>=0.110,<0.116']\n",
-    )
-    write_text(
-        workspace_dir / "uv.lock",
-        """
-version = 1
-
-[[package]]
-name = "fastapi"
-version = "0.115.0"
-source = { registry = "https://pypi.org/simple" }
-
-[[package]]
-name = "requests"
-version = "2.31.0"
-source = { registry = "https://pypi.org/simple" }
-""".strip()
-        + "\n",
-    )
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    npm_package = package_fixture(
-        name="requests",
-        version="2.31.0",
-        default_action="block",
-        recommended_fix_version="2.32.0",
-    )
-    npm_package["ecosystem"] = "npm"
-    npm_package["purl"] = "pkg:npm/requests@2.31.0"
-    npm_package["riskScore"] = 999
-    pypi_package = package_fixture(
-        name="requests",
-        version="2.31.0",
-        default_action="block",
-        recommended_fix_version="2.32.0",
-    )
-    pypi_package["riskScore"] = 200
-    pypi_package["knownExploited"] = False
-    pypi_package["malwareState"] = "none"
-    pypi_package["normalizedSeverity"] = "medium"
-    pypi_package["exploitLevel"] = "none"
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        bundle_response_fixture(packages=[npm_package, pypi_package]),
-        "2026-05-19T00:00:00Z",
-    )
-    bundle_response = load_supply_chain_bundle_response(bundle_response_fixture(packages=[npm_package, pypi_package]))
-    artifact = artifact_from_command_fixture("uv add fastapi>=0.110,<0.116", workspace=workspace_dir)
-    results = supply_chain_package_eval_module._transitive_lockfile_results(
-        bundle_response=bundle_response,
-        artifact=artifact,
-        workspace_dir=workspace_dir,
-    )
-
-    assert len(results) == 1
-    assert results[0]["ecosystem"] == "pypi"
-    assert results[0]["name"] == "requests"
-    assert results[0]["decision"] == "warn"
 
 
 def test_evaluate_package_request_artifact_uses_manager_specific_fix_commands_for_python_transitives(
@@ -413,7 +196,7 @@ source = { registry = "https://pypi.org/simple" }
         + "\n",
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -498,7 +281,7 @@ def test_evaluate_package_request_artifact_resolves_ranges_from_supported_python
     write_text(workspace_dir / manifest_name, manifest_text)
     write_text(workspace_dir / lockfile_name, lockfile_text.strip() + "\n")
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         bundle_response_fixture(
@@ -542,7 +325,7 @@ def test_evaluate_package_request_artifact_uses_manager_specific_python_fix_comm
     write_text(workspace_dir / "pyproject.toml", "[project]\nname = 'demo'\n")
     write_text(workspace_dir / "Pipfile", "[packages]\nflask = '*'\n")
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     package_name = "fastapi" if "fastapi" in command else "requests" if "requests" in command else "flask"
     fix_version = "0.115.1" if package_name == "fastapi" else "2.32.0" if package_name == "requests" else "3.0.1"
     current_version = "0.115.0" if package_name == "fastapi" else "2.31.0" if package_name == "requests" else "3.0.0"

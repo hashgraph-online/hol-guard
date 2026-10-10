@@ -12,7 +12,7 @@ import pytest
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.protect import build_protect_payload
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )

@@ -19,7 +19,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_scope_support import package_request_runtime_workspace_scope
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
-from codex_plugin_scanner.guard.local_supply_chain import package_request_policy_hash
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact, package_request_policy_hash
 from codex_plugin_scanner.guard.mcp_tool_calls import ToolCallDecision
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
@@ -29,7 +29,6 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     extract_package_intent_request,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = [

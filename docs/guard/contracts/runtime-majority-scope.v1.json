@@ -41,14 +41,6 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.daemon.hook_process_entrypoint",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
-        "module": "codex_plugin_scanner.guard.daemon.hook_process_runner",
-        "surface": "hook_http_and_cli_events"
-      },
-      {
         "module": "codex_plugin_scanner.guard.daemon.runtime_hook_scheduler",
         "surface": "hook_http_and_cli_events"
       },
@@ -482,6 +474,7 @@
           "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
           "src/codex_plugin_scanner/guard/runtime/verified_*.py",
           "src/codex_plugin_scanner/guard/runtime/supply_chain*.py",
+          "src/codex_plugin_scanner/guard/runtime/package_request_evaluation.py",
           "src/codex_plugin_scanner/guard/runtime/command_*.py",
           "src/codex_plugin_scanner/guard/runtime/shell_*.py",
           "src/codex_plugin_scanner/guard/runtime/secret_file_request*",
