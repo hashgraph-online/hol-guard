@@ -135,14 +135,17 @@ def native_approval_queue_identities(
         raise ApprovalQueueIdentityUnavailableError
     identities: list[QueueIdentity] = []
     for entry in reply:
-        fields = (
-            (entry.get("identity_key"), entry.get("action_identity"), entry.get("queue_group_id"))
-            if isinstance(entry, dict)
-            else ()
-        )
-        if len(fields) != 3 or not all(isinstance(field, str) and field for field in fields[1:]):
+        if not isinstance(entry, dict):
             raise ApprovalQueueIdentityUnavailableError
-        if not isinstance(fields[0], str):
+        identity_key = entry.get("identity_key")
+        action_identity = entry.get("action_identity")
+        queue_group_id = entry.get("queue_group_id")
+        # identity_key may be empty; the action and queue ids must be present.
+        if not isinstance(identity_key, str):
             raise ApprovalQueueIdentityUnavailableError
-        identities.append(QueueIdentity(fields[0], fields[1], fields[2]))
+        if not isinstance(action_identity, str) or not action_identity:
+            raise ApprovalQueueIdentityUnavailableError
+        if not isinstance(queue_group_id, str) or not queue_group_id:
+            raise ApprovalQueueIdentityUnavailableError
+        identities.append(QueueIdentity(identity_key, action_identity, queue_group_id))
     return identities
