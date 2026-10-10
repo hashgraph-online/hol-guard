@@ -54,7 +54,7 @@ pub use bound_open::{
 };
 pub use capture::{
     capture as capture_managed_child, capture_owned_child, capture_pipes, CaptureCommand,
-    CapturePipes, CapturedOutput,
+    CapturePipes, CapturedOutput, InheritWindow,
 };
 pub use directory_binding::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,

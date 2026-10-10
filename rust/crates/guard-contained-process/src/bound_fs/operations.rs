@@ -204,6 +204,11 @@ impl Directory {
         };
         file.write_all(bytes)?;
         file.sync_all()?;
+        // The new name is only durable once its directory entry is flushed.
+        #[cfg(unix)]
+        if unsafe { libc::fsync(parent.file.as_raw_fd()) } != 0 {
+            return Err(io::Error::last_os_error());
+        }
         parent.verify()?;
         Ok(())
     }

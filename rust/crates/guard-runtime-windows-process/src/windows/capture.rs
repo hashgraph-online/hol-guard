@@ -1,6 +1,7 @@
 use super::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
+use winapi::um::winbase::HANDLE_FLAG_INHERIT;
 use winapi::um::winbase::{
     FILE_FLAG_OVERLAPPED, PIPE_ACCESS_INBOUND, PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE, PIPE_WAIT,
 };
@@ -19,7 +20,8 @@ pub struct CapturedOutput {
     pub cancelled: bool,
 }
 
-/// Child handles are inheritable; only these three belong in HANDLE_LIST.
+/// Child handles are inheritable only inside `inheritable_window`; only these
+/// three belong in HANDLE_LIST.
 /// Parent handles use owned overlapped operations and cannot be inherited.
 pub struct CapturePipes {
     pub child_stdin: OwnedHandle,
@@ -79,11 +81,63 @@ fn pipe(write: bool, security: &mut SECURITY_ATTRIBUTES) -> io::Result<(OwnedHan
     Ok((child, Operation::new(parent)?.connect()?))
 }
 
+static LAUNCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Marks the three child pipe ends inheritable and serializes capture launches
+/// for as long as it lives, so a concurrent capture's CreateProcessW cannot
+/// inherit another capture's pipes. Dropping it clears the flags again.
+pub struct InheritWindow {
+    handles: [HANDLE; 3],
+    _launch: std::sync::MutexGuard<'static, ()>,
+}
+
+// SAFETY: The raw handles are only used for SetHandleInformation while the
+// owning CapturePipes (borrowed for this window) keeps them open.
+unsafe impl Send for InheritWindow {}
+
+impl Drop for InheritWindow {
+    fn drop(&mut self) {
+        for handle in self.handles {
+            unsafe {
+                SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+            }
+        }
+    }
+}
+
+impl CapturePipes {
+    /// Hold the returned guard only across the launching `CreateProcessW`.
+    pub fn inheritable_window(&self) -> io::Result<InheritWindow> {
+        let launch = LAUNCH_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let handles = [
+            self.child_stdin.as_raw_handle() as HANDLE,
+            self.child_stdout.as_raw_handle() as HANDLE,
+            self.child_stderr.as_raw_handle() as HANDLE,
+        ];
+        let window = InheritWindow {
+            handles,
+            _launch: launch,
+        };
+        for handle in handles {
+            if unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT, HANDLE_FLAG_INHERIT) }
+                == FALSE
+            {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        Ok(window)
+    }
+}
+
 pub fn capture_pipes() -> io::Result<CapturePipes> {
     let mut security = SECURITY_ATTRIBUTES {
         nLength: size_of::<SECURITY_ATTRIBUTES>() as DWORD,
         lpSecurityDescriptor: null_mut(),
-        bInheritHandle: TRUE,
+        // Child ends are born non-inheritable. They are made inheritable only
+        // inside `inheritable_window`, around the launching CreateProcessW.
+        bInheritHandle: FALSE,
     };
     let (child_stdin, parent_stdin) = pipe(true, &mut security)?;
     let (child_stdout, parent_stdout) = pipe(false, &mut security)?;

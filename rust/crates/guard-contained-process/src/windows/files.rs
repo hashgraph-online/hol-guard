@@ -168,10 +168,28 @@ pub(crate) fn promote_transaction(
         return Err(error);
     }
     if !published_object(parent, name, &written.identity)? {
+        // The published name no longer maps to our object: another writer
+        // owns it now and must not be overwritten. The displaced object stays
+        // in recovery/old.
         return Err(crate::bound_fs::changed());
     }
     if let Some(old) = old.as_ref() {
-        delete_object(old)?;
+        if let Err(error) = delete_object(old) {
+            // Disposal failed after publication. Put the old target back so
+            // the caller sees an ordinary failed replacement, or say plainly
+            // that the new bytes are committed when that is impossible.
+            let restored = rename_bound(&new, recovery, OsStr::new("new"), false)
+                .and_then(|()| rename_bound(old, parent, name, false));
+            return match restored {
+                Ok(()) => {
+                    let _ = delete_object(&new);
+                    Err(error)
+                }
+                Err(_) => Err(io::Error::other(
+                    "promotion committed; displaced object retained in recovery",
+                )),
+            };
+        }
     }
     parent.verify()
 }

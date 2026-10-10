@@ -52,9 +52,66 @@ pub(super) fn replace(
     ));
     parent.mkdir_all(Path::new(&recovery_name))?;
     let recovery = parent.directory(Path::new(&recovery_name))?;
-    recovery.create(Path::new("new"), bytes, false)?;
+    #[cfg(windows)]
+    {
+        let operation = (|| {
+            recovery.create(Path::new("new"), bytes, false)?;
+            let written = recovery.read(Path::new("new"), LIMIT)?;
+            parent.verify()?;
+            crate::windows::promote_transaction(&parent, name, &recovery, expected, &written)
+        })();
+        let cleanup = finish_recovery(&parent, &recovery_name, recovery);
+        operation.and(cleanup)
+    }
     #[cfg(unix)]
-    if let Some(before) = before.as_ref() {
+    {
+        let mut staged = None;
+        let operation = (|| {
+            recovery.create(Path::new("new"), bytes, false)?;
+            let written = recovery.read(Path::new("new"), LIMIT)?;
+            staged = Some((written.identity.clone(), written.digest.clone()));
+            publish_staged(
+                root,
+                path,
+                &parent,
+                name,
+                &recovery,
+                before.as_ref(),
+                expected,
+                &written,
+            )
+        })();
+        // Every exit after the recovery directory exists reaches this point.
+        // Staged bytes we wrote ourselves are discarded when still unchanged;
+        // displaced or raced user objects are never matched and stay retained.
+        if let Some((id, digest)) = staged.as_ref() {
+            if recovery
+                .read(Path::new("new"), LIMIT)
+                .is_ok_and(|file| matches(&file, (id, digest)))
+            {
+                let _ = recovery.unlink(Path::new("new"), false);
+            }
+        }
+        let cleanup = finish_recovery(&parent, &recovery_name, recovery);
+        let durable = sync_directory(&parent);
+        let verified = parent.verify();
+        operation.and(cleanup).and(durable).and(verified)
+    }
+}
+
+#[cfg(unix)]
+#[allow(clippy::too_many_arguments)]
+fn publish_staged(
+    root: &Directory,
+    path: &Path,
+    parent: &Directory,
+    name: &OsStr,
+    recovery: &Directory,
+    before: Option<&ReadFile>,
+    expected: Option<(&Identity, &str)>,
+    written: &ReadFile,
+) -> io::Result<()> {
+    if let Some(before) = before {
         let original = root.open_file(path)?;
         if !same_object(&identity(&original)?, &before.identity) {
             return Err(changed());
@@ -70,47 +127,55 @@ pub(super) fn replace(
             return Err(io::Error::last_os_error());
         }
     }
-    let written = recovery.read(Path::new("new"), LIMIT)?;
     parent.verify()?;
-    #[cfg(windows)]
-    {
-        let operation =
-            crate::windows::promote_transaction(&parent, name, &recovery, expected, &written);
-        finish_recovery(&parent, &recovery_name, recovery)?;
-        operation
-    }
-    #[cfg(unix)]
-    {
-        let operation = if let Some(expected) = expected {
-            exchange(&recovery, OsStr::new("new"), &parent, name)?;
-            let displaced = recovery.read(Path::new("new"), LIMIT);
-            let current = parent.read(Path::new(name), LIMIT);
-            if displaced.as_ref().is_ok_and(|file| matches(file, expected))
-                && current
-                    .as_ref()
-                    .is_ok_and(|file| matches(file, (&written.identity, &written.digest)))
-            {
-                // Displaced bytes are the exact old target authorized for
-                // replacement. The private recovery directory holds their name.
-                recovery.unlink(Path::new("new"), false)?;
-                Ok(())
-            } else {
-                rollback(&parent, name, &recovery, &written)?;
-                Err(changed())
-            }
-        } else {
-            publish_new(&recovery, OsStr::new("new"), &parent, name)?;
-            if !parent
-                .read(Path::new(name), LIMIT)
-                .is_ok_and(|file| matches(&file, (&written.identity, &written.digest)))
-            {
-                return Err(changed());
-            }
+    if let Some(expected) = expected {
+        exchange(recovery, OsStr::new("new"), parent, name)?;
+        let displaced = recovery.read(Path::new("new"), LIMIT);
+        let current = parent.read(Path::new(name), LIMIT);
+        if displaced.as_ref().is_ok_and(|file| matches(file, expected))
+            && current
+                .as_ref()
+                .is_ok_and(|file| matches(file, (&written.identity, &written.digest)))
+        {
+            // Displaced bytes are the exact old target authorized for
+            // replacement. The private recovery directory holds their name.
+            recovery.unlink(Path::new("new"), false)?;
+            sync_directory(recovery)?;
+            sync_directory(parent)?;
             Ok(())
-        };
-        finish_recovery(&parent, &recovery_name, recovery)?;
-        parent.verify()?;
-        operation
+        } else {
+            rollback(parent, name, recovery, written)?;
+            sync_directory(recovery)?;
+            sync_directory(parent)?;
+            Err(changed())
+        }
+    } else {
+        publish_new(recovery, OsStr::new("new"), parent, name)?;
+        sync_directory(recovery)?;
+        sync_directory(parent)?;
+        if !parent
+            .read(Path::new(name), LIMIT)
+            .is_ok_and(|file| matches(&file, (&written.identity, &written.digest)))
+        {
+            return Err(changed());
+        }
+        Ok(())
+    }
+}
+
+/// Directory entries changed by exchange/link/unlink are only durable once the
+/// containing directory itself reaches stable storage. Plain fsync is used so
+/// macOS does not need F_FULLFSYNC semantics on a directory descriptor.
+#[cfg(unix)]
+fn sync_directory(directory: &Directory) -> io::Result<()> {
+    loop {
+        if unsafe { libc::fsync(directory.handle().as_raw_fd()) } == 0 {
+            return Ok(());
+        }
+        let error = io::Error::last_os_error();
+        if error.kind() != io::ErrorKind::Interrupted {
+            return Err(error);
+        }
     }
 }
 
@@ -250,9 +315,11 @@ pub(super) fn remove(root: &Directory, path: &Path, expected: (&Identity, &str))
                 Err(changed())
             }
         };
+        let synced = sync_directory(&recovery);
         finish_recovery(&parent, &recovery_name, recovery)?;
+        let synced = synced.and(sync_directory(&parent));
         parent.verify()?;
-        operation
+        operation.and(synced)
     }
 }
 
@@ -301,9 +368,11 @@ pub(super) fn remove_directory(
             let _ = move_exclusive(&recovery, OsStr::new("old"), &parent, name);
             Err(changed())
         };
+        let synced = sync_directory(&recovery);
         finish_recovery(&parent, &recovery_name, recovery)?;
+        let synced = synced.and(sync_directory(&parent));
         parent.verify()?;
-        operation
+        operation.and(synced)
     }
 }
 

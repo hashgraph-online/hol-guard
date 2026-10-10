@@ -146,7 +146,8 @@ pub fn capture(
     if Instant::now() >= deadline {
         return Err(io::Error::new(io::ErrorKind::TimedOut, "launch deadline"));
     }
-    if unsafe {
+    let window = pipes.inheritable_window()?;
+    let created = unsafe {
         CreateProcessW(
             executable.as_ptr(),
             line.as_mut_ptr(),
@@ -159,9 +160,11 @@ pub fn capture(
             &mut startup.StartupInfo,
             &mut information,
         )
-    } == FALSE
-    {
-        return Err(io::Error::last_os_error());
+    };
+    let launch_error = io::Error::last_os_error();
+    drop(window);
+    if created == FALSE {
+        return Err(launch_error);
     }
     let process = unsafe { OwnedHandle::from_raw_handle(information.hProcess as RawHandle) };
     let thread = unsafe { OwnedHandle::from_raw_handle(information.hThread as RawHandle) };

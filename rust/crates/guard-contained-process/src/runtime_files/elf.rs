@@ -53,6 +53,32 @@ const MAX_DYNAMIC_ENTRIES: usize = 16_384;
 const MAX_SEARCH_PATHS: usize = 64;
 const MAX_SEARCH_BYTES: usize = 65_536;
 
+// Mirror ld.so for the running architecture: the host multiarch directories
+// first, then lib64 (x86_64 multilib hosts keep their 32-bit compatibility
+// libraries under lib), then lib. Foreign-architecture triplets are never
+// searched, so a library installed for another architecture cannot be
+// captured in place of the one the native loader selects.
+#[cfg(target_arch = "x86_64")]
+const DEFAULT_LIBRARY_DIRECTORIES: [&str; 6] = [
+    "/lib/x86_64-linux-gnu",
+    "/usr/lib/x86_64-linux-gnu",
+    "/lib64",
+    "/usr/lib64",
+    "/lib",
+    "/usr/lib",
+];
+#[cfg(target_arch = "aarch64")]
+const DEFAULT_LIBRARY_DIRECTORIES: [&str; 6] = [
+    "/lib/aarch64-linux-gnu",
+    "/usr/lib/aarch64-linux-gnu",
+    "/lib64",
+    "/usr/lib64",
+    "/lib",
+    "/usr/lib",
+];
+#[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+const DEFAULT_LIBRARY_DIRECTORIES: [&str; 4] = ["/lib64", "/usr/lib64", "/lib", "/usr/lib"];
+
 #[cfg(test)]
 pub(super) fn elf(data: &[u8], library: &Path) -> io::Result<Vec<Import>> {
     elf_with_context(data, library, &[], &|| Ok(()))
@@ -187,16 +213,7 @@ pub(super) fn elf_with_context(
     } else {
         append_paths(&mut search, &inherited_rpath)?;
     }
-    for path in [
-        "/lib",
-        "/lib64",
-        "/usr/lib",
-        "/usr/lib64",
-        "/lib/x86_64-linux-gnu",
-        "/usr/lib/x86_64-linux-gnu",
-        "/lib/aarch64-linux-gnu",
-        "/usr/lib/aarch64-linux-gnu",
-    ] {
+    for path in DEFAULT_LIBRARY_DIRECTORIES {
         append_paths(&mut search, &[PathBuf::from(path)])?;
     }
     let search: std::sync::Arc<[PathBuf]> = search.into();

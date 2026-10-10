@@ -153,6 +153,14 @@ pub(crate) fn capture(
             "legacy CPU/address-space/file/descriptor resource guarantees unavailable on Windows",
         ));
     }
+    // Fail closed: a caller asking for a Seatbelt profile or a completion
+    // report must never get an unconfined launch or an empty report.
+    if isolation.seatbelt.is_some() || isolation.completion_report {
+        return Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Seatbelt profiles and completion reports are unavailable on Windows",
+        ));
+    }
     command.verify_bindings()?;
     let result = capture_native(
         &command,
@@ -247,6 +255,7 @@ fn capture_native(
             "AppContainer request expired before process creation",
         ));
     }
+    let window = pipes.inheritable_window()?;
     let created = unsafe {
         CreateProcessW(
             executable.as_ptr(),
@@ -261,8 +270,10 @@ fn capture_native(
             &mut process,
         )
     };
+    let launch_error = io::Error::last_os_error();
+    drop(window);
     if created == 0 {
-        return Err(io::Error::last_os_error());
+        return Err(launch_error);
     }
     let process_handle = unsafe { OwnedHandle::from_raw_handle(process.hProcess) };
     let thread_handle = unsafe { OwnedHandle::from_raw_handle(process.hThread) };

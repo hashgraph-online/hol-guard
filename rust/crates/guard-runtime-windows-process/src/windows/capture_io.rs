@@ -26,30 +26,37 @@ struct Resources {
 // cancellation with no caller-borrowed pointers or concurrent access.
 unsafe impl Send for Resources {}
 
+/// Block until the cancelled operation completes, then drop its storage.
+/// An operation whose completion cannot be verified may still be writing into
+/// its buffer, so that storage is leaked rather than released.
+fn complete_and_release(mut resources: Resources) {
+    let mut count = 0;
+    let completed = unsafe {
+        GetOverlappedResult(
+            resources.handle.as_raw_handle() as HANDLE,
+            &mut *resources.overlapped,
+            &mut count,
+            TRUE,
+        )
+    };
+    if completed == FALSE
+        && !matches!(
+            unsafe { GetLastError() },
+            ERROR_OPERATION_ABORTED | ERROR_BROKEN_PIPE | ERROR_NO_DATA
+        )
+    {
+        // An unverified operation must never outlive its allocation.
+        std::mem::forget(resources);
+    }
+}
+
 static REAPER: LazyLock<Option<mpsc::Sender<Resources>>> = LazyLock::new(|| {
     let (sender, receiver) = mpsc::channel::<Resources>();
     std::thread::Builder::new()
         .name("guard-win-io-reaper".into())
         .spawn(move || {
-            for mut resources in receiver {
-                let mut count = 0;
-                let completed = unsafe {
-                    GetOverlappedResult(
-                        resources.handle.as_raw_handle() as HANDLE,
-                        &mut *resources.overlapped,
-                        &mut count,
-                        TRUE,
-                    )
-                };
-                if completed == FALSE
-                    && !matches!(
-                        unsafe { GetLastError() },
-                        ERROR_OPERATION_ABORTED | ERROR_BROKEN_PIPE | ERROR_NO_DATA
-                    )
-                {
-                    // An unverified operation must never outlive its allocation.
-                    std::mem::forget(resources);
-                }
+            for resources in receiver {
+                complete_and_release(resources);
             }
         })
         .ok()
@@ -57,13 +64,30 @@ static REAPER: LazyLock<Option<mpsc::Sender<Resources>>> = LazyLock::new(|| {
 });
 
 fn retain_until_completed(resources: Resources) {
-    match &*REAPER {
-        Some(sender) => {
-            if let Err(error) = sender.send(resources) {
-                std::mem::forget(error.0);
+    let resources = match &*REAPER {
+        Some(sender) => match sender.send(resources) {
+            Ok(()) => return,
+            Err(error) => error.0,
+        },
+        None => resources,
+    };
+    // The shared reaper is unavailable. Hand the operation to a dedicated
+    // thread so ordinary thread-creation pressure does not leak its handle,
+    // event and buffers. Only if that also fails is the storage leaked, because
+    // freeing memory under a possibly pending kernel I/O is unsound.
+    let slot = std::sync::Arc::new(std::sync::Mutex::new(Some(resources)));
+    let worker = slot.clone();
+    let spawned = std::thread::Builder::new()
+        .name("guard-win-io-release".into())
+        .spawn(move || {
+            if let Some(resources) = worker.lock().ok().and_then(|mut held| held.take()) {
+                complete_and_release(resources);
             }
+        });
+    if spawned.is_err() {
+        if let Some(resources) = slot.lock().ok().and_then(|mut held| held.take()) {
+            std::mem::forget(resources);
         }
-        None => std::mem::forget(resources),
     }
 }
 
