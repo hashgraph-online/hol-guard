@@ -41,7 +41,6 @@ from .secret_file_request_services import read_only_filters as _read_only_filter
 from .secret_file_request_services import request_artifacts as _request_artifacts
 from .secret_file_request_services import request_models as _request_models
 from .secret_file_request_services import sensitive_read_pipeline as _sensitive_read_pipeline
-from .secret_file_request_services import shell_environment as _shell_environment
 from .secret_file_request_services import shell_quote_parsing as _shell_quote_parsing
 from .secret_file_request_services import shell_request_classifier as _shell_request_classifier
 from .secret_file_request_services import shell_static_safety as _shell_static_safety
@@ -170,7 +169,6 @@ _SERVICE_MODULES = (
     _git_routines,
     _developer_routines,
     _benign_requests,
-    _shell_environment,
 )
 for _service_module in _SERVICE_MODULES:
     _service_exports = getattr(_service_module, "__all__", None)

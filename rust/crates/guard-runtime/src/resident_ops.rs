@@ -269,6 +269,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::McpProxyDecide(request) => {
                 crate::mcp_proxy_decision_op::evaluate_mcp_proxy_decision(&request)
             }
+            ResidentOperationV1::DaemonLifecycleDecide(request) => {
+                crate::daemon_lifecycle_decision_op::evaluate_daemon_lifecycle_decision(&request)
+            }
             ResidentOperationV1::GitExecutionSafety(request) => {
                 crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }
