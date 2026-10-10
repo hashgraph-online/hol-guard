@@ -4,13 +4,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from functools import wraps
 from inspect import signature
-from typing import Concatenate, ParamSpec
+from typing import Any, Concatenate, ParamSpec
 
 # ruff: noqa: F403,F405
-from .retry_lineage import preserve_retry_lineage
 from .store_base import *
 from .store_resume import update_request_resume as _update_request_resume
 
@@ -32,7 +31,11 @@ def _with_resume_connection(
     return _method
 
 
-def _guard_session_row(row: sqlite3.Row) -> dict[str, object]:
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _guard_session_row(row: Mapping[str, Any]) -> dict[str, object]:
     return {
         "session_id": str(row["session_id"]),
         "harness": str(row["harness"]),
@@ -48,7 +51,7 @@ def _guard_session_row(row: sqlite3.Row) -> dict[str, object]:
     }
 
 
-def _guard_operation_row(row: sqlite3.Row) -> dict[str, object]:
+def _guard_operation_row(row: Mapping[str, Any]) -> dict[str, object]:
     return {
         "operation_id": str(row["operation_id"]),
         "session_id": str(row["session_id"]),
@@ -63,7 +66,38 @@ def _guard_operation_row(row: sqlite3.Row) -> dict[str, object]:
     }
 
 
+def _guard_item_row(row: Mapping[str, Any]) -> dict[str, object]:
+    return {
+        "item_id": str(row["item_id"]),
+        "operation_id": str(row["operation_id"]),
+        "item_type": str(row["item_type"]),
+        "lifecycle": str(row["lifecycle"]),
+        "payload": json.loads(str(row["payload_json"])),
+        "created_at": str(row["created_at"]),
+    }
+
+
+def _guard_attachment_row(row: Mapping[str, Any]) -> dict[str, object]:
+    return {
+        "client_id": str(row["client_id"]),
+        "surface": str(row["surface"]),
+        "session_id": str(row["session_id"]) if row["session_id"] is not None else None,
+        "metadata": json.loads(str(row["metadata_json"])),
+        "lease_id": str(row["lease_id"]),
+        "lease_expires_at": str(row["lease_expires_at"]) if row["lease_expires_at"] is not None else None,
+        "attached_at": str(row["attached_at"]),
+        "last_seen_at": str(row["last_seen_at"]),
+    }
+
+
 class StoreSessionsMixin:
+    """Sessions, operations, items, client leases and surface opens.
+
+    The resident owns every persisted fact (merge of retry lineage, lease
+    arithmetic, liveness). Python supplies instants, the lease identifier and
+    the JSON text of structured values, then shapes the raw rows it gets back.
+    """
+
     def upsert_guard_session(
         self,
         *,
@@ -78,82 +112,29 @@ class StoreSessionsMixin:
         capabilities: list[str],
         now: str,
     ) -> dict[str, object]:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_sessions (
-                  session_id,
-                  harness,
-                  surface,
-                  status,
-                  client_name,
-                  client_title,
-                  client_version,
-                  workspace,
-                  capabilities_json,
-                  created_at,
-                  updated_at
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict(session_id) do update set
-                  harness = excluded.harness,
-                  surface = excluded.surface,
-                  status = excluded.status,
-                  client_name = excluded.client_name,
-                  client_title = excluded.client_title,
-                  client_version = excluded.client_version,
-                  workspace = excluded.workspace,
-                  capabilities_json = excluded.capabilities_json,
-                  updated_at = excluded.updated_at
-                """,
-                (
-                    session_id,
-                    harness,
-                    surface,
-                    status,
-                    client_name,
-                    client_title,
-                    client_version,
-                    workspace,
-                    json.dumps(capabilities),
-                    now,
-                    now,
-                ),
-            )
-        session = self.get_guard_session(session_id)
-        if session is None:
-            raise RuntimeError(f"Guard session {session_id} was not persisted.")
-        return session
-
-    def get_guard_session(self, session_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select session_id, harness, surface, status, client_name, client_title, client_version, workspace,
-                       capabilities_json, created_at, updated_at
-                from guard_sessions
-                where session_id = ?
-                """,
-                (session_id,),
-            ).fetchone()
-        if row is None:
-            return None
+        row = self._native_store_call(
+            "upsert_guard_session",
+            {
+                "session_id": session_id,
+                "harness": harness,
+                "surface": surface,
+                "status": status,
+                "client_name": client_name,
+                "client_title": client_title,
+                "client_version": client_version,
+                "workspace": workspace,
+                "capabilities_json": json.dumps(capabilities),
+                "now": now,
+            },
+        )
         return _guard_session_row(row)
 
+    def get_guard_session(self, session_id: str) -> dict[str, object] | None:
+        row = self._native_store_call("get_guard_session", {"session_id": session_id})
+        return None if row is None else _guard_session_row(row)
+
     def list_guard_sessions(self, status: str | None = None, limit: int = 100) -> list[dict[str, object]]:
-        query = """
-            select session_id, harness, surface, status, client_name, client_title, client_version, workspace,
-                   capabilities_json, created_at, updated_at
-            from guard_sessions
-        """
-        params: list[object] = []
-        if status is not None:
-            query += " where status = ?"
-            params.append(status)
-        query += " order by updated_at desc, session_id desc limit ?"
-        params.append(limit)
-        with self._connect() as connection:
-            rows = connection.execute(query, tuple(params)).fetchall()
+        rows = self._native_store_call("list_guard_sessions", {"status": status, "limit": limit})
         return [_guard_session_row(row) for row in rows]
 
     def upsert_guard_operation(
@@ -169,125 +150,33 @@ class StoreSessionsMixin:
         metadata: dict[str, object],
         now: str,
     ) -> dict[str, object]:
-        with self._connect() as connection:
-            # Serialize the read/merge/write boundary so a concurrent first
-            # writer cannot replace an already valid retry lineage.
-            connection.execute("begin immediate")
-            existing_row = connection.execute(
-                "select metadata_json from guard_operations where operation_id = ?",
-                (operation_id,),
-            ).fetchone()
-            persisted_metadata = metadata
-            if existing_row is not None:
-                try:
-                    existing_metadata = json.loads(str(existing_row["metadata_json"]))
-                except (TypeError, ValueError):
-                    existing_metadata = {}
-                if isinstance(existing_metadata, dict):
-                    persisted_metadata = preserve_retry_lineage(existing_metadata, metadata)
-            connection.execute(
-                """
-                insert into guard_operations (
-                  operation_id,
-                  session_id,
-                  harness,
-                  operation_type,
-                  status,
-                  approval_request_ids_json,
-                  resume_token,
-                  metadata_json,
-                  created_at,
-                  updated_at
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict(operation_id) do update set
-                  session_id = excluded.session_id,
-                  harness = excluded.harness,
-                  operation_type = excluded.operation_type,
-                  status = excluded.status,
-                  approval_request_ids_json = excluded.approval_request_ids_json,
-                  resume_token = excluded.resume_token,
-                  metadata_json = excluded.metadata_json,
-                  updated_at = excluded.updated_at
-                """,
-                (
-                    operation_id,
-                    session_id,
-                    harness,
-                    operation_type,
-                    status,
-                    json.dumps(approval_request_ids),
-                    resume_token,
-                    json.dumps(persisted_metadata),
-                    now,
-                    now,
-                ),
-            )
-        operation = self.get_guard_operation(operation_id)
-        if operation is None:
-            raise RuntimeError(f"Guard operation {operation_id} was not persisted.")
-        return operation
-
-    def get_guard_operation(self, operation_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select operation_id, session_id, harness, operation_type, status, approval_request_ids_json,
-                       resume_token, metadata_json, created_at, updated_at
-                from guard_operations
-                where operation_id = ?
-                """,
-                (operation_id,),
-            ).fetchone()
-        if row is None:
-            return None
+        row = self._native_store_call(
+            "upsert_guard_operation",
+            {
+                "operation_id": operation_id,
+                "session_id": session_id,
+                "harness": harness,
+                "operation_type": operation_type,
+                "status": status,
+                "approval_request_ids_json": json.dumps(approval_request_ids),
+                "resume_token": resume_token,
+                "metadata_json": json.dumps(metadata),
+                "now": now,
+            },
+        )
         return _guard_operation_row(row)
 
+    def get_guard_operation(self, operation_id: str) -> dict[str, object] | None:
+        row = self._native_store_call("get_guard_operation", {"operation_id": operation_id})
+        return None if row is None else _guard_operation_row(row)
+
     def list_guard_operations(self, session_id: str | None = None, limit: int = 100) -> list[dict[str, object]]:
-        query = """
-            select operation_id, session_id, harness, operation_type, status, approval_request_ids_json,
-                   resume_token, metadata_json, created_at, updated_at
-            from guard_operations
-        """
-        params: list[object] = []
-        if session_id is not None:
-            query += " where session_id = ?"
-            params.append(session_id)
-        query += " order by updated_at desc, operation_id desc limit ?"
-        params.append(limit)
-        with self._connect() as connection:
-            rows = connection.execute(query, tuple(params)).fetchall()
+        rows = self._native_store_call("list_guard_operations", {"session_id": session_id, "limit": limit})
         return [_guard_operation_row(row) for row in rows]
 
     def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                select operation_id, session_id, harness, operation_type, status, approval_request_ids_json,
-                       resume_token, metadata_json, created_at, updated_at
-                from guard_operations
-                where approval_request_ids_json like ?
-                order by updated_at desc, operation_id desc
-                """,
-                (f"%{request_id}%",),
-            ).fetchall()
-        for row in rows:
-            approval_request_ids = json.loads(str(row["approval_request_ids_json"]))
-            if request_id not in {str(item) for item in approval_request_ids}:
-                continue
-            return {
-                "operation_id": str(row["operation_id"]),
-                "session_id": str(row["session_id"]),
-                "harness": str(row["harness"]),
-                "operation_type": str(row["operation_type"]),
-                "status": str(row["status"]),
-                "approval_request_ids": approval_request_ids,
-                "resume_token": str(row["resume_token"]) if row["resume_token"] is not None else None,
-                "metadata": json.loads(str(row["metadata_json"])),
-                "created_at": str(row["created_at"]),
-                "updated_at": str(row["updated_at"]),
-            }
-        return None
+        row = self._native_store_call("get_guard_operation_for_approval_request", {"request_id": request_id})
+        return None if row is None else _guard_operation_row(row)
 
     def seed_request_resume(
         self,
@@ -332,44 +221,22 @@ class StoreSessionsMixin:
         payload: dict[str, object],
         now: str,
     ) -> dict[str, object]:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_operation_items (
-                  item_id, operation_id, item_type, lifecycle, payload_json, created_at
-                )
-                values (?, ?, ?, ?, ?, ?)
-                """,
-                (item_id, operation_id, item_type, lifecycle, json.dumps(payload), now),
-            )
-        items = self.list_guard_operation_items(operation_id)
-        for item in items:
-            if item["item_id"] == item_id:
-                return item
-        raise RuntimeError(f"Guard operation item {item_id} was not persisted.")
+        row = self._native_store_call(
+            "add_guard_operation_item",
+            {
+                "item_id": item_id,
+                "operation_id": operation_id,
+                "item_type": item_type,
+                "lifecycle": lifecycle,
+                "payload_json": json.dumps(payload),
+                "now": now,
+            },
+        )
+        return _guard_item_row(row)
 
     def list_guard_operation_items(self, operation_id: str) -> list[dict[str, object]]:
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                select item_id, operation_id, item_type, lifecycle, payload_json, created_at
-                from guard_operation_items
-                where operation_id = ?
-                order by created_at asc, item_id asc
-                """,
-                (operation_id,),
-            ).fetchall()
-        return [
-            {
-                "item_id": str(row["item_id"]),
-                "operation_id": str(row["operation_id"]),
-                "item_type": str(row["item_type"]),
-                "lifecycle": str(row["lifecycle"]),
-                "payload": json.loads(str(row["payload_json"])),
-                "created_at": str(row["created_at"]),
-            }
-            for row in rows
-        ]
+        rows = self._native_store_call("list_guard_operation_items", {"operation_id": operation_id})
+        return [_guard_item_row(row) for row in rows]
 
     def attach_guard_client(
         self,
@@ -381,29 +248,20 @@ class StoreSessionsMixin:
         lease_seconds: int,
         now: str,
     ) -> dict[str, object]:
-        lease_id = uuid4().hex
-        lease_expires_at = _lease_expiry(now, lease_seconds)
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_client_attachments (
-                  client_id, surface, session_id, metadata_json, lease_id, lease_expires_at, attached_at, last_seen_at
-                )
-                values (?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict(client_id) do update set
-                  surface = excluded.surface,
-                  session_id = excluded.session_id,
-                  metadata_json = excluded.metadata_json,
-                  lease_id = excluded.lease_id,
-                  lease_expires_at = excluded.lease_expires_at,
-                  last_seen_at = excluded.last_seen_at
-                """,
-                (client_id, surface, session_id, json.dumps(metadata), lease_id, lease_expires_at, now, now),
-            )
-        item = self.get_guard_client_attachment(client_id)
-        if item is not None:
-            return item
-        raise RuntimeError(f"Guard client attachment {client_id} was not persisted.")
+        datetime.fromisoformat(now)
+        row = self._native_store_call(
+            "attach_guard_client",
+            {
+                "client_id": client_id,
+                "surface": surface,
+                "session_id": session_id,
+                "metadata_json": json.dumps(metadata),
+                "lease_id": uuid4().hex,
+                "lease_seconds": lease_seconds,
+                "now": now,
+            },
+        )
+        return _guard_attachment_row(row)
 
     def renew_guard_client_attachment(
         self,
@@ -413,44 +271,16 @@ class StoreSessionsMixin:
         lease_seconds: int,
         now: str,
     ) -> dict[str, object] | None:
-        lease_expires_at = _lease_expiry(now, lease_seconds)
-        with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                update guard_client_attachments
-                set last_seen_at = ?, lease_expires_at = ?
-                where client_id = ? and lease_id = ?
-                """,
-                (now, lease_expires_at, client_id, lease_id),
-            )
-        if cursor.rowcount <= 0:
-            return None
-        return self.get_guard_client_attachment(client_id)
+        datetime.fromisoformat(now)
+        row = self._native_store_call(
+            "renew_guard_client_attachment",
+            {"client_id": client_id, "lease_id": lease_id, "lease_seconds": lease_seconds, "now": now},
+        )
+        return None if row is None else _guard_attachment_row(row)
 
     def get_guard_client_attachment(self, client_id: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select
-                  client_id, surface, session_id, metadata_json,
-                  lease_id, lease_expires_at, attached_at, last_seen_at
-                from guard_client_attachments
-                where client_id = ?
-                """,
-                (client_id,),
-            ).fetchone()
-        if row is None:
-            return None
-        return {
-            "client_id": str(row["client_id"]),
-            "surface": str(row["surface"]),
-            "session_id": str(row["session_id"]) if row["session_id"] is not None else None,
-            "metadata": json.loads(str(row["metadata_json"])),
-            "lease_id": str(row["lease_id"]),
-            "lease_expires_at": str(row["lease_expires_at"]) if row["lease_expires_at"] is not None else None,
-            "attached_at": str(row["attached_at"]),
-            "last_seen_at": str(row["last_seen_at"]),
-        }
+        row = self._native_store_call("get_guard_client_attachment", {"client_id": client_id})
+        return None if row is None else _guard_attachment_row(row)
 
     def list_guard_client_attachments(
         self,
@@ -459,65 +289,19 @@ class StoreSessionsMixin:
         session_id: str | None = None,
         active_within_seconds: int = 60,
     ) -> list[dict[str, object]]:
-        query = """
-            select client_id, surface, session_id, metadata_json, lease_id, lease_expires_at, attached_at, last_seen_at
-            from guard_client_attachments
-        """
-        params: list[object] = []
-        filters: list[str] = []
-        if surface is not None:
-            filters.append("surface = ?")
-            params.append(surface)
-        if session_id is not None:
-            filters.append("session_id = ?")
-            params.append(session_id)
-        if filters:
-            query += " where " + " and ".join(filters)
-        query += " order by last_seen_at desc, client_id asc"
-        with self._connect() as connection:
-            rows = connection.execute(query, tuple(params)).fetchall()
-        cutoff = datetime.now(timezone.utc).timestamp() - max(active_within_seconds, 0)
-        items: list[dict[str, object]] = []
-        for row in rows:
-            lease_expires_at = row["lease_expires_at"]
-            if lease_expires_at is not None:
-                expires_at = datetime.fromisoformat(str(lease_expires_at)).timestamp()
-                if expires_at < datetime.now(timezone.utc).timestamp():
-                    continue
-            else:
-                last_seen = datetime.fromisoformat(str(row["last_seen_at"])).timestamp()
-                if last_seen < cutoff:
-                    continue
-            items.append(
-                {
-                    "client_id": str(row["client_id"]),
-                    "surface": str(row["surface"]),
-                    "session_id": str(row["session_id"]) if row["session_id"] is not None else None,
-                    "metadata": json.loads(str(row["metadata_json"])),
-                    "lease_id": str(row["lease_id"]),
-                    "lease_expires_at": str(row["lease_expires_at"]) if row["lease_expires_at"] is not None else None,
-                    "attached_at": str(row["attached_at"]),
-                    "last_seen_at": str(row["last_seen_at"]),
-                }
-            )
-        return items
+        rows = self._native_store_call(
+            "list_guard_client_attachments",
+            {
+                "surface": surface,
+                "session_id": session_id,
+                "active_within_seconds": active_within_seconds,
+                "now": _utc_now_iso(),
+            },
+        )
+        return [_guard_attachment_row(row) for row in rows]
 
     def record_guard_surface_open(self, *, surface: str, open_key: str, now: str) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into guard_surface_opens (surface, open_key, opened_at)
-                values (?, ?, ?)
-                on conflict(surface, open_key) do update set
-                  opened_at = excluded.opened_at
-                """,
-                (surface, open_key, now),
-            )
+        self._native_store_call("record_guard_surface_open", {"surface": surface, "open_key": open_key, "now": now})
 
     def has_guard_surface_open(self, *, surface: str, open_key: str) -> bool:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select 1 from guard_surface_opens where surface = ? and open_key = ?",
-                (surface, open_key),
-            ).fetchone()
-        return row is not None
+        return bool(self._native_store_call("has_guard_surface_open", {"surface": surface, "open_key": open_key}))

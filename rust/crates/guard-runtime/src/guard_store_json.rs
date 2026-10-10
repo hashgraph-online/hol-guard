@@ -39,6 +39,75 @@ pub(crate) fn add_seconds_isoformat(text: &str, delta_micros: i64) -> Option<Str
     Some(format_iso(parsed, delta_micros))
 }
 
+/// `datetime.fromisoformat(text).timestamp()` in whole microseconds. Instants
+/// without an offset are read as UTC; the store only persists aware instants.
+pub(crate) fn epoch_micros(text: &str) -> Option<i128> {
+    let parsed = parse_iso(&text.replace('Z', "+00:00"))?;
+    Some(parsed.micros_since_epoch - i128::from(parsed.offset_seconds.unwrap_or(0)) * 1_000_000)
+}
+
+/// `repr(text)` for a Python `str`, as it appears inside CPython error messages.
+pub(crate) fn py_repr_str(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::from(quote);
+    for character in text.chars() {
+        match character {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", c as u32));
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// `str(value)` of a value decoded by `json.loads`, for set-membership tests.
+pub(crate) fn py_str(value: &Value) -> Option<String> {
+    Some(match value {
+        Value::String(text) => text.clone(),
+        other => py_repr(other)?,
+    })
+}
+
+fn py_repr(value: &Value) -> Option<String> {
+    Some(match value {
+        Value::Null => "None".to_owned(),
+        Value::Bool(true) => "True".to_owned(),
+        Value::Bool(false) => "False".to_owned(),
+        Value::Number(number) if number.is_f64() => dumps_sorted(value)?,
+        Value::Number(number) => number.to_string(),
+        Value::String(text) => py_repr_str(text),
+        Value::Array(items) => format!(
+            "[{}]",
+            items
+                .iter()
+                .map(py_repr)
+                .collect::<Option<Vec<_>>>()?
+                .join(", ")
+        ),
+        Value::Object(map) => {
+            let mut parts = Vec::new();
+            for (key, item) in map {
+                parts.push(format!("{}: {}", py_repr_str(key), py_repr(item)?));
+            }
+            format!("{{{}}}", parts.join(", "))
+        }
+    })
+}
+
 struct Parsed {
     micros_since_epoch: i128,
     offset_seconds: Option<i64>,
