@@ -16,11 +16,11 @@ use guard_contracts::{
     McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1,
     McpToolEvidenceRequestV1, McpToolPolicyDecideRequestV1, NativeHookRequestV1,
     PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
-    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
-    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
-    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyBundleAuthorityRequestV1,
+    PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1, RequestContextRequestV1,
+    RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
+    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -97,6 +97,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_command::catalog_read_model::CATALOG_READ_CAPABILITY.into(),
         guard_contracts::GIT_EXECUTION_SAFETY_FEATURE.into(),
         guard_contracts::COMPOUND_GIT_INSPECTION_FEATURE.into(),
+        guard_contracts::POLICY_BUNDLE_AUTHORITY_FEATURE.into(),
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
         guard_contracts::FALSE_POSITIVE_RULES_FEATURE.into(),
         guard_contracts::RUNNER_AUTHORITY_FEATURE.into(),
@@ -192,6 +193,7 @@ pub(crate) enum ResidentOperationV1 {
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     GitExecutionSafety(GitExecutionSafetyRequestV1),
     CompoundGitInspection(CompoundGitInspectionRequestV1),
+    PolicyBundleAuthority(PolicyBundleAuthorityRequestV1),
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
     FalsePositiveRules(FalsePositiveRulesRequestV1),
     RunnerAuthority(RunnerAuthorityRequestV1),
