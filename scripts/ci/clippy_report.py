@@ -14,6 +14,9 @@ from pathlib import Path
 from scripts.ci import wait_for_pytest_shards as barrier
 from scripts.ci.select_pytest_coverage import _pages, _time
 
+# Each poll reads the run plus every job page of a ~300-job CI run with the
+# repository GITHUB_TOKEN, whose hourly quota every workflow shares.
+_POLL_SECONDS = 30.0
 COMMAND = [
     "cargo",
     "clippy",
@@ -168,7 +171,7 @@ def select(
         if not jobs:
             if run.get("status") == "completed":
                 raise ValueError("Current attempt has no Clippy producer")
-            sleep(5.0)
+            sleep(_POLL_SECONDS)
             continue
         job = jobs[0]
         if (
@@ -178,13 +181,13 @@ def select(
         ):
             raise ValueError("Clippy producer identity mismatch")
         if barrier._job_state(job, "Clippy producer") != "success":
-            sleep(5.0)
+            sleep(_POLL_SECONDS)
             continue
         barrier._require_current_execution(job, "Clippy producer")
         name = f"clippy-report-{attempt}"
         artifacts = [item for item in _pages(f"{base}/artifacts", "artifacts", fetch) if item.get("name") == name]
         if not artifacts:
-            sleep(5.0)
+            sleep(_POLL_SECONDS)
             continue
         if len(artifacts) != 1:
             raise ValueError("Ambiguous Clippy artifact")
