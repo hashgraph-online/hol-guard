@@ -6,6 +6,8 @@ import pytest
 
 from codex_plugin_scanner.checks.security import check_license, run_security_checks
 
+from codex_plugin_scanner.lint_fixes import apply_safe_autofixes
+
 MIT_LICENSE = "MIT License\n\nPermission is hereby granted, free of charge, to any person.\n"
 
 
@@ -80,3 +82,31 @@ def test_unreadable_canonical_license_does_not_fall_back_to_markdown(tmp_path: P
 
     assert not result.passed
     assert "could not be read" in result.message
+
+
+@pytest.mark.parametrize("filename", ["LICENSE.md", "LICENCE.txt", "COPYING", "license.md"])
+def test_autofix_does_not_create_conflicting_license(tmp_path: Path, filename: str) -> None:
+    original = "Apache License, Version 2.0\n"
+    (tmp_path / filename).write_text(original, encoding="utf-8")
+
+    changes = apply_safe_autofixes(tmp_path)
+
+    assert not (tmp_path / "LICENSE").exists()
+    assert (tmp_path / filename).read_text(encoding="utf-8") == original
+    assert "created LICENSE" not in changes
+
+
+def test_autofix_still_creates_license_when_absent(tmp_path: Path) -> None:
+    changes = apply_safe_autofixes(tmp_path)
+
+    assert (tmp_path / "LICENSE").is_file()
+    assert "created LICENSE" in changes
+
+
+def test_autofix_does_not_treat_license_template_as_real_license(tmp_path: Path) -> None:
+    (tmp_path / "LICENSE.template").write_text(MIT_LICENSE, encoding="utf-8")
+
+    changes = apply_safe_autofixes(tmp_path)
+
+    assert (tmp_path / "LICENSE").exists()
+    assert "created LICENSE" in changes
