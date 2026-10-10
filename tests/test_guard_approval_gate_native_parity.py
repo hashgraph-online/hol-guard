@@ -90,7 +90,10 @@ def _apply_file(home: Path, spec: dict[str, object]) -> dict[str, object]:
     if "write" in spec:
         path.write_text(str(spec["content"]), encoding="utf-8")
     elif "delete" in spec:
-        shutil.rmtree(path, ignore_errors=True)
+        if path.is_dir() and not path.is_symlink():
+            shutil.rmtree(path)
+        else:
+            path.unlink(missing_ok=True)
     else:
         state = json.loads(path.read_text(encoding="utf-8"))
         state.update(spec["patch_state"])

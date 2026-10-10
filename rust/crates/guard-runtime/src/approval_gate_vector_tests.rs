@@ -50,11 +50,23 @@ fn resolve_input(input: &Value, secrets: &HashMap<String, String>) -> Value {
     Value::Object(out)
 }
 
+/// Delete a file or a directory tree; an absent path is already deleted.
+fn remove_path(path: &Path) {
+    let removed = match std::fs::symlink_metadata(path) {
+        Ok(meta) if meta.is_dir() => std::fs::remove_dir_all(path),
+        Ok(_) => std::fs::remove_file(path),
+        Err(error) => Err(error),
+    };
+    if let Err(error) = removed {
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound, "{path:?}");
+    }
+}
+
 fn apply_file_step(home: &Path, spec: &Value) {
     if let Some(name) = spec.get("write").and_then(Value::as_str) {
         std::fs::write(home.join(name), spec["content"].as_str().unwrap()).unwrap();
     } else if let Some(name) = spec.get("delete").and_then(Value::as_str) {
-        let _ = std::fs::remove_dir_all(home.join(name));
+        remove_path(&home.join(name));
     } else if let Some(patch) = spec.get("patch_state").and_then(Value::as_object) {
         let path = home.join("approval-gate.json");
         let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();

@@ -67,8 +67,11 @@ pub(crate) fn evaluate_resident_bytes(
     {
         crate::oneshot::validate_request_policy_snapshot(&value)?;
     }
+    // The frame parsed as strict JSON but names no request shape this runtime
+    // supports. A client of another runtime version is told apart from a
+    // transient failure by this code alone.
     let request: ResidentRequestV1 = crate::strict_json::from_value(value)
-        .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
+        .map_err(|_| "native_request_schema_unsupported".to_owned())?;
     if let (Some(policy_store), ResidentRequestV1::Operation(operation)) = (policy_store, &request)
     {
         if let Some(guard_home) = operation_guard_home(operation) {

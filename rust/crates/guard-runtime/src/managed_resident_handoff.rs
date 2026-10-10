@@ -51,10 +51,12 @@ pub(super) fn retire_orphaned_foreign_resident(
 /// that admits only snapshots bound to its own runtime. Every push is then
 /// rejected and hooks fail closed on a stale snapshot indefinitely.
 ///
-/// The same holds for a request shape the foreign resident predates: a
-/// capability bump adds fields its strict parser denies, so it answers
-/// `native_request_invalid_json` to a request this runtime built validly and
-/// would answer that way forever.
+/// The same holds for a request shape the foreign resident does not support:
+/// a capability bump adds fields its strict typed parser denies, so it answers
+/// `native_request_schema_unsupported`. That code is emitted only when typed
+/// request deserialization fails; transient failures and other errors, which
+/// the safe-error mapping folds into `native_request_invalid_json`, never
+/// retire a resident.
 ///
 /// The resident's rejection is the authoritative signal: it never admits this
 /// runtime's policy or request. Stop it even while clients of its runtime
@@ -87,7 +89,7 @@ fn rejects_runtime_request(response: &[u8]) -> bool {
     crate::strict_json_value(response).is_ok_and(|response| {
         matches!(
             response.get("error").and_then(serde_json::Value::as_str),
-            Some("snapshot_runtime_identity_mismatch" | "native_request_invalid_json")
+            Some("snapshot_runtime_identity_mismatch" | "native_request_schema_unsupported")
         )
     })
 }
