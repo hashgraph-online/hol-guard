@@ -21,12 +21,10 @@ resolver = "2"
 
 [profile.release]
 opt-level = "s"
+# Deduplicate native dependency code across crate boundaries in packaged binaries.
+lto = "thin"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
-
-[profile.release.package.guard-command]
-# Keep the command parser and admission proofs within the native runtime budget.
-opt-level = "z"
 
 [workspace.package]
 version = "0.1.0"
