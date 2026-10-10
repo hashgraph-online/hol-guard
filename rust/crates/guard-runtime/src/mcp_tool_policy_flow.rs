@@ -92,11 +92,7 @@ pub(crate) fn action_value(action: GuardAction) -> Value {
 }
 
 pub(crate) fn most_restrictive(left: GuardAction, right: GuardAction) -> GuardAction {
-    if right.severity() > left.severity() {
-        right
-    } else {
-        left
-    }
+    guard_command::effect_decision::maximum_action_floor([&left, &right])
 }
 
 fn row_of(value: &Value) -> Flow<Option<Map<String, Value>>> {
