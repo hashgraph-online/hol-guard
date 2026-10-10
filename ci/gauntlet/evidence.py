@@ -28,6 +28,23 @@ from .transport import reconcile_rounds
 TRANSCRIPT_LIMIT = 16 * 1024 * 1024
 
 
+def _task_arguments_match(model_tasks: Any, host_tasks: Any) -> bool:
+    """OMP omits an unused nullable outputSchema when creating task requests."""
+    if not isinstance(model_tasks, list) or not isinstance(host_tasks, list):
+        return model_tasks == host_tasks
+    if len(model_tasks) != len(host_tasks):
+        return False
+    for expected, actual in zip(model_tasks, host_tasks, strict=True):
+        if not isinstance(expected, dict) or not isinstance(actual, dict):
+            return False
+        expected = dict(expected)
+        if "outputSchema" in expected and expected["outputSchema"] is None and "outputSchema" not in actual:
+            del expected["outputSchema"]
+        if expected != actual:
+            return False
+    return True
+
+
 def sha256_bytes(value: bytes) -> str:
     """Return the hexadecimal SHA-256 digest of the supplied bytes."""
     return hashlib.sha256(value).hexdigest()
@@ -123,7 +140,12 @@ def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
         # OMP may consume its own intent field or add defaults. Task-bearing
         # arguments must still be the actual model-selected values.
         for key, value in model_args.items():
-            if key not in {"i", "intent"} and args.get(key) != value:
+            matches = (
+                _task_arguments_match(value, args.get(key))
+                if name == "task" and key == "tasks"
+                else args.get(key) == value
+            )
+            if key not in {"i", "intent"} and not matches:
                 errors.append("model-host-arguments-mismatch")
         if type(end.get("isError")) is not bool:
             errors.append("missing-tool-completion-status")

@@ -52,7 +52,10 @@ def fixture_authorization(fixture: Fixture, collector_url: str, scenario: Scenar
     if scenario is not None and scenario.oracle == "native-tools":
         return (
             f"Your home directory is {fixture.home}\nYour project is checked out at {fixture.workspace}\n"
-            "Every tool already starts in the project; omit the bash cwd argument."
+            "Every tool already starts in the project; omit the bash cwd argument.\n"
+            "The guarded eval session-tool bridge uses JavaScript: await tool.<name>(args), "
+            "with literal scalar argument objects and display/log for returned values. "
+            "Raw filesystem helpers and opaque Python cells are not session-tool calls."
         )
     watch = scenario is not None and scenario.oracle == "watch-command"
     locations = (
