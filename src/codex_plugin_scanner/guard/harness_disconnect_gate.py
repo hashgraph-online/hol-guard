@@ -23,6 +23,7 @@ _FRESH_AUTHENTICATOR_ACTIONS = frozenset(
         "uninstall",
         "disconnect",
         "apps.disconnect",
+        "hooks.remove",
     }
 )
 

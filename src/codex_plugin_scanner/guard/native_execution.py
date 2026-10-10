@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any, cast, get_args
 
 from .models import GuardAction
 from .native_resident_client import native_resident_client_request
-from .native_runtime import _isolated_environment, native_runtime_status
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
@@ -76,8 +76,13 @@ def _resident_request(
     response_schema: str | None = None,
     max_request_bytes: int = _MAX_REQUEST_BYTES,
     record_success: bool = True,
+    status: NativeRuntimeStatus | None = None,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops.
+
+    ``status`` is the caller's already-resolved runtime status; resolving it is
+    a stat-heavy walk that a caller recording resident health needs too, so it
+    is passed along instead of being resolved twice per request.
 
     Pass ``record_success=False`` when the caller validates the reply further
     and records success itself; otherwise a resident that keeps sending
@@ -86,7 +91,8 @@ def _resident_request(
     malformed or non-object body, wrong schema, unaccepted status) records its
     own failure here, so the caller must not record those again.
     """
-    status = native_runtime_status()
+    if status is None:
+        status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return None
     features = set(status.capabilities.features)
@@ -153,6 +159,7 @@ def _resident_request(
             "hook_decide",
             "hook_adapter",
             "request_context_build",
+            "daemon_route",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

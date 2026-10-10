@@ -480,7 +480,7 @@ def _guard_control_floor(arguments: tuple[str, ...]) -> tuple[GuardAction, str] 
         return "review", "critical.guard-control-help"
     if _contains_ordered(arguments, "capability", "consume"):
         return "block", "critical.capability-replay"
-    if "uninstall" in arguments:
+    if "uninstall" in arguments or _contains_ordered(arguments, "hooks", "remove"):
         return "block", "critical.guard-self-protection"
     if _contains_ordered(arguments, "policy", "disable"):
         return "block", "critical.guard-policy-tamper"

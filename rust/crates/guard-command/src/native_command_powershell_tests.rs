@@ -73,6 +73,8 @@ fn write_all_text_reviews_like_set_content() {
         "native_command_extension_evaluation_failed"
     );
     assert_eq!(off.minimum_action, "block");
+    let encoded = "[System.IO.File]::WriteAllText('docs/change.md', \"Retry limit increased from 3 to 5.`n\", [System.Text.UTF8Encoding]::new($false))";
+    assert_eq!(action(encoded), action(WRITE_ALL_TEXT));
 }
 
 #[test]

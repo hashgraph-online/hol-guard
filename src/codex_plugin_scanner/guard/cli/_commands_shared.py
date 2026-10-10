@@ -299,6 +299,8 @@ _GUARD_HELP_GROUPS = (
     "  advisories   Inspect cached Guard Cloud advisories\n"
     "  events       Review Guard lifecycle events\n"
     "  doctor       Run local diagnostics\n"
+    "  repair       Repair the daemon, hooks, and stale Guard state\n"
+    "  hooks        Remove every Guard hook from every app (hooks remove --all)\n"
     "  bootstrap    Detect, install, and launch the approval center\n"
     "  install      Enable Guard management for a harness\n"
     "  uninstall    Disable Guard management or remove hol-guard entirely\n"

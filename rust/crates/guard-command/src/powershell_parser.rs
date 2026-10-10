@@ -25,6 +25,8 @@ pub(crate) enum PsCall {
         type_name: String,
         method: String,
         args: Vec<String>,
+        /// A trailing text-encoding argument from the fixed list below.
+        encoding: bool,
     },
 }
 
@@ -184,15 +186,27 @@ fn parse_static_call(chars: &[char], index: &mut usize) -> Result<PsCall, Reason
     }
     *index += 1;
     let mut args: Vec<String> = Vec::new();
+    let mut encoding = false;
     let mut after_comma = false;
     loop {
         skip_blanks(chars, index);
+        if encoding && chars.get(*index) != Some(&')') {
+            return Err("powershell_static_call_argument_not_supported");
+        }
         if chars.get(*index) == Some(&')') {
             if after_comma {
                 return Err("powershell_array_not_supported");
             }
             *index += 1;
             break;
+        }
+        if !args.is_empty() {
+            if let Some(length) = encoding_argument(&chars[*index..]) {
+                *index += length;
+                encoding = true;
+                after_comma = false;
+                continue;
+            }
         }
         let mut parsed = Vec::new();
         read_arg(chars, index, true, &mut parsed)?;
@@ -216,6 +230,36 @@ fn parse_static_call(chars: &[char], index: &mut usize) -> Result<PsCall, Reason
         type_name,
         method,
         args,
+        encoding,
+    })
+}
+
+/// Length of a text-encoding argument such as `[Text.UTF8Encoding]::new($false)`.
+/// Only these constant forms are accepted; any other expression is rejected.
+fn encoding_argument(chars: &[char]) -> Option<usize> {
+    const FORMS: &[&str] = &[
+        "[text.utf8encoding]::new($false)",
+        "[text.utf8encoding]::new($true)",
+        "[text.utf8encoding]::new()",
+        "[text.encoding]::utf8",
+        "[text.encoding]::ascii",
+        "[text.encoding]::unicode",
+        "[text.encoding]::default",
+    ];
+    let text: String = chars
+        .iter()
+        .take(48)
+        .collect::<String>()
+        .to_ascii_lowercase();
+    let (prefix, text) = match text.strip_prefix("[system.") {
+        Some(rest) => (7, format!("[{rest}")),
+        None => (0, text),
+    };
+    FORMS.iter().find_map(|form| {
+        let rest = text.strip_prefix(form)?;
+        let next = rest.chars().next();
+        next.is_none_or(|c| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | '(')))
+            .then_some(prefix + form.chars().count())
     })
 }
 

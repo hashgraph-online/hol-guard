@@ -1013,7 +1013,7 @@ function withGuardAuthForToken(
   };
 }
 
-async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
   const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));

@@ -128,6 +128,7 @@ def test_observe_mode_does_not_block_failed_local_review(
         ),
     ),
 )
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_observe_mode_uses_native_nonblocking_claude_responses(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

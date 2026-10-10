@@ -51,6 +51,10 @@ mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
 mod daemon_policy_authority;
+mod daemon_route_op;
+mod daemon_route_paths;
+mod daemon_route_resolve;
+mod daemon_route_session;
 mod data_flow_analyze_op;
 mod edge;
 mod encrypted_secret_store;
