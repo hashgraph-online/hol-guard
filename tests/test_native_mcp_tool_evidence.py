@@ -162,6 +162,44 @@ def test_mismatched_binding_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
         native_tool_risk_evidence(_risk_artifact(case["source"]), case["source"]["arguments"])
 
 
+@pytest.mark.parametrize(
+    "raw_payload",
+    (
+        '{"risk_categories":["not-a-category"],"signals":["x"],"summary":"s"}',
+        '{"risk_categories":[],"signals":[],"summary":7}',
+        '{"risk_categories":[],"signals":["extra"],"summary":"s"}',
+    ),
+)
+def test_malformed_operation_payload_counts_as_a_resident_failure(
+    monkeypatch: pytest.MonkeyPatch, raw_payload: str
+) -> None:
+    _force_available(monkeypatch)
+    failures: list[str] = []
+    successes: list[object] = []
+    monkeypatch.setattr(module, "native_record_resident_failure", lambda *a, **k: failures.append(k["reason"]))
+    monkeypatch.setattr(module, "native_record_resident_success", lambda *a, **k: successes.append(a))
+
+    def client(*, payload: bytes, **_kwargs: object) -> bytes:
+        request = json.loads(payload)["request"]
+        return json.dumps(
+            {
+                "schema": module._RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": module._canonical_request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+                "payload": json.loads(raw_payload),
+            }
+        ).encode()
+
+    monkeypatch.setattr(module, "native_resident_client_request", client)
+    case = _RISK[sorted(_RISK)[0]]
+    with pytest.raises(NativeMcpToolEvidenceError, match="result_invalid"):
+        native_tool_risk_evidence(_risk_artifact(case["source"]), case["source"]["arguments"])
+    assert failures == ["native_mcp_tool_evidence_result_invalid"]
+    assert successes == []
+
+
 def test_non_string_server_name_fails_closed() -> None:
     source = dict(_FIREWALL[sorted(_FIREWALL)[0]]["source"])
     artifact = _firewall_artifact({**source, "metadata": {**source["metadata"], "server_name": 5}})

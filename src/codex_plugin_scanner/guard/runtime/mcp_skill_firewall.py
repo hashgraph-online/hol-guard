@@ -143,6 +143,16 @@ def _read_text_file(path: str) -> str | None:
         return None
 
 
+def _can_carry_firewall(artifact: GuardArtifact) -> bool:
+    if artifact.artifact_type == "mcp_server":
+        return isinstance(artifact.command, str) and bool(artifact.command.strip())
+    if artifact.command is not None:
+        return True
+    return isinstance(artifact.metadata.get("mcp_server_identity"), dict) and isinstance(
+        artifact.metadata.get("mcp_tool_identity"), dict
+    )
+
+
 def enrich_artifact_with_mcp_skill_firewall(artifact: GuardArtifact) -> GuardArtifact:
     """Attach firewall metadata; MCP server and tool-call evidence is native-owned."""
     if artifact.artifact_type == "skill":
@@ -156,6 +166,10 @@ def enrich_artifact_with_mcp_skill_firewall(artifact: GuardArtifact) -> GuardArt
             metadata["mcp_skill_identity"] = _legacy_skill_identity(skill)
         return replace(artifact, metadata=metadata)
     if artifact.artifact_type not in {"mcp_server", "tool_call"}:
+        return artifact
+    if not _can_carry_firewall(artifact):
+        # Transport precondition, not evidence derivation: these never have a
+        # firewall, so they must not need a resident round trip.
         return artifact
     patch = native_firewall_metadata_patch(artifact)
     if patch is None:

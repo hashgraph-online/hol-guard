@@ -44,6 +44,27 @@ def test_firewall_enrichment_fails_closed_without_native_authority(
         enrich_artifact_with_mcp_skill_firewall(artifact)
 
 
+def test_command_less_mcp_server_never_needs_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(_artifact):
+        raise AssertionError("command-less servers have no firewall and need no resident round trip")
+
+    monkeypatch.setattr(mcp_skill_firewall, "native_firewall_metadata_patch", forbidden)
+    for command in (None, "", "   "):
+        artifact = GuardArtifact(
+            artifact_id="cursor:project:remote",
+            name="remote",
+            harness="cursor",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=".cursor/mcp.json",
+            command=command,
+            url="https://example.com/mcp",
+            transport="http",
+            metadata={},
+        )
+        assert enrich_artifact_with_mcp_skill_firewall(artifact) is artifact
+
+
 def test_mcp_server_artifact_emits_mcp_skill_firewall_bundle() -> None:
     artifact = enrich_artifact_with_mcp_skill_firewall(
         GuardArtifact(

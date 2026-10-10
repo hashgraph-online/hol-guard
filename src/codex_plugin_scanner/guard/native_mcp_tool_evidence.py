@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -117,8 +117,19 @@ def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
     }
 
 
-def native_mcp_tool_evidence_request(subop: str, payload: dict[str, object], guard_home: Path | None = None) -> dict:
-    """One bound resident round trip; returns the verified ``payload`` object."""
+def native_mcp_tool_evidence_request(
+    subop: str,
+    payload: dict[str, object],
+    guard_home: Path | None = None,
+    *,
+    validate: Callable[[dict[str, Any]], Any] | None = None,
+) -> Any:
+    """One bound resident round trip; returns the verified ``payload`` object.
+
+    ``validate`` checks the operation-specific payload before the resident is
+    recorded healthy, so a reply that parses but is malformed counts as a
+    resident failure instead of resetting the failure circuit.
+    """
     guard_home = _resolve_digest_home(guard_home)
     request: dict[str, Any] = {
         "schema": _REQUEST_SCHEMA,
@@ -204,8 +215,15 @@ def native_mcp_tool_evidence_request(subop: str, payload: dict[str, object], gua
         raise NativeMcpToolEvidenceError(
             code if isinstance(code, str) and code.startswith("native_mcp_tool_evidence_") else _INVALID_RESULT
         )
+    verified: Any = result["payload"]
+    if validate is not None:
+        try:
+            verified = validate(verified)
+        except NativeMcpToolEvidenceError:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=_INVALID_RESULT)
+            raise
     native_record_resident_success(status.identity.sha256, guard_home)
-    return result["payload"]
+    return verified
 
 
 def _string_list(value: object) -> list[str]:
@@ -214,17 +232,7 @@ def _string_list(value: object) -> list[str]:
     return value
 
 
-def native_tool_risk_evidence(
-    artifact: GuardArtifact,
-    arguments: object,
-    *,
-    risk_categories: tuple[str, ...] | None = None,
-    summary_code: str | None = None,
-) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """Return native ``(risk_categories, signals, summary)`` for one tool call."""
-    payload = native_mcp_tool_evidence_request(
-        "risk", risk_input(artifact, arguments, risk_categories=risk_categories, summary_code=summary_code)
-    )
+def _validated_risk_payload(payload: dict[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...], str]:
     categories = _string_list(payload.get("risk_categories"))
     signals = _string_list(payload.get("signals"))
     summary = payload.get("summary")
@@ -237,12 +245,30 @@ def native_tool_risk_evidence(
     return tuple(categories), tuple(signals), summary
 
 
-def native_firewall_metadata_patch(artifact: GuardArtifact) -> dict[str, object] | None:
-    """Return the native metadata patch for a firewall artifact, or ``None`` for no firewall."""
-    if artifact.artifact_type not in _FIREWALL_ARTIFACT_TYPES:
-        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unsupported_artifact_type")
-    payload = native_mcp_tool_evidence_request("firewall", firewall_input(artifact))
+def _validated_firewall_payload(payload: dict[str, Any]) -> dict[str, object] | None:
     patch = payload.get("metadata_patch")
     if "metadata_patch" not in payload or not (patch is None or isinstance(patch, dict)):
         raise NativeMcpToolEvidenceError(_INVALID_RESULT)
     return patch
+
+
+def native_tool_risk_evidence(
+    artifact: GuardArtifact,
+    arguments: object,
+    *,
+    risk_categories: tuple[str, ...] | None = None,
+    summary_code: str | None = None,
+) -> tuple[tuple[str, ...], tuple[str, ...], str]:
+    """Return native ``(risk_categories, signals, summary)`` for one tool call."""
+    return native_mcp_tool_evidence_request(
+        "risk",
+        risk_input(artifact, arguments, risk_categories=risk_categories, summary_code=summary_code),
+        validate=_validated_risk_payload,
+    )
+
+
+def native_firewall_metadata_patch(artifact: GuardArtifact) -> dict[str, object] | None:
+    """Return the native metadata patch for a firewall artifact, or ``None`` for no firewall."""
+    if artifact.artifact_type not in _FIREWALL_ARTIFACT_TYPES:
+        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unsupported_artifact_type")
+    return native_mcp_tool_evidence_request("firewall", firewall_input(artifact), validate=_validated_firewall_payload)
