@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import secrets
 import threading
 from collections import OrderedDict
 from collections.abc import Mapping, Sequence
@@ -139,13 +140,16 @@ class _ScrubMemo:
         self._size = size
         self._entries: OrderedDict[bytes, str] = OrderedDict()
         self._lock = threading.Lock()
+        # A keyed, process-local MAC: the key never leaves memory, so an entry cannot
+        # be matched against a guessed text, and the memo keeps no raw text.
+        self._key = secrets.token_bytes(32)
 
     def clear(self) -> None:
         with self._lock:
             self._entries.clear()
 
     def get(self, value: str) -> str:
-        key = hashlib.sha256(value.encode("utf-8", "surrogatepass")).digest()
+        key = hashlib.blake2b(value.encode("utf-8", "surrogatepass"), key=self._key, digest_size=32).digest()
         with self._lock:
             found = self._entries.get(key)
             if found is not None:
