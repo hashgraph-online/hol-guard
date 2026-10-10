@@ -302,6 +302,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::McpRuntimeEvidence(request) => {
                 crate::mcp_runtime_evidence_op::evaluate_mcp_runtime_evidence(&request)
             }
+            ResidentOperationV1::FalsePositiveRules(request) => {
+                crate::false_positive_rules_op::evaluate_false_positive_rules(&request)
+            }
             ResidentOperationV1::McpToolEvidence(request) => {
                 crate::mcp_tool_evidence_op::evaluate_mcp_tool_evidence(&request)
             }
@@ -364,6 +367,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
+        ResidentOperationV1::FalsePositiveRules(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
