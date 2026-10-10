@@ -83,7 +83,6 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_update_artifact.py::"
         "test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat",
         "tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms",
-        "tests/test_guard_command_decision_diff.py::test_fresh_process_report_is_environment_independent_and_bounded",
         "tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection",
     }
 )
