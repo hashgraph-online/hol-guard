@@ -33,6 +33,7 @@ from .native_resident_client import (
 )
 from .native_response_decoder import native_error as _native_error
 from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
+from .native_runtime_request_scope import _status_binary_unchanged
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
@@ -185,26 +186,6 @@ _STATUS_MEMO_TTL_SECONDS = 0.1
 # tests monkeypatch ``native_runtime_status`` and always get a fresh probe,
 # while a production burst keeps sharing the real probe's snapshot.
 _status_memo: tuple[float, NativeRuntimeStatus, object] | None = None
-
-
-def _status_binary_unchanged(status: NativeRuntimeStatus) -> bool:
-    """True while the on-disk binary still matches the memoized identity.
-
-    ``stat()`` is cheap relative to re-hashing the whole binary, so checking
-    ``size``/``mtime_ns`` per memo read keeps the reused status honest against
-    a mid-window binary swap without paying the full re-validation cost.
-    """
-
-    identity = status.identity
-    if identity is None:
-        # No binary was validated (mode=off / unavailable).  There is nothing
-        # to keep fresh, so the snapshot is reusable for the TTL.
-        return True
-    try:
-        meta = Path(identity.path).stat()
-    except OSError:
-        return False
-    return meta.st_size == identity.size and meta.st_mtime_ns == identity.mtime_ns
 
 
 def _native_runtime_status_memo() -> NativeRuntimeStatus:

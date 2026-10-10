@@ -27,6 +27,7 @@ _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "bootstrap.",
     "disconnect",
     "doctor.",
+    "hooks.",
     "init.",
     "install",
     "runtime.",
@@ -91,6 +92,11 @@ def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequire
         return LifecycleGateRequirement(f"trust.{trust_command}", "local-trust")
     if command == "doctor" and _bool_attribute(args, "repair"):
         return LifecycleGateRequirement("doctor.repair", _string_attribute(args, "harness") or "all")
+    if command == "repair":
+        # `repair` is the same operation as `doctor --repair` (dry-run exempt above).
+        return LifecycleGateRequirement("doctor.repair", "all")
+    if command == "hooks" and _string_attribute(args, "hooks_command") == "remove":
+        return LifecycleGateRequirement("hooks.remove", "all")
     return None
 
 

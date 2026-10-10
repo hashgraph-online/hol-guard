@@ -1,7 +1,68 @@
 import { test, expect } from 'bun:test';
 import { authorized, convertMessages, finishReason, requirePromptable, eventDelta, setModel, WireArguments,
   requireTransportSelection, thinkingLevel, promptCacheKey, usageChunk,
-  REQUEST_MODEL, THINKING_LEVELS } from './luna_adapter';
+  REQUEST_MODEL, THINKING_LEVELS, keepStreamAlive } from './luna_adapter';
+
+test('silent inference emits only SSE comments and releases its heartbeat timer', () => {
+  const chunks: string[] = [];
+  let tick = () => {};
+  let stopped = 0;
+  const stop = keepStreamAlive(chunk => chunks.push(new TextDecoder().decode(chunk)),
+    () => { throw new Error('Unexpected stream error'); }, callback => {
+      tick = callback;
+      return () => { stopped++; };
+    });
+  expect(chunks).toEqual([': native-luna keepalive\n\n']);
+  tick();
+  expect(chunks).toHaveLength(2);
+  expect(chunks.every(chunk => chunk.startsWith(': ') && !chunk.includes('data:'))).toBe(true);
+  stop(); stop(); tick();
+  expect(stopped).toBe(1);
+  expect(chunks).toHaveLength(2);
+});
+
+test('a disconnected stream stops its timer and reports the transport failure', () => {
+  let tick = () => {};
+  let stopped = false;
+  let disconnected = false;
+  const failure = new Error('closed stream');
+  const errors: unknown[] = [];
+  const stop = keepStreamAlive(() => { if (disconnected) throw failure; },
+    error => errors.push(error), callback => { tick = callback; return () => { stopped = true; }; });
+  disconnected = true;
+  tick(); tick(); stop();
+  expect(stopped).toBe(true);
+  expect(errors).toEqual([failure]);
+});
+
+test('HTTP headers arrive while inference is silent and later payload bytes remain intact', async () => {
+  let release = () => {};
+  let stop = () => {};
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const payload = new TextEncoder().encode('data: {"literal":"雪\\n"}\n\n');
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0,
+    fetch() {
+      const stream = new ReadableStream<Uint8Array>({
+        start(sink) {
+          stop = keepStreamAlive(chunk => sink.enqueue(chunk), error => sink.error(error));
+          void pending.then(() => { stop(); sink.enqueue(payload); sink.close(); });
+        },
+        cancel() { stop(); },
+      });
+      return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } });
+    },
+  });
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.port}`, { signal: AbortSignal.timeout(2000) });
+    const reader = response.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toBe(': native-luna keepalive\n\n');
+    release();
+    expect(Buffer.from((await reader.read()).value!)).toEqual(Buffer.from(payload));
+    expect((await reader.read()).done).toBe(true);
+  } finally {
+    release(); stop(); server.stop(true);
+  }
+});
 
 test('native streaming tool argument bytes are preserved across arbitrary splits', () => {
   const indices = new Map<number, number>();

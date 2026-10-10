@@ -38,6 +38,8 @@ import {
   revokeApprovalGateCooldown,
 } from "./guard-api";
 import { approvalGateCooldownLabel } from "./approval-gate-utils";
+import { GuardHookRemovalPanel } from "./guard-hook-removal-panel";
+import { GuardRepairControl } from "./guard-repair-control";
 import { humanizeList } from "./approval-center-utils";
 import { resolveProtectionLevelCopy } from "./runtime-overview";
 import { RISK_CONTROL_CONSEQUENCES, filterSettingsBySearch } from "./apps/app-catalog";
@@ -1928,6 +1930,13 @@ export function SettingsWorkspace({ onApprovalGateChange }: SettingsWorkspacePro
                           {repairing ? "Repairing…" : "Repair"}
                         </ActionButton>
                       </div>
+                    </div>
+                    <div id="guard-repair">
+                      <p className="text-sm font-semibold text-brand-dark">Repair Guard</p>
+                      <GuardRepairControl description="Fixes the background service, app hooks, and stale local state when hooks time out or an app stays blocked." />
+                    </div>
+                    <div id="guard-hook-removal">
+                      <GuardHookRemovalPanel />
                     </div>
                   </div>
                 </div>
