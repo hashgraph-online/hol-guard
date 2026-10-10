@@ -9,6 +9,8 @@ mod approval_gate;
 pub use approval_gate::*;
 mod approval_reuse;
 pub use approval_reuse::*;
+mod github_cli_classify;
+pub use github_cli_classify::*;
 mod claim_approval_reuse;
 pub use claim_approval_reuse::*;
 mod policy_decision_lookup;
