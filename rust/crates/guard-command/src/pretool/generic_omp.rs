@@ -172,6 +172,13 @@ fn listing(
         }
     }
     let target = input_path(input, signals)?.unwrap_or(".");
+    // OMP glob uses `path` for the complete selector, not just a directory.
+    // Prove its fixed directory prefix; the tool returns names, not contents.
+    let target = if signals.tool_name.as_deref() == Some("glob") {
+        glob_directory(target)?
+    } else {
+        target
+    };
     super::super::safe_reads::bounded_omp_directory_read_target(
         target,
         context.path.home_dir,
@@ -184,6 +191,25 @@ fn listing(
             "The Rust authority proved this names-only listing targets a verified ordinary directory.",
         )
     })
+}
+
+fn glob_directory(target: &str) -> Option<&str> {
+    let Some(index) = target.find(['*', '?', '[', '{']) else {
+        return Some(target);
+    };
+    let selector = target
+        .strip_prefix("~/")
+        .or_else(|| target.strip_prefix('/'))
+        .unwrap_or(target);
+    if !contained_selector(selector) || target.starts_with("//") {
+        return None;
+    }
+    let prefix = &target[..index];
+    match prefix.rsplit_once('/') {
+        Some(("", _)) => Some("/"),
+        Some((directory, _)) => Some(directory),
+        None => Some("."),
+    }
 }
 
 fn grep_scope(
