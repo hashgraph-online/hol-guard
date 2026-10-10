@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from ..store import GuardStore
-from .local_request_snapshots import _cloud_scrub_text
+from .cloud_request_native import cloud_error_texts
 
 _REPLAY_MARKER = "guard_cloud_review_retry_identity_replay"
 
@@ -14,9 +14,9 @@ def retry_result_message(items: list[dict[str, object]]) -> str:
     details: list[str] = []
     for item in items:
         detail = ": ".join(
-            _cloud_scrub_text(value)
-            for value in (item.get("code"), item.get("error"))
-            if isinstance(value, str) and value.strip()
+            cloud_error_texts(
+                [value for value in (item.get("code"), item.get("error")) if isinstance(value, str) and value.strip()]
+            )
         )
         if detail and detail not in details:
             details.append(detail)
