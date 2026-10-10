@@ -60,7 +60,7 @@ pub(crate) fn page_text(bytes: Vec<u8>, offset: usize) -> Handled {
     if offset > text.len() || !text.is_char_boundary(offset) {
         return Err(Fail::Invalid);
     }
-    let mut end = text.len().min(offset + TEXT_PAGE_BYTES);
+    let mut end = text.len().min(offset.saturating_add(TEXT_PAGE_BYTES));
     while !text.is_char_boundary(end) {
         end -= 1;
     }

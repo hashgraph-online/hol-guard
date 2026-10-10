@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from .native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION, PolicyBundleNativeError
+from .native_policy_bundle import PolicyBundleNativeError, native_rejection_code
 from .policy_bundle_parser import (
     policy_bundle_is_enforceable,
     policy_bundle_is_version_downgrade,
@@ -58,10 +58,10 @@ def cached_policy_bundle_validation(
             policy_bundle,
         ):
             return None, "bundle_version_downgrade"
-    except PolicyBundleNativeError:
+    except PolicyBundleNativeError as error:
         # No verdict is not a verdict: the cached bundle stays unusable until the
         # resident can decide, and callers see a distinct outage code.
-        return None, NATIVE_UNAVAILABLE_REJECTION
+        return None, native_rejection_code(error)
     return policy_bundle, None
 
 

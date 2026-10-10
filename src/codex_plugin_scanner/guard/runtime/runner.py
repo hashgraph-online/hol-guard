@@ -52,6 +52,7 @@ from ..native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
     PolicyBundleNativeUnavailableError,
+    native_rejection_code,
 )
 from ..native_prompt import NativePromptAnalysisError
 from ..native_prompt import analyze as _prompt_analyze_native
@@ -1956,9 +1957,9 @@ def sync_receipts(
             ):
                 validated_policy_bundle = None
                 policy_bundle_rejection_reason = "bundle_version_downgrade"
-        except PolicyBundleNativeError:
+        except PolicyBundleNativeError as error:
             validated_policy_bundle = None
-            policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
+            policy_bundle_rejection_reason = native_rejection_code(error)
         candidate_managed_capabilities = _managed_controls_negotiated_capabilities(store, policy_bundle_sync_payload)
         (
             validated_policy_bundle,
@@ -2049,10 +2050,10 @@ def sync_receipts(
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
                 policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
-            except PolicyBundleNativeError:
+            except PolicyBundleNativeError as error:
                 candidate_policy_decisions = []
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
+                policy_bundle_rejection_reason = native_rejection_code(error)
         if validated_policy_bundle is not None:
             effective_policy_bundle = validated_policy_bundle
             update_last_good = True
@@ -2133,9 +2134,9 @@ def sync_receipts(
             ):
                 activation_bundle = None
                 activation_reason = "bundle_version_downgrade"
-        except PolicyBundleNativeError:
+        except PolicyBundleNativeError as error:
             activation_bundle = None
-            activation_reason = NATIVE_UNAVAILABLE_REJECTION
+            activation_reason = native_rejection_code(error)
         if activation_bundle is None:
             activation_last_error = _policy_bundle_rejection_payload(activation_reason)
             store.add_event("policy_bundle/rejected", activation_last_error, now)
@@ -2196,13 +2197,20 @@ def sync_receipts(
                 stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
                 synced_at=now,
             )
-        except PolicyBundleNativeError:
-            # Fail closed: nothing new is materialized or acknowledged while
-            # the resident cannot decide, and the prior authority is kept.
-            activation_last_error = _policy_bundle_rejection_payload(NATIVE_UNAVAILABLE_REJECTION)
+        except PolicyBundleNativeError as error:
+            # Fail closed: nothing new is materialized or acknowledged. Only an
+            # outage keeps the prior authority; a deterministic native rejection
+            # is a verdict, so it must not leave a stale bundle in force.
+            activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
             store.add_event("policy_bundle/rejected", activation_last_error, now)
             effective_policy_bundle = None
-            retain_existing_policy_authority = True
+            if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
+                store.clear_policy_bundle_authority(
+                    now,
+                    policy_bundle_last_error=activation_last_error,
+                    managed_controls_publish=managed_controls_publish,
+                )
+                _reset_cloud_receipt_redaction_authority(store, synced_at=now)
             selected_policy_decisions = []
             policy_bundle_ack = {}
         if effective_policy_bundle is not None:
@@ -2288,9 +2296,9 @@ def sync_receipts(
                         )
                     else:
                         _reset_cloud_receipt_redaction_authority(store, synced_at=now)
-            except PolicyBundleNativeError:
+            except PolicyBundleNativeError as error:
                 cloud_exception_items = []
-                activation_last_error = _policy_bundle_rejection_payload(NATIVE_UNAVAILABLE_REJECTION)
+                activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
                 persist_activation_rejection(store, activation_last_error, now)
             except ApprovalGateError as error:
                 cloud_exception_items = []
