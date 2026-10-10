@@ -74,6 +74,7 @@ def _resident_request(
     timeout_seconds: float,
     required_feature: str,
     response_schema: str | None = None,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops."""
     status = native_runtime_status()
@@ -92,7 +93,7 @@ def _resident_request(
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
         return None
-    if len(payload) > _MAX_REQUEST_BYTES:
+    if len(payload) > max_request_bytes:
         return None
     environment = _isolated_environment()
     response = native_resident_client_request(
