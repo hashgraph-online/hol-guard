@@ -1255,12 +1255,8 @@ class TestGuardSurfaceServer:
         # This endpoint test owns shutdown; worker readiness can exceed the
         # five-second ephemeral-home idle timeout on a traced runner.
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
-        monkeypatch.setattr(daemon._server.hook_process_runner, "_timeout_seconds", 8.0)
         daemon.start()
         try:
-            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-                minimum_workers=1, timeout_seconds=15
-            )
             health_deadline = time.monotonic() + 5
             while True:
                 try:
@@ -1312,16 +1308,13 @@ class TestGuardSurfaceServer:
             # slow/py3.14 spawn it can exhaust and fail closed. Both the
             # "could not complete local review" and the deadline-exhaust
             # denial are transient admission misses, not a wrong decision -
-            # retry after the worker pool has capacity.
+            # retry once.
             if (
                 str(hook_payload.get("reason", "")).startswith(
                     "HOL Guard blocked this action because isolated local review could not complete safely."
                 )
                 or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted"
             ):
-                assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-                    minimum_workers=1, timeout_seconds=15
-                )
                 hook_payload = urlopen_json(hook_request, timeout=15)
         finally:
             daemon.stop()
@@ -1329,7 +1322,7 @@ class TestGuardSurfaceServer:
         assert hook_payload["decision"] == "deny"
         assert hook_payload["reason_code"] == "native_policy_reapproval_required", {
             "hook_payload": hook_payload,
-            "worker_stats": daemon._server.hook_process_runner.stats(),
+            "scheduler_stats": daemon._server.runtime_hook_scheduler.stats(),
         }
         assert hook_payload["approval_request_id"]
 
@@ -1771,15 +1764,16 @@ class TestGuardSurfaceServer:
         assert health["hook_capacity"]["rejected"] == 1
         assert health["hook_capacity"]["per_harness_rejected"]["pi"] == 1
         assert health["hook_capacity"]["rejection_reasons"] == {"daemon_hook_queue_bytes": 1}
-        assert health["hook_workers"]["decisions"] == {}
         assert health["request_capacity"]["limit"] == 32
         assert health["request_capacity"]["critical_limit"] == 8
         operator_health = runtime["operator_health"]
         assert operator_health["state"] == "healthy"
         assert operator_health["repairable"] is False
         assert operator_health["queue_depth"] == health["hook_capacity"]["queued"]
-        assert operator_health["workers_busy"] == health["hook_workers"]["busy"]
-        assert operator_health["workers_ready"] == health["hook_workers"]["ready"]
+        assert operator_health["workers_busy"] == health["hook_capacity"]["active"]
+        assert operator_health["workers_ready"] == (
+            health["hook_capacity"]["limit"] - health["hook_capacity"]["active"]
+        )
         assert "automatically" in operator_health["automatic_recovery"]
         assert set(health["sqlite_profile"]) == {
             "connects",
@@ -2181,8 +2175,6 @@ class TestGuardSurfaceServer:
             return {}
 
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-        monkeypatch.setattr(daemon._server.hook_process_runner, "start", lambda **_: None)
-        monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
         monkeypatch.setattr(
             daemon._server.hook_worker,
             "prepare_workspace_policy",
@@ -2190,7 +2182,6 @@ class TestGuardSurfaceServer:
         )
         monkeypatch.setattr(daemon._server.hook_worker, "review_http_payload", fake_review)
         daemon.start()
-        daemon._server.runtime_hook_process_scheduler.set_active_limit(1)
         try:
             request = urllib.request.Request(
                 (
@@ -2842,9 +2833,6 @@ class TestGuardSurfaceServer:
         daemon.start()
 
         try:
-            assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-                minimum_workers=1, timeout_seconds=15
-            )
             hook_request = urllib.request.Request(
                 (
                     f"http://127.0.0.1:{daemon.port}/v1/hooks/claude-code?"
@@ -2955,11 +2943,6 @@ class TestGuardSurfaceServer:
         guard_home = tmp_path / "pytest-of-user" / "guard-home"
         store = GuardStore(guard_home)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60.0)
-        monkeypatch.setattr(
-            daemon._server.hook_process_runner,
-            "enable_full_capacity",
-            lambda **_kwargs: None,
-        )
         daemon.start()
 
         assert not daemon._shutdown_started.is_set()

@@ -49,7 +49,6 @@ def test_daemon_serve_publishes_listen_state_before_artifact_reconciliation(
         home_dir=configured_home,
         idle_timeout_seconds=0,
     )
-    monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
 
     worker = threading.Thread(target=daemon.serve, name="guard-daemon-serve-test", daemon=True)
     worker.start()
@@ -108,7 +107,6 @@ def test_serve_stop_during_reconcile_does_not_leave_background_workers(
 
     monkeypatch.setattr(daemon_server_module, "reconcile_runtime_artifacts", reconcile)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
-    monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
 
     worker = threading.Thread(target=daemon.serve, name="guard-daemon-stop-during-reconcile", daemon=True)
     worker.start()
@@ -121,7 +119,6 @@ def test_serve_stop_during_reconcile_does_not_leave_background_workers(
         assert reconcile_started.wait(timeout=8)
         daemon.stop()
         assert daemon._command_queue_worker is None
-        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_reconcile.set()
         daemon.stop()
@@ -160,7 +157,6 @@ def test_post_listen_startup_aborts_when_generation_changes_during_reconcile(
     )
     daemon._lifecycle_generation = 1
     daemon._active_start_generation = 1
-    monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
 
     def reconcile(
         _store: GuardStore,
@@ -198,7 +194,6 @@ def test_post_listen_startup_aborts_when_generation_changes_during_activity_main
     )
     daemon._lifecycle_generation = 1
     daemon._active_start_generation = 1
-    monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
     monkeypatch.setattr(
         daemon_server_module,
         "reconcile_runtime_artifacts",
@@ -235,7 +230,6 @@ def test_post_listen_startup_aborts_when_generation_changes_before_background_wo
     )
     daemon._lifecycle_generation = 1
     daemon._active_start_generation = 1
-    monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
     monkeypatch.setattr(
         daemon_server_module,
         "reconcile_runtime_artifacts",
@@ -318,34 +312,6 @@ def test_signed_authority_starts_command_queue_without_daemon_restart(
     assert len(calls) == 1
 
 
-def test_begin_owned_service_defers_hook_workers_only_when_publishing_before_listen(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    daemon = GuardDaemonServer(
-        GuardStore(tmp_path / "guard-home", prime_policy_integrity=False),
-        host="127.0.0.1",
-        port=0,
-        idle_timeout_seconds=0,
-    )
-    daemon._lifecycle_generation = 1
-    daemon._active_start_generation = 1
-    seen: list[bool] = []
-
-    def capture_start(*, defer_backfill: bool = False) -> None:
-        seen.append(defer_backfill)
-        raise RuntimeError("stop-after-start-flag")
-
-    monkeypatch.setattr(daemon._server.hook_process_runner, "start", capture_start)
-
-    with pytest.raises(RuntimeError, match="stop-after-start-flag"):
-        daemon._begin_owned_service(1, publish_before_workers=False)
-    with pytest.raises(RuntimeError, match="stop-after-start-flag"):
-        daemon._begin_owned_service(1, publish_before_workers=True)
-
-    assert seen == [False, True]
-
-
 def test_desktop_owned_core_executable_prefers_runtime_owner(monkeypatch, tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.dashboard_launcher import _desktop_owned_core_executable
 
@@ -391,7 +357,6 @@ def test_serve_enables_full_capacity_on_the_caller_thread(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
-    monkeypatch.setattr(daemon._server.hook_process_runner, "require_initial_capacity", lambda: None)
     monkeypatch.setattr(
         daemon_server_module,
         "reconcile_runtime_artifacts",

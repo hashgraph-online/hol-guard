@@ -161,7 +161,6 @@ def test_self_protected_contract_requires_an_owner(monkeypatch: pytest.MonkeyPat
 def _copy_pretool_graph_sources(root: Path) -> None:
     for relative in (
         "src/codex_plugin_scanner/guard/daemon/server.py",
-        "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
         "src/codex_plugin_scanner/guard/cli/commands_hook.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py",
@@ -173,22 +172,6 @@ def _copy_pretool_graph_sources(root: Path) -> None:
 
 def test_pretool_graph_gate_covers_server_entrypoint_and_cli() -> None:
     assert MODULE._graph_failures(ROOT) == []
-
-
-def test_pretool_graph_gate_rejects_resident_python_cli_escape(tmp_path: Path) -> None:
-    _copy_pretool_graph_sources(tmp_path)
-    entrypoint = tmp_path / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"
-    source = entrypoint.read_text(encoding="utf-8")
-    marker = "        worker_payload = worker.review_http_payload(\n"
-    assert marker in source
-    entrypoint.write_text(
-        source.replace(marker, "        worker_payload = _run_guard_hook_command(\n", 1),
-        encoding="utf-8",
-    )
-
-    failures = MODULE._graph_failures(tmp_path)
-
-    assert any("resident entrypoint can still reach the Python CLI" in failure for failure in failures)
 
 
 def test_pretool_graph_gate_rejects_cli_normalization_before_native(tmp_path: Path) -> None:

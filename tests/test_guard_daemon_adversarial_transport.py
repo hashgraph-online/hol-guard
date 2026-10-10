@@ -771,7 +771,6 @@ def test_partial_start_failure_rolls_back_workers_state_and_owner_lock(
     assert started_threads
     assert all(not thread.is_alive() for thread in started_threads)
     assert daemon._owner_lock is None
-    assert daemon._server.hook_process_runner.stats()["workers"] == 0
     assert daemon._server.runtime_heartbeat._thread is None
     assert daemon._server.unclassified_watchdog_thread is None
     assert daemon._server.approval_attention._thread is None
@@ -799,7 +798,6 @@ def test_partial_start_failure_rolls_back_workers_state_and_owner_lock(
         assert daemon._finish_service_completed is False
     finally:
         daemon.stop()
-    assert daemon._server.hook_process_runner.stats()["workers"] == 0
 
 
 def test_partial_start_retains_owner_until_worker_containment(
@@ -813,12 +811,12 @@ def test_partial_start_retains_owner_until_worker_containment(
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
-    close_runner = daemon._server.hook_process_runner.close_contained
+    close_runner = daemon._server.hook_worker.close_contained
 
     def fail_startup() -> None:
         raise RuntimeError("injected partial startup failure")
 
-    monkeypatch.setattr(daemon._server.hook_process_runner, "close_contained", lambda: False)
+    monkeypatch.setattr(daemon._server.hook_worker, "close_contained", lambda: False)
     monkeypatch.setattr(daemon, "_start_watchdog", fail_startup)
     try:
         with pytest.raises(RuntimeError, match="injected partial startup failure"):
@@ -827,10 +825,9 @@ def test_partial_start_retains_owner_until_worker_containment(
         assert daemon._owner_lock is not None
         with pytest.raises(RuntimeError, match="already active"):
             daemon_manager.acquire_guard_daemon_owner_lock(store.guard_home)
-        assert daemon._server.hook_process_runner.stats()["workers"] > 0
         assert daemon._server.runtime_heartbeat._thread is None
         assert store.get_runtime_state() is None
     finally:
-        monkeypatch.setattr(daemon._server.hook_process_runner, "close_contained", close_runner)
+        monkeypatch.setattr(daemon._server.hook_worker, "close_contained", close_runner)
         assert daemon._finish_service()
         daemon._server.server_close()

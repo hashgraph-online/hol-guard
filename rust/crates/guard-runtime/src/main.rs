@@ -30,6 +30,14 @@ mod claim_reuse_binding;
 mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
+mod cloud_action_envelope;
+mod cloud_action_envelope_fields;
+mod cloud_request_payload;
+mod cloud_request_snapshot;
+mod cloud_request_text;
+#[cfg(test)]
+mod cloud_request_vectors_tests;
+mod cloud_sync_privacy;
 mod codex_tool_output_git;
 mod codex_tool_output_op;
 #[cfg(all(test, unix))]
@@ -53,6 +61,7 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
+mod cursor_observer_proof_op;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_headless;
@@ -80,6 +89,18 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod guard_store_args;
+mod guard_store_cmd_activity;
+mod guard_store_cmd_api;
+mod guard_store_cmd_feedback;
+mod guard_store_cmd_lifecycle;
+mod guard_store_cmd_maintenance;
+mod guard_store_cmd_privacy;
+#[cfg(test)]
+mod guard_store_cmd_read_vectors_tests;
+mod guard_store_cmd_rollups;
+#[cfg(test)]
+mod guard_store_cmd_vectors_tests;
+mod guard_store_cmd_wire;
 mod guard_store_db;
 mod guard_store_json;
 mod guard_store_op;
