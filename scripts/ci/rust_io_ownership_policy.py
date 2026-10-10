@@ -133,8 +133,15 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.
         "src/codex_plugin_scanner/guard/native_false_positive_rules.py",
+        # Decodes the bounded resident runner-authority response envelope and
+        # projects typed runner state to it; Rust owns every authority answer.
+        "src/codex_plugin_scanner/guard/native_runner_authority.py",
+        "src/codex_plugin_scanner/guard/runtime/runner_native_authority.py",
         # Decodes the bounded resident MCP tool-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",
+        # JSON-safe DTO copy shared by the native runner-authority and MCP
+        # tool-evidence projections; it carries no decision.
+        "src/codex_plugin_scanner/guard/runtime/json_safe_copy.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
     }

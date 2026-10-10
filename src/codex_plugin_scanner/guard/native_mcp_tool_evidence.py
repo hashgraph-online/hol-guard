@@ -35,6 +35,7 @@ from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
 )
+from .runtime.json_safe_copy import json_safe_copy
 
 _FEATURE = "mcp-tool-evidence-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
@@ -50,17 +51,12 @@ class NativeMcpToolEvidenceError(ValueError):
     """The native owner could not supply bound, typed MCP tool evidence."""
 
 
-def _json_value(value: object) -> Any:
-    """JSON-safe copy of a value; ``default=str`` mirrors every other DTO."""
-    return json.loads(json.dumps(value, default=str))
-
-
 def _arguments_dto(arguments: object) -> dict[str, object]:
     if isinstance(arguments, Mapping):
-        return {"format": "mapping", "entries": _json_value([(str(key), value) for key, value in arguments.items()])}
+        return {"format": "mapping", "entries": json_safe_copy([(str(key), value) for key, value in arguments.items()])}
     if isinstance(arguments, str):
         return {"format": "json", "text": arguments}
-    return {"format": "other", "value": _json_value(arguments)}
+    return {"format": "other", "value": json_safe_copy(arguments)}
 
 
 def risk_input(
@@ -72,7 +68,7 @@ def risk_input(
 ) -> dict[str, object]:
     """Transport-only DTO for the ``risk`` subop."""
     return {
-        "artifact": _json_value(
+        "artifact": json_safe_copy(
             {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)}
         ),
         "arguments": _arguments_dto(arguments),
@@ -88,7 +84,7 @@ def _string_pairs(value: object) -> list[list[str]]:
 
 
 def _record(value: object) -> dict[str, object] | None:
-    return _json_value(value) if isinstance(value, dict) else None
+    return json_safe_copy(value) if isinstance(value, dict) else None
 
 
 def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
@@ -110,10 +106,10 @@ def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
         "env": _string_pairs(metadata.get("env")),
         "mcp_server_identity": _record(metadata.get("mcp_server_identity")),
         "mcp_tool_identity": _record(metadata.get("mcp_tool_identity")),
-        "tool_schema": _json_value(metadata.get("tool_schema")),
-        "tool_description": _json_value(metadata.get("tool_description")),
-        "tool_names": _json_value(metadata.get("tool_names")),
-        "tool_names_camel": _json_value(metadata.get("toolNames")),
+        "tool_schema": json_safe_copy(metadata.get("tool_schema")),
+        "tool_description": json_safe_copy(metadata.get("tool_description")),
+        "tool_names": json_safe_copy(metadata.get("tool_names")),
+        "tool_names_camel": json_safe_copy(metadata.get("toolNames")),
     }
 
 

@@ -268,7 +268,7 @@ fn parse_confidence(v: &Value) -> Res<RiskConfidenceLabel> {
     parse_risk_confidence(v).map_err(|e| DecisionError(e.0.to_string()))
 }
 /// `_parse_signals`.
-fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
+pub fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
     let arr = match v {
         Value::Array(a) => a,
         _ => return err("signals must be a list"),
@@ -624,9 +624,17 @@ fn dashboard_detail_from_signals(signals: &[RiskSignalV2], fallback: &str) -> St
 This command sends local secret to {sink_type} without exposing the raw secret in Guard evidence."
         );
     }
+    // Python's `max` keeps the FIRST of equally confident signals; Rust's
+    // `max_by_key` would keep the last, so the tie is broken explicitly.
     let strongest = signals
         .iter()
-        .max_by_key(|item| confidence_rank(item.confidence))
+        .reduce(|best, item| {
+            if confidence_rank(item.confidence) > confidence_rank(best.confidence) {
+                item
+            } else {
+                best
+            }
+        })
         .unwrap();
     strongest.plain_reason.clone()
 }

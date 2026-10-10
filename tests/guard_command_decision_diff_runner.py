@@ -67,10 +67,12 @@ from tests.guard_command_corpus_native import (
 from tests.guard_command_corpus_native_contract import configure_native_contract_shard, validate_native_case
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 from tests.guard_command_corpus_oracle_types import OracleRecord
-from tests.guard_command_corpus_runner import EVALUATION_SHARD_COUNT, MAX_CONCURRENT_WORKERS, peak_rss_mib
+from tests.guard_command_corpus_runner import EVALUATION_SHARD_COUNT, peak_rss_mib
 
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
+# Bound the aggregate memory of Python workers and their native residents.
+MAX_CONCURRENT_WORKERS = 2
 
 
 @dataclass(frozen=True, slots=True)
