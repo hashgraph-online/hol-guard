@@ -25,6 +25,13 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from scripts.ci.runtime_majority_functions import (  # noqa: E402
+    ModulePlan,
+    ScopeError,
+    check_external_references,
+    plan_modules,
+    validate_entries,
+)
 from scripts.ci.runtime_majority_python import (  # noqa: E402
     ImportGraph,
     build_graph,
@@ -37,10 +44,6 @@ from scripts.ci.runtime_majority_rust import measure_rust  # noqa: E402
 SCHEMA: Final = "hol-guard.runtime-majority-report.v1"
 SCOPE_SCHEMA: Final = "hol-guard.runtime-majority-scope.v1"
 DEFAULT_SCOPE: Final = "docs/guard/contracts/runtime-majority-scope.v1.json"
-
-
-class ScopeError(RuntimeError):
-    """The scope configuration is malformed or names a missing root."""
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -61,6 +64,7 @@ def load_scope(path: Path) -> dict[str, Any]:
             raise ScopeError(f"exclusion {entry.get('id')!r} needs a non-empty path list")
         if not str(entry.get("reason", "")).strip() or not str(entry.get("category", "")).strip():
             raise ScopeError(f"exclusion {entry.get('id')!r} needs a category and a reason")
+    validate_entries(scope["python"].get("function_exclusions", []))
     for item in scope["rust"].get("exclude_paths", []):
         if not str(item.get("reason", "")).strip():
             raise ScopeError(f"rust exclusion {item.get('path')!r} needs a reason")
@@ -145,6 +149,39 @@ def _python_exclusions(
     return records
 
 
+def _function_exclusions(
+    graph: ImportGraph, in_scope: dict[str, str], plans: dict[str, ModulePlan], entries: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """One record per reviewed function-level entry whose module is in scope."""
+    live = {module.path for name, module in graph.modules.items() if name in in_scope}
+    records: list[dict[str, Any]] = []
+    for entry in entries:
+        plan = plans.get(entry["path"])
+        if plan is None or plan.path not in live:
+            continue
+        first = next(item for item in entries if item["path"] == entry["path"]) is entry
+        symbols = sorted(entry["symbols"])
+        records.append(
+            {
+                "language": "python",
+                "path": entry["path"],
+                "loc": sum(plan.symbol_loc[name] for name in symbols) + (plan.import_loc if first else 0),
+                "kind": "function",
+                "exclusion_id": entry["id"],
+                "category": entry["category"],
+                "reason": entry["reason"],
+                "evidence": entry["evidence"],
+                "symbols": symbols,
+                "entry_points": sorted(entry.get("entry_points", [])),
+                "pruned_import_loc": plan.import_loc if first else 0,
+                "imported_by": "",
+                "in_scope_importers": [],
+                "imported_at_import_time_by_in_scope": False,
+            }
+        )
+    return records
+
+
 def _summarize_exclusions(records: list[dict[str, Any]], entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     summary = []
     for entry in entries:
@@ -177,14 +214,20 @@ def _tree_total(repo: Path, patterns: list[str]) -> int:
 def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, Any]:
     scope = load_scope(scope_path)
     python_scope = scope["python"]
-    graph = build_graph(repo, python_scope["package_root"])
+    function_entries = list(python_scope.get("function_exclusions", []))
     roots = [str(item["module"]) for item in python_scope["roots"]]
+    root_paths = {f"{python_scope['package_root'].rsplit('/', 1)[0]}/{root.replace('.', '/')}.py" for root in roots} | {
+        f"{python_scope['package_root'].rsplit('/', 1)[0]}/{root.replace('.', '/')}/__init__.py" for root in roots
+    }
+    plans = plan_modules(repo, function_entries, root_paths=root_paths)
+    graph = build_graph(repo, python_scope["package_root"], plans)
     missing = [root for root in roots if root not in graph.modules]
     if missing:
         raise ScopeError(f"runtime roots not found: {missing}")
     entries = list(python_scope["exclusions"])
     unpruned, _, _ = closure(graph, roots, exclusions=[])
     in_scope, direct_hits, kind = closure(graph, roots, exclusions=entries)
+    check_external_references(repo, graph.modules, in_scope, plans)
     reviewed = python_scope["reviewed_runtime"]
     root_set = set(roots)
 
@@ -210,7 +253,10 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
     python_loc = sum(item["loc"] for item in files)
     share = rust_loc / (rust_loc + python_loc) if rust_loc + python_loc else 0.0
 
-    exclusions = _python_exclusions(graph, unpruned, in_scope, entries, direct_hits) + rust_exclusions
+    function_records = _function_exclusions(graph, in_scope, plans, function_entries)
+    exclusions = (
+        _python_exclusions(graph, unpruned, in_scope, entries, direct_hits) + function_records + rust_exclusions
+    )
     exclusions.sort(key=lambda item: (item["language"], item["path"]))
     package_total = sum(module.loc for module in graph.modules.values())
     in_scope_paths = {item["path"] for item in files}
@@ -269,7 +315,7 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
             "pending_unclassified_loc": sum(item["loc"] for item in pending),
             "dynamic_import_sites_unresolved": sum(graph.dynamic_unresolved.get(name, 0) for name in in_scope),
         },
-        "exclusion_summary": _summarize_exclusions(exclusions, entries),
+        "exclusion_summary": _summarize_exclusions(exclusions, [*entries, *function_entries]),
         "exclusions": exclusions,
         "non_runtime_totals": {
             "tests": {"rust_loc": rust_totals["tests"], "python_loc": _tree_total(repo, python_scope["tests"]["path"])},
