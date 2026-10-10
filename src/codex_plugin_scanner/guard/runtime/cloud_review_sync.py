@@ -9,7 +9,7 @@ from typing import Any
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
-from .cloud_request_native import cloud_scrub_text
+from .cloud_request_native import cloud_error_text
 from .cloud_review_batching import (
     CloudReviewBatchLimits,
     CloudReviewEventTooLargeError,
@@ -210,7 +210,7 @@ def _post_events_with_oauth_refresh(
 
 
 def _retry_review_events(store: GuardStore, sequences: list[int], *, error: str, binding: dict[str, str]) -> None:
-    store.retry_review_events(sequences, now=_now(), error=cloud_scrub_text(error), **binding)
+    store.retry_review_events(sequences, now=_now(), error=cloud_error_text(error), **binding)
 
 
 def sync_cloud_review_events_once(

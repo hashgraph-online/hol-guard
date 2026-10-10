@@ -99,7 +99,7 @@ def test_native_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
     def refuse(kind: str, args: object, guard_home: object = None) -> dict[str, Any]:
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
-    cloud._scrubbed.cache_clear()
+    cloud._SCRUB_MEMO.clear()
     cloud._synced_text.cache_clear()
     monkeypatch.setattr(cloud, "native_runner_authority", refuse)
     with pytest.raises(NativeRunnerAuthorityError):
@@ -112,7 +112,7 @@ def test_native_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
 
 @pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_scrub_is_reused_for_the_same_text(monkeypatch: pytest.MonkeyPatch) -> None:
-    cloud._scrubbed.cache_clear()
+    cloud._SCRUB_MEMO.clear()
     first = cloud.cloud_scrub_text("password hunter2")
 
     def refuse(kind: str, args: object, guard_home: object = None) -> dict[str, Any]:
@@ -152,3 +152,42 @@ def test_oversized_snapshot_is_built_in_chunks(monkeypatch: pytest.MonkeyPatch) 
     assert cloud.local_request_snapshot(**args) == whole
     assert calls.count("local_request_snapshot_items") > 2
     assert calls[-1] == "local_request_snapshot"
+
+
+def test_request_row_text_is_cut_to_fit_one_resident_request() -> None:
+    row = {
+        "request_id": "r1",
+        "raw_command_text": "a" * 200_000 + "b" * 200_000,
+        "action_envelope_json": "{" + " " * 900_000,
+    }
+    projected = cloud.project_request_row(row)
+    assert projected["raw_command_text"] == "a" * 70_000 + "b" * 70_000
+    assert len(projected["action_envelope_json"]) == 400_000
+    assert projected["request_id"] == "r1"
+
+
+def test_error_text_is_withheld_not_raised_or_leaked_when_scrub_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(_values: object) -> list[str]:
+        raise NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+
+    monkeypatch.setattr(cloud, "cloud_scrub_texts", refuse)
+    secret = "token=hunter2-secret"
+    assert cloud.cloud_error_text(secret) == cloud.WITHHELD_ERROR_TEXT
+    assert cloud.cloud_error_texts([secret, "b"]) == [cloud.WITHHELD_ERROR_TEXT] * 2
+
+
+def test_scrub_memo_keys_by_digest_and_stays_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+
+    def scrub(values: list[str]) -> list[str]:
+        calls.append(list(values))
+        return [f"scrubbed:{len(value)}" for value in values]
+
+    monkeypatch.setattr(cloud, "cloud_scrub_texts", scrub)
+    memo = cloud._ScrubMemo(2)
+    assert memo.get("password=a") == memo.get("password=a")
+    assert len(calls) == 1
+    memo.get("b")
+    memo.get("c")
+    assert len(memo._entries) == 2
+    assert all(isinstance(key, bytes) and len(key) == 32 for key in memo._entries)
