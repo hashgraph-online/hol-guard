@@ -91,6 +91,8 @@ mod generic_hook_payload;
 pub use generic_hook_payload::*;
 mod hook_decision;
 pub use hook_decision::*;
+mod daemon_handler;
+pub use daemon_handler::*;
 mod daemon_route;
 pub use daemon_route::*;
 

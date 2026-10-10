@@ -160,6 +160,7 @@ def _resident_request(
             "hook_adapter",
             "request_context_build",
             "daemon_route",
+            "daemon_handler",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

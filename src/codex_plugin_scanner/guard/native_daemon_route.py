@@ -154,15 +154,23 @@ def _decide(
     guard_home: Path | None,
     fields: Mapping[str, Any],
     validate: Callable[[dict[str, Any]], None] | None = None,
+    *,
+    operation: ResidentOperation | None = None,
 ) -> dict[str, Any]:
-    """Ask the resident and return its payload once it is bound and strictly shaped."""
+    """Ask the resident and return its payload once it is bound and strictly shaped.
+
+    ``operation`` selects the resident operation; every daemon operation shares
+    the in-flight ask slots and the pinned transport.
+    """
+
+    operation = operation or _OPERATION
 
     def check(payload: dict[str, Any]) -> None:
-        _shape(payload, {"kind": str, **fields})
+        shape_fields(payload, {"kind": str, **fields}, lambda: operation.fail(operation.invalid))
         if validate is not None:
             validate(payload)
 
-    deadline = time.monotonic() + _OPERATION.timeout_seconds
+    deadline = time.monotonic() + operation.timeout_seconds
 
     def bounded_request(*, timeout_seconds: float, **kwargs: Any) -> dict[str, object] | None:
         if not _ASK_SLOTS.acquire(timeout=max(0.0, deadline - time.monotonic())):
@@ -175,7 +183,7 @@ def _decide(
         finally:
             _ASK_SLOTS.release()
 
-    return resident_decide(_OPERATION, bounded_request, query, guard_home, check)
+    return resident_decide(operation, bounded_request, query, guard_home, check)
 
 
 def native_route_facts(method: str, path: str, *, guard_home: Path | None = None) -> RouteFacts:
