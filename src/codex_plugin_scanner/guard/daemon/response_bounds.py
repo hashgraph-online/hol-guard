@@ -7,7 +7,7 @@ from typing import Protocol
 
 
 class _ReadableResponse(Protocol):
-    def read(self, n: int = -1) -> bytes: ...
+    def read(self, n: int = -1, /) -> bytes: ...
 
 
 def _bound_response_read(response: object, timeout: float) -> bool:

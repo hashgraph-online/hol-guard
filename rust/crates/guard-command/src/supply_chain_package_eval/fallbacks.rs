@@ -30,30 +30,23 @@ pub(super) fn lockfile_parse_warning_result(
     Some(pkg)
 }
 
-#[allow(dead_code)]
-pub(super) fn lockfile_ecosystem(file_name: &str) -> String {
-    let name = std::path::Path::new(file_name)
+/// Ecosystem of a lockfile, given its file name or the parser's format label
+/// (`LockfileParseResult.format`); mirrors `_lockfile_ecosystem`.
+pub(super) fn lockfile_ecosystem(file_name_or_format: &str) -> String {
+    let name = std::path::Path::new(file_name_or_format)
         .file_name()
         .map(|n| n.to_string_lossy().to_lowercase())
         .unwrap_or_default();
-    if name.contains("package-lock")
-        || name.contains("npm-shrinkwrap")
-        || name.contains("pnpm")
-        || name.contains("yarn")
-        || name.contains("bun")
-    {
-        "npm".into()
-    } else if name.contains("cargo") {
-        "cargo".into()
-    } else if name.contains("composer") {
-        "composer".into()
-    } else if name.contains("gemfile") {
-        "gem".into()
-    } else if name.contains("poetry") || name.contains("pipfile") || name.contains("uv") {
-        "pypi".into()
-    } else {
-        "npm".into()
+    match name.as_str() {
+        "poetry.lock" | "uv.lock" | "pipfile.lock" | "poetry-lock" | "uv-lock" | "pipenv-lock" => {
+            "pypi"
+        }
+        "cargo.lock" | "cargo-lock" => "cargo",
+        "composer.lock" | "composer-lock" => "packagist",
+        "gemfile.lock" | "bundler-lock" => "rubygems",
+        _ => "npm",
     }
+    .into()
 }
 
 #[allow(dead_code)]
@@ -146,23 +139,40 @@ pub(super) fn bundle_package_result(
 pub(super) fn incomplete_lockfile_fallback_target(
     parse_result: &LockfileParseResult,
 ) -> Map<String, Value> {
+    let ecosystem = match parse_result.format.as_str() {
+        "bundler-lock" => "rubygems",
+        "cargo-lock" => "cargo",
+        "composer-lock" => "packagist",
+        "pipenv-lock" | "poetry-lock" | "uv-lock" => "pypi",
+        _ => "npm",
+    };
+    let package_manager = match parse_result.format.as_str() {
+        "bun-lock" => "bun",
+        "bundler-lock" => "bundler",
+        "cargo-lock" => "cargo",
+        "composer-lock" => "composer",
+        "pipenv-lock" => "pipenv",
+        "pnpm-lock" => "pnpm",
+        "poetry-lock" => "poetry",
+        "uv-lock" => "uv",
+        "yarn-lock" => "yarn",
+        _ => "npm",
+    };
     let mut target = Map::new();
-    target.insert(
-        "ecosystem".to_string(),
-        Value::String(lockfile_ecosystem(&parse_result.format)),
-    );
+    target.insert("ecosystem".to_string(), Value::String(ecosystem.into()));
     target.insert(
         "name".to_string(),
         Value::String("unresolved-lockfile".into()),
     );
     target.insert("namespace".to_string(), Value::Null);
-    target.insert("version".to_string(), Value::Null);
-    target.insert("range".to_string(), Value::Null);
-    target.insert("package_manager".to_string(), Value::String("npm".into()));
     target.insert(
-        "package_name".to_string(),
-        Value::String("unresolved-lockfile".into()),
+        "package_manager".to_string(),
+        Value::String(package_manager.into()),
     );
+    target.insert("range".to_string(), Value::Null);
+    target.insert("version".to_string(), Value::Null);
+    target.insert("redacted_command".to_string(), Value::Null);
+    target.insert("alias".to_string(), Value::Null);
     target
 }
 

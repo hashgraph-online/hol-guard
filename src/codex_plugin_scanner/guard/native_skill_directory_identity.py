@@ -27,6 +27,7 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
+from .native_path_anchor import anchor_to_process_directory
 from .skill_directory_identity_contract import (
     SKILL_DIRECTORY_IDENTITY_SCHEMA,
     SkillDirectoryIdentity,
@@ -105,8 +106,8 @@ def native_inspect_skill_directory(
     payload = _exchange(
         {
             "kind": "inspect",
-            "skill_document": _absolute(skill_document),
-            "scope_root": _absolute(scope_root),
+            "skill_document": anchor_to_process_directory(skill_document),
+            "scope_root": anchor_to_process_directory(scope_root),
             "limits": _limits(limits),
         },
         timeout_seconds=_INSPECT_TIMEOUT_SECONDS,
@@ -120,7 +121,7 @@ def native_discover_skill_documents(
     *,
     limits: SkillDirectoryIdentityLimits,
 ) -> SkillDocumentDiscovery:
-    root = Path(_absolute(skill_root))
+    root = Path(anchor_to_process_directory(skill_root))
     payload = _exchange(
         {"kind": "discover", "skill_root": str(root), "limits": _limits(limits)},
         timeout_seconds=_DISCOVER_TIMEOUT_SECONDS,
@@ -148,13 +149,6 @@ def native_discover_skill_documents(
             ),
         ),
     )
-
-
-def _absolute(path: Path) -> str:
-    """Anchor a relative path to this process's directory; no normalization."""
-
-    text = os.fspath(path)
-    return text if os.path.isabs(text) else os.path.join(os.getcwd(), text)
 
 
 def _limits(limits: SkillDirectoryIdentityLimits) -> dict[str, object]:

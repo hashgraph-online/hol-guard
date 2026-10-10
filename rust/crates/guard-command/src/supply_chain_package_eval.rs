@@ -154,8 +154,8 @@ use request_payload::{build_request_payload, workspace_fingerprint};
 #[path = "supply_chain_package_eval/package_resolution.rs"]
 mod package_resolution;
 use package_resolution::{
-    bundle_package, bundle_package_label, exact_version, hash_paths, lockfile_target_key,
-    npm_source_spec, optional_string_map, registry_resolved_target_version,
+    bundle_package, bundle_package_label, exact_version, first_dict_item, hash_paths,
+    lockfile_target_key, npm_source_spec, optional_string_map, registry_resolved_target_version,
     resolved_target_version, split_namespace_name, stable_hash, value_to_plain_string,
 };
 #[path = "supply_chain_package_eval/bundle_policy.rs"]
@@ -196,6 +196,18 @@ use lockfile_helpers::{
 };
 #[path = "supply_chain_package_eval/package_lock.rs"]
 mod package_lock;
+
+#[path = "supply_chain_package_eval/lockfile_parse.rs"]
+mod lockfile_parse;
+#[cfg(test)]
+#[path = "supply_chain_package_eval/lockfile_parse_tests.rs"]
+mod lockfile_parse_tests;
+#[path = "supply_chain_package_eval/lockfile_validate.rs"]
+mod lockfile_validate;
+pub use lockfile_parse::{
+    collect_lockfile_parse_results, incomplete_lockfile_result, parse_lockfile_text,
+    parse_lockfile_with_budget, LOCKFILE_PARSER_VERSION,
+};
 
 #[path = "supply_chain_package_eval/manifest_dependency_targets.rs"]
 mod manifest_dependency_targets;
