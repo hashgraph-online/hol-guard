@@ -5,9 +5,13 @@ seccomp/LSM, cgroups, network, secrets, outputs, and cleanup to the
 atomic guarantee contract.
 
 Deny-by-default: unknown or unsupported OCI features LOWER assurance,
-never grant. A feature not explicitly mapped never contributes a
-guarantee. Hostile specs (SYS_ADMIN, host mounts, host network) are
+never grant. Hostile specs (SYS_ADMIN, host mounts, host network) are
 refused at plan time.
+
+The native resident owns the bundle evidence reader, the violation and
+guarantee verdict, the bundle digest and the plan digest. This module ships
+typed inputs, rebuilds the typed evidence from the owner's answer and turns
+a refusal into ``ProviderPlanError``; it never computes a verdict itself.
 """
 
 from __future__ import annotations
@@ -16,9 +20,10 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Final, cast
 
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
     AtomicGuaranteeKind,
@@ -30,28 +35,22 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     ProviderHealthState,
     ProviderIdentity,
     TerminalStatement,
-    framed_digest,
 )
 from codex_plugin_scanner.guard.runtime.isolation_provider import (
     ProviderHealth,
     ProviderPlanError,
     validate_provider_plan_inputs,
 )
-from codex_plugin_scanner.guard.runtime.oci_mount_security import (
-    is_oci_host_path_mount,
-    match_forbidden_oci_path,
-    normalize_oci_bind_source,
-    require_oci_bundle_relative_path,
-    resolve_oci_bind_source,
-    resolve_oci_bundle_path,
-    resolve_oci_bundle_root,
-)
+from codex_plugin_scanner.guard.runtime.oci_mount_security import resolve_oci_bundle_root
 
-from .payload_coercion import object_list, object_map, string_tuple
+from .payload_coercion import object_map, string_tuple
 
 _PROVIDE_KIND: Final = "oci-isolation"
 _SIGNING_IDENTITY: Final = "guard-oci-builtin"
 _TRUST_DOMAIN: Final = "guard.oci"
+_MALFORMED_INPUT_CODES: Final = frozenset(
+    {"native_runner_authority_component_unencodable", "native_runner_authority_invalid"}
+)
 
 # OCI features mapped to atomic guarantees.
 # When an OCI spec declares these capabilities, they map to specific
@@ -73,66 +72,6 @@ _OCI_ENFORCED: Final[tuple[tuple[AtomicGuaranteeKind, GuardExecutionAssuranceBou
 _OCI_ABSENT: Final[tuple[AtomicGuaranteeKind, ...]] = (
     AtomicGuaranteeKind.KERNEL_HARDWARE,
     AtomicGuaranteeKind.TENANT,
-)
-
-# Dangerous capabilities that cause immediate plan rejection.
-_DANGEROUS_CAPABILITIES: Final = frozenset(
-    {
-        "CAP_SYS_ADMIN",
-        "SYS_ADMIN",
-        "CAP_SYS_PTRACE",
-        "SYS_PTRACE",
-        "CAP_NET_ADMIN",
-        "NET_ADMIN",
-    }
-)
-
-# Host namespace types that break isolation.
-_HOST_NAMESPACES: Final = frozenset(
-    {
-        "pid",
-        "net",
-        "ipc",
-        "uts",
-        "user",
-    }
-)
-
-# Network modes that defeat isolation.
-_HOST_NETWORK_MODES: Final = frozenset(
-    {
-        "host",
-        "host.network",
-        "HostNetwork",
-    }
-)
-
-# Forbidden bind-mount sources (host paths).
-_FORBIDDEN_BIND_SOURCES: Final = frozenset(
-    {
-        "/",
-        "/etc",
-        "/etc/shadow",
-        "/etc/passwd",
-        "/proc",
-        "/sys",
-        "/dev",
-        "/var/run",
-        "/run",
-        "/root",
-        "/home",
-        "/var/lib",
-        "/var/log",
-    }
-)
-
-# World-writable mount option tokens (denies by default).
-_WORLD_WRITABLE_OPTIONS: Final = frozenset(
-    {
-        "world-writable",
-        "world_writable",
-        "o+w",
-    }
 )
 
 
@@ -243,16 +182,6 @@ class OCIUserEvidence:
 
 
 @dataclass(frozen=True)
-class _OCILinuxEvidence:
-    seccomp: OCISeccompEvidence
-    lsm: OCILSMEvidence
-    cgroup: OCICGroupEvidence
-    namespaces: OCINamespaceEvidence
-    capabilities: OCICapabilitiesEvidence
-    network_spec: object
-
-
-@dataclass(frozen=True)
 class OCIBundleEvidence:
     """Evidence from OCI bundle spec validation."""
 
@@ -270,532 +199,6 @@ class OCIBundleEvidence:
     capabilities: OCICapabilitiesEvidence = field(default_factory=OCICapabilitiesEvidence)
     rootfs: OCIRootFSEvidence = field(default_factory=OCIRootFSEvidence)
     user: OCIUserEvidence = field(default_factory=OCIUserEvidence)
-
-
-# ---------------------------------------------------------------------------
-# Validation helpers
-# ---------------------------------------------------------------------------
-
-
-def _validate_bundle(evidence: OCIBundleEvidence) -> tuple[str, ...]:
-    """Validate OCI bundle evidence. Returns list of violation reasons."""
-    violations: list[str] = []
-
-    if not evidence.bundle_valid:
-        violations.append("bundle invalid")
-
-    if evidence.seccomp.profile_kind in (
-        OCISeccompProfile.UNSET,
-        OCISeccompProfile.NONE,
-    ):
-        violations.append("seccomp profile unset or none")
-
-    if evidence.mounts:
-        violations.extend(evidence.mounts.forbidden_bind_sources)
-        violations.extend(f"unverified bind source: {source}" for source in evidence.mounts.unverified_bind_sources)
-        violations.extend(evidence.mounts.world_writable_binds)
-
-    if not evidence.rootfs.containment_verified:
-        violations.append("rootfs containment is unverified")
-
-    if evidence.capabilities:
-        violations.extend(evidence.capabilities.dangerous_capabilities)
-
-    if evidence.network and evidence.network.mode in _HOST_NETWORK_MODES:
-        violations.append("host network mode")
-
-    if evidence.namespaces:
-        if not evidence.namespaces.pid_isolated:
-            violations.append("pid namespace not isolated")
-        if not evidence.namespaces.net_isolated:
-            violations.append("net namespace not isolated")
-
-    if evidence.user and not evidence.user.non_root:
-        violations.append("running as root (uid=0)")
-
-    return tuple(violations)
-
-
-def _has_dangerous_caps(evidence: OCIBundleEvidence) -> bool:
-    """Return True if evidence contains dangerous capabilities."""
-    if not evidence.capabilities:
-        return False
-    return len(evidence.capabilities.dangerous_capabilities) > 0
-
-
-def _has_host_mounts(evidence: OCIBundleEvidence) -> bool:
-    """Return True if evidence has forbidden host bind mounts."""
-    if not evidence.mounts:
-        return False
-    return len(evidence.mounts.forbidden_bind_sources) > 0
-
-
-def _has_host_network(evidence: OCIBundleEvidence) -> bool:
-    """Return True if evidence uses host network mode."""
-    if not evidence.network:
-        return False
-    return evidence.network.mode in _HOST_NETWORK_MODES
-
-
-# ---------------------------------------------------------------------------
-# Guarantee mapping
-# ---------------------------------------------------------------------------
-
-
-def _map_guarantees(
-    evidence: OCIBundleEvidence,
-    violations: tuple[str, ...],
-) -> tuple[AtomicGuarantee, ...]:
-    """Map verified OCI evidence to atomic guarantees.
-
-    Deny-by-default: only guarantees supported by the OCI runtime adapter
-    and verified by the evidence are granted. Dangerous capabilities,
-    host mounts, or host network cause refusal (not downgrade).
-    Unknown/unsupported features lower assurance.
-    """
-    has_hostile = _has_dangerous_caps(evidence) or _has_host_mounts(evidence) or _has_host_network(evidence)
-
-    # Hostile input → refuse entirely
-    if has_hostile:
-        boundary = GuardExecutionAssuranceBoundary.OBSERVED_HOST
-        return tuple(
-            AtomicGuarantee(
-                kind=kind,
-                enforced=False,
-                boundary=boundary,
-            )
-            for kind, _ in _OCI_ENFORCED
-        ) + tuple(
-            AtomicGuarantee(
-                kind=kind,
-                enforced=False,
-                boundary=GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-            )
-            for kind in _OCI_ABSENT
-        )
-
-    # Violations lower boundary
-    enforced = len(violations) == 0
-    boundary = (
-        GuardExecutionAssuranceBoundary.OS_ISOLATED if enforced else GuardExecutionAssuranceBoundary.OBSERVED_HOST
-    )
-
-    guarantees: list[AtomicGuarantee] = []
-
-    for kind, _ in _OCI_ENFORCED:
-        guarantees.append(
-            AtomicGuarantee(
-                kind=kind,
-                enforced=enforced,
-                boundary=boundary if enforced else GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-            )
-        )
-
-    for kind in _OCI_ABSENT:
-        guarantees.append(
-            AtomicGuarantee(
-                kind=kind,
-                enforced=False,
-                boundary=GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-            )
-        )
-
-    return tuple(guarantees)
-
-
-# ---------------------------------------------------------------------------
-# Plan digest computation
-# ---------------------------------------------------------------------------
-
-
-def _compute_bundle_digest(spec: dict[str, object]) -> str:
-    """Compute a deterministic SHA-256 digest over an OCI spec dict.
-
-    Serialises only recognised keys (sorted), frames each value,
-    and hashes — ensuring identical specs always produce the same digest
-    while unknown extra keys are silently ignored.
-    """
-    recognised: Final = frozenset(
-        {
-            "ociVersion",
-            "root",
-            "process",
-            "mounts",
-            "linux",
-            "hostname",
-        }
-    )
-    filtered: dict[str, object] = {}
-    for key in sorted(spec):
-        if key not in recognised:
-            continue
-        raw = spec[key]
-        if isinstance(raw, str):
-            filtered[key] = raw
-        elif isinstance(raw, (list, tuple)):
-            values = cast(list[object] | tuple[object, ...], raw)
-            filtered[key] = [_frame_scalar(item) for item in values]
-        elif (mapping := object_map(raw)) is not None:
-            filtered[key] = {nested_key: _frame_scalar(value) for nested_key, value in mapping.items()}
-        elif isinstance(raw, (int, float, bool)):
-            filtered[key] = raw
-        elif raw is None:
-            filtered[key] = None
-        else:
-            raise ValueError(f"unsupported OCI spec field type: {type(raw).__name__}")
-    return framed_digest("guard.oci-bundle-spec.v1", filtered)
-
-
-def _frame_scalar(value: object) -> object:
-    """Normalise nested input to a JSON-serialisable, stable form."""
-    if isinstance(value, (str, bool, int, float)) or value is None:
-        return value
-    if isinstance(value, (list, tuple)):
-        values = cast(list[object] | tuple[object, ...], value)
-        return [_frame_scalar(item) for item in values]
-    mapping = object_map(value)
-    if mapping is not None:
-        return {key: _frame_scalar(mapping[key]) for key in sorted(mapping)}
-    raise ValueError(f"unsupported OCI spec field type: {type(value).__name__}")
-
-
-# ---------------------------------------------------------------------------
-# Evidence builder
-# ---------------------------------------------------------------------------
-
-
-def _build_evidence(
-    bundle: dict[str, object],
-    rootfs: dict[str, object] | None = None,
-    process: dict[str, object] | None = None,
-    linux: dict[str, object] | None = None,
-    bundle_root: str | Path | None = None,
-) -> OCIBundleEvidence:
-    """Build evidence from an OCI bundle spec dict without executing code.
-
-    Validates the structure and extracts isolation-relevant fields
-    conservatively. Unrecognised fields are ignored (deny-by-default).
-    """
-    raw_version = bundle.get("ociVersion")
-    version = raw_version if isinstance(raw_version, str) and raw_version else "0.0.0"
-    bundle_valid = version != "0.0.0"
-    rootfs_spec = object_map(rootfs if rootfs is not None else bundle.get("root")) or {}
-    rootfs_ev = _read_rootfs(rootfs_spec, bundle_root=bundle_root)
-    process_spec = object_map(process if process is not None else bundle.get("process")) or {}
-    user_ev = _read_process(process_spec, rootfs_ev)
-    raw_linux = linux if linux is not None else bundle.get("linux")
-    linux_ev = _read_linux(object_map(raw_linux) or {})
-    mounts_ev = _read_mounts(object_list(bundle.get("mounts")) or [], bundle_root=bundle_root)
-    network_ev = _read_network(linux_ev)
-    raw_binary_digest = bundle.get("_binary_digest")
-
-    return OCIBundleEvidence(
-        bundle_version=version,
-        bundle_valid=bundle_valid,
-        binary_digest=(raw_binary_digest if isinstance(raw_binary_digest, str) else "0" * 64),
-        binary_verified=False,
-        seccomp=linux_ev.seccomp,
-        lsm=linux_ev.lsm,
-        cgroup=linux_ev.cgroup,
-        namespaces=linux_ev.namespaces,
-        mounts=mounts_ev,
-        network=network_ev,
-        capabilities=linux_ev.capabilities,
-        rootfs=rootfs_ev,
-        user=user_ev,
-    )
-
-
-def _read_rootfs(spec: dict[str, object], *, bundle_root: str | Path | None = None) -> OCIRootFSEvidence:
-    """Extract rootfs evidence from spec."""
-    path = spec.get("path", "")
-    readonly = spec.get("readonly", False)
-    if not isinstance(path, str):
-        path = ""
-    if not isinstance(readonly, bool):
-        readonly = False
-    abs_path = PurePosixPath(path).is_absolute()
-    containment_verified = False
-    resolved_path = ""
-    try:
-        resolved_path = resolve_oci_bundle_path(
-            path,
-            bundle_root=bundle_root,
-            label="OCI rootfs path",
-            require_directory=True,
-        )
-        containment_verified = True
-    except ValueError:
-        pass
-    return OCIRootFSEvidence(
-        path=path,
-        readonly=readonly,
-        absolute=abs_path,
-        containment_verified=containment_verified,
-        resolved_path=resolved_path,
-    )
-
-
-def _read_process(spec: dict[str, object], rootfs: OCIRootFSEvidence) -> OCIUserEvidence:
-    """Extract user evidence after validating process paths."""
-    uid = 0
-    gid = 0
-    user = object_map(spec.get("user"))
-    if user is not None:
-        uid_val = user.get("uid")
-        gid_val = user.get("gid")
-        if isinstance(uid_val, int):
-            uid = uid_val
-        if isinstance(gid_val, int):
-            gid = gid_val
-
-    working_dir = spec.get("cwd")
-    if isinstance(working_dir, str) and working_dir and rootfs.absolute:
-        _ = PurePosixPath(working_dir)
-
-    return OCIUserEvidence(uid=uid, gid=gid, non_root=uid != 0)
-
-
-def _read_linux(spec: dict[str, object]) -> _OCILinuxEvidence:
-    """Extract linux isolation evidence from spec."""
-    # Seccomp
-    seccomp_spec = object_map(spec.get("seccomp"))
-    seccomp_profile = OCISeccompProfile.UNSET
-    seccomp_digest = "0" * 64
-    if seccomp_spec is not None:
-        raw_action = seccomp_spec.get("defaultAction")
-        rule_type = raw_action.upper() if isinstance(raw_action, str) else ""
-        if rule_type == "SCMP_ACT_ERRNO" or seccomp_spec.get("strict") is True:
-            seccomp_profile = OCISeccompProfile.STRICT
-        elif rule_type == "SCMP_ACT_ALLOW":
-            seccomp_profile = OCISeccompProfile.DEFAULT
-        elif raw_action in ("", None):
-            seccomp_profile = OCISeccompProfile.NONE
-        else:
-            seccomp_profile = OCISeccompProfile.CUSTOM
-        path = seccomp_spec.get("path")
-        if isinstance(path, str) and path:
-            seccomp_digest = hashlib.sha256(path.encode()).hexdigest()
-
-    seccomp = OCISeccompEvidence(
-        profile_kind=seccomp_profile,
-        profile_json_digest=seccomp_digest,
-    )
-
-    # LSM
-    lsm_enabled = False
-    lsm_profile = ""
-    # Check for AppArmor or SELinux profiles in spec
-    apparmor = spec.get("apparmor")
-    selinux = spec.get("selinux")
-    if isinstance(apparmor, str) and apparmor:
-        lsm_enabled = True
-        lsm_profile = apparmor
-    selinux_map = object_map(selinux)
-    if selinux_map:
-        lsm_enabled = True
-        raw_label = selinux_map.get("label")
-        lsm_profile = raw_label if isinstance(raw_label, str) else ""
-    lsm = OCILSMEvidence(
-        enabled=lsm_enabled,
-        profile_name=lsm_profile,
-        profile_verified=False,
-    )
-
-    # Cgroup
-    cgroup_path = spec.get("cgroupsPath")
-    cgroup_v2 = cgroup_path.startswith("/sys/fs/cgroup/unified") if isinstance(cgroup_path, str) else False
-    cgroup = OCICGroupEvidence(
-        v2=cgroup_v2,
-        path=str(cgroup_path) if isinstance(cgroup_path, str) else "",
-        controller_bound=bool(cgroup_path),
-    )
-
-    # Namespaces
-    ns_list = object_list(spec.get("namespaces")) or []
-    pid_isolated = False
-    net_isolated = False
-    ipc_isolated = False
-    uts_isolated = False
-    user_isolated = False
-
-    namespace_maps: list[dict[str, object]] = []
-    for ns_entry in ns_list:
-        namespace_map = object_map(ns_entry)
-        if namespace_map is None:
-            continue
-        namespace_maps.append(namespace_map)
-        raw_type = namespace_map.get("type")
-        typ = raw_type.lower() if isinstance(raw_type, str) else ""
-        raw_path = namespace_map.get("path")
-        host = namespace_map.get("host") is True or (isinstance(raw_path, str) and bool(raw_path))
-        if typ == "pid" and not host:
-            pid_isolated = True
-        elif typ == "net" and not host:
-            net_isolated = True
-        elif typ == "ipc" and not host:
-            ipc_isolated = True
-        elif typ == "uts" and not host:
-            uts_isolated = True
-        elif typ == "user" and not host:
-            user_isolated = True
-
-    # OCI namespace ``path`` joins an existing namespace and is therefore shared.
-    namespaces_host = any(
-        namespace.get("host") is True or (isinstance((path := namespace.get("path")), str) and bool(path))
-        for namespace in namespace_maps
-    )
-    if namespaces_host:
-        pid_isolated = False
-        net_isolated = False
-        ipc_isolated = False
-        uts_isolated = False
-        user_isolated = False
-
-    namespaces = OCINamespaceEvidence(
-        pid_isolated=pid_isolated,
-        net_isolated=net_isolated,
-        ipc_isolated=ipc_isolated,
-        uts_isolated=uts_isolated,
-        user_isolated=user_isolated,
-    )
-
-    # Capabilities
-    caps_spec = object_map(spec.get("capabilities")) or {}
-    effective = string_tuple(caps_spec.get("effective"))
-    permitted = string_tuple(caps_spec.get("permitted"))
-    ambient = string_tuple(caps_spec.get("ambient"))
-    bounding = string_tuple(caps_spec.get("bounding"))
-    all_caps = set(effective) | set(permitted) | set(ambient) | set(bounding)
-    dangerous = tuple(capability for capability in sorted(all_caps) if capability.upper() in _DANGEROUS_CAPABILITIES)
-
-    capabilities = OCICapabilitiesEvidence(
-        effective=effective,
-        permitted=permitted,
-        ambient=ambient,
-        bounding_set=bounding,
-        dangerous_capabilities=dangerous,
-    )
-
-    return _OCILinuxEvidence(
-        seccomp=seccomp,
-        lsm=lsm,
-        cgroup=cgroup,
-        namespaces=namespaces,
-        capabilities=capabilities,
-        network_spec=spec.get("network"),
-    )
-
-
-def _read_mounts(
-    spec_list: list[object],
-    *,
-    bundle_root: str | Path | None = None,
-) -> OCIMountEvidence:
-    """Extract mount evidence from OCI mounts list."""
-    host_binds: list[str] = []
-    secret_mounts: list[str] = []
-    output_mounts: list[str] = []
-    forbidden_sources: list[str] = []
-    unverified_sources: list[str] = []
-    resolved_sources: list[str] = []
-    world_writable: list[str] = []
-
-    readonly_rootfs = False
-
-    for raw_mount in spec_list:
-        mount = object_map(raw_mount)
-        if mount is None:
-            continue
-
-        raw_source = mount.get("source")
-        raw_destination = mount.get("destination")
-        raw_type = mount.get("type")
-        src = raw_source if isinstance(raw_source, str) else ""
-        dst = raw_destination if isinstance(raw_destination, str) else ""
-        typ = raw_type if isinstance(raw_type, str) else ""
-        raw_options = mount.get("options")
-        options = (raw_options,) if isinstance(raw_options, str) else string_tuple(raw_options)
-        is_bind = is_oci_host_path_mount(typ, options, src)
-
-        if is_bind and not src:
-            forbidden_sources.append("<empty-bind-source>")
-            continue
-
-        # Rootfs mount (no source, destination=/)
-        if not is_bind and src == "" and dst == "/":
-            if "readonly" in options or "ro" in options:
-                readonly_rootfs = True
-            continue
-
-        # Host bind mount detection
-        if is_bind and src:
-            normalized_src, escapes_bundle = normalize_oci_bind_source(src)
-            resolved_src = normalized_src
-            source_verified = False
-            try:
-                resolved_src = resolve_oci_bind_source(src, bundle_root=bundle_root)
-                source_verified = True
-                resolved_sources.append(resolved_src)
-            except ValueError:
-                pass
-            is_forbidden = escapes_bundle or any(
-                match_forbidden_oci_path(candidate, _FORBIDDEN_BIND_SOURCES) is not None
-                for candidate in (normalized_src, resolved_src)
-            )
-            if not is_forbidden:
-                # Check if it's a world-writable bind
-                for opt in options:
-                    if opt in _WORLD_WRITABLE_OPTIONS:
-                        world_writable.append(dst)
-                        break
-            else:
-                forbidden_sources.append(src)
-            if not source_verified:
-                unverified_sources.append(src)
-
-            # Classify as secret or output mount
-            secret_keywords = frozenset({".env", ".ssh", "secret", "credential", "private", "token"})
-            output_keywords = frozenset({".hol-guard", "guard", "output", "result", "report"})
-            if secret_keywords & set(PurePosixPath(dst).parts):
-                secret_mounts.append(dst)
-            elif output_keywords & set(PurePosixPath(dst).parts):
-                output_mounts.append(dst)
-            else:
-                host_binds.append(dst)
-
-    return OCIMountEvidence(
-        readonly_rootfs=readonly_rootfs,
-        host_bind_mounts=tuple(host_binds),
-        secret_mounts=tuple(secret_mounts),
-        output_mounts=tuple(output_mounts),
-        forbidden_bind_sources=tuple(forbidden_sources),
-        unverified_bind_sources=tuple(unverified_sources),
-        resolved_bind_sources=tuple(resolved_sources),
-        world_writable_binds=tuple(world_writable),
-    )
-
-
-def _read_network(linux_ev: _OCILinuxEvidence) -> OCINetworkEvidence:
-    """Extract network evidence from validated Linux evidence."""
-    mode = "default"
-    port_mappings: tuple[str, ...] = ()
-    loopback_only = linux_ev.namespaces.net_isolated
-    network_spec = object_map(linux_ev.network_spec)
-    if network_spec is not None:
-        raw_mode = network_spec.get("mode")
-        mode = raw_mode if isinstance(raw_mode, str) else "default"
-        raw_ports = object_list(network_spec.get("ports"))
-        if raw_ports is not None:
-            port_mappings = tuple(str(port) for port in raw_ports)
-        if mode in _HOST_NETWORK_MODES:
-            loopback_only = False
-
-    return OCINetworkEvidence(
-        mode=mode,
-        port_mappings=port_mappings,
-        loopback_only=loopback_only,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -903,75 +306,32 @@ class OCIIsolationProvider:
         if minimum_boundary is GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED:
             raise ProviderPlanError("OCI bundle isolation cannot provide a hardware-isolated boundary")
 
-        # Build evidence from bundle spec
         bundle = bundle_spec or {}
-        hooks = bundle.get("hooks")
-        if hooks not in (None, {}):
-            raise ProviderPlanError("OCI lifecycle hooks are unsupported")
-        selected_rootfs = rootfs_spec if rootfs_spec is not None else object_map(bundle.get("root")) or {}
-        if selected_rootfs:
-            rootfs_path = selected_rootfs.get("path")
-            try:
-                require_oci_bundle_relative_path(
-                    rootfs_path if isinstance(rootfs_path, str) else "",
-                    label="OCI rootfs path",
-                )
-            except ValueError as error:
-                if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED:
-                    raise ProviderPlanError(str(error)) from error
-        evidence = _build_evidence(
-            bundle,
-            rootfs=rootfs_spec,
-            process=process_spec,
-            linux=linux_spec,
-            bundle_root=bundle_root,
-        )
-
-        # Validate evidence — produce violation list
-        violations = _validate_bundle(evidence)
-
-        # Host-sensitive evidence is always refused.
-        if evidence.capabilities.dangerous_capabilities:
-            raise ProviderPlanError(
-                "dangerous capabilities detected: " + ", ".join(evidence.capabilities.dangerous_capabilities)
-            )
-        if evidence.mounts.forbidden_bind_sources:
-            raise ProviderPlanError("forbidden host bind mounts: " + ", ".join(evidence.mounts.forbidden_bind_sources))
-
-        if evidence.network and evidence.network.mode in _HOST_NETWORK_MODES:
-            raise ProviderPlanError("host network mode rejected")
-
-        if not evidence.bundle_valid:
-            raise ProviderPlanError("malformed OCI bundle spec")
-
-        # Map evidence to guarantees (deny-by-default)
-        guarantees = _map_guarantees(evidence, violations)
-
-        if minimum_boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED:
-            required_kinds = {kind for kind, _ in _OCI_ENFORCED}
-            required = tuple(guarantee for guarantee in guarantees if guarantee.kind in required_kinds)
-            if any(
-                not guarantee.enforced or guarantee.boundary is not GuardExecutionAssuranceBoundary.OS_ISOLATED
-                for guarantee in required
-            ):
-                raise ProviderPlanError("required boundary is unavailable on this host")
-
-        # Compute deterministic plan digest
+        args: dict[str, object] = {
+            "bundle": bundle,
+            "minimum_boundary": minimum_boundary.value,
+            "context_digest": context.context_digest,
+        }
+        for key, value in (
+            ("rootfs", rootfs_spec),
+            ("process", process_spec),
+            ("linux", linux_spec),
+            ("bundle_root", None if bundle_root is None else str(bundle_root)),
+        ):
+            if value is not None:
+                args[key] = value
         try:
-            canonical_bundle_root = Path(bundle_root).resolve(strict=True).as_posix() if bundle_root is not None else ""
-            spec_fields: dict[str, object] = {
-                "context_digest": context.context_digest,
-                "minimum_boundary": minimum_boundary.value,
-                "bundle_digest": _compute_bundle_digest(bundle),
-                "bundle_version": evidence.bundle_version,
-                "bundle_root": canonical_bundle_root,
-                "rootfs_resolved_path": evidence.rootfs.resolved_path,
-                "resolved_bind_sources": evidence.mounts.resolved_bind_sources,
-                "violations_count": len(violations),
-            }
-            plan_digest = framed_digest("guard.oci-plan.v1", spec_fields)
-        except (OSError, RuntimeError, ValueError) as error:
-            raise ProviderPlanError("malformed OCI bundle digest input") from error
+            answer = native_runner_authority("oci_bundle_plan", args)
+        except NativeRunnerAuthorityError as error:
+            if str(error) in _MALFORMED_INPUT_CODES:
+                raise ProviderPlanError("malformed OCI bundle digest input") from error
+            raise ProviderPlanError("OCI plan authority is unavailable") from error
+        refusal = answer.get("refusal")
+        if refusal is not None:
+            raise ProviderPlanError(str(refusal))
+        plan_digest = answer.get("plan_digest")
+        if not isinstance(plan_digest, str) or not plan_digest:
+            raise ProviderPlanError("OCI plan authority returned no digest")
 
         return ExecutionLease(
             plan_digest=plan_digest,
@@ -1015,6 +375,86 @@ class OCIIsolationProvider:
 # ---------------------------------------------------------------------------
 
 
+def _evidence_wire(evidence: OCIBundleEvidence) -> dict[str, object]:
+    def section(value: object) -> object:
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, tuple):
+            return [section(item) for item in cast(tuple[object, ...], value)]
+        if hasattr(value, "__dataclass_fields__"):
+            return {name: section(getattr(value, name)) for name in value.__dataclass_fields__}
+        return value
+
+    return cast(dict[str, object], section(evidence))
+
+
+def _mapping(value: object) -> dict[str, object]:
+    return object_map(value) or {}
+
+
+def _evidence_from_wire(wire: dict[str, object]) -> OCIBundleEvidence:
+    seccomp = _mapping(wire.get("seccomp"))
+    lsm = _mapping(wire.get("lsm"))
+    cgroup = _mapping(wire.get("cgroup"))
+    namespaces = _mapping(wire.get("namespaces"))
+    mounts = _mapping(wire.get("mounts"))
+    network = _mapping(wire.get("network"))
+    capabilities = _mapping(wire.get("capabilities"))
+    rootfs = _mapping(wire.get("rootfs"))
+    user = _mapping(wire.get("user"))
+    return OCIBundleEvidence(
+        bundle_version=str(wire["bundle_version"]),
+        bundle_valid=wire["bundle_valid"] is True,
+        binary_digest=str(wire["binary_digest"]),
+        binary_verified=wire["binary_verified"] is True,
+        seccomp=OCISeccompEvidence(
+            profile_kind=OCISeccompProfile(str(seccomp["profile_kind"])),
+            profile_json_digest=str(seccomp["profile_json_digest"]),
+        ),
+        lsm=OCILSMEvidence(
+            enabled=lsm["enabled"] is True,
+            profile_name=str(lsm["profile_name"]),
+            profile_verified=lsm["profile_verified"] is True,
+        ),
+        cgroup=OCICGroupEvidence(
+            v2=cgroup["v2"] is True,
+            path=str(cgroup["path"]),
+            controller_bound=cgroup["controller_bound"] is True,
+        ),
+        namespaces=OCINamespaceEvidence(
+            **{name: namespaces[name] is True for name in OCINamespaceEvidence.__dataclass_fields__}
+        ),
+        mounts=OCIMountEvidence(
+            readonly_rootfs=mounts["readonly_rootfs"] is True,
+            **{
+                name: string_tuple(mounts[name])
+                for name in OCIMountEvidence.__dataclass_fields__
+                if name != "readonly_rootfs"
+            },
+        ),
+        network=OCINetworkEvidence(
+            mode=str(network["mode"]),
+            port_mappings=string_tuple(network["port_mappings"]),
+            loopback_only=network["loopback_only"] is True,
+        ),
+        capabilities=OCICapabilitiesEvidence(
+            **{name: string_tuple(capabilities[name]) for name in OCICapabilitiesEvidence.__dataclass_fields__}
+        ),
+        rootfs=OCIRootFSEvidence(
+            path=str(rootfs["path"]),
+            readonly=rootfs["readonly"] is True,
+            absolute=rootfs["absolute"] is True,
+            containment_verified=rootfs["containment_verified"] is True,
+            resolved_path=str(rootfs["resolved_path"]),
+        ),
+        user=OCIUserEvidence(
+            uid=cast(int, user["uid"]),
+            gid=cast(int, user["gid"]),
+            non_root=user["non_root"] is True,
+        ),
+    )
+
+
 def build_oci_evidence(
     bundle: dict[str, object],
     rootfs: dict[str, object] | None = None,
@@ -1022,14 +462,38 @@ def build_oci_evidence(
     linux: dict[str, object] | None = None,
     bundle_root: str | Path | None = None,
 ) -> OCIBundleEvidence:
-    """Build OCI bundle evidence from spec dicts."""
-    return _build_evidence(
-        bundle,
-        rootfs=rootfs,
-        process=process,
-        linux=linux,
-        bundle_root=bundle_root,
+    """Build OCI bundle evidence from spec dicts in the native resident."""
+    args: dict[str, object] = {"bundle": bundle}
+    for key, value in (
+        ("rootfs", rootfs),
+        ("process", process),
+        ("linux", linux),
+        ("bundle_root", None if bundle_root is None else str(bundle_root)),
+    ):
+        if value is not None:
+            args[key] = value
+    answer = native_runner_authority("oci_bundle_evidence", args)
+    return _evidence_from_wire(_mapping(answer.get("evidence")))
+
+
+def evaluate_oci_evidence(
+    evidence: OCIBundleEvidence,
+    violations: tuple[str, ...] | None = None,
+) -> tuple[tuple[str, ...], tuple[AtomicGuarantee, ...]]:
+    """Return the native violation list and deny-by-default guarantees."""
+    args: dict[str, object] = {"evidence": _evidence_wire(evidence)}
+    if violations is not None:
+        args["violations"] = list(violations)
+    answer = native_runner_authority("oci_evidence_verdict", args)
+    guarantees = tuple(
+        AtomicGuarantee(
+            kind=AtomicGuaranteeKind(str(item["kind"])),
+            enforced=item["enforced"] is True,
+            boundary=GuardExecutionAssuranceBoundary(str(item["boundary"])),
+        )
+        for item in cast(list[dict[str, object]], answer["guarantees"])
     )
+    return string_tuple(answer["violations"]), guarantees
 
 
 __all__ = [
@@ -1045,8 +509,6 @@ __all__ = [
     "OCISeccompEvidence",
     "OCISeccompProfile",
     "OCIUserEvidence",
-    "_compute_bundle_digest",
-    "_map_guarantees",
-    "_validate_bundle",
     "build_oci_evidence",
+    "evaluate_oci_evidence",
 ]
