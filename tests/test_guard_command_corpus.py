@@ -79,7 +79,7 @@ _NATIVE_PAIR_MINIMUM_ACTIONS = {
     "p-shell-data-vs-eval": ("allow", "block"),
     "p-cloud-help-redirection": ("review", "block"),
     "p-patch-check-vs-apply": ("review", "review"),
-    "p-capability-replay": ("review", "review"),
+    "p-capability-replay": ("block", "block"),
 }
 
 

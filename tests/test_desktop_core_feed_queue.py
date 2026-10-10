@@ -71,35 +71,59 @@ def _release(tag: str, *, prerelease: bool = False) -> dict[str, object]:
 RELEASES = [_release("v1.3.0", prerelease=True), _release("v1.2.4"), _release("v1.2.3")]
 
 
-def _discover(tmp_path: Path, requested: str) -> subprocess.CompletedProcess[str]:
+def _discover(
+    tmp_path: Path,
+    requested: str,
+    *,
+    releases: list[dict[str, object]] | None = None,
+    git_tags: tuple[str, ...] = ("v1.2.3", "v1.3.0", "v1.2.4", "v1.2.10-rc.1", "extensions-2026"),
+    failing_tag: str = "",
+    failing_readiness: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    releases = RELEASES if releases is None else releases
     stubs = tmp_path / "bin"
     stubs.mkdir()
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
-    (fixtures / "list.json").write_text(json.dumps(RELEASES), encoding="utf-8")
-    for release in RELEASES:
+    (fixtures / "list.json").write_text(json.dumps(releases), encoding="utf-8")
+    for release in releases:
         (fixtures / f"{release['tag_name']}.json").write_text(json.dumps(release), encoding="utf-8")
+    git = stubs / "git"
+    git.write_text(
+        "#!/bin/bash\n"
+        '[[ "$1 $2 $3" == "ls-remote --tags --refs" ]] || exit 2\n'
+        + "".join(f"printf '%s\\trefs/tags/%s\\n' {'0' * 40} {tag}\n" for tag in git_tags),
+        encoding="utf-8",
+    )
+    git.chmod(0o755)
+    if failing_readiness:
+        python = stubs / "python3"
+        python.write_text("#!/bin/sh\necho 'readiness check crashed' >&2\nexit 3\n", encoding="utf-8")
+        python.chmod(0o755)
+    if failing_tag:
+        (fixtures / f"{failing_tag}.json").write_text("rate limited", encoding="utf-8")
     gh = stubs / "gh"
     # Emulates `gh api [--paginate] <path> --jq <filter>` against the fixtures and logs each request path.
     gh.write_text(
         "#!/bin/bash\n"
         "set -euo pipefail\n"
-        "args=(\"$@\")\n"
+        'args=("$@")\n'
         "path=''; filter=''\n"
         "for ((i = 0; i < ${#args[@]}; i++)); do\n"
-        "  case \"${args[i]}\" in\n"
-        "    --jq) filter=\"${args[i + 1]}\"; i=$((i + 1)) ;;\n"
-        "    repos/*) path=\"${args[i]}\" ;;\n"
+        '  case "${args[i]}" in\n'
+        '    --jq) filter="${args[i + 1]}"; i=$((i + 1)) ;;\n'
+        '    repos/*) path="${args[i]}" ;;\n'
         "  esac\n"
         "done\n"
-        "echo \"$path\" >> \"$RUNNER_TEMP/gh-requests.txt\"\n"
-        "case \"$path\" in\n"
-        "  */releases/tags/*) fixture=\"$FIXTURES/${path##*/}.json\" ;;\n"
-        "  */releases\\?per_page=100) fixture=\"$FIXTURES/list.json\" ;;\n"
+        'echo "$path" >> "$RUNNER_TEMP/gh-requests.txt"\n'
+        'case "$path" in\n'
+        '  */releases/tags/*) fixture="$FIXTURES/${path##*/}.json" ;;\n'
+        '  */releases\\?per_page=100) fixture="$FIXTURES/list.json" ;;\n'
         "  *) exit 2 ;;\n"
         "esac\n"
         "test -f \"$fixture\" || { echo 'HTTP 404: Not Found' >&2; exit 1; }\n"
-        "jq -c \"$filter\" \"$fixture\"\n",
+        "grep -q 'rate limited' \"$fixture\" && { echo 'API rate limit exceeded for installation' >&2; exit 1; }\n"
+        'jq -c "$filter" "$fixture"\n',
         encoding="utf-8",
     )
     gh.chmod(0o755)
@@ -125,16 +149,56 @@ def test_named_core_version_reads_only_that_release(tmp_path: Path) -> None:
     result = _discover(tmp_path, "1.2.3")
     assert result.returncode == 0, result.stderr
     assert "version=1.2.3\ntag=v1.2.3\n" in result.stdout
-    assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == ["repos/example/core/releases/tags/v1.2.3"]
+    assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == [
+        "repos/example/core/releases/tags/v1.2.3"
+    ]
 
 
-def test_unnamed_discovery_scans_all_releases_for_the_newest_stable(tmp_path: Path) -> None:
+def test_unnamed_discovery_reads_stable_tags_newest_first_until_one_is_ready(tmp_path: Path) -> None:
     result = _discover(tmp_path, "")
     assert result.returncode == 0, result.stderr
     assert "version=1.2.4\ntag=v1.2.4\n" in result.stdout
+    # v1.3.0 is a prerelease, so the walk continues; it never paginates every release.
     assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == [
-        "repos/example/core/releases?per_page=100"
+        "repos/example/core/releases/tags/v1.3.0",
+        "repos/example/core/releases/tags/v1.2.4",
     ]
+
+
+def test_unnamed_discovery_skips_tags_without_a_release(tmp_path: Path) -> None:
+    result = _discover(tmp_path, "", git_tags=("v1.2.3", "v1.2.4", "v1.9.0"))
+    assert result.returncode == 0, result.stderr
+    assert "version=1.2.4\ntag=v1.2.4\n" in result.stdout
+
+
+def test_unnamed_discovery_falls_back_to_the_full_scan_when_no_tag_is_ready(tmp_path: Path) -> None:
+    result = _discover(tmp_path, "", git_tags=("v1.3.0",))
+    assert result.returncode == 0, result.stderr
+    assert "version=1.2.4\ntag=v1.2.4\n" in result.stdout
+    assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == [
+        "repos/example/core/releases/tags/v1.3.0",
+        "repos/example/core/releases?per_page=100",
+    ]
+
+
+def test_unnamed_discovery_fails_when_the_readiness_check_fails(tmp_path: Path) -> None:
+    result = _discover(tmp_path, "", failing_readiness=True)
+    assert result.returncode != 0
+    assert "readiness check crashed" in result.stderr
+    assert "available=true" not in result.stdout
+    # v1.3.0 is a prerelease; the check first runs for v1.2.4 and the failure
+    # stops discovery instead of moving on to older releases.
+    assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == [
+        "repos/example/core/releases/tags/v1.3.0",
+        "repos/example/core/releases/tags/v1.2.4",
+    ]
+
+
+def test_unnamed_discovery_fails_on_api_errors_other_than_not_found(tmp_path: Path) -> None:
+    result = _discover(tmp_path, "", git_tags=("v1.2.5", "v1.2.4"), failing_tag="v1.2.5")
+    assert result.returncode != 0
+    assert "rate limit" in result.stderr
+    assert "available=true" not in result.stdout
 
 
 @pytest.mark.parametrize("requested", ["1.3.0", "1.2.9", "1.2", "v1.2.3", "1.2.3/../x"])

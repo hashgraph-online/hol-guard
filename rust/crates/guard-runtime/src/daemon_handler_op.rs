@@ -5,6 +5,10 @@
 //! handler answers either `reject` (the status and body to send) or `proceed`
 //! (the normalized values the caller may act on).
 
+use crate::daemon_handler_headless::{
+    detection_statuses, headless_cursor_surface, headless_error, headless_state,
+    supply_chain_sync_error,
+};
 use crate::daemon_handler_policy::{
     policy_clear, policy_upsert, PolicyClearInput, PolicyUpsertInput,
 };
@@ -127,6 +131,34 @@ pub(crate) fn decide(request: &DaemonHandlerRequestV1) -> Result<DaemonHandlerPa
             ("harness_action", harness_action(action, dry_run))
         }
         DaemonHandlerQueryV1::EventsCursor { query } => ("events_cursor", events_cursor(query)),
+        DaemonHandlerQueryV1::HeadlessError {
+            operation,
+            error_code,
+        } => ("headless_error", headless_error(operation, error_code)),
+        DaemonHandlerQueryV1::HeadlessCursorSurface => {
+            ("headless_cursor_surface", headless_cursor_surface())
+        }
+        DaemonHandlerQueryV1::HeadlessState {
+            harness,
+            operation,
+            managed_install,
+            verification,
+        } => (
+            "headless_state",
+            headless_state(harness, operation, managed_install, verification),
+        ),
+        DaemonHandlerQueryV1::DetectionStatuses { values } => {
+            ("detection_statuses", detection_statuses(values))
+        }
+        DaemonHandlerQueryV1::SupplyChainSyncError {
+            operation,
+            error,
+            message,
+            retryable,
+        } => (
+            "supply_chain_sync_error",
+            supply_chain_sync_error(operation, *error, message, *retryable),
+        ),
     };
     Ok(DaemonHandlerPayloadV1 {
         kind: kind.to_owned(),

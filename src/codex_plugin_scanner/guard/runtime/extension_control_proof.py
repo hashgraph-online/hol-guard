@@ -91,6 +91,12 @@ def _current_login_name() -> str | None:
         return None
 
 
+def _normalized_terminal_id(name: str) -> str:
+    """Return the device path relative to ``/dev`` (``pts/7``, ``ttys020``)."""
+
+    return name.removeprefix("/dev/")
+
+
 def _terminal_session_is_local(terminal_name: str) -> bool:
     """Accept a local login record or a user-owned desktop PTY."""
 
@@ -108,11 +114,13 @@ def _terminal_session_is_local(terminal_name: str) -> bool:
         )
     except (OSError, subprocess.SubprocessError):
         completed = None
-    terminal_id = Path(terminal_name).name
+    # Linux ``who`` prints ``pts/7`` while macOS prints ``ttys020``; compare the
+    # ``/dev``-relative form and keep the bare basename for single-segment names.
+    terminal_ids = {_normalized_terminal_id(terminal_name), Path(terminal_name).name}
     if completed is not None:
         for line in completed.stdout.splitlines():
             fields = line.split()
-            if len(fields) < 2 or fields[0] != expected_user or fields[1] != terminal_id:
+            if len(fields) < 2 or fields[0] != expected_user or _normalized_terminal_id(fields[1]) not in terminal_ids:
                 continue
             return not (fields[-1].startswith("(") and fields[-1].endswith(")"))
     # GNOME and other desktop terminal emulators often do not create utmp

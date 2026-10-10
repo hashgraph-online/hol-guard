@@ -9,6 +9,7 @@ from typing import Any, cast
 from ..approval_link_output import native_review_reason
 from ..native_decision_receipt import valid_prompt_risk_classes
 from .hook_availability_policy import availability_harness_response, hook_action_is_emergency_safe
+from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
 
 
 def post_tool_unavailable_response(
@@ -68,49 +69,6 @@ def prepare_native_hook_policy(
         )
     )
     return False
-
-
-def _canonical_managed_harness(harness: str) -> str:
-    try:
-        from ..adapters import get_adapter
-
-        return get_adapter(harness).harness
-    except (ValueError, ImportError):
-        return _canonical_hook_harness(harness)
-
-
-def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
-    """True when leftover hooks belong to an app Guard is not currently protecting."""
-
-    store = getattr(daemon_server, "store", None)
-    if store is None:
-        return False
-    getter = getattr(store, "get_managed_install", None)
-    if not callable(getter):
-        return False
-    canonical = _canonical_managed_harness(harness)
-    try:
-        # Reuse setup only for this hook; each read keeps its own transaction.
-        with store.connection_scope():
-            managed = getter(canonical)
-            if isinstance(managed, dict) and managed.get("active") is False:
-                return True
-            if managed is not None:
-                return False
-            lister = getattr(store, "list_managed_installs", None)
-            if not callable(lister):
-                return False
-            installs = lister()
-    except Exception:
-        return False
-    if not isinstance(installs, list):
-        return False
-    return any(
-        isinstance(item, dict)
-        and item.get("active") is True
-        and _canonical_managed_harness(str(item.get("harness") or "")) != canonical
-        for item in installs
-    )
 
 
 def _write_unmanaged_harness_passthrough(

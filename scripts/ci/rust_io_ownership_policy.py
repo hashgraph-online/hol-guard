@@ -101,6 +101,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
+        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
         # reattachment integrity but never authorize or evaluate an action.
         "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -165,6 +167,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
+        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.
@@ -210,6 +214,7 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_file_io.py",
         "src/codex_plugin_scanner/guard/directory_path_authority.py",
+        "src/codex_plugin_scanner/guard/path_resolution_cache.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_correlation.py",
     }
 )

@@ -23,7 +23,7 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy._env import _build_scrubbed_env
-from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy, build_sensitive_read_approval_hash
+from codex_plugin_scanner.guard.proxy.stdio import StdioGuardProxy
 from codex_plugin_scanner.guard.runtime.approval_context import (
     build_approval_context_token,
     build_configured_environment_hash,
@@ -40,6 +40,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_read_request,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_sensitive_read_support import sensitive_read_token
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
@@ -1046,7 +1047,7 @@ def _save_sensitive_read_allow(
     artifact, _legacy_digest = _sensitive_read_artifact(workspace)
     current_action = config.risk_actions["local_secret_read"] if config.risk_actions is not None else "review"
     launch_env = _build_scrubbed_env()
-    digest = build_sensitive_read_approval_hash(
+    digest = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,

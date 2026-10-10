@@ -52,6 +52,11 @@ def _scenario_tools(scenario: Scenario) -> str:
     """Expose the real tools required by the task, without unrelated probes."""
     if scenario.oracle == "home-copy-task":
         return "bash,read"
+    if scenario.oracle == "native-tools":
+        tools = list(scenario.required_tools)
+        if scenario.commands and "bash" not in tools:
+            tools.append("bash")
+        return ",".join(tools)
     if scenario.commands:
         return "bash"
     if scenario.oracle == "blocked-read":

@@ -107,9 +107,64 @@ fn bounded_task_outputs_keep_input_proof_without_lowering_security_floors() {
         json!({"tool_name": "TaskOutput", "tool_input": {"task_id": "../credentials"}}),
     ] {
         assert!(!guard_command::pretool::bounded_task_metadata_output(
-            &other
+            &other,
+            "claude-code"
         ));
     }
+}
+
+#[test]
+fn omp_delegation_acknowledgements_preserve_output_and_harness_floors() {
+    let input = json!({
+        "tool_name": "task",
+        "tool_input": {"context": "Read-only lookup", "tasks": [{
+            "name": "ReadmeSentence", "agent": "scout", "task": "Read README.md",
+            "schemaMode": "permissive", "tools": []
+        }]},
+        "tool_response": {"content": [], "details": {"async": {"state": "running"}}}
+    });
+    let mut request = post_request(input.clone());
+    request.harness = "omp".into();
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "review".into());
+    let output = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(output.decision, "allow");
+    let denied = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("source_secret_match", "sensitive output"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    effective
+        .harness_actions
+        .insert("omp".into(), "block".into());
+    let denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    assert!(!guard_command::pretool::bounded_task_metadata_output(
+        &input, "codex"
+    ));
+    let mut unsafe_input = input;
+    unsafe_input["tool_input"]["command"] = json!("run something");
+    assert!(!guard_command::pretool::bounded_task_metadata_output(
+        &unsafe_input,
+        "omp"
+    ));
 }
 
 #[test]

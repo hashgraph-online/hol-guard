@@ -10,7 +10,8 @@ Fail-closed behavior is unchanged: the caller still denies PreToolUse and
 PermissionRequest; only the waiting is removed. The shortcut applies only when
 all of these hold, so a slow or busy daemon never triggers it:
 
-* the daemon state file is missing, or names a pid that no longer exists;
+* the daemon state file is missing, is the empty tombstone a failed restart
+  leaves behind, or names a pid that no longer exists;
 * a launch recorded a failed start within the last ``FAILED_START_WINDOW_SECONDS``.
 
 Stdlib only; every error means "not provably dead" and the normal flow runs.
@@ -33,28 +34,42 @@ def _marker_path(state_path: str | Path) -> Path:
     return Path(state_path).parent / FAILED_START_MARKER
 
 
-def _state_pid(state_path: Path) -> int | None:
+def _state_pid(state_path: Path) -> tuple[bool, int | None]:
+    """Return ``(readable, pid)``.
+
+    ``readable`` is False for unparseable state and for objects that are neither
+    a live-style record with a pid nor the empty tombstone, so unknown shapes are
+    never taken as proof that the daemon is gone.
+    """
+
     try:
         payload = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
-    if isinstance(payload, dict) and isinstance(payload.get("state"), dict):
+        return False, None
+    if not isinstance(payload, dict):
+        return False, None
+    if isinstance(payload.get("state"), dict):
         payload = payload["state"]
-    pid = payload.get("pid") if isinstance(payload, dict) else None
-    return pid if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0 else None
+    pid = payload.get("pid")
+    if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0:
+        return True, pid
+    return not payload, None
 
 
 def daemon_provably_dead(state_path: str | Path) -> bool:
-    """True when no daemon state exists or its recorded pid is gone."""
+    """True when no daemon state exists, it is a pid-less tombstone, or its pid is gone."""
 
     if os.name == "nt":
         return False
     path = Path(state_path)
     if not path.exists():
         return True
-    pid = _state_pid(path)
-    if pid is None:
+    readable, pid = _state_pid(path)
+    if not readable:
         return False
+    if pid is None:
+        # ``clear_guard_daemon_state`` rewrites a failed restart to ``{}``.
+        return True
     try:
         os.kill(pid, 0)
     except ProcessLookupError:

@@ -12,6 +12,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::mcp_sensitive_read::{
+    McpSensitiveReadContextQueryV1, McpSensitiveReadHintQueryV1, McpSensitiveReadReuseQueryV1,
+};
+
 pub const MCP_PROXY_DECISION_REQUEST_SCHEMA: &str = "guard-mcp-proxy-decision-request.v1";
 pub const MCP_PROXY_DECISION_RESULT_SCHEMA: &str = "guard-mcp-proxy-decision-result.v1";
 pub const MCP_PROXY_DECISION_FEATURE: &str = "mcp-proxy-decision-v1";
@@ -232,6 +236,9 @@ pub enum McpProxyQueryV1 {
     RouteToolCall(McpRouteToolCallQueryV1),
     ObserveToolForward(McpObserveToolForwardQueryV1),
     EvidenceItem(McpEvidenceItemQueryV1),
+    SensitiveReadContext(McpSensitiveReadContextQueryV1),
+    SensitiveReadReuse(McpSensitiveReadReuseQueryV1),
+    SensitiveReadHint(McpSensitiveReadHintQueryV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
