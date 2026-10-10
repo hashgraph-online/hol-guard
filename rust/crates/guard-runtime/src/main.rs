@@ -29,6 +29,17 @@ mod claim_reuse_binding;
 mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
+mod cloud_action_envelope;
+mod cloud_action_envelope_fields;
+mod cloud_receipt_payload;
+#[cfg(test)]
+mod cloud_receipt_vectors_tests;
+mod cloud_request_payload;
+mod cloud_request_snapshot;
+mod cloud_request_text;
+#[cfg(test)]
+mod cloud_request_vectors_tests;
+mod cloud_sync_privacy;
 mod codex_tool_output_git;
 mod codex_tool_output_op;
 #[cfg(all(test, unix))]
@@ -52,12 +63,26 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
+mod cursor_observer_proof_op;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_headless;
 mod daemon_handler_op;
 mod daemon_handler_policy;
 mod daemon_handler_requests;
+mod daemon_lifecycle_claims;
+mod daemon_lifecycle_command;
+mod daemon_lifecycle_decision_op;
+mod daemon_lifecycle_facts;
+mod daemon_lifecycle_inventory;
+mod daemon_lifecycle_malformed;
+mod daemon_lifecycle_ports;
+mod daemon_lifecycle_state;
+mod daemon_lifecycle_text;
+#[cfg(test)]
+mod daemon_lifecycle_unit_tests;
+#[cfg(test)]
+mod daemon_lifecycle_vectors_tests;
 mod daemon_policy_authority;
 mod daemon_route_op;
 mod daemon_route_paths;

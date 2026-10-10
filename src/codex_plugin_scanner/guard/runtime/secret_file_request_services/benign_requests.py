@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shlex
 from pathlib import Path
 
@@ -43,7 +42,6 @@ from .git_routines import (
 )
 from .github_pr_ephemeral_body import gh_pr_create_uses_safe_ephemeral_body
 from .github_shell_capabilities import (
-    _ShellTokenWithQuoteContext,
     classify_github_shell_capabilities,
     github_argument_token_has_untrusted_expansion,
 )
@@ -57,15 +55,8 @@ from .interpreter_observers import (
 from .request_artifacts import _candidate_command_texts
 from .request_models import ToolActionRequestMatch, _normalize_tool_name, tool_action_risk_summary
 from .routine_directory_creation import is_safe_routine_directory_creation
-from .sensitive_read_pipeline import _runtime_read_root_texts
 from .shell_quote_tokens import shell_token_segments, shell_tokens_preserving_quote_context
-from .shell_static_safety import _path_text_is_within_root_text, _without_safe_inspection_redirections
-from .shell_stdin_sources import (
-    _cat_reads_local_file,
-    _cat_stdout_payloads,
-    _echo_stdout_payload,
-    _printf_stdout_payloads,
-)
+from .shell_static_safety import _without_safe_inspection_redirections
 from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command, _split_shell_parts
 
 
@@ -324,46 +315,6 @@ def _looks_like_safe_existence_probe(
     return bool(allowed_roots) and any(resolved.is_relative_to(root) for root in allowed_roots)
 
 
-def _skip_shell_wrapper_options(segment: list[_ShellTokenWithQuoteContext], index: int) -> int:
-    while index < len(segment) and segment[index].plain.startswith("-"):
-        index += 1
-    return index
-
-
-def _shell_stdout_payloads(
-    segment: list[str],
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-    allowed_roots: tuple[Path, ...] | None = None,
-) -> tuple[tuple[str, Path | None], ...]:
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name is None or command_index is None:
-        return ()
-    segment_args = segment[command_index + 1 :]
-    if command_name == "printf":
-        payloads = _printf_stdout_payloads(segment_args)
-        return tuple((payload, cwd) for payload in payloads)
-    if command_name == "echo":
-        payload = _echo_stdout_payload(segment_args)
-        return ((payload, cwd),) if payload else ()
-    if command_name == "cat":
-        return _cat_stdout_payloads(segment_args, cwd=cwd, home_dir=home_dir, allowed_roots=allowed_roots)
-    return ()
-
-
-def _shell_stdout_uses_local_file(
-    segment: list[str],
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> bool:
-    command_name, command_index = _shell_segment_primary_command(segment)
-    if command_name != "cat" or command_index is None:
-        return False
-    return _cat_reads_local_file(segment[command_index + 1 :], cwd=cwd, home_dir=home_dir)
-
-
 def build_tool_action_request_artifact(
     harness: str,
     request: ToolActionRequestMatch,
@@ -547,17 +498,7 @@ def build_tool_action_request_artifact(
     )
 
 
-def _path_is_within_roots(path: Path, roots: tuple[Path, ...]) -> bool:
-    path_text = os.path.realpath(os.fspath(path))
-    root_texts = _runtime_read_root_texts(roots)
-    return any(_path_text_is_within_root_text(path_text, root_text) for root_text in root_texts)
-
-
 __all__ = [
-    "_path_is_within_roots",
-    "_shell_stdout_payloads",
-    "_shell_stdout_uses_local_file",
-    "_skip_shell_wrapper_options",
     "build_tool_action_request_artifact",
     "is_explicitly_benign_native_file_read_request",
     "is_explicitly_benign_tool_action_request",
