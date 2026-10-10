@@ -71,15 +71,34 @@ pub(crate) fn git_grep_uses_external_execution(args: &[String]) -> bool {
     })
 }
 
-/// `_shell_wrapper_script_index`.
+/// `_shell_wrapper_script_index`, bounded at the first operand: once a script
+/// path (or any non-option word) appears the shell runs that script and a later
+/// `-c` is only its argument, so no command string is reported.
 pub(crate) fn shell_wrapper_script_index(parts: &[String]) -> Option<usize> {
-    for (offset, arg) in parts.iter().enumerate().skip(1) {
-        if arg == "-c" {
-            return Some(offset + 1);
+    let mut offset = 1;
+    while offset < parts.len() {
+        let arg = parts[offset].as_str();
+        if arg == "--" || !(arg.starts_with('-') || arg.starts_with('+')) {
+            return None;
         }
-        if arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('c') {
-            return Some(offset + 1);
+        if matches!(arg, "-o" | "+o" | "-O" | "+O" | "--rcfile" | "--init-file") {
+            offset += 2;
+            continue;
         }
+        if arg.starts_with("--") || arg.starts_with('+') {
+            offset += 1;
+            continue;
+        }
+        if arg[1..].contains('c') {
+            // `-co name` style clusters take their option argument before the
+            // command string; refuse them instead of guessing.
+            return if arg[1..].contains(['o', 'O']) {
+                None
+            } else {
+                Some(offset + 1)
+            };
+        }
+        offset += 1;
     }
     None
 }
@@ -354,4 +373,49 @@ pub(crate) fn sed_args_are_bounded_filter(args: &[String]) -> bool {
             .scripts
             .iter()
             .all(|script| sed_script_is_bounded_print(script))
+}
+
+#[cfg(test)]
+mod shell_wrapper_tests {
+    use super::shell_wrapper_script_index;
+
+    fn parts(text: &str) -> Vec<String> {
+        text.split(' ').map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn command_string_follows_the_wrapper_options() {
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash -c script")),
+            Some(2)
+        );
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash -lc script")),
+            Some(2)
+        );
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash -o pipefail -c script")),
+            Some(4)
+        );
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash --norc -c script")),
+            Some(3)
+        );
+    }
+
+    #[test]
+    fn a_script_operand_ends_the_scan() {
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash evil.sh -c script")),
+            None
+        );
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash -- -c script")),
+            None
+        );
+        assert_eq!(
+            shell_wrapper_script_index(&parts("bash -co pipefail script")),
+            None
+        );
+    }
 }

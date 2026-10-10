@@ -222,6 +222,7 @@ def test_git_pathspec_query_does_not_execute_aliases_hooks_or_diff_helpers(git_r
     marker = git_repository.parent / "executed"
     _git(git_repository, "config", "alias.ls-files", f"!touch {marker}")
     _git(git_repository, "config", "diff.external", f"touch {marker}")
+    _git(git_repository, "config", "core.fsmonitor", f"touch {marker}")
     hook = git_repository / ".git" / "hooks" / "post-checkout"
     _write(hook, f"#!/bin/sh\ntouch {marker}\n")
     hook.chmod(0o755)

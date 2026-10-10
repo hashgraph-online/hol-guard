@@ -39,6 +39,8 @@ pub(crate) fn run_pathspec_git(
         .arg("--no-pager")
         .arg("-c")
         .arg(format!("core.hooksPath={NULL_DEVICE}"))
+        .arg("-c")
+        .arg("core.fsmonitor=false")
         .args(arguments)
         .current_dir(cwd)
         .env_clear()
