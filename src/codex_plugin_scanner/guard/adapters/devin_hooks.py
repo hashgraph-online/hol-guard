@@ -11,30 +11,11 @@ responses carry only the event envelope with no decision keys.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from collections.abc import Mapping
 from typing import TextIO
 
-from .hook_payloads import normalize_session_and_workspace_aliases
-
-# Devin's tool names map onto the Claude-Code-shaped canonical names the Guard
-# runtime contract expects. ``apply_patch`` already matches the canonical
-# contract; interactive shell helpers (write_to_process, get_output,
-# kill_shell) are deliberately unmapped because they carry no new command.
-_DEVIN_TOOL_ALIASES: dict[str, str] = {
-    "exec": "Bash",
-    "read": "Read",
-    "notebook_read": "Read",
-    "write": "Write",
-    "edit": "Edit",
-    "notebook_edit": "Edit",
-    "webfetch": "WebFetch",
-    "grep": "Grep",
-    "glob": "Glob",
-}
-
-_DEVIN_PROJECT_DIR_ENV = "DEVIN_PROJECT_DIR"
+from ..native_hook_adapter import native_prepare_payload
 
 
 def _raw_hook_event_name(payload: Mapping[str, object]) -> str:
@@ -61,78 +42,10 @@ def _canonical_devin_event_name(raw_event: str) -> str:
     return mapping.get(normalized, raw_event or "PreToolUse")
 
 
-def _canonical_devin_tool_name(raw_tool: object | None) -> str | None:
-    if not isinstance(raw_tool, str) or not raw_tool.strip():
-        return None
-    stripped = raw_tool.strip()
-    return _DEVIN_TOOL_ALIASES.get(stripped.lower(), stripped)
-
-
-def _apply_devin_mcp_call(normalized: dict[str, object]) -> None:
-    """Rewrite ``mcp_call_tool`` dispatch payloads onto the ``mcp__*`` shape.
-
-    The Guard runtime evaluates MCP tools by their ``mcp__<server>__<tool>``
-    name, so the dispatcher's ``server_name``/``tool_name`` inputs are folded
-    into the canonical tool name and ``arguments`` becomes the tool input.
-    The original routing pair is preserved under ``devin_mcp_call`` for
-    evidence.
-    """
-
-    if str(normalized.get("tool_name") or "").strip().lower() != "mcp_call_tool":
-        return
-    tool_input = normalized.get("tool_input")
-    if not isinstance(tool_input, dict):
-        return
-    server_name = tool_input.get("server_name")
-    tool_name = tool_input.get("tool_name")
-    if not isinstance(server_name, str) or not server_name.strip():
-        return
-    if not isinstance(tool_name, str) or not tool_name.strip():
-        return
-    normalized["devin_mcp_call"] = {"server_name": server_name, "tool_name": tool_name}
-    normalized["tool_name"] = f"mcp__{server_name.strip()}__{tool_name.strip()}"
-    arguments = tool_input.get("arguments")
-    normalized["tool_input"] = dict(arguments) if isinstance(arguments, dict) else {}
-
-
 def prepare_devin_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map a Devin hook stdin JSON object onto Guard's shared hook shape."""
 
-    normalized = dict(payload)
-    raw_event = _raw_hook_event_name(normalized)
-    if raw_event:
-        normalized["hook_event_name"] = _canonical_devin_event_name(raw_event)
-
-    tool_name = normalized.get("tool_name")
-    if tool_name is None:
-        tool_name = normalized.get("toolName")
-    canonical_tool = _canonical_devin_tool_name(tool_name)
-    if canonical_tool is not None:
-        normalized["tool_name"] = canonical_tool
-
-    tool_input = normalized.get("tool_input")
-    if tool_input is None:
-        tool_input = normalized.get("toolInput")
-    if tool_input is None:
-        tool_input = normalized.get("arguments")
-    if tool_input is not None:
-        normalized["tool_input"] = tool_input
-
-    _apply_devin_mcp_call(normalized)
-
-    # Devin hook payloads carry no cwd; DEVIN_PROJECT_DIR is the only
-    # workspace signal the harness exports to hook processes.
-    if normalized.get("cwd") is None and normalized.get("workspace") is None:
-        project_dir = os.environ.get(_DEVIN_PROJECT_DIR_ENV)
-        if isinstance(project_dir, str) and project_dir.strip():
-            normalized["cwd"] = project_dir.strip()
-
-    normalize_session_and_workspace_aliases(normalized)
-
-    prompt = normalized.get("prompt")
-    if prompt is None and isinstance(normalized.get("userPrompt"), str):
-        normalized["prompt"] = normalized["userPrompt"]
-    return normalized
+    return native_prepare_payload("devin", payload)
 
 
 def _event_name_for_response(payload: Mapping[str, object]) -> str:

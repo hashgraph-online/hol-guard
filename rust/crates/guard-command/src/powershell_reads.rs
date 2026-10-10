@@ -21,7 +21,8 @@ pub(crate) fn with_windows_powershell_reads<T>(body: impl FnOnce() -> T) -> T {
     result
 }
 
-pub(crate) fn windows_powershell_reads() -> bool {
+/// Host gate: PowerShell parsing and cmdlet mapping only apply on Windows.
+pub(crate) fn windows_powershell_host() -> bool {
     #[cfg(test)]
     if FORCE_WINDOWS.with(std::cell::Cell::get) {
         return true;

@@ -48,6 +48,12 @@ from ..edge_events import build_runtime_session_event
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..mdm.network import managed_urlopen
 from ..models import GuardArtifact, HarnessDetection, PolicyDecision
+from ..native_policy_bundle import (
+    NATIVE_UNAVAILABLE_REJECTION,
+    PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
+    native_rejection_code,
+)
 from ..native_prompt import NativePromptAnalysisError
 from ..native_prompt import analyze as _prompt_analyze_native
 from ..native_prompt import artifact_from_dict as _guard_artifact_from_dict
@@ -1420,24 +1426,24 @@ def _policy_bundle_is_version_downgrade(
         expected_hash = (
             expected_last_good_bundle.get("bundleHash") if isinstance(expected_last_good_bundle, dict) else None
         )
-        return (
-            validate_policy_bundle_v2_transition(
-                next_bundle,
-                current_bundle_version=(
-                    current_version
-                    if isinstance(current_version, int) and not isinstance(current_version, bool)
-                    else None
-                ),
-                current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
-                expected_last_good_bundle_version=(
-                    expected_version
-                    if isinstance(expected_version, int) and not isinstance(expected_version, bool)
-                    else None
-                ),
-                expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
-            )
-            is not None
+        transition_error = validate_policy_bundle_v2_transition(
+            next_bundle,
+            current_bundle_version=(
+                current_version if isinstance(current_version, int) and not isinstance(current_version, bool) else None
+            ),
+            current_bundle_hash=(current_hash if isinstance(current_hash, str) else None),
+            expected_last_good_bundle_version=(
+                expected_version
+                if isinstance(expected_version, int) and not isinstance(expected_version, bool)
+                else None
+            ),
+            expected_last_good_bundle_hash=(expected_hash if isinstance(expected_hash, str) else None),
         )
+        if transition_error == NATIVE_UNAVAILABLE_REJECTION:
+            # The resident could not decide. That is an outage, never a
+            # downgrade verdict and never an implicit allow.
+            raise PolicyBundleNativeUnavailableError(NATIVE_UNAVAILABLE_REJECTION)
+        return transition_error is not None
     return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
 
 
@@ -1933,18 +1939,27 @@ def sync_receipts(
                     expected_workspace_id=store.get_cloud_workspace_id(),
                 )
             )
-        if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+        if existing_policy_bundle_error == NATIVE_UNAVAILABLE_REJECTION:
+            # The downgrade reference could not be validated, so a downgrade
+            # cannot be ruled out. Reject instead of comparing to nothing.
             validated_policy_bundle = None
-            policy_bundle_rejection_reason = "unsupported_daemon_version"
-        if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
+            policy_bundle_rejection_reason = NATIVE_UNAVAILABLE_REJECTION
+        try:
+            if validated_policy_bundle is not None and not _daemon_version_supported(validated_policy_bundle):
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "unsupported_daemon_version"
+            if validated_policy_bundle is not None and not policy_bundle_is_enforceable(validated_policy_bundle):
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "inactive_rollout_state"
+            if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
+                _policy_bundle_downgrade_reference(store, existing_policy_bundle),
+                validated_policy_bundle,
+            ):
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = "bundle_version_downgrade"
+        except PolicyBundleNativeError as error:
             validated_policy_bundle = None
-            policy_bundle_rejection_reason = "inactive_rollout_state"
-        if validated_policy_bundle is not None and _policy_bundle_is_version_downgrade(
-            _policy_bundle_downgrade_reference(store, existing_policy_bundle),
-            validated_policy_bundle,
-        ):
-            validated_policy_bundle = None
-            policy_bundle_rejection_reason = "bundle_version_downgrade"
+            policy_bundle_rejection_reason = native_rejection_code(error)
         candidate_managed_capabilities = _managed_controls_negotiated_capabilities(store, policy_bundle_sync_payload)
         (
             validated_policy_bundle,
@@ -2035,6 +2050,10 @@ def sync_receipts(
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
                 policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+            except PolicyBundleNativeError as error:
+                candidate_policy_decisions = []
+                validated_policy_bundle = None
+                policy_bundle_rejection_reason = native_rejection_code(error)
         if validated_policy_bundle is not None:
             effective_policy_bundle = validated_policy_bundle
             update_last_good = True
@@ -2100,20 +2119,24 @@ def sync_receipts(
             managed_keyring_provenance=store.get_sync_payload(MANAGED_POLICY_BUNDLE_KEYRING_PROVENANCE_STATE_KEY),
             expected_workspace_id=store.get_cloud_workspace_id(),
         )
-        if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
+        try:
+            if activation_bundle is not None and not policy_bundle_is_enforceable(activation_bundle):
+                activation_bundle = None
+                activation_reason = "inactive_rollout_state"
+            acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+            if (
+                activation_bundle is not None
+                and isinstance(acceptance_checkpoint, dict)
+                and _policy_bundle_is_version_downgrade(
+                    acceptance_checkpoint,
+                    activation_bundle,
+                )
+            ):
+                activation_bundle = None
+                activation_reason = "bundle_version_downgrade"
+        except PolicyBundleNativeError as error:
             activation_bundle = None
-            activation_reason = "inactive_rollout_state"
-        acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
-        if (
-            activation_bundle is not None
-            and isinstance(acceptance_checkpoint, dict)
-            and _policy_bundle_is_version_downgrade(
-                acceptance_checkpoint,
-                activation_bundle,
-            )
-        ):
-            activation_bundle = None
-            activation_reason = "bundle_version_downgrade"
+            activation_reason = native_rejection_code(error)
         if activation_bundle is None:
             activation_last_error = _policy_bundle_rejection_payload(activation_reason)
             store.add_event("policy_bundle/rejected", activation_last_error, now)
@@ -2140,6 +2163,10 @@ def sync_receipts(
                     store.add_event("policy_bundle/rejected", activation_last_error, now)
                     effective_policy_bundle = None
                     retain_existing_policy_authority = True
+    if effective_policy_bundle is None and activation_last_error.get("reason") == NATIVE_UNAVAILABLE_REJECTION:
+        # The resident could not decide. Do not activate anything new, but a
+        # transient outage must not also erase the previously verified policy.
+        retain_existing_policy_authority = True
     if effective_policy_bundle is None:
         if not retain_existing_policy_authority:
             store.clear_policy_bundle_authority(
@@ -2149,119 +2176,141 @@ def sync_receipts(
             )
             _reset_cloud_receipt_redaction_authority(store, synced_at=now)
     else:
-        selected_policy_decisions = (
-            candidate_policy_decisions
-            if validated_policy_bundle is not None
-            and effective_policy_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
-            else _build_policy_bundle_decisions(
-                effective_policy_bundle,
+        try:
+            selected_policy_decisions = (
+                candidate_policy_decisions
+                if validated_policy_bundle is not None
+                and effective_policy_bundle.get("bundleHash") == validated_policy_bundle.get("bundleHash")
+                else _build_policy_bundle_decisions(
+                    effective_policy_bundle,
+                    device_id=device_id,
+                    device_name=device_name,
+                    canonical_enforcement=canonical_enforcement,
+                )
+            )
+            policy_bundle_ack = effective_policy_bundle_acknowledgement(
                 device_id=device_id,
                 device_name=device_name,
-                canonical_enforcement=canonical_enforcement,
+                effective_policy_bundle=effective_policy_bundle,
+                validated_policy_bundle=validated_policy_bundle,
+                validated_delivery=validated_policy_bundle_delivery,
+                stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
+                synced_at=now,
             )
-        )
-        remote_decisions.update(selected_policy_decisions)
-        policy_bundle_ack = effective_policy_bundle_acknowledgement(
-            device_id=device_id,
-            device_name=device_name,
-            effective_policy_bundle=effective_policy_bundle,
-            validated_policy_bundle=validated_policy_bundle,
-            validated_delivery=validated_policy_bundle_delivery,
-            stored_acknowledgement=store.get_sync_payload("policy_bundle_ack"),
-            synced_at=now,
-        )
-        cloud_exception_items = _policy_bundle_cloud_exception_items(
-            store,
-            device_id=device_id,
-            sync_exceptions=[],
-            policy_bundle=effective_policy_bundle,
-            policy_bundle_ack=policy_bundle_ack,
-        )
-        try:
-            custom_extension_continuity = apply_custom_extension_continuity_from_sync(
+        except PolicyBundleNativeError as error:
+            # Fail closed: nothing new is materialized or acknowledged. Only an
+            # outage keeps the prior authority; a deterministic native rejection
+            # is a verdict, so it must not leave a stale bundle in force.
+            activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
+            store.add_event("policy_bundle/rejected", activation_last_error, now)
+            effective_policy_bundle = None
+            if not isinstance(error, PolicyBundleNativeUnavailableError) and not retain_existing_policy_authority:
+                store.clear_policy_bundle_authority(
+                    now,
+                    policy_bundle_last_error=activation_last_error,
+                    managed_controls_publish=managed_controls_publish,
+                )
+                _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+            selected_policy_decisions = []
+            policy_bundle_ack = {}
+        if effective_policy_bundle is not None:
+            remote_decisions.update(selected_policy_decisions)
+            cloud_exception_items = _policy_bundle_cloud_exception_items(
                 store,
-                effective_policy_bundle,
-                device_id=delivery_device_id,
-                negotiated_capabilities=effective_managed_capabilities,
-                now=now,
-            )
-            activated, activation_rejection_reason = activate_with_reason(
-                store.apply_policy_bundle_authority,
-                list(remote_decisions),
-                now,
+                device_id=device_id,
+                sync_exceptions=[],
                 policy_bundle=effective_policy_bundle,
-                policy_bundle_keyring=policy_bundle_keyring_payload(
-                    trusted_policy_bundle_keys,
-                    workspace_id=store.get_cloud_workspace_id(),
-                ),
-                cloud_exceptions=cloud_exception_items,
                 policy_bundle_ack=policy_bundle_ack,
-                policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(effective_policy_bundle),
-                update_last_good=update_last_good,
-                policy_bundle_last_error=activation_last_error,
-                managed_controls_policy=effective_managed_controls,
-                managed_controls_negotiated_capabilities=effective_managed_capabilities,
-                managed_controls_delivery=validated_policy_bundle_delivery,
-                managed_controls_publish=managed_controls_publish,
-                custom_extension_continuity=custom_extension_continuity,
-                remote_write_authorized=True,
             )
-            if activated is None:
-                cloud_exception_items = []
-                activation_last_error = _policy_bundle_rejection_payload(activation_rejection_reason)
-                persist_activation_rejection(store, activation_last_error, now)
-            else:
-                remote_policies_stored = len(remote_decisions)
-                if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
-                    canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
-                    if isinstance(canonical_last_good, dict) and canonical_last_good.get(
-                        "bundleHash"
-                    ) != effective_policy_bundle.get("bundleHash"):
+            try:
+                custom_extension_continuity = apply_custom_extension_continuity_from_sync(
+                    store,
+                    effective_policy_bundle,
+                    device_id=delivery_device_id,
+                    negotiated_capabilities=effective_managed_capabilities,
+                    now=now,
+                )
+                activated, activation_rejection_reason = activate_with_reason(
+                    store.apply_policy_bundle_authority,
+                    list(remote_decisions),
+                    now,
+                    policy_bundle=effective_policy_bundle,
+                    policy_bundle_keyring=policy_bundle_keyring_payload(
+                        trusted_policy_bundle_keys,
+                        workspace_id=store.get_cloud_workspace_id(),
+                    ),
+                    cloud_exceptions=cloud_exception_items,
+                    policy_bundle_ack=policy_bundle_ack,
+                    policy_bundle_checkpoint=_policy_bundle_acceptance_checkpoint(effective_policy_bundle),
+                    update_last_good=update_last_good,
+                    policy_bundle_last_error=activation_last_error,
+                    managed_controls_policy=effective_managed_controls,
+                    managed_controls_negotiated_capabilities=effective_managed_capabilities,
+                    managed_controls_delivery=validated_policy_bundle_delivery,
+                    managed_controls_publish=managed_controls_publish,
+                    custom_extension_continuity=custom_extension_continuity,
+                    remote_write_authorized=True,
+                )
+                if activated is None:
+                    cloud_exception_items = []
+                    activation_last_error = _policy_bundle_rejection_payload(activation_rejection_reason)
+                    persist_activation_rejection(store, activation_last_error, now)
+                else:
+                    remote_policies_stored = len(remote_decisions)
+                    if effective_policy_bundle.get("contractVersion") == POLICY_BUNDLE_V2_CONTRACT:
+                        canonical_last_good = store.get_sync_payload("policy_bundle_canonical_last_good")
+                        if isinstance(canonical_last_good, dict) and canonical_last_good.get(
+                            "bundleHash"
+                        ) != effective_policy_bundle.get("bundleHash"):
+                            store.set_sync_payload(
+                                "policy_bundle_canonical_previous_good",
+                                canonical_last_good,
+                                now,
+                            )
                         store.set_sync_payload(
-                            "policy_bundle_canonical_previous_good",
-                            canonical_last_good,
+                            "policy_bundle_canonical_last_good",
+                            effective_policy_bundle,
                             now,
                         )
-                    store.set_sync_payload(
-                        "policy_bundle_canonical_last_good",
-                        effective_policy_bundle,
-                        now,
-                    )
-                else:
-                    store.set_sync_payload(
-                        "policy_bundle_legacy_last_good",
-                        effective_policy_bundle,
-                        now,
-                    )
-                if validated_policy_bundle is None and policy_bundle_field_provided:
-                    store.add_event(
-                        "policy_bundle/rollback",
-                        {
-                            "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
-                            "restored": "policy_bundle_last_good",
-                        },
-                        now,
-                    )
-                cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
-                if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
-                    _persist_cloud_receipt_redaction_level(
-                        store,
-                        level=cloud_redaction_level,
-                        synced_at=now,
-                    )
-                else:
-                    _reset_cloud_receipt_redaction_authority(store, synced_at=now)
-        except ApprovalGateError as error:
-            cloud_exception_items = []
-            remote_policy_sync_blocked = True
-            store.add_event(
-                "approval_gate/remote_policy_sync_blocked",
-                {
-                    "error": error.code,
-                    "remote_policies_count": len(remote_decisions),
-                },
-                now,
-            )
+                    else:
+                        store.set_sync_payload(
+                            "policy_bundle_legacy_last_good",
+                            effective_policy_bundle,
+                            now,
+                        )
+                    if validated_policy_bundle is None and policy_bundle_field_provided:
+                        store.add_event(
+                            "policy_bundle/rollback",
+                            {
+                                "reason": activation_last_error.get("reason", "invalid_policy_bundle"),
+                                "restored": "policy_bundle_last_good",
+                            },
+                            now,
+                        )
+                    cloud_redaction_level = non_empty_string(effective_policy_bundle.get("receiptRedactionLevel"))
+                    if cloud_redaction_level in VALID_RECEIPT_REDACTION_LEVELS:
+                        _persist_cloud_receipt_redaction_level(
+                            store,
+                            level=cloud_redaction_level,
+                            synced_at=now,
+                        )
+                    else:
+                        _reset_cloud_receipt_redaction_authority(store, synced_at=now)
+            except PolicyBundleNativeError as error:
+                cloud_exception_items = []
+                activation_last_error = _policy_bundle_rejection_payload(native_rejection_code(error))
+                persist_activation_rejection(store, activation_last_error, now)
+            except ApprovalGateError as error:
+                cloud_exception_items = []
+                remote_policy_sync_blocked = True
+                store.add_event(
+                    "approval_gate/remote_policy_sync_blocked",
+                    {
+                        "error": error.code,
+                        "remote_policies_count": len(remote_decisions),
+                    },
+                    now,
+                )
     if review_verification_keys_payload is not None:
         if cloud_workspace_id is None:
             raise RuntimeError("review_verification_keys_workspace_missing")
@@ -3527,7 +3576,7 @@ def _refresh_guard_oauth_access_token_once(
                 if _invalid_grant_oauth_payload(payload):
                     raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
                 refresh_error_message = _oauth_refresh_error_message(error)
-                raise GuardSyncAuthorizationExpiredError(
+                raise _GuardOAuthRefreshRejectedError(
                     f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
                 ) from error
             refresh_error_message = _oauth_refresh_error_message(error)
@@ -3591,11 +3640,17 @@ class _GuardOAuthRefreshRateLimitedError(RuntimeError):
         super().__init__(f"Guard OAuth token refresh was rate limited. Retry after {retry_after_seconds} seconds.")
 
 
+class _GuardOAuthRefreshRejectedError(GuardSyncAuthorizationExpiredError):
+    """The token endpoint rejected the refresh request with an error other than invalid_grant."""
+
+
 _OAUTH_REFRESH_CIRCUIT_STATE_KEY = "guard_oauth_refresh_circuit"
 _OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_SECONDS"
 _OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_SECONDS"
 _OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS = 30.0
 _OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS = 300.0
+_OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED = "revoked"
+_OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED = "rejected"
 _OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS = 3600.0
 
 
@@ -3689,6 +3744,8 @@ def _oauth_refresh_circuit_check(
     if next_allowed is None or next_allowed <= now:
         return
     if bool(state.get("needs_reauthorization")):
+        if state.get("failure_kind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
     raise _GuardOAuthRefreshRateLimitedError(max(1, int((next_allowed - now).total_seconds())))
 
@@ -3699,12 +3756,17 @@ def _oauth_refresh_circuit_record_dead_grant(
     refresh_token: str,
     issuer: str,
     now: datetime,
+    failure_kind: str = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED,
 ) -> None:
     """Mark the grant permanently invalid and schedule the next probe.
 
     A propagated failure already consumed the bounded invalid_grant retry, so
     one record flips the binding into needs-reauthorization and fires the
     single user-visible notice; later failures only extend the probe backoff.
+    Other rejections (for example invalid_request) record the `rejected` kind
+    so the fast-fail keeps their reauthorization error instead of the revoked
+    one, which would let sign-in cleanup wipe credentials after one bad 400.
+    A rejection sends the notice only once the next probe is rejected too.
     """
     fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
     state = _load_oauth_refresh_circuit(store)
@@ -3728,7 +3790,7 @@ def _oauth_refresh_circuit_record_dead_grant(
         )
     )
     notice_sent = bool(state.get("notice_sent"))
-    if not notice_sent:
+    if not notice_sent and (failure_kind != _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED or failures > 1):
         notice_sent = _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint)
     _save_oauth_refresh_circuit(
         store,
@@ -3736,6 +3798,7 @@ def _oauth_refresh_circuit_record_dead_grant(
             "refresh_token_fingerprint": fingerprint,
             "consecutive_failures": failures,
             "needs_reauthorization": True,
+            "failure_kind": failure_kind,
             "notice_sent": notice_sent,
             "backoff_seconds": backoff,
             "next_refresh_allowed_at": (now + timedelta(seconds=backoff)).isoformat(),
@@ -3771,6 +3834,7 @@ def _oauth_refresh_circuit_record_rate_limit(
             if isinstance(state.get("consecutive_failures"), int)
             else 0,
             "needs_reauthorization": bool(state.get("needs_reauthorization")),
+            **({"failure_kind": state["failure_kind"]} if isinstance(state.get("failure_kind"), str) else {}),
             "notice_sent": bool(state.get("notice_sent")),
             "backoff_seconds": bounded_retry_after,
             "next_refresh_allowed_at": (now + timedelta(seconds=bounded_retry_after)).isoformat(),
@@ -4065,15 +4129,21 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         raise
     except GuardSyncAuthorizationExpiredError as error:
         if str(error) == _guard_oauth_reconnect_after_revoked_message():
-            failed_refresh_token = (
-                _optional_string(effective_credentials_ref["value"].get("refresh_token")) or refresh_token
-            )
-            _oauth_refresh_circuit_record_dead_grant(
-                store=store,
-                refresh_token=failed_refresh_token,
-                issuer=issuer,
-                now=datetime.now(timezone.utc),
-            )
+            failure_kind = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED
+        elif isinstance(error, _GuardOAuthRefreshRejectedError):
+            failure_kind = _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED
+        else:
+            raise
+        failed_refresh_token = (
+            _optional_string(effective_credentials_ref["value"].get("refresh_token")) or refresh_token
+        )
+        _oauth_refresh_circuit_record_dead_grant(
+            store=store,
+            refresh_token=failed_refresh_token,
+            issuer=issuer,
+            now=datetime.now(timezone.utc),
+            failure_kind=failure_kind,
+        )
         raise
     _oauth_refresh_circuit_clear(store)
     effective_credentials = effective_credentials_ref["value"]

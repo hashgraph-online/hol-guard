@@ -67,8 +67,9 @@ def test_windows_verifier_resolves_the_existing_compiler_suffix(monkeypatch, arg
     monkeypatch.setattr(verifier, "_run", calls.append)
     assert verifier.main() == 0
     expected = argument if argument.endswith(".exe") else argument + ".exe"
-    assert calls[0][-1] == expected
-    assert calls[1] == [*calls[0], "--check"]
+    assert calls[0][-2:] == [expected, "--check-public-descriptors"]
+    assert calls[1][-1] == expected
+    assert calls[2] == [*calls[1], "--check"]
 
 
 def test_dependency_setup_does_not_compile_projections_in_each_coverage_shard() -> None:
@@ -79,14 +80,11 @@ def test_dependency_setup_does_not_compile_projections_in_each_coverage_shard() 
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     steps = workflow["jobs"]["coverage"]["steps"]
     restore = next(
-        index
-        for index, step in enumerate(steps)
-        if step.get("uses") == "./.github/actions/restore-command-projections"
+        index for index, step in enumerate(steps) if step.get("uses") == "./.github/actions/restore-command-projections"
     )
     restoration = yaml.safe_load((ROOT / ".github/actions/restore-command-projections/action.yml").read_text())
     assert any(
-        step.get("with", {}).get("name") == "pytest-native-command-projections"
-        for step in restoration["runs"]["steps"]
+        step.get("with", {}).get("name") == "pytest-native-command-projections" for step in restoration["runs"]["steps"]
     )
     tests = next(index for index, step in enumerate(steps) if "run_projection_shard.py" in step.get("run", ""))
     assert restore < tests

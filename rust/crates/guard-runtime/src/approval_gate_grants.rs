@@ -352,7 +352,11 @@ impl ApprovalGateGrants {
         // (11) TOTP-enabled path vs strict-password path
         if totp_enabled {
             if !totp_state_valid {
-                return Err(ApprovalGateErrorV1::totp_required("TOTP code is required."));
+                return Err(ApprovalGateErrorV1 {
+                    code: "approval_gate_recovery_required".to_owned(),
+                    message: "Approval gate TOTP secret is unavailable.".to_owned(),
+                    status: 423,
+                });
             }
             let is_totp_factor = grant.factor_set == ["totp"];
             if !is_totp_factor || !grant.totp_verified {

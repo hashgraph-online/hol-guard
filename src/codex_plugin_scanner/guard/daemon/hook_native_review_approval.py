@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
+from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.actions import normalize_harness_payload
 from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
@@ -26,6 +27,8 @@ from .hook_native_review_binding import (
 )
 from .hook_native_saved_approval import (
     EXACT_ACTION_CONTEXT_TOKEN_KEY,
+    TOKEN_UNSET,
+    TokenUnset,
     native_exact_action_token,
     native_saved_review_response,
 )
@@ -34,6 +37,7 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
 )
+from .native_review_allow_hint import native_review_extension_allow_hint
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -141,6 +145,18 @@ def pause_native_pre_tool_for_approval(
     )
     if custom is not None and custom[0]:
         return custom[1]
+    # Derive the exact-action token once: the saved-decision lookup and the queued
+    # request must bind the identical value, and each derivation re-reads operands
+    # and repeats resident launch-identity round trips.
+    exact_token = native_exact_action_token(
+        harness=harness,
+        tool_name=tool_name,
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
     saved = native_saved_review_response(
         store,
         harness=harness,
@@ -151,6 +167,7 @@ def pause_native_pre_tool_for_approval(
         native_receipt=native_receipt,
         workspace=workspace,
         home_dir=home_dir,
+        precomputed_token=exact_token,
     )
     if saved is not None:
         return saved
@@ -196,6 +213,7 @@ def pause_native_pre_tool_for_approval(
         ask = asks_for_approval(load_guard_config(guard_home, workspace=workspace))
     except (OSError, RuntimeError, TypeError, ValueError):
         ask = False
+    approval_center_url = _native_review_approval_center_url(store)
     if not ask:
         # The agent stays on the silent block. The inbox row is a separate record.
         queued = queue_native_pre_tool_review(
@@ -208,6 +226,8 @@ def pause_native_pre_tool_for_approval(
             guard_home=guard_home,
             home_dir=home_dir,
             deadline=deadline,
+            exact_token=exact_token,
+            approval_center_url=approval_center_url,
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
@@ -235,6 +255,8 @@ def pause_native_pre_tool_for_approval(
         guard_home=guard_home,
         home_dir=home_dir,
         deadline=deadline,
+        exact_token=exact_token,
+        approval_center_url=approval_center_url,
     )
     if queued is None:
         failed = dict(native_result)
@@ -251,7 +273,7 @@ def pause_native_pre_tool_for_approval(
         guard_home=guard_home,
     )
     response["prompted"] = True
-    response["approval_center_url"] = _native_review_approval_center_url(store)
+    response["approval_center_url"] = approval_center_url
     return response
 
 
@@ -295,6 +317,8 @@ def queue_native_pre_tool_review(
     guard_home: Path,
     home_dir: Path | None = None,
     deadline: float | None = None,
+    exact_token: str | None | TokenUnset = TOKEN_UNSET,
+    approval_center_url: str | None = None,
 ) -> dict[str, object] | None:
     try:
         native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
@@ -308,7 +332,8 @@ def queue_native_pre_tool_review(
     tool_name = _native_review_tool_name(payload)
     request_id = uuid.uuid4().hex
     artifact_id = _native_review_artifact_id(harness, tool_name)
-    approval_center_url = _native_review_approval_center_url(store)
+    if approval_center_url is None:
+        approval_center_url = _native_review_approval_center_url(store)
     approval_url = f"{approval_center_url}/requests/{request_id}"
     reason = str(native_result.get("reason") or "HOL Guard requires review before this action can execute.")
     binding = _native_review_binding(harness, payload, native_result, native_receipt, workspace)
@@ -324,22 +349,25 @@ def queue_native_pre_tool_review(
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
-        # Exception messages can contain private tool input; log only the error class.
-        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
+        # Exception messages can contain private tool input; log only the error class and, for
+        # native adapter outages, its fixed reason code (unavailable, deadline, size).
+        reason = error.code if isinstance(error, NativeHookAdapterError) else type(error).__name__
+        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, reason)
         return None
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
         return None
     # Offer an exact-action Always only when the action binds to a stable token.
-    exact_token = native_exact_action_token(
-        harness=harness,
-        tool_name=tool_name,
-        payload=payload,
-        native_result=native_result,
-        native_receipt=native_receipt,
-        workspace=workspace,
-        home_dir=home_dir,
-    )
+    if isinstance(exact_token, TokenUnset):
+        exact_token = native_exact_action_token(
+            harness=harness,
+            tool_name=tool_name,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            home_dir=home_dir,
+        )
     if exact_token is not None:
         action_envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = exact_token
     request = GuardApprovalRequest(
@@ -361,6 +389,14 @@ def queue_native_pre_tool_review(
         risk_summary=reason,
         action_envelope_json=action_envelope,
         raw_command_text=pre_tool_command(payload),
+        extension_allow_hint=native_review_extension_allow_hint(
+            store,
+            payload=payload,
+            native_result=native_result,
+            workspace=workspace,
+            home_dir=home_dir,
+            deadline=deadline,
+        ),
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())

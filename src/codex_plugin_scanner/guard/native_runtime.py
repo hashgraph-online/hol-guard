@@ -215,6 +215,9 @@ def _isolated_environment() -> dict[str, str]:
         "COMSPEC",
         "HOME",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        # Dedicated opt-in for the resident's supply-chain test seams; kept
+        # separate from diagnostics so diagnostics alone never enable them.
+        "HOL_GUARD_RESIDENT_TEST_SEAMS",
         "LANG",
         "PATHEXT",
         "SYSTEMROOT",

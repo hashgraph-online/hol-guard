@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
@@ -24,15 +25,52 @@ class CloudReviewSettingsError(ValueError):
         self.code: str = code
 
 
+def cloud_review_reconnect_required(store: GuardStore, sync: dict[str, object] | None = None) -> bool:
+    health = store.get_oauth_local_credential_health()
+    if health.get("state") != "healthy":
+        return True
+    if sync is None:
+        sync_key = "guard_cloud_review_sync_state"
+        if store.guard_source != "default":
+            sync_key += f":{store.guard_source}"
+        state = store.get_sync_payload(sync_key)
+        sync = state if isinstance(state, dict) else {}
+    if sync.get("state") != "error":
+        return False
+    error_code = sync.get("last_error_code")
+    if isinstance(error_code, str):
+        return error_code in {"cloud_auth_expired", "cloud_connect_required"}
+    if "last_error_code" in sync:
+        # A sync attempt clears the code once authentication succeeds. Outbox rows
+        # that still carry an older 401 text must not demand a second sign-in.
+        return False
+    error = sync.get("last_error")
+    return isinstance(error, str) and error.startswith(
+        (
+            "Guard authorization expired.",
+            "Guard Cloud sign-in on this device is no longer valid.",
+            "HTTP Error 401:",
+        )
+    )
+
+
 def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     status = exact_cloud_review_status(store)
-    binding = store.get_review_event_oauth_binding()
+    outbox_unavailable: str | None = None
+    try:
+        binding = store.get_review_event_oauth_binding()
+        delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
+        outbox = store.review_event_outbox_status(
+            now=datetime.now(timezone.utc).isoformat(),
+            **(delivery_binding or {}),
+        )
+        held_events = store.count_recoverable_unbound_review_events()
+    except NativeGuardStoreUnavailable as error:
+        binding, delivery_binding = None, None
+        outbox = unavailable_outbox_status(error)
+        outbox_unavailable = error.reason
+        held_events = 0
     profile = store.get_cloud_sync_profile()
-    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
-    outbox = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(delivery_binding or {}),
-    )
     sync_key = "guard_cloud_review_sync_state"
     if store.guard_source != "default":
         sync_key += f":{store.guard_source}"
@@ -40,15 +78,17 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     sync = sync if isinstance(sync, dict) else {}
     recovery = store.get_sync_payload(_RECOVERY_KEY)
     recovery = recovery if isinstance(recovery, dict) and recovery.get("binding") == binding else {}
+    connected = profile is not None and binding is not None
     return {
         "enabled": status.get("enabled") is True,
-        "connected": profile is not None and binding is not None,
+        "connected": connected,
+        "reconnect_required": connected and cloud_review_reconnect_required(store, sync),
         "reason": status.get("reason"),
         "expires_at": status.get("expires_at"),
         "workspace_id": binding["workspace_id"] if binding else None,
         "source": binding["oauth_source"] if binding else None,
         "pending_uploads": outbox.get("depth", 0) if binding else 0,
-        "held_events": store.count_recoverable_unbound_review_events(),
+        "held_events": held_events,
         "isolated_events": outbox.get("quarantined_depth", 0),
         "activation_error": recovery.get("error"),
         "last_synced_at": (
@@ -58,6 +98,8 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         ),
         "delivery_state": sync.get("state", "idle"),
         "approval_gate": public_config(store.guard_home).to_dict(),
+        "outbox_available": outbox_unavailable is None,
+        "outbox_unavailable_reason": outbox_unavailable,
     }
 
 

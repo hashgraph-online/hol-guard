@@ -140,7 +140,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           COMPARISON_BASE: ${{ steps.contribution-base.outputs.sha }}
         run: |
-          arguments=(--compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
+          arguments=(--publish-directory --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
             arguments+=(--changed-from "$COMPARISON_BASE")
           fi

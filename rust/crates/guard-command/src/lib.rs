@@ -101,6 +101,10 @@ pub mod package_manifest_diff;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;
+mod powershell_command;
+mod powershell_effects;
+mod powershell_floors;
+mod powershell_parser;
 mod powershell_reads;
 use parser_executables::*;
 use parser_segments::*;
@@ -215,6 +219,46 @@ struct RawSegment {
 
 pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
     let raw = request.command.trim();
+    if request.dialect == "powershell" && request.transport == "shell_string" && !raw.is_empty() {
+        return Ok(parse_explicit_powershell(request, raw));
+    }
+    let posix = parse_posix_command(request)?;
+    if request.dialect != "posix" || !powershell_reads::windows_powershell_host() {
+        return Ok(posix);
+    }
+    // Windows agents run PowerShell. A cmdlet name means POSIX only saw an
+    // unknown word, so the PowerShell result stands even when it is uncertain.
+    if posix.confidence == "exact" && powershell_command::names_powershell_effect(&posix.segments) {
+        return Ok(parse_explicit_powershell(request, raw));
+    }
+    // Otherwise retry only input that POSIX cannot prove.
+    if posix.confidence != "exact"
+        && raw.chars().count() <= MAX_COMMAND_BYTES
+        && raw.len() <= MAX_COMMAND_BYTES
+    {
+        if let Ok(model) = powershell_command::parse(request, raw) {
+            return Ok(model);
+        }
+    }
+    Ok(posix)
+}
+
+fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> CanonicalCommandV1 {
+    if raw.chars().count() > MAX_COMMAND_BYTES || raw.len() > MAX_COMMAND_BYTES {
+        return uncertain(request, raw, "command_byte_limit_exceeded");
+    }
+    match powershell_command::parse(request, raw) {
+        Ok(model) => model,
+        Err(reason) => {
+            let mut model = uncertain(request, raw, reason);
+            model.parser_profile = powershell_command::POWERSHELL_PROFILE.to_owned();
+            model
+        }
+    }
+}
+
+fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
+    let raw = request.command.trim();
     if raw.is_empty() {
         return Err("command_text_empty".to_owned());
     }
@@ -276,7 +320,7 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
         } else {
             Vec::new()
         };
-        if executable_index == 0 && powershell_reads::windows_powershell_reads() {
+        if executable_index == 0 && powershell_reads::windows_powershell_host() {
             if let Some(operands) = executable.as_deref().and_then(|name| {
                 powershell_reads::plain_get_content_operands(name, &arguments, &text)
             }) {
@@ -378,6 +422,9 @@ fn uncertain(request: &CommandModelRequestV1, raw: &str, reason: &str) -> Canoni
 }
 
 #[cfg(test)]
+#[path = "powershell_parser_tests.rs"]
+mod powershell_parser_tests;
+#[cfg(test)]
 #[path = "parser_tests.rs"]
 mod tests;
 
@@ -387,6 +434,8 @@ pub mod cloud_audit_sync;
 pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
+#[cfg(test)]
+mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;
 pub mod package_policy_override;
 pub mod package_protect_projection;
@@ -409,8 +458,25 @@ pub mod decisions;
 pub mod detectors;
 #[cfg(unix)]
 pub mod direct_vitest;
+pub mod egress_broker;
+mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
+mod hook_adapter_cline_tables;
+pub mod hook_adapter_envelope;
+mod hook_adapter_envelope_tables;
+mod hook_adapter_envelope_text;
+pub mod hook_adapter_paths;
+pub mod hook_adapter_prepare;
+pub mod hook_adapter_prepare_cline;
+mod hook_adapter_prepare_cursor;
+mod hook_adapter_pyjson;
+mod hook_adapter_pytext;
+mod hook_adapter_redact;
+mod hook_adapter_secret_path;
+pub mod hook_adapter_value;
+#[cfg(all(test, unix))]
+mod hook_adapter_vector_tests;
 pub mod hook_evidence_writer;
 pub mod hook_responses;
 pub mod inventory_contract;
@@ -425,13 +491,12 @@ mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;
+pub mod registry_metadata_transport;
 pub mod restricted_archive;
 pub mod restricted_archive_transport;
 #[cfg(unix)]
 pub mod restricted_pytest;
 pub mod resume_template;
-pub mod review_event_outbox;
-pub mod review_event_outbox_schema;
 #[cfg(unix)]
 pub mod sandbox;
 pub mod shims;

@@ -29,11 +29,11 @@ def test_every_event_stages_then_strictly_verifies_current_sources(monkeypatch, 
     monkeypatch.setattr(verifier, "_run", calls.append)
     assert verifier.main() == 0
     generate = [sys.executable, "scripts/build_native_command_program.py", "--compiler", compiler]
-    assert calls == [generate, [*generate, "--check"]]
+    assert calls == [[*generate, "--check-public-descriptors"], generate, [*generate, "--check"]]
     assert all(command[0] not in {"cargo", "git"} for command in calls)
 
 
-@pytest.mark.parametrize("failed_stage", [0, 1])
+@pytest.mark.parametrize("failed_stage", [0, 1, 2])
 def test_compilation_or_verification_failure_is_not_retried_or_ignored(monkeypatch, failed_stage):
     """Verify compilation or verification failure is not retried or ignored."""
     monkeypatch.setattr(sys, "argv", ["verify", "--compiler", "compiler"])
@@ -60,11 +60,12 @@ def test_unavailable_pr_base_cannot_change_full_source_validation(monkeypatch):
     calls = []
     monkeypatch.setattr(verifier, "_run", calls.append)
     assert verifier.main() == 0
-    assert len(calls) == 2
+    assert len(calls) == 3
+    assert calls[0][-1] == "--check-public-descriptors"
     assert calls[-1][-1] == "--check"
 
 
-@pytest.mark.parametrize("failed_stage", [0, 1])
+@pytest.mark.parametrize("failed_stage", [0, 1, 2])
 def test_failed_validation_does_not_export_compiler(monkeypatch, tmp_path, failed_stage):
     """Only successfully verified compilers may reach subsequent packaging steps."""
     compiler = tmp_path / "compiler"
@@ -98,6 +99,7 @@ def test_successful_validation_exports_absolute_compiler_path(monkeypatch, tmp_p
     calls = []
     monkeypatch.setattr(verifier, "_run", calls.append)
     assert verifier.main() == 0
-    assert calls[0][-1] == "compiler"
-    assert calls[1] == [*calls[0], "--check"]
+    assert calls[0] == [*calls[1], "--check-public-descriptors"]
+    assert calls[1][-1] == "compiler"
+    assert calls[2] == [*calls[1], "--check"]
     assert environment.read_text() == f"EXISTING=value\nHOL_GUARD_BUILD_SOURCE_COMPILER={compiler}\n"

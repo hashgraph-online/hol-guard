@@ -8,30 +8,8 @@ import sys
 from collections.abc import Mapping
 from typing import TextIO
 
+from ..native_hook_adapter import native_prepare_payload
 from .grok_approval_resume import grok_resume_metadata_from_guard_payload
-from .hook_payloads import normalize_session_and_workspace_aliases
-
-_GROK_TOOL_ALIASES: dict[str, str] = {
-    "run_terminal_command": "Bash",
-    "read_file": "Read",
-    "search_replace": "Edit",
-    "write": "Edit",
-    "write_file": "Edit",
-    "multi_edit": "Edit",
-    "multiedit": "Edit",
-    "grep": "Grep",
-    "glob": "Grep",
-    "list_dir": "Read",
-    "listdir": "Read",
-    "web_fetch": "WebFetch",
-    "web_search": "WebFetch",
-    "open_page": "WebFetch",
-    "open_page_with_find": "WebFetch",
-    "spawn_subagent": "Task",
-    "task": "Task",
-    "use_tool": "MCPTool",
-    "callmcptool": "MCPTool",
-}
 
 _GROK_EVENT_NAMES: dict[str, str] = {
     "pretooluse": "PreToolUse",
@@ -62,14 +40,6 @@ _OBSERVE_ONLY_EVENTS = frozenset(
 )
 
 
-def _raw_hook_event_name(payload: Mapping[str, object]) -> str:
-    for key in ("hook_event_name", "hookEventName"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip().lower()
-    return ""
-
-
 def _canonical_grok_event_name(raw_event: str) -> str:
     normalized = raw_event.replace("_", "").replace("-", "").lower()
     return _GROK_EVENT_NAMES.get(normalized, raw_event or "PreToolUse")
@@ -83,105 +53,10 @@ def is_grok_observe_only_event(event_name: str | None) -> bool:
     return _canonical_grok_event_name(event_name.strip()) in _OBSERVE_ONLY_EVENTS
 
 
-def _canonical_grok_tool_name(raw_tool: object | None) -> str | None:
-    if not isinstance(raw_tool, str) or not raw_tool.strip():
-        return None
-    stripped = raw_tool.strip()
-    return _GROK_TOOL_ALIASES.get(stripped.lower(), stripped)
-
-
-def _mapping_value(value: object) -> Mapping[str, object] | None:
-    return value if isinstance(value, Mapping) else None
-
-
-def _native_mcp_envelope(tool_input: Mapping[str, object]) -> bool:
-    server = tool_input.get("server")
-    tool = tool_input.get("tool")
-    return isinstance(server, str) and bool(server.strip()) and isinstance(tool, str) and bool(tool.strip())
-
-
-def _unwrap_dispatcher_tool(
-    tool_name: str | None,
-    tool_input: Mapping[str, object] | None,
-) -> tuple[str | None, Mapping[str, object] | None]:
-    if tool_name != "MCPTool" or tool_input is None:
-        return tool_name, tool_input
-    # Grok's native MCP payload keeps the method name in `tool` next to `server`.
-    # That is not a dispatcher wrapper and must stay MCPTool.
-    if _native_mcp_envelope(tool_input):
-        return tool_name, tool_input
-    for key in ("tool_name", "toolName", "name", "tool"):
-        inner = tool_input.get(key)
-        if isinstance(inner, str) and inner.strip() and inner.strip() != "MCPTool":
-            inner_input = _mapping_value(tool_input.get("arguments") or tool_input.get("toolInput"))
-            return inner.strip(), inner_input or tool_input
-    return tool_name, tool_input
-
-
-def _apply_qualified_mcp_tool(normalized: dict[str, object], tool_name: str) -> str:
-    if "__" not in tool_name or tool_name.lower() in _GROK_TOOL_ALIASES:
-        return tool_name
-    server, tool = tool_name.split("__", 1)
-    if not server or not tool:
-        return tool_name
-    normalized["mcp_server"] = server
-    normalized["mcp_tool"] = tool
-    normalized["original_tool_name"] = tool_name
-    return "MCPTool"
-
-
 def prepare_grok_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map Grok hook stdin JSON into Guard hook normalization shape."""
 
-    normalized = dict(payload)
-    raw_event = _raw_hook_event_name(normalized)
-    if raw_event:
-        normalized["hook_event_name"] = _canonical_grok_event_name(raw_event)
-        if raw_event.replace("_", "").replace("-", "").lower() == "posttoolusefailure":
-            normalized["failed"] = True
-    tool_name = normalized.get("tool_name")
-    if tool_name is None:
-        tool_name = normalized.get("toolName")
-    tool_input = normalized.get("tool_input")
-    if tool_input is None:
-        tool_input = normalized.get("toolInput")
-    mapped_input = _mapping_value(tool_input)
-    canonical_tool = _canonical_grok_tool_name(tool_name)
-    canonical_tool, mapped_input = _unwrap_dispatcher_tool(canonical_tool, mapped_input)
-    if isinstance(canonical_tool, str):
-        remapped = _canonical_grok_tool_name(canonical_tool)
-        if remapped is not None:
-            canonical_tool = remapped
-        canonical_tool = _apply_qualified_mcp_tool(normalized, canonical_tool)
-        normalized["tool_name"] = canonical_tool
-    if mapped_input is not None:
-        if canonical_tool == "MCPTool" and _native_mcp_envelope(mapped_input):
-            normalized.setdefault("mcp_server", str(mapped_input["server"]).strip())
-            normalized.setdefault("mcp_tool", str(mapped_input["tool"]).strip())
-        normalized["tool_input"] = dict(mapped_input)
-        tool_input = mapped_input
-    elif tool_input is not None:
-        normalized["tool_input"] = tool_input
-    normalize_session_and_workspace_aliases(normalized)
-    if isinstance(normalized.get("permissionMode"), str) and "permission_mode" not in normalized:
-        normalized["permission_mode"] = normalized["permissionMode"]
-    if isinstance(normalized.get("subagentType"), str) and "subagent_type" not in normalized:
-        normalized["subagent_type"] = normalized["subagentType"]
-    prompt = normalized.get("prompt")
-    if prompt is None and isinstance(normalized.get("userPrompt"), str):
-        normalized["prompt"] = normalized["userPrompt"]
-    if (
-        prompt is None
-        and canonical_tool == "Task"
-        and isinstance(tool_input, Mapping)
-        and isinstance(tool_input.get("prompt"), str)
-    ):
-        normalized["prompt"] = tool_input["prompt"]
-    if canonical_tool == "Task" and isinstance(tool_input, Mapping):
-        subagent_type = tool_input.get("subagent_type") or tool_input.get("subagentType")
-        if isinstance(subagent_type, str) and subagent_type.strip():
-            normalized["subagent_type"] = subagent_type.strip()
-    return normalized
+    return native_prepare_payload("grok", payload)
 
 
 def grok_hook_response_from_guard(

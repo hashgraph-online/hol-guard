@@ -23,6 +23,7 @@ hex.workspace = true
 fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
+rsa.workspace = true
 rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
@@ -55,6 +56,9 @@ windows-permissions.workspace = true
 
 [target.'cfg(all(unix, target_os = "linux"))'.dependencies]
 seccompiler = "0.5.0"
+
+[dev-dependencies]
+flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 
 [lints]
 workspace = true

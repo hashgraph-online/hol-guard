@@ -55,6 +55,7 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setenv("HOL_GUARD_TEST_MODE", "1")
     monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_TEST_SEAMS", "1")
     if "HOL_GUARD_NATIVE" not in os.environ:
         mode = "force" if os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" else "off"
         monkeypatch.setenv("HOL_GUARD_NATIVE", mode)

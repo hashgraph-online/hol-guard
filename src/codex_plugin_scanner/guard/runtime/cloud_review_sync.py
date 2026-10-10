@@ -6,6 +6,7 @@ import urllib.error
 from datetime import datetime, timezone
 from typing import Any
 
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
 from .cloud_review_batching import (
@@ -86,7 +87,7 @@ def _prepare_sync_batch_state(
     state = _load_sync_state(store)
     binding_key = _batch_binding_key(delivery_binding)
     limits = persisted_review_batch_limits(state, binding_key)
-    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None})
+    state.update({"state": "syncing", "last_sync_attempt_at": _now(), "last_error": None, "last_error_code": None})
     _save_sync_state(store, state)
     return state, binding_key, limits
 
@@ -451,20 +452,23 @@ def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
     state = _load_sync_state(store)
     profile = store.get_cloud_sync_profile()
     workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    binding = store.get_review_event_oauth_binding()
-    if binding is not None:
-        outbox = store.review_event_outbox_status(
-            now=_now(),
-            oauth_subject_hash=binding["oauth_subject_hash"],
-            workspace_id=binding["workspace_id"],
-            machine_id=binding["machine_id"],
-            machine_installation_id=binding["machine_installation_id"],
-        )
-    else:
-        outbox = store.review_event_outbox_status(
-            now=_now(),
-            workspace_id=workspace_id,
-        )
+    try:
+        binding = store.get_review_event_oauth_binding()
+        if binding is not None:
+            outbox = store.review_event_outbox_status(
+                now=_now(),
+                oauth_subject_hash=binding["oauth_subject_hash"],
+                workspace_id=binding["workspace_id"],
+                machine_id=binding["machine_id"],
+                machine_installation_id=binding["machine_installation_id"],
+            )
+        else:
+            outbox = store.review_event_outbox_status(
+                now=_now(),
+                workspace_id=workspace_id,
+            )
+    except NativeGuardStoreUnavailable as error:
+        outbox = unavailable_outbox_status(error)
     return {
         "state": state.get("state") or "not_configured",
         "last_sync_at": state.get("last_sync_at"),

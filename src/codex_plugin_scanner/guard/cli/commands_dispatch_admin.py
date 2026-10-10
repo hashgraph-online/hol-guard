@@ -375,9 +375,11 @@ def _run_guard_doctor_command(
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     with nullcontext() if args.harness else without_command_probes():
         payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    payload.update(harness_posture_summary(config))
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 
