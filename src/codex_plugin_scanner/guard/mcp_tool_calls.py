@@ -6,15 +6,20 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
 from .local_cli_trust import apply_local_mcp_extension_decision
-from .mcp_fresh_approval import fresh_local_tool_approval_matches, fresh_lookup_preserves_claim
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .native_approval_proof import (
+    ApprovalReuseClaimDisposition,
+    claimed_approval_authorizes_postclaim_review,
+    fresh_local_tool_approval_matches,
+    fresh_lookup_preserves_claim,
+)
 from .native_context import (
     context_mcp_tool_approval_hash,
     context_mcp_tool_policy,
@@ -60,75 +65,6 @@ _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "sandbox-required": ("runtime_tool_call_sandbox_required", "runtime tool call requires an enforceable sandbox"),
     "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
 }
-
-ApprovalReuseClaimDisposition = Literal["consumed", "retained"]
-
-_APPROVAL_REUSE_DECISION_IDENTITY_KEYS = (
-    "action",
-    "approval_id",
-    "artifact_hash",
-    "artifact_id",
-    "decision_id",
-    "expires_at",
-    "harness",
-    "integrity_enforcement",
-    "integrity_generation",
-    "integrity_key_id",
-    "integrity_mode",
-    "integrity_status",
-    "integrity_version",
-    "owner",
-    "publisher",
-    "reason",
-    "request_id",
-    "scope",
-    "signed_at",
-    "source",
-    "updated_at",
-    "workspace",
-)
-
-
-def approval_reuse_decisions_match(
-    expected: Mapping[str, object] | None,
-    current: Mapping[str, object] | None,
-) -> bool:
-    """Return whether two lookups selected the same saved authority row."""
-
-    if expected is None or current is None:
-        return False
-    expected_approval_id = expected.get("approval_id")
-    current_approval_id = current.get("approval_id")
-    expected_decision_id = expected.get("decision_id")
-    current_decision_id = current.get("decision_id")
-    same_identifier = (
-        isinstance(expected_approval_id, str)
-        and bool(expected_approval_id)
-        and current_approval_id == expected_approval_id
-    ) or (
-        isinstance(expected_decision_id, int)
-        and not isinstance(expected_decision_id, bool)
-        and current_decision_id == expected_decision_id
-    )
-    return same_identifier and all(
-        expected.get(key) == current.get(key) for key in _APPROVAL_REUSE_DECISION_IDENTITY_KEYS
-    )
-
-
-def claimed_approval_authorizes_postclaim_review(
-    *,
-    claim_disposition: ApprovalReuseClaimDisposition | None,
-    claimed_decision: Mapping[str, object] | None,
-    current_decision: Mapping[str, object] | None,
-) -> bool:
-    """Validate the saved proof used to lower a fresh review after claiming."""
-
-    if claim_disposition == "consumed":
-        return True
-    return claim_disposition == "retained" and approval_reuse_decisions_match(
-        claimed_decision,
-        current_decision,
-    )
 
 
 @dataclass(frozen=True, slots=True)

@@ -31,6 +31,8 @@ mod context_digest;
 pub use context_digest::*;
 mod local_cli_identity;
 pub use local_cli_identity::*;
+mod approval_proof;
+pub use approval_proof::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
 mod browser_mcp_intent;

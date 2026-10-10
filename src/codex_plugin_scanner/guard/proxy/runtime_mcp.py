@@ -43,21 +43,23 @@ from ..local_supply_chain import (
     evaluate_package_request_artifact,
     package_request_policy_hash,
 )
-from ..mcp_fresh_approval import fresh_claim_allows_reapproval
 from ..mcp_tool_calls import (
-    ApprovalReuseClaimDisposition,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
     build_tool_call_artifact,
     build_tool_call_hash,
-    claimed_approval_authorizes_postclaim_review,
     evaluate_tool_call,
     resolve_tool_call_policy_action,
     tool_call_risk_categories,
     tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_approval_proof import (
+    ApprovalReuseClaimDisposition,
+    claimed_approval_authorizes_postclaim_review,
+    fresh_claim_allows_reapproval,
+)
 from ..native_execution import (
     mcp_stdio_session_close_native,
     mcp_stdio_session_open_native,
