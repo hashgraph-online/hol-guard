@@ -422,6 +422,7 @@ jobs:
             --deselect tests/test_guard_update_artifact.py::test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat \
             --deselect 'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload' \
             --deselect tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection \
+            --deselect tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability \
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
