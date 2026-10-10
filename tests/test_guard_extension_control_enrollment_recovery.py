@@ -250,11 +250,11 @@ def test_recovery_requires_explicit_totp_even_with_recent_session_approval(
     from datetime import datetime, timedelta, timezone
     from urllib.parse import parse_qs, urlparse
 
-    from codex_plugin_scanner.guard import approval_gate
+    from codex_plugin_scanner.guard import approval_gate, native_approval_gate
     from codex_plugin_scanner.guard.cli import approval_gate_prompt
     from codex_plugin_scanner.guard.totp import totp_code_at_counter
 
-    monkeypatch.setattr(approval_gate, "_current_totp_session_binding", lambda: "issue-3089-local-session")
+    monkeypatch.setattr(native_approval_gate, "_session_signals", lambda: ["issue-3089-local-session"])
     now = datetime.now(timezone.utc)
     enrollment_time = now - timedelta(seconds=90)
     enrollment = approval_gate.begin_totp_enrollment(
