@@ -30,6 +30,45 @@ def write(path: Path, events: list[dict]) -> None:
     path.write_text("".join(json.dumps(event) + "\n" for event in events))
 
 
+def test_eval_bridge_requires_complete_hooks_inside_actual_model_eval() -> None:
+    from copy import deepcopy
+
+    parent = lifecycle("eval", "eval", {"language": "js", "code": 'await tool.read({path:"README.md"})'})
+    start = {
+        "type": "eval_bridge_start",
+        "parentToolCallId": "eval",
+        "event": {
+            "type": "tool_call",
+            "toolCallId": "js-read-123",
+            "toolName": "read",
+            "input": {"path": "README.md"},
+        },
+    }
+    end = {
+        "type": "eval_bridge_end",
+        "parentToolCallId": "eval",
+        "event": {
+            "type": "tool_result",
+            "toolCallId": "js-read-123",
+            "toolName": "read",
+            "input": {"path": "README.md"},
+            "content": [{"type": "text", "text": "inert fixture"}],
+            "isError": False,
+        },
+    }
+    from ci.gauntlet.evidence import public_events
+
+    events = public_events([*parent[:2], start, end, *parent[2:]], {})
+    calls, errors = reconcile(events)
+    assert not errors and len(calls) == 2
+    assert calls[1]["bridge_parent_id"] == "eval"
+    for broken in [events[:-1], events[:2] + events[3:], [*events[:2], events[2], events[2], *events[3:]]]:
+        assert reconcile(broken)[1]
+    altered = deepcopy(events)
+    altered[3]["event"]["input"]["path"] = ".env"
+    assert reconcile(altered)[1]
+
+
 def test_child_calls_keep_model_start_completion_and_parent_agreement(tmp_path: Path) -> None:
     task = lifecycle("parent", "task", {"tasks": [{"agent": "scout", "task": "Read README.md"}]})
     child = lifecycle("child", "read", {"path": "README.md"})

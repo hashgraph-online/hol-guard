@@ -9,10 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from .approval_rows import always_gap
+from .bridge_evidence import bridge_calls
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy_error
 from .catalog import WATCH_OUTPUT, Scenario
+from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
-from .input_evidence import redact_value
 from .mixed_reads import assess_mixed_reads
 from .native_tools import native_tools_scope_error
 from .proofs import (
@@ -48,35 +49,6 @@ def read_events(path: Path) -> list[dict[str, Any]]:
             raise ValueError("malformed OMP event")
         events.append(event)
     return events
-
-
-def public_events(events: list[dict[str, Any]], replacements: dict[str, str]) -> list[dict[str, Any]]:
-    """Export tool evidence only, excluding system prompts and model reasoning."""
-    selected = []
-    for event in events:
-        kind = event["type"]
-        if kind in {"tool_execution_start", "tool_execution_end"}:
-            keys = ("type", "toolCallId", "toolName", "args", "result", "isError")
-            selected.append({key: event[key] for key in keys if key in event})
-        elif kind == "message_end" and event.get("message", {}).get("role") == "assistant":
-            message = event["message"]
-            selected.append(
-                {
-                    "type": "model_turn",
-                    "provider": message.get("provider"),
-                    "model": message.get("model"),
-                    "stop_reason": message.get("stopReason"),
-                    "calls": [
-                        {"id": part.get("id"), "name": part.get("name"), "arguments": part.get("arguments")}
-                        for part in message.get("content", [])
-                        if part.get("type") == "toolCall"
-                    ],
-                }
-            )
-        elif kind == "agent_end":
-            selected.append({"type": "agent_end", "terminal": event.get("isTerminal") is True})
-
-    return redact_value(selected, replacements)
 
 
 def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
@@ -136,6 +108,10 @@ def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
         calls.append(
             {"id": call_id, "name": name, "args": args, "is_error": end.get("isError"), "result": end.get("result")}
         )
+    try:
+        calls.extend(bridge_calls(events, calls))
+    except ValueError:
+        errors.append("invalid-sdk-bridge-evidence")
     return calls, sorted(set(errors))
 
 
