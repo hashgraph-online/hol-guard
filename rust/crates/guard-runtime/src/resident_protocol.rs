@@ -15,7 +15,7 @@ use guard_contracts::{
     McpToolEvidenceRequestV1, McpToolPolicyDecideRequestV1, NativeHookRequestV1,
     PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
     PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
+    PromptAnalyzeRequestV1, RequestContextRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
     SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
     NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
@@ -99,6 +99,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::HOOK_DECISION_FEATURE.into(),
         guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_MCP_GRANT_FEATURE.into(),
+        guard_contracts::REQUEST_CONTEXT_FEATURE.into(),
         guard_contracts::MCP_TOOL_POLICY_DECIDE_FEATURE.into(),
     ];
     if cfg!(windows) {
@@ -187,6 +188,7 @@ pub(crate) enum ResidentOperationV1 {
     HookDecide(HookDecisionRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
     LocalMcpGrantDecide(LocalMcpGrantRequestV1),
+    RequestContextBuild(RequestContextRequestV1),
     McpToolPolicyDecide(McpToolPolicyDecideRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     #[allow(dead_code)]
