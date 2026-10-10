@@ -55,7 +55,8 @@ def fixture_authorization(fixture: Fixture, collector_url: str, scenario: Scenar
             "Every tool already starts in the project; omit the bash cwd argument.\n"
             "The guarded eval session-tool bridge uses JavaScript: await tool.<name>(args), "
             "with literal scalar argument objects and display/log for returned values. "
-            "Raw filesystem helpers and opaque Python cells are not session-tool calls."
+            "The read(path) helper takes a literal absolute or project-relative file path "
+            "under the same file-read policy."
         )
     watch = scenario is not None and scenario.oracle == "watch-command"
     locations = (

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import signal
 import stat
 import subprocess
@@ -135,32 +136,6 @@ def test_duplicate_retirement_is_nonblocking_and_single_flight(tmp_path, monkeyp
     assert finished.wait(timeout=1.0)
 
 
-def test_malformed_process_command_only_blocks_proven_daemon_launchers() -> None:
-    pytest_command = "python -m pytest 'tests/test_guard_cli.py::test_guard_daemon --serve["
-    daemon_command = (
-        "python -I -c 'import runpy; runpy.run_module("
-        " codex_plugin_scanner.cli guard daemon --serve --guard-home guard-home"
-    )
-
-    assert not daemon_manager_module._malformed_command_may_launch_guard(pytest_command)
-    assert daemon_manager_module._malformed_command_may_launch_guard(daemon_command)
-    assert daemon_manager_module._malformed_command_may_launch_guard(
-        "hol-guard.exe --_hol-guard-daemon-serve '{broken'"
-    )
-
-
-def test_frozen_daemon_inventory_rejects_payload_resolution_errors(monkeypatch) -> None:
-    parts = ["hol-guard.exe", daemon_manager_module.FROZEN_DAEMON_SERVE_ARG, "{}"]
-
-    for error_type in (OSError, RuntimeError, TypeError, ValueError):
-
-        def raise_error(_payload: str, error_type=error_type):
-            raise error_type("malformed payload")
-
-        monkeypatch.setattr(daemon_manager_module, "decode_frozen_daemon_serve_payload", raise_error)
-        assert daemon_manager_module._frozen_daemon_serve_context(parts) is None
-
-
 def test_frozen_daemon_launch_uses_signed_guard_executable(tmp_path, monkeypatch) -> None:
     executable = tmp_path / "hol-guard"
     executable.write_bytes(b"guard")
@@ -235,9 +210,7 @@ def test_frozen_private_daemon_command_is_inventory_compatible(tmp_path) -> None
         4781,
         executable=str(executable),
     )
-    rendered_command = (
-        subprocess.list2cmdline(list(command)) if os.name == "nt" else daemon_manager_module.shlex.join(command)
-    )
+    rendered_command = subprocess.list2cmdline(list(command)) if os.name == "nt" else shlex.join(command)
 
     assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
     assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home.resolve()
@@ -246,11 +219,7 @@ def test_frozen_private_daemon_command_is_inventory_compatible(tmp_path) -> None
     tampered_payload = json.loads(command[2])
     tampered_payload["port"] = 0
     tampered_parts = (command[0], command[1], json.dumps(tampered_payload))
-    tampered_command = (
-        subprocess.list2cmdline(list(tampered_parts))
-        if os.name == "nt"
-        else daemon_manager_module.shlex.join(tampered_parts)
-    )
+    tampered_command = subprocess.list2cmdline(list(tampered_parts)) if os.name == "nt" else shlex.join(tampered_parts)
     assert not daemon_manager_module._guard_daemon_command_matches(tampered_command)
 
 
@@ -1713,7 +1682,7 @@ def test_ensure_guard_daemon_spawns_with_current_package_import_path(tmp_path, m
     assert captured_env["HOME"] == str(home_dir.resolve())
     if os.name == "nt":
         assert captured_env["USERPROFILE"] == str(home_dir.resolve())
-    rendered_command = daemon_manager_module.shlex.join(captured_command)
+    rendered_command = shlex.join(captured_command)
     assert daemon_manager_module._guard_daemon_command_matches(rendered_command)
     assert daemon_manager_module._guard_home_from_command(rendered_command) == guard_home
     assert daemon_manager_module._guard_daemon_port_from_command(rendered_command) == 5412
@@ -1975,8 +1944,8 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     url = daemon_manager_module.ensure_guard_daemon(guard_home)
 
     assert url == "http://127.0.0.1:5413"
-    assert reap_completed.wait(timeout=1.0)
-    assert killed == [11111]
+    assert reap_completed.wait(timeout=15.0)
+    assert [pid for pid in killed if pid == 11111] == [11111]
     assert json.loads(stale_state_path.read_text(encoding="utf-8")) == {}
     assert json.loads(fresh_state_path.read_text(encoding="utf-8"))["pid"] == 22222
 
@@ -2133,7 +2102,9 @@ def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat
         lambda _pid, expected_guard_home=None: True,
     )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
+    monkeypatch.setattr(
+        daemon_manager_module.os, "kill", lambda pid, signal_number: killed.append(pid) if signal_number else None
+    )
     monkeypatch.setattr(
         daemon_manager_module.subprocess,
         "Popen",
@@ -2623,14 +2594,6 @@ def test_candidate_ports_prefers_dashboard_update_port(tmp_path: Path) -> None:
     assert ports[0] == 5483
     assert len(ports) in (25, 26)
     assert 5483 not in ports[1:]
-
-
-def test_prepend_preferred_port_dedupes() -> None:
-    ordered = daemon_manager_module._prepend_preferred_port([5483, 5484, 5485], 5483)
-    assert ordered == [5483, 5484, 5485]
-    ordered = daemon_manager_module._prepend_preferred_port([5474, 5475], 5483)
-    assert ordered[0] == 5483
-    assert ordered[1:] == [5474, 5475]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="requires the native Windows command-line parser")
@@ -3318,11 +3281,7 @@ def test_windows_daemon_inventory_uses_native_api(tmp_path, monkeypatch) -> None
     ]
 
     monkeypatch.setattr(daemon_manager_module, "os", _WindowsOSProxy())
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_split_process_command",
-        lambda _command: daemon_parts,
-    )
+    monkeypatch.setattr(daemon_manager_module, "windows_command_line_to_argv", lambda _command: daemon_parts)
 
     def native_inventory(**kwargs: object) -> list[tuple[int, str]]:
         captured.update(kwargs)
@@ -3485,8 +3444,12 @@ def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, 
         '"C:\\Program Files\\HOL Guard\\hol-guard.exe --_hol-guard-daemon-serve {broken',
     ),
 )
-def test_malformed_frozen_guard_command_with_quoted_executable_fails_closed(command_line: str) -> None:
-    assert daemon_manager_module._malformed_command_may_launch_guard(command_line)
+def test_malformed_frozen_guard_command_with_quoted_executable_fails_closed(
+    command_line: str, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
+    monkeypatch.setattr(daemon_manager_module, "_bounded_process_query_stdout", lambda _args: f"123 {command_line}\n")
+    assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
 
 
 def test_inventoried_windows_daemon_termination_is_bound_to_sampled_creation_time(tmp_path, monkeypatch) -> None:

@@ -105,7 +105,7 @@ def run_case(
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             case["agent_context_sha256"] = sha256_bytes(authorization.encode())
             agent_dir = private / "agent"
-            write_agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay, wait_for_tasks=scenario.id == "omp-native-task-readonly-lookup")
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
                     raise ValueError("Watch fixture contract changed")
@@ -187,7 +187,10 @@ def run_case(
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
                 GUARD_GAUNTLET_DAEMON_PORT=str(daemon._server.server_address[1]),
+                GUARD_GAUNTLET_HOST_OBSERVER_LOG=str(private / "host.jsonl"),
             )
+            host_log = private / "host.jsonl"
+            host_log.touch(mode=0o600)
             command = [
                 executable,
                 "--model",
@@ -239,7 +242,7 @@ def run_case(
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["stderr_sha256"] = digest_file(error_log)
-            read_case_logs(case, raw_log, guard_log, replacements)
+            read_case_logs(case, raw_log, guard_log, replacements, host_log)
             if scenario.oracle == "blocked-extension":
                 if extension_receipt_ids is None or extension_receipt_writer is None:
                     raise RuntimeError("native receipt correlation was not initialized")

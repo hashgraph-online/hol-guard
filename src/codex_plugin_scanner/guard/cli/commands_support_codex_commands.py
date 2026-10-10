@@ -71,9 +71,6 @@ def _codex_command_is_read_only_git_metadata(
     return codex_tool_output_native("git_metadata", command=command_text, cwd=cwd).allowed
 
 
-def _codex_post_tool_command_text(payload: dict[str, object]) -> str:
-    command_texts = _codex_post_tool_command_texts(payload)
-    return command_texts[0] if command_texts else ""
 
 
 def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...]:
@@ -217,6 +214,5 @@ __all__ = [
     "_codex_output_is_only_benign_secret_fixture",
     "_codex_output_uses_placeholder_private_key_fixture",
     "_codex_post_tool_command_is_read_only_source_inspection",
-    "_codex_post_tool_command_text",
     "_codex_source_inspection_can_skip_secret_output",
 ]

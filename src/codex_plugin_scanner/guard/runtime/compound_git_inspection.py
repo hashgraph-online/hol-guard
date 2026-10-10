@@ -59,12 +59,6 @@ def is_low_risk_git_inspection_segment(
     return _segments_allowed("segment", (segment,), home_dir=home_dir)
 
 
-def is_low_risk_git_push_segment(segment: ShellExecutionSegment) -> bool:
-    """Recognize one current-branch push to a verified GitHub origin."""
-
-    return _segments_allowed("push_segment", (segment,))
-
-
 def is_low_risk_standalone_git_routine(
     context: ShellExecutionContext,
     *,
@@ -126,7 +120,6 @@ __all__ = (
     "git_log_has_execution_free_config",
     "is_low_risk_compound_git_inspection",
     "is_low_risk_git_inspection_segment",
-    "is_low_risk_git_push_segment",
     "is_low_risk_standalone_git_routine",
     "is_safe_standalone_git_object_existence_query",
 )

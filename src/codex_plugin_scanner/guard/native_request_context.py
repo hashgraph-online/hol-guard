@@ -58,12 +58,6 @@ class NativeRequestContextFailure:
     code: str
 
 
-def request_context_guard_home(guard_home: Path | None = None) -> Path:
-    """Resolve the resident home the same way the digest transport does."""
-
-    return _resolve_digest_home(guard_home)
-
-
 def _owner_uid() -> int | None:
     return None if sys.platform == "win32" else os.geteuid()
 
@@ -302,5 +296,4 @@ __all__ = [
     "native_request_context_build",
     "native_shell_hashes",
     "native_shell_validate_segment",
-    "request_context_guard_home",
 ]

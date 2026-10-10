@@ -299,6 +299,11 @@ fn evaluate_validated_envelope(
                         .unwrap_or(&unavailable_environment),
                 ),
             );
+            let native = crate::omp_yield_input_scan::scan(
+                &envelope.raw_payload,
+                envelope.deadline_budget_ms,
+                native,
+            )?;
             let evaluated = if let Some(snapshot) = policy_snapshot {
                 crate::policy_enforcement::apply_pre_tool_policy(
                     snapshot,
