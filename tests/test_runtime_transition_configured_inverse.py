@@ -48,6 +48,7 @@ DAEMON_PROCESS = r"""
 import os, sys, time
 from pathlib import Path
 from codex_plugin_scanner.guard.daemon import server
+from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
 from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.owned_daemon_test_support import publish_ready_pid
