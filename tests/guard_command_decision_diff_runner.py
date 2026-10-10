@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import importlib.util
 import multiprocessing
+import os
 import sys
 from collections import defaultdict
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import chain, islice
 from pathlib import Path
@@ -49,8 +51,6 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import (
 )
 from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecision,
-    EffectDecisionRequest,
-    evaluate_effect_decision,
 )
 from codex_plugin_scanner.guard.runtime.native_command_evaluation import NativeCommandEvaluation
 from tests.guard_command_corpus import CommandCorpusCase, iter_adversarial_corpus, iter_benign_corpus
@@ -93,8 +93,33 @@ def evaluate_decision_diff_shards() -> tuple[DecisionDiffShard, ...]:
     """Evaluate fixed corpus partitions with bounded process concurrency."""
 
     context = multiprocessing.get_context("spawn")
-    with ProcessPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS, mp_context=context) as executor:
+    with (
+        _resident_authority_environment(),
+        ProcessPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS, mp_context=context) as executor,
+    ):
         return tuple(executor.map(_evaluate_shard, range(EVALUATION_SHARD_COUNT)))
+
+
+@contextmanager
+def _resident_authority_environment() -> Iterator[None]:
+    """Make spawned workers reach the exact resident the caller configured.
+
+    The resident owns every decision this report records, and the exact-binary
+    override (``HOL_GUARD_NATIVE_BINARY``) is honoured only in ``force`` mode.
+    A module-scoped pytest fixture, or this script run directly, executes before
+    any per-test fixture could select that mode, so the workers would otherwise
+    see the default mode, find no bundled runtime and fail closed as unavailable.
+    A caller's explicit mode is preserved.
+    """
+
+    if "HOL_GUARD_NATIVE" in os.environ or not os.environ.get("HOL_GUARD_NATIVE_BINARY"):
+        yield
+        return
+    os.environ["HOL_GUARD_NATIVE"] = "force"
+    try:
+        yield
+    finally:
+        os.environ.pop("HOL_GUARD_NATIVE", None)
 
 
 def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
@@ -198,12 +223,8 @@ def _canonical_native_floor(action: CommandDecisionFloor) -> GuardAction:
 
 
 def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> EffectDecision:
-    return evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=evaluation.baseline_factors,
-            uncertainties=evaluation.baseline_uncertainties,
-        )
-    )
+    """The resident's decision over the baseline factors alone."""
+    return evaluation.baseline_decision
 
 
 def _reconciliation_category(native_floor: GuardAction, current: GuardAction, oracle: GuardAction) -> str:

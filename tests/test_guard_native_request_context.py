@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard import native_request_context as client
 from codex_plugin_scanner.guard.native_context import _UNBOUND_PREFIX, _canonical_request_sha256
 from codex_plugin_scanner.guard.runtime import shell_execution_context as shell
 from codex_plugin_scanner.guard.runtime._shell_execution_context_support import ShellPathIdentity
-from codex_plugin_scanner.guard.runtime.command_shell_read_factors import shell_read_floor_factors
 from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "request-context-parity" / "cases.v1.json"
@@ -273,8 +272,6 @@ def test_unavailable_resident_keeps_the_mandatory_read_floors(
     _reply(monkeypatch, prerequisite=False)
     assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
     assert assessment.requires_review is True
-    factors = shell_read_floor_factors(command, "action:test", cwd=tmp_path, home_dir=tmp_path)
-    assert [factor.reason_code for factor in factors] != []
 
 
 def test_unavailable_resident_does_not_invent_a_floor_for_unrelated_text(

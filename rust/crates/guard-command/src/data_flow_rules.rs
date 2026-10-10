@@ -479,7 +479,13 @@ fn secret_read_command_paths(command: &str) -> Vec<String> {
         if tokens.is_empty() || !SECRET_READ_COMMANDS.contains(&tokens[0].to_lowercase().as_str()) {
             continue;
         }
-        for m in SECRET_PATH_TOKEN_PATTERN.captures_iter(&segment).flatten() {
+        for found in SECRET_PATH_TOKEN_PATTERN.captures_iter(&segment) {
+            // A matcher error (backtrack limit) must read as a match, never as
+            // "no secret path here": fail closed.
+            let Ok(m) = found else {
+                paths.push(".env".to_owned());
+                break;
+            };
             let path_group = m.name("path").expect("path group");
             let char_start = segment[..path_group.start()].chars().count();
             if url_ranges
