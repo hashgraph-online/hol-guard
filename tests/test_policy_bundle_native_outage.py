@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard import native_policy_bundle as bridge
 from codex_plugin_scanner.guard import policy_bundle_parser as parser
 from codex_plugin_scanner.guard import policy_bundle_trusted_keys as trusted_keys
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.native_policy_bundle import (
     NATIVE_UNAVAILABLE_REJECTION,
     PolicyBundleNativeError,
@@ -298,34 +299,50 @@ def test_runner_downgrade_check_raises_on_an_unavailable_transition(monkeypatch:
         guard_runner_module._policy_bundle_is_version_downgrade(None, v2)
 
 
+def _signed_policy_bundle(store: GuardStore) -> dict[str, object]:
+    _seed_daemon_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-05-19T00:00:00Z")
+    return sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
+
+
+def _post_policy_sync(store: GuardStore, bundle: dict[str, object]) -> tuple[int, dict[str, object]]:
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        payload = {"harness": "codex", "operation": "policy_sync", "policy_bundle": json.dumps(bundle)}
+        request = _request(daemon.port, "/v1/policy/sync", token=_dashboard_token_for(store), payload=payload)
+        return _read_json_response(request)
+    finally:
+        daemon.stop()
+
+
 def test_daemon_policy_sync_answers_503_when_the_resident_is_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
-    _seed_daemon_cloud(store, workspace_id="workspace-1")
-    store.set_sync_payload("policy_bundle_keyring", policy_bundle_test_keyring(), "2026-05-19T00:00:00Z")
-    bundle = sign_policy_bundle(build_cloud_exception_policy_bundle(workspace_id="workspace-1"))
-
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        with _resident_outage(monkeypatch):
-            status, payload = _read_json_response(
-                _request(
-                    daemon.port,
-                    "/v1/policy/sync",
-                    token=token,
-                    payload={"harness": "codex", "operation": "policy_sync", "policy_bundle": json.dumps(bundle)},
-                )
-            )
-    finally:
-        daemon.stop()
+    bundle = _signed_policy_bundle(store)
+    with _resident_outage(monkeypatch):
+        status, payload = _post_policy_sync(store, bundle)
 
     assert status == 503
     assert payload["error"] == NATIVE_UNAVAILABLE_REJECTION
     assert "native runtime" in str(payload["message"])
     assert store.get_sync_payload("policy_bundle") is None
+    assert store.list_policy_decisions() == []
+
+
+def test_daemon_policy_sync_reports_a_native_rejection_as_a_400_verdict(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _rejected(*_args: object, **_kwargs: object) -> object:
+        raise PolicyBundleNativeError("limit_bytes")
+
+    monkeypatch.setattr(daemon_server_module, "activate_with_reason", _rejected)
+    store = GuardStore(tmp_path / "guard-home")
+    status, payload = _post_policy_sync(store, _signed_policy_bundle(store))
+
+    assert status == 400
+    assert payload["error"] == "limit_bytes"
     assert store.list_policy_decisions() == []
 
 

@@ -149,7 +149,12 @@ from ..models import (
 )
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
-from ..native_policy_bundle import NATIVE_UNAVAILABLE_REJECTION, PolicyBundleNativeError
+from ..native_policy_bundle import (
+    NATIVE_UNAVAILABLE_REJECTION,
+    PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
+    native_rejection_code,
+)
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -4000,11 +4005,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _handle_headless_policy_sync(self, payload: dict[str, object]) -> None:
         try:
             self._handle_headless_policy_sync_checked(payload)
-        except PolicyBundleNativeError:
+        except PolicyBundleNativeUnavailableError:
             # The resident owns policy bundle authority. Without its verdict
             # nothing is accepted, activated, or acknowledged, and the caller
             # gets an explicit retryable outage rather than a policy verdict.
             self._write_native_policy_bundle_unavailable()
+        except PolicyBundleNativeError as error:
+            # A native verdict or input rejection is final for this bundle;
+            # report its code instead of a retryable outage.
+            self._write_native_policy_bundle_rejection(native_rejection_code(error))
+
+    def _write_native_policy_bundle_rejection(self, code: str) -> None:
+        error_payload: dict[str, object] = {"error": code}
+        remediation = policy_bundle_rejection_message(code)
+        if remediation is not None:
+            error_payload["message"] = remediation
+        self._write_json(error_payload, status=400)
 
     def _write_native_policy_bundle_unavailable(self) -> None:
         self._write_json(
