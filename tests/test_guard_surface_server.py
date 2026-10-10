@@ -1330,6 +1330,7 @@ class TestGuardSurfaceServer:
         }
         assert hook_payload["approval_request_id"]
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_cursor_hook_endpoint_applies_hook_env_overlay(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
         monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
@@ -1496,6 +1497,7 @@ class TestGuardSurfaceServer:
         assert "AskUserQuestion" in notification_payload["hookSpecificOutput"]["additionalContext"]
         assert "Keep blocked" in notification_payload["hookSpecificOutput"]["additionalContext"]
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_claude_hook_endpoint_rejects_relative_workspace_path_and_records_audit(
         self, tmp_path, monkeypatch
     ) -> None:
@@ -1767,6 +1769,7 @@ class TestGuardSurfaceServer:
         assert elapsed < 0.4, f"expired rendering restarted the storage wait: {elapsed:.3f}s"
         assert sqlite_operation_deadline_monotonic() == inherited_deadline
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_pi_hook_endpoint_rejects_missing_temporary_workspace(self, tmp_path, monkeypatch) -> None:
         # Python-side 400 only surfaces when the Rust edge isn't authoritative;
         # under `HOL_GUARD_NATIVE=force` (CI native regression) the daemon defers
@@ -2042,6 +2045,7 @@ class TestGuardSurfaceServer:
         assert stats["completed"] == 2
         assert stats["rejected"] == {}
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_native_dispatch_keeps_referenced_payload_opaque(
         self,
         tmp_path,
@@ -2400,6 +2404,7 @@ class TestGuardSurfaceServer:
         assert payload == {}
         assert captured["workspace"] == str(workspace_dir)
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_claude_hook_endpoint_rejects_workspace_path_outside_safe_roots_and_records_audit(
         self, tmp_path, monkeypatch
     ) -> None:
@@ -2477,6 +2482,7 @@ class TestGuardSurfaceServer:
         assert payload.get("policy_action", "allow") in {"allow", "warn"}
         assert payload.get("decision") != "block"
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_claude_hook_endpoint_rejects_unexpected_guard_home_and_records_audit(
         self, tmp_path, monkeypatch
     ) -> None:
@@ -2510,6 +2516,7 @@ class TestGuardSurfaceServer:
         assert events[-1]["payload"]["parameter"] == "guard-home"
         assert events[-1]["payload"]["reason"] == "unexpected_guard_home"
 
+    @pytest.mark.usefixtures("native_route_policy_with_hooks_off")
     def test_guard_daemon_claude_hook_endpoint_rejects_special_guard_home_path_and_records_audit(
         self, tmp_path, monkeypatch
     ) -> None:

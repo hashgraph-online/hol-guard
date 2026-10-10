@@ -446,3 +446,38 @@ def native_data_flow_runtime(
         lambda guard_home: guard_home if guard_home is not None else _native_context_home,
     )
     return _native_context_home
+
+
+@pytest.fixture
+def native_route_policy_with_hooks_off(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep daemon route/origin policy native while hook handling stays ``off``.
+
+    The daemon's route and origin policy is owned by the resident and has no
+    Python answer, so a test that sets ``HOL_GUARD_NATIVE=off`` to exercise
+    the Python hook fallback would otherwise see every request fail closed.
+    Only the route-policy transport call runs with the runtime pinned; hook
+    handling in the same test still observes ``off``.
+    """
+
+    from codex_plugin_scanner.guard import native_daemon_route
+
+    runtime = _resolve_native_hook_runtime()
+    real_request = native_daemon_route._resident_request
+    lock = threading.Lock()
+
+    def pinned_request(**kwargs):
+        with lock:
+            saved = {key: os.environ.get(key) for key in ("HOL_GUARD_NATIVE", "HOL_GUARD_NATIVE_BINARY")}
+            os.environ["HOL_GUARD_NATIVE"] = "force"
+            os.environ["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
+            try:
+                return real_request(**kwargs)
+            finally:
+                for key, value in saved.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+
+    monkeypatch.setattr(native_daemon_route, "_resident_request", pinned_request)
+    return runtime
