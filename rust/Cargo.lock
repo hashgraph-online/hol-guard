@@ -864,6 +864,7 @@ dependencies = [
  "libproc",
  "nix",
  "pbkdf2",
+ "regex",
  "ring",
  "rsa",
  "rusqlite",

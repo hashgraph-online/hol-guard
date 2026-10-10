@@ -92,9 +92,7 @@ class TestNormalizedIdentityLookupPerformance:
     """T741: approval lookup by normalized identity stays under 50 ms with 100k approvals."""
 
     @pytest.mark.slow
-    def test_lookup_by_identity_key_under_50ms_with_100k_rows(self) -> None:
-        from codex_plugin_scanner.guard.store_approvals import _normalized_identity_key  # type: ignore[attr-defined]
-
+    def test_lookup_by_identity_key_under_50ms_with_100k_rows(self, tmp_path) -> None:
         conn = _make_conn()
         harness = "codex"
         artifact_id = "codex:project:perf-tool"
@@ -108,13 +106,15 @@ class TestNormalizedIdentityLookupPerformance:
                 artifact_id=f"codex:project:tool-{uuid.uuid4().hex[:8]}",
                 workspace=workspace,
             )
-            add_approval_request(conn, req, now)
+            add_approval_request(conn, req, now, guard_home=tmp_path)
 
         target = _make_request(
             harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target=launch_target
         )
-        add_approval_request(conn, target, now)
-        identity_key = _normalized_identity_key(launch_target)
+        add_approval_request(conn, target, now, guard_home=tmp_path)
+        identity_key = conn.execute(
+            "select normalized_identity_key from approval_requests where request_id = ?", (target.request_id,)
+        ).fetchone()[0]
 
         start = time.monotonic()
         result = conn.execute(
@@ -140,7 +140,7 @@ class TestDuplicatePendingCollapsePerformance:
     """T742: duplicate pending collapse stays under 100 ms with 100k approvals."""
 
     @pytest.mark.slow
-    def test_dedup_insert_under_100ms_with_100k_rows(self) -> None:
+    def test_dedup_insert_under_100ms_with_100k_rows(self, tmp_path) -> None:
         conn = _make_conn()
         harness = "codex"
         artifact_id = "codex:project:dedup-tool"
@@ -154,7 +154,7 @@ class TestDuplicatePendingCollapsePerformance:
                 artifact_id=f"codex:project:tool-{uuid.uuid4().hex[:8]}",
                 workspace=workspace,
             )
-            add_approval_request(conn, req, now)
+            add_approval_request(conn, req, now, guard_home=tmp_path)
 
         first = _make_request(
             harness=harness,
@@ -162,13 +162,13 @@ class TestDuplicatePendingCollapsePerformance:
             workspace=workspace,
             launch_target=launch_target,
         )
-        first_id = add_approval_request(conn, first, now)
+        first_id = add_approval_request(conn, first, now, guard_home=tmp_path)
 
         repeat = _make_request(
             harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target=launch_target
         )
         start = time.monotonic()
-        second_id = add_approval_request(conn, repeat, now)
+        second_id = add_approval_request(conn, repeat, now, guard_home=tmp_path)
         elapsed_ms = (time.monotonic() - start) * 1000
 
         assert first_id == second_id, "Duplicate must be collapsed"

@@ -14,6 +14,7 @@ import pytest
 from codex_plugin_scanner.guard import store as store_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
     InvalidApprovalCursorError,
@@ -457,7 +458,8 @@ def test_before_cursor_uses_last_seen_sort_order() -> None:
     assert [row["request_id"] for row in rows] == ["req-middle"]
 
 
-def test_guard_store_migrates_database_missing_queue_columns(tmp_path: Path) -> None:
+@pytest.mark.parametrize("provisioned", [True, False])
+def test_guard_store_migrates_database_missing_queue_columns(tmp_path: Path, provisioned: bool) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
     connection = sqlite3.connect(guard_home / "guard.db")
@@ -560,12 +562,21 @@ def test_guard_store_migrates_database_missing_queue_columns(tmp_path: Path) -> 
     finally:
         connection.close()
 
+    if provisioned:
+        provision_native_policy_verifier_key(guard_home, b"k" * 32)
     store = GuardStore(guard_home)
     migrated = store.get_approval_request("req-old")
 
     assert migrated is not None
     assert migrated["dedupe_count"] == 1
     assert migrated["last_seen_at"] == "2026-05-08T10:00:00+00:00"
+    if not provisioned:
+        # Without a resident the migration cannot identify the row; the first
+        # write that reaches the resident finishes the backfill.
+        assert migrated["queue_group_id"] is None
+        store.add_approval_request(_request("req-new", artifact_id="codex:project:other"), "2026-05-08T10:05:00+00:00")
+        migrated = store.get_approval_request("req-old")
+        assert migrated is not None
     assert isinstance(migrated["action_identity"], str)
     assert str(migrated["queue_group_id"]).startswith("approval-group:v1:")
 
