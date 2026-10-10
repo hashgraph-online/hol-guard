@@ -4,11 +4,19 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from collections.abc import Mapping
+from typing import cast
 
 # ruff: noqa: F403,F405
+from .retry_lineage import preserve_retry_lineage
 from .store_base import *
+from .store_exact_cloud_local_once import claim_exact_cloud_local_once_approval_locked
+from .store_local_once_authority import (
+    EXACT_CLOUD_AUTHORITY_KIND,
+    LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
+)
 from .store_policy import _approval_authority_revision
 from .store_review_event_outbox_writes import append_request_snapshot_event
 
@@ -165,12 +173,32 @@ def _persist_continuation_resume_state(
         continuation_cancelled_at=cast(str | None, resume_update.get("continuation_cancelled_at")),
     )
     if operation_update is not None:
-        connection.execute(
+        requested_metadata = operation_update.get("metadata")
+        persisted_metadata: dict[str, object] = (
+            dict(cast(Mapping[str, object], requested_metadata)) if isinstance(requested_metadata, dict) else {}
+        )
+        existing_row = cast(
+            sqlite3.Row | None,
+            connection.execute(
+                "select metadata_json from guard_operations where operation_id = ?",
+                (str(operation_update["operation_id"]),),
+            ).fetchone(),
+        )
+        if existing_row is not None:
+            try:
+                existing_metadata: object = cast(object, json.loads(str(existing_row["metadata_json"])))
+            except (TypeError, ValueError):
+                existing_metadata = {}
+            if isinstance(existing_metadata, dict):
+                persisted_metadata = preserve_retry_lineage(
+                    cast(Mapping[str, object], existing_metadata), persisted_metadata
+                )
+        _ = connection.execute(
             """update guard_operations set status = ?, metadata_json = ?, updated_at = ?
                where operation_id = ?""",
             (
                 str(operation_update["status"]),
-                json.dumps(operation_update["metadata"], sort_keys=True),
+                json.dumps(persisted_metadata, sort_keys=True),
                 now,
                 str(operation_update["operation_id"]),
             ),
@@ -223,7 +251,9 @@ class StoreContinuationMixin:
         self,
         connection: sqlite3.Connection,
         *,
+        request_id: str,
         approval_decision: Mapping[str, object],
+        consumes_approval: bool,
         now: str,
     ) -> bool:
         approval_id = approval_decision.get("approval_id")
@@ -235,13 +265,28 @@ class StoreContinuationMixin:
             or isinstance(authority_revision, bool)
             or authority_revision < 0
             or approval_decision.get("action") != "allow"
-            or self.approval_reuse_claim_disposition(approval_decision) != "consumed"
+            or not consumes_approval
         ):
             return False
         integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=False)
         if integrity_key is None or integrity_key_id is None:
             return False
         if _approval_authority_revision(connection) != authority_revision:
+            return False
+        authority_kind = approval_decision.get("authority_kind")
+        if authority_kind == EXACT_CLOUD_AUTHORITY_KIND:
+            return (
+                claim_exact_cloud_local_once_approval_locked(
+                    connection,
+                    request_id=request_id,
+                    expected_decision=approval_decision,
+                    now=now,
+                    integrity_key=integrity_key,
+                    integrity_key_id=integrity_key_id,
+                )
+                is not None
+            )
+        if authority_kind != LOCAL_ONCE_LEGACY_AUTHORITY_KIND:
             return False
         return (
             self._claim_local_once_approval_by_id_locked(
@@ -251,6 +296,7 @@ class StoreContinuationMixin:
                 expected_decision=approval_decision,
                 integrity_key=integrity_key,
                 integrity_key_id=integrity_key_id,
+                authority_kind=LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
             )
             is not None
         )
@@ -319,11 +365,17 @@ class StoreContinuationMixin:
     ) -> bool:
         """Finalize continuation evidence and optionally consume exact allow authority atomically."""
 
+        # Ask the resident before the write lock is held; no answer means no claim.
+        consumes_approval = (
+            approval_decision is not None and self.approval_reuse_claim_disposition(approval_decision) == "consumed"
+        )
         with self._connect() as connection:
             connection.execute("begin immediate")
             if approval_decision is not None and not self._claim_continuation_approval_authority(
                 connection,
+                request_id=request_id,
                 approval_decision=approval_decision,
+                consumes_approval=consumes_approval,
                 now=now,
             ):
                 connection.rollback()

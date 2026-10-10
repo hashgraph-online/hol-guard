@@ -81,6 +81,21 @@ for (const viewport of [{ width: 1365, height: 900 }, { width: 390, height: 844 
   });
 }
 
+test("Enter in the authenticator code field authorizes the device without a click", async ({ page }) => {
+  const state = await fixture(page);
+  await page.getByRole("button", { name: "Enable Cloud Review" }).click();
+  const dialog = page.getByRole("dialog", { name: "Authorize Cloud Review" });
+  const code = dialog.getByLabel("Authenticator code");
+  await code.press("Enter");
+  await expect(dialog).toBeVisible();
+  expect(state.writes).toEqual([]);
+  await code.fill("123456");
+  await code.press("Enter");
+  await expect(dialog).not.toBeVisible();
+  expect(state.writes).toHaveLength(1);
+  expect(state.writes[0]).toMatchObject({ action: "enable", approval_totp_code: "123456" });
+});
+
 test("rejected MFA keeps recovery inline and does not claim success", async ({ page }) => {
   const state = await fixture(page);
   state.reject();

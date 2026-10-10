@@ -53,6 +53,9 @@ const PolicyWorkspacePage = lazyWorkspace("policy-workspace-page", () =>
 const AboutWorkspace = lazyWorkspace("about-workspace", () =>
   import("./about/about-workspace").then((m) => ({ default: m.AboutWorkspace }))
 );
+const ProtectionRepairPage = lazyWorkspace("protection-repair-page", () =>
+  import("./protection-repair-page").then((m) => ({ default: m.ProtectionRepairPage }))
+);
 
 function LazyFallback() {
   return (
@@ -153,6 +156,7 @@ export function viewTitle(view: AppView): string {
   if (view === "feed-health") return "Feed Health";
   if (view === "about") return "About";
   if (view === "extensions") return "Extensions";
+  if (view === "protection-repair") return "Repair protection";
   return "App detail";
 }
 
@@ -177,6 +181,9 @@ export function resolveView(pathname: string): AppView {
   }
   if (pathname === "/extensions" || pathname.startsWith("/extensions/")) {
     return "extensions";
+  }
+  if (pathname === "/protection/repair") {
+    return "protection-repair";
   }
   if (pathname === "/settings") {
     return "settings";
@@ -277,6 +284,7 @@ export function App() {
   const appDetailHarness = parseAppDetail(pathname);
   const [requests, setRequests] = useState<RequestState>({ kind: "loading" });
   const [detail, setDetail] = useState<DetailState>({ kind: "idle" });
+  const [detailRefreshKey, setDetailRefreshKey] = useState(0);
   const [receipts, setReceipts] = useState<ReceiptsState>({ kind: "loading" });
   const [runtime, setRuntime] = useState<RuntimeState>({ kind: "loading" });
   const [policies, setPolicies] = useState<PolicyState>({ kind: "loading" });
@@ -318,7 +326,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeRequestId]);
+  }, [activeRequestId, detailRefreshKey]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -988,9 +996,9 @@ export function App() {
       onResolve={handleResolve}
       onBulkApprove={handleBulkApprove}
       onRetry={handleRetry}
+      onRetryDetail={() => setDetailRefreshKey((key) => key + 1)}
       onRepair={handleRepair}
       onGuardReconnected={handleRetry}
-      enableUpdateStatus={view !== "inbox"}
       onClearEvidence={handleClearEvidence}
       fleetContent={
         runtime.kind === "ready" ? (
@@ -1019,6 +1027,13 @@ export function App() {
         <ErrorBoundary onReset={handleGoHome}>
           <Suspense fallback={<LazyFallback />}>
             <ExtensionsWorkspace runtime={runtime.kind === "ready" ? runtime.snapshot : null} onRefreshRuntime={refreshStateAfterAction} onNavigate={navigate} />
+          </Suspense>
+        </ErrorBoundary>
+      }
+      protectionRepairContent={
+        <ErrorBoundary onReset={handleGoHome}>
+          <Suspense fallback={<LazyFallback />}>
+            <ProtectionRepairPage onNavigate={navigate} />
           </Suspense>
         </ErrorBoundary>
       }

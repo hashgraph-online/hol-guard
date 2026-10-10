@@ -5,6 +5,24 @@ use serde_json::Value;
 
 mod approval_contracts;
 pub use approval_contracts::*;
+mod approval_gate;
+pub use approval_gate::*;
+mod approval_reuse;
+pub use approval_reuse::*;
+mod github_cli_classify;
+pub use github_cli_classify::*;
+mod git_execution_safety;
+pub use git_execution_safety::*;
+mod compound_git_inspection;
+pub use compound_git_inspection::*;
+mod policy_bundle_authority;
+pub use policy_bundle_authority::*;
+mod claim_approval_reuse;
+pub use claim_approval_reuse::*;
+mod guard_store;
+pub use guard_store::*;
+mod policy_decision_lookup;
+pub use policy_decision_lookup::*;
 mod native_hook_receipt;
 pub use native_hook_receipt::*;
 mod native_command_observations;
@@ -13,6 +31,94 @@ mod native_command_controls;
 pub use native_command_controls::*;
 mod approval_v4_contracts;
 pub use approval_v4_contracts::*;
+mod workspace_review_contracts;
+pub use workspace_review_contracts::*;
+mod archive_inspection;
+pub use archive_inspection::*;
+mod execution_environment;
+pub use execution_environment::*;
+mod context_digest;
+pub use context_digest::*;
+mod local_cli_identity;
+pub use local_cli_identity::*;
+mod approval_proof;
+pub use approval_proof::*;
+mod hook_artifact_compose;
+pub use hook_artifact_compose::*;
+mod local_cli_grant;
+pub use local_cli_grant::*;
+mod contributed_mcp_decision;
+pub use contributed_mcp_decision::*;
+mod local_mcp_grant;
+pub use local_mcp_grant::*;
+mod mcp_proxy_decision;
+pub use mcp_proxy_decision::*;
+mod request_context;
+pub use request_context::*;
+mod skill_directory_identity;
+pub use skill_directory_identity::*;
+mod browser_mcp_intent;
+pub use browser_mcp_intent::*;
+mod false_positive_rules;
+pub use false_positive_rules::*;
+mod runner_authority;
+pub use runner_authority::*;
+mod mcp_runtime_evidence;
+pub use mcp_runtime_evidence::*;
+mod mcp_tool_evidence;
+pub use mcp_tool_evidence::*;
+mod mcp_tool_policy;
+pub use mcp_tool_policy::*;
+mod mcp_tool_policy_decide;
+pub use mcp_tool_policy_decide::*;
+mod mcp_stdio_session;
+pub use mcp_stdio_session::*;
+mod command_effect;
+pub use command_effect::*;
+mod canonical_json;
+pub use canonical_json::*;
+
+mod utc_timestamp;
+pub use utc_timestamp::*;
+
+mod native_runtime_values;
+pub use native_runtime_values::*;
+mod install_checks;
+pub use install_checks::*;
+mod generic_hook_payload;
+pub use generic_hook_payload::*;
+mod hook_decision;
+pub use hook_decision::*;
+
+mod workflow_capability;
+pub use workflow_capability::*;
+mod workflow_capability_transitions;
+pub use workflow_capability_transitions::*;
+mod workflow_capability_authority_state;
+pub use workflow_capability_authority_state::*;
+
+mod signal_contract;
+pub use signal_contract::*;
+
+mod decision_lattice;
+pub use decision_lattice::*;
+
+mod authoritative_decision;
+pub use authoritative_decision::*;
+
+mod package_authority;
+pub use package_authority::*;
+
+mod contained_execution;
+pub use contained_execution::*;
+mod data_flow_analyze;
+pub use data_flow_analyze::*;
+mod prompt_requests;
+pub use prompt_requests::*;
+mod business_action;
+pub use business_action::*;
+mod business_dispatch_receipt;
+pub use business_dispatch_receipt::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";
@@ -36,6 +142,8 @@ pub struct GuardHookSourceMetadataV2 {
     pub guard_home: String,
     #[serde(default)]
     pub source_ref_external_allowed: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_environment: Option<GuardExecutionEnvironmentV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -118,6 +226,18 @@ pub enum PreToolOperationV1 {
     Unknown,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+pub enum NativePromptRiskClassV1 {
+    LocalEnvRead,
+    SensitiveMaterial,
+    ExfilIntent,
+    DestructiveIntent,
+    SubprocessIntent,
+    GuardBypassIntent,
+    PromptInjectionIntent,
+}
+
 /// Versioned generic PreToolUse result. Keep this contract independent of
 /// harness JSON so adapters can only render the native minimum floor.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -135,6 +255,8 @@ pub struct PreToolResultV1 {
     pub explicitly_benign: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub command_extensions: Option<NativeCommandObservationsV1>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prompt_risk_classes: Vec<NativePromptRiskClassV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -273,6 +395,15 @@ pub struct RuntimeCapabilitiesV1 {
     pub build_sha: String,
     pub target: String,
     pub features: Vec<String>,
+    /// Packaged command identity of this binary. Empty when the program
+    /// cannot be loaded. The publisher uses these to bind a snapshot to the
+    /// runtime that will enforce it.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub program_digest: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub catalog_digest: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub trust_digest: String,
 }
 
 #[cfg(test)]

@@ -16,6 +16,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.extension_trust_projection import repository_trust_map
+
 MAX_BYTES = 16 * 1024 * 1024
 SOURCE_SCHEMA = "guard.command-extension-source.v1"
 MANIFEST = "migration-manifest.json"
@@ -213,7 +216,7 @@ def main() -> int:
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [load(path) for path in sorted((root / "contributions/mcp-servers").glob("*.json"))],
-        "trust": load(root / "contracts/extensions/trust-class-map.v1.json"),
+        "trust": repository_trust_map(root),
     }
     result = subprocess.run(
         [str(args.compiler.resolve(strict=True)), "compile"],

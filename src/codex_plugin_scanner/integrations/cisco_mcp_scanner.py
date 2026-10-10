@@ -637,30 +637,6 @@ def _run_awaitable(awaitable: Awaitable[T], *, timeout_seconds: float | None = N
     raise RuntimeError("Cisco MCP scanner completed without a result.")
 
 
-async def _scan_targets(
-    plugin_dir: Path, targets: tuple[_StaticScanTarget, ...], analyzer: _CiscoAnalyzer
-) -> tuple[tuple[Finding, ...], int]:
-    findings: list[Finding] = []
-    targets_scanned = 0
-    for target in targets:
-        try:
-            content = target.read_path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        external_findings = await analyzer.analyze(
-            content,
-            {
-                "tool_name": target.tool_name,
-                "content_type": target.content_type,
-                "file_path": str(target.read_path),
-            },
-        )
-        targets_scanned += 1
-        for finding in external_findings:
-            findings.append(_normalize_finding(plugin_dir, target.read_path, finding))
-    return tuple(findings), targets_scanned
-
-
 async def _scan_targets_multi(
     plugin_dir: Path,
     targets: tuple[_StaticScanTarget, ...],

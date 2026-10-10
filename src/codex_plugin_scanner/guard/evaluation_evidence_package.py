@@ -27,14 +27,24 @@ from .evaluation_contracts import (
     validate_evaluation_profile,
     validate_evaluation_result,
 )
+from .evaluation_json import reject_duplicate_keys
 from .evaluation_preflight import _safe_temp_parent
 
 EVALUATION_EVIDENCE_PACKAGE_SCHEMA_VERSION = "guard.evaluation-evidence-package.v1"
+EVALUATION_PROOF_BOUNDARY = "caller_supplied_unverified"
 _PROFILE_NAME = "profile.json"
 _RESULT_NAME = "result.json"
 _MANIFEST_NAME = "manifest.json"
 _ARCHIVE_NAMES = (_PROFILE_NAME, _RESULT_NAME, _MANIFEST_NAME)
-_MAX_PACKAGE_BYTES = 64 * 1024 * 1024
+MAX_EVIDENCE_PACKAGE_BYTES = 64 * 1024 * 1024
+
+
+class EvaluationEvidencePackageError(EvaluationContractError):
+    """A package failure with a stable machine code and value-free message."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,9 +57,14 @@ class EvaluationEvidencePackage:
 
 
 def _json_bytes(value: Mapping[str, object]) -> bytes:
-    return (
-        json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n"
-    ).encode("utf-8")
+    try:
+        return (
+            json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False) + "\n"
+        ).encode("utf-8")
+    except UnicodeError as exc:
+        raise EvaluationEvidencePackageError(
+            "invalid_text", "evaluation evidence package contains invalid text"
+        ) from exc
 
 
 def _record_payloads(
@@ -72,7 +87,7 @@ def _manifest(
         "schemaVersion": EVALUATION_EVIDENCE_PACKAGE_SCHEMA_VERSION,
         "profileId": profile["profileId"],
         "resultId": result["resultId"],
-        "proofBoundary": "caller_supplied_unverified",
+        "proofBoundary": EVALUATION_PROOF_BOUNDARY,
         "files": [
             {
                 "path": _PROFILE_NAME,
@@ -102,8 +117,10 @@ def _package_bytes(profile_payload: Mapping[str, object], result_payload: Mappin
             archive.writestr(info, content)
     packaged = buffer.getvalue()
     limits = cast(Mapping[str, object], profile_payload["resourceLimits"])
-    if len(packaged) > min(cast(int, limits["maxOutputBytes"]), _MAX_PACKAGE_BYTES):
-        raise EvaluationContractError("evaluation evidence package exceeds the declared output limit")
+    if len(packaged) > min(cast(int, limits["maxOutputBytes"]), MAX_EVIDENCE_PACKAGE_BYTES):
+        raise EvaluationEvidencePackageError(
+            "output_limit", "evaluation evidence package exceeds the declared output limit"
+        )
     return packaged
 
 
@@ -120,7 +137,7 @@ def build_evaluation_evidence_package(
 def verify_evaluation_evidence_package(data: bytes) -> dict[str, object]:
     """Verify archive integrity and record contracts, without claiming authenticity."""
 
-    if not isinstance(data, bytes) or len(data) > _MAX_PACKAGE_BYTES:
+    if not isinstance(data, bytes) or len(data) > MAX_EVIDENCE_PACKAGE_BYTES:
         raise EvaluationContractError("evaluation evidence package is invalid or oversized")
     try:
         with zipfile.ZipFile(io.BytesIO(data), mode="r") as archive:
@@ -129,15 +146,15 @@ def verify_evaluation_evidence_package(data: bytes) -> dict[str, object]:
             entries = archive.infolist()
             if (
                 any(info.compress_type != zipfile.ZIP_STORED for info in entries)
-                or sum(info.file_size for info in entries) > _MAX_PACKAGE_BYTES
+                or sum(info.file_size for info in entries) > MAX_EVIDENCE_PACKAGE_BYTES
             ):
                 raise EvaluationContractError("evaluation evidence package has an oversized entry")
             profile_bytes = archive.read(_PROFILE_NAME)
             result_bytes = archive.read(_RESULT_NAME)
             manifest_bytes = archive.read(_MANIFEST_NAME)
-        profile = json.loads(profile_bytes)
-        result = json.loads(result_bytes)
-        manifest = json.loads(manifest_bytes)
+        profile = json.loads(profile_bytes, object_pairs_hook=reject_duplicate_keys)
+        result = json.loads(result_bytes, object_pairs_hook=reject_duplicate_keys)
+        manifest = json.loads(manifest_bytes, object_pairs_hook=reject_duplicate_keys)
         if not isinstance(profile, Mapping) or not isinstance(result, Mapping):
             raise EvaluationContractError("evaluation evidence records must be objects")
         profile_payload, result_payload = _record_payloads(profile, result, portable=True)
@@ -169,7 +186,7 @@ def write_evaluation_evidence_package(
 ) -> EvaluationEvidencePackage:
     """Write one archive exclusively under the profile's private temp root."""
 
-    profile_payload, result_payload = _record_payloads(profile, result)
+    profile_payload, result_payload = _record_payloads(profile, result, portable=True)
     scope = cast(Mapping[str, object], profile_payload["targetScope"])
     declared_root = Path(cast(str, scope["rootPath"]))
     destination_root = Path(output_dir)
@@ -178,12 +195,16 @@ def write_evaluation_evidence_package(
         or not _safe_temp_parent(destination_root)
         or os.path.normcase(os.path.realpath(destination_root)) != os.path.normcase(os.path.realpath(declared_root))
     ):
-        raise EvaluationContractError("evaluation evidence output must be the profile's private temporary root")
+        raise EvaluationEvidencePackageError(
+            "output_scope", "evaluation evidence output must be the profile's private temporary root"
+        )
     packaged = build_evaluation_evidence_package(profile_payload, result_payload)
     digest = hashlib.sha256(packaged).hexdigest()
     destination = destination_root / f"hol-guard-eval-evidence-{digest[:24]}.zip"
     if os.name == "nt" or not (getattr(os, "O_DIRECTORY", 0) and getattr(os, "O_NOFOLLOW", 0)):
-        raise EvaluationContractError("safe evidence package writing is unavailable on this platform")
+        raise EvaluationEvidencePackageError(
+            "output_unavailable", "safe evidence package writing is unavailable on this platform"
+        )
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
     created = False
     directory_fd: int | None = None
@@ -191,18 +212,30 @@ def write_evaluation_evidence_package(
         directory_fd = os.open(destination_root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         details = os.fstat(directory_fd)
         if not stat.S_ISDIR(details.st_mode) or details.st_uid != os.getuid() or stat.S_IMODE(details.st_mode) & 0o077:
-            raise EvaluationContractError("evaluation evidence output must remain a private temporary root")
+            raise EvaluationEvidencePackageError(
+                "output_scope", "evaluation evidence output must remain a private temporary root"
+            )
         descriptor = os.open(destination.name, flags, 0o600, dir_fd=directory_fd)
         created = True
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(packaged)
             stream.flush()
             os.fsync(stream.fileno())
+    except FileExistsError as exc:
+        # O_EXCL collisions leave created false; never unlink someone else's file.
+        if created and directory_fd is not None:
+            with suppress(OSError):
+                os.unlink(destination.name, dir_fd=directory_fd)
+        raise EvaluationEvidencePackageError(
+            "output_exists", "evaluation evidence package already exists; refusing to write without overwriting"
+        ) from exc
     except OSError as exc:
         if created and directory_fd is not None:
             with suppress(OSError):
                 os.unlink(destination.name, dir_fd=directory_fd)
-        raise EvaluationContractError("unable to write evaluation evidence package without overwriting") from exc
+        raise EvaluationEvidencePackageError(
+            "write_failed", "unable to write evaluation evidence package safely"
+        ) from exc
     finally:
         if directory_fd is not None:
             os.close(directory_fd)
@@ -211,7 +244,10 @@ def write_evaluation_evidence_package(
 
 __all__ = [
     "EVALUATION_EVIDENCE_PACKAGE_SCHEMA_VERSION",
+    "EVALUATION_PROOF_BOUNDARY",
+    "MAX_EVIDENCE_PACKAGE_BYTES",
     "EvaluationEvidencePackage",
+    "EvaluationEvidencePackageError",
     "build_evaluation_evidence_package",
     "verify_evaluation_evidence_package",
     "write_evaluation_evidence_package",

@@ -11,7 +11,6 @@ action_identity_mod = pytest.importorskip(
 
 normalize_command_identity = action_identity_mod.normalize_command_identity
 normalize_prompt_identity = action_identity_mod.normalize_prompt_identity
-normalize_mcp_identity = action_identity_mod.normalize_mcp_identity
 
 
 class TestCommandIdentityNormalization:
@@ -95,66 +94,6 @@ class TestPromptIdentityNormalization:
         normalized_file = normalize_prompt_identity(prompt_file)
         assert "openai_api_key" in normalized_key, "Internal underscores in env var names must be preserved"
         assert "my_secret_file" in normalized_file, "Internal underscores in file names must be preserved"
-
-
-class TestMcpIdentityNormalization:
-    """T709-T711: MCP identity normalizer."""
-
-    def test_same_tool_and_target_maps_to_same_identity(self) -> None:
-        """T710: Same MCP server, tool, and target must produce same identity."""
-        call_a = {
-            "server_id": "github-mcp",
-            "tool_name": "read_file",
-            "arguments": {"path": "/Users/me/.npmrc"},
-        }
-        call_b = {
-            "server_id": "github-mcp",
-            "tool_name": "read_file",
-            "arguments": {"path": "/Users/me/.npmrc"},
-        }
-        assert normalize_mcp_identity(call_a) == normalize_mcp_identity(call_b)
-
-    def test_different_mcp_target_produces_different_identity(self) -> None:
-        """T710: Same MCP tool with different target must produce different identity."""
-        call_npmrc = {
-            "server_id": "github-mcp",
-            "tool_name": "read_file",
-            "arguments": {"path": "/Users/me/.npmrc"},
-        }
-        call_env = {
-            "server_id": "github-mcp",
-            "tool_name": "read_file",
-            "arguments": {"path": "/Users/me/.env"},
-        }
-        assert normalize_mcp_identity(call_npmrc) != normalize_mcp_identity(call_env)
-
-    def test_mcp_schema_change_produces_different_identity(self) -> None:
-        """T711: Change in MCP tool schema hash must invalidate previous approval identity."""
-        call_v1 = {
-            "server_id": "custom-mcp",
-            "tool_name": "execute",
-            "arguments": {"cmd": "ls"},
-            "schema_hash": "v1-abc123",
-        }
-        call_v2 = {
-            "server_id": "custom-mcp",
-            "tool_name": "execute",
-            "arguments": {"cmd": "ls"},
-            "schema_hash": "v2-def456",
-        }
-        assert normalize_mcp_identity(call_v1) != normalize_mcp_identity(call_v2)
-
-    def test_mcp_identity_is_deterministic(self) -> None:
-        """T709: normalize_mcp_identity must return same hash on repeated calls."""
-        call = {
-            "server_id": "test-mcp",
-            "tool_name": "read_file",
-            "arguments": {"path": "/tmp/test"},
-            "schema_hash": "hash-001",
-        }
-        first = normalize_mcp_identity(call)
-        second = normalize_mcp_identity(call)
-        assert first == second
 
 
 class TestBrowserMcpIdentityNormalization:

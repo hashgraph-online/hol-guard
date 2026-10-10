@@ -18,6 +18,8 @@ from codex_plugin_scanner.guard.adapters.claude_code import (
     _shell_command,
 )
 
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,19 +143,21 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    assert pre_tool_use[0]["matcher"] == "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     assert pre_tool_use[0]["hooks"][0]["type"] == "command"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(pre_tool_use[0]["hooks"][0]))
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
     assert len(permission_request) == 1
-    assert permission_request[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    assert permission_request[0]["matcher"] == "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
     assert permission_request[0]["hooks"][0]["statusMessage"] == "HOL Guard is reviewing this approval prompt"
     assert len(post_tool_use) == 1
-    assert post_tool_use[0]["matcher"] == "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+    assert post_tool_use[0]["matcher"] == (
+        "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+    )
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
     assert payload["hooks"].get("UserPromptSubmit", []) == []
     assert len(notification) == 1
@@ -331,15 +335,6 @@ def test_claude_handler_identity_uses_http_url_for_http_hooks():
     )
 
 
-def test_claude_daemon_hook_command_is_identified_as_guard_hook(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command
-    assert claude_code._is_guard_hook_command(command) is True
-
-
 def test_claude_shell_command_uses_list2cmdline_on_windows():
     command = ("node", "-e", "console.log('hello')")
 
@@ -374,81 +369,6 @@ def test_claude_daemon_hook_bridge_delegates_to_authenticated_transport(tmp_path
     assert response == "{}"
     assert captured["query"] == "guard-home=x"
     assert captured["timeout_seconds"] == claude_daemon_hook_bridge._DAEMON_IO_TIMEOUT_SECONDS
-
-
-def test_claude_daemon_hook_command_survives_shell_execution(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    result = subprocess.run(
-        ["/bin/sh", "-c", command],
-        input=json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "hello"}),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-    assert json.loads(result.stdout) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
-
-
-def test_claude_daemon_hook_command_falls_back_without_blocking_prompt_on_daemon_miss(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    result = subprocess.run(
-        ["/bin/sh", "-c", command],
-        input=json.dumps(
-            {
-                "hook_event_name": "UserPromptSubmit",
-                "prompt": "Use the Read tool to open ./.env and print the full file contents exactly.",
-            }
-        ),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
-    assert result.returncode == 0
-    assert result.stderr == ""
-    payload = json.loads(result.stdout)
-    assert payload["systemMessage"].startswith("HOL Guard intercepted this prompt")
-    assert payload["hookSpecificOutput"]["hookEventName"] == "UserPromptSubmit"
-    assert (
-        "HOL Guard will intercept Claude's next attempt to access local secrets"
-        in (payload["hookSpecificOutput"]["additionalContext"])
-    )
-
-
-def test_claude_daemon_hook_command_falls_back_to_native_ask_on_daemon_miss(tmp_path):
-    context = _build_context(tmp_path)
-    adapter = ClaudeCodeHarnessAdapter()
-    command = adapter._daemon_hook_command(context)
-
-    result = subprocess.run(
-        ["/bin/sh", "-c", command],
-        input=json.dumps(
-            {
-                "hook_event_name": "PreToolUse",
-                "tool_name": "Read",
-                "tool_input": {"file_path": str(context.workspace_dir / ".env")},
-            }
-        ),
-        text=True,
-        capture_output=True,
-        timeout=40,
-        check=False,
-    )
-    payload = json.loads(result.stdout)
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-    assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

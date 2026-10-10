@@ -91,7 +91,7 @@ def _decision(discovery: Discovery, operation: Operation, value: object) -> Deci
         safe_argv=tuple(sorted(tuple(item) for item in cast(list[list[str]], row["safeArgv"]))),
     )
     default_state = "review" if discovery.metadata.kind == "cli" else "inherit"
-    allowed = {"review", "block"} if discovery.metadata.kind == "cli" else {"inherit", "allow", "block"}
+    allowed = {"review", "block"} if discovery.metadata.kind == "cli" else {"inherit", "allow", "review", "block"}
     if decision.state not in allowed or "execution" not in decision.risk_classes:
         raise BuilderError(
             "review_state", "Review state or execution risk is incompatible with this contribution kind."

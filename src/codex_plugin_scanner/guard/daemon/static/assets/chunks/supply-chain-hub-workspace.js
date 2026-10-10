@@ -1,6 +1,5 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/approval-proof-modal.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
-import { bw as isSupplyChainAuditIncomplete, bx as isSupplyChainAuditEvidence, b9 as GuardHarnessActionError, by as readString$1, bz as isRecord$1, r as reactExports, j as jsxRuntimeExports, z as HiMiniCheckCircle, l as HiMiniArrowPath, X as HiMiniExclamationTriangle, aP as Tag, J as formatRelativeTime, bA as HiMiniClock, bB as IconActionButton, ad as HiMiniXCircle, bb as HiMiniTrash, D as HiMiniShieldCheck, a9 as HiMiniWrenchScrewdriver, bC as HiMiniBeaker, bD as ActivationSummary, bE as ActionResultPanel, aM as HiMiniMagnifyingGlass, x as EmptyState, A as ActionButton, bF as HiMiniBugAnt, M as HiMiniXMark, at as buildApprovalProofCredentials, bG as GuardModalLayer, bH as ConnectFlowCard, bI as ApprovalProofInline, b6 as HiMiniArrowTopRightOnSquare, bJ as HiMiniCloudArrowDown, aU as useResolvedApprovalGate, bK as fetchPackageFirewallStatus, bL as runPackageAudit, bM as resolveSupplyChainAuditFailure, bN as runPackageSync, bO as startPackageFirewallConnect, a6 as openPackageFirewallAuthorizeFallback, bP as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, bQ as repairSupplyChainProtection, bR as runPackageFirewallAction, bS as parseInterceptProofSnapshot, bT as activatePackageFirewallRuntime, S as SectionLabel, bU as EntitlementNotice, bV as chooseSupplyChainAuditFolder, bW as fetchReceipts, aL as WorkspacePageHeader, bX as lazyWorkspace, bY as __vitePreload } from "../guard-dashboard.js";
-import { A as ApprovalProofModal } from "./approval-proof-modal.js";
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/supply-chain-workspace.js","assets/guard-dashboard.js","assets/index.css","assets/chunks/feed-health-workspace.js","assets/chunks/home-protection-module.js","assets/chunks/supply-chain-protection-stats.js","assets/chunks/audit-workspace.js"])))=>i.map(i=>d[i]);
+import { cc as isSupplyChainAuditIncomplete, cd as isSupplyChainAuditEvidence, bR as GuardHarnessActionError, ce as readString$1, cf as isRecord$1, r as reactExports, j as jsxRuntimeExports, C as HiMiniCheckCircle, l as HiMiniArrowPath, Z as HiMiniExclamationTriangle, b6 as Tag, L as formatRelativeTime, cg as HiMiniClock, ch as IconActionButton, al as HiMiniXCircle, bT as HiMiniTrash, I as HiMiniShieldCheck, ai as HiMiniWrenchScrewdriver, ci as HiMiniBeaker, cj as ActivationSummary, ck as ActionResultPanel, b2 as HiMiniMagnifyingGlass, y as EmptyState, A as ActionButton, cl as HiMiniBugAnt, P as HiMiniXMark, aI as buildApprovalProofCredentials, bP as GuardModalLayer, cm as ConnectFlowCard, cn as ApprovalProofInline, bI as HiMiniArrowTopRightOnSquare, co as HiMiniCloudArrowDown, bu as useResolvedApprovalGate, cp as fetchPackageFirewallStatus, cq as runPackageAudit, cr as resolveSupplyChainAuditFailure, cs as runPackageSync, ct as startPackageFirewallConnect, ae as openPackageFirewallAuthorizeFallback, cu as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE, cv as repairSupplyChainProtection, cw as runPackageFirewallAction, cx as parseInterceptProofSnapshot, cy as activatePackageFirewallRuntime, S as SectionLabel, cz as EntitlementNotice, bK as ApprovalProofModal, cA as chooseSupplyChainAuditFolder, cB as fetchReceipts, b1 as WorkspacePageHeader, cC as lazyWorkspace, cD as __vitePreload } from "../guard-dashboard.js";
 const SEVERITY_RANK = {
   critical: 4,
   high: 3,
@@ -1549,9 +1548,9 @@ function supplyChainFixAllNeedsCloudConnect(state) {
   return state.remainingAction === "connect" && state.failedSteps.length === 0;
 }
 function supplyChainFixAllStateFromRepair(result) {
-  const remainingAction = result.remaining_steps.some((step) => step.action === "connect") ? "connect" : null;
+  const remainingAction = result.remaining_steps.some((step) => step.action === "check_access") ? "check_access" : result.remaining_steps.some((step) => step.action === "connect") ? "connect" : null;
   return {
-    phase: result.repaired ? "success" : "incomplete",
+    phase: result.repaired ? "success" : remainingAction === "check_access" ? "access_required" : "incomplete",
     message: result.message,
     completedSteps: result.completed_steps,
     failedSteps: result.failed_steps.map((failure) => failure.message),
@@ -1570,6 +1569,8 @@ function supplyChainFixAllConnectState(phase, message, remainingSteps = []) {
   };
 }
 function supplyChainFixAllButtonLabel(phase, remainingAction = null, failedCount = 0) {
+  if (phase === "checking") return "Checking access…";
+  if (phase === "access_required") return "Check Cloud access";
   if (phase === "working") return "Fixing…";
   if (phase === "approval") return "Approval required";
   if (phase === "connecting") return "Connecting…";
@@ -1577,16 +1578,28 @@ function supplyChainFixAllButtonLabel(phase, remainingAction = null, failedCount
     return "Connect Guard Cloud";
   }
   if (phase === "incomplete" || phase === "error") return "Retry remaining";
-  return "Fix all";
+  return "Restore protection";
 }
 function supplyChainFixAllIsPending(phase) {
-  return phase === "working" || phase === "approval" || phase === "connecting";
+  return phase === "checking" || phase === "working" || phase === "approval" || phase === "connecting";
+}
+function supplyChainFixAllAccessState(message = "Package protection access could not be verified on this device. Check Cloud access to refresh your plan. Your local approval password cannot change Cloud access.") {
+  return {
+    phase: "access_required",
+    message,
+    completedSteps: [],
+    failedSteps: [],
+    remainingAction: "check_access"
+  };
+}
+function supplyChainFixAllCanRepair(data) {
+  return data.entitlement.allowed || (data.protection?.installed_managers.length ?? 0) > 0 || data.package_shims.some((entry) => entry.installed);
 }
 function supplyChainFixAllRequiresConnection(data) {
   if (data.entitlement.allowed) return false;
   if (data.entitlement.reason === "guard_cloud_reconnect_required") return true;
   if (data.entitlement.reason !== "guard_cloud_connect_required") return false;
-  return !data.package_shims.some((entry) => entry.installed);
+  return !supplyChainFixAllCanRepair(data);
 }
 function actionLabel(op) {
   return op.charAt(0).toUpperCase() + op.slice(1);
@@ -1661,6 +1674,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   const rootRef = reactExports.useRef(null);
   const recoveryConnectHandledRef = reactExports.useRef(false);
   const repairNeedsCloudConnectRef = reactExports.useRef(false);
+  const repairNeedsCloudAccessRef = reactExports.useRef(false);
   const [panelLoad, setPanelLoad] = reactExports.useState({ phase: "loading" });
   const [refreshError, setRefreshError] = reactExports.useState(null);
   const [sharedRefreshError, setSharedRefreshError] = reactExports.useState(null);
@@ -1757,6 +1771,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     void refreshSharedState();
   }, [refreshAfterOp, refreshSharedState]);
   reactExports.useEffect(() => {
+    if (pendingOp?.op === "fix_all") return;
     if (panelLoad.phase !== "loaded") {
       return;
     }
@@ -1768,7 +1783,7 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
       void refreshAfterOp();
     }, flow.poll_after_ms ?? 1500);
     return () => window.clearTimeout(handle);
-  }, [panelLoad, refreshAfterOp]);
+  }, [panelLoad, refreshAfterOp, pendingOp?.op]);
   const openAuditConnectGate = reactExports.useCallback((resumeAfterConnect) => {
     setAuditConnectGateActive(true);
     setResumeAuditAfterConnect(resumeAfterConnect);
@@ -1985,20 +2000,40 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
   }, [handleStartConnect, onFixAllStateChange]);
   const handleFixAll = reactExports.useCallback(
     async (credentials) => {
-      const requiresConnection = panelLoad.phase === "loaded" && supplyChainFixAllRequiresConnection(panelLoad.data);
-      if (requiresConnection || repairNeedsCloudConnectRef.current) {
-        await beginFixAllConnectRecovery();
-        return;
-      }
-      onFixAllStateChange?.(supplyChainFixAllWorkingState());
       setPendingOp({ op: "fix_all", manager: null });
+      let checkingAccess = true;
       try {
+        onFixAllStateChange?.({ phase: "checking", message: "Checking Cloud access before device approval…", completedSteps: [], failedSteps: [] });
+        const requestId = ++statusRequestId.current;
+        const latest = await fetchPackageFirewallStatus();
+        if (requestId !== statusRequestId.current) {
+          onFixAllStateChange?.({ phase: "error", message: "Package status changed while checking. Check again before restoring protection.", completedSteps: [], failedSteps: [] });
+          return;
+        }
+        checkingAccess = false;
+        setPanelLoad({ phase: "loaded", data: latest });
+        if (supplyChainFixAllRequiresConnection(latest) || repairNeedsCloudConnectRef.current && !latest.entitlement.allowed) {
+          await beginFixAllConnectRecovery();
+          return;
+        }
+        repairNeedsCloudConnectRef.current = false;
+        if (!supplyChainFixAllCanRepair(latest) || repairNeedsCloudAccessRef.current && !latest.entitlement.allowed) {
+          onFixAllStateChange?.(supplyChainFixAllAccessState());
+          return;
+        }
+        repairNeedsCloudAccessRef.current = false;
+        onFixAllStateChange?.(supplyChainFixAllWorkingState());
         const result = await repairSupplyChainProtection(credentials);
         const nextState = supplyChainFixAllStateFromRepair(result);
+        repairNeedsCloudAccessRef.current = nextState.remainingAction === "check_access";
         repairNeedsCloudConnectRef.current = supplyChainFixAllNeedsCloudConnect(nextState);
         onFixAllStateChange?.(nextState);
         refreshInBackground();
       } catch (error) {
+        if (checkingAccess) {
+          onFixAllStateChange?.({ phase: "error", message: "Could not check package status. No repair was attempted. Check that Guard is running, then try again.", completedSteps: [], failedSteps: [] });
+          return;
+        }
         if (credentials === void 0 && isApprovalGateRequiredError(error)) {
           await resolveApprovalGate();
           setPendingApprovalOp({ op: "fix_all", manager: null });
@@ -2012,6 +2047,11 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
         }
         if (isSupplyChainSyncConnectError(error)) {
           await beginFixAllConnectRecovery();
+          return;
+        }
+        if (readHarnessActionErrorCode(error) === "paid_guard_cloud_required") {
+          onFixAllStateChange?.(supplyChainFixAllAccessState());
+          refreshInBackground();
           return;
         }
         const message = readHarnessActionUserMessage(
@@ -2031,7 +2071,6 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     [
       beginFixAllConnectRecovery,
       onFixAllStateChange,
-      panelLoad,
       refreshInBackground,
       resolveApprovalGate
     ]
@@ -2415,9 +2454,9 @@ const PackageFirewallPanel = reactExports.forwardRef(function PackageFirewallPan
     pendingApprovalOp !== null && /* @__PURE__ */ jsxRuntimeExports.jsx(
       ApprovalProofModal,
       {
-        title: pendingApprovalOp.op === "fix_all" ? "Fix all supply-chain issues" : `${actionLabel(pendingApprovalOp.op)} ${pendingApprovalOp.manager}`,
+        title: pendingApprovalOp.op === "fix_all" ? "Restore package protection" : `${actionLabel(pendingApprovalOp.op)} ${pendingApprovalOp.manager}`,
         detail: "Enter local approval proof before Guard changes package-manager protection on this device.",
-        confirmLabel: pendingApprovalOp.op === "fix_all" ? "Fix all" : actionLabel(pendingApprovalOp.op),
+        confirmLabel: pendingApprovalOp.op === "fix_all" ? "Restore protection" : actionLabel(pendingApprovalOp.op),
         approvalGate: resolvedApprovalGate,
         onCancel: handleApprovalCancel,
         onConfirm: handleApprovalConfirm
@@ -2635,11 +2674,11 @@ function useSupplyChainAuditSession({
 }
 const SupplyChainWorkspace = lazyWorkspace(
   "supply-chain-workspace",
-  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5,6]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
+  () => __vitePreload(() => import("./supply-chain-workspace.js"), true ? __vite__mapDeps([0,1,2,3,4,5]) : void 0).then((m) => ({ default: m.SupplyChainWorkspace }))
 );
 const AuditWorkspace = lazyWorkspace(
   "audit-workspace",
-  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([7,1,2,6,5]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
+  () => __vitePreload(() => import("./audit-workspace.js"), true ? __vite__mapDeps([6,1,2,5]) : void 0).then((m) => ({ default: m.AuditWorkspace }))
 );
 const FeedHealthWorkspace = lazyWorkspace(
   "feed-health-workspace",

@@ -11,7 +11,8 @@ import re
 import sqlite3
 from datetime import datetime, timedelta, timezone
 
-_NATIVE_REVIEW_BINDING = re.compile(r"native-review-v4:[0-9a-f]{64}(?::[a-z0-9_-]{1,128}){4}")
+# Extension-bound reviews append a lowercase SHA256 policy-domain digest.
+_NATIVE_REVIEW_BINDING = re.compile(r"native-review-v4:[0-9a-f]{64}(?::[a-z0-9_-]{1,128}){4}(?::[0-9a-f]{64})?")
 
 
 def _aware_utc(value: object) -> datetime | None:
@@ -67,7 +68,10 @@ def consume_native_review_approval(
     latest_rows = [row for resolved_at, row in resolved_rows if resolved_at == approved_at]
     # Same-instant decisions are one logical resolution set. Any conflict is
     # ambiguous and must fail closed rather than relying on SQLite row order.
-    if any(row["resolution_action"] != "allow" or row["resolution_scope"] != "artifact" for row in latest_rows):
+    if any(
+        row["resolution_action"] != "allow" or row["resolution_scope"] not in {"once", "artifact"}
+        for row in latest_rows
+    ):
         return False
     if not timedelta(0) <= current - approved_at <= timedelta(minutes=5):
         return False

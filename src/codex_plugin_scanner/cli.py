@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
+from .cli_native_errors import guard_value_error_exit
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
 from .reporting import format_json as format_json
 from .version import __version__
@@ -308,6 +309,7 @@ def _resolve_legacy_args(
         "protect",
         "preflight",
         "pytest-contained",
+        "execute-contained-test",
         "diff",
         "test-eval",
         "command",
@@ -364,6 +366,10 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
         from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
+    if requested_argv[:1] == ["__guard-claude-hook"]:
+        from .guard.adapters.claude_frozen_hook import run_frozen_claude_hook
+
+        return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
 
     frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
@@ -402,10 +408,12 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "combined"
     if program_mode == "guard" and requested_argv[:1] == ["help"]:
         requested_argv = [*requested_argv[1:], "--help"]
-    if program_mode in {"guard", "hol-guard"} and requested_argv[:1] == ["--version"]:
-        # Fast path: answering a version probe must not build the full Guard
-        # command surface. Update flows spawn `--version` on every check, and
-        # hook wrappers probe it while a tool waits.
+    if requested_argv[:1] == ["--version"] and (
+        program_mode in {"guard", "hol-guard"}
+        or (program_name.startswith("hol-guard-") and program_name.endswith(".partial"))
+    ):
+        # Desktop stages Core as hol-guard-*.partial. Keep other executable
+        # names on their existing parser path, including scanner/combined CLIs.
         print(f"{program_name} {__version__}")
         return 0
     if program_mode != "scanner":
@@ -457,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
             run_guard = getattr(cli_module, "run_guard_command", None) or _guard_cli("run_guard_command")
             return run_guard(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -488,7 +496,7 @@ def _dispatch_scanner_command(
         try:
             return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1

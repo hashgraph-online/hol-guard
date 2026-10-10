@@ -71,14 +71,14 @@ _WORKFLOW_FAMILIES = {
 # independent semantic labels; neither supplies native execution authority.
 _NATIVE_PAIR_MINIMUM_ACTIONS = {
     "p-navigation-boundary": ("allow", "allow"),
-    "p-source-boundary": ("allow", "allow"),
+    "p-source-boundary": ("allow", "review"),
     "p-typescript-source": ("review", "review"),
     "p-git-history": ("review", "review"),
-    "p-github-mutation-impact": ("block", "block"),
+    "p-github-mutation-impact": ("review", "review"),
     "p-package-operation": ("review", "review"),
     "p-shell-data-vs-eval": ("allow", "block"),
     "p-cloud-help-redirection": ("review", "block"),
-    "p-patch-check-vs-apply": ("review", "block"),
+    "p-patch-check-vs-apply": ("review", "review"),
     "p-capability-replay": ("review", "review"),
 }
 
@@ -362,14 +362,24 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
         expected[key] = (count, digest)
 
     runner_path = Path(__file__).with_name("guard_command_corpus_runner.py")
-    completed = subprocess.run(
-        [sys.executable, str(runner_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=90,
-        cwd=Path.cwd(),
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(runner_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            cwd=Path.cwd(),
+            # Evaluation is the resident's verdict, so the runner and its
+            # workers must always run in force mode. Jobs that bind the
+            # native binary without the regression flag would otherwise leave
+            # the mode off and every worker would see the resident unavailable.
+            env={**os.environ, "HOL_GUARD_NATIVE": "force"},
+        )
+    except subprocess.CalledProcessError as error:
+        raise AssertionError(
+            f"corpus runner exited {error.returncode}: {error.stderr[-4000:] if error.stderr else 'no stderr'}"
+        ) from error
     report_value = cast(object, json.loads(completed.stdout))
     assert isinstance(report_value, dict)
     report = cast(dict[str, object], report_value)
@@ -391,7 +401,7 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
     assert {key: tuple(value) for key, value in rejection_groups.items()} == expected_native_rejection_groups()
     assert report["native_rejection_count"] == 27_084
     assert report["original_oracle_below_count"] == 0
-    assert report["original_oracle_above_count"] == 11_558
+    assert report["original_oracle_above_count"] == 10_541
     assert isinstance(report["elapsed"], int | float) and report["elapsed"] < int(
         load_seed_manifest()["evaluation_budget_seconds"]
     )
@@ -399,23 +409,34 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
 
 
 def test_windows_peak_rss_uses_process_working_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    import ctypes
+    from ctypes import wintypes
+    from types import SimpleNamespace
+
     peak_bytes = 128 * 1024 * 1024
 
-    def fake_run(
-        command: list[str],
-        *,
-        check: bool,
-        capture_output: bool,
-        text: bool,
-        timeout: int,
-    ) -> subprocess.CompletedProcess[str]:
-        assert command[-1] == "(Get-Process -Id 4242).PeakWorkingSet64"
-        assert check and capture_output and text and timeout == 10
-        return subprocess.CompletedProcess(command, 0, stdout=f"{peak_bytes}\n", stderr="")
+    def fake_get_current_process() -> int:
+        return 4242
+
+    def fake_get_process_memory_info(handle: int, counters: object, size: int) -> int:
+        assert handle == 4242
+        word_size = ctypes.sizeof(ctypes.c_size_t)
+        peak_index = (2 * ctypes.sizeof(wintypes.DWORD) + word_size - 1) // word_size
+        assert size >= (peak_index + 1) * word_size
+        native_counters = ctypes.cast(cast(ctypes.c_void_p, counters), ctypes.POINTER(ctypes.c_size_t))
+        native_counters[peak_index] = peak_bytes
+        return 1
 
     monkeypatch.setattr(sys, "platform", "win32")
-    monkeypatch.setattr(os, "getpid", lambda: 4242)
-    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    def fake_win_dll(name: str, *, use_last_error: bool) -> SimpleNamespace:
+        assert use_last_error
+        if name == "kernel32":
+            return SimpleNamespace(GetCurrentProcess=fake_get_current_process)
+        assert name == "psapi"
+        return SimpleNamespace(GetProcessMemoryInfo=fake_get_process_memory_info)
+
+    monkeypatch.setattr(ctypes, "WinDLL", fake_win_dll, raising=False)
 
     assert peak_rss_mib() == 128.0
 

@@ -350,3 +350,52 @@ fn partial_or_flush_request_write_is_never_retryable() {
         assert!(!error.retryable_teardown);
     }
 }
+
+#[test]
+fn rejected_server_proof_never_receives_client_proof_or_request_payload() {
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let peer = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut nonce = [0u8; AUTH_NONCE_BYTES];
+        stream.read_exact(&mut nonce).unwrap();
+        stream.write_all(&[0u8; AUTH_PROOF_BYTES]).unwrap();
+        let mut post_nonce = Vec::new();
+        stream.read_to_end(&mut post_nonce).unwrap();
+        post_nonce
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    let error = authenticate(
+        &mut client,
+        &[7u8; crate::AUTH_TOKEN_BYTES],
+        Duration::from_secs(1),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "native_client_auth_rejected");
+    assert!(!error.retryable_teardown);
+    drop(client);
+    assert!(peer.join().unwrap().is_empty());
+}
+
+#[test]
+fn resident_proofs_are_role_bound_and_match_fixed_hmac_vectors() {
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    let nonce = [11u8; AUTH_NONCE_BYTES];
+    let server = hmac_sha256(&token, SERVER_PROOF_LABEL, &nonce);
+    let client = hmac_sha256(&token, CLIENT_PROOF_LABEL, &nonce);
+    assert_ne!(server, client);
+    assert_eq!(
+        hex::encode(server),
+        "31fb45d43ad5910eb2988dacbaa675809cf398dead1ac909b41c1b05f73d6ca2"
+    );
+    assert_eq!(
+        hex::encode(client),
+        "7eee66422a1717a1650543cdd98cf98847fe78bb45611c4f4fd1b4086aa7742d"
+    );
+}

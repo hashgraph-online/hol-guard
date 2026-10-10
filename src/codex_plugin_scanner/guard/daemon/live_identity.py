@@ -4,10 +4,63 @@ from __future__ import annotations
 
 import math
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionPlan
 
 from .discovery import load_authenticated_daemon_state
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION, load_guard_daemon_auth_token
+
+
+@dataclass(frozen=True)
+class DaemonArtifactBinding:
+    """A read-only identity filter, never a lifecycle authorization capability."""
+
+    executable: Path
+    executable_sha256: str
+    package_version: str
+
+    def __post_init__(self) -> None:
+        if (
+            not self.executable.is_absolute()
+            or len(self.executable_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.executable_sha256)
+            or not self.package_version
+        ):
+            raise ValueError("Exact daemon artifact binding is invalid.")
+
+    @classmethod
+    def from_transition_plan(cls, plan: TransitionPlan, side: str) -> DaemonArtifactBinding:
+        """Use the planned executable dependency, not an archive receipt digest."""
+        from ..runtime_transition import TransitionError
+
+        if side not in {"candidate", "predecessor"}:
+            raise TransitionError("daemon_artifact_binding_invalid")
+        payload = plan.payload()
+        artifact = cast(dict[str, object], payload[side])
+        path = Path(str(artifact["path"]))
+        for change in cast(list[dict[str, object]], payload["files"]):
+            identity = change.get("artifact_identity")
+            digest = change.get("expected_digest")
+            if (
+                change["path"] == str(path)
+                and isinstance(identity, dict)
+                and cast(dict[str, object], identity).get("role") == "artifact"
+                and isinstance(digest, str)
+            ):
+                return cls(path, digest, str(artifact["version"]))
+        raise TransitionError("daemon_artifact_dependency_missing")
+
+    def matches(self, state: dict[str, object]) -> bool:
+        return (
+            state.get("executable") == str(self.executable)
+            and state.get("source_root") == str(self.executable)
+            and state.get("runtime_fingerprint") == self.executable_sha256
+            and state.get("package_version") == self.package_version
+        )
 
 
 def _state_marker(state: dict[str, object], *keys: str) -> str | None:
@@ -122,6 +175,8 @@ def probe_live_guard_daemon_identity(
     *,
     session_timeout: float = 1.0,
     verify_dashboard: bool = True,
+    expected_artifact: DaemonArtifactBinding | None = None,
+    deadline_monotonic: float | None = None,
 ) -> tuple[dict[str, object] | None, str]:
     """Return identity plus a safe reason for health or session failure.
 
@@ -137,12 +192,20 @@ def probe_live_guard_daemon_identity(
     if not math.isfinite(probe_timeout) or probe_timeout <= 0.0:
         return None, "service_unresponsive"
     deadline = time.monotonic() + probe_timeout
+    if deadline_monotonic is not None:
+        if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
+            return None, "service_unresponsive"
+        deadline = min(deadline, deadline_monotonic)
+    if time.monotonic() >= deadline:
+        return None, "service_unresponsive"
 
     def remaining() -> float:
         return max(0.0, deadline - time.monotonic())
 
     state = load_authenticated_daemon_state(guard_home)
     if not isinstance(state, dict):
+        return None, "identity_unverified"
+    if expected_artifact is not None and not expected_artifact.matches(state):
         return None, "identity_unverified"
     version_text = state.get("package_version")
     host = state.get("host")
@@ -177,6 +240,9 @@ def probe_live_guard_daemon_identity(
         return None, "service_unresponsive"
     identity = {**state, "daemon_url": daemon_url}
     if not verify_dashboard:
+        # The state file must still describe the process that passed the health probe.
+        if time.monotonic() >= deadline or load_authenticated_daemon_state(guard_home) != state:
+            return None, "identity_unverified"
         return identity, "healthy"
     session_timeout_remaining = remaining()
     if session_timeout_remaining <= 0.0:
@@ -235,14 +301,22 @@ def verified_live_guard_daemon_identity(
     guard_home: Path,
     *,
     session_timeout: float = 1.0,
+    expected_artifact: DaemonArtifactBinding | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, object] | None:
-    """Return authenticated process identity from the existing health probe."""
+    """Return authenticated live daemon identity after state and health agree."""
     identity, reason = probe_live_guard_daemon_identity(
         guard_home,
         session_timeout=session_timeout,
         verify_dashboard=False,
+        expected_artifact=expected_artifact,
+        deadline_monotonic=deadline_monotonic,
     )
     return identity if reason == "healthy" else None
 
 
-__all__ = ["probe_live_guard_daemon_identity", "verified_live_guard_daemon_identity"]
+__all__ = [
+    "DaemonArtifactBinding",
+    "probe_live_guard_daemon_identity",
+    "verified_live_guard_daemon_identity",
+]

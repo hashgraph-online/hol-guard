@@ -16,19 +16,32 @@ def _manager():
     return manager
 
 
-def guard_recovery_is_disabled(guard_home: Path) -> bool:
-    """Do not restart a daemon when local protection is explicitly off."""
+def guard_recovery_posture(guard_home: Path) -> str:
+    """Return "on", "off" or "unknown" for local protection.
+
+    "unknown" means the config could not be read. Callers that perform a
+    privileged mutation must refuse on it; automatic hook recovery treats it as
+    not disabled so a broken config cannot suppress a valid recovery.
+    """
 
     try:
         from ..config import load_guard_config
         from ..protection_posture import protection_is_off
 
         config = load_guard_config(guard_home)
+        # A harness overridden to Protected keeps enforcing under a global Watch, so
+        # its hooks still need a recoverable daemon.
+        enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
+        off = protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
     except Exception:
-        # Recovery is a privileged mutation. If posture cannot be proven on,
-        # refuse the restart instead of treating unreadable state as enabled.
-        return True
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+        return "unknown"
+    return "off" if off else "on"
+
+
+def guard_recovery_is_disabled(guard_home: Path) -> bool:
+    """Do not restart a daemon when local protection is explicitly off."""
+
+    return guard_recovery_posture(guard_home) == "off"
 
 
 def recover_guard_daemon_after_hook_failure(
@@ -95,7 +108,7 @@ def _existing_recovery_url(manager, guard_home: Path, deadline: float | None) ->
         _record_dead_process(manager, guard_home, state)
         current_url = manager.load_guard_daemon_url(guard_home)
         live_process_url = manager._authenticated_live_current_daemon_url(guard_home, state)
-        return current_url or live_process_url
+        return live_process_url or current_url
 
 
 def authenticated_live_current_daemon_url(guard_home: Path, state: dict[str, object] | None) -> str | None:
@@ -103,6 +116,9 @@ def authenticated_live_current_daemon_url(guard_home: Path, state: dict[str, obj
 
     manager = _manager()
     if not isinstance(state, dict) or not manager._guard_daemon_state_matches_current_runtime(state):
+        return None
+    state_id = state.get("state_id")
+    if not isinstance(state_id, str) or not state_id:
         return None
     pid = state.get("pid")
     port = state.get("port")
@@ -293,6 +309,7 @@ def terminate_recovery_worker(process: subprocess.Popen[bytes]) -> bool:
 __all__ = [
     "authenticated_live_current_daemon_url",
     "guard_recovery_is_disabled",
+    "guard_recovery_posture",
     "recover_guard_daemon_after_hook_failure",
     "schedule_guard_daemon_recovery",
     "terminate_recovery_worker",

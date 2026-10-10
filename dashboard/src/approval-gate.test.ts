@@ -1,7 +1,10 @@
 import { readFileSync } from "node:fs";
 import type { GuardApprovalGatePublicConfig, GuardSettings } from "./guard-types";
-import { approvalGateCooldownLabel, requiresApprovalPasswordPrompt } from "./approval-gate-utils";
-import { buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
+import {
+  approvalGateCooldownLabel,
+  requiresApprovalPasswordPrompt,
+} from "./approval-gate-utils";
+import { approvalGateProofReady, buildApprovalProofCredentials, isApprovalProofSubmitDisabled } from "./approval-proof-inline";
 import { applyApprovalGateDraft, effectiveApprovalGateCooldownSeconds, hasUnsavedChanges } from "./settings-workspace";
 import { cloudReviewConfirmationError, cloudReviewProofIncomplete } from "./settings/cloud-review-settings";
 
@@ -381,6 +384,77 @@ function testDisconnectWaitsForApprovalSettingsBeforeConfirm(): void {
   );
 }
 
+function testApprovalProofBlocksUnreadyGate(): void {
+  const unconfiguredGate: GuardApprovalGatePublicConfig = {
+    enabled: false,
+    configured: false,
+    cooldown_seconds: 0,
+    cooldown_active: false,
+    cooldown_expires_at: null,
+    locked_until: null,
+    fail_closed: false,
+    strict_all_decisions: false,
+    totp_enabled: false,
+    totp_pending: false,
+  };
+  const disabledConfiguredGate: GuardApprovalGatePublicConfig = {
+    ...unconfiguredGate,
+    configured: true,
+  };
+  const readyGate: GuardApprovalGatePublicConfig = {
+    ...unconfiguredGate,
+    enabled: true,
+    configured: true,
+  };
+  const corruptGate: GuardApprovalGatePublicConfig = {
+    ...unconfiguredGate,
+    enabled: true,
+  };
+  assert(approvalGateProofReady(readyGate) === true, "gate proof ready only when enabled and configured");
+  assert(approvalGateProofReady(unconfiguredGate) === false, "unconfigured gate is not proof ready");
+  assert(approvalGateProofReady(disabledConfiguredGate) === false, "disabled gate is not proof ready");
+  assert(approvalGateProofReady(corruptGate) === false, "enabled gate without a verifier is not proof ready");
+  assert(approvalGateProofReady(null) === false, "unresolved gate is not proof ready");
+  assert(
+    isApprovalProofSubmitDisabled(unconfiguredGate, { approvalPassword: "secret123", approvalTotpCode: "" }, false, false, true) === true,
+    "fail-closed surfaces must block proof submission when the gate is unconfigured",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(disabledConfiguredGate, { approvalPassword: "secret123", approvalTotpCode: "" }, false, false, true) === true,
+    "fail-closed surfaces must block proof submission when the gate is disabled",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(corruptGate, { approvalPassword: "secret123", approvalTotpCode: "" }, false, false, true) === true,
+    "fail-closed surfaces must block when the enabled gate has no verifier",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(unconfiguredGate, { approvalPassword: "", approvalTotpCode: "" }, false) === false,
+    "fail-open surfaces submit without proof while the gate is off",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(corruptGate, { approvalPassword: "", approvalTotpCode: "" }, false) === true,
+    "fail-open surfaces still block when an enabled gate has no verifier",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(readyGate, { approvalPassword: "secret123", approvalTotpCode: "" }, false) === false,
+    "ready gate still accepts a password",
+  );
+  assert(
+    isApprovalProofSubmitDisabled(null, { approvalPassword: "secret123", approvalTotpCode: "" }, false) === false,
+    "unresolved gate keeps the permissive submit path",
+  );
+  const dropped = buildApprovalProofCredentials(unconfiguredGate, { approvalPassword: "secret123", approvalTotpCode: "123456" });
+  assert(!("approval_password" in dropped), "unconfigured gate must not send an approval password");
+  assert(!("approval_totp_code" in dropped), "unconfigured gate must not send an authenticator code");
+  const sent = buildApprovalProofCredentials(readyGate, { approvalPassword: "secret123", approvalTotpCode: "123456" });
+  assert(sent.approval_password === "secret123", "ready gate still sends the password");
+  const source = readFileSync(new URL("./approval-proof-inline.tsx", import.meta.url), "utf8");
+  assert(
+    source.includes("approvalGateProofReady(props.approvalGate)") && source.includes("/settings?section=approval"),
+    "shared proof fields must show the approval setup route when the gate is not ready",
+  );
+}
+
 const tests: Array<[string, () => void]> = [
   ["testApprovalGatePublicConfigEnabled", testApprovalGatePublicConfigEnabled],
   ["testApprovalGatePublicConfigDisabled", testApprovalGatePublicConfigDisabled],
@@ -394,6 +468,7 @@ const tests: Array<[string, () => void]> = [
   ["testApprovalProofTotpOverridesPassword", testApprovalProofTotpOverridesPassword],
   ["testApprovalProofRecentTotpSkipsCode", testApprovalProofRecentTotpSkipsCode],
   ["testApprovalProofFreshTotpRequiredForDisconnect", testApprovalProofFreshTotpRequiredForDisconnect],
+  ["testApprovalProofBlocksUnreadyGate", testApprovalProofBlocksUnreadyGate],
   ["testCloudReviewKeepsAuthenticatorFieldAfterRecentProof", testCloudReviewKeepsAuthenticatorFieldAfterRecentProof],
   ["testDisconnectWaitsForApprovalSettingsBeforeConfirm", testDisconnectWaitsForApprovalSettingsBeforeConfirm],
 ];

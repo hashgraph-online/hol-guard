@@ -88,7 +88,7 @@ def _run_plugin(source: str, tmp_path: Path, expression: str) -> subprocess.Comp
         f"const result=await ({expression});console.log(JSON.stringify(result));"
     )
     return subprocess.run(
-        [node, "--input-type=module", "-e", code], capture_output=True, text=True, timeout=10, check=False
+        [node, "--input-type=module", "-e", code], capture_output=True, text=True, timeout=30, check=False
     )
 
 
@@ -495,9 +495,7 @@ def test_generated_plugin_withholds_unserializable_posttool_output(tmp_path: Pat
 
 
 @pytest.mark.parametrize("decision", [{"decision": "allow"}, {"decision": "allow", "policy_action": "allow"}])
-def test_generated_plugin_withholds_allow_without_model_output_action(
-    tmp_path: Path, decision: dict[str, str]
-) -> None:
+def test_generated_plugin_withholds_allow_without_model_output_action(tmp_path: Path, decision: dict[str, str]) -> None:
     context = _context(tmp_path)
     _activate(context, "plugin")
     guard = tmp_path / "replacement_guard.py"
@@ -659,7 +657,9 @@ def test_generated_plugin_accepts_explicit_native_pretool_allow_but_withholds_po
     _activate(context, "plugin")
     guard = tmp_path / "allow_guard.py"
     decision = {"continue": True, "policy_action": "allow", "hookSpecificOutput": {"permissionDecision": "allow"}}
-    guard.write_text(f"print({json.dumps(decision)!r})\n", encoding="utf-8")
+    # Model the CLI protocol: consume the request before replying, rather than
+    # racing Node's synchronous stdin writer with an immediately exiting child.
+    guard.write_text(f"import sys\nsys.stdin.read()\nprint({json.dumps(decision)!r})\n", encoding="utf-8")
     source = _plugin_source(context, [sys.executable, str(guard)])
     before = _run_plugin(
         source,

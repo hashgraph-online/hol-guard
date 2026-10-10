@@ -16,7 +16,7 @@ function remainingStep(candidate: Record<string, unknown>): SupplyChainRepairRem
   const step = stringValue(candidate.step);
   const message = stringValue(candidate.message);
   const action = stringValue(candidate.action);
-  if (step === "intelligence_sync" && action === "connect" && message !== null) {
+  if (((step === "intelligence_sync" && action === "connect") || (step === "package_shims" && action === "check_access")) && message !== null) {
     return { step, message, action };
   }
   return null;

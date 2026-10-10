@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import {
   addedCustomExtensions,
+  connectorWorkspaceItems,
   filterExtensionSuggestions,
   applyBulkCommandState,
   bulkCommandState,
@@ -19,11 +20,39 @@ import {
   suggestedHarnessExtensions,
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
+  waitForMcpDiscoveryJob,
 } from "./local-cli-api";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
+import { fetchLocalCliApi } from "./guard-api";
 
 assert.equal(isLocalCliId("local-cli.cwv-py-abcdef12"), true);
 assert.equal(isLocalCliId("command.git"), false);
+
+for (const [error, guidance] of [
+  ["mcp_launch_failed", "configured executable and dependencies"],
+  ["mcp_transport_failed", "executable, dependencies, and server logs"],
+  ["mcp_initialize_failed", "starts in the host app and uses stdio MCP"],
+  ["mcp_protocol_unsupported", "protocol version Guard does not support"],
+  ["mcp_capability_rejected", "rejected Guard's discovery capabilities"],
+]) {
+  await assert.rejects(waitForMcpDiscoveryJob("local-cli.fixture", {
+    job_id: "a".repeat(32), cli_id: "local-cli.fixture", state: "failed", error,
+  }, new AbortController().signal), (caught: unknown) => caught instanceof Error
+    && caught.message.includes(guidance) && caught.message.includes("Known tools and choices were kept"));
+}
+
+{
+  const receipt = { state: "acknowledged", revision: 3, generation: 8, policy_digest: "a".repeat(64) };
+  const list = (native_publication: unknown) => normalizeLocalCliList({
+    schema_version: "guard.daemon.local-clis.v1", revision: 3, items: [], native_publication,
+  });
+  assert.deepEqual(list(receipt).native_publication, { state: "acknowledged", revision: 3, generation: 8 });
+  for (const invalid of [
+    { ...receipt, revision: 2 }, { ...receipt, generation: true },
+    { ...receipt, generation: 0 }, { ...receipt, policy_digest: "bad" },
+  ]) assert.equal(list(invalid).native_publication, undefined);
+  assert.deepEqual(list({ state: "pending", revision: 3 }).native_publication, { state: "pending", revision: 3 });
+}
 
 const item = normalizeLocalCliItem({
   cli_id: "local-cli.cwv-py-abcdef12",
@@ -79,6 +108,8 @@ const mcpItem = normalizeLocalCliItem({
 });
 assert.equal(mcpItem.surface, "mcp");
 assert.equal(mcpItem.server_identity_hash, "b".repeat(64));
+assert.equal(mcpItem.shares_enrolled_server, undefined);
+assert.equal(normalizeLocalCliItem({ ...mcpItem, shares_enrolled_server: true }).shares_enrolled_server, true);
 assert.equal(
   normalizeLocalCliItem({ ...mcpItem, source_label: "Codex, Claude Code" }).source_label,
   "Codex, Claude Code",
@@ -328,3 +359,43 @@ const mixedValidity = normalizeLocalCliList({
 });
 assert.deepEqual(mixedValidity.items.map((entry) => entry.cli_id), [item.cli_id, blockedItem.cli_id]);
 assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
+
+{
+  const observed = { ...item, cli_id: "local-cli.mcp-observed", name: "Observed connector", surface: "mcp" as const,
+    source_label: "Synthetic host", state: "unset" as const, suggestable: true, last_seen_at: "2026-09-27T12:00:00Z" };
+  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const, suggestable: false };
+  const before = JSON.stringify([item, observed, hidden]);
+  const workspace = connectorWorkspaceItems([item, observed, hidden]);
+  assert.equal(workspace[0]?.cli_id, observed.cli_id);
+  assert.equal(workspace.some((entry) => entry.cli_id === hidden.cli_id), false);
+  assert.deepEqual(connectorWorkspaceItems(workspace, "synthetic host").map((entry) => entry.cli_id), [observed.cli_id]);
+  assert.equal(JSON.stringify([item, observed, hidden]), before);
+  assert.equal(observed.state, "unset");
+}
+
+{
+  // Forget must pass the dashboard's local-CLI path allowlist (issue 3819).
+  const realFetch = globalThis.fetch;
+  const storage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://127.0.0.1:4174", pathname: "/", search: "", hash: "" },
+      sessionStorage: storage,
+      localStorage: storage,
+    },
+  });
+  let requested = "";
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requested = String(input);
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await fetchLocalCliApi("/v1/local-clis/forget", { method: "POST", body: "{}" });
+  } finally {
+    globalThis.fetch = realFetch;
+    Reflect.deleteProperty(globalThis, "window");
+  }
+  assert.match(requested, /\/v1\/local-clis\/forget$/);
+  await assert.rejects(fetchLocalCliApi("/v1/local-clis/forget-all"), /Invalid local CLI API path/);
+}

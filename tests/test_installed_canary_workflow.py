@@ -92,8 +92,9 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
 
     checkout_ref = _text(_mapping(checkout["with"])["ref"])
     assert "github.event.pull_request.head.sha" in checkout_ref
-    assert "github.sha" in checkout_ref
-    assert not any(str(step.get("uses", "")).startswith("astral-sh/setup-uv") for step in steps)
+    assert "needs.build.outputs.source_sha" in checkout_ref
+    setup_uv = _action_step(steps, "astral-sh/setup-uv")
+    assert "if" not in setup_uv
     assert steps.index(setup_python) < steps.index(checkout)
     caches = [step for step in steps if "cache" in str(step.get("uses", ""))]
     assert len(caches) == 1
@@ -115,11 +116,32 @@ def test_pr_native_wheel_checkout_cannot_write_release_compilation_cache() -> No
     assert "uv sync" not in commands
 
 
+def test_verify_step_preserves_version_matched_runtime_fingerprint() -> None:
+    steps = _steps(_job("build-native-guard-wheels"))
+    build_step = _named_step(steps, "Build version-matched runtime")
+    verify = next(step for step in steps if "verify_native_command_program.py" in str(step.get("run", "")))
+    assemble = next(step for step in steps if "build_native_hol_guard_wheel.py" in str(step.get("run", "")))
+
+    build_env = _mapping(build_step["env"])
+    verify_env = _mapping(verify["env"])
+    for name in (
+        "HOL_GUARD_BUILD_SHA",
+        "HOL_GUARD_PACKAGE_VERSION",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX",
+        "HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_FINGERPRINT_HEX",
+        "RUSTFLAGS",
+    ):
+        assert verify_env[name] == build_env[name]
+    assert verify_env["HOL_GUARD_PACKAGE_VERSION"] == "${{ needs.build.outputs.version }}"
+    assert steps.index(build_step) < steps.index(verify) < steps.index(assemble)
+
+
 def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard() -> None:
     steps = _steps(_job("pr-installed-canary"))
     names = [step.get("name") for step in steps]
 
     assert "Download exact TestPyPI wheel bytes" in names
+    assert "Bind compatible native canary wheel" in names
     assert "Verify PR head, version, and TestPyPI bytes" in names
     assert "Install only the verified wheel" in names
     assert "Prove the harness rejects missing evidence" in names
@@ -128,6 +150,8 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     workflow_text = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "verify-release --registry testpypi" in workflow_text
     assert "--download-dir verified-testpypi" in workflow_text
+    assert "scripts/select_installed_native_wheel.py" in workflow_text
+    assert "--dist-dir selected-native" in workflow_text
     assert "git rev-parse 'HEAD^{commit}'" in workflow_text
     assert "installed-canary/missing-subject.json" in workflow_text
     assert "-m scripts.run_installed_canary" in workflow_text
@@ -171,15 +195,21 @@ def test_matrix_proves_remote_bytes_install_origin_record_corpus_and_dashboard()
     assert 'shutil.which("bun")' in runner_text
     assert '"build",' in runner_text
     assert 'manifest["canonical_digests"]' in runner_text
-    assert "observed = decision.decision_plane.action" in runner_text
-    assert "observed = decision.minimum_action" not in runner_text
+    assert "scripts/run_installed_native_corpus.py" in runner_text
+    assert 'report.get("native_contract_equality") is not True' in runner_text
+    assert 'report.get("original_oracle_below_count") != 0' in runner_text
+    installed_native_runner_text = (ROOT / "scripts/run_installed_native_corpus.py").read_text(encoding="utf-8")
+    assert 'distribution("hol-guard").locate_file("codex_plugin_scanner")' in installed_native_runner_text
+    assert "runner._coordinator_report()" in installed_native_runner_text
     assert '"no_post_execution_proof": _no_post_execution_proof_smoke()' in runner_text
     attributes_text = (ROOT / ".gitattributes").read_text(encoding="utf-8")
     assert "/tests/guard_command_corpus*.py text eol=lf" in attributes_text
     assert "/tests/fixtures/guard-command-corpus/*.json text eol=lf" in attributes_text
+    assert "/rust/crates/guard-command/src/*.rs text eol=lf" in attributes_text
+    assert "/rust/crates/guard-command/src/command_compatibility/*.rs text eol=lf" in attributes_text
     assert "/src/codex_plugin_scanner/guard/daemon/static/index.html text eol=lf" in attributes_text
     assert '"$CANARY_PYTHON" -m pip install --no-compile' in workflow_text
-    assert 'python -m venv "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text
+    assert 'python -m venv --copies "$RUNNER_TEMP/hol-guard-canary-venv"' in workflow_text
     assert "uv pip install" not in workflow_text
 
 

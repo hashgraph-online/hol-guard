@@ -4,8 +4,14 @@ on:
   pull_request:
     paths:
       - ".github/workflows/mdm-local-lab.yml"
+      - ".github/actions/setup-rust/**"
+      - "rust/Cargo.lock"
+      - "rust/crates/guard-contracts/src/policy_bundle_*.rs"
+      - "rust/crates/guard-runtime/src/policy_bundle_*.rs"
+      - "rust/crates/guard-runtime/src/resident_*.rs"
       - "scripts/mdm/**"
       - "src/codex_plugin_scanner/guard/mdm/**"
+      - "src/codex_plugin_scanner/guard/*policy_bundle*.py"
       - "tests/test_guard_mdm_*.py"
       - "tests/test_guard_self_protection_schemas.py"
   workflow_dispatch:
@@ -35,6 +41,23 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --python 3.12 --extra dev --frozen
+      - uses: ./.github/actions/stage-command-projections
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: mdm-local-lab-native
+      # Managed policy keyrings and policy bundle snapshots are decided by the
+      # resident runtime, which fails closed when no binary is bound.
+      - name: Build and bind the native runtime
+        shell: bash
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            suffix=".exe"
+          fi
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime$suffix" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - run: uv run --python 3.12 --no-sync python scripts/mdm/run-local-lab.py --json --output mdm-local-conformance.json ${{ matrix.suites }}
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

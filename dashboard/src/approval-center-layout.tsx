@@ -24,6 +24,7 @@ import type {
 import { useGuardUpdate } from "./guard-update-panel";
 import { updateSettings } from "./guard-api";
 import { WatchProtectionBanner } from "./watch-protection-banner";
+import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
 
 const McpPolicyRequestPanel = lazyWorkspace("mcp-policy-request-panel", () =>
   import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
@@ -61,6 +62,7 @@ type RuntimeState =
 export type { BulkGateCredentials } from "./approval-gate-utils";
 
 type LayoutProps = {
+  onRetryDetail?: () => void;
   view: AppView;
   requests: RequestState;
   detail: DetailState;
@@ -79,6 +81,7 @@ type LayoutProps = {
   supplyChainHubContent?: ReactNode;
   policyContent?: ReactNode;
   aboutContent?: ReactNode;
+  protectionRepairContent?: ReactNode;
   onGoHome: () => void;
   onNavigate: (pathname: string) => void;
   onOpenRequest: (requestId: string) => void;
@@ -100,20 +103,24 @@ type LayoutProps = {
   onClearEvidence?: () => void;
   onRetryResume?: () => void;
   onGuardReconnected?: () => void;
-  enableUpdateStatus?: boolean;
 };
 
-function InboxWatchBanner(props: { onRestored?: () => void; onOpenSettings: () => void }) {
+function InboxWatchBanner(props: {
+  snapshot: GuardRuntimeSnapshot;
+  onRestored?: () => void;
+  onOpenSettings: () => void;
+}) {
+  const { snapshot } = props;
   const handleTurnOn = useCallback(() => {
-    void updateSettings({ protection_posture: "protected" })
+    void updateSettings(turnProtectionOnUpdate(snapshot))
       .then(() => {
         props.onRestored?.();
       })
       .catch(() => {
         props.onOpenSettings();
       });
-  }, [props.onOpenSettings, props.onRestored]);
-  return <WatchProtectionBanner onTurnProtectionOn={handleTurnOn} />;
+  }, [props.onOpenSettings, props.onRestored, snapshot]);
+  return <WatchProtectionBanner model={watchBannerModel(snapshot)} onTurnProtectionOn={handleTurnOn} />;
 }
 
 function renderInboxContent(props: LayoutProps): ReactNode {
@@ -158,6 +165,9 @@ function renderInboxContent(props: LayoutProps): ReactNode {
     <ReviewWorkspace
       requests={props.requests.items}
       activeRequestId={props.activeRequestId}
+      detailError={props.detail.kind === "error" ? props.detail.message : null}
+      detailLoading={props.detail.kind === "loading"}
+      onRetryDetail={props.onRetryDetail}
       detail={
         props.detail.kind === "ready"
           ? {
@@ -203,6 +213,9 @@ function renderViewContent(props: LayoutProps): ReactNode {
   }
   if (props.view === "extensions") {
     return props.extensionsContent;
+  }
+  if (props.view === "protection-repair") {
+    return props.protectionRepairContent ?? null;
   }
   if (props.view === "settings") {
     return props.settingsContent;
@@ -266,7 +279,7 @@ export function ApprovalCenterLayout(props: LayoutProps) {
     onUpdateGuard,
     onReinstallGuard,
     onSetUpdateChannel,
-  } = useGuardUpdate({ onReconnected: props.onGuardReconnected, enabled: props.enableUpdateStatus });
+  } = useGuardUpdate({ onReconnected: props.onGuardReconnected });
 
   return (
     <div className="min-h-screen bg-white text-brand-dark">
@@ -308,9 +321,10 @@ export function ApprovalCenterLayout(props: LayoutProps) {
           <div className="guard-shell-workspace" data-view={props.view}>
             {props.view === "inbox"
               && props.runtime.kind === "ready"
-              && props.runtime.snapshot.protection_posture === "watch" ? (
+              && watchBannerModel(props.runtime.snapshot) !== null ? (
               <div className="mb-4">
                 <InboxWatchBanner
+                  snapshot={props.runtime.snapshot}
                   onRestored={props.onGuardReconnected}
                   onOpenSettings={handleOpenSettings}
                 />

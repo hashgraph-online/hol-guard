@@ -9,6 +9,7 @@ import secrets
 import signal
 import socket
 import subprocess
+import tempfile
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
@@ -16,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.native_runtime.native_process_test_support import process_is_alive
 from codex_plugin_scanner.guard.live_process_identity import process_start_token
 from codex_plugin_scanner.guard.native_policy_snapshot import (
     _policy_snapshot_push_bytes_v3,
@@ -34,15 +36,24 @@ def native_runtime(tmp_path: Path) -> Iterator[tuple[Path, Path]]:
         pytest.skip("compiled native runtime is required")
     assert _NATIVE_BINARY is not None
     runtime = Path(_NATIVE_BINARY).resolve(strict=True)
-    state_dir = tmp_path / "native-runtime"
-    state_dir.mkdir(mode=0o700)
-    yield runtime, state_dir
-    subprocess.run(
-        (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
-        check=False,
-        capture_output=True,
-        timeout=2,
+    state_root = (
+        tempfile.TemporaryDirectory(prefix="hol-guard-native-runtime-", dir=Path.home()) if os.name == "nt" else None
     )
+    state_dir = (Path(state_root.name) if state_root is not None else tmp_path) / "native-runtime"
+    state_dir.mkdir(mode=0o700)
+    try:
+        yield runtime, state_dir
+    finally:
+        try:
+            subprocess.run(
+                (str(runtime), "resident-stop", "--state-dir", str(state_dir)),
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+        finally:
+            if state_root is not None:
+                state_root.cleanup()
 
 
 def _rule_digest(runtime: Path) -> str:
@@ -66,6 +77,7 @@ def _request(
     default_action: str = "allow",
     deadline_budget_ms: int = 1_000,
     risk_actions: dict[str, str] | None = None,
+    generation: int = 1,
 ) -> bytes:
     runtime_identity = hashlib.sha256(runtime.read_bytes()).hexdigest()
     rule_digest = _rule_digest(runtime)
@@ -93,7 +105,7 @@ def _request(
         runtime_identity=runtime_identity,
         rule_digest=rule_digest,
         verifier_key=derive_native_policy_verifier_key(policy_master),
-        generation=1,
+        generation=generation,
     )
     return json.dumps(
         {
@@ -106,7 +118,7 @@ def _request(
                 "tool_input": {"command": command},
             },
             "deadline_budget_ms": deadline_budget_ms,
-            "policy_generation": 1,
+            "policy_generation": generation,
             "policy_snapshot": policy_snapshot,
             "source": {
                 "cwd": str(root),
@@ -119,20 +131,55 @@ def _request(
     ).encode()
 
 
+def _startup_diagnostic(runtime: Path, state_dir: Path) -> str:
+    """Expose only bounded native error codes from a failed test-only startup."""
+    try:
+        result = subprocess.run(
+            (
+                str(runtime),
+                "serve-managed",
+                "--state-dir",
+                str(state_dir),
+                "--generation",
+                str(time.time_ns()),
+                "--owner-process-id",
+                str(os.getpid()),
+                "--runtime-sha256",
+                hashlib.sha256(runtime.read_bytes()).hexdigest(),
+            ),
+            input=b"51" * 32 + b"\n",
+            capture_output=True,
+            check=False,
+            timeout=3,
+        )
+    except subprocess.TimeoutExpired:
+        return "native_test_direct_start_timeout"
+    return _native_diagnostic(result.stderr) if result.returncode else "native_test_direct_start_ok"
+
+
 def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
     value = json.loads(request)
     assert isinstance(value, dict)
     snapshot = value["policy_snapshot"]
     assert isinstance(snapshot, dict)
-    result = subprocess.run(
-        (str(runtime), "resident-client", "--stdin", str(state_dir)),
-        input=_policy_snapshot_push_bytes_v3(snapshot),
-        check=False,
-        capture_output=True,
-        timeout=8,
-    )
+    try:
+        result = subprocess.run(
+            (str(runtime), "resident-client", "--stdin", str(state_dir)),
+            input=_policy_snapshot_push_bytes_v3(snapshot),
+            check=False,
+            capture_output=True,
+            timeout=8,
+        )
+    except subprocess.TimeoutExpired:
+        raise AssertionError(
+            "native policy push failed: native_policy_snapshot_push_timed_out; "
+            f"direct startup: {_startup_diagnostic(runtime, state_dir)}"
+        ) from None
     if result.returncode != 0:
-        raise AssertionError(f"native policy push failed: {_native_diagnostic(result.stderr)}")
+        raise AssertionError(
+            f"native policy push failed: {_native_diagnostic(result.stderr)}; "
+            f"direct startup: {_startup_diagnostic(runtime, state_dir)}"
+        )
     try:
         acknowledgement = json.loads(result.stdout)
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
@@ -318,12 +365,13 @@ def _terminate_process(process_id: int) -> None:
     except OSError:
         return
     deadline = time.monotonic() + 2
+    # Signal 0 is CTRL_C_EVENT on Windows, not a harmless liveness probe.
+    # Query the process handle there instead of interrupting the test console.
     while time.monotonic() < deadline:
-        try:
-            os.kill(process_id, 0)
-        except OSError:
+        if not process_is_alive(process_id):
             return
         time.sleep(0.01)
+    raise AssertionError("native test process did not terminate within its deadline")
 
 
 def _read_exact(client: socket.socket, length: int) -> bytes:

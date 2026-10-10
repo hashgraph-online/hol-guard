@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 _MAX_INPUT_BYTES = 4 * 1024 * 1024
+_MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
 _MAX_COMPILER_BYTES = 128 * 1024 * 1024
@@ -213,7 +214,7 @@ def _canonical_request(request: Mapping[str, object]) -> bytes:
         )
     except (TypeError, ValueError) as exc:
         raise NativeSourceCompilerError("compiler request is not canonical JSON") from exc
-    if len(encoded) > _MAX_INPUT_BYTES:
+    if len(encoded) > _MAX_REQUEST_BYTES:
         raise NativeSourceCompilerError("compiler request exceeds the native input bound")
     return encoded
 
@@ -250,7 +251,7 @@ def _decode_output(
 @contextmanager
 def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
-    with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-") as directory:
+    with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-", ignore_cleanup_errors=True) as directory:
         name = "guard-command-source.exe" if os.name == "nt" else "guard-command-source"
         path = Path(directory) / name
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)

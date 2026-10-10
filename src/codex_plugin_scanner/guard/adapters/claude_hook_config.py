@@ -6,7 +6,9 @@ from pathlib import Path
 
 from .base import HarnessContext
 
-CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+# Grep reads file contents, including hidden files such as `.env`; the
+# native authority proves directory scopes before allowing them.
+CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
 CLAUDE_GUARD_POST_TOOL_MATCHER = f"{CLAUDE_GUARD_TOOL_MATCHER}|AskUserQuestion"
 CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
 CLAUDE_GUARD_SESSION_START_MATCHERS = ("startup", "resume", "clear", "compact")
@@ -16,6 +18,9 @@ CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_STOP_TIMEOUT_SECONDS = 10
 CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
 CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
+# Authenticated daemon marker: defer a PermissionRequest to Claude's own
+# dialog without supplying a decision.
+CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY = "guard_permission_passthrough"
 
 
 def manifest_notes(payload: dict[str, object]) -> list[str]:
@@ -185,16 +190,6 @@ def merge_hook_group(
     return normalized
 
 
-def group_has_handler(entry: object, handler: dict[str, object]) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    hooks = entry.get("hooks")
-    if not isinstance(hooks, list):
-        return False
-    expected_identity = handler_identity(handler)
-    return any(isinstance(hook, dict) and handler_identity(hook) == expected_identity for hook in hooks)
-
-
 def prune_guard_hook_entries(entries: list[object]) -> list[object]:
     remaining: list[object] = []
     for entry in entries:
@@ -212,29 +207,4 @@ def prune_guard_hook_entries(entries: list[object]) -> list[object]:
             updated_entry = dict(entry)
             updated_entry["hooks"] = filtered_hooks
             remaining.append(updated_entry)
-    return remaining
-
-
-def remove_hook_entry(entries: list[object], handler: dict[str, object]) -> list[object]:
-    remaining: list[object] = []
-    expected_identity = handler_identity(handler)
-    for entry in entries:
-        if not isinstance(entry, dict):
-            remaining.append(entry)
-            continue
-        if is_guard_hook_handler(entry):
-            continue
-        if group_has_handler(entry, handler):
-            hooks = entry.get("hooks")
-            if not isinstance(hooks, list):
-                continue
-            filtered_hooks = [
-                item for item in hooks if not (isinstance(item, dict) and handler_identity(item) == expected_identity)
-            ]
-            if filtered_hooks:
-                updated_entry = dict(entry)
-                updated_entry["hooks"] = filtered_hooks
-                remaining.append(updated_entry)
-            continue
-        remaining.append(entry)
     return remaining

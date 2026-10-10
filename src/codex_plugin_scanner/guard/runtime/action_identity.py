@@ -8,7 +8,6 @@ or hashing across repeated calls with transient variation stripped out.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 
 _ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*[mABCDEFGHJKSTfhinsu]")
@@ -60,31 +59,6 @@ def normalize_prompt_identity(prompt: str) -> str:
     normalized = re.sub(r"\s+", " ", normalized).strip()
     normalized = normalized.lower()
     return normalized
-
-
-def normalize_mcp_identity(call: dict[str, object]) -> str:
-    """Return a stable identity hash for an MCP tool call.
-
-    The identity is derived from:
-    - server_id
-    - tool_name
-    - arguments (sorted keys, stable JSON)
-    - schema_hash (when present)
-
-    Returns a hex digest suitable for equality comparison.
-    """
-    server_id = str(call.get("server_id", ""))
-    tool_name = str(call.get("tool_name", ""))
-    arguments = call.get("arguments", {})
-    schema_hash = str(call.get("schema_hash", ""))
-
-    stable_args = json.dumps(
-        {k: v for k, v in sorted(arguments.items())} if isinstance(arguments, dict) else arguments,
-        sort_keys=True,
-        ensure_ascii=True,
-    )
-    identity_source = f"{server_id}:{tool_name}:{stable_args}:{schema_hash}"
-    return hashlib.sha256(identity_source.encode("utf-8")).hexdigest()
 
 
 def normalize_browser_mcp_identity(call: dict[str, object]) -> str:

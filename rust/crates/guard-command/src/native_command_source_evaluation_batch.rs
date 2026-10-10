@@ -13,6 +13,12 @@ struct Request {
     schema: String,
     cases: Vec<Case>,
     #[serde(default)]
+    home_dir: Option<String>,
+    #[serde(default)]
+    cwd: Option<String>,
+    #[serde(default)]
+    execution_environment: Option<guard_contracts::GuardExecutionEnvironmentV1>,
+    #[serde(default)]
     controls: Vec<NativeExtensionControlV1>,
     #[serde(default)]
     managed_controls: Vec<NativeExtensionControlV1>,
@@ -20,6 +26,11 @@ struct Request {
     global_lockdown: bool,
     #[serde(default)]
     managed_global_lockdown: bool,
+    /// Binds the synthetic snapshot to a non-default authority health so
+    /// offline fixtures can exercise the host health floor with evidence that
+    /// matches the unhealthy binding. Admission still validates the value.
+    #[serde(default)]
+    health: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -45,6 +56,16 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
         || request.cases.len() > MAX_CASES
     {
         return Err("command_source_evaluation_batch_contract_invalid");
+    }
+    for path in [&request.home_dir, &request.cwd].into_iter().flatten() {
+        if path.is_empty() || path.len() > 32_768 || path.contains('\0') {
+            return Err("command_source_evaluation_batch_context_invalid");
+        }
+    }
+    if request.execution_environment.is_some()
+        && (request.home_dir.is_none() || request.cwd.is_none())
+    {
+        return Err("command_source_evaluation_batch_context_invalid");
     }
     let mut ids = BTreeSet::new();
     for case in &request.cases {
@@ -74,7 +95,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema":"guard.native-command-control-binding.v1",
         "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,
-        "trust_digest":program.trust_digest,"health":"protected","revision":1,
+        "trust_digest":program.trust_digest,"health":request.health.as_deref().unwrap_or("protected"),"revision":1,
         "managed_revision":if managed_layer {1} else {0},
         "effective_digest":"","layers":layers,
     }))
@@ -84,12 +105,18 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
 
     let mut results = Vec::with_capacity(request.cases.len());
     for case in request.cases {
-        let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
+        let result = crate::pretool::evaluate_pre_tool_envelope_with_execution_context(
             "claude-code",
             "PreToolUse",
             &serde_json::json!({"tool_name":"Bash","tool_input":{"command":case.command}}),
             Some(&controls),
             None,
+            crate::pretool::PathContext {
+                home_dir: request.home_dir.as_deref(),
+                cwd: request.cwd.as_deref(),
+                cdpath_unset: false,
+            },
+            request.execution_environment.as_ref(),
         );
         // This is the same model returned by `hol-guard-runtime pre-tool` for
         // the single-command fixture. Preserve that adapter's provenance.
@@ -185,6 +212,24 @@ mod tests {
     }
 
     #[test]
+    fn health_is_bound_into_the_synthetic_snapshot_and_validated() {
+        let mut input: Value =
+            serde_json::from_slice(&request(serde_json::json!([{"id":"a","command":"pwd"}])))
+                .unwrap();
+        let protected = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(protected["control_binding"]["health"], "protected");
+        input["health"] = serde_json::json!("tampered");
+        let tampered = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(tampered["control_binding"]["health"], "tampered");
+        assert_ne!(
+            protected["control_binding"]["effective_digest"],
+            tampered["control_binding"]["effective_digest"]
+        );
+        input["health"] = serde_json::json!("healthy");
+        assert!(evaluate_batch(&serde_json::to_vec(&input).unwrap()).is_err());
+    }
+
+    #[test]
     fn global_lockdown_is_bound_even_without_individual_controls() {
         let baseline: Value = serde_json::from_slice(&request(serde_json::json!([
             {"id":"safe","command":"pwd"}
@@ -201,6 +246,10 @@ mod tests {
                 payload["reason_code"],
                 "native_command_control_authority_block"
             );
+            assert!(!payload["reason"]
+                .as_str()
+                .unwrap()
+                .contains("hol-guard command controls"));
             assert_ne!(
                 blocked["control_binding"]["effective_digest"],
                 allowed["control_binding"]["effective_digest"]

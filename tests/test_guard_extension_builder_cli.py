@@ -21,24 +21,18 @@ def invoke(arguments: list[str], capsys: pytest.CaptureFixture[str]) -> tuple[in
     return result, json.loads(capsys.readouterr().out)
 
 
-def write_trust_map(repository: Path, classes: dict[str, list[object]]) -> None:
-    trust_map = repository / "contracts/extensions/trust-class-map.v1.json"
-    trust_map.parent.mkdir(parents=True, exist_ok=True)
-    trust_map.write_text(
+def write_external_trust_map(repository: Path, extension_id: str = "command.demo") -> None:
+    binding = repository / f"contracts/extensions/trust/{extension_id}.v1.json"
+    binding.parent.mkdir(parents=True, exist_ok=True)
+    binding.write_text(
         canonical_json(
             {
-                "schemaVersion": "guard.extension-trust-class-map.v1",
-                "classes": classes,
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": extension_id,
+                "trustClass": "external",
             }
         ),
         encoding="utf-8",
-    )
-
-
-def write_external_trust_map(repository: Path, extension_id: str = "command.demo") -> None:
-    write_trust_map(
-        repository,
-        {"first-party": [], "trusted-library": [], "external": [extension_id]},
     )
 
 
@@ -326,59 +320,56 @@ def test_cli_handoff_rejects_noncanonical_paths_before_running_preparation(
 
 
 @pytest.mark.parametrize(
-    ("trust_map", "code"),
+    ("schema", "extension", "trust_class", "code"),
     [
-        ({"schemaVersion": "other", "classes": {}}, "trust_schema"),
-        (
-            {
-                "schemaVersion": "guard.extension-trust-class-map.v1",
-                "classes": {"first-party": [], "trusted-library": [], "external": [123]},
-            },
-            "trust_shape",
-        ),
-        (
-            {
-                "schemaVersion": "guard.extension-trust-class-map.v1",
-                "classes": {"first-party": [], "trusted-library": [], "external": ["command.other"]},
-            },
-            "missing_external_trust",
-        ),
-        (
-            {
-                "schemaVersion": "guard.extension-trust-class-map.v1",
-                "classes": {"first-party": ["command.demo"], "trusted-library": [], "external": []},
-            },
-            "trust_class",
-        ),
-        (
-            {
-                "schemaVersion": "guard.extension-trust-class-map.v1",
-                "classes": {
-                    "first-party": ["command.demo"],
-                    "trusted-library": [],
-                    "external": ["command.demo"],
-                },
-            },
-            "trust_class",
-        ),
+        ("other", "command.demo", "external", "trust_shape"),
+        ("guard.extension-trust-binding.v1", 123, "external", "trust_shape"),
+        ("guard.extension-trust-binding.v1", "command.other", "external", "missing_external_trust"),
+        ("guard.extension-trust-binding.v1", "command.demo", "first-party", "trust_class"),
+        ("guard.extension-trust-binding.v1", "command.demo", "unknown", "trust_shape"),
     ],
 )
-def test_cli_handoff_rejects_invalid_trust_maps(
+def test_cli_handoff_rejects_invalid_trust_bindings(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    trust_map: dict[str, object],
+    schema: str,
+    extension: object,
+    trust_class: str,
     code: str,
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["hol-guard"])
     source_path, fixture_path = write_handoff_inputs(tmp_path, include_script=False)
-    map_path = tmp_path / "contracts/extensions/trust-class-map.v1.json"
+    identity = extension if isinstance(extension, str) else "command.demo"
+    map_path = tmp_path / f"contracts/extensions/trust/{identity}.v1.json"
     map_path.parent.mkdir(parents=True)
-    map_path.write_text(canonical_json(trust_map), encoding="utf-8")
+    map_path.write_text(
+        canonical_json({"schemaVersion": schema, "extension": extension, "trustClass": trust_class}),
+        encoding="utf-8",
+    )
 
     status, error = invoke(handoff_arguments(tmp_path, source_path, fixture_path), capsys)
 
     assert status == 2 and error["error"]["code"] == code
+
+
+def test_cli_handoff_requires_authored_binding_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["hol-guard"])
+    source_path, fixture_path = write_handoff_inputs(tmp_path)
+    aggregate = tmp_path / "contracts/extensions/trust-class-map.v1.json"
+    aggregate.parent.mkdir(parents=True)
+    aggregate.write_text(
+        canonical_json(
+            {
+                "schemaVersion": "guard.extension-trust-class-map.v1",
+                "classes": {"external": ["command.demo"]},
+            }
+        )
+    )
+    status, error = invoke(handoff_arguments(tmp_path, source_path, fixture_path), capsys)
+    assert status == 2 and error["error"]["code"] == "trust_shape"
 
 
 def test_cli_handoff_requires_repository_preparation_tooling(
@@ -424,7 +415,18 @@ def test_cli_handoff_human_output_confirms_the_safety_boundary(
 ) -> None:
     monkeypatch.setattr(sys, "argv", ["hol-guard"])
     source_path, fixture_path = write_handoff_inputs(tmp_path)
-    write_external_trust_map(tmp_path)
+    binding = tmp_path / "contracts/extensions/trust/command.demo.v1.json"
+    binding.parent.mkdir(parents=True)
+    binding.write_text(
+        canonical_json(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": "command.demo",
+                "trustClass": "external",
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.extension_builder_commands.subprocess.run",
         lambda command, **_kwargs: subprocess.CompletedProcess(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { HiMiniArrowLeft, HiMiniArrowTopRightOnSquare, HiMiniLockClosed } from "react-icons/hi2";
 
 import {
@@ -10,6 +10,7 @@ import {
 } from "../extension-control-center-model";
 import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../extension-controls-api";
 import { ExtensionPolicyPanel } from "../extension-policy-panel";
+import { useConfirmDialog } from "../confirm-dialog";
 import type { GuardRuntimeSnapshot } from "../guard-types";
 import { buildLocalProtectionView } from "../managed-controls/local-protection-model";
 import {
@@ -23,6 +24,8 @@ import { McpServerDefaults } from "./mcp-server-defaults";
 import { ProtectionTestLab } from "./protection-test-lab";
 
 export type ProtectionDetailTab = "overview" | "permissions" | "managed-controls" | "activity" | "technical";
+
+const DRAFT_EXIT_MESSAGE = "Discard your unreviewed protection setting changes?";
 
 const DETAIL_TABS: ReadonlyArray<{ id: ProtectionDetailTab; label: string }> = [
   { id: "overview", label: "Overview" },
@@ -39,12 +42,23 @@ export function canonicalProtectionDetailTab(tab: ExtensionDetailUrlState["tab"]
   return tab === "activity" ? "activity" : "overview";
 }
 
+function availabilityTitle(extension: ExtensionCatalogItem): string {
+  if (extension.surface === "mcp") return "MCP tools available";
+  if (extension.surface === "unsupported") return "Protection available";
+  return "Commands available";
+}
+
 function requiredLine(extension: ExtensionCatalogItem): string | null {
   if (!extension.required) return null;
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
 }
 
 function availabilityCopy(extension: ExtensionCatalogItem, enabled: boolean): string {
+  if (extension.surface === "unsupported") {
+    return enabled
+      ? "This protection follows the settings below. Update Guard to see what it covers."
+      : "This protection is off on this device. Update Guard to see what it covers.";
+  }
   if (extension.surface === "mcp" && extension.trust_class === "external") {
     if (enabled) {
       return "Matching MCP tools follow the protection settings below. Turn off to leave this community server inactive.";
@@ -153,6 +167,11 @@ export function ProtectionModuleDetail(props: {
   onRequestExtensionChange?: (extension: ExtensionCatalogItem, enabled: boolean) => void;
 }) {
   const [policyDirty, setPolicyDirty] = useState(false);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
+  const urlStateRef = useRef(props.urlState);
+  urlStateRef.current = props.urlState;
+  const onUrlStateRef = useRef(props.onUrlState);
+  onUrlStateRef.current = props.onUrlState;
   useEffect(() => {
     let highlightTimer = 0;
     let highlighted: HTMLElement | null = null;
@@ -207,17 +226,29 @@ export function ProtectionModuleDetail(props: {
     (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by "),
   );
   const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || undefined;
-  const setActiveTab = useCallback((tab: ProtectionDetailTab): boolean => {
+  const setActiveTab = useCallback(async (tab: ProtectionDetailTab): Promise<boolean> => {
     if (!props.onUrlState) return false;
+    const needsConfirmation = tab !== activeTab && policyDirty;
     if (
-      tab !== activeTab
-      && policyDirty
-      && !window.confirm("Discard your unreviewed protection setting changes?")
+      needsConfirmation
+      && !(await requestConfirmation({
+        title: "Discard unreviewed changes?",
+        description: DRAFT_EXIT_MESSAGE,
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        tone: "destructive",
+      }))
     ) {
       return false;
     }
-    props.onUrlState({
-      ...(props.urlState ?? {
+    const latestUrlState = urlStateRef.current;
+    const latestOnUrlState = onUrlStateRef.current;
+    if (!latestOnUrlState) return false;
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
+      return false;
+    }
+    latestOnUrlState({
+      ...(latestUrlState ?? {
         tab: "overview",
         query: "",
         risk: "all",
@@ -233,8 +264,8 @@ export function ProtectionModuleDetail(props: {
       ruleId: null,
     });
     return true;
-  }, [activeTab, policyDirty, props.onUrlState, props.urlState]);
-  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: ProtectionDetailTab) => {
+  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
+  const handleTabKeyDown = async (event: KeyboardEvent<HTMLButtonElement>, tab: ProtectionDetailTab) => {
     if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
     const index = DETAIL_TABS.findIndex((item) => item.id === tab);
     let nextIndex = index;
@@ -246,17 +277,26 @@ export function ProtectionModuleDetail(props: {
     event.preventDefault();
     const next = DETAIL_TABS[nextIndex];
     if (!next) return;
-    if (!setActiveTab(next.id)) return;
+    if (!(await setActiveTab(next.id))) return;
     window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
   };
-  const handleBack = () => {
-    if (policyDirty && !window.confirm("Discard your unreviewed protection setting changes?")) return;
+  const handleBack = async () => {
+    if (
+      policyDirty
+      && !(await requestConfirmation({
+        title: "Discard unreviewed changes?",
+        description: DRAFT_EXIT_MESSAGE,
+        confirmLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+        tone: "destructive",
+      }))
+    ) return;
     props.onBack();
   };
 
   return (
     <div data-testid="protection-module-detail" className="w-full">
-      <button type="button" onClick={handleBack} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark">
+      <button type="button" onClick={() => void handleBack()} className="inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark">
         <HiMiniArrowLeft className="size-4" aria-hidden="true" />
         Extensions
       </button>
@@ -293,7 +333,7 @@ export function ProtectionModuleDetail(props: {
               <span className="guard-tool-switch-knob" />
             </button>
             <div>
-              <p className="text-sm font-semibold text-brand-dark">{props.extension.surface === "mcp" ? "MCP tools available" : "Commands available"}</p>
+              <p className="text-sm font-semibold text-brand-dark">{availabilityTitle(props.extension)}</p>
               <p className="text-xs leading-5 text-brand-dark/75">
                 {availabilityCopy(props.extension, extensionEnabled)}
               </p>
@@ -320,8 +360,8 @@ export function ProtectionModuleDetail(props: {
             aria-selected={activeTab === tab.id}
             aria-controls={`protection-panel-${tab.id}`}
             tabIndex={activeTab === tab.id ? 0 : -1}
-            onClick={() => setActiveTab(tab.id)}
-            onKeyDown={(event) => handleTabKeyDown(event, tab.id)}
+            onClick={() => void setActiveTab(tab.id)}
+            onKeyDown={(event) => void handleTabKeyDown(event, tab.id)}
             className={`-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`}
           >
             {tab.label}
@@ -384,6 +424,7 @@ export function ProtectionModuleDetail(props: {
       {activeTab === "technical" ? <div id="protection-panel-technical" role="tabpanel" aria-labelledby="protection-tab-technical" className="mt-6">
         <DeveloperModuleDetails extension={props.extension} effective={props.effective} catalogDigest={props.catalogDigest} />
       </div> : null}
+      {confirmDialog}
     </div>
   );
 }

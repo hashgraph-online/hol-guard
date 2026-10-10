@@ -11,9 +11,11 @@
 [![Publish](https://img.shields.io/github/actions/workflow/status/hashgraph-online/hol-guard/publish.yml?branch=main&label=Publish&logo=githubactions&logoColor=white)](https://github.com/hashgraph-online/hol-guard/actions/workflows/publish.yml)
 [![Container Image](https://img.shields.io/badge/ghcr-hol--guard-2496ED?logo=docker&logoColor=white)](https://github.com/hashgraph-online/hol-guard/pkgs/container/hol-guard)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/hashgraph-online/hol-guard/badge)](https://scorecard.dev/viewer/?uri=github.com/hashgraph-online/hol-guard)
+[![Vercel OSS Program](https://vercel.com/oss/program-badge.svg)](https://vercel.com/oss)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/hashgraph-online/hol-guard?style=social)](https://github.com/hashgraph-online/hol-guard/stargazers)
 [![Lint: ruff](https://img.shields.io/badge/lint-ruff-D7FF64.svg)](https://github.com/astral-sh/ruff)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/hashgraph-online/hol-guard)
 
 | ![HOL whole dark logo](https://hol.org/brand/Logo_Whole_Dark.png) | **Stop risky AI actions before they compromise your machine.** HOL Guard is a local-first security layer for AI agents, tools, plugins, skills, MCP servers, and package installs.<br><br>[Install HOL Guard](https://hol.org/guard/activate)<br>[Read the documentation](https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/get-started.md)<br>[PyPI Package (`hol-guard`)](https://pypi.org/project/hol-guard/)<br>[Report an Issue](https://github.com/hashgraph-online/hol-guard/issues) |
 | :--- | :--- |
@@ -23,6 +25,9 @@ HOL Guard reviews agent actions before they run: shell commands, file access, pa
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
 [Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Development](#development)
+
+<!-- hol-sponsors:start -->
+<!-- hol-sponsors:end -->
 
 ## Install HOL Guard
 
@@ -65,7 +70,7 @@ Guard connects through native agent hooks, managed MCP proxies, and launch integ
 
 ## Supported AI Agents
 
-Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
+Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage.
 
 For example, to set up Codex explicitly:
 
@@ -344,7 +349,7 @@ Yes. Local protection, CLI commands, approvals, and receipts work without signin
 
 ### Which AI agents does HOL Guard support?
 
-Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, and ZCode. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
+Guard includes adapters for Codex, Claude Code, GitHub Copilot CLI, Cursor, Cline, Gemini CLI, Grok, Hermes, Kimi Code, Pi, oh-my-pi, OpenClaw, OpenCode, Antigravity, ZCode, and Devin. [Paseo](docs/guard/paseo.md) is supported through these native provider integrations, with per-provider coverage. The [support matrix](docs/guard/harness-support.md) explains which events and enforcement paths each adapter supports.
 
 ### What is the difference between HOL Guard and Plugin Scanner?
 
@@ -359,6 +364,8 @@ Guard inspects MCP server configuration and reviews supported MCP tool calls thr
 The action may need approval under your active policy, or its tools or artifacts may have changed. Start with `hol-guard approvals`, inspect the command with `hol-guard command explain '<command>'`, and use `hol-guard receipts` to review the recorded decision.
 
 ## Documentation
+
+For enrollment or stale native authority errors, see [extension-control recovery](docs/guard/extension-control-recovery.md).
 
 | Guide | Contents |
 | :--- | :--- |

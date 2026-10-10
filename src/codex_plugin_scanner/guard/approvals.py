@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.metadata
+import logging
 import threading
 import time
 import uuid
@@ -30,6 +31,7 @@ from .approval_scope_support import (
     request_scope_contract_payload,
     resolve_request_scope_selection,
     resolve_request_workspace_scope,
+    tool_call_exact_context_token,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -46,8 +48,14 @@ from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
+from .harness_posture import harness_posture_summary
 from .incident import build_incident_context
-from .local_dashboard_session import build_local_dashboard_session_token
+from .local_dashboard_session import (
+    build_approval_browser_url as build_approval_browser_url,
+)
+from .local_dashboard_session import (
+    build_local_dashboard_session_token,
+)
 from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
@@ -66,6 +74,7 @@ from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
+from .runtime.extension_allow_hint import validated_extension_allow_hint
 from .runtime.github_workflow_runtime import (
     issue_github_workflow_capability_for_resolution,
 )
@@ -93,6 +102,8 @@ from .trusted_local_tools import (
     parse_local_tool_grant_selection,
 )
 from .value_coercion import coerce_non_negative_int
+
+_LOGGER = logging.getLogger(__name__)
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -146,27 +157,6 @@ def build_approval_request_url(approval_center_url: str, request_id: str) -> str
     """Build the canonical local dashboard deep link for one approval request."""
 
     return f"{approval_center_url.rstrip('/')}/requests/{request_id.strip()}"
-
-
-def build_approval_browser_url(approval_url: str | None, *, auth_token: str | None) -> str | None:
-    """Build a browser-openable approval URL with a scoped Guard session token."""
-
-    if not approval_url or auth_token is None:
-        return approval_url
-    parsed = urlparse(approval_url)
-    fragment_pairs = [
-        (key, value) for key, value in parse_qsl(parsed.fragment, keep_blank_values=True) if key != "guard-token"
-    ]
-    fragment_pairs.append(
-        (
-            "guard-token",
-            build_local_dashboard_session_token(
-                auth_token=auth_token,
-                surface="approval-center",
-            ),
-        )
-    )
-    return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 
 def _normalize_harness_slug(harness: str | None) -> str | None:
@@ -470,6 +460,7 @@ def queue_blocked_approvals(
     approval_center_url: str,
     now: str | None = None,
     notify: bool = True,
+    prompt_shown: bool = True,
     redaction_level: str = "full",
     continuation_operation: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
@@ -590,6 +581,7 @@ def queue_blocked_approvals(
             guard_version=guard_version,
             first_seen_guard_version=guard_version,
             last_seen_guard_version=guard_version,
+            extension_allow_hint=_item_extension_allow_hint(item, artifact),
         )
         request = replace(
             request,
@@ -611,7 +603,7 @@ def queue_blocked_approvals(
                 approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
             )
         if created_new_request:
-            _record_created_event(store, request, timestamp)
+            _record_created_event(store, request, timestamp, prompt_shown=prompt_shown)
         if notify:
             _notify_pending_approval(store=store, request=request)
         request_payload = store.get_approval_request(persisted_request_id)
@@ -619,6 +611,46 @@ def queue_blocked_approvals(
             raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
         queued.append(request_payload)
     return queued
+
+
+def silent_review_center_url(guard_home: Path) -> str:
+    """Loopback origin stored on a silent review. Does not start the daemon."""
+
+    from .daemon.manager import guard_daemon_url_for_home
+
+    return guard_daemon_url_for_home(guard_home)
+
+
+def record_unprompted_review(
+    *,
+    detection: HarnessDetection,
+    evaluation: Mapping[str, object],
+    store: GuardStore,
+    approval_center_url: str | None = None,
+    now: str | None = None,
+    redaction_level: str = "full",
+    continuation_operation: Mapping[str, object] | None = None,
+) -> list[dict[str, object]]:
+    """Persist a blocked review for the inbox and cloud outbox without prompting."""
+
+    import sqlite3
+
+    try:
+        return queue_blocked_approvals(
+            detection=detection,
+            evaluation=dict(evaluation),
+            store=store,
+            approval_center_url=approval_center_url or silent_review_center_url(store.guard_home),
+            now=now,
+            notify=False,
+            prompt_shown=False,
+            redaction_level=redaction_level,
+            continuation_operation=continuation_operation,
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, sqlite3.Error) as error:
+        # Exception text can include tool input. Keep the class only.
+        _LOGGER.warning("Silent review stayed blocked without an inbox row (%s)", type(error).__name__)
+        return []
 
 
 def _item_browser_intent(item: Mapping[str, object]) -> dict[str, object] | None:
@@ -767,6 +799,15 @@ def apply_approval_resolution(
         browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
         if browser_mcp_exact_key is not None:
             scoped_artifact_hash = browser_mcp_exact_key
+    native_once_artifact_hash: str | None = None
+    if persist_policy is True and scope == "artifact" and approval_context_token is None:
+        # Native review rows keep the per-call binding as their artifact hash
+        # for once flows; a saved decision keys on the stable exact-action token.
+        native_exact_token = tool_call_exact_context_token(request)
+        if native_exact_token is not None:
+            scoped_artifact_id = request_artifact_id
+            scoped_artifact_hash = native_exact_token
+            native_once_artifact_hash = request_artifact_hash
     decision = PolicyDecision(
         harness="*" if scope == "global" else _approval_policy_harness(request),
         scope=scope,
@@ -800,7 +841,11 @@ def apply_approval_resolution(
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
-                decision=decision,
+                decision=(
+                    decision
+                    if native_once_artifact_hash is None
+                    else replace(decision, artifact_hash=native_once_artifact_hash)
+                ),
                 harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
@@ -827,6 +872,27 @@ def apply_approval_resolution(
                 harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
+
+    elif (
+        persist_policy is False
+        and scope == "artifact"
+        and exact_context_allow
+        and temporary_mcp_selection is None
+        and local_tool_selection is None
+    ):
+        # "Do not remember" still authorizes the exact approved retry once.
+        store.ensure_policy_integrity_ready_for_write(
+            harness=decision.harness,
+            approval_gate_grant=resolved_gate_grant,
+            now=resolved_at,
+        )
+        local_once_fallback = _record_local_once_approval(
+            store,
+            request_id=request_id,
+            decision=decision,
+            harness=_approval_policy_harness(request),
+            created_at=resolved_at,
+        )
 
     temporary_mcp_result: dict[str, object] | None = None
     temporary_mcp_resolved_ids: list[str] = []
@@ -908,6 +974,7 @@ def apply_approval_resolution(
                 harness=resolution_harness,
                 scope=scope,
                 artifact_id=scoped_artifact_id,
+                artifact_hash=request_artifact_hash,
                 workspace=resolved_workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
@@ -948,6 +1015,7 @@ def apply_approval_resolution(
             harness=resolution_harness,
             scope=scope,
             artifact_id=scoped_artifact_id,
+            artifact_hash=request_artifact_hash,
             workspace=resolved_workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])
@@ -1287,7 +1355,13 @@ def _enqueue_memory_decision_for_resolution(
     )
 
 
-def _record_created_event(store: GuardStore, request: GuardApprovalRequest, created_at: str) -> None:
+def _record_created_event(
+    store: GuardStore,
+    request: GuardApprovalRequest,
+    created_at: str,
+    *,
+    prompt_shown: bool = True,
+) -> None:
     store.add_event(
         "approval.created",
         {
@@ -1304,7 +1378,7 @@ def _record_created_event(store: GuardStore, request: GuardApprovalRequest, crea
         },
         created_at,
     )
-    if request.policy_action in {"review", "require-reapproval"}:
+    if prompt_shown and request.policy_action in {"review", "require-reapproval"}:
         store.add_event(
             "guard.protection.ask_once_shown",
             {
@@ -1494,18 +1568,6 @@ def attach_primary_approval_link(
 _UNPROVEN_HOOK_REASONS = frozenset({"guard_cursor_cli_attestation_unavailable"})
 
 
-def _recorded_hook_verification(value: object) -> bool | None:
-    """Return proven hook state, or None when current proof is still unavailable."""
-
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, Mapping):
-        return None
-    if value.get("reason") in _UNPROVEN_HOOK_REASONS or value.get("integrity_status") == "attestation-unavailable":
-        return None
-    return value.get("protection_active") is True
-
-
 def _live_hook_verification(
     managed_installs: Sequence[Mapping[str, object]],
     store: GuardStore,
@@ -1577,6 +1639,35 @@ def build_runtime_snapshot(
     active_request_id: str | None = None,
     include_items: bool = True,
     containment_health: object = None,
+    serving_runtime: Mapping[str, object] | None = None,
+) -> dict[str, object]:
+    # Each store call otherwise opens its own connection. That made this
+    # control-plane read take several seconds on an ordinary local store.
+    with store.connection_scope():
+        return _build_runtime_snapshot(
+            store=store,
+            approval_center_url=approval_center_url,
+            now=now,
+            request_limit=request_limit,
+            receipt_limit=receipt_limit,
+            active_request_id=active_request_id,
+            include_items=include_items,
+            containment_health=containment_health,
+            serving_runtime=serving_runtime,
+        )
+
+
+def _build_runtime_snapshot(
+    *,
+    store: GuardStore,
+    approval_center_url: str | None,
+    now: str | None = None,
+    request_limit: int = 200,
+    receipt_limit: int = 25,
+    active_request_id: str | None = None,
+    include_items: bool = True,
+    containment_health: object = None,
+    serving_runtime: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     queue_page = store.list_pending_approval_summaries(limit=1, exclude_watch_only=True)
     queue_items = queue_page["items"] if isinstance(queue_page["items"], list) else []
@@ -1602,6 +1693,14 @@ def build_runtime_snapshot(
     hook_verification = _live_hook_verification(health_managed_installs, store)
     runtime_state = store.get_runtime_state()
     health_runtime_state = dict(runtime_state) if runtime_state is not None else None
+    if health_runtime_state is None and serving_runtime is not None:
+        # The store row is gone but this process is serving requests. Report a
+        # truthful "missing registration" state instead of claiming the runtime
+        # is offline; the heartbeat writer re-registers the row.
+        health_runtime_state = dict(serving_runtime)
+        health_runtime_state["registration_status"] = "missing"
+        if approval_center_url is not None:
+            health_runtime_state["approval_center_url"] = approval_center_url
     if health_runtime_state is not None and containment_health is not None:
         health_runtime_state["containment_health"] = containment_health
     protection_health = build_runtime_protection_health(
@@ -1614,7 +1713,7 @@ def build_runtime_snapshot(
     )
     headline_state = _resolve_runtime_headline_state(
         pending_count=pending_count,
-        runtime_state=runtime_state,
+        runtime_state=health_runtime_state,
         protection_state=str(protection_health["state"]),
     )
     return {
@@ -1648,6 +1747,7 @@ def build_runtime_snapshot(
         "protection_health": protection_health,
         "protection_capabilities": protection_capability_payloads(),
         "protection_posture": config.protection_posture,
+        **harness_posture_summary(config),
     }
 
 
@@ -1813,6 +1913,13 @@ def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, 
         if isinstance(extension_id, str) and extension_id.startswith("command."):
             return {**item, "action_envelope_json": {**envelope, "command_category": extension_id}}
     return item
+
+
+def _item_extension_allow_hint(item: dict[str, object], artifact) -> dict[str, object] | None:
+    value = artifact.metadata.get("extension_allow_hint") if artifact is not None else None
+    if value is None:
+        value = item.get("extension_allow_hint")
+    return validated_extension_allow_hint(value)
 
 
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:

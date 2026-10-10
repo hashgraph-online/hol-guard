@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import shutil
+import json
 import sys
 from pathlib import Path
 
@@ -36,10 +36,10 @@ from codex_plugin_scanner.guard.runtime.extension_trust import (
     mapped_ids,
     trust_class_for,
 )
+from tests.command_extension_contracts import enable_local_admin_extension_layer
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
 )
-from tests.command_extension_contracts import enable_local_admin_extension_layer
 from tests.native_command_test_support import real_native_command_evaluation
 
 _NOODLE = "noodle request run users/get --collection ./my-api --env staging"
@@ -79,20 +79,18 @@ def _disable_layer(extension_id: str) -> ExtensionControlLayer:
 
 
 def test_trust_map_covers_every_builtin_extension() -> None:
+    """Verify trust map covers every builtin extension."""
     registry_ids = {extension.extension_id for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions}
     assert mapped_ids() == registry_ids
-    assert ids_for_class("external") == {
-        "command.blitcp",
-        "command.mcp-filesystem",
-        "command.mcp-instapods",
-        "command.noodle",
-        "command.ollama",
-        "command.probe",
-        "command.remote.essh",
-        "command.repo2nb",
-        "command.skill-sunset",
-        "command.uivoid",
-    }
+    # Expected membership comes from authored per-extension bindings, never
+    # generated Python or the derived aggregate map.
+    root = Path(__file__).resolve().parents[1]
+    authored: dict[str, list[str]] = {"first-party": [], "trusted-library": [], "external": []}
+    for binding in sorted((root / "contracts/extensions/trust").glob("*.v1.json")):
+        payload = json.loads(binding.read_bytes())
+        authored[payload["trustClass"]].append(payload["extension"])
+    for trust_class, expected_ids in authored.items():
+        assert ids_for_class(trust_class) == set(expected_ids)
     assert trust_class_for("command.git") == "first-party"
     assert trust_class_for("command.cloud.aws") == "trusted-library"
     assert trust_class_for("command.cloud.azure") == "trusted-library"
@@ -321,12 +319,12 @@ def test_disabling_aws_still_blocks(tmp_path: Path) -> None:
 
 
 def test_frozen_trust_map_reads_meipass_package_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    source = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust-class-map.v1.json"
+    bindings = Path(__file__).resolve().parents[1] / "contracts" / "extensions" / "trust"
     target = (
         tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions" / "trust-class-map.v1.json"
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, target)
+    target.write_text(json.dumps(extension_trust_module.trust_map_from_bindings(bindings)))
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
 

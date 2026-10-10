@@ -1649,9 +1649,9 @@ class UserRecoveryCoordinator:
             value = _call_hook(self.hooks.protection_posture, self.guard_home)
             return value if isinstance(value, str) and value in {"on", "off", "unknown"} else "unknown"
         try:
-            from .recovery_lifecycle import guard_recovery_is_disabled
+            from .recovery_lifecycle import guard_recovery_posture
 
-            return "off" if guard_recovery_is_disabled(self.guard_home) else "on"
+            return guard_recovery_posture(self.guard_home)
         except (OSError, RuntimeError, ValueError):
             return "unknown"
 

@@ -27,12 +27,15 @@ Azure, Git, Kubernetes, Docker, and other mapped tools) stay on.
 - **trusted-library**: HOL-curated protection for widely used tools. On by default.
 - **external**: contributed tools. Listed as External. Off until you turn them on.
 
-The trust class is reviewed separately in
-`contracts/extensions/trust-class-map.v1.json`; a source file cannot select its
-own class or activation state. Turning off a first-party or trusted-library
-extension blocks that capability. Turning off an external extension returns it
-to inert: Guard does not apply that contribution, and first-party floors still
-apply.
+The trust class is reviewed separately as a per-extension binding file
+`contracts/extensions/trust/<extension-id>.v1.json`; a source file cannot select
+its own class or activation state. The reviewed bindings are the authored source
+of truth; `contracts/extensions/build-trust-class-map.v1.json` is a generated
+projection of `contracts/extensions/trust/`. It is generated for packages, ignored by Git,
+and never edited by hand. Clean Rust builds read the bindings directly.
+Turning off a first-party or trusted-library extension blocks that capability.
+Turning off an external extension returns it to inert: Guard does not apply that
+contribution, and first-party floors still apply.
 
 ## Source-of-truth files
 
@@ -47,8 +50,20 @@ For a command extension, contributors submit these files together in the same ch
    synthetic local controls, the expected action, the owning rule, and the
    expected effective segments. Cases are data; they never invoke the target
    executable.
-3. The external entry for the extension ID in
-   `contracts/extensions/trust-class-map.v1.json`.
+
+3. `contracts/extensions/trust/command.<name>.v1.json`, the reviewed trust
+   binding. Run `python scripts/refresh_extension_artifacts.py --trust-only`
+   to create missing bindings as external/opt-in and include the new binding
+   in the same PR. The Extension Builder integration plan also creates it.
+
+Required CI checks that every canonical command and MCP source has an authored
+binding before preparation can generate defaults. Preparation then regenerates
+the ignored `contracts/extensions/build-trust-class-map.v1.json` projection.
+Because each extension's trust binding is its own file, parallel
+contributions do not collide on a shared map. Contributors do not need to edit
+the shared trust map or pull unrelated main changes to refresh generated catalogs.
+Existing reviewed trust classifications are never promoted or changed by this
+preparation step.
 
 The compiler derives these projections. Contributors do not edit or include
 them as independent inputs:
@@ -58,10 +73,14 @@ them as independent inputs:
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
 
-After source review, a maintainer runs the preparation command to validate the
-exact source/fixture binding and synchronize the derived files:
+Before submitting, create the external binding and verify the authored inventory.
+After source review, preparation validates the exact source/fixture binding and
+synchronizes the derived files. CI verifies ownership before preparing the PR
+merge checkout:
 
 ```sh
+python scripts/refresh_extension_artifacts.py --trust-only
+python scripts/refresh_extension_artifacts.py --check-trust
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --source contributions/command-sources/command.<name>.json \
   --fixture tests/fixtures/command-source-<slug>.v1.json
@@ -86,27 +105,43 @@ permission. Use existing native operations and compose them with `any.v1`,
 callbacks, imports, candidate indexes, and contributor-supplied native
 function names are rejected.
 
-Build the compiler with the locked Rust toolchain:
+Contributors do not need a Rust toolchain. The reviewed compiler ships inside the
+installed `hol-guard` package at `codex_plugin_scanner/_native/guard-command-source`
+and is digest-verified on every invocation. Resolve it once, then pass it to the
+preparation command:
 
 ```sh
-cargo +1.88.0 build --locked --manifest-path rust/Cargo.toml -p guard-command --bin guard-command-source
+COMPILER=$(uv run --no-sync python -c \
+  'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+uv run --no-sync python scripts/refresh_extension_artifacts.py --trust-only
+
+uv run --no-sync python scripts/prepare_extension_contribution.py \
+  --compiler "$COMPILER" \
+  --source contributions/command-sources/command.<name>.json \
+  --fixture tests/fixtures/command-source-<slug>.v1.json
 ```
 
-The compiler reads one bounded JSON build envelope from standard input. For a
-single addition, assemble an envelope with the independently reviewed trust
-map and the packaged baseline. This runnable example uses the checked-in
-synthetic `command.example-cli` source:
+For lower-level control, run the packaged compiler directly. It reads one bounded JSON
+build envelope from standard input. For a single addition, assemble an envelope with the
+independently reviewed trust map and the packaged baseline. This runnable example uses
+the checked-in synthetic `command.example-cli` source and the packaged binary:
 
 ```sh
+COMPILER=$(uv run --no-sync python -c \
+  'from codex_plugin_scanner.guard.extension_builder.native_source_compiler import find_packaged_source_compiler as f; print(f())')
+
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
-  --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+  --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
 
-rust/target/debug/guard-command-source validate < source-build.json
-rust/target/debug/guard-command-source compile < source-build.json > source-compiled.json
+"$COMPILER" validate < source-build.json
+"$COMPILER" compile < source-build.json > source-compiled.json
 ```
+
+Building from source with `cargo +1.88.0 build --locked -p guard-command` is only needed
+when reviewing or changing the native contract itself, not to compose existing operations.
 
 `base: "packaged"` compiles an addition against the admitted baseline and
 labels the result `addition-only-not-release-catalog`. It cannot replace an
@@ -149,10 +184,10 @@ uv run --no-sync python scripts/export_extension_directory.py --check
 uv run --no-sync python scripts/render_command_extension_directory.py --check
 ```
 
-Maintainers commit the canonical sources, reviewed trust changes, generated
-descriptors, program/catalog artifacts, and changed public directory files
-together after preparation. Contributors need only submit the source, fixture,
-and trust-map inputs.
+Contributors submit the canonical source, portable fixture, and reviewed
+per-extension trust binding together. Maintainer regeneration publishes derived
+descriptors and public directory files after merge; program/catalog and aggregate
+trust projections are ignored package outputs. Do not commit those projections.
 Release packaging supplies the native compiler and its identity manifest from
 the platform build; an installed compiler does not fall back to a checkout.
 
@@ -241,10 +276,10 @@ restoring a Python fallback.
 
 ## Review bar
 
-- The canonical source, fixture, trust-map entry, and generated projections agree on IDs and digests.
+- The canonical source, fixture, per-extension trust binding, and generated projections agree on IDs and digests.
 - The source compiler accepts the build envelope and the portable fixture passes through native evaluation.
 - The [focused native, contribution, and directory checks](extensions/contributing.md#local-validation) pass against the regenerated program.
-- New catalog IDs are added to the trust-class map in the same change. CI fails if a built-in ID is missing.
+- Every new command or MCP catalog ID has its authored trust binding in the same change. Required CI fails before preparation if a canonical contribution lacks one.
 - Community command contributions are explicitly mapped as `external` and require local-admin enable; author metadata cannot promote them to a trusted class.
 - Generated metadata is inspected for publisher, homepage, references, risk classes, and safer guidance.
 - A signed-cloud enable cannot turn an external contribution on. Local-admin enable is required.

@@ -8,7 +8,8 @@ import {
   extensionStateLabel,
   managedPermissionState,
 } from "../../extension-control-center-model";
-import type { EffectiveExtensionControls, ExtensionCatalogItem } from "../../extension-controls-api";
+import type { CatalogReadModel } from "../../extension-catalog-v2";
+import type { EffectiveExtensionControls, ExtensionCatalogSummary, ExtensionPermission } from "../../extension-controls-api";
 import {
   PermissionPolicyRow,
   PolicyReviewSheet,
@@ -17,15 +18,16 @@ import { AppliedPolicyToast } from "../../extension-policy-applied-toast";
 import { useResolvedApprovalGate } from "../../use-resolved-approval-gate";
 import { useExtensionPolicyDraft } from "../../use-extension-policy-draft";
 import { COMMAND_PATTERN_DISPLAY_LIMIT, searchCommandPatterns } from "../model/protection-landing";
+import { useCatalogPermissionSearch } from "../use-catalog-permission-search";
 import { ProtectionModuleRow } from "./protection-primitives";
 import { ExtensionBrandMark } from "./extension-brand-mark";
 import { QuickApplyToolbar } from "./quick-apply-toolbar";
 import { PolicyEditingLocks } from "./policy-editing-locks";
 
 function CatalogSearchRow(props: {
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
-  onOpen: (extension: ExtensionCatalogItem) => void;
+  onOpen: (extension: ExtensionCatalogSummary) => void;
 }) {
   const handleOpen = useCallback(() => {
     props.onOpen(props.extension);
@@ -58,15 +60,21 @@ function CatalogSearchRow(props: {
  * the page.
  */
 export function PatternSearchConsole(props: {
-  catalog: readonly ExtensionCatalogItem[];
+  /** Extensions currently visible under the active filters. */
+  catalog: readonly ExtensionCatalogSummary[];
+  readModel: CatalogReadModel;
   effective: EffectiveExtensionControls;
   onRefresh: () => Promise<void> | void;
-  onOpenExtension: (extension: ExtensionCatalogItem) => void;
+  onOpenExtension: (extension: ExtensionCatalogSummary) => void;
   active?: boolean;
   query?: string;
   onQueryChange?: (query: string) => void;
   /** Rendered under the input while the parent hides its own header actions. */
   actionSlot?: ReactNode;
+  /** Rendered beside the search input on wide viewports (e.g. the Filters trigger). */
+  toolbarSlot?: ReactNode;
+  /** Rendered directly under the search row (filter tokens and the popover panel anchor). */
+  subtoolbarSlot?: ReactNode;
 }) {
   const [internalQuery, setInternalQuery] = useState("");
   const query = props.query ?? internalQuery;
@@ -97,13 +105,15 @@ export function PatternSearchConsole(props: {
   }, [searchActive]);
 
   const totalPermissionCount = useMemo(
-    () => props.catalog.reduce((total, extension) => total + extension.permissions.length, 0),
+    () => props.catalog.reduce((total, extension) => total + extension.permission_count, 0),
     [props.catalog],
   );
-  const allMatches = useMemo(
-    () => searchCommandPatterns(props.catalog, query, totalPermissionCount),
-    [props.catalog, query, totalPermissionCount],
-  );
+  const search = useCatalogPermissionSearch(props.readModel, query);
+  const allMatches = useMemo(() => {
+    const visible = new Set(props.catalog.map((extension) => extension.extension_id));
+    const candidates = search.hits.filter((hit) => visible.has(hit.extension.extension_id));
+    return searchCommandPatterns(candidates, query, totalPermissionCount);
+  }, [props.catalog, search.hits, query, totalPermissionCount]);
   const matches = useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
   const toolMatches = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -114,10 +124,10 @@ export function PatternSearchConsole(props: {
     });
   }, [props.catalog, query]);
   const grouped = useMemo(() => {
-    const groups = new Map<string, { extension: ExtensionCatalogItem; permissionIds: string[] }>();
+    const groups = new Map<string, { extension: ExtensionCatalogSummary; permissions: ExtensionPermission[] }>();
     for (const match of matches) {
-      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissionIds: [] };
-      group.permissionIds.push(match.permission.permission_id);
+      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissions: [] };
+      group.permissions.push(match.permission);
       groups.set(match.extension.extension_id, group);
     }
     return [...groups.values()];
@@ -139,7 +149,9 @@ export function PatternSearchConsole(props: {
 
   return <section aria-labelledby="pattern-search-heading" className="mt-6">
     <h2 id="pattern-search-heading" className="sr-only">Search command patterns</h2>
-    <label className="relative block">
+    <div className="relative">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <label className="relative block min-w-0 flex-1 sm:min-w-60">
       <span className="sr-only">Search command patterns</span>
       <HiMiniMagnifyingGlass className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55" aria-hidden="true" />
       <input
@@ -152,7 +164,7 @@ export function PatternSearchConsole(props: {
         onChange={(event) => setQuery(event.target.value.slice(0, 160))}
         placeholder='Search any command Guard watches — "squash", "git push --force", "kubectl"…'
         aria-describedby="pattern-search-hint"
-        className="min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        className="min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
       />
       {showResults ? (
         <button
@@ -164,7 +176,12 @@ export function PatternSearchConsole(props: {
           <HiMiniXMark className="size-4" aria-hidden="true" />
         </button>
       ) : null}
-    </label>
+        </label>
+        {props.toolbarSlot ? <div className="flex shrink-0 flex-wrap items-center gap-2">{props.toolbarSlot}</div> : null}
+      </div>
+      {props.subtoolbarSlot}
+    </div>
+
     <p id="pattern-search-hint" className={`mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`}>
       Matches patterns across every tool. Press / to focus search from anywhere on this page.
     </p>
@@ -177,6 +194,10 @@ export function PatternSearchConsole(props: {
         globalLockdown={baseEffective.global_lockdown}
         refreshRequired={refreshRequired}
       />
+    ) : null}
+
+    {showResults && search.error ? (
+      <p role="alert" className="mt-3 text-sm font-medium text-rose-800">{search.error}</p>
     ) : null}
 
     {showResults ? (
@@ -211,9 +232,7 @@ export function PatternSearchConsole(props: {
                 {group.extension.executables.length ? <code>{group.extension.executables[0]}</code> : null}
                 <span>{extensionDisplayName(group.extension.name)}</span>
               </h3>
-              {group.permissionIds.map((permissionId) => {
-                const permission = group.extension.permissions.find((item) => item.permission_id === permissionId);
-                if (!permission) return null;
+              {group.permissions.map((permission) => {
                 return <PermissionPolicyRow
                   key={permission.permission_id}
                   permission={permission}
@@ -244,7 +263,9 @@ export function PatternSearchConsole(props: {
           ) : null}
         </div>
       ) : (
-        <p className="mt-3 text-sm text-brand-dark/75">No command patterns or tools match this search.</p>
+        <p role="status" className="mt-3 text-sm text-brand-dark/75">
+          {search.pending ? "Searching command patterns…" : "No command patterns or tools match this search."}
+        </p>
       )
     ) : null}
 

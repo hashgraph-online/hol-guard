@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from contextlib import nullcontext
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
@@ -47,13 +48,15 @@ def test_desktop_dashboard_session_is_scoped_fragment_token(monkeypatch, tmp_pat
 
 
 def test_desktop_bootstrap_uses_canonical_dashboard_session_builder() -> None:
-    source = __import__("inspect").getsource(commands_dispatch_desktop._run_guard_desktop_command)
-    assert "build_desktop_dashboard_session_url" in source
-    assert 'dashboard["sessionUrl"]' in source
-    assert 'dashboard["canonical"] = True' in source
-    assert "scan_installed_apps=False" in source
-    assert source.index("session_url = build_desktop_dashboard_session_url") < source.index(
-        "build_guard_status_payload"
+    inspect = __import__("inspect")
+    command = inspect.getsource(commands_dispatch_desktop._run_guard_desktop_command)
+    document = inspect.getsource(commands_dispatch_desktop.assemble_desktop_bootstrap_document)
+    assert "build_desktop_dashboard_session_url" in command
+    assert "session_url=session_url" in command
+    assert 'dashboard["canonical"] = True' in document
+    assert "scan_installed_apps=False" in document
+    assert command.index("session_url = build_desktop_dashboard_session_url") < command.index(
+        "assemble_desktop_bootstrap_document"
     )
 
 
@@ -104,6 +107,7 @@ def test_desktop_bootstrap_aligns_runtime_before_projecting_protection(monkeypat
         guard_home=tmp_path,
         context=SimpleNamespace(guard_home=tmp_path, home_dir=tmp_path / "home"),
         store=SimpleNamespace(
+            connection_scope=nullcontext,
             list_approval_requests=lambda **_kwargs: [],
             oldest_approval_request_created_at=lambda **_kwargs: None,
             count_approval_requests=lambda **_kwargs: 0,
@@ -156,6 +160,7 @@ def test_desktop_preflight_skips_daemon_session(monkeypatch, tmp_path: Path) -> 
         guard_home=tmp_path,
         context=SimpleNamespace(guard_home=tmp_path),
         store=SimpleNamespace(
+            connection_scope=nullcontext,
             list_approval_requests=lambda **_kwargs: [],
             oldest_approval_request_created_at=lambda **_kwargs: None,
             count_approval_requests=lambda **_kwargs: 0,

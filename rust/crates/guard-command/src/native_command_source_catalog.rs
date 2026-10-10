@@ -2,6 +2,10 @@
 
 use super::{contract::*, matcher::SourceGraph, *};
 
+/// Bound on the compiled catalog array. The packaged artifact envelope around it has its own
+/// budget, checked by the build script. Tested against `contracts/catalog-delivery/limits.json`.
+pub(super) const MAX_NATIVE_CATALOG_PROJECTION_BYTES: usize = 8_000_000;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TrustMap {
@@ -71,7 +75,7 @@ fn trust_rows(bytes: &[u8]) -> Result<(TrustMap, BTreeMap<String, String>), &'st
 }
 
 /// Existing MCP JSON remains canonical and is lowered alongside command sources.
-fn lower_catalog(
+pub(super) fn lower_catalog(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],
@@ -82,7 +86,7 @@ fn lower_catalog(
             .iter()
             .chain(mcp_sources.iter())
             .try_fold(0usize, |total, bytes| total.checked_add(bytes.len()))
-            .is_none_or(|size| size > MAX_PROGRAM_BYTES)
+            .is_none_or(|size| size > MAX_SOURCE_CATALOG_BYTES)
     {
         return Err("command_source_catalog_bytes_invalid");
     }
@@ -314,7 +318,7 @@ fn lower_catalog(
     let catalog = Value::Array(catalog);
     let catalog_bytes =
         serde_json::to_vec(&catalog).map_err(|_| "command_source_encoding_failed")?;
-    if catalog_bytes.len() > 1_000_000 {
+    if catalog_bytes.len() > MAX_NATIVE_CATALOG_PROJECTION_BYTES {
         return Err("command_source_catalog_projection_exceeded");
     }
     let nodes = graph.finish()?;
@@ -451,4 +455,40 @@ pub fn compile_addition_with_mcp(
     output.catalog_projection_kind = "addition-only-not-release-catalog".to_owned();
     output.base_program_digest = Some(base_digest);
     admit(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const EXAMPLE_SOURCE: &[u8] =
+        include_bytes!("../tests/fixtures/command-source-example.v1.json");
+    const TRUST_MAP: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/trust-class-map.v1.json"));
+
+    #[test]
+    fn source_catalog_between_program_and_source_limits_compiles() {
+        let mut source = EXAMPLE_SOURCE.to_vec();
+        source.resize(MAX_PROGRAM_BYTES + 1, b' ');
+        assert!(source.len() > MAX_PROGRAM_BYTES);
+        assert!(source.len() <= MAX_SOURCE_CATALOG_BYTES);
+
+        let output = compile_addition(&[source.as_slice()], TRUST_MAP)
+            .expect("a valid source catalog above 4 MiB must compile as an addition");
+        assert_eq!(
+            output.catalog_projection_kind,
+            "addition-only-not-release-catalog"
+        );
+    }
+
+    #[test]
+    fn catalog_projection_budget_matches_delivery_manifest() {
+        let manifest: Value = serde_json::from_str(include_str!(
+            "../../../../contracts/catalog-delivery/limits.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            manifest["max_native_catalog_projection_bytes"].as_u64(),
+            Some(MAX_NATIVE_CATALOG_PROJECTION_BYTES as u64)
+        );
+    }
 }

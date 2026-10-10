@@ -4,6 +4,28 @@ Local harness protection works without signing in to Guard Cloud. Cloud adds syn
 history, visibility, and team controls around the same adapters. See
 [Local Guard vs Guard Cloud](./local-vs-cloud.md).
 
+## Hook verdict exit codes
+
+`guard/cli/native_hook_exit_code.py::native_hook_verdict_exit_code` is the
+authority for verdict exit codes, including `--json` responses. Emitters pass
+the canonical harness, resolved policy action, and normalized hook event;
+they do not maintain independent exit-code tables.
+
+| Harness | Blocking verdict | Nonblocking verdict |
+| --- | --- | --- |
+| Codex, Claude Code, Copilot, Pi, OMP | `0` for `PreToolUse`, `UserPromptSubmit`, and `PermissionRequest`; the JSON envelope carries the denial. `1` for other events, including `PostToolUse`. | `0` |
+| Cursor, Devin, Kimi, Hermes | `2` | `0` |
+| OpenCode, Superagent | `1` | `0` |
+| Grok, ZCode | Adapter-defined event/recording-mode behavior, through the shared authority. | Adapter-defined |
+| Unknown harness | `1` | `0` |
+
+Blocking actions are `review`, `require-reapproval`, `sandbox-required`, and
+`block`. Missing event context does not imply that an envelope will be consumed.
+`PostToolUse` reports a policy violation; it cannot undo an executed tool.
+
+## Harness coverage
+
+
 Current Guard support in this repo:
 
 - `codex`
@@ -100,8 +122,8 @@ Current Guard support in this repo:
   - rejects relative, current-directory, workspace, unsafe-owner/mode, and workspace-targeting symlink executables before probing or launch; custom install roots can be selected once with `hol-guard run grok --grok-executable /absolute/path/to/grok`
   - binds an explicit custom selection to its SHA-256 identity and sanitizes code-loader variables and unsafe PATH entries without adding prompts to unchanged launches
   - installs one catch-all `PreToolUse` hook so native tools, `spawn_subagent`, `list_dir`, and `server__tool` MCP names are reviewed once
-  - installs observe-only `UserPromptSubmit`, `SubagentStart`, and `SessionStart` hooks for inventory; Grok ignores deny on those events
-  - installs Guard-managed deny rules and backup hooks in `~/.grok/managed_config.toml` without touching user `~/.grok/config.toml` or `~/.grok/auth`
+  - screens prompts on `UserPromptSubmit` before inference; `SubagentStart` and `SessionStart` remain passive lifecycle hooks
+  - merges deny rules and identical backup hooks into `.grok/config.toml`, preserving unrelated values, comments, and hooks; leaves vendor-managed configuration and authentication intact
   - blocks by returning exit code `2` and Grok-native stdout JSON `{"decision":"deny","reason":"..."}` with approval-center copy in stderr
   - waits on the original PreToolUse hook after queuing an approval, then returns allow so Grok resumes the same tool call
   - surfaces `--always-approve`, `bypassPermissions`, and sandbox `off` as degraded protection states when detected in Grok config
@@ -117,6 +139,14 @@ Current Guard support in this repo:
   - installs Guard-managed `PreToolUse` and `UserPromptSubmit` hooks in the `hooks` section of `~/.zcode/cli/config.json` without touching user `mcp`, `plugins`, or pre-existing hooks
   - blocks by returning exit code `2` and ZCode-native stdout JSON `hookSpecificOutput.permissionDecision: "deny"` with approval-center copy in stderr
   - fails open if a hook crashes or times out, so ZCode keeps working when Guard is unreachable
+- `devin`
+  - detects `~/.config/devin/config.json` (`%APPDATA%\devin\config.json` on Windows), `~/.config/devin/mcp_config.json`, project `.devin/config.json`, `.devin/config.local.json`, `.devin/hooks.v1.json`, `.devin/mcp_config.json`, and `.devin/mcp_config.local.json`, plus legacy `mcpServers` inside `config.json` files
+  - detects skills in `.devin/skills/` and `.agents/skills/` at both user and project scope
+  - detects Guard-managed Claude Code hooks in `.claude` settings files and warns that Devin also loads them by default (unless `read_config_from.claude` is `false`)
+  - installs Guard-managed `PreToolUse`, `PermissionRequest`, `UserPromptSubmit`, and `PostToolUse` hooks in the `hooks` section of `~/.config/devin/config.json` without touching other config keys
+  - refuses to install when the user config is JSONC (comments or trailing commas) rather than rewriting it lossy
+  - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
+  - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
 
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only
@@ -189,6 +219,7 @@ Generated from `src/codex_plugin_scanner/guard/adapters/contracts.py`.
 | `pi` | `pi`, `pi-agent`, `pi-coding-agent` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `omp` | `omp`, `oh-my-pi` | ✅ | ✅ | ✅ | shell, prompt, mcp_tool, file_read, tool_result |
 | `zcode` | `zcode`, `zai`, `z-code`, `zai-zcode` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read |
+| `devin` | `devin`, `devin-cli`, `cognition-devin` | ❌ | ✅ | ❌ | shell, prompt, mcp_tool, file_read, file_write, tool_result |
 | `paseo` | `paseo` | ❌ | ❌ | ❌ | — |
 
 ## Versioned Event Capability Report

@@ -95,6 +95,8 @@ def test_apply_desktop_core_update_installs_verified_sidecar(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return binary
@@ -123,6 +125,8 @@ def test_apply_desktop_core_update_rejects_integrity_mismatch(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return b"nope"
@@ -146,6 +150,8 @@ def test_apply_rejects_missing_minimum_desktop_version(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return b"core"
@@ -169,6 +175,8 @@ def test_apply_rejects_older_desktop_when_version_is_known(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return b"core"
@@ -202,6 +210,8 @@ def test_install_rejects_symlink_version_dir(
 
     def fetch_bytes(url: str, limit: int) -> bytes:
         _ = limit
+        if ".onedir." in url:
+            raise update_desktop_core.DesktopCoreUpdateError("desktop_core_asset_missing")
         if url.endswith(".json"):
             return json.dumps(manifest).encode("utf-8")
         return binary

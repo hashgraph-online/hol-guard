@@ -243,8 +243,28 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", payload, as_json)
     return 0
 
+def _repair_resident_update_marker(guard_home: Path) -> dict[str, object] | None:
+    """Recover a resident-update marker stranded by an interrupted update."""
+
+    try:
+        from ..native_resident_update_lock import repair_stale_resident_update_marker
+        from ..native_runtime import native_runtime_status
+
+        # Point the marker at the runtime resident requests actually select (an
+        # override included), and only once ordinary admission accepts it.
+        status = native_runtime_status()
+        if not status.compatible or status.identity is None:
+            return {"status": "unavailable", "reason_code": status.reason}
+        return repair_stale_resident_update_marker(guard_home, status.identity.path)
+    except Exception:  # repair must not block daemon repair
+        return {"status": "unavailable", "reason_code": "update_native_resident_lock_failed"}
+
+
 def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | None = None) -> int:
-    result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
+    marker = _repair_resident_update_marker(guard_home)
+    result: dict[str, object] = dict(repair_guard_daemon_runtime(guard_home, home_dir=home_dir))
+    if marker is not None:
+        result["resident_update_marker"] = marker
     _emit("daemon", result, as_json)
     return 0
 
