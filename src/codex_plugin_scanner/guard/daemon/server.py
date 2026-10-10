@@ -8604,9 +8604,9 @@ class GuardDaemonServer:
         while not self._shutdown_started.is_set():
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
-            try:
-                from ..native_approval_scope import ApprovalScopeUnavailableError
+            from ..native_approval_scope import ApprovalScopeUnavailableError
 
+            try:
                 pending_review_requests = self._server.store.list_approval_requests(
                     status="pending",
                     limit=1,
