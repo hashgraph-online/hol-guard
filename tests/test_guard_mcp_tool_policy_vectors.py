@@ -385,3 +385,46 @@ def test_rejected_reply_counts_as_resident_failure(monkeypatch, tmp_path: Path, 
         native_mcp_tool_policy._round_trip(tmp_path, subject={}, claim_saved_approval=False, observations=[])
     assert raised.value.code == "transport"
     assert failures == recorded
+
+
+def test_repeated_rejected_replies_open_the_resident_circuit(monkeypatch, tmp_path: Path) -> None:
+    """The real transport must not reset the failure streak before the caller validates the reply."""
+
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import native_execution
+    from codex_plugin_scanner.guard.native_runtime_resilience import native_runtime_health_snapshot
+
+    identity = SimpleNamespace(sha256="sha256:" + "ab" * 32, path=tmp_path / "guard-runtime")
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=identity,
+        capabilities=SimpleNamespace(
+            features=("resident-protocol-v2", native_mcp_tool_policy.NATIVE_MCP_TOOL_POLICY_FEATURE)
+        ),
+    )
+
+    def client(*, payload, **_kwargs):
+        request = json.loads(payload)["request"]
+        return json.dumps(
+            {
+                "schema": native_mcp_tool_policy._RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": "sha256:" + "0" * 64,
+                "status": "ok",
+                "code": "ok",
+                "payload": None,
+            }
+        ).encode()
+
+    monkeypatch.setattr(native_execution, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(native_mcp_tool_policy, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(native_execution, "native_resident_client_request", client)
+    monkeypatch.setattr(native_execution, "_isolated_environment", lambda: {})
+    for _ in range(3):
+        with pytest.raises(native_mcp_tool_policy.NativeMcpToolPolicyError):
+            native_mcp_tool_policy._round_trip(tmp_path, subject={}, claim_saved_approval=False, observations=[])
+    snapshot = native_runtime_health_snapshot(identity.sha256, tmp_path)
+    assert snapshot.circuit_open is True
+    assert snapshot.consecutive_failures >= 3

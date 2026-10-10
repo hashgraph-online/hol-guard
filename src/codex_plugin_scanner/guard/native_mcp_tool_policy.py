@@ -31,7 +31,7 @@ from .native_context import (
 from .native_execution import _resident_request
 from .native_mcp_tool_evidence import _arguments_dto, _json_value
 from .native_runtime import native_runtime_status
-from .native_runtime_resilience import native_record_resident_failure
+from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 if TYPE_CHECKING:
     from .config import GuardConfig
@@ -122,6 +122,14 @@ def _rejected(guard_home: Path, code: str) -> NativeMcpToolPolicyError:
     return NativeMcpToolPolicyError(code)
 
 
+def _accepted(guard_home: Path) -> None:
+    """Record resident success once a reply has passed binding and payload validation."""
+
+    status = native_runtime_status()
+    if status.identity is not None:
+        native_record_resident_success(status.identity.sha256, guard_home)
+
+
 @dataclass(frozen=True, slots=True)
 class NativeToolPolicyResult:
     """Rust's decision DTO plus the authority objects Python supplied."""
@@ -179,6 +187,7 @@ def _round_trip(
         required_feature=NATIVE_MCP_TOOL_POLICY_FEATURE,
         response_schema=_RESULT_SCHEMA,
         max_request_bytes=_MAX_REQUEST_BYTES,
+        record_success=False,
     )
     if response is None:
         raise NativeMcpToolPolicyError("transport")
@@ -190,6 +199,7 @@ def _round_trip(
         raise _rejected(guard_home, "transport")
     status, code = response.get("status"), response.get("code")
     if status == "error":
+        _accepted(guard_home)
         raise NativeMcpToolPolicyError(
             code.removeprefix("native_mcp_tool_policy_decide_")
             if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code)
@@ -352,10 +362,12 @@ def native_evaluate_tool_call(
                     raise _rejected(guard_home, error.code) from None
                 if payload["post_claim_authority"] == "fresh" and authority is None:
                     raise _rejected(guard_home, "payload_invalid")
+                _accepted(guard_home)
                 return NativeToolPolicyResult(payload, authority)
             need = reply.get("payload")
             if not isinstance(need, dict):
                 raise _rejected(guard_home, "need_invalid")
+            _accepted(guard_home)
             if need.get("kind") == "fresh_authority":
                 # The claim is committed. Refresh authority without a storage
                 # lease, then read policy again in a new scope.
