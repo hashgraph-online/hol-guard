@@ -73,8 +73,12 @@ pub(super) fn unused(
     if paths.last() != Some(&0) {
         return None;
     }
-    // A gitlink can cause status to inspect another repository, whose filter
-    // configuration is not covered by this repository's attribute proof.
+    // Untracked nested repositories and linked worktrees are listed as `dir/`.
+    // Status reports them as one untracked entry and never descends into them,
+    // so they cannot run filters. Tracked gitlinks (mode 160000) are listed
+    // without a trailing slash and can make status inspect another repository,
+    // whose filter configuration this proof does not cover.
+    let mut covered = Vec::with_capacity(paths.len());
     for path in paths
         .split(|byte| *byte == 0)
         .filter(|path| !path.is_empty())
@@ -82,10 +86,19 @@ pub(super) fn unused(
         if Instant::now() >= deadline {
             return None;
         }
-        let path = root.join(std::str::from_utf8(path).ok()?);
-        if path.is_dir() && path.join(".git").exists() {
+        if path.ends_with(b"/") {
+            continue;
+        }
+        let candidate = root.join(std::str::from_utf8(path).ok()?);
+        if candidate.is_dir() && candidate.join(".git").exists() {
             return Some(false);
         }
+        covered.extend_from_slice(path);
+        covered.push(0);
+    }
+    let paths = covered;
+    if paths.is_empty() {
+        return Some(true);
     }
     // Attribute output repeats each path plus two fields. Batch by the
     // expected response size while retaining the per-query output cap.

@@ -257,7 +257,7 @@ LFS_GITCONFIG = (
 
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 HOME_ARTIFACT_DOC = "# Synthetic artifact\nInert build report text.\n"
-HOME_NOTES = "Notes kept outside the project.\nretry policy: three attempts.\n"
+SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three attempts.\n"
 
 
 def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
@@ -270,7 +270,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str]) -
     for relative, text in (
         (".agent/skills/x/SKILL.md", HOME_SKILL_DOC),
         (".agent/artifacts/report.md", HOME_ARTIFACT_DOC),
-        ("other-project/notes.md", HOME_NOTES),
+        ("other-project/notes.md", SIBLING_PROJECT_DOC),
     ):
         target = home / relative
         target.parent.mkdir(parents=True, exist_ok=True)
