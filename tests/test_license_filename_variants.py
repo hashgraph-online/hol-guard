@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.checks.security import check_license, run_security_checks
-
 from codex_plugin_scanner.lint_fixes import apply_safe_autofixes
 
 MIT_LICENSE = "MIT License\n\nPermission is hereby granted, free of charge, to any person.\n"
