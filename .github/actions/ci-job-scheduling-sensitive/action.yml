@@ -34,6 +34,7 @@ runs:
       echo "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
       echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
       echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+      echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
     shell: bash
   - name: Run scheduling-sensitive tests untraced
     run: |
