@@ -15,7 +15,6 @@ use serde_json::{json, Map, Value};
 
 const APPROVAL_GATE_SOURCE: &str = "approval-gate";
 const LOCAL_ONCE_SOURCE: &str = "approval-gate-once";
-const PACKAGE_REQUEST_MARKER: &str = ":package-request:";
 const NO_SAVED_DECISION: &str = "approval_reuse_no_saved_decision";
 const REAPPROVAL_REQUIRED: &str = "approval_reuse_reapproval_required";
 
@@ -52,7 +51,7 @@ pub(crate) enum Disposition {
 }
 
 impl Disposition {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Consumed => "consumed",
             Self::Retained => "retained",
@@ -188,11 +187,13 @@ pub(crate) fn claim_disposition(decision: &Map<String, Value>) -> Option<Disposi
     }
     if non_empty_text(decision, "approval_id").is_some() {
         let artifact_id = non_empty_text(decision, "artifact_id")?;
-        return Some(if artifact_id.contains(PACKAGE_REQUEST_MARKER) {
-            Disposition::Retained
-        } else {
-            Disposition::Consumed
-        });
+        return Some(
+            if crate::local_once_store::local_once_approval_is_reusable(artifact_id) {
+                Disposition::Retained
+            } else {
+                Disposition::Consumed
+            },
+        );
     }
     integer_id(decision)?;
     let expiring = decision
@@ -275,6 +276,12 @@ fn scalar(value: &Value) -> Option<Scalar> {
     }
 }
 
+/// Exact int/float equality as in Python: no rounding of the integer side.
+fn int_equals_float(int: i128, float: f64) -> bool {
+    // Below 2^127 a whole float converts to i128 without loss.
+    float.is_finite() && float.fract() == 0.0 && float.abs() < 1.7e38 && float as i128 == int
+}
+
 /// Python `==` over decoded JSON: `True == 1 == 1.0`, containers recurse.
 fn py_equal(left: &Value, right: &Value) -> bool {
     if let (Some(a), Some(b)) = (scalar(left), scalar(right)) {
@@ -282,7 +289,7 @@ fn py_equal(left: &Value, right: &Value) -> bool {
             (Scalar::Int(a), Scalar::Int(b)) => a == b,
             (Scalar::Float(a), Scalar::Float(b)) => a == b,
             (Scalar::Int(a), Scalar::Float(b)) | (Scalar::Float(b), Scalar::Int(a)) => {
-                (a as f64) == b && b.fract() == 0.0
+                int_equals_float(a, b)
             }
         };
     }

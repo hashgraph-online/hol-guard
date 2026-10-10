@@ -441,7 +441,8 @@ def _revalidate_claimed_tool_call_approval(
     if fresh_decision.approval_reuse_reason_code == "approval_reuse_integrity_failure":
         validation_reason = "approval_reuse_integrity_failure"
     elif fresh_decision.approval_reuse_status == "rejected" and not fresh_lookup_preserves_claim(
-        fresh_decision.approval_reuse_reason_code
+        fresh_decision.approval_reuse_reason_code,
+        guard_home=store.guard_home,
     ):
         validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
 
@@ -455,6 +456,7 @@ def _revalidate_claimed_tool_call_approval(
         claim_disposition=claim_disposition,
         claimed_decision=claimed_decision,
         current_decision=fresh_decision.pending_approval_reuse_decision,
+        guard_home=store.guard_home,
     ):
         validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
     if validation_reason is not None:
@@ -479,7 +481,10 @@ def _revalidate_claimed_tool_call_approval(
         fresh_local_approval=(
             claim_disposition == "consumed"
             and fresh_local_tool_approval_matches(
-                claimed_decision, artifact=fresh_artifact, artifact_hash=fresh_artifact_hash
+                claimed_decision,
+                artifact=fresh_artifact,
+                artifact_hash=fresh_artifact_hash,
+                guard_home=store.guard_home,
             )
         ),
     )

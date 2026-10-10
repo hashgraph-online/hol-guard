@@ -2250,11 +2250,13 @@ class RuntimeMcpGuardProxy:
                 claim_disposition=claimed_tool_disposition,
                 claimed_decision=claimed_tool_decision,
                 current_decision=postclaim_tool_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             package_claim_authorizes_review = claimed_approval_authorizes_postclaim_review(
                 claim_disposition=claimed_package_disposition,
                 claimed_decision=claimed_package_decision,
                 current_decision=postclaim_package_resolution.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             postclaim_tool_evidence = _postclaim_claim_evidence(
                 postclaim_tool_evidence,
@@ -3000,6 +3002,7 @@ class RuntimeMcpGuardProxy:
                 claim_disposition=claim_disposition,
                 claimed_decision=pending,
                 current_decision=fresh_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             postclaim_evidence = _postclaim_claim_evidence(
                 postclaim_evidence,
@@ -3040,6 +3043,7 @@ class RuntimeMcpGuardProxy:
                         decision=pending,
                         artifact=fresh_authority.artifact,
                         artifact_hash=fresh_authority.artifact_hash,
+                        guard_home=self.store.guard_home,
                     )
                 )
                 or (fresh_action == "review" and not claim_authorizes_review)

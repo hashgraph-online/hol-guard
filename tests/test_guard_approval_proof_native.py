@@ -103,6 +103,8 @@ def _good(request: dict[str, object], **overrides: object) -> dict[str, object]:
         {"payload": {"accepted": True}},
         {"payload": {"accepted": "yes", "claim_disposition": None}},
         {"payload": {"accepted": True, "claim_disposition": "other"}},
+        {"payload": {"accepted": True, "claim_disposition": []}},
+        {"payload": {"accepted": True, "claim_disposition": {}}},
         {"payload": None},
     ],
 )
@@ -135,3 +137,38 @@ def test_non_json_rows_fail_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(proof, "_resolve_digest_home", lambda _home: Path("/tmp/approval-proof-home"))
     with pytest.raises(proof.NativeApprovalProofError):
         proof.native_approval_proof({"kind": "claim_disposition", "decision": {"action": object()}})
+
+
+def test_helpers_send_the_callers_guard_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    homes: list[Path] = []
+
+    def fake(*, request, guard_home, **_kwargs):
+        homes.append(guard_home)
+        return _good(request)
+
+    monkeypatch.setattr(proof, "_resolve_digest_home", lambda home: home if home is not None else Path("/ambient"))
+    monkeypatch.setattr(proof, "_resident_request", fake)
+    row = {
+        "source": "approval-gate-once",
+        "approval_id": "approval-id",
+        "action": "allow",
+        "scope": "artifact",
+        "harness": "codex",
+        "artifact_id": "codex:workspace:tool",
+        "artifact_hash": "hash",
+        "expires_at": "2030-01-01T00:00:00+00:00",
+    }
+    proof.fresh_local_tool_approval_matches(row, artifact=_ARTIFACT, artifact_hash="hash", guard_home=tmp_path)
+    proof.fresh_lookup_preserves_claim(None, guard_home=tmp_path)
+    proof.claimed_approval_authorizes_postclaim_review(
+        claim_disposition="consumed", claimed_decision=None, current_decision=None, guard_home=tmp_path
+    )
+    proof.fresh_claim_allows_reapproval(
+        claim_disposition="consumed",
+        reason_code=None,
+        decision=row,
+        artifact=_ARTIFACT,
+        artifact_hash="hash",
+        guard_home=tmp_path,
+    )
+    assert homes == [tmp_path] * 4

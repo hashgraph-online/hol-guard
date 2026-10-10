@@ -113,3 +113,35 @@ fn unknown_claim_disposition_never_authorizes() {
         assert_eq!(reply["payload"]["accepted"], false);
     }
 }
+
+#[test]
+fn int_and_float_compare_exactly_like_python() {
+    use super::py_equal;
+    // 2**53 + 1 is not representable as f64; Python keeps it unequal.
+    assert!(!py_equal(
+        &json!(9007199254740993_i64),
+        &json!(9007199254740992.0)
+    ));
+    assert!(py_equal(
+        &json!(9007199254740992_i64),
+        &json!(9007199254740992.0)
+    ));
+    assert!(py_equal(&json!(1), &json!(1.0)));
+    assert!(py_equal(&json!(true), &json!(1.0)));
+    assert!(!py_equal(&json!(1), &json!(1.5)));
+    assert!(!py_equal(&json!(u64::MAX), &json!(18446744073709552000.0)));
+}
+
+#[test]
+fn empty_approval_id_takes_the_decision_id_branch_for_every_caller() {
+    let row = json!({"action": "allow", "approval_id": "", "decision_id": 1});
+    let expected = Some("retained");
+    assert_eq!(
+        super::claim_disposition(row.as_object().unwrap()).map(|d| d.as_str()),
+        expected
+    );
+    assert_eq!(
+        crate::claim_reuse::approval_reuse_claim_disposition(&row),
+        expected
+    );
+}

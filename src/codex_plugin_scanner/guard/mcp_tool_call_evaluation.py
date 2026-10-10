@@ -153,6 +153,15 @@ def _evaluate_tool_call(
         validation_reason is None
         and saved_decision is not None
         and saved_action == "allow"
+        and saved_disposition is None
+    ):
+        # No authoritative disposition (unclaimable row or no resident answer):
+        # never reach the claim, which could consume the approval unlaunched.
+        validation_reason = calls.APPROVAL_REUSE_CLAIM_FAILED
+    if (
+        validation_reason is None
+        and saved_decision is not None
+        and saved_action == "allow"
         and calls.composio_requires_action_review(artifact.command or "")
         and saved_disposition != "consumed"
     ):
@@ -169,7 +178,12 @@ def _evaluate_tool_call(
             validation_reason is None
             and saved_decision is not None
             and saved_disposition == "consumed"
-            and calls.fresh_local_tool_approval_matches(saved_decision, artifact=artifact, artifact_hash=artifact_hash)
+            and calls.fresh_local_tool_approval_matches(
+                saved_decision,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                guard_home=store.guard_home,
+            )
         ),
     )
     if reuse is None:
