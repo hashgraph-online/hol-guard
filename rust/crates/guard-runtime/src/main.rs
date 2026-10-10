@@ -35,6 +35,19 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
+mod daemon_lifecycle_claims;
+mod daemon_lifecycle_command;
+mod daemon_lifecycle_decision_op;
+mod daemon_lifecycle_facts;
+mod daemon_lifecycle_inventory;
+mod daemon_lifecycle_malformed;
+mod daemon_lifecycle_ports;
+mod daemon_lifecycle_state;
+mod daemon_lifecycle_text;
+#[cfg(test)]
+mod daemon_lifecycle_unit_tests;
+#[cfg(test)]
+mod daemon_lifecycle_vectors_tests;
 mod daemon_policy_authority;
 mod data_flow_analyze_op;
 mod edge;

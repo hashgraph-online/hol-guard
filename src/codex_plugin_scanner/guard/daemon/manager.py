@@ -8,9 +8,7 @@ import json
 import math
 import ntpath
 import os
-import re
 import secrets
-import shlex
 import signal
 import stat
 import subprocess
@@ -22,22 +20,23 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
-from typing import BinaryIO, Literal, TypedDict, cast
+from typing import Any, BinaryIO, Literal, TypedDict, cast
 
 from ...version import __version__
 from .. import windows_processes
 from ..fork_safety import forget_in_child
 from ..frozen_runtime_commands import (
-    FROZEN_DAEMON_SERVE_ARG,
     decode_frozen_daemon_serve_payload,
     frozen_daemon_serve_command,
 )
 from ..live_process_identity import process_start_token
 from ..mdm.file_lock import release_file_lock
+from ..native_daemon_lifecycle import NativeDaemonLifecycleError, native_daemon_lifecycle
 from ..private_file_io import read_private_regular_text
 from ..windows_paths import (
     windows_command_line_to_argv,
@@ -381,32 +380,109 @@ def _guard_daemon_launch_command(
     )
 
 
+def _native_int(value: object) -> int | None:
+    """``value`` when it is a real integer (not a bool), otherwise ``None``."""
+
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def _native_fields(source: Mapping[str, object], keys: tuple[str, ...]) -> dict[str, object]:
+    """The decision-relevant fields of a loaded record, in a JSON-safe form."""
+
+    fields: dict[str, object] = {}
+    for key in keys:
+        value = source.get(key)
+        fields[key] = None if isinstance(value, float) and not math.isfinite(value) else value
+    return fields
+
+
+def _reservation_facts(reservation: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(reservation, dict):
+        return None
+    return _native_fields(
+        reservation,
+        ("created_at", "pid", "process_command_digest", "process_start_marker", "process_creation_time"),
+    )
+
+
+def _lifecycle_fact_resolver(guard_home: Path | None) -> Callable[[str], object]:
+    """Answer the resident's fact requests from the operating system."""
+
+    def resolve(key: str) -> object:
+        kind, _, argument = key.partition(":")
+        if kind == "argv":
+            return windows_command_line_to_argv(argument)
+        if kind == "frozen":
+            try:
+                decoded_home, _executable, decoded_port = decode_frozen_daemon_serve_payload(argument)
+            except (OSError, RuntimeError, TypeError, ValueError):
+                return None
+            return {"guard_home": str(decoded_home), "port": decoded_port}
+        if kind == "resolve":
+            try:
+                return str(Path(argument).resolve())
+            except OSError:
+                return None
+        if key == "frozen_parent_trusted":
+            from ..frozen_daemon_runtime import _trusted_frozen_bootloader_parent_pid
+
+            return guard_home is not None and _trusted_frozen_bootloader_parent_pid(guard_home) == os.getppid()
+        if key == "heartbeat_age":
+            return None if guard_home is None else _runtime_state_age_seconds(guard_home)
+        pid = int(argument)
+        if kind == "pid_running":
+            return _guard_daemon_pid_is_running(pid)
+        if kind == "cmd":
+            return _guard_daemon_command_for_pid(pid)
+        if kind == "start_token":
+            return process_start_token(pid)
+        if kind == "win_ctime":
+            return windows_process_creation_time(pid)
+        if kind == "win_live":
+            return windows_process_liveness(pid)
+        if kind == "matches_command":
+            return _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+        raise NativeDaemonLifecycleError("native_daemon_lifecycle_fact_unknown")
+
+    return resolve
+
+
+def _lifecycle(
+    check: str,
+    query: Mapping[str, object],
+    *,
+    home: Path | None = None,
+    facts_home: Path | None = None,
+) -> dict[str, Any]:
+    """The resident's verdict for one lifecycle ``check``; Python never recomputes it."""
+
+    return native_daemon_lifecycle(
+        check,
+        query,
+        resolve_fact=_lifecycle_fact_resolver(facts_home),
+        guard_home=home,
+        platform="nt" if os.name == "nt" else "posix",
+    )
+
+
+def _start_timeouts() -> dict[str, Any]:
+    query = {
+        "desktop": os.environ.get("HOL_GUARD_DESKTOP", "").strip() == "1",
+        "worker_ready_floor": hook_worker_ready_timeout(0.0),
+    }
+    return _lifecycle("start_timeouts", query)
+
+
 def desktop_preflight_requested() -> bool:
     return os.environ.get("HOL_GUARD_DESKTOP_PREFLIGHT", "").strip().lower() in {"1", "true", "yes"}
 
 
 def _default_guard_daemon_start_timeout() -> float:
-    base = (
-        GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS
-        if os.environ.get("HOL_GUARD_DESKTOP", "").strip() == "1"
-        else GUARD_DAEMON_START_TIMEOUT_SECONDS
-    )
-    # The client's startup poll must outlast the worker's own readiness budget.
-    # When an operator raises HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS for a
-    # slow host (QEMU guests, cold CI), the daemon needs that full window plus a
-    # margin to finish its isolated handshake before the client gives up. A
-    # fixed client deadline would otherwise re-create the nested-budget deadlock
-    # one level higher: a healthy daemon killed while still waiting on a healthy
-    # worker.
-    worker_ready_floor = hook_worker_ready_timeout(0.0)
-    return max(base, worker_ready_floor + GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS)
+    return float(_start_timeouts()["default"])
 
 
 def _post_update_guard_daemon_start_timeout() -> float:
-    return max(
-        GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
-        hook_worker_ready_timeout(0.0) + GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS,
-    )
+    return float(_start_timeouts()["post_update"])
 
 
 def ensure_guard_daemon(
@@ -965,11 +1041,8 @@ def _claim_guard_daemon_wake_reservation(guard_home: Path) -> str | None:
     _ensure_private_directory(guard_home)
     with _guard_daemon_state_write_lock(guard_home):
         existing = _load_guard_daemon_wake_reservation(guard_home)
-        created_at = existing.get("created_at") if isinstance(existing, dict) else None
-        if (
-            isinstance(created_at, (int, float))
-            and 0.0 <= now - float(created_at) < _GUARD_DAEMON_WAKE_RESERVATION_SECONDS
-        ):
+        query = {"existing": _reservation_facts(existing), "now": now}
+        if not _lifecycle("wake_claim", query, home=guard_home)["claim"]:
             return None
         _write_private_atomic_text(
             _guard_daemon_wake_reservation_path(guard_home),
@@ -1015,14 +1088,8 @@ def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
     _ensure_private_directory(guard_home)
     with _guard_daemon_state_write_lock(guard_home):
         existing = _load_guard_daemon_recovery_reservation(guard_home)
-        owner_state = _guard_daemon_recovery_owner_state(existing)
-        if owner_state is True:
-            return None
-        created_at = existing.get("created_at") if isinstance(existing, dict) else None
-        if owner_state is None and (
-            isinstance(created_at, (int, float))
-            and 0.0 <= now - float(created_at) < _GUARD_DAEMON_RECOVERY_RESERVATION_SECONDS
-        ):
+        query = {"existing": _reservation_facts(existing), "now": now}
+        if not _lifecycle("recovery_claim", query, home=guard_home)["claim"]:
             return None
         _write_private_atomic_text(
             _guard_daemon_recovery_reservation_path(guard_home),
@@ -1034,36 +1101,8 @@ def _claim_guard_daemon_recovery_reservation(guard_home: Path) -> str | None:
 def _guard_daemon_recovery_owner_state(reservation: dict[str, object] | None) -> bool | None:
     """Return whether a claimed recovery worker is still alive."""
 
-    if not isinstance(reservation, dict):
-        return None
-    pid = reservation.get("pid")
-    if type(pid) is not int or pid <= 0:
-        return None
-    if not _guard_daemon_pid_is_running(pid):
-        return False
-    process_command_digest = reservation.get("process_command_digest")
-    if isinstance(process_command_digest, str) and process_command_digest:
-        actual_command = _guard_daemon_command_for_pid(pid)
-        if actual_command is None:
-            return None
-        actual_command_digest = hashlib.sha256(actual_command.encode("utf-8", errors="replace")).hexdigest()
-        if not secrets.compare_digest(actual_command_digest, process_command_digest):
-            return False
-    process_start_marker = reservation.get("process_start_marker")
-    if isinstance(process_start_marker, str) and process_start_marker:
-        actual_start_marker = process_start_token(pid)
-        if actual_start_marker is None:
-            return None
-        if not secrets.compare_digest(actual_start_marker, process_start_marker):
-            return False
-    if os.name == "nt":
-        creation_time = reservation.get("process_creation_time")
-        if type(creation_time) is int:
-            actual_creation_time = windows_process_creation_time(pid)
-            if actual_creation_time != creation_time:
-                return False
-        return windows_process_liveness(pid) is not False
-    return True
+    query = {"reservation": _reservation_facts(reservation)}
+    return cast("bool | None", _lifecycle("recovery_owner_state", query)["state"])
 
 
 def _bind_guard_daemon_recovery_reservation(
@@ -1216,15 +1255,12 @@ def _live_guard_daemon_identity(
     payload, auth_token = identity
     if require_current_runtime and not _guard_daemon_state_matches_current_runtime(payload):
         return None
-    compatibility_version = payload.get("compatibility_version")
-    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
+    gate_query = {"payload": _native_fields(payload, ("compatibility_version", "port", "pid"))}
+    gate = _lifecycle("live_state_gate", gate_query, home=guard_home)
+    if not gate["ok"]:
         return None
-    port = payload.get("port")
-    if not isinstance(port, int):
-        return None
-    pid = payload.get("pid")
-    if not isinstance(pid, int) or pid <= 0 or not _guard_daemon_pid_is_running(pid):
-        return None
+    port = int(gate["port"])
+    pid = int(gate["pid"])
     if expected_pid is not None and not _guard_daemon_pid_is_spawned_launch(pid, expected_pid):
         return None
     url = f"http://127.0.0.1:{port}"
@@ -1248,18 +1284,8 @@ def _load_authenticated_daemon_identity(guard_home: Path) -> tuple[dict[str, obj
     if payload is None:
         return None
     auth_token = load_guard_daemon_auth_token(guard_home)
-    expected_token_id = payload.get("auth_token_id")
-    state_id = payload.get("state_id")
-    if (
-        auth_token is None
-        or not isinstance(expected_token_id, str)
-        or not isinstance(state_id, str)
-        or not state_id
-        or not secrets.compare_digest(
-            hashlib.sha256(auth_token.encode("utf-8")).hexdigest(),
-            expected_token_id,
-        )
-    ):
+    binding = {"payload": _native_fields(payload, ("auth_token_id", "state_id")), "auth_token": auth_token}
+    if auth_token is None or not _lifecycle("identity_binding", binding, home=guard_home)["bound"]:
         return None
     return payload, auth_token
 
@@ -1355,7 +1381,7 @@ def _adopt_existing_guard_daemon(
             return adopted["url"]
     candidate_ports = _adoptable_guard_daemon_ports(guard_home)
     if isinstance(preferred_port, int) and preferred_port > 0:
-        candidate_ports = _prepend_preferred_port(candidate_ports, preferred_port)
+        candidate_ports = list(dict.fromkeys([preferred_port, *candidate_ports]))
     for port in candidate_ports:
         adopted = _initialize_existing_guard_daemon(guard_home, port)
         if adopted is None:
@@ -1366,24 +1392,14 @@ def _adopt_existing_guard_daemon(
 
 
 def _adoptable_guard_daemon_ports(guard_home: Path) -> list[int]:
-    preferred_ports: list[int] = []
     state = _load_state(guard_home)
-    state_port = state.get("port") if isinstance(state, dict) else None
-    if isinstance(state_port, int) and state_port > 0:
-        preferred_ports.append(state_port)
-    configured_port = _configured_port(guard_home)
-    if isinstance(configured_port, int) and configured_port > 0:
-        preferred_ports.append(configured_port)
-    for _pid, port in _running_guard_daemon_processes_for_guard_home(guard_home):
-        preferred_ports.append(port)
-    seen: set[int] = set()
-    ordered: list[int] = []
-    for port in preferred_ports:
-        if port in seen:
-            continue
-        seen.add(port)
-        ordered.append(port)
-    return ordered
+    query = {
+        "env_port": os.environ.get("GUARD_DAEMON_PORT"),
+        "guard_home": str(guard_home),
+        "state_port": _native_int(state.get("port")) if isinstance(state, dict) else None,
+        "running_ports": [port for _pid, port in _running_guard_daemon_processes_for_guard_home(guard_home)],
+    }
+    return [int(port) for port in _lifecycle("adoptable_ports", query, home=guard_home)["ports"]]
 
 
 def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingGuardDaemon | None:
@@ -1674,39 +1690,28 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
         return None
     if not isinstance(payload, dict):
         return None
-    pid = payload.get("pid")
-    if not isinstance(pid, int) or pid <= 0:
+    fields = ("pid", "daemon_url", "approval_url_base", "started_at", "state_path", "guard_home")
+    shape = _lifecycle("locator_shape", {"payload": _native_fields(payload, fields)}, home=guard_home)
+    if not shape["valid"]:
         return None
-    if not _guard_daemon_pid_is_running(pid):
-        return None
-    daemon_url = payload.get("daemon_url")
-    approval_url_base = payload.get("approval_url_base")
-    started_at = payload.get("started_at")
-    state_path_str = payload.get("state_path")
-    guard_home_str = payload.get("guard_home")
-    if not isinstance(daemon_url, str):
-        return None
-    if not isinstance(approval_url_base, str):
-        return None
-    if not isinstance(started_at, str):
-        return None
-    if not isinstance(state_path_str, str):
-        return None
-    if not isinstance(guard_home_str, str):
-        return None
+    pid = int(shape["pid"])
+    daemon_url = cast("str", payload["daemon_url"])
     if not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
         state = load_authenticated_daemon_state(guard_home)
-        state_pid = state.get("pid") if isinstance(state, dict) else None
-        state_port = state.get("port") if isinstance(state, dict) else None
-        if state_pid != pid or not isinstance(state_port, int) or daemon_url != f"http://127.0.0.1:{state_port}":
+        binding = {
+            "state": None if not isinstance(state, dict) else _native_fields(state, ("pid", "port")),
+            "pid": pid,
+            "daemon_url": daemon_url,
+        }
+        if not _lifecycle("locator_binding", binding, home=guard_home)["bound"]:
             return None
     return ApprovalCenterLocator(
-        guard_home=Path(guard_home_str),
+        guard_home=Path(cast("str", payload["guard_home"])),
         daemon_url=daemon_url,
-        approval_url_base=approval_url_base,
+        approval_url_base=cast("str", payload["approval_url_base"]),
         pid=pid,
-        started_at=started_at,
-        state_path=Path(state_path_str),
+        started_at=cast("str", payload["started_at"]),
+        state_path=Path(cast("str", payload["state_path"])),
     )
 
 
@@ -1822,22 +1827,9 @@ def _load_state(guard_home: Path) -> dict[str, object] | None:
 
 
 def _looks_like_guard_daemon_state(payload: dict[str, object], *, guard_home: Path) -> bool:
-    compatibility_version = payload.get("compatibility_version")
-    source_root = payload.get("source_root")
-    runtime_fingerprint = payload.get("runtime_fingerprint")
-    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
-        return False
-    if not isinstance(source_root, str) or not source_root.strip():
-        return False
-    if not isinstance(runtime_fingerprint, str) or not runtime_fingerprint.strip():
-        return False
-    payload_guard_home = payload.get("guard_home")
-    if isinstance(payload_guard_home, str) and payload_guard_home.strip():
-        try:
-            return Path(payload_guard_home).resolve() == guard_home.resolve()
-        except OSError:
-            return Path(payload_guard_home) == guard_home
-    return True
+    shape = _native_fields(payload, ("compatibility_version", "source_root", "runtime_fingerprint", "guard_home"))
+    query = {"payload": shape, "guard_home": str(guard_home)}
+    return bool(_lifecycle("state_shape", query, home=guard_home)["result"])
 
 
 def _state_path(guard_home: Path) -> Path:
@@ -2178,21 +2170,12 @@ def _clear_guard_daemon_start_progress(guard_home: Path) -> None:
 def _guard_daemon_start_progress_is_live(guard_home: Path, record: GuardDaemonStartProgress) -> bool:
     """Whether the record still names a live, identity-proven daemon for this home."""
 
-    pid = record.get("pid")
-    start_token = record.get("process_start_token")
-    recorded_at_ns = record.get("recorded_at_ns")
-    if not (
-        type(pid) is int and pid > 0 and isinstance(start_token, str) and start_token and type(recorded_at_ns) is int
-    ):
-        return False
-    age_ns = time.time_ns() - recorded_at_ns
-    if age_ns < 0 or age_ns >= int(_post_update_guard_daemon_start_timeout() * 1_000_000_000):
-        return False
-    if not _guard_daemon_pid_is_running(pid):
-        return False
-    if process_start_token(pid) != start_token:
-        return False
-    return _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
+    query = {
+        "record": _native_fields(record, ("pid", "process_start_token", "recorded_at_ns")),
+        "now_ns": time.time_ns(),
+        "worker_ready_floor": hook_worker_ready_timeout(0.0),
+    }
+    return bool(_lifecycle("start_progress_live", query, home=guard_home, facts_home=guard_home)["live"])
 
 
 def _windows_pending_launch_needs_retirement(guard_home: Path, *, progress_is_live: bool) -> bool:
@@ -2475,7 +2458,7 @@ def _state_path_age_seconds(state_path: Path) -> float:
 
 
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
-    return any(part.startswith("pytest-") or "pytest-of-" in part for part in guard_home.parts)
+    return bool(_lifecycle("ephemeral_home", {"guard_home": str(guard_home)})["ephemeral"])
 
 
 def _ephemeral_guard_home_is_inactive(
@@ -2485,18 +2468,9 @@ def _ephemeral_guard_home_is_inactive(
     state_payload: dict[str, object] | None = None,
 ) -> bool:
     payload = state_payload if isinstance(state_payload, dict) else _load_state(guard_home)
-    if isinstance(payload, dict):
-        pid = payload.get("pid")
-        if not isinstance(pid, int) or pid <= 0:
-            return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
-        if not _guard_daemon_pid_is_running(pid):
-            return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
-        if not _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home):
-            return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
-    heartbeat_age_seconds = _runtime_state_age_seconds(guard_home)
-    if heartbeat_age_seconds is None:
-        return fallback_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
-    return heartbeat_age_seconds >= _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS
+    state = None if not isinstance(payload, dict) else {"pid": _native_int(payload.get("pid"))}
+    query = {"state": state, "fallback_age_seconds": float(fallback_age_seconds)}
+    return bool(_lifecycle("ephemeral_inactive", query, facts_home=guard_home)["inactive"])
 
 
 def _runtime_state_age_seconds(guard_home: Path) -> float | None:
@@ -2751,65 +2725,20 @@ def _running_ephemeral_guard_daemon_processes() -> list[tuple[int, Path, float]]
     output = _bounded_process_query_stdout([ps_path, "-axo", "pid=,etime=,command="])
     if output is None:
         return []
-    processes: list[tuple[int, Path, float]] = []
-    for line in output.splitlines():
-        match = re.match(r"^\s*(\d+)\s+(\S+)\s+(.*)$", line)
-        if match is None:
-            continue
-        pid = int(match.group(1))
-        elapsed_seconds = _elapsed_seconds_from_ps(match.group(2))
-        command = match.group(3).strip()
-        if not _guard_daemon_command_matches(command):
-            continue
-        guard_home = _guard_home_from_command(command)
-        if guard_home is None or not _guard_home_is_ephemeral(guard_home):
-            continue
-        processes.append((pid, guard_home, elapsed_seconds))
-    return processes
-
-
-def _elapsed_seconds_from_ps(value: str) -> float:
-    trimmed = value.strip()
-    if not trimmed:
-        return 0.0
-    day_split = trimmed.split("-", 1)
-    days = 0
-    time_part = trimmed
-    if len(day_split) == 2:
-        days = int(day_split[0])
-        time_part = day_split[1]
-    fields = [int(field) for field in time_part.split(":")]
-    if len(fields) == 3:
-        hours, minutes, seconds = fields
-    elif len(fields) == 2:
-        hours = 0
-        minutes, seconds = fields
-    else:
-        hours = 0
-        minutes = 0
-        seconds = fields[0]
-    return float((((days * 24) + hours) * 60 + minutes) * 60 + seconds)
+    verdict = _lifecycle("ephemeral_processes", {"ps_output": output})
+    if "raises" in verdict:
+        raise ValueError("unparseable process elapsed time")
+    return [(int(pid), Path(home), float(elapsed)) for pid, home, elapsed in verdict["processes"]]
 
 
 def _guard_home_from_command(command: str) -> Path | None:
-    parts = _split_process_command(command)
-    if parts is None:
-        return None
-    return _guard_home_from_command_parts(parts)
+    home = _lifecycle("inspect_command", {"command": command})["guard_home"]
+    return None if home is None else Path(home)
 
 
 def _guard_home_from_command_parts(parts: list[str]) -> Path | None:
-    frozen_context = _frozen_daemon_serve_context(parts)
-    if frozen_context is not None:
-        return frozen_context[0]
-    for index, part in enumerate(parts):
-        if part == "--guard-home" and index + 1 < len(parts):
-            value = parts[index + 1]
-            return Path(value) if value else None
-        if part.startswith("--guard-home="):
-            value = part.split("=", 1)[1]
-            return Path(value) if value else None
-    return None
+    home = _lifecycle("inspect_parts", {"parts": list(parts)})["guard_home"]
+    return None if home is None else Path(home)
 
 
 def _implicit_daemon_guard_home() -> Path:
@@ -2819,100 +2748,20 @@ def _implicit_daemon_guard_home() -> Path:
 
 
 def _guard_daemon_port_from_command(command: str) -> int | None:
-    parts = _split_process_command(command)
-    if parts is None:
-        return None
-    frozen_context = _frozen_daemon_serve_context(parts)
-    if frozen_context is not None:
-        return frozen_context[2]
-    for index, part in enumerate(parts):
-        if part.startswith("--port="):
-            try:
-                port = int(part.split("=", 1)[1])
-            except ValueError:
-                return None
-            return port if port > 0 else None
-        if part != "--port" or index + 1 >= len(parts):
-            continue
-        try:
-            port = int(parts[index + 1])
-        except ValueError:
-            return None
-        return port if port > 0 else None
-    return None
+    port = _lifecycle("inspect_command", {"command": command})["port"]
+    return cast("int | None", port)
 
 
 def _guard_daemon_command_matches(command: str) -> bool:
-    parts = _split_process_command(command)
-    if parts is None:
-        return False
-    return _guard_daemon_command_parts_match(parts)
+    return bool(_lifecycle("inspect_command", {"command": command})["matches"])
 
 
 def _split_process_command(command: str) -> list[str] | None:
-    if os.name == "nt":
-        return windows_command_line_to_argv(command)
-    try:
-        return shlex.split(command)
-    except ValueError:
-        return None
-
-
-_HOOK_LAUNCHER_ARGS = frozenset({"__guard-bounded-hook", "__guard-cursor-hook"})
+    return cast("list[str] | None", _lifecycle("split_command", {"command": command})["parts"])
 
 
 def _guard_daemon_command_parts_match(parts: list[str]) -> bool:
-    if any(part in _HOOK_LAUNCHER_ARGS for part in parts):
-        return False
-    if _frozen_daemon_serve_context(parts) is not None:
-        return True
-    for index in range(len(parts) - 1):
-        prefix = parts[:index]
-        if parts[index : index + 2] == ["daemon", "--serve"]:
-            if any(part == "codex_plugin_scanner.cli" for part in prefix):
-                return True
-            if index > 0:
-                launcher_name = ntpath.basename(parts[index - 1]).lower()
-                if launcher_name in {
-                    "hol-guard",
-                    "hol-guard.exe",
-                    "plugin-guard",
-                    "plugin-guard.exe",
-                }:
-                    return True
-            continue
-        if parts[index : index + 3] != ["guard", "daemon", "--serve"]:
-            continue
-        if any(part == "codex_plugin_scanner.cli" for part in prefix):
-            return True
-        if index == 0:
-            continue
-        launcher_name = ntpath.basename(parts[index - 1]).lower()
-        if launcher_name in {
-            "hol-guard",
-            "hol-guard.exe",
-            "plugin-guard",
-            "plugin-guard.exe",
-        }:
-            return True
-    return False
-
-
-def _frozen_daemon_serve_context(parts: list[str]) -> tuple[Path, Path, int] | None:
-    if len(parts) != 3 or parts[1] != FROZEN_DAEMON_SERVE_ARG:
-        return None
-    launcher_name = ntpath.basename(parts[0]).lower()
-    if launcher_name not in {
-        "hol-guard",
-        "hol-guard.exe",
-        "plugin-guard",
-        "plugin-guard.exe",
-    }:
-        return None
-    try:
-        return decode_frozen_daemon_serve_payload(parts[2])
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return None
+    return bool(_lifecycle("inspect_parts", {"parts": list(parts)})["matches"])
 
 
 def _guard_daemon_process_inventory_for_guard_home(
@@ -2920,6 +2769,8 @@ def _guard_daemon_process_inventory_for_guard_home(
 ) -> list[tuple[int, int]] | None:
     """Return a proven process inventory, or ``None`` when enumeration is unknown."""
 
+    output: str | None = None
+    entries: list[tuple[int, str]] | None = None
     if os.name == "nt":
         candidate_names = {
             "hol-guard.exe",
@@ -2951,107 +2802,22 @@ def _guard_daemon_process_inventory_for_guard_home(
             output = _bounded_process_query_stdout([ps_path, "-axo", "pid=,command="])
             if output is None:
                 return None
-            entries = []
-            for line in output.splitlines():
-                match = re.match(r"^\s*(\d+)\s+(.*)$", line)
-                if match is None:
-                    continue
-                entries.append((int(match.group(1)), match.group(2).strip()))
 
-    processes: list[tuple[int, int]] = []
-    for pid, command_line in entries:
-        parts = _split_process_command(command_line)
-        if parts is None:
-            lowered = command_line.lower()
-            if ("codex_plugin_scanner" in lowered or "guard" in lowered) and _malformed_command_may_launch_guard(
-                command_line
-            ):
-                return None
-            continue
-        if not _guard_daemon_command_parts_match(parts):
-            continue
-        command_guard_home = _guard_home_from_command_parts(parts)
-        if command_guard_home is None:
-            command_guard_home = _implicit_daemon_guard_home()
-        try:
-            matches_home = command_guard_home.resolve() == guard_home.resolve()
-        except OSError:
-            matches_home = command_guard_home == guard_home
-        if not matches_home:
-            continue
-        port = _guard_daemon_port_from_command(command_line)
-        if port is None:
-            # A serving process may request the OS-assigned port (or omit it).
-            # It cannot compete with itself; other unresolved PIDs remain unknown.
-            if pid == os.getpid():
-                continue
-            if bool(getattr(sys, "frozen", False)) and pid == os.getppid():
-                from ..frozen_daemon_runtime import _trusted_frozen_bootloader_parent_pid
-
-                # Apply the existing exact executable/home bootloader proof
-                # before port decoding can turn the parent's dynamic port unknown.
-                if _trusted_frozen_bootloader_parent_pid(guard_home) == pid:
-                    continue
-            return None
-        processes.append((pid, port))
-    return sorted(processes, key=lambda item: item[1])
-
-
-def _malformed_command_may_launch_guard(command_line: str) -> bool:
-    trimmed_command = command_line.lstrip()
-    if not trimmed_command:
-        return False
-    if trimmed_command[0] in {'"', "'"}:
-        quote = trimmed_command[0]
-        closing_quote = trimmed_command.find(quote, 1)
-        if closing_quote <= 1:
-            lowered = trimmed_command.lower()
-            launcher_names = (
-                "hol-guard",
-                "hol-guard.exe",
-                "plugin-guard",
-                "plugin-guard.exe",
-            )
-            launcher_present = any(
-                re.search(
-                    rf"(?:^|[\\/\s]){re.escape(name)}(?:$|[\\/\s\"'])",
-                    lowered,
-                )
-                for name in launcher_names
-            )
-            if FROZEN_DAEMON_SERVE_ARG in lowered:
-                return launcher_present
-            daemon_invocation = re.search(r"(?:^|\s)(?:guard\s+)?daemon\s+--serve(?:\s|$)", lowered)
-            return daemon_invocation is not None and launcher_present
-        first_token = trimmed_command[1:closing_quote]
-    else:
-        first_token = trimmed_command.split(maxsplit=1)[0]
-    launcher = ntpath.basename(first_token).lower()
-    lowered = command_line.lower()
-    if FROZEN_DAEMON_SERVE_ARG in lowered:
-        return launcher in {
-            "hol-guard",
-            "hol-guard.exe",
-            "plugin-guard",
-            "plugin-guard.exe",
-        }
-    daemon_invocation = re.search(r"(?:^|\s)(?:guard\s+)?daemon\s+--serve(?:\s|$)", lowered)
-    if daemon_invocation is None:
-        return False
-    if launcher.startswith("python"):
-        module_launch = (
-            "runpy.run_module" in lowered
-            or re.search(r"(?:^|\s)-m\s+codex_plugin_scanner\.cli(?:\s|$)", lowered) is not None
-        )
-        return "codex_plugin_scanner.cli" in lowered and module_launch
-    if launcher in {"env", "uv", "uv.exe"}:
-        return re.search(r"(?:^|\s)(?:hol-guard|plugin-guard)(?:\.exe)?(?:\s|$)", lowered) is not None
-    return launcher in {
-        "hol-guard",
-        "hol-guard.exe",
-        "plugin-guard",
-        "plugin-guard.exe",
+    query: dict[str, object] = {
+        "guard_home": str(guard_home),
+        "implicit_home": str(_implicit_daemon_guard_home()),
+        "own_pid": os.getpid(),
+        "parent_pid": os.getppid(),
+        "frozen_runtime": bool(getattr(sys, "frozen", False)),
     }
+    if output is not None:
+        query["ps_output"] = output
+    else:
+        query["entries"] = [[pid, command_line] for pid, command_line in entries or []]
+    verdict = _lifecycle("process_inventory", query, home=guard_home, facts_home=guard_home)
+    if not verdict["known"]:
+        return None
+    return [(int(pid), int(port)) for pid, port in verdict["processes"]]
 
 
 def _running_guard_daemon_processes_for_guard_home(guard_home: Path) -> list[tuple[int, int]]:
@@ -3302,20 +3068,12 @@ def _guard_daemon_pid_command_identity(
     command = _guard_daemon_command_for_pid(pid)
     if command is None:
         return None
-    parts = _split_process_command(command)
-    if parts is None:
-        return None
-    if not _guard_daemon_command_parts_match(parts):
-        return False
-    if expected_guard_home is None:
-        return True
-    command_guard_home = _guard_home_from_command_parts(parts)
-    if command_guard_home is None:
-        command_guard_home = _implicit_daemon_guard_home()
-    try:
-        return command_guard_home.resolve() == expected_guard_home.resolve()
-    except OSError:
-        return command_guard_home == expected_guard_home
+    query = {
+        "command": command,
+        "expected_home": None if expected_guard_home is None else str(expected_guard_home),
+        "implicit_home": str(_implicit_daemon_guard_home()),
+    }
+    return cast("bool | None", _lifecycle("command_identity", query, home=expected_guard_home)["identity"])
 
 
 def _guard_daemon_command_for_pid(pid: int) -> str | None:
@@ -3563,23 +3321,7 @@ def _guard_daemon_recovery_lock(guard_home: Path, *, timeout_seconds: float | No
 def _same_daemon_invocation(left: str, right: str) -> bool:
     """Return whether two command lines are the same Guard daemon serve invocation."""
 
-    left_parts = _split_process_command(left)
-    right_parts = _split_process_command(right)
-    if left_parts is None or right_parts is None:
-        return False
-    if not _guard_daemon_command_parts_match(left_parts) or not _guard_daemon_command_parts_match(right_parts):
-        return False
-    left_home = _guard_home_from_command_parts(left_parts)
-    right_home = _guard_home_from_command_parts(right_parts)
-    left_port = _guard_daemon_port_from_command(left)
-    right_port = _guard_daemon_port_from_command(right)
-    if left_home is None or right_home is None or left_port is None or right_port is None:
-        return False
-    try:
-        homes_match = left_home.resolve() == right_home.resolve()
-    except (OSError, NotImplementedError, RuntimeError, ValueError):
-        homes_match = os.path.normcase(str(left_home)) == os.path.normcase(str(right_home))
-    return homes_match and left_port == right_port
+    return bool(_lifecycle("same_invocation", {"left": left, "right": right})["same"])
 
 
 def _windows_venv_launcher_parent_pid() -> int | None:
@@ -3606,11 +3348,12 @@ def _windows_venv_launcher_parent_pid() -> int | None:
 
 
 def _inventory_has_competing_daemon(inventory: list[tuple[int, int]]) -> bool:
-    ignored = {os.getpid()}
-    launcher_parent = _windows_venv_launcher_parent_pid()
-    if launcher_parent is not None:
-        ignored.add(launcher_parent)
-    return any(pid not in ignored for pid, _port in inventory)
+    query = {
+        "inventory": [[pid, port] for pid, port in inventory],
+        "own_pid": os.getpid(),
+        "launcher_parent": _windows_venv_launcher_parent_pid(),
+    }
+    return bool(_lifecycle("competing_daemon", query)["competing"])
 
 
 def acquire_guard_daemon_owner_lock(guard_home: Path) -> BinaryIO:
@@ -3664,78 +3407,32 @@ _unlock_daemon_start_file = release_file_lock
 
 
 def _configured_port(guard_home: Path) -> int | None:
-    raw_port = os.environ.get("GUARD_DAEMON_PORT")
-    if raw_port is None or not raw_port.strip():
-        return _stable_port_for_guard_home(guard_home)
-    try:
-        port = int(raw_port)
-    except ValueError:
-        return _stable_port_for_guard_home(guard_home)
-    return port if port > 0 else _stable_port_for_guard_home(guard_home)
-
-
-def _stable_port_for_guard_home(guard_home: Path) -> int:
-    encoded_path = str(guard_home.resolve()).encode("utf-8")
-    digest = hashlib.sha256(encoded_path).hexdigest()
-    offset = int(digest[:8], 16) % GUARD_DAEMON_PORT_RANGE
-    return DEFAULT_GUARD_DAEMON_PORT + offset
-
-
-def _prepend_preferred_port(ports: list[int], preferred_port: int | None) -> list[int]:
-    if not isinstance(preferred_port, int) or preferred_port <= 0:
-        return ports
-    ordered: list[int] = [preferred_port]
-    seen = {preferred_port}
-    for port in ports:
-        if port in seen:
-            continue
-        seen.add(port)
-        ordered.append(port)
-    return ordered
+    query = {"env_port": os.environ.get("GUARD_DAEMON_PORT"), "guard_home": str(guard_home)}
+    return cast("int | None", _lifecycle("configured_port", query, home=guard_home)["port"])
 
 
 def _candidate_ports(guard_home: Path, *, preferred_port: int | None = None) -> list[int]:
-    configured_port = _configured_port(guard_home)
-    if configured_port is None:
-        return _prepend_preferred_port([], preferred_port)
-    raw_port = os.environ.get("GUARD_DAEMON_PORT")
-    if raw_port is not None and raw_port.strip():
-        return _prepend_preferred_port([configured_port], preferred_port)
-    offset = configured_port - DEFAULT_GUARD_DAEMON_PORT
-    ports: list[int] = []
-    for step in range(min(25, GUARD_DAEMON_PORT_RANGE)):
-        candidate_offset = (offset + step) % GUARD_DAEMON_PORT_RANGE
-        ports.append(DEFAULT_GUARD_DAEMON_PORT + candidate_offset)
-    return _prepend_preferred_port(ports, preferred_port)
+    query = {
+        "env_port": os.environ.get("GUARD_DAEMON_PORT"),
+        "guard_home": str(guard_home),
+        "preferred_port": _native_int(preferred_port),
+    }
+    return [int(port) for port in _lifecycle("candidate_ports", query, home=guard_home)["ports"]]
 
 
 def _healthz_payload_is_current(raw_payload: str) -> bool:
-    payload = json.loads(raw_payload)
-    if not isinstance(payload, dict):
-        return False
-    compatibility_version = payload.get("compatibility_version")
-    if compatibility_version != GUARD_DAEMON_COMPATIBILITY_VERSION:
-        return False
-    tables = payload.get("tables")
-    if tables is None:
-        return True
-    if not isinstance(tables, list):
-        return False
-    table_names = {table for table in tables if isinstance(table, str)}
-    return REQUIRED_DAEMON_TABLES.issubset(table_names)
+    verdict = _lifecycle("healthz_current", {"raw_payload": raw_payload})
+    if not verdict["valid_json"]:
+        raise json.JSONDecodeError("invalid daemon health payload", raw_payload, 0)
+    return bool(verdict["result"])
 
 
 def _healthz_payload_matches_guard_home(raw_payload: str, guard_home: Path) -> bool:
-    payload = json.loads(raw_payload)
-    if not isinstance(payload, dict):
-        return False
-    payload_guard_home = payload.get("guard_home")
-    if not isinstance(payload_guard_home, str) or not payload_guard_home.strip():
-        return False
-    try:
-        return Path(payload_guard_home).resolve() == guard_home.resolve()
-    except OSError:
-        return Path(payload_guard_home) == guard_home
+    query = {"raw_payload": raw_payload, "guard_home": str(guard_home)}
+    verdict = _lifecycle("healthz_home", query, home=guard_home)
+    if not verdict["valid_json"]:
+        raise json.JSONDecodeError("invalid daemon health payload", raw_payload, 0)
+    return bool(verdict["result"])
 
 
 def _live_or_newer_daemon_url(guard_home: Path, *, executable: Path | None, preferred_port: int | None) -> str | None:

@@ -26,7 +26,7 @@ def test_linux_process_inventory_uses_bounded_procfs_without_ps(
         b"daemon",
         b"--serve",
         b"--guard-home",
-        b"/guard-home",
+        str(tmp_path / "guard-home").encode(),
         b"--port",
         b"4781",
     )
@@ -40,7 +40,7 @@ def test_linux_process_inventory_uses_bounded_procfs_without_ps(
         lambda: read_proc_entries(proc_root),
     )
 
-    assert manager._guard_daemon_process_inventory_for_guard_home(Path("/guard-home")) == [(4242, 4781)]
+    assert manager._guard_daemon_process_inventory_for_guard_home(tmp_path / "guard-home") == [(4242, 4781)]
 
 
 def test_linux_proc_process_inventory_fails_closed_when_budget_is_exceeded(
