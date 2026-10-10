@@ -14,8 +14,16 @@ mod archive_inspect;
 mod archive_inspect_containment;
 mod business_document_compile;
 mod business_source_codec;
+mod approval_reuse_diagnostic_op;
+mod approval_reuse_diagnostic_probes;
+#[cfg(test)]
+mod approval_reuse_diagnostic_vectors_tests;
 mod claim_approval_reuse_op;
 mod claim_reuse;
+#[cfg(test)]
+mod claim_reuse_vectors_tests;
+#[cfg(test)]
+mod store_vectors_support_tests;
 mod command_effect;
 mod compound_git_args;
 mod compound_git_chain;

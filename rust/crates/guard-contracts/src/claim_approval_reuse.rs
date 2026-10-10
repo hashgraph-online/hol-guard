@@ -3,10 +3,10 @@
 //! SQLite `BEGIN IMMEDIATE` transaction.
 //!
 //! Unlike `ApprovalReuseDecide` (pure lattice), this op performs IO against the
-//! guard store and secret store: it opens `store_path`, resolves policy-
-//! integrity secret material + integrity state from `guard_home`, then calls
-//! `claim_approval_reuse_decisions`. Key bytes never cross the wire; the
-//! resident derives them locally.
+//! guard store: it opens `store_path` and claims the batch. The OS-keyring
+//! facing integrity evidence (refreshed integrity state, HMAC key material,
+//! materialized policy-bundle identities) is procured by the Python transport
+//! and shipped in the request, exactly as for `PolicyDecisionLookup`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -43,6 +43,19 @@ pub struct ClaimApprovalReuseDecisionsRequestV1 {
     /// member without touching the bundle table.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy_bundle_decision_identities: Option<Vec<Vec<Value>>>,
+    /// `_refresh_policy_integrity_state(...)` output captured before dispatch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity_state: Option<Value>,
+    /// Policy-integrity HMAC key bytes (base64url, no padding).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity_key_b64: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub integrity_key_id: Option<String>,
+    /// Local-once approval HMAC key bytes (base64url, no padding).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_once_integrity_key_b64: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_once_integrity_key_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -151,6 +151,8 @@ def _resident_request(
             "approval_proof_decide",
             "hook_decide",
             "request_context_build",
+            "claim_approval_reuse_decisions",
+            "approval_reuse_diagnostic",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

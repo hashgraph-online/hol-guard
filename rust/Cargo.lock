@@ -824,6 +824,7 @@ dependencies = [
  "base64ct",
  "caseless",
  "cbc",
+ "flate2",
  "fs2",
  "getrandom 0.3.4",
  "guard-archive",
