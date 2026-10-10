@@ -320,6 +320,16 @@ class AdaptiveHookProcessCapacity:
             self._queue_p95_seconds = max(0.0, queue_p95_ms / 1000.0)
             self._queued = max(0, queued)
 
+    def needs_rss(self) -> bool:
+        """True only when queue pressure could scale capacity up.
+
+        Process-tree RSS is consulted solely by the scale-up condition, so a
+        process-table scan is wasted work while the queue is short.
+        """
+
+        with self._lock:
+            return self._queued > 0 and self._queue_p95_seconds > _QUEUE_P95_SCALE_THRESHOLD_SECONDS
+
     def refresh(self, *, failure_rate: float, rss_bytes: int | None) -> int:
         cpu_ratio = self._cpu_ratio_provider()
         with self._lock:

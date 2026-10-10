@@ -49,7 +49,7 @@ mod agent_metadata;
 
 /// Reuse the exact host-input proof after execution; output content still
 /// requires its independent native scan and installed policy enforcement.
-pub fn bounded_task_metadata_output(payload: &serde_json::Value) -> bool {
+pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) -> bool {
     let Some(root) = payload.as_object() else {
         return false;
     };
@@ -72,7 +72,11 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value) -> bool {
         })
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
-    agent_metadata::bounded_task_list(&serde_json::Value::Object(input), Some(tool))
+    let input = serde_json::Value::Object(input);
+    if harness == "omp" && omp::bounded_delegation_metadata(&input) {
+        return true;
+    }
+    agent_metadata::bounded_task_list(&input, Some(tool))
 }
 #[path = "generic_tools.rs"]
 mod tools;

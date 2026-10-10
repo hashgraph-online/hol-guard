@@ -11,20 +11,24 @@ The stable contribution ID is the public identity. `command.blitcp` uses
 `mcp.filesystem` keeps that identity even though its runtime catalog entry is
 `command.mcp-filesystem`.
 
-Publisher verification uses numeric GitHub account IDs recorded in accepted
-publisher metadata. Pull-request authorship is attribution evidence only; it never
-creates publisher authority by itself. A profile link, username, repository
-membership, authorship of the contribution, commit email, or authorship of an
-unrelated change is not sufficient. The contribution and the authority-bearing
-metadata must still exist on canonical `main`. Ambiguous history, renames, direct
-pushes, and disputed attribution require maintainer review rather than an automatic
-grant.
+When an external contribution merges, its initial publisher identity comes from
+the verified PR that first added its source to protected `main`. Verification
+checks the complete source history, the introducing PR and its numeric GitHub
+User ID, and current source and trust classification. A later fix, username,
+commit email, credit field, or onboarding link cannot grant ownership. Ambiguous
+history, renames, reused paths, direct pushes, and disputed attribution require
+maintainer review.
 
-The first accepted claimant set is established through normal protected repository
-review of `maintainerGithubIds`. Adding or removing one of those IDs is an
-authority-bearing metadata change and must be reviewed as such. An empty claimant
-set deliberately leaves the extension unclaimable until maintainers accept an
-explicit mapping; consumers must not fall back to PR authorship.
+No listing PR or manually entered ID is needed for that initial claim. The
+post-merge workflow sends a claim invitation, and the snapshot publisher recovers
+missed invitations after publication. These generated records never commit to
+the repository or open another PR.
+
+An optional `maintainerGithubIds` field overrides automatic initial ownership
+when maintainers delegate or withdraw claim authority. Changing that field is an
+authority change and requires normal protected repository review. An explicit
+empty array disables automatic claims; omitting the field preserves the verified
+introducing author's claim.
 
 First-party and trusted-library coverage is project-maintained. It is not claimable
 by the last person who edited its source.
@@ -37,9 +41,8 @@ Publisher presentation and claim authority belong in:
 contributions/extension-listings/<contribution-id>.json
 ```
 
-A sidecar is optional for public presentation, but an external extension cannot be
-automatically claimed until an accepted sidecar names at least one authorized
-numeric GitHub ID.
+A sidecar is optional for public presentation and initial claim eligibility.
+Use `maintainerGithubIds` only when an explicit authority override is needed.
 
 New sidecars use v2. v1 sidecars remain readable so existing accepted mappings
 keep their exact semantics. Example for `command.blitcp`:
@@ -87,8 +90,8 @@ pull-request, issue, commit, or discussion URLs. `upstream` is an optional
 public project reference. These fields help a publisher profile prefill public
 attribution, but they are never claim authority, runtime behavior, or a reason
 to infer GitHub access. A credit can be present while `maintainerGithubIds` is
-empty; that extension stays unclaimable until maintainers review an explicit
-mapping.
+explicitly empty; that extension stays unclaimable until maintainers change the
+reviewed override. Omitting the field permits verified introducing-author authority.
 
 ### Reviewed claim authority
 
@@ -97,10 +100,12 @@ Each ID is an explicit, reviewed authorization to manage the extension's publish
 profile. It never changes runtime trust, code ownership, or upstream ownership.
 GitHub login names remain display data and can change without changing identity.
 
-Omitting `maintainerGithubIds` and providing an empty array both mean there is no
-automatic publisher claimant. Pull-request authorship remains useful context for a
-maintainer review, but it cannot substitute for an accepted numeric-ID mapping.
-The directory always emits an array. For `claimPolicy: provenance`, Cloud must grant
+Omitting `maintainerGithubIds` permits automatic attribution to the verified
+introducing contributor's numeric GitHub ID. Providing an explicit empty array
+disables automatic claims. Ambiguous or incomplete history still requires review;
+unverified authorship and public credit cannot grant authority.
+The published directory always emits the resulting accepted array. For
+`claimPolicy: provenance`, Cloud must grant
 or transfer elevated publisher authority only to IDs present in that accepted array.
 `claimPolicy: project` never grants a third-party claim through this field.
 
@@ -164,10 +169,17 @@ The post-merge `Extension Claim Notice` workflow runs only after a pull request 
 merged into the repository's default branch and only for native contribution or
 publisher-listing changes. It compares the merged source with the pull request's
 recorded pre-merge base revision, verifies both ancestry and canonical-branch
-membership, reads the accepted sidecar at the merged source SHA, and notifies only
-newly accepted `maintainerGithubIds`. For a newly introduced native contribution,
-all accepted IDs in its merged sidecar are eligible for the notice. Pull-request
-authorship is never substituted for missing authority.
+membership, and revalidates current claim authority. Reviewed explicit
+`maintainerGithubIds` control delegation and revocation. When that optional field
+is absent, verified introducing history establishes the original contributor's
+numeric identity. The earliest canonical authored-source or descriptor introduction
+wins; later publication, source-format migrations, and fix PRs cannot replace it.
+
+Snapshot publication recovers missing invitations, including extensions omitted
+from an existing trusted notice. It refreshes that notice under the same per-PR
+lock rather than posting a duplicate. GitHub API failures stop publication visibly:
+the previous verified snapshot remains available, and the failed run must be
+retried rather than replacing accepted authority with incomplete results.
 
 Rename-affected contributions and publisher listings are never invited
 automatically. After maintainers review the renamed identity and claimant mapping,
@@ -177,6 +189,6 @@ as a new source of authority.
 
 Notices are idempotent on each merged PR and can be backfilled with the workflow's
 manual `pr_number` input. A removed, non-canonical, malformed, or authority-free
-listing produces no claim invitation. The notice is only an onboarding link; the
+contribution produces no claim invitation. The notice is only an onboarding link; the
 publisher profile remains separate from runtime trust, activation, security
 certification, and upstream ownership.
