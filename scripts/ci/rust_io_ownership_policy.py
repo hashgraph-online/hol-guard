@@ -74,6 +74,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Same correlation-only digest for the generic-hook decision resident op.
+        "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Same correlation-only digest for the hook artifact composition op.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
@@ -114,6 +116,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident approval-proof response; the answer is
         # strictly validated and never reinterpreted into a decision.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Decodes the bounded resident generic-hook decision response; the
+        # answer is strictly validated and never reinterpreted into a decision.
+        "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Decodes the bounded resident hook artifact composition response; the
         # answer is strictly bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",

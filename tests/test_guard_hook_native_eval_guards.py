@@ -12,10 +12,7 @@ from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
     _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
-from codex_plugin_scanner.guard.cli.commands_hook_native_generic import (
-    _observed_action_detail,
-    _should_relax_configured_default,
-)
+from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _observed_action_detail
 
 
 @pytest.mark.parametrize(
@@ -113,50 +110,6 @@ def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> N
             context=context,
             raw_command="cat other",
             runtime_workspace=tmp_path,
-        )
-        is False
-    )
-
-
-def test_should_relax_configured_default_requires_review_tier_and_no_override(tmp_path) -> None:
-    assert (
-        _should_relax_configured_default(
-            configured_action="review",
-            has_narrow_override=True,
-            home_dir=tmp_path,
-            payload={},
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _should_relax_configured_default(
-            configured_action="allow",
-            has_narrow_override=False,
-            home_dir=tmp_path,
-            payload={},
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-
-
-@pytest.mark.usefixtures("native_prompt_runtime")
-def test_should_relax_configured_default_rejects_prompt_submit_without_clean_prompt(tmp_path) -> None:
-    base = {
-        "configured_action": "review",
-        "has_narrow_override": False,
-        "home_dir": tmp_path,
-        "runtime_workspace": tmp_path,
-    }
-    assert _should_relax_configured_default(payload={"hook_event_name": "UserPromptSubmit"}, **base) is False
-    assert (
-        _should_relax_configured_default(payload={"hook_event_name": "UserPromptSubmit", "prompt": "   "}, **base)
-        is False
-    )
-    assert (
-        _should_relax_configured_default(
-            payload={"hook_event_name": "UserPromptSubmit", "prompt": "read my .env file"}, **base
         )
         is False
     )

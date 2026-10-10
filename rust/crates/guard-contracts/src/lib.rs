@@ -79,6 +79,8 @@ mod install_checks;
 pub use install_checks::*;
 mod generic_hook_payload;
 pub use generic_hook_payload::*;
+mod hook_decision;
+pub use hook_decision::*;
 
 mod workflow_capability;
 pub use workflow_capability::*;
