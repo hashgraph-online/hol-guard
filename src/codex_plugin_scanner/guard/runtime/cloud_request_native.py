@@ -11,9 +11,11 @@ its historical ``ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)`` contract.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import threading
+from collections import OrderedDict
 from collections.abc import Mapping, Sequence
-from functools import lru_cache
 from typing import Any
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
@@ -22,6 +24,19 @@ from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 _DECISION_INCONSISTENT_CODE = "native_runner_authority_decision_inconsistent"
 _INVALID_RESULT = "native_runner_authority_result_invalid"
 _MEMO_SIZE = 4096
+# The owner keeps the head and tail of a long command (at most 65,536 UTF-16 units),
+# so an oversized text column keeps this many chars at each end and drops the middle;
+# one oversized row then never exceeds the resident request cap. The action envelope
+# is JSON, so it gets a larger plain cut.
+_ROW_TEXT_KEEP_CHARS = 70_000
+_ROW_TEXT_MAX_CHARS = 2 * _ROW_TEXT_KEEP_CHARS
+_ROW_ENVELOPE_MAX_CHARS = 400_000
+_ROW_ENVELOPE_KEYS = frozenset({"action_envelope_json"})
+# A text with no usable scrub (resident outage or refusal) is withheld, never sent raw.
+_ERROR_TEXT_MAX_CHARS = 20_000
+WITHHELD_ERROR_TEXT = "[withheld: Cloud-safe scrub unavailable]"
+# Bound resident refusals that describe the row itself, not an outage.
+NATIVE_ROW_REFUSAL_CODES = frozenset({"native_runner_authority_request_too_large", "native_runner_authority_invalid"})
 # The resident accepts 4 MiB per request: send a snapshot in one call when it fits
 # and otherwise build its items in smaller chunks first.
 _ONE_SHOT_BYTES = 3_000_000
@@ -70,10 +85,21 @@ def _invalid() -> NativeRunnerAuthorityError:
     return NativeRunnerAuthorityError(_INVALID_RESULT)
 
 
+def _fit_row_value(key: str, value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    if key in _ROW_ENVELOPE_KEYS:
+        # A cut JSON document is unparseable, which the owner reports as a malformed envelope.
+        return value if len(value) <= _ROW_ENVELOPE_MAX_CHARS else value[:_ROW_ENVELOPE_MAX_CHARS]
+    if len(value) <= _ROW_TEXT_MAX_CHARS:
+        return value
+    return value[:_ROW_TEXT_KEEP_CHARS] + value[-_ROW_TEXT_KEEP_CHARS:]
+
+
 def project_request_row(row: Mapping[str, object]) -> dict[str, object]:
     """The columns of a local request row the native owner reads."""
 
-    return {key: row[key] for key in _ROW_KEYS if key in row}
+    return {key: _fit_row_value(key, row[key]) for key in _ROW_KEYS if key in row}
 
 
 def _call(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
@@ -100,15 +126,59 @@ def cloud_scrub_texts(values: Sequence[str]) -> list[str]:
     return _text_list(_call("cloud_scrub_texts", {"texts": list(values)}), len(values))
 
 
-@lru_cache(maxsize=_MEMO_SIZE)
-def _scrubbed(value: str) -> str:
-    return cloud_scrub_texts([value])[0]
+class _ScrubMemo:
+    """Bounded memo of scrubbed texts keyed by digest, so raw text is never retained."""
+
+    def __init__(self, size: int) -> None:
+        self._size = size
+        self._entries: OrderedDict[bytes, str] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def clear(self) -> None:
+        with self._lock:
+            self._entries.clear()
+
+    def get(self, value: str) -> str:
+        key = hashlib.sha256(value.encode("utf-8", "surrogatepass")).digest()
+        with self._lock:
+            found = self._entries.get(key)
+            if found is not None:
+                self._entries.move_to_end(key)
+                return found
+        scrubbed = cloud_scrub_texts([value])[0]
+        with self._lock:
+            self._entries[key] = scrubbed
+            while len(self._entries) > self._size:
+                self._entries.popitem(last=False)
+        return scrubbed
+
+
+_SCRUB_MEMO = _ScrubMemo(_MEMO_SIZE)
 
 
 def cloud_scrub_text(value: str) -> str:
-    """The Cloud-safe form of one text; the pure derivation is memoized."""
+    """The Cloud-safe form of one text; the pure derivation is memoized by digest."""
 
-    return _scrubbed(value)
+    return _SCRUB_MEMO.get(value)
+
+
+def cloud_error_text(value: str) -> str:
+    """Cloud-safe error text that never raises and never leaks: unscrubbable text is withheld."""
+
+    try:
+        return cloud_scrub_text(value[:_ERROR_TEXT_MAX_CHARS])
+    except NativeRunnerAuthorityError:
+        return WITHHELD_ERROR_TEXT
+
+
+def cloud_error_texts(values: Sequence[str]) -> list[str]:
+    """Cloud-safe error texts, one batched round trip when it is accepted."""
+
+    cut = [value[:_ERROR_TEXT_MAX_CHARS] for value in values]
+    try:
+        return cloud_scrub_texts(cut)
+    except NativeRunnerAuthorityError:
+        return [cloud_error_text(value) for value in cut]
 
 
 _TOO_LARGE_CODES = frozenset(
