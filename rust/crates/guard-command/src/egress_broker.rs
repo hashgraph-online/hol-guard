@@ -81,6 +81,10 @@ pub enum ArchiveExchange {
     Unavailable(String),
 }
 
+/// Reason reported when no caller is brokering the exchange (the scope denies all
+/// network access), as opposed to an exchange that was merely deferred or recorded.
+pub const NO_BROKERED_CALLER: &str = "egress unavailable: no brokered caller";
+
 type Key = (EgressClass, String, String, String);
 
 struct State {
@@ -228,7 +232,7 @@ enum Resolution {
 impl State {
     fn resolve(&mut self, class: EgressClass, spec: &NeedSpec<'_>) -> Resolution {
         if self.denied {
-            return Resolution::Unavailable("egress unavailable: no brokered caller");
+            return Resolution::Unavailable(NO_BROKERED_CALLER);
         }
         let key: Key = (
             class,
@@ -341,9 +345,7 @@ fn no_scope(
     _max_redirects: u32,
     _max_response_bytes: u64,
 ) -> Result<SyncResponse, SyncHttpError> {
-    Err(SyncHttpError::Other(
-        "egress unavailable: no brokered caller".to_owned(),
-    ))
+    Err(SyncHttpError::Other(NO_BROKERED_CALLER.to_owned()))
 }
 
 #[cfg(test)]
@@ -404,7 +406,7 @@ pub fn exchange_archive(
             ArchiveExchange::Unavailable("egress outcome does not match the request".to_owned())
         }
         Some(Resolution::Unavailable(reason)) => ArchiveExchange::Unavailable(reason.to_owned()),
-        None => ArchiveExchange::Unavailable("egress unavailable: no brokered caller".to_owned()),
+        None => ArchiveExchange::Unavailable(NO_BROKERED_CALLER.to_owned()),
     }
 }
 

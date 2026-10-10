@@ -224,9 +224,24 @@ def native_supply_chain_eval_payload(
     probed = False
     with ExitStack() as stack:
         response = _send_eval_request(request, guard_home)
-        for _round in range(_MAX_ROUNDS):
+        # The initial request plus at most _MAX_ROUNDS follow-ups; the response to the last
+        # follow-up is inspected as well, so a verdict reached on it is not discarded.
+        for round_index in range(_MAX_ROUNDS + 1):
             answered_ok = response.get("status") == "ok"
-            if answered_ok and response.get("code") == EGRESS_REQUIRED_CODE:
+            needs_egress = answered_ok and response.get("code") == EGRESS_REQUIRED_CODE
+            needs_probe = (
+                answered_ok
+                and response.get("code") == _PROBE_REQUIRED_CODE
+                and saved_policy_lookup is not None
+                and isinstance(response.get("payload"), dict)
+                and not probed
+            )
+            if not (needs_egress or needs_probe):
+                break
+            if round_index == _MAX_ROUNDS:
+                _record_unbound_answer(guard_home)
+                raise NativeSupplyChainEvalError("Native package evaluation did not settle")
+            if needs_egress:
                 # The resident cannot reach the network itself: perform what it asked
                 # for under the managed network policy and replay with the outcomes.
                 if exchanger is None:
@@ -243,23 +258,12 @@ def native_supply_chain_eval_payload(
                     "egress_supplied": list(exchanger.supplied),
                     "egress_spool_dir": str(exchanger.spool_dir),
                 }
-            elif (
-                answered_ok
-                and response.get("code") == _PROBE_REQUIRED_CODE
-                and saved_policy_lookup is not None
-                and isinstance(response.get("payload"), dict)
-                and not probed
-            ):
+            else:
                 probed = True
                 decision = saved_policy_lookup(response["payload"])
                 probe: dict[str, object] = {} if decision is None else {"decision": decision}
                 request = {**request, "request_id": _request_id(), "now": fixed_now, "saved_policy_probe": probe}
-            else:
-                break
             response = _send_eval_request(request, guard_home)
-        else:
-            _record_unbound_answer(guard_home)
-            raise NativeSupplyChainEvalError("Native package evaluation did not settle")
     if response.get("status") != "ok" or response.get("code") != "ok":
         raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
     payload = response.get("payload")

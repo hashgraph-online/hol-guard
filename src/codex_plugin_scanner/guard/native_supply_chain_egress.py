@@ -71,6 +71,31 @@ _MAX_TIMEOUT_SECONDS = 60.0
 _MAX_REDIRECTS_CEILING = 10
 
 
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
+# A credential or cookie must never ride along to a redirect target.
+_CREDENTIAL_HEADERS = frozenset({"authorization", "dpop", "cookie", "proxy-authorization"})
+
+
+def _redirect_budget(method: str, data: bytes | None, headers: Mapping[str, str], requested: int) -> int:
+    """Redirects are followed only for body-less reads that carry no credential."""
+    if requested <= 0 or data is not None or method.upper() not in {"GET", "HEAD"}:
+        return 0
+    if any(name.lower() in _CREDENTIAL_HEADERS for name in headers):
+        return 0
+    return min(requested, _MAX_REDIRECTS_CEILING)
+
+
+def _redirect_target(current: str, location: str) -> str | None:
+    """Resolve a Location header, refusing a non-HTTP scheme or an https -> http downgrade."""
+    target = urllib.parse.urljoin(current, location)
+    scheme = urllib.parse.urlsplit(target).scheme.lower()
+    if scheme not in {"http", "https"}:
+        return None
+    if urllib.parse.urlsplit(current).scheme.lower() == "https" and scheme != "https":
+        return None
+    return target
+
+
 class EgressProtocolError(ValueError):
     """The resident's egress request is malformed; the evaluation cannot proceed."""
 
@@ -110,47 +135,60 @@ class EgressExchanger:
             return {"kind": "blocked", "code": "egress_scheme_not_allowed"}
         body = need.get("body")
         data = body.encode("utf-8") if isinstance(body, str) else None
-        request = urllib.request.Request(
-            url,
-            data=data,
-            headers={str(k): str(v) for k, v in dict(need["headers"]).items()},
-            method=str(need["method"]),
-        )
+        headers = {str(k): str(v) for k, v in dict(need["headers"]).items()}
+        method = str(need["method"])
         limit = int(need["max_response_bytes"])
         deadline = time.monotonic() + MAX_EXCHANGE_SECONDS
-        try:
-            with managed_urlopen(
-                request,
-                timeout=float(need["timeout_seconds"]),
-                allow_redirects=int(need["max_redirects"]) > 0,
-            ) as response:
-                return self._response_outcome(
-                    int(response.status),
-                    response.headers.items(),
-                    _read_bounded(response, limit, deadline),
-                    limit,
-                )
-        except urllib.error.HTTPError as error:
+        max_redirects = _redirect_budget(method, data, headers, int(need["max_redirects"]))
+        hops = 0
+        while True:
+            request = urllib.request.Request(url, data=data, headers=headers, method=method)
             try:
-                return self._response_outcome(
-                    int(error.code), error.headers.items(), _read_bounded(error, limit, deadline), limit
-                )
-            except (TimeoutError, OSError) as read_error:
-                if isinstance(read_error, TimeoutError):
-                    return {"kind": "timeout"}
-                return {"kind": "error", "message": type(read_error).__name__}
-            finally:
-                error.close()
-        except ManagedNetworkError as error:
-            return {"kind": "blocked", "code": str(error)[:128]}
-        except TimeoutError:
-            return {"kind": "timeout"}
-        except urllib.error.URLError as error:
-            if isinstance(error.reason, TimeoutError):
+                # Redirects are never followed by the transport: each hop is a fresh
+                # request, so the managed policy validates every destination and the
+                # exact hop limit the resident asked for is enforced here.
+                with managed_urlopen(
+                    request,
+                    timeout=float(need["timeout_seconds"]),
+                    allow_redirects=False,
+                ) as response:
+                    return self._response_outcome(
+                        int(response.status),
+                        response.headers.items(),
+                        _read_bounded(response, limit, deadline),
+                        limit,
+                    )
+            except urllib.error.HTTPError as error:
+                try:
+                    location = error.headers.get("Location") if error.code in _REDIRECT_STATUSES else None
+                    if location is not None and max_redirects > 0:
+                        if hops >= max_redirects:
+                            return {"kind": "error", "message": "too many redirects"}
+                        target = _redirect_target(url, location)
+                        if target is None:
+                            return {"kind": "blocked", "code": "egress_redirect_not_allowed"}
+                        url = target
+                        hops += 1
+                        continue
+                    return self._response_outcome(
+                        int(error.code), error.headers.items(), _read_bounded(error, limit, deadline), limit
+                    )
+                except (TimeoutError, OSError) as read_error:
+                    if isinstance(read_error, TimeoutError):
+                        return {"kind": "timeout"}
+                    return {"kind": "error", "message": type(read_error).__name__}
+                finally:
+                    error.close()
+            except ManagedNetworkError as error:
+                return {"kind": "blocked", "code": str(error)[:128]}
+            except TimeoutError:
                 return {"kind": "timeout"}
-            return {"kind": "error", "message": type(error.reason).__name__}
-        except (OSError, ValueError) as error:
-            return {"kind": "error", "message": type(error).__name__}
+            except urllib.error.URLError as error:
+                if isinstance(error.reason, TimeoutError):
+                    return {"kind": "timeout"}
+                return {"kind": "error", "message": type(error.reason).__name__}
+            except (OSError, ValueError) as error:
+                return {"kind": "error", "message": type(error).__name__}
 
     def _response_outcome(
         self,

@@ -168,3 +168,22 @@ fn malformed_or_oversized_probe_is_refused_not_treated_as_no_policy() {
     let oversized = json!({"reason": "x".repeat(SAVED_POLICY_MAX_BYTES + 1)});
     assert!(probe_of(Some(oversized)).is_none());
 }
+
+#[test]
+fn denied_archive_egress_fails_the_download_instead_of_aborting_the_operation() {
+    let _scope = crate::supply_chain_egress::deny_egress().expect("deny scope");
+    let result = ResidentRestrictedArchive.download_restricted_archive(
+        "https://registry.example/pkg.tgz",
+        1024,
+        0,
+        1.0,
+        None,
+    );
+    match result {
+        Ok(RestrictedArchiveDownloadResult::Failure(failure)) => {
+            assert_eq!(failure.code, "external_archive_connection_failed");
+        }
+        Ok(_) => panic!("a denied archive download must not succeed"),
+        Err(error) => panic!("a denied archive download must be a failure result: {error:?}"),
+    }
+}

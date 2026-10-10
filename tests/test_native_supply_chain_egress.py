@@ -10,9 +10,11 @@ Rust crate; here the resident is replaced by a scripted fake.
 from __future__ import annotations
 
 import http.server
+import io
 import json
 import socket
 import threading
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
@@ -301,6 +303,86 @@ def test_non_http_scheme_is_blocked(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     assert exchanger.supplied[0]["outcome"] == {"kind": "blocked", "code": "egress_scheme_not_allowed"}
 
 
+def _redirecting_urlopen(
+    performed: list[str], routes: dict[str, str], *, final: str = "https://example.com/final"
+) -> object:
+    """Mimic the managed transport: validate every hop, answer 302 per route, never follow."""
+
+    def fake_urlopen(request: object, **kwargs: object) -> object:
+        url = request.full_url  # type: ignore[attr-defined]
+        assert kwargs["allow_redirects"] is False
+        resolved, _managed_policy = network_transport.resolved_network_policy(None)
+        network_transport.validate_destination(url, resolved)
+        performed.append(url)
+        if url in routes:
+            raise urllib.error.HTTPError(url, 302, "Found", {"Location": routes[url]}, io.BytesIO(b""))  # type: ignore[arg-type]
+        assert url == final
+        raise urllib.error.HTTPError(url, 200, "OK", {}, io.BytesIO(b"{}"))  # type: ignore[arg-type]
+
+    return fake_urlopen
+
+
+def test_a_redirect_to_a_disallowed_host_is_blocked_before_it_is_requested(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _managed(monkeypatch, allow_public_registries=False)
+    performed: list[str] = []
+    start = "https://mirror.example.com/pkg"
+    routes = {start: "https://registry.npmjs.org/pkg"}
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, routes))
+    exchanger = egress.EgressExchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need(start, max_redirects=3)]})
+    assert performed == [start]
+    assert exchanger.supplied[0]["outcome"] == {"kind": "blocked", "code": "managed_public_registry_disabled"}
+
+
+def test_redirects_are_counted_against_the_exact_limit(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _unmanaged(monkeypatch)
+    performed: list[str] = []
+    routes = {f"https://example.com/{i}": f"https://example.com/{i + 1}" for i in range(5)}
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, routes))
+    exchanger = egress.EgressExchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need("https://example.com/0", max_redirects=2)]})
+    assert performed == ["https://example.com/0", "https://example.com/1", "https://example.com/2"]
+    assert exchanger.supplied[0]["outcome"] == {"kind": "error", "message": "too many redirects"}
+
+
+def test_a_redirect_within_the_limit_is_followed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _unmanaged(monkeypatch)
+    performed: list[str] = []
+    routes = {"https://example.com/a": "/final"}
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, routes))
+    exchanger = egress.EgressExchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need("https://example.com/a", max_redirects=1)]})
+    assert performed == ["https://example.com/a", "https://example.com/final"]
+    assert exchanger.supplied[0]["outcome"]["kind"] == "response"  # type: ignore[index]
+
+
+@pytest.mark.parametrize("target", ["http://example.com/plain", "file:///etc/passwd", "ftp://example.com/x"])
+def test_a_redirect_that_downgrades_or_leaves_http_is_refused(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: str
+) -> None:
+    _unmanaged(monkeypatch)
+    performed: list[str] = []
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, {"https://example.com/a": target}))
+    exchanger = egress.EgressExchanger(tmp_path)
+    exchanger.fulfil({"needs": [_need("https://example.com/a", max_redirects=3)]})
+    assert performed == ["https://example.com/a"]
+    assert exchanger.supplied[0]["outcome"] == {"kind": "blocked", "code": "egress_redirect_not_allowed"}
+
+
+def test_a_credentialed_request_never_follows_a_redirect(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _unmanaged(monkeypatch)
+    performed: list[str] = []
+    routes = {"https://example.com/a": "https://example.com/final"}
+    monkeypatch.setattr(egress, "managed_urlopen", _redirecting_urlopen(performed, routes))
+    exchanger = egress.EgressExchanger(tmp_path)
+    need = _need("https://example.com/a", max_redirects=3, headers={"Authorization": "Bearer t"})
+    exchanger.fulfil({"needs": [need]})
+    assert performed == ["https://example.com/a"]
+    assert exchanger.supplied[0]["outcome"]["status"] == 302  # type: ignore[index]
+
+
 def test_archive_failure_from_the_restricted_downloader_is_carried_back(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -444,8 +526,26 @@ def test_a_resident_that_never_settles_is_a_bounded_block(monkeypatch: pytest.Mo
     )
     with pytest.raises(transport.NativeSupplyChainEvalError):
         _payload_for(tmp_path)
-    assert len(requests) <= transport._MAX_ROUNDS + 1
+    assert len(requests) == transport._MAX_ROUNDS + 1
     assert len(failures) == 1
+
+
+def test_a_verdict_reached_on_the_last_allowed_round_is_not_discarded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _unmanaged(monkeypatch)
+    monkeypatch.setattr(
+        egress,
+        "managed_urlopen",
+        lambda *_a, **_k: (_ for _ in ()).throw(network_transport.ManagedNetworkError("x")),
+    )
+    failures: list[object] = []
+    monkeypatch.setattr(transport, "_record_unbound_answer", lambda home: failures.append(home))
+    needs = (egress.EGRESS_REQUIRED_CODE, {"needs": [_need("https://registry.npmjs.org/a", occurrence=1)]})
+    requests = _script(monkeypatch, [needs] * transport._MAX_ROUNDS + [("ok", _ok_payload())])
+    assert _payload_for(tmp_path)
+    assert len(requests) == transport._MAX_ROUNDS + 1
+    assert failures == []
 
 
 def test_malformed_egress_answer_records_one_failure_and_blocks(

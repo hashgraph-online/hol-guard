@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use guard_contracts::{
     EgressNeedV1, EgressOutcomeV1, EgressRequiredV1, EgressSuppliedV1, SupplyChainEvalRequestV1,
@@ -74,6 +75,9 @@ impl CloudServer {
 }
 
 fn serve(mut stream: TcpStream, spec: &Value, seen: &Seen) {
+    // A peer that connects and never sends (including `finish`'s wake-up connect) must
+    // not hang the server thread, so every read is bounded.
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
     let mut buffer = Vec::new();
     let mut chunk = [0_u8; 4096];
     let header_end = loop {

@@ -1898,7 +1898,7 @@ impl RestrictedArchiveApi for ResidentRestrictedArchive {
         timeout_seconds: f64,
         _temp_dir: Option<&Path>,
     ) -> EvalResult<RestrictedArchiveDownloadResult> {
-        use guard_command::egress_broker::{exchange_archive, ArchiveExchange};
+        use guard_command::egress_broker::{exchange_archive, ArchiveExchange, NO_BROKERED_CALLER};
         match exchange_archive(source_url, max_bytes, max_redirects, timeout_seconds) {
             ArchiveExchange::Downloaded {
                 sha256,
@@ -1918,6 +1918,15 @@ impl RestrictedArchiveApi for ResidentRestrictedArchive {
                     RestrictedArchiveFailure { code, message },
                 ))
             }
+            // A scope that denies all egress behaves as an unreachable network, exactly as
+            // a failed connection did before archive transfers were brokered. Any other
+            // unavailable state (recorded or deferred need) still aborts the evaluation.
+            ArchiveExchange::Unavailable(reason) if reason == NO_BROKERED_CALLER => Ok(
+                RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
+                    code: "external_archive_connection_failed".to_owned(),
+                    message: "External archive connection failed.".to_owned(),
+                }),
+            ),
             ArchiveExchange::Unavailable(reason) => Err(EvalError::Internal(reason)),
         }
     }
