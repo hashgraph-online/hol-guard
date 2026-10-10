@@ -265,11 +265,15 @@ pub(super) fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_native_file_write_target(
+        && (super::super::safe_reads::bounded_native_file_write_target(
             &signals.path_values[0],
             home_dir,
             cwd,
-        )
+        ) || super::super::safe_writes::bounded_native_temporary_write_target(
+            &signals.path_values[0],
+            home_dir,
+            cwd,
+        ))
     {
         return generic_result(
             action,
