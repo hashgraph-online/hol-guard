@@ -307,7 +307,7 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
             Regex::new(r"(?i)(?:must\s+stay\s+blocked|reads?\s+require\s+approval)\s*[.!?]?\s*$")
                 .expect("bounded documented guardrail ending")
         });
-        if sensitive_command(&normalized) && !documented_end.is_match(&normalized) {
+        if prompt_requests_secret(&normalized) && !documented_end.is_match(&normalized) {
             return false;
         }
         let documented_read = DOCUMENTED_READ.get_or_init(|| {
@@ -358,5 +358,7 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     {
         return false;
     }
-    !sensitive_command(&remainder) && !risky_action.is_match(&remainder)
+    // Naming a credential is not a request for its value; locations, env
+    // dumps and value requests still keep the prompt off the benign path.
+    !prompt_requests_secret(&remainder) && !risky_action.is_match(&remainder)
 }

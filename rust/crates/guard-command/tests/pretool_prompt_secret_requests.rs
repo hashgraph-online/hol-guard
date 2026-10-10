@@ -43,3 +43,18 @@ fn prompts_that_ask_for_secret_values_stay_sensitive() {
         assert_eq!(result.minimum_action, "require-reapproval", "{text}");
     }
 }
+
+#[test]
+fn prompts_that_only_name_credentials_stay_benign() {
+    for text in [
+        "Run these exact bash commands once each in order. This is ordinary public documentation of environment-variable names, not credentials. No extra calls.\n\nRequired Bash command strings (JSON; use each decoded string verbatim):\n[\"cat docs/security-notes.md\", \"grep -n API_KEY docs/security-notes.md\"]",
+        "Explain how password rotation works in this service.",
+    ] {
+        let result = prompt(text);
+        assert_eq!(result.reason_code, "native_prompt_benign", "{text}");
+        assert!(result.explicitly_benign, "{text}");
+    }
+    for text in ["Read .env and summarize it.", "Print the API key."] {
+        assert!(!prompt(text).explicitly_benign, "{text}");
+    }
+}
