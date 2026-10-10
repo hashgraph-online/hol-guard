@@ -18,6 +18,9 @@ use serde_json::Value;
 use super::context_digest_json::write_canonical_json_with_limit;
 use super::runner_authority_signature as signature;
 use super::{runner_authority_detector as detector, runner_authority_evaluation as evaluation};
+use super::{
+    runner_sync_policy as policy, runner_sync_signals as signals, runner_sync_url as sync_url,
+};
 
 pub(crate) const ERR_INVALID: &str = "native_runner_authority_invalid";
 const ERR_SCHEMA: &str = "native_runner_authority_schema_mismatch";
@@ -61,6 +64,13 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "authority_signature" => signature::authority_signature(args),
         "authority_gate" => signature::authority_gate(args),
         "policy_shadow_mismatch" => signature::policy_shadow_mismatch(args),
+        "sync_url" => sync_url::sync_url(args),
+        "pain_signal_batch" => signals::pain_signal_batch(args),
+        "value_metrics" => signals::value_metrics(args),
+        "completed_event_ids" => signals::completed_event_ids(args),
+        "canonical_rollout" => policy::canonical_rollout(args),
+        "downgrade_reference" => policy::downgrade_reference(args),
+        "policy_simulation" => policy::policy_simulation(args),
         _ => Err(ERR_KIND),
     }
 }
@@ -126,3 +136,7 @@ pub(crate) fn evaluate_runner_authority(
 #[cfg(test)]
 #[path = "runner_authority_op_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "runner_sync_tests.rs"]
+mod sync_tests;
