@@ -40,6 +40,9 @@ def projection_builder(tmp_path, monkeypatch):
     monkeypatch.setattr(module, "ROOT", tmp_path)
     monkeypatch.setattr(module, "ARTIFACT", tmp_path / "contracts/extensions/native-command-program.v1.json")
     monkeypatch.setattr(
+        module, "CATALOG_ARTIFACT", tmp_path / "contracts/extensions/command-catalog.v1.json", raising=False
+    )
+    monkeypatch.setattr(
         module,
         "build_request",
         lambda: {
