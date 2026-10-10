@@ -68,6 +68,33 @@ fn recorded_python_vectors_match() {
 }
 
 #[test]
+fn fresh_identity_is_the_guard_cli_package_request_and_a_plain_hash_is_not() {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let vector = vectors
+        .iter()
+        .find(|item| item["name"] == "fresh_expiring_local_identity")
+        .unwrap();
+    assert_eq!(vector["request"]["decision"]["harness"], json!("guard-cli"));
+    assert_eq!(
+        vector["request"]["decision"]["artifact_id"],
+        json!("guard-cli:project:package-request:abc")
+    );
+    let fresh = run(&request(vector, None)).unwrap();
+    assert_eq!(fresh["claim_disposition"], json!("consumed"));
+
+    for hash in [
+        json!("plain-package-hash"),
+        json!("guard-approval-context:v1:invalid"),
+        Value::Null,
+    ] {
+        let mut rejected_vector = vector.clone();
+        rejected_vector["request"]["decision"]["artifact_hash"] = hash;
+        let rejected = run(&request(&rejected_vector, None)).unwrap();
+        assert_eq!(rejected["claim_disposition"], Value::Null);
+    }
+}
+
+#[test]
 fn rejects_malformed_requests() {
     let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
     let good = request(&vectors[0], None);

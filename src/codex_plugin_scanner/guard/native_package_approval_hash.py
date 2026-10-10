@@ -93,11 +93,16 @@ def _evaluation_view(evaluation: Any, fields: tuple[str, ...] = _EVALUATION_FIEL
     view: dict[str, object] = {}
     for field in fields:
         value = getattr(evaluation, field)
-        view[field] = (
-            [dict(item) if isinstance(item, Mapping) else item for item in value]
-            if isinstance(value, (list, tuple))
-            else value
-        )
+        if isinstance(value, (list, tuple)):
+            projected: list[object] = []
+            for item in value:
+                if isinstance(item, Mapping):
+                    projected.append(dict(item))
+                else:
+                    projected.append(item)
+            view[field] = projected
+        else:
+            view[field] = value
     return view
 
 

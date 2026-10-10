@@ -71,12 +71,38 @@ def test_malformed_reply_fails_closed(monkeypatch: pytest.MonkeyPatch, payload: 
         _call(_Store(decision))
 
 
+def _verdict_patch(policy_action: str) -> dict[str, object]:
+    return {
+        "decision": policy_action,
+        "policy_action": policy_action,
+        "risk_summary": policy_action,
+        "record_monitor_evidence": False,
+        "user_copy": {
+            "title": policy_action,
+            "summary": policy_action,
+            "next_step": None,
+            "dashboard_url": None,
+            "harness_message": policy_action,
+        },
+    }
+
+
 def test_failed_claim_repeats_the_request_with_the_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     requests: list[dict[str, object]] = []
     replies = iter(
         [
-            {"patch": {}, "claim": "store", "claim_disposition": "retained", "reused": True},
-            {"patch": {}, "claim": "store", "claim_disposition": None, "reused": False},
+            {
+                "patch": _verdict_patch("allow"),
+                "claim": "store",
+                "claim_disposition": "retained",
+                "reused": True,
+            },
+            {
+                "patch": _verdict_patch("review"),
+                "claim": None,
+                "claim_disposition": None,
+                "reused": False,
+            },
         ]
     )
 
@@ -91,4 +117,69 @@ def test_failed_claim_repeats_the_request_with_the_failure(monkeypatch: pytest.M
     assert store.claims == ["2026-07-17T00:00:00Z"]
     assert "claim_succeeded" not in requests[0]
     assert requests[1]["claim_succeeded"] is False
+    assert (disposition, reused) == (None, None)
+
+
+def _reply(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "patch": _verdict_patch("allow"),
+        "claim": None,
+        "claim_disposition": None,
+        "reused": False,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_empty_patch_does_not_skip_a_saved_approval(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bridge, "_transport", lambda *_args, **_kwargs: _reply(patch={}))
+    with pytest.raises(bridge.NativePackagePolicyResolveError):
+        _call(_Store({"action": "allow", "decision_id": 1}))
+
+
+def test_incomplete_patch_does_not_skip_a_saved_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        bridge,
+        "_transport",
+        lambda *_args, **_kwargs: _reply(patch={"policy_action": "block"}),
+    )
+    with pytest.raises(bridge.NativePackagePolicyResolveError):
+        _call(_Store({"action": "block", "decision_id": 1}))
+
+
+def test_unclaimed_allow_and_failed_retry_reuse_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    def transport(request: dict[str, object], *_args: object, **_kwargs: object) -> dict[str, object]:
+        if request.get("claim_succeeded") is False:
+            return _reply(reused=True)
+        return _reply(claim="store", claim_disposition="consumed", reused=True)
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    saved = {"action": "allow", "decision_id": 1}
+    with pytest.raises(bridge.NativePackagePolicyResolveError):
+        _call(_Store(saved), claim_saved_approval=False)
+    with pytest.raises(bridge.NativePackagePolicyResolveError):
+        _call(_Store(saved))
+
+
+def test_a_new_allow_without_reuse_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bridge, "_transport", lambda *_args, **_kwargs: _reply())
+    with pytest.raises(bridge.NativePackagePolicyResolveError):
+        _call(_Store({"action": "block", "decision_id": 1}))
+
+
+def test_stale_family_block_keeps_the_current_evaluation(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(bridge, "_transport", lambda *_args, **_kwargs: _reply(patch={}))
+    monkeypatch.setattr(bridge, "_bundle_rules", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(bridge, "apply_package_evaluation_patch", lambda evaluation, patch: (evaluation, patch)[0])
+    decision = {
+        "action": "block",
+        "artifact_hash": None,
+        "artifact_id": "family:package-request",
+        "decision_id": 3,
+        "owner": "rule-1",
+        "scope": "harness",
+        "source": "policy-bundle",
+    }
+    evaluation, disposition, reused = _call(_Store(decision))
+    assert evaluation.policy_action == "review"  # type: ignore[attr-defined]
     assert (disposition, reused) == (None, None)
