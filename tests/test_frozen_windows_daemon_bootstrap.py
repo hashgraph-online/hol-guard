@@ -48,6 +48,27 @@ def _assert_windows_process_stopped(pid: object) -> None:
         time.sleep(0.1)
 
 
+def _diagnostics(env: dict[str, str]) -> str:
+    guard_home = Path(env["HOL_GUARD_HOME"])
+    lines = [f"state={_safe_read(guard_home / 'daemon-state.json')!r}"]
+    for sub in ("daemon-lifecycle", "logs", "native-runtime"):
+        directory = guard_home / sub
+        if directory.is_dir():
+            for entry in sorted(directory.rglob("*"))[-12:]:
+                if entry.is_file():
+                    lines.append(f"{entry.relative_to(guard_home)} {_safe_read(entry)[-400:]!r}")
+                else:
+                    lines.append(str(entry))
+    return "\n".join(lines)
+
+
+def _safe_read(path: Path) -> str:
+    try:
+        return path.read_text(errors="replace")
+    except OSError as error:
+        return f"<{error!r}>"
+
+
 def _stop_and_assert_process_stopped(
     executable: Path,
     stop_args: list[str],
@@ -57,7 +78,7 @@ def _stop_and_assert_process_stopped(
 ) -> dict[str, object]:
     stopped = _json_result(_run_core(executable, stop_args, env=env))
     assert stopped["running"] is False, stopped
-    assert stopped["stopped"] is True, stopped
+    assert stopped["stopped"] is True, (stopped, _diagnostics(env))
     assert stopped["pid"] == pid, stopped
     _assert_windows_process_stopped(pid)
     return stopped
