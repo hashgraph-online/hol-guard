@@ -42,7 +42,7 @@ def planned_pull_requests(directory: Path, source_sha: str) -> list[int]:
             raise ValueError("Claim invitation plan repeats an extension")
         entry = current.get(extension_id)
         if (
-            entry is None or entry.get("claimPolicy") != "provenance"
+            entry is None or entry.get("claimPolicy") != "provenance" or entry.get("trustClass") != "external"
             or github_id not in entry["maintainerGithubIds"]
             or type(number) is not int or number <= 0
         ):
@@ -75,6 +75,8 @@ def main() -> int:
     if args.plan:
         pending = [number for number in planned_pull_requests(args.directory, args.source_sha)
                    if not has_trusted_notice(client.comments(number))]
+        if len(pending) > 256:
+            raise ValueError("Missing invitations exceed the GitHub Actions matrix limit")
         print(json.dumps(pending, separators=(",", ":")))
         return 0
     return reconcile(client, args.directory, args.source_sha, dry_run=args.dry_run)
