@@ -9,6 +9,7 @@ from typing import Any
 from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
+from .cloud_request_native import cloud_error_text
 from .cloud_review_batching import (
     CloudReviewBatchLimits,
     CloudReviewEventTooLargeError,
@@ -20,7 +21,7 @@ from .cloud_review_event_delivery import CLOUD_REVIEW_EVENT_PROTOCOL_VERSION, po
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
 from .cloud_review_retry_recovery import recover_rejected_review_events, retry_result_message
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
-from .local_request_snapshots import _cloud_scrub_text, _resolve_cloud_receipt_redaction_level
+from .local_request_snapshots import _resolve_cloud_receipt_redaction_level
 from .native_workspace_review_context import NativeWorkspaceReviewContextProbeState
 from .native_workspace_review_replay import (
     _PROBE_STATE_ATTRIBUTE,
@@ -209,7 +210,7 @@ def _post_events_with_oauth_refresh(
 
 
 def _retry_review_events(store: GuardStore, sequences: list[int], *, error: str, binding: dict[str, str]) -> None:
-    store.retry_review_events(sequences, now=_now(), error=_cloud_scrub_text(error), **binding)
+    store.retry_review_events(sequences, now=_now(), error=cloud_error_text(error), **binding)
 
 
 def sync_cloud_review_events_once(
