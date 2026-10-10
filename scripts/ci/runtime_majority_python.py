@@ -109,11 +109,11 @@ class _ImportCollector(ast.NodeVisitor):
     def _mode(self) -> str:
         return "lazy" if self._function_depth else "eager"
 
-    def visit_Module(self, node: ast.Module) -> None:
-        """Skip top-level statements removed by a reviewed function-level exclusion."""
-        for child in node.body:
-            if child.lineno not in self._skip_linenos:
-                self.visit(child)
+    def visit(self, node: ast.AST) -> None:
+        """Skip statements removed by a reviewed function-level exclusion."""
+        if isinstance(node, ast.stmt) and node.lineno in self._skip_linenos:
+            return
+        super().visit(node)
 
     def visit_If(self, node: ast.If) -> None:
         if _is_type_checking(node.test):
