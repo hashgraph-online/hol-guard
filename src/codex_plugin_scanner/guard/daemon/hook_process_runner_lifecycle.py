@@ -258,9 +258,13 @@ class HookProcessRunnerLifecycleMixin:
                     if process.pid is not None
                 ),
             )
-        rss_bytes = (
-            self._rss_bytes_provider() if self._rss_bytes_provider is not None else process_tree_rss_bytes(process_ids)
-        )
+        rss_bytes = None
+        if adaptive_capacity.needs_rss():
+            rss_bytes = (
+                self._rss_bytes_provider()
+                if self._rss_bytes_provider is not None
+                else process_tree_rss_bytes(process_ids)
+            )
         target = adaptive_capacity.refresh(failure_rate=failure_rate, rss_bytes=rss_bytes)
         with self._state_lock:
             if self._closed or target == self._capacity_target:

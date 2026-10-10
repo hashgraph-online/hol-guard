@@ -17,6 +17,8 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from .path_resolution_cache import cached_realpath
+
 _MAX_HEALTH_ENTRIES = 128
 _CIRCUIT_FAILURE_THRESHOLD = 3
 _CIRCUIT_COOLDOWN_SECONDS = 15.0
@@ -70,7 +72,7 @@ def _privacy_safe_key(identity_sha256: str, guard_home: Path) -> str:
     digest.update(identity_sha256.encode("ascii", errors="ignore")[:128])
     digest.update(b"\x00")
     try:
-        normalized = os.fsencode(guard_home.expanduser().resolve(strict=False))
+        normalized = os.fsencode(cached_realpath(os.fspath(guard_home.expanduser())))
     except (OSError, RuntimeError, ValueError):
         normalized = os.fsencode(str(guard_home))
     digest.update(normalized)

@@ -23,6 +23,23 @@ pub(super) struct OmpContext<'a> {
     pub(super) execution_environment: Option<&'a guard_contracts::GuardExecutionEnvironmentV1>,
 }
 
+/// The acknowledgement of a delegated task adds no executable operation.
+/// Any returned content still needs the normal output scan and policy floors.
+pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
+    let Ok(signals) = super::extract::extract_generic_signals(payload) else {
+        return false;
+    };
+    matches!(
+        signals.tool_name.as_deref(),
+        Some("task" | "wait" | "todo" | "todo_write")
+    ) && !signals.sensitive_target
+        && signals.command.is_none()
+        && !signals.package_present
+        && signals.url_values.is_empty()
+        && signals.path_values.is_empty()
+        && strict_tool_input(payload).is_some()
+}
+
 /// `Some` only when a bounded proof applies; `None` keeps the normal path.
 pub(super) fn evaluate(
     payload: &Value,
@@ -172,6 +189,26 @@ fn listing(
         }
     }
     let target = input_path(input, signals)?.unwrap_or(".");
+    let has_glob_selector =
+        signals.tool_name.as_deref() == Some("glob") && target.contains(['*', '?', '[', '{']);
+    // OMP glob uses `path` for the complete selector, not just a directory.
+    // Prove its fixed directory prefix; the tool returns names, not contents.
+    let target = if signals.tool_name.as_deref() == Some("glob") {
+        glob_directory(target)?
+    } else {
+        target
+    };
+    // A wildcard can traverse hidden or symlinked children even when the
+    // literal prefix is ordinary. Prove the entire reachable prefix tree.
+    if has_glob_selector
+        && !super::super::search_scope::unfiltered_directory_scope_proven(
+            target,
+            context.path.home_dir,
+            context.path.cwd,
+        )
+    {
+        return None;
+    }
     super::super::safe_reads::bounded_omp_directory_read_target(
         target,
         context.path.home_dir,
@@ -184,6 +221,31 @@ fn listing(
             "The Rust authority proved this names-only listing targets a verified ordinary directory.",
         )
     })
+}
+
+fn glob_directory(target: &str) -> Option<&str> {
+    let Some(index) = target.find(['*', '?', '[', '{']) else {
+        return Some(target);
+    };
+    let selector = target
+        .strip_prefix("~/")
+        .or_else(|| target.strip_prefix('/'))
+        .unwrap_or(target);
+    // Restrict this proof to simple globs. Alternatives and escaped syntax can
+    // synthesize traversal segments that are absent from the literal input.
+    if !contained_selector(selector)
+        || target.starts_with("//")
+        || selector.contains("..")
+        || selector.contains(['\\', '[', ']', '{', '}', '(', ')'])
+    {
+        return None;
+    }
+    let prefix = &target[..index];
+    match prefix.rsplit_once('/') {
+        Some(("", _)) => Some("/"),
+        Some((directory, _)) => Some(directory),
+        None => Some("."),
+    }
 }
 
 fn grep_scope(

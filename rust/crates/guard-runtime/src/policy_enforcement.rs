@@ -390,7 +390,7 @@ pub(crate) fn apply_post_tool_policy(
         return Err("native_policy_mode_invalid".to_owned());
     }
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
-        && guard_command::pretool::bounded_task_metadata_output(&request.payload);
+        && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
     let classified_action = post_action_type(request, payload_kind)?;
     let action_type = if task_metadata {
         PreToolActionTypeV1::Harness

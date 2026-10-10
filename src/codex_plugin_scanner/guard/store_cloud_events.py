@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 # ruff: noqa: F403,F405
+from .managed_install_revision import bump_managed_install_revision
 from .store_base import *
 from .store_receipt_rollups import reconcile_dirty_receipt_rollups, reconcile_pending_receipt_events
 
@@ -25,9 +26,12 @@ class StoreCloudEventsMixin:
         from .codex_install_transaction import codex_install_transaction
         from .runtime_transition import assert_transition_mutation_allowed
 
-        with codex_install_transaction(self.guard_home, self.path, actor="managed-install-record"):
-            assert_transition_mutation_allowed(self.guard_home)
-            self._set_managed_install_owned(harness, active, workspace, manifest, now)
+        try:
+            with codex_install_transaction(self.guard_home, self.path, actor="managed-install-record"):
+                assert_transition_mutation_allowed(self.guard_home)
+                self._set_managed_install_owned(harness, active, workspace, manifest, now)
+        finally:
+            bump_managed_install_revision()
 
     def _set_managed_install_owned(
         self, harness: str, active: bool, workspace: str | None, manifest: dict[str, object], now: str
@@ -57,57 +61,60 @@ class StoreCloudEventsMixin:
         A crash during the callback rolls SQLite back. The signed file plan
         can then recover its independently durable before/after byte states.
         """
-        from .codex_install_transaction import require_codex_install_owner
+        try:
+            from .codex_install_transaction import require_codex_install_owner
 
-        require_codex_install_owner(self.guard_home)
-        harnesses = [change[0] for change in changes]
-        if len(harnesses) != len(set(harnesses)):
-            raise ValueError("Duplicate managed-install transition target")
-        with self._connect() as connection:
-            # These rows participate in the durable file inverse. Preserve
-            # them across power loss as well as process interruption.
-            connection.execute("pragma synchronous=FULL")
-            connection.execute("begin immediate")
-            for harness, allowed, replacement in changes:
-                if not allowed or (replacement is not None and replacement.get("harness") != harness):
-                    raise ValueError("Invalid managed-install transition target")
-                row = connection.execute(
-                    "select harness, active, workspace, manifest_json, updated_at "
-                    "from managed_installs where harness = ?",
-                    (harness,),
-                ).fetchone()
-                current = (
-                    None
-                    if row is None
-                    else {
-                        "harness": str(row["harness"]),
-                        "active": bool(row["active"]),
-                        "workspace": row["workspace"],
-                        "manifest": json.loads(str(row["manifest_json"])),
-                        "updated_at": str(row["updated_at"]),
-                    }
-                )
-                if current not in allowed:
-                    return False
-            before_mutation()
-            for harness, _allowed, replacement in changes:
-                if replacement is None:
-                    connection.execute("delete from managed_installs where harness = ?", (harness,))
-                else:
-                    connection.execute(
-                        """insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
-                        values (?, ?, ?, ?, ?) on conflict(harness) do update set
-                        active = excluded.active, workspace = excluded.workspace,
-                        manifest_json = excluded.manifest_json, updated_at = excluded.updated_at""",
-                        (
-                            harness,
-                            1 if replacement["active"] else 0,
-                            replacement["workspace"],
-                            json.dumps(replacement["manifest"]),
-                            replacement["updated_at"],
-                        ),
+            require_codex_install_owner(self.guard_home)
+            harnesses = [change[0] for change in changes]
+            if len(harnesses) != len(set(harnesses)):
+                raise ValueError("Duplicate managed-install transition target")
+            with self._connect() as connection:
+                # These rows participate in the durable file inverse. Preserve
+                # them across power loss as well as process interruption.
+                connection.execute("pragma synchronous=FULL")
+                connection.execute("begin immediate")
+                for harness, allowed, replacement in changes:
+                    if not allowed or (replacement is not None and replacement.get("harness") != harness):
+                        raise ValueError("Invalid managed-install transition target")
+                    row = connection.execute(
+                        "select harness, active, workspace, manifest_json, updated_at "
+                        "from managed_installs where harness = ?",
+                        (harness,),
+                    ).fetchone()
+                    current = (
+                        None
+                        if row is None
+                        else {
+                            "harness": str(row["harness"]),
+                            "active": bool(row["active"]),
+                            "workspace": row["workspace"],
+                            "manifest": json.loads(str(row["manifest_json"])),
+                            "updated_at": str(row["updated_at"]),
+                        }
                     )
-        return True
+                    if current not in allowed:
+                        return False
+                before_mutation()
+                for harness, _allowed, replacement in changes:
+                    if replacement is None:
+                        connection.execute("delete from managed_installs where harness = ?", (harness,))
+                    else:
+                        connection.execute(
+                            """insert into managed_installs (harness, active, workspace, manifest_json, updated_at)
+                            values (?, ?, ?, ?, ?) on conflict(harness) do update set
+                            active = excluded.active, workspace = excluded.workspace,
+                            manifest_json = excluded.manifest_json, updated_at = excluded.updated_at""",
+                            (
+                                harness,
+                                1 if replacement["active"] else 0,
+                                replacement["workspace"],
+                                json.dumps(replacement["manifest"]),
+                                replacement["updated_at"],
+                            ),
+                        )
+            return True
+        finally:
+            bump_managed_install_revision()
 
     def get_managed_install(self, harness: str) -> dict[str, object] | None:
         with self._connect() as connection:
