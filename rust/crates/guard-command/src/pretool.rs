@@ -1,4 +1,4 @@
-use crate::{parse_command, CanonicalCommandV1, CommandModelRequestV1};
+use crate::{parse_command, powershell_floors as ps, CanonicalCommandV1, CommandModelRequestV1};
 use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -406,7 +406,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
                 .any(|arg| arg == "--force")
             && !segment.arguments.iter().any(|arg| matches!(arg.as_str(), "--help" | "-h"))
     });
-    if destructive_command(normalized) || destructive_remote_sync {
+    if destructive_remote_sync || ps::destructive(&model, destructive_command) {
         return Ok(pretool_decision(
             model,
             "block",
@@ -414,7 +414,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard blocked a destructive command before execution.",
         ));
     }
-    if sensitive_command(normalized) && exfiltration_command(normalized) {
+    if ps::sensitive_exfiltration(&model, sensitive_command, exfiltration_command) {
         return Ok(pretool_decision(
             model,
             "block",
