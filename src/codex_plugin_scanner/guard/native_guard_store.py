@@ -18,6 +18,7 @@ import re
 import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Any, TypeVar
 from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
@@ -39,13 +40,16 @@ class NativeGuardStoreUnavailable(sqlite3.OperationalError):
     """The resident gave no authoritative answer; the store call did not run."""
 
 
-def _failure(error: sqlite3.DatabaseError, code: int) -> sqlite3.DatabaseError:
-    error.sqlite_errorcode = code  # type: ignore[attr-defined]
+_DatabaseErrorT = TypeVar("_DatabaseErrorT", bound=sqlite3.DatabaseError)
+
+
+def _failure(error: _DatabaseErrorT, code: int) -> _DatabaseErrorT:
+    setattr(error, "sqlite_errorcode", code)  # noqa: B010
     return error
 
 
 def _unavailable(reason: str) -> NativeGuardStoreUnavailable:
-    return _failure(NativeGuardStoreUnavailable(f"Guard store native runtime unavailable ({reason})."), _SQLITE_ERROR)  # type: ignore[return-value]
+    return _failure(NativeGuardStoreUnavailable(f"Guard store native runtime unavailable ({reason})."), _SQLITE_ERROR)
 
 
 def _raise_for_code(code: object, payload: object) -> None:
@@ -75,7 +79,7 @@ def native_guard_store_call(
     method: str,
     args: Mapping[str, object],
     busy_timeout_seconds: float,
-) -> tuple[object, int | None]:
+) -> tuple[Any, int | None]:
     """Run one store method in the resident; return ``(payload, outbox_generation)``."""
 
     request: dict[str, object] = {

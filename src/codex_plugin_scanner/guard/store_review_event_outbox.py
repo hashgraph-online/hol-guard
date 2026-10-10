@@ -13,6 +13,7 @@ import json
 import sqlite3
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
+from typing import Any
 
 from . import store_review_event_outbox_schema
 from .native_guard_store import native_guard_store_call
@@ -50,13 +51,13 @@ def _marker_parts(marker_payload: Mapping[str, object]) -> list[str]:
 
 
 class StoreReviewEventOutboxMixin:
-    def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any:
         timeout_seconds = sqlite_connect_timeout_seconds()
         if timeout_seconds <= 0:
             raise TimeoutError("Guard storage operation deadline expired.")
         failure: sqlite3.DatabaseError | None = None
         generation: int | None = None
-        payload: object = None
+        payload: Any = None
         with self._hold_storage_gate(exclusive=False):
             try:
                 payload, generation = native_guard_store_call(
