@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -22,10 +23,13 @@ from codex_plugin_scanner.guard.cli import commands_support_codex_tool_output as
 from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as runtime_artifacts
 from codex_plugin_scanner.guard.native_codex_tool_output import codex_tool_output_native
 
-pytestmark = pytest.mark.skipif(
-    not (os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" and os.environ.get("HOL_GUARD_NATIVE_BINARY")),
-    reason="native runtime binary is not provisioned for this run",
-)
+pytestmark = [
+    pytest.mark.skipif(
+        not (os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" and os.environ.get("HOL_GUARD_NATIVE_BINARY")),
+        reason="native runtime binary is not provisioned for this run",
+    ),
+    pytest.mark.skipif(sys.platform == "win32", reason="the Codex tool-output review models POSIX paths"),
+]
 
 _FIXTURE = (
     Path(__file__).resolve().parents[1]
@@ -195,3 +199,10 @@ def test_git_pathspec_identity_presence_matches_the_retired_python_vectors(
         ),
     )
     assert not failures, failures[:10]
+
+
+def test_unencodable_observed_values_are_denied_with_a_typed_code(tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LANG", "en_US\udcff")
+    answer = codex_tool_output_native("read_only_inspection", command="cat src/a.py", cwd=tree / "home" / "proj")
+    assert answer.allowed is False
+    assert answer.error_code == "native_codex_tool_output_invalid"

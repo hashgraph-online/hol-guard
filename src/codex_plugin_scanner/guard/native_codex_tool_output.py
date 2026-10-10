@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -40,6 +41,7 @@ _REQUEST_SCHEMA = "guard-codex-tool-output-request.v1"
 _RESULT_SCHEMA = "guard-codex-tool-output-result.v1"
 _DEFAULT_TIMEOUT_SECONDS = 8.0
 _UNAVAILABLE = "native_codex_tool_output_unavailable"
+_UNSUPPORTED_PLATFORM = "native_codex_tool_output_unsupported_platform"
 _EXTRA_SNAPSHOT_NAMES = frozenset({"RIPGREP_CONFIG_PATH", "LANG", "LC_ALL", "LC_CTYPE", "TMP", "TEMP", "TMPDIR"})
 
 _request_counter = 0
@@ -56,6 +58,12 @@ class ToolOutputAnswer:
 
 def _deny(code: str) -> ToolOutputAnswer:
     return ToolOutputAnswer(False, None, code)
+
+
+def _platform_is_supported() -> bool:
+    # The review models POSIX shell text and POSIX paths; Windows drive and UNC
+    # roots are not represented, so Windows is refused instead of guessed at.
+    return sys.platform != "win32"
 
 
 def _environment_snapshot() -> dict[str, str]:
@@ -81,6 +89,8 @@ def codex_tool_output_native(
     """Ask the resident for one Codex tool-output verdict."""
 
     global _request_counter
+    if not _platform_is_supported():
+        return _deny(_UNSUPPORTED_PLATFORM)
     effective_deadline = time.monotonic() + timeout_seconds
     status = native_runtime_status(deadline_monotonic=effective_deadline)
     if (

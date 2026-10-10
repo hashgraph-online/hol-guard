@@ -25,6 +25,7 @@ const VECTORS: &str = include_str!("../tests/fixtures/codex_tool_output_vectors.
 
 struct PinnedHost {
     git: Option<String>,
+    trust_git: bool,
 }
 
 impl InspectionHost for PinnedHost {
@@ -38,7 +39,7 @@ impl InspectionHost for PinnedHost {
 
     fn git_safety(&self, check: GitCheck, _cwd: Option<&str>, arguments: &[String]) -> bool {
         if check != GitCheck::StatusArguments {
-            return true;
+            return self.trust_git;
         }
         let request = GitExecutionSafetyRequestV1 {
             schema: GIT_EXECUTION_SAFETY_REQUEST_SCHEMA.to_owned(),
@@ -87,9 +88,13 @@ fn git(root: &Path, repo: &str, args: &[&str]) {
 }
 
 fn build_tree(vectors: &Value) -> PathBuf {
+    let test_name = std::thread::current()
+        .name()
+        .unwrap_or("test")
+        .replace("::", "-");
     let root = fs::canonicalize(std::env::temp_dir())
         .unwrap()
-        .join(format!("cto-vectors-{}", std::process::id()));
+        .join(format!("cto-vectors-{}-{test_name}", std::process::id()));
     let _ = fs::remove_dir_all(&root);
     for dir in vectors["dirs"].as_array().unwrap() {
         fs::create_dir_all(root.join(dir.as_str().unwrap())).unwrap();
@@ -206,19 +211,39 @@ fn py_trim(text: &str) -> String {
 }
 
 fn verdict(action: &CodexToolOutputActionV1, key: &str, root: &Path) -> bool {
-    let host = PinnedHost { git: find_git() };
+    verdict_with_trust(action, key, root, true)
+}
+
+fn verdict_with_trust(
+    action: &CodexToolOutputActionV1,
+    key: &str,
+    root: &Path,
+    trust_git: bool,
+) -> bool {
+    let outcome = review_with_trust(action, root, trust_git);
+    if key == "id" {
+        outcome.value.is_some()
+    } else {
+        outcome.allowed
+    }
+}
+
+fn review_with_trust(
+    action: &CodexToolOutputActionV1,
+    root: &Path,
+    trust_git: bool,
+) -> guard_command::ToolOutputOutcome {
+    let host = PinnedHost {
+        git: find_git(),
+        trust_git,
+    };
     let root_text = root.to_string_lossy().into_owned();
     let ctx = Ctx::new(
         &host,
         &format!("{root_text}/proc"),
         &format!("{root_text}/home"),
     );
-    let outcome = review_codex_tool_output(&ctx, action);
-    if key == "id" {
-        outcome.value.is_some()
-    } else {
-        outcome.allowed
-    }
+    review_codex_tool_output(&ctx, action)
 }
 
 #[cfg(unix)]
@@ -270,5 +295,35 @@ fn codex_tool_output_matches_the_retired_python_vectors() {
         "{} vector mismatches, first: {:#?}",
         mismatches.len(),
         &mismatches[..mismatches.len().min(40)]
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn pathspec_identity_requires_a_vetted_git_binary_and_environment() {
+    let vectors: Value = serde_json::from_str(VECTORS).unwrap();
+    let root = build_tree(&vectors);
+    let mut resolved_by_git = 0usize;
+    for case in vectors["cases"].as_array().unwrap() {
+        if case["expected"]["id"].as_bool() != Some(true) {
+            continue;
+        }
+        for (key, action) in actions(case, &root) {
+            if key != "id" {
+                continue;
+            }
+            let trusted = review_with_trust(&action, &root, true).value;
+            let untrusted = review_with_trust(&action, &root, false).value;
+            assert!(trusted.is_some(), "no identity for {:?}", case["command"]);
+            assert!(untrusted.is_some(), "no identity for {:?}", case["command"]);
+            if trusted != untrusted {
+                resolved_by_git += 1;
+            }
+        }
+    }
+    let _ = fs::remove_dir_all(&root);
+    assert!(
+        resolved_by_git > 0,
+        "an untrusted git must change at least the git-resolved identities"
     );
 }

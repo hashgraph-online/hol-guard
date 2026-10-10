@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::codex_output_env::{Ctx, GitRun};
+use crate::codex_output_env::{Ctx, GitCheck, GitRun};
 use crate::codex_output_fs as pyfs;
 use crate::codex_output_identity::{selection_identity, IdentityPayload, WorktreeEntry};
 use crate::codex_output_py::{py_strip, PyPath};
@@ -223,6 +223,17 @@ fn resolve_inner(
     }
     let git_text = git_path.to_string();
     let cwd_text = effective_cwd.to_string();
+    // The resident only runs a `git` it has vetted for this directory, and only
+    // with a routing environment that cannot redirect the repository queries.
+    if !ctx
+        .host
+        .git_safety(GitCheck::ResolveBinary, Some(&cwd_text), &[])
+        || !ctx
+            .host
+            .git_safety(GitCheck::ConfigEnvironmentClean, None, &[])
+    {
+        return fail("git_pathspec_git_unavailable");
+    }
     let mut root_args: Vec<String> = global_modes.to_vec();
     root_args.extend(["-C", &cwd_text, "rev-parse", "--show-toplevel"].map(str::to_owned));
     let root_output = match ctx.host.run_git(&git_text, &root_args, &cwd_text) {

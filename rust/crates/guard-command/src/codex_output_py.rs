@@ -138,28 +138,7 @@ fn is_shlex_space(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\r' | '\n')
 }
 
-/// `shlex.quote`.
-pub(crate) fn shlex_quote(value: &str) -> String {
-    if value.is_empty() {
-        return "''".to_owned();
-    }
-    if value
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c))
-    {
-        return value.to_owned();
-    }
-    format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-/// `shlex.join`.
-pub(crate) fn shlex_join<S: AsRef<str>>(tokens: &[S]) -> String {
-    tokens
-        .iter()
-        .map(|token| shlex_quote(token.as_ref()))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
+pub(crate) use crate::command_launcher_floors::shlex_join;
 
 /// A `pathlib.PurePosixPath`: root plus normalized components.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -310,14 +289,6 @@ mod tests {
         assert_eq!(py_splitlines("a\u{85}b\u{2028}"), vec!["a", "b"]);
         assert!(py_splitlines("").is_empty());
         assert_eq!(py_splitlines("a\n"), vec!["a"]);
-    }
-
-    #[test]
-    fn quote_and_join_match_python() {
-        assert_eq!(shlex_quote(""), "''");
-        assert_eq!(shlex_quote("a-b.c/d"), "a-b.c/d");
-        assert_eq!(shlex_quote("a b'c"), "'a b'\"'\"'c'");
-        assert_eq!(shlex_join(&["cat", "a b"]), "cat 'a b'");
     }
 
     #[test]
