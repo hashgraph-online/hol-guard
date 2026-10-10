@@ -1,4 +1,4 @@
-import { aV as isGuardDemoMode, aW as isRecord, aX as fetchWithGuardAuth, r as reactExports, ag as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, ah as ApprovalProofModal, ai as Tag } from "../guard-dashboard.js";
+import { b6 as isGuardDemoMode, b7 as isRecord, b8 as fetchWithGuardAuth, r as reactExports, ai as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aj as ApprovalProofModal, ak as Tag } from "../guard-dashboard.js";
 const SUPPORTED_APP_SLUGS = [
   "codex",
   "claude-code",
