@@ -20,7 +20,7 @@ def _isolated_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     transport._NEED_KEYS.clear()
     transport._VERDICTS.clear()
     monkeypatch.setattr(transport, "native_runtime_status", lambda: _Status())
-    monkeypatch.setattr(transport, "_resolve_digest_home", lambda home: Path("/home"))
+    monkeypatch.setattr(transport, "_resolve_existing_digest_home", lambda home: Path("/home"))
     monkeypatch.setattr(transport, "_record_success", lambda _home: None)
 
 

@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
+from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_resident_client import native_resident_client_failure_code
 from .native_runtime import native_runtime_status
@@ -175,7 +175,7 @@ def _decide(
 ) -> dict[str, Any]:
     # Verdicts are pure, so a home that does not exist yet must not be created
     # (or get its own resident) just to be asked a question; use the context home.
-    home = _resolve_digest_home(guard_home if guard_home is not None and guard_home.is_dir() else None)
+    home = _resolve_existing_digest_home(guard_home)
     platform = platform or ("nt" if os.name == "nt" else "posix")
     # The resident digests its typed decoding of the request, which omits unset
     # optional fields; omit them here too so both sides hash identical bytes.

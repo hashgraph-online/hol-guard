@@ -1313,9 +1313,12 @@ class TestGuardSurfaceServer:
             # "could not complete local review" and the deadline-exhaust
             # denial are transient admission misses, not a wrong decision -
             # retry after the worker pool has capacity.
-            if str(hook_payload.get("reason", "")).startswith(
-                "HOL Guard blocked this action because isolated local review could not complete safely."
-            ) or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted":
+            if (
+                str(hook_payload.get("reason", "")).startswith(
+                    "HOL Guard blocked this action because isolated local review could not complete safely."
+                )
+                or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted"
+            ):
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
                     minimum_workers=1, timeout_seconds=15
                 )
@@ -2052,6 +2055,7 @@ class TestGuardSurfaceServer:
         monkeypatch,
     ) -> None:
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
+        monkeypatch.setattr(daemon_manager_module, "_inventory_has_competing_daemon", lambda _inventory: False)
         monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
         monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
         store = GuardStore(tmp_path / "guard-home")
