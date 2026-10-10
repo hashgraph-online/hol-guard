@@ -35,6 +35,8 @@ pub const COMMAND_EFFECT_BATCH_FEATURE: &str = "command-effect-batch-v1";
 pub const COMMAND_EFFECT_BATCH_MAX_ITEMS: usize = 64;
 /// Largest total canonical serialization of all items in one batched request.
 pub const COMMAND_EFFECT_BATCH_MAX_BYTES: usize = 4 * 1024 * 1024;
+/// Most permission ids one counterfactual overlay may enable.
+pub const COMMAND_EFFECT_COUNTERFACTUAL_MAX: usize = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -74,6 +76,13 @@ pub struct CommandEffectRequestV1 {
     /// Home directory used for the private-scope fence.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_dir: Option<String>,
+    /// Counterfactual only: permission ids to treat as enabled in the local
+    /// admin layer. The resident validates `control_snapshot` as supplied
+    /// (digest included) and applies this overlay afterwards, so a caller can
+    /// ask "would this allow if these permissions were on" without forging a
+    /// binding. At most `COMMAND_EFFECT_COUNTERFACTUAL_MAX` ids.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub counterfactual_enabled_permission_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

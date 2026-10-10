@@ -144,15 +144,9 @@ fn evaluate(request: &CommandEffectRequestV1) -> Result<serde_json::Value, Strin
     if request.schema != COMMAND_EFFECT_REQUEST_SCHEMA {
         return Err("native_command_effect_schema_mismatch".to_owned());
     }
-    // Read floors are POSIX-only (shell path identity relies on stat fields);
-    // fail closed on non-unix instead of dropping them.
-    #[cfg(not(unix))]
-    return Err("native_command_effect_read_floors_unsupported".to_owned());
-    #[cfg(unix)]
     evaluate_with_read_floors(request)
 }
 
-#[cfg(unix)]
 fn evaluate_with_read_floors(
     request: &CommandEffectRequestV1,
 ) -> Result<serde_json::Value, String> {
@@ -174,9 +168,14 @@ fn evaluate_with_read_floors(
     let command = CanonicalCommand::from_v1(&canonical_v1);
     let registry = packaged_command_catalog()
         .map_err(|_| "native_command_effect_catalog_unavailable".to_owned())?;
-    let binding: NativeCommandControlBindingV1 =
+    let mut binding: NativeCommandControlBindingV1 =
         serde_json::from_value(request.control_snapshot.clone())
             .map_err(|_| "native_command_effect_invalid_control_snapshot".to_owned())?;
+    // The binding is the only control authority: its layers must hash to the
+    // effective digest the native evidence is bound to. A counterfactual
+    // overlay, if any, is applied only after that check.
+    binding.validate().map_err(str::to_owned)?;
+    apply_counterfactual_permissions(&mut binding, &request.counterfactual_enabled_permission_ids)?;
     let workflow_authorization: Option<GitHubWorkflowAuthorizationV1> = request
         .workflow_authorization
         .as_ref()
@@ -208,6 +207,64 @@ fn evaluate_with_read_floors(
             format!("native_command_effect_{code}")
         }
     })
+}
+
+/// Enable `permission_ids` in the local-admin layer of an already validated
+/// binding. The effective digest is left alone: it still names the snapshot the
+/// evidence is bound to, and only the layers used for control resolution change.
+fn apply_counterfactual_permissions(
+    binding: &mut guard_contracts::NativeCommandControlBindingV1,
+    permission_ids: &[String],
+) -> Result<(), String> {
+    use guard_contracts::{
+        NativeExtensionControlLayerV1, NativeExtensionControlV1, COMMAND_EFFECT_COUNTERFACTUAL_MAX,
+    };
+
+    if permission_ids.is_empty() {
+        return Ok(());
+    }
+    let invalid = || "native_command_effect_invalid_counterfactual".to_owned();
+    if permission_ids.len() > COMMAND_EFFECT_COUNTERFACTUAL_MAX {
+        return Err(invalid());
+    }
+    let mut targets: Vec<&String> = permission_ids.iter().collect();
+    targets.sort();
+    targets.dedup();
+    if targets.iter().any(|id| {
+        guard_command::extension_control::ControlTarget::new(
+            guard_command::extension_control::ControlTargetKind::Permission,
+            (*id).clone(),
+        )
+        .is_err()
+    }) {
+        return Err(invalid());
+    }
+    let position = binding
+        .layers
+        .iter()
+        .position(|layer| layer.kind == "local-admin");
+    let index = position.unwrap_or_else(|| {
+        binding.layers.push(NativeExtensionControlLayerV1 {
+            schema_version: "1.0.0".to_owned(),
+            kind: "local-admin".to_owned(),
+            catalog_digest: binding.catalog_digest.clone(),
+            global_lockdown: false,
+            controls: Vec::new(),
+        });
+        binding.layers.len() - 1
+    });
+    let layer = &mut binding.layers[index];
+    layer.controls.retain(|control| {
+        !(control.target_kind == "permission" && targets.contains(&&control.target_id))
+    });
+    layer
+        .controls
+        .extend(targets.into_iter().map(|id| NativeExtensionControlV1 {
+            target_kind: "permission".to_owned(),
+            target_id: id.clone(),
+            state: "enabled".to_owned(),
+        }));
+    Ok(())
 }
 
 /// CLI byte-path entry (`--stdin`).
@@ -279,6 +336,13 @@ mod tests {
         serde_json::to_value(model).expect("command model serializes")
     }
 
+    /// A real home directory for the private-scope fence, on any host.
+    fn test_home() -> std::path::PathBuf {
+        let home = std::env::temp_dir().join("rtm008-home");
+        std::fs::create_dir_all(&home).ok();
+        home
+    }
+
     fn request_json(command: &str, snapshot: &NativeCommandControlBindingV1) -> Value {
         let registry = packaged_command_catalog().unwrap();
         let command_extensions = json!({
@@ -319,18 +383,14 @@ mod tests {
                 "native_extension_evidence": evidence,
                 "control_snapshot": serde_json::to_value(snapshot).unwrap(),
                 "workflow_authorization": Value::Null,
-                "cwd": "/tmp",
-                "home_dir": "/tmp/rtm008-home",
+                "cwd": std::env::temp_dir(),
+                "home_dir": test_home(),
             }
         })
     }
 
-    // POSIX read floors are not compiled on Windows; production fail-closes
-    // before evaluate_command. Do not weaken that to satisfy this assertion.
-    #[cfg(unix)]
     #[test]
     fn command_effect_op_decides_over_resident_transport() {
-        std::fs::create_dir_all("/tmp/rtm008-home").ok();
         let snapshot = valid_control_snapshot();
 
         let out = crate::resident_protocol::evaluate_resident_bytes(
@@ -357,6 +417,61 @@ mod tests {
             text.contains("critical.local-secret-read") || text.contains("shell-read-floors"),
             "expected shell-read factor in payload: {text}"
         );
+    }
+
+    fn decide(request: &Value) -> Value {
+        let out =
+            crate::resident_protocol::evaluate_resident_bytes(request.to_string().as_bytes(), None)
+                .expect("op returns bytes");
+        serde_json::from_slice(&out).unwrap()
+    }
+
+    #[test]
+    fn forged_control_layers_are_refused_before_evaluation() {
+        let snapshot = valid_control_snapshot();
+        let mut request = request_json("ls -la", &snapshot);
+        // Enable a permission while keeping the digest the evidence names.
+        request["request"]["control_snapshot"]["layers"][0]["controls"] = json!([{
+            "target_kind": "permission",
+            "target_id": "command.git.permission.add",
+            "state": "enabled",
+        }]);
+        let result = decide(&request);
+        assert_eq!(result["status"], "error");
+        assert_eq!(result["code"], "native_command_control_digest_mismatch");
+    }
+
+    #[test]
+    fn counterfactual_permissions_apply_after_the_binding_is_validated() {
+        let snapshot = valid_control_snapshot();
+        let mut request = request_json("ls -la", &snapshot);
+        request["request"]["counterfactual_enabled_permission_ids"] =
+            json!(["command.git.permission.add"]);
+        let result = decide(&request);
+        assert_eq!(result["status"], "ok", "{}", result["code"]);
+        let enabled = &result["payload"]["control_resolution"]["composed"]["controls"];
+        assert!(
+            enabled.to_string().contains("command.git.permission.add"),
+            "overlay not applied: {enabled}"
+        );
+
+        for ids in [
+            json!(["not-a-permission"]),
+            json!([
+                "command.a.permission.b",
+                "command.a.permission.c",
+                "command.a.permission.d",
+                "command.a.permission.e"
+            ]),
+        ] {
+            request["request"]["counterfactual_enabled_permission_ids"] = ids;
+            let result = decide(&request);
+            assert_eq!(result["status"], "error");
+            assert_eq!(
+                result["code"],
+                "native_command_effect_invalid_counterfactual"
+            );
+        }
     }
 
     #[test]
@@ -399,10 +514,8 @@ mod tests {
         serde_json::from_slice(&out).unwrap()
     }
 
-    #[cfg(unix)]
     #[test]
     fn batch_matches_single_op_per_item_with_bound_hashes() {
-        std::fs::create_dir_all("/tmp/rtm008-home").ok();
         let snapshot = valid_control_snapshot();
         let commands = ["ls -la", "cat ~/.ssh/id_rsa", "echo hi"];
         let batch = run_batch(&batch_json(&commands, &snapshot));

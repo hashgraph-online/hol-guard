@@ -137,8 +137,14 @@ def evaluate_command(
     native_extension_evidence: object | None = None,
     extension_control_snapshot: ExtensionControlRuntimeSnapshot | None = None,
     guard_home: Path | None = None,
+    counterfactual_enabled_permission_ids: Sequence[str] = (),
 ) -> CompositeCommandEvaluation:
-    """Evaluate one command through the resident without executing or persisting it."""
+    """Evaluate one command through the resident without executing or persisting it.
+
+    ``counterfactual_enabled_permission_ids`` asks the resident to treat those
+    permissions as enabled for this evaluation only; the snapshot stays the
+    authenticated one the native evidence is bound to.
+    """
 
     snapshot = extension_control_snapshot or current_extension_control_snapshot()
     if native_extension_evidence is None:
@@ -172,6 +178,7 @@ def evaluate_command(
             workflow_authorization=item.workflow_authorization,
             cwd=item.cwd,
             home_dir=item.home_dir,
+            counterfactual_enabled_permission_ids=counterfactual_enabled_permission_ids,
         )
     except NativeCommandEffectRejectedError as error:
         raise NativeCommandExtensionEvidenceError(error.code) from error

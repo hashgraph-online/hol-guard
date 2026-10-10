@@ -21,13 +21,14 @@ from pathlib import Path
 
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
-from .native_runtime import NativeRuntimeStatus, _isolated_environment, _native_error, native_runtime_status
+from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
     native_runtime_health_snapshot,
 )
+from .native_runtime_values import NativeRuntimeIdentity
 
 COMMAND_EFFECT_FEATURE = "command-effect-v1"
 COMMAND_EFFECT_BATCH_FEATURE = "command-effect-batch-v1"
@@ -93,6 +94,7 @@ def _build_request(
     workflow_authorization: Mapping[str, object] | None,
     cwd: Path | None,
     home_dir: Path | None,
+    counterfactual_enabled_permission_ids: Sequence[str] = (),
 ) -> dict[str, object]:
     global _request_counter
     request: dict[str, object] = {
@@ -114,6 +116,10 @@ def _build_request(
         request["cwd"] = str(cwd)
     if home_dir is not None:
         request["home_dir"] = str(home_dir)
+    if counterfactual_enabled_permission_ids:
+        # Counterfactual only: the resident validates the real binding first,
+        # then treats these permissions as enabled for this one evaluation.
+        request["counterfactual_enabled_permission_ids"] = list(counterfactual_enabled_permission_ids)
     return request
 
 
@@ -122,25 +128,26 @@ def _resident_ready(
     feature: str,
     timeout_seconds: float,
     deadline_monotonic: float | None,
-) -> tuple[NativeRuntimeStatus, float] | None:
-    """Return the compatible resident and the request deadline, or ``None``."""
+) -> tuple[NativeRuntimeIdentity, float] | None:
+    """Return the compatible resident's identity and the request deadline, or ``None``."""
     effective_deadline = time.monotonic() + timeout_seconds
     if deadline_monotonic is not None:
         effective_deadline = min(effective_deadline, deadline_monotonic)
     if effective_deadline <= time.monotonic():
         return None
     status = native_runtime_status(deadline_monotonic=effective_deadline)
+    identity = status.identity
     if (
         status.mode == "off"
         or not status.available
         or not status.compatible
-        or status.identity is None
+        or identity is None
         or status.capabilities is None
         or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
         or feature not in status.capabilities.features
     ):
         return None
-    if native_runtime_health_snapshot(status.identity.sha256, guard_home).circuit_open:
+    if native_runtime_health_snapshot(identity.sha256, guard_home).circuit_open:
         return None
     # The one-time on-disk prerequisite is provisioning, not request work, so
     # its first-use cost must not consume this request's own time budget.
@@ -149,7 +156,7 @@ def _resident_ready(
     effective_deadline = time.monotonic() + timeout_seconds
     if deadline_monotonic is not None:
         effective_deadline = min(effective_deadline, deadline_monotonic)
-    return status, effective_deadline
+    return identity, effective_deadline
 
 
 def command_effect_decide_native(
@@ -166,12 +173,13 @@ def command_effect_decide_native(
     home_dir: Path | None = None,
     timeout_seconds: float = 5.0,
     deadline_monotonic: float | None = None,
+    counterfactual_enabled_permission_ids: Sequence[str] = (),
 ) -> dict[str, object] | None:
     """Return the resident's evaluation payload, or ``None`` when unavailable."""
     ready = _resident_ready(guard_home, COMMAND_EFFECT_FEATURE, timeout_seconds, deadline_monotonic)
     if ready is None:
         return None
-    status, effective_deadline = ready
+    identity, effective_deadline = ready
 
     request = _build_request(
         command_text=command_text,
@@ -183,6 +191,7 @@ def command_effect_decide_native(
         workflow_authorization=workflow_authorization,
         cwd=cwd,
         home_dir=home_dir,
+        counterfactual_enabled_permission_ids=counterfactual_enabled_permission_ids,
     )
 
     remaining_seconds = effective_deadline - time.monotonic()
@@ -206,29 +215,27 @@ def command_effect_decide_native(
         return None
 
     output = native_resident_client_request(
-        executable=status.identity.path,
+        executable=identity.path,
         guard_home=guard_home,
         environment=_isolated_environment(),
         payload=resident,
         deadline_monotonic=effective_deadline,
     )
     if output is None:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_command_effect_unavailable")
+        native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_unavailable")
         return None
     try:
         envelope = json.loads(output)
     except (UnicodeDecodeError, json.JSONDecodeError):
-        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_command_effect_decode_failed")
+        native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_decode_failed")
         raise NativeCommandEffectMalformedError("command_effect result is not valid JSON") from None
     if _native_error(envelope) == "native_overloaded":
-        native_record_overload(status.identity.sha256, guard_home)
+        native_record_overload(identity.sha256, guard_home)
         return None
     if isinstance(envelope, dict) and isinstance(envelope.get("error"), str) and "schema" not in envelope:
         # A resident-level refusal (for example an older resident that does not
         # know this operation) is an outage for this feature, never an answer.
-        native_record_resident_failure(
-            status.identity.sha256, guard_home, reason="native_command_effect_resident_error"
-        )
+        native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_resident_error")
         return None
     if (
         not isinstance(envelope, dict)
@@ -236,21 +243,19 @@ def command_effect_decide_native(
         or envelope.get("request_id") != request["request_id"]
         or envelope.get("request_sha256") != request_sha256
     ):
-        native_record_resident_failure(
-            status.identity.sha256, guard_home, reason="native_command_effect_schema_mismatch"
-        )
+        native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_schema_mismatch")
         raise NativeCommandEffectMalformedError("command_effect result does not match the request")
     code = envelope.get("code")
     if envelope.get("status") == "error":
         # A bound refusal is an answer, not an outage: the resident rejected
         # this exact request. Surface its code so callers fail closed on it.
-        native_record_resident_success(status.identity.sha256, guard_home)
+        native_record_resident_success(identity.sha256, guard_home)
         raise NativeCommandEffectRejectedError(code if isinstance(code, str) else "native_command_effect_rejected")
     payload = envelope.get("payload")
     if envelope.get("status") != "ok" or code != "ok" or not isinstance(payload, dict):
-        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_command_effect_bad_status")
+        native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_bad_status")
         raise NativeCommandEffectMalformedError("command_effect result has no evaluation payload")
-    native_record_resident_success(status.identity.sha256, guard_home)
+    native_record_resident_success(identity.sha256, guard_home)
     return payload
 
 
@@ -273,7 +278,7 @@ def command_effect_decide_batch_native(
     ready = _resident_ready(guard_home, COMMAND_EFFECT_BATCH_FEATURE, timeout_seconds, deadline_monotonic)
     if ready is None:
         return None
-    status, effective_deadline = ready
+    identity, effective_deadline = ready
     requests = [
         _build_request(
             command_text=item.command_text,
@@ -295,7 +300,7 @@ def command_effect_decide_batch_native(
     results: list[dict[str, object] | NativeCommandEffectRejectedError] = []
     for start in range(0, len(requests), COMMAND_EFFECT_BATCH_MAX_ITEMS):
         chunk = _batch_chunk(
-            status,
+            identity,
             guard_home,
             requests[start : start + COMMAND_EFFECT_BATCH_MAX_ITEMS],
             hashes[start : start + COMMAND_EFFECT_BATCH_MAX_ITEMS],
@@ -308,15 +313,13 @@ def command_effect_decide_batch_native(
 
 
 def _batch_chunk(
-    status: NativeRuntimeStatus,
+    identity: NativeRuntimeIdentity,
     guard_home: Path,
     requests: list[dict[str, object]],
     hashes: list[str],
     deadline: float,
 ) -> list[dict[str, object] | NativeCommandEffectRejectedError] | None:
     global _request_counter
-    identity = status.identity
-    assert identity is not None
     remaining_seconds = deadline - time.monotonic()
     if remaining_seconds <= 0:
         return None
@@ -336,7 +339,7 @@ def _batch_chunk(
     except (TypeError, ValueError) as exc:
         raise NativeCommandEffectMalformedError("command_effect request is not JSON data") from exc
     if len(resident) > COMMAND_EFFECT_BATCH_MAX_BYTES + _MAX_REQUEST_BYTES // 8:
-        return _split_batch(status, guard_home, requests, hashes, deadline, "native_command_effect_batch_too_large")
+        return _split_batch(identity, guard_home, requests, hashes, deadline, "native_command_effect_batch_too_large")
     output = native_resident_client_request(
         executable=identity.path,
         guard_home=guard_home,
@@ -370,7 +373,7 @@ def _batch_chunk(
         native_record_resident_success(identity.sha256, guard_home)
         refusal = code if isinstance(code, str) else "native_command_effect_rejected"
         if refusal in _BATCH_SPLITTABLE_CODES and len(requests) > 1:
-            return _split_batch(status, guard_home, requests, hashes, deadline, refusal)
+            return _split_batch(identity, guard_home, requests, hashes, deadline, refusal)
         raise NativeCommandEffectRejectedError(refusal)
     answers = envelope.get("items")
     if envelope.get("status") != "ok" or code != "ok" or not isinstance(answers, list) or len(answers) != len(requests):
@@ -404,7 +407,7 @@ def _batch_chunk(
 
 
 def _split_batch(
-    status: NativeRuntimeStatus,
+    identity: NativeRuntimeIdentity,
     guard_home: Path,
     requests: list[dict[str, object]],
     hashes: list[str],
@@ -416,7 +419,7 @@ def _split_batch(
     middle = len(requests) // 2
     outcomes: list[dict[str, object] | NativeCommandEffectRejectedError] = []
     for part_requests, part_hashes in ((requests[:middle], hashes[:middle]), (requests[middle:], hashes[middle:])):
-        part = _batch_chunk(status, guard_home, part_requests, part_hashes, deadline)
+        part = _batch_chunk(identity, guard_home, part_requests, part_hashes, deadline)
         if part is None:
             return None
         outcomes.extend(part)
