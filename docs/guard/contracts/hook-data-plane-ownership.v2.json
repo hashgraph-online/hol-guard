@@ -578,6 +578,7 @@
     "rust/crates/guard-hook-core/**",
     "rust/crates/guard-secure-fs/**",
     "rust/crates/guard-seatbelt/**",
+    "rust/crates/guard-contained-process/**",
     "rust/crates/guard-runtime-windows-process/**",
     "rust/crates/guard-google-identity/**"
    ],
