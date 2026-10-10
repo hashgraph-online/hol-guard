@@ -110,7 +110,7 @@ fn plain_non_secret_read(arguments: &[String]) -> bool {
         "-A",
     ];
     let mut subcommand: Option<&str> = None;
-    let mut resource: Option<&str> = None;
+    let mut resources: Vec<&str> = Vec::new();
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         index += 1;
@@ -142,22 +142,26 @@ fn plain_non_secret_read(arguments: &[String]) -> bool {
             }
         } else if subcommand.is_none() {
             subcommand = Some(argument);
-        } else if resource.is_none() {
-            resource = Some(argument);
+        } else {
+            // kubectl accepts several TYPE[/NAME] operands; every one must be checked.
+            resources.push(argument);
         }
     }
-    let (Some("get" | "describe"), Some(resource)) = (subcommand, resource) else {
+    if !matches!(subcommand, Some("get" | "describe")) || resources.is_empty() {
         return false;
-    };
-    resource.split(',').all(|part| {
-        let head = part.split('/').next().unwrap_or("").to_ascii_lowercase();
-        !head.is_empty()
-            && head
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
-            && !head.starts_with("secret")
-            && !head.starts_with("sealedsecret")
-    })
+    }
+    resources
+        .iter()
+        .flat_map(|resource| resource.split(','))
+        .all(|part| {
+            let head = part.split('/').next().unwrap_or("").to_ascii_lowercase();
+            !head.is_empty()
+                && head
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                && !head.starts_with("secret")
+                && !head.starts_with("sealedsecret")
+        })
 }
 
 /// Output formats that render the fetched objects only. The `*-file` formats

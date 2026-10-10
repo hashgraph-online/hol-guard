@@ -14,7 +14,6 @@ fn request(command: &str) -> CommandModelRequestV1 {
 struct Fixture {
     home: String,
     workspace: String,
-    bare: String,
 }
 
 fn write(root: &std::path::Path, file: &str) {
@@ -35,7 +34,7 @@ fn fixture() -> Fixture {
             NEXT.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
         ));
     let _ = std::fs::remove_dir_all(&base);
-    let (home, ws, bare) = (base.join("home"), base.join("ws"), base.join("bare"));
+    let (home, ws) = (base.join("home"), base.join("ws"));
     for file in [
         "app/registry/[slug]/page.tsx",
         "app/registry/alpha/page.tsx",
@@ -55,7 +54,6 @@ fn fixture() -> Fixture {
     ] {
         write(&ws, file);
     }
-    write(&bare, "package.json");
     std::fs::create_dir_all(ws.join("node_modules/.bin")).unwrap();
     std::os::unix::fs::symlink(
         "../wrangler/bin/wrangler.js",
@@ -68,7 +66,6 @@ fn fixture() -> Fixture {
     Fixture {
         home: canonical(&home),
         workspace: canonical(&ws),
-        bare: canonical(&bare),
     }
 }
 
@@ -224,13 +221,12 @@ fn find_admits_only_read_only_predicates() {
 }
 
 #[test]
-fn version_probes_and_local_npx_wrangler() {
+fn version_probes_admit_lone_flags_and_keep_npx_review() {
     let fixture = fixture();
     let ws = fixture.workspace.as_str();
     for command in [
         "uv --version",
         "uv -V",
-        "pytest --version",
         "npm --version",
         "npm -v",
         "bun --version",
@@ -246,9 +242,6 @@ fn version_probes_and_local_npx_wrangler() {
         "jq --version",
         "rg --version",
         "fd --version",
-        "npx wrangler --version",
-        "npx wrangler whoami",
-        "npx wrangler deploy --help",
     ] {
         assert!(allowed_in(&fixture, ws, command), "{command}");
     }
@@ -256,6 +249,7 @@ fn version_probes_and_local_npx_wrangler() {
         "uv --version --python x",
         "uv run --version",
         "pytest -q",
+        "pytest --version",
         "pytest --version tests",
         "go version",
         "cargo --version",
@@ -271,6 +265,10 @@ fn version_probes_and_local_npx_wrangler() {
         "PATH=/tmp uv --version",
         "uv --version | sh",
         "uv --version > out.txt",
+        // A local install does not help: the workspace controls node_modules.
+        "npx wrangler --version",
+        "npx wrangler whoami",
+        "npx wrangler deploy --help",
         "npx wrangler deploy",
         "npx wrangler dev",
         "npx --yes wrangler --version",
@@ -281,10 +279,6 @@ fn version_probes_and_local_npx_wrangler() {
         "npx wrangler",
     ] {
         assert!(!allowed_in(&fixture, ws, command), "{command}");
-    }
-    // npx would download wrangler when no local install is present.
-    for command in ["npx wrangler --version", "npx wrangler whoami"] {
-        assert!(!allowed_in(&fixture, &fixture.bare, command), "{command}");
     }
 }
 

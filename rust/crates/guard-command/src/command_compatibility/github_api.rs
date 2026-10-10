@@ -202,7 +202,8 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
 }
 
 /// A single static `query` field against the GraphQL endpoint reads only when the
-/// document is an unambiguous query: no mutation or subscription text anywhere.
+/// shared GraphQL classifier proves it is one static query. That classifier ignores
+/// strings and comments, so a field argument that mentions "mutation" stays a read.
 fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
     if !method.is_none_or(|value| value.eq_ignore_ascii_case("POST")) {
         return None;
@@ -212,12 +213,8 @@ fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
     if queries.next().is_some() {
         return None;
     }
-    let lowered = document.trim_start().to_ascii_lowercase();
-    let starts_as_query = lowered.starts_with('{')
-        || lowered
-            .strip_prefix("query")
-            .is_some_and(|tail| !tail.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'));
-    if !starts_as_query || lowered.contains("mutation") || lowered.contains("subscription") {
+    let assessment = crate::github_command_capabilities::classify_graphql_document(document);
+    if assessment.reason_code != "github.graphql.proven-query" {
         return None;
     }
     one("read_remote")

@@ -7,7 +7,12 @@
 //! no path separator, no environment prefix and no wrapper reaches this proof.
 //! The caller enforces those preconditions.
 //!
+//! `node`, `python` and `wrangler` have their own argument proofs in
+//! `safe_scalar` and `wrangler_reads`.
+//!
 //! Deliberately absent:
+//! - `pytest`: it loads `conftest.py` files and ini-configured plugins before
+//!   it prints its version, so the probe can run workspace code.
 //! - `yarn` and `pnpm`: Yarn's `yarnPath` and Corepack's `packageManager`
 //!   field select a workspace-supplied binary that the probe would execute.
 //! - `docker version` and bare `kubectl version`: both contact a server.
@@ -32,9 +37,9 @@ pub(super) fn safe_version_probe(basename: &str, arguments: &[String]) -> bool {
 fn single_flag_probe(basename: &str, flag: &str) -> bool {
     let long = flag == "--version";
     match basename {
-        "uv" | "pip" | "pip3" | "ruff" | "python" | "python3" => long || flag == "-V",
-        "node" | "nodejs" | "npm" | "bun" | "deno" | "docker" => long || flag == "-v",
-        "pytest" | "gh" | "wrangler" | "jq" | "rg" | "fd" | "tsc" | "black" | "mypy" => long,
+        "uv" | "pip" | "pip3" | "ruff" => long || flag == "-V",
+        "npm" | "bun" | "deno" | "docker" => long || flag == "-v",
+        "gh" | "jq" | "rg" | "fd" | "tsc" | "black" | "mypy" => long,
         "git" => long || flag == "version",
         "helm" => flag == "version",
         _ => false,
@@ -54,7 +59,6 @@ mod tests {
         for (tool, flag) in [
             ("uv", "--version"),
             ("uv", "-V"),
-            ("pytest", "--version"),
             ("npm", "-v"),
             ("bun", "--version"),
             ("deno", "--version"),
@@ -65,7 +69,6 @@ mod tests {
             ("docker", "--version"),
             ("git", "--version"),
             ("git", "version"),
-            ("wrangler", "--version"),
             ("jq", "--version"),
             ("rg", "--version"),
             ("fd", "--version"),
@@ -87,6 +90,7 @@ mod tests {
             ("kubectl", vec!["--version"]),
             ("kubectl", vec!["version", "--output=yaml"]),
             ("docker", vec!["version"]),
+            ("pytest", vec!["--version"]),
             ("pytest", vec!["-v"]),
             ("pytest", vec!["-V", "extra"]),
             ("cargo", vec!["-v"]),

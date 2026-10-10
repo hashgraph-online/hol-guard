@@ -43,7 +43,15 @@ fn read_only_graphql_queries_need_no_prompt_but_mutations_do() {
             "gh api {endpoint} -f query='query{{repository(owner:\"example-org\",name:\"example-repo\"){{id}}}}'"
         );
         assert_eq!(action(&controls, &query), "allow", "{query}");
+        // Words inside string arguments do not change the operation type.
+        let search = format!(
+            "gh api {endpoint} -f query='query{{search(query:\"mutation testing\",type:ISSUE,first:5){{issueCount}}}}'"
+        );
+        assert_eq!(action(&controls, &search), "allow", "{search}");
         for command in [
+            format!("gh api {endpoint} -f query='subscription{{a}}'"),
+            format!("gh api {endpoint} -f query='query{{mutation:viewer{{login}}}}'"),
+            format!("gh api {endpoint} -f query='query a{{b}} mutation c{{d}}'"),
             format!("gh api {endpoint} -f query='mutation{{addStar(input:{{starrableId:\"X\"}}){{clientMutationId}}}}'"),
             format!("gh api {endpoint} -X PATCH -f query='query{{viewer{{login}}}}'"),
             format!("gh api {endpoint} -f query='query{{a}}' -f query='mutation{{b}}'"),
@@ -84,6 +92,9 @@ fn kubectl_reads_are_an_opt_in_permission_that_never_covers_exec_or_secrets() {
         "kubectl get pods --kubeconfig /tmp/example/config",
         "kubectl get pods --server https://example.invalid",
         "kubectl get secret example-secret -o yaml",
+        "kubectl get pods/example-app secrets/example-secret -o yaml",
+        "kubectl describe deploy example-app secret/example-secret",
+        "oc get pods/example-app secrets/example-secret -o yaml",
         "kubectl get pods -o go-template-file=/etc/passwd",
         "kubectl get pods -o jsonpath-file=/etc/passwd",
         "kubectl get pods --output=custom-columns-file=/etc/passwd",
