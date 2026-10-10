@@ -46,6 +46,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        # Per-request status reuse. stat() only rechecks the validated binary.
+        "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
         # Extracted binary identity validation; no command or policy semantics.
         "src/codex_plugin_scanner/guard/native_binary_identity.py",
         "src/codex_plugin_scanner/guard/native_context.py",
