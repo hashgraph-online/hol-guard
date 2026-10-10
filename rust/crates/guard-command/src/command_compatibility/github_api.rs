@@ -5,6 +5,28 @@ fn field_is_static(value: &str) -> bool {
     !value.contains(['$', '`', '@', '\0', '\n', '\r'])
 }
 
+/// GraphQL documents may span lines and declare `$variables`. Every `$name` must be
+/// declared in the document itself, so a shell-expanded `$HOME` never qualifies.
+pub(super) fn graphql_text_is_static(value: &str) -> bool {
+    if value.contains(['`', '@', '\0', '\r']) {
+        return false;
+    }
+    let mut rest = value;
+    while let Some(position) = rest.find('$') {
+        rest = &rest[position + 1..];
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty()
+            || !value.contains(&format!("${name}:")) && !value.contains(&format!("${name} :"))
+        {
+            return false;
+        }
+    }
+    true
+}
+
 fn safe_header(value: &str) -> bool {
     let lowered = value.to_ascii_lowercase();
     let Some((name, value)) = lowered.split_once(':') else {
@@ -66,6 +88,7 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
     let mut endpoint: Option<&str> = None;
     let mut method: Option<&str> = None;
     let mut fields: Vec<(&str, &str)> = Vec::new();
+    let mut relaxed_query = false;
     let mut index = 0;
     while let Some(argument) = arguments.get(index) {
         if argument == "--" {
@@ -122,7 +145,15 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
                 index += 1;
                 arguments.get(index)?.as_str()
             };
-            if !field_is_static(value) {
+            let query_field = matches!(name, "--field" | "--raw-field" | "-f" | "-F")
+                && value.split_once('=').is_some_and(|(key, _)| key == "query");
+            if query_field {
+                let (_, text) = value.split_once('=')?;
+                if !graphql_text_is_static(text) {
+                    return None;
+                }
+                relaxed_query |= !field_is_static(text);
+            } else if !field_is_static(value) {
                 return None;
             }
             match name {
@@ -146,6 +177,13 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         index += 1;
     }
     let endpoint = endpoint?;
+    if endpoint.trim_matches('/').eq_ignore_ascii_case("graphql") && !endpoint.contains(['%', '?'])
+    {
+        return graphql_read(method, &fields);
+    }
+    if relaxed_query {
+        return None;
+    }
     let method = method
         .unwrap_or(if fields.is_empty() { "GET" } else { "POST" })
         .to_ascii_uppercase();
@@ -161,6 +199,28 @@ pub(super) fn classify(arguments: &[String]) -> Capabilities {
         return one("read_remote");
     }
     Some(mutation_capabilities(endpoint, &method, &fields))
+}
+
+/// A single static `query` field against the GraphQL endpoint reads only when the
+/// document is an unambiguous query: no mutation or subscription text anywhere.
+fn graphql_read(method: Option<&str>, fields: &[(&str, &str)]) -> Capabilities {
+    if !method.is_none_or(|value| value.eq_ignore_ascii_case("POST")) {
+        return None;
+    }
+    let mut queries = fields.iter().filter(|(key, _)| *key == "query");
+    let (_, document) = queries.next()?;
+    if queries.next().is_some() {
+        return None;
+    }
+    let lowered = document.trim_start().to_ascii_lowercase();
+    let starts_as_query = lowered.starts_with('{')
+        || lowered
+            .strip_prefix("query")
+            .is_some_and(|tail| !tail.starts_with(|c: char| c.is_ascii_alphanumeric() || c == '_'));
+    if !starts_as_query || lowered.contains("mutation") || lowered.contains("subscription") {
+        return None;
+    }
+    one("read_remote")
 }
 
 fn mutation_capabilities(

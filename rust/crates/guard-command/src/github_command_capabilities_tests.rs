@@ -72,3 +72,56 @@ fn github_cli_classification_matches_python_oracle() {
         mismatches.join("\n")
     );
 }
+
+fn graphql_capability(args: &[&str]) -> crate::github_capability_contract::GitHubCommandCapability {
+    let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+    classify_github_cli(&args).capability
+}
+
+#[test]
+fn graphql_endpoint_with_leading_slash_matches_the_bare_endpoint() {
+    use crate::github_capability_contract::GitHubCommandCapability as C;
+    let query = "query{repository(owner:\"example-org\",name:\"example-repo\"){id}}";
+    for endpoint in ["graphql", "/graphql"] {
+        assert_eq!(
+            graphql_capability(&["api", endpoint, "-f", &format!("query={query}")]),
+            C::ReadRemote,
+            "{endpoint}"
+        );
+    }
+    let mutation = "mutation{addStar(input:{starrableId:\"X\"}){clientMutationId}}";
+    for endpoint in ["graphql", "/graphql"] {
+        assert_ne!(
+            graphql_capability(&["api", endpoint, "-f", &format!("query={mutation}")]),
+            C::ReadRemote,
+            "{endpoint}"
+        );
+        assert_ne!(
+            graphql_capability(&[
+                "api",
+                endpoint,
+                "-X",
+                "POST",
+                "-f",
+                &format!("query={query}")
+            ]),
+            C::ReadRemote,
+            "{endpoint}"
+        );
+        assert_ne!(
+            graphql_capability(&["api", endpoint, "-F", "query=@query.graphql"]),
+            C::ReadRemote,
+            "{endpoint}"
+        );
+    }
+    // A REST endpoint with a body stays a write, and blob creation stays review.
+    assert_ne!(
+        graphql_capability(&[
+            "api",
+            "/repos/example-org/example-repo/git/blobs",
+            "-F",
+            "content=@file.txt"
+        ]),
+        C::ReadRemote
+    );
+}

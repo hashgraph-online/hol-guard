@@ -17,6 +17,50 @@ pub(super) fn safe_wrangler_arguments(arguments: &[String]) -> bool {
     }
 }
 
+/// `npx wrangler <read-only args>` runs the project's own installed Wrangler.
+///
+/// `npx` downloads and runs a package it cannot find locally, so the proof
+/// requires the exact package name as the first argument (no `--yes`, `-p`,
+/// version suffix or other npx flag) and a local `node_modules/.bin/wrangler`
+/// symlink into `node_modules/wrangler/` at the nearest project root, which is
+/// where npx looks first. A pnpm shim script or a missing install keeps review.
+pub(super) fn safe_npx_wrangler(arguments: &[String], context: super::PathContext<'_>) -> bool {
+    let Some((package, rest)) = arguments.split_first() else {
+        return false;
+    };
+    package == "wrangler"
+        && safe_wrangler_arguments(rest)
+        && super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+        && context
+            .cwd
+            .is_some_and(|cwd| local_wrangler_installed(cwd, context.home_dir))
+}
+
+fn local_wrangler_installed(cwd: &str, home_dir: Option<&str>) -> bool {
+    let cwd = match (cwd, home_dir) {
+        ("~", Some(home)) => std::path::PathBuf::from(home),
+        (_, Some(home)) if cwd.starts_with("~/") => std::path::Path::new(home).join(&cwd[2..]),
+        _ => std::path::PathBuf::from(cwd),
+    };
+    let Ok(cwd) = std::fs::canonicalize(cwd) else {
+        return false;
+    };
+    // npm's local prefix is the nearest ancestor with a manifest or modules dir.
+    let Some(project) = cwd
+        .ancestors()
+        .take(32)
+        .find(|dir| dir.join("package.json").is_file() || dir.join("node_modules").is_dir())
+    else {
+        return false;
+    };
+    let Ok(target) = std::fs::read_link(project.join("node_modules/.bin/wrangler")) else {
+        return false;
+    };
+    target
+        .to_str()
+        .is_some_and(|target| target.starts_with("../wrangler/") && !target.contains("/../"))
+}
+
 fn subcommand_word(word: &str) -> bool {
     let mut characters = word.chars();
     characters
