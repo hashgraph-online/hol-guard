@@ -10,7 +10,7 @@ import pytest
 from scripts.ci import runtime_majority_report as report_module
 from scripts.ci.runtime_majority_python import build_graph, closure, count_python_loc
 from scripts.ci.runtime_majority_report import DEFAULT_SCOPE, ScopeError, build_report, load_scope, main
-from scripts.ci.runtime_majority_rust import analyze_source
+from scripts.ci.runtime_majority_rust import analyze_source, measure_rust
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -206,3 +206,145 @@ def test_cli_entrypoint_runs_from_source_tree() -> None:
     )
     assert completed.returncode == 0, completed.stderr
     assert "runtime majority share" in completed.stdout
+
+
+def test_rust_test_dir_filter_ignores_checkout_location(tmp_path: Path) -> None:
+    repo = tmp_path / "tests" / "target" / "checkout"
+    _rust_workspace(repo)
+    counts, exclusions, totals, _meta = measure_rust(repo, {"workspace": "rust", "binary_crate": "bin"})
+    assert [(item.path, item.loc) for item in counts] == [("rust/crates/bin/src/main.rs", 3)]
+    assert not exclusions
+    assert totals["tests"] == 2
+
+
+def test_rust_test_dir_inside_crate_is_still_excluded(tmp_path: Path) -> None:
+    repo = tmp_path / "checkout"
+    _rust_workspace(repo)
+    _write(repo / "rust" / "crates" / "bin" / "src" / "main.rs", "mod tests;\nfn main() {}\n")
+    _write(repo / "rust" / "crates" / "bin" / "src" / "tests" / "mod.rs", "fn helper() {}\n")
+    counts, exclusions, _totals, _meta = measure_rust(repo, {"workspace": "rust", "binary_crate": "bin"})
+    assert [item.path for item in counts] == ["rust/crates/bin/src/main.rs"]
+    assert [(item["path"], item["category"]) for item in exclusions] == [("rust/crates/bin/src/tests/mod.rs", "tests")]
+
+
+@pytest.mark.parametrize(
+    ("attribute", "stripped"),
+    [
+        ("#[cfg(test)]", True),
+        ("#[cfg(all(windows, test))]", True),
+        ("#[cfg(all(unix, test))]", True),
+        ("#[cfg(all(test, unix))]", True),
+        ('#[cfg(all(test, feature = "x"))]', True),
+        ("#[cfg(all(unix, any(test, windows)))]", False),
+        ("#[cfg(any(test, test))]", True),
+        ("#[cfg(any(test, unix))]", False),
+        ("#[cfg(not(test))]", False),
+        ("#[cfg(all(unix, not(test)))]", False),
+        ("#[cfg(windows)]", False),
+    ],
+)
+def test_rust_cfg_test_predicates(attribute: str, stripped: bool) -> None:
+    runtime_loc, test_loc, _code, _flags = analyze_source(f"fn keep() {{}}\n{attribute}\nfn item() {{\n    1;\n}}\n")
+    assert (runtime_loc, test_loc) == ((1, 4) if stripped else (5, 0))
+
+
+def test_relative_import_module_calls_are_resolved(tmp_path: Path) -> None:
+    pkg = tmp_path / "src" / "pkg"
+    _write(pkg / "__init__.py", "")
+    _write(
+        pkg / "root.py",
+        "import importlib\n"
+        "def a():\n    return importlib.import_module('.t_one', __package__)\n"
+        "def b():\n    return importlib.import_module('..t_two', 'pkg.sub')\n"
+        "def c():\n    return importlib.import_module('.t_three', package='pkg')\n"
+        "def d(name):\n    return importlib.import_module(name, __package__)\n",
+    )
+    for name in ("t_one", "t_two", "t_three"):
+        _write(pkg / f"{name}.py")
+    _write(pkg / "sub" / "__init__.py", "")
+    graph = build_graph(tmp_path, "src/pkg")
+    assert graph.lazy["pkg.root"] >= {"pkg.t_one", "pkg.t_two", "pkg.t_three"}
+    assert graph.dynamic_unresolved["pkg.root"] == 1
+
+
+def test_relative_import_module_in_package_init_uses_dunder_name(tmp_path: Path) -> None:
+    pkg = tmp_path / "src" / "pkg"
+    _write(
+        pkg / "__init__.py",
+        "from importlib import import_module\ndef load():\n    return import_module('.runner', __name__)\n",
+    )
+    _write(pkg / "runner.py")
+    assert "pkg.runner" in build_graph(tmp_path, "src/pkg").lazy["pkg"]
+
+
+def test_min_share_compares_unrounded_share(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake = {"schema": report_module.SCHEMA, "metric": {"share": 0.69999996, "target_share": 0.7}, "python": {}}
+    monkeypatch.setattr(report_module, "build_report", lambda *_a, **_k: fake)
+    monkeypatch.setattr(report_module, "render_summary", lambda _r: "summary")
+    assert main(["--repo", "/", "--scope", "/x.json", "--min-share", "0.7"]) == 1
+    assert "below --min-share" in capsys.readouterr().err
+
+
+def test_real_report_share_is_not_rounded(tmp_path: Path) -> None:
+    repo, scope_path = _synthetic_repo(tmp_path)
+    metric = build_report(repo, scope_path)["metric"]
+    assert metric["share"] == metric["rust_runtime_loc"] / (metric["rust_runtime_loc"] + metric["python_runtime_loc"])
+
+
+@pytest.mark.parametrize("target", [0, -0.1, 1.5, "0.7", None, True])
+def test_target_share_must_be_in_unit_interval(
+    tmp_path: Path, target: object, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo, scope_path = _synthetic_repo(tmp_path)
+    scope = _scope()
+    scope["metric"]["target_share"] = target
+    scope_path.write_text(json.dumps(scope), encoding="utf-8")
+    with pytest.raises(ScopeError):
+        load_scope(scope_path)
+    assert main(["--repo", str(repo), "--scope", str(scope_path)]) == 2
+    assert "target_share" in capsys.readouterr().err
+
+
+def _git(repo: Path, *args: str) -> None:
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@example.com",
+            *args,
+        ],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_dirty_indicator_covers_untracked_scanned_files(tmp_path: Path) -> None:
+    repo, scope_path = _synthetic_repo(tmp_path)
+    _git(repo, "init", "-q")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "base")
+    clean = build_report(repo, scope_path)
+    assert clean["git_dirty"] is False and clean["git_dirty_paths"] == []
+    _write(repo / "src" / "pkg" / "new_untracked.py", "n = 1\n")
+    dirty = build_report(repo, scope_path)
+    assert dirty["git_dirty"] is True
+    assert dirty["git_dirty_paths"] == ["src/pkg/new_untracked.py"]
+    _write(repo / "rust" / "crates" / "bin" / "src" / "extra.rs", "fn x() {}\n")
+    assert "rust/crates/bin/src/extra.rs" in build_report(repo, scope_path)["git_dirty_paths"]
+
+
+def test_shipped_scope_keeps_managed_policy_loading_in_scope() -> None:
+    result = build_report(REPO_ROOT, REPO_ROOT / DEFAULT_SCOPE)
+    in_scope = {item["path"] for item in result["python"]["files"]}
+    assert "src/codex_plugin_scanner/guard/mdm/policy.py" in in_scope
+    assert "src/codex_plugin_scanner/guard/mdm/contracts.py" in in_scope
+    assert any(item["path"].endswith("native_package_evaluation_compose.py") for item in result["python"]["files"])

@@ -90,8 +90,32 @@ def _is_type_checking(test: ast.expr) -> bool:
     return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
 
 
+def _literal_package(node: ast.expr, module: PythonModule) -> str | None:
+    """Package anchor of a relative ``import_module`` call, when statically known."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name) and node.id == "__package__":
+        return module.name if module.is_package else module.name.rpartition(".")[0]
+    if isinstance(node, ast.Name) and node.id == "__name__":
+        return module.name
+    return None
+
+
+def _absolute_name(name: str, package: str | None) -> str | None:
+    if not name.startswith("."):
+        return name
+    if not package:
+        return None
+    level = len(name) - len(name.lstrip("."))
+    base = package.split(".")
+    if level - 1 >= len(base):
+        return None
+    return ".".join([*base[: len(base) - (level - 1)], name.lstrip(".")]).rstrip(".")
+
+
 class _ImportCollector(ast.NodeVisitor):
-    def __init__(self) -> None:
+    def __init__(self, module: PythonModule) -> None:
+        self.module = module
         self.found: list[tuple[str, str, int, tuple[str, ...]]] = []
         self.dynamic_unresolved = 0
         self._function_depth = 0
@@ -126,8 +150,15 @@ class _ImportCollector(ast.NodeVisitor):
         name = func.attr if isinstance(func, ast.Attribute) else getattr(func, "id", "")
         if name in {"import_module", "__import__"} and node.args:
             arg = node.args[0]
-            if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and not arg.value.startswith("."):
-                self.found.append(("lazy", arg.value, 0, ()))
+            package_node = node.args[1] if len(node.args) > 1 else None
+            for keyword in node.keywords:
+                if keyword.arg == "package":
+                    package_node = keyword.value
+            package = _literal_package(package_node, self.module) if package_node is not None else None
+            literal = arg.value if isinstance(arg, ast.Constant) and isinstance(arg.value, str) else None
+            target = _absolute_name(literal, package) if literal is not None else None
+            if target:
+                self.found.append(("lazy", target, 0, ()))
             else:
                 self.dynamic_unresolved += 1
         self.generic_visit(node)
@@ -167,7 +198,7 @@ def build_graph(repo: Path, package_root: str) -> ImportGraph:
     graph = ImportGraph(modules=modules)
     for name, module in modules.items():
         source = (repo / module.path).read_text(encoding="utf-8")
-        collector = _ImportCollector()
+        collector = _ImportCollector(module)
         try:
             collector.visit(ast.parse(source))
         except SyntaxError:

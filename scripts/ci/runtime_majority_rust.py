@@ -24,7 +24,8 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
 TEST_FILE_NAMES = re.compile(r"(?:_tests?\.rs|^tests?\.rs)$")
 TEST_DIR_NAMES = frozenset({"tests", "testdata", "benches", "examples", "fuzz"})
 
-_CFG_TEST = re.compile(r"#\s*(?P<inner>!\s*)?\[\s*(?:cfg\s*\(\s*(?:test|all\s*\(\s*test\s*[,)][^\]]*?)\s*\)|test)\s*\]")
+_CFG_START = re.compile(r"#\s*(?P<inner>!\s*)?\[\s*(?:(?P<cfg>cfg\s*\()|test\s*\])")
+_TOP_PRED = re.compile(r"(all|any|not)\s*\((.*)\)\Z", re.DOTALL)
 _ATTRIBUTE = re.compile(r"#\s*!?\s*\[")
 _MOD_DECL = re.compile(r"(?<![\w:])(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_]\w*)\s*;")
 _INCLUDE = re.compile(r'include!\s*\(\s*"([^"]+)"\s*\)')
@@ -192,20 +193,74 @@ def _item_end(code: str, start: int) -> int:
     return n
 
 
+def _split_top_level(text: str) -> list[str]:
+    parts: list[str] = []
+    depth, start = 0, 0
+    for index, char in enumerate(text):
+        if char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+        elif char == "," and depth == 0:
+            parts.append(text[start:index])
+            start = index + 1
+    parts.append(text[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
+def _is_test_only(predicate: str) -> bool:
+    """True when a ``cfg`` predicate can only hold in a test build.
+
+    ``all`` needs one test-only member, ``any`` needs every member test-only,
+    ``not(...)`` is conservatively runtime.
+    """
+    predicate = predicate.strip()
+    match = _TOP_PRED.match(predicate)
+    if match is None:
+        return predicate == "test"
+    operator, inner = match.groups()
+    children = _split_top_level(inner)
+    if operator == "all":
+        return any(_is_test_only(child) for child in children)
+    if operator == "any":
+        return bool(children) and all(_is_test_only(child) for child in children)
+    return False
+
+
+def _find_test_attribute(code: str, position: int) -> tuple[int, int, bool] | None:
+    """Next ``#[cfg(<test-only>)]``/``#[test]`` as ``(start, end, is_inner)``."""
+    while True:
+        match = _CFG_START.search(code, position)
+        if match is None:
+            return None
+        inner = bool(match.group("inner"))
+        if not match.group("cfg"):
+            return match.start(), match.end(), inner
+        depth, index = 1, match.end()
+        while index < len(code) and depth:
+            depth += {"(": 1, ")": -1}.get(code[index], 0)
+            index += 1
+        close = re.compile(r"\s*\]").match(code, index)
+        if depth == 0 and close and _is_test_only(code[match.end() : index - 1]):
+            return match.start(), close.end(), inner
+        position = match.end()
+
+
 def strip_test_regions(code: str, flags: bytearray) -> list[tuple[int, int]]:
     """Mark ``#[cfg(test)]``/``#[test]`` items as non-counting; return their spans."""
     spans: list[tuple[int, int]] = []
     position = 0
     while True:
-        match = _CFG_TEST.search(code, position)
-        if not match:
+        found = _find_test_attribute(code, position)
+        if found is None:
             break
-        if match.group("inner"):
+        start, attribute_end, inner = found
+        if inner:
             spans.append((0, len(code)))  # inner `#![cfg(test)]`: whole file
             break
-        end = _item_end(code, match.start())
-        spans.append((match.start(), end))
-        position = max(end, match.end())
+        end = _item_end(code, start)
+        spans.append((start, end))
+        position = max(end, attribute_end)
     for start, end in spans:
         for k in range(start, end):
             flags[k] = 0
@@ -380,7 +435,9 @@ def measure_rust(
     unresolved: list[str] = []
     for name in sorted(graph):
         directory, _, manifest = graph[name]
-        files_in_crate = sorted(path for path in directory.rglob("*.rs") if "target" not in path.parts)
+        files_in_crate = sorted(
+            path for path in directory.rglob("*.rs") if "target" not in path.relative_to(directory).parts
+        )
         reachable: dict[Path, None] = {}
         if name in linked:
             roots = crate_roots(directory, manifest, binary=name == binary_crate)
@@ -395,7 +452,9 @@ def measure_rust(
             totals["tests"] += test_loc
             if path.resolve() in reachable:
                 override = match_any(relative, path_exclusions)
-                if TEST_FILE_NAMES.search(path.name) or any(p in TEST_DIR_NAMES for p in path.parts):
+                if TEST_FILE_NAMES.search(path.name) or any(
+                    p in TEST_DIR_NAMES for p in path.relative_to(directory).parts[:-1]
+                ):
                     totals["tests"] += loc
                     exclusions.append(_exclusion(relative, "tests", "test-only file name or directory", loc))
                 elif override:

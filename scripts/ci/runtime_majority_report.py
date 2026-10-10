@@ -45,13 +45,16 @@ class ScopeError(RuntimeError):
 
 def _git(repo: Path, *args: str) -> str:
     result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, check=False)
-    return result.stdout.strip() if result.returncode == 0 else ""
+    return result.stdout.rstrip("\n") if result.returncode == 0 else ""
 
 
 def load_scope(path: Path) -> dict[str, Any]:
     scope = json.loads(path.read_text(encoding="utf-8"))
     if scope.get("schema") != SCOPE_SCHEMA:
         raise ScopeError(f"scope schema must be {SCOPE_SCHEMA}")
+    target = scope.get("metric", {}).get("target_share")
+    if isinstance(target, bool) or not isinstance(target, int | float) or not 0 < target <= 1:
+        raise ScopeError("metric.target_share must be a number with 0 < target_share <= 1")
     for entry in scope["python"]["exclusions"]:
         paths = entry.get("path")
         if not (isinstance(paths, list) and paths and all(isinstance(item, str) and item for item in paths)):
@@ -62,6 +65,15 @@ def load_scope(path: Path) -> dict[str, Any]:
         if not str(item.get("reason", "")).strip():
             raise ScopeError(f"rust exclusion {item.get('path')!r} needs a reason")
     return scope
+
+
+def _dirty_paths(repo: Path, scope: dict[str, Any], scope_path: Path) -> list[str]:
+    """Tracked changes and untracked files under every tree the report reads."""
+    pathspecs = [scope["python"]["package_root"], scope["rust"]["workspace"], "tests"]
+    if scope_path.is_relative_to(repo):
+        pathspecs.append(scope_path.relative_to(repo).as_posix())
+    output = _git(repo, "status", "--porcelain", "--untracked-files=all", "--", *pathspecs)
+    return sorted(line[3:] for line in output.splitlines())
 
 
 def _matches_any(path: str, patterns: list[str]) -> bool:
@@ -201,19 +213,21 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
             "python_modules": len(matched),
         }
 
+    dirty = _dirty_paths(repo, scope, scope_path)
     ranked = sorted(files, key=lambda item: (-item["loc"], item["path"]))[:top]
     scope_bytes = scope_path.read_bytes()
     return {
         "schema": SCHEMA,
         "git_head": _git(repo, "rev-parse", "HEAD"),
-        "git_tracked_changes": bool(_git(repo, "status", "--porcelain", "--untracked-files=no")),
+        "git_dirty": bool(dirty),
+        "git_dirty_paths": dirty,
         "scope_file": scope_path.relative_to(repo).as_posix() if scope_path.is_relative_to(repo) else str(scope_path),
         "scope_sha256": hashlib.sha256(scope_bytes).hexdigest(),
         "metric": {
             "formula": scope["metric"]["formula"],
             "rust_runtime_loc": rust_loc,
             "python_runtime_loc": python_loc,
-            "share": round(share, 6),
+            "share": share,
             "target_share": scope["metric"]["target_share"],
             "meets_target": share >= scope["metric"]["target_share"],
             "python_loc_needed_for_target": max(
