@@ -12,11 +12,14 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
 )
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
+    load_mcp_contribution_payloads,
     mcp_tool_state,
     normalized_remote_mcp_url,
     validate_mcp_contribution,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import matching_mcp_contribution
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_recorded_expectations import instapods_matches
 
 
 def _remote_payload(url: str) -> dict[str, object]:
@@ -82,7 +85,6 @@ def test_copilot_hosted_url_wins_over_executable_command_for_matching(tmp_path: 
         server_fingerprint=fingerprint,
         server_identity=identity,
     )
-    payload = matching_mcp_contribution(artifact)
-    assert payload is not None
-    assert payload["id"] == "mcp.instapods"
+    assert instapods_matches(artifact)
+    payload = next(item for item in load_mcp_contribution_payloads() if item["id"] == "mcp.instapods")
     assert mcp_tool_state(payload, "delete_pod") == "review"

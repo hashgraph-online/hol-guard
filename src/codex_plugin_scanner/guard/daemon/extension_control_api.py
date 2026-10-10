@@ -90,6 +90,7 @@ class ExtensionControlApiService:
     ) -> None:
         self._store = store
         self._registry = registry
+        self.catalog_digest = registry.catalog_digest
         self._runtime = runtime
         self._proof_lock = threading.Lock()
         self._apply_lock = threading.Lock()

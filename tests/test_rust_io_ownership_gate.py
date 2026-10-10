@@ -177,13 +177,3 @@ def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str
         edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
         with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):
             MODULE.validate(tmp_path)
-
-
-def test_extracted_command_factor_hashes_retain_decision_time_ownership() -> None:
-    path = "src/codex_plugin_scanner/guard/runtime/command_native_factors.py"
-    original = "src/codex_plugin_scanner/guard/runtime/command_evaluation.py"
-    assert MODULE._category(path, "hash") == MODULE._category(original, "hash")
-    assert MODULE._category(path, "hash") == "pending_authority_migration"
-    assert MODULE._category(path, "filesystem") == "unclassified_python_io"
-    assert MODULE._category(path, "decode") == "unclassified_python_content_io"
-    assert MODULE._category(path, "archive") == "unclassified_python_content_io"

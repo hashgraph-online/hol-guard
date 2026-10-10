@@ -34,7 +34,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
 
 
 def _identity():
@@ -86,6 +86,8 @@ def _layer(
 class _AuthorityStore:
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
+        self.guard_home = native_test_guard_home()
+        self.path = self.guard_home / "guard.db"
 
     def has_local_cli_grant_rules(self) -> bool:
         """No device grant rows exist, so an unavailable resident cannot hide one."""
@@ -118,13 +120,10 @@ def test_enabled_filesystem_keeps_read_on_review() -> None:
     assert apply_contributed_mcp_decision(enabled, artifact, "review") is None
 
 
-def test_local_mcp_path_reasserts_enabled_review_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.mcp_server_grants.mcp_tool_state",
-        lambda *_args, **_kwargs: "review",
-    )
-    artifact = _artifact(_identity(), "write_file")
-    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),))
+def test_local_mcp_path_reasserts_enabled_review_default() -> None:
+    identity = build_mcp_server_identity(config_path="", command="uvx", args=("agenthub-gateway",), transport="stdio")
+    artifact = _artifact(identity, "ask")
+    enabled = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-agenthub", ControlState.ENABLED),))
     reviewed = apply_local_mcp_extension_decision(enabled, artifact, "review")
     assert reviewed is not None
     assert reviewed[0] == "review"
@@ -137,23 +136,15 @@ def test_signed_cloud_enable_does_not_activate_mcp_contribution() -> None:
     assert apply_contributed_mcp_decision(cloud, artifact, "review") is None
 
 
-def test_global_lockdown_suppresses_allow(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.mcp_server_grants.mcp_tool_state",
-        lambda *_args, **_kwargs: "allow",
-    )
-    artifact = _artifact(_identity(), "read_file")
-    locked = _AuthorityStore(
-        (
-            _layer(
-                ControlLayerKind.LOCAL_ADMIN,
-                "command.mcp-filesystem",
-                ControlState.ENABLED,
-                lockdown=True,
-            ),
-        )
-    )
-    assert apply_contributed_mcp_decision(locked, artifact, "review") is None
+def test_global_lockdown_suppresses_allow() -> None:
+    identity = build_mcp_server_identity(config_path="", command="uvx", args=("enola-cli",), transport="stdio")
+    artifact = _artifact(identity, "query_facts")
+    layer = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-enola", ControlState.ENABLED)
+    allowed = apply_contributed_mcp_decision(_AuthorityStore((layer,)), artifact, "review")
+    assert allowed is not None
+    assert allowed[0] == "allow"
+    locked = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-enola", ControlState.ENABLED, lockdown=True)
+    assert apply_contributed_mcp_decision(_AuthorityStore((locked,)), artifact, "review") is None
 
 
 def test_missing_tool_identity_does_not_apply_other_defaults() -> None:

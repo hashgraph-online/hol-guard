@@ -9,21 +9,11 @@ proof-bound extension-control mutation.
 
 from __future__ import annotations
 
-import dataclasses
 from pathlib import Path
 
 from .command_evaluation import evaluate_command
 from .command_evaluation_types import CompositeCommandEvaluation
 from .command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
-from .extension_control_contract import (
-    CONTROL_SCHEMA_VERSION,
-    ControlLayerKind,
-    ControlState,
-    ControlTarget,
-    ControlTargetKind,
-    ExtensionControl,
-    ExtensionControlLayer,
-)
 from .extension_control_runtime import ExtensionControlRuntimeSnapshot
 from .native_command_extension_evidence import NativeCommandExtensionEvidenceError
 
@@ -37,31 +27,6 @@ def _valid_hint_ids(items: object, *, allow_empty: bool) -> list[str] | None:
         return None
     ids = [item for item in items if isinstance(item, str) and item.startswith("command.") and len(item) <= 256]
     return ids if len(ids) == len(items) else None
-
-
-def _with_local_permissions_enabled(
-    snapshot: ExtensionControlRuntimeSnapshot,
-    permission_ids: tuple[str, ...],
-) -> ExtensionControlRuntimeSnapshot:
-    """Return an in-memory counterfactual snapshot; never installed or persisted.
-
-    Revision and digest fields are kept so the native evidence binding still
-    validates; only the layers used for control resolution change.
-    """
-
-    targets = {ControlTarget(ControlTargetKind.PERMISSION, permission_id) for permission_id in permission_ids}
-    local = next((layer for layer in snapshot.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN), None)
-    retained = tuple(control for control in (() if local is None else local.controls) if control.target not in targets)
-    added = tuple(ExtensionControl(target, ControlState.ENABLED) for target in sorted(targets))
-    hypothetical_local = ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=snapshot.catalog_digest if local is None else local.catalog_digest,
-        global_lockdown=False if local is None else local.global_lockdown,
-        controls=tuple(sorted((*retained, *added), key=lambda control: control.target)),
-    )
-    layers = tuple(layer for layer in snapshot.layers if layer.kind is not ControlLayerKind.LOCAL_ADMIN)
-    return dataclasses.replace(snapshot, layers=(hypothetical_local, *layers))
 
 
 def compute_extension_allow_hint(
@@ -109,9 +74,9 @@ def compute_extension_allow_hint(
             canonical_command=evaluation.command,
             cwd=cwd,
             home_dir=home_dir,
-            registry=registry,
             native_extension_evidence=native_evidence,
-            extension_control_snapshot=_with_local_permissions_enabled(snapshot, tuple(permission_ids)),
+            extension_control_snapshot=snapshot,
+            counterfactual_enabled_permission_ids=tuple(permission_ids),
         )
     except (NativeCommandExtensionEvidenceError, RuntimeError, ValueError):
         return None

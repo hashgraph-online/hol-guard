@@ -7,9 +7,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import containment_outputs as outputs_module
-from codex_plugin_scanner.guard.runtime.command_workspace_write_candidates import (
-    workspace_write_candidate_operation,
-)
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentPolicy,
     ContainmentRequest,
@@ -32,7 +29,6 @@ def _write(path: Path, content: str) -> None:
 def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
     benign_count = 0
     unsupported_apply_count = 0
-    operations: set[str] = set()
     for reviewed, oracle in zip(
         iter_native_command_evaluations(
             (case.command for case in iter_benign_corpus()), cwd=Path("workspace"), home_dir=Path("home")
@@ -41,30 +37,24 @@ def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
         strict=True,
     ):
         evaluation = reviewed.evaluation
-        operation = workspace_write_candidate_operation(evaluation.command)
         if oracle.owner != "CDX-062":
-            assert operation is None
             continue
         benign_count += 1
-        assert operation is not None
-        operations.add(operation)
         # The native catalog models the read-only --check form. Applying an
         # unchecked patch stays unattributed: it needs a human review and is
         # never contained automatically, and disabled Git controls still block.
-        if operation == "patch-apply":
+        extensions = reviewed.payload["command_extensions"]
+        assert isinstance(extensions, dict)
+        binding = extensions["binding"]
+        assert isinstance(binding, dict)
+        if int(binding["uncertainty_count"]) > 0:
             unsupported_apply_count += 1
             assert reviewed.native_minimum_action == "review"
-            extensions = reviewed.payload["command_extensions"]
-            assert isinstance(extensions, dict)
-            binding = extensions["binding"]
-            assert isinstance(binding, dict)
-            assert int(binding["uncertainty_count"]) > 0
         assert evaluation.minimum_action == "review"
         assert evaluation.decision_plane.action == "review"
         assert evaluation.decision_plane.proof_routes == frozenset()
     assert benign_count == 100
     assert unsupported_apply_count == 25
-    assert operations == {"patch-check", "patch-apply", "format-write", "copy-generated"}
 
     adversarial_count = 0
     adversarial_cases = (
@@ -81,13 +71,9 @@ def test_every_cdx_062_case_retains_exact_review_or_block_floor() -> None:
     assert adversarial_count == 4167
 
 
-@pytest.mark.parametrize(
-    ("command", "expected"),
-    (("ruff format src/module.py", "format-write"), ("cp build/schema.json generated/schema.json", "copy-generated")),
-)
-def test_direct_workspace_writes_use_the_exact_operation_allowlist(command: str, expected: str) -> None:
+@pytest.mark.parametrize("command", ("ruff format src/module.py", "cp build/schema.json generated/schema.json"))
+def test_direct_workspace_writes_retain_the_review_floor(command: str) -> None:
     evaluation = real_native_command_evaluation(command, cwd=Path("workspace"), home_dir=Path("home")).evaluation
-    assert workspace_write_candidate_operation(evaluation.command) == expected
     assert evaluation.minimum_action == "review"
     assert evaluation.decision_plane.action == "review"
     assert evaluation.decision_plane.proof_routes == frozenset()

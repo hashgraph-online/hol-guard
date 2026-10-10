@@ -9,9 +9,10 @@ import sys
 from pathlib import Path
 
 from codex_plugin_scanner import __version__
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
+from codex_plugin_scanner.guard.runtime.native_command_evaluation import review_command_native
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
 
@@ -43,12 +44,16 @@ def main() -> None:
     if permission is None or _EXPECTED_RULE not in permission.rule_ids:
         raise RuntimeError("runtime probe catalog ownership changed")
 
-    evaluation = evaluate_command(
+    reviewed = review_command_native(
         _PROBE_COMMAND,
+        guard_home=guard_home,
         cwd=workspace,
         home_dir=guard_home,
-        extension_control_layers=authority.layers,
+        extension_control_snapshot=ExtensionControlRuntimeSnapshot.from_authority_view(authority),
     )
+    if reviewed is None:
+        raise RuntimeError("installed runtime probe could not obtain a native command evaluation")
+    evaluation = reviewed.evaluation
     if not evaluation.control_resolution.blocked:
         raise RuntimeError("installed runtime probe was not blocked by extension policy")
     if evaluation.minimum_action != "block":

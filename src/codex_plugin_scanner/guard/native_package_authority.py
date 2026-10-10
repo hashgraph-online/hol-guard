@@ -2,8 +2,9 @@
 
 Cached advisory matching is terminal: missing or invalid native authority
 raises ``NativePackageAdvisoryAuthorityError`` instead of evaluating in Python.
-The older intent/authority/evaluation adapters still expose optional transport
-results; their production caller cutover remains tracked under RTM-028.
+Package evaluation is terminal in ``native_supply_chain_eval``. The older
+intent/authority adapters still expose optional transport results; their
+production caller cutover remains tracked under RTM-028.
 """
 
 from __future__ import annotations
@@ -175,81 +176,6 @@ def package_intent_parse_native(
     if not isinstance(runtime_private_metadata, Mapping):
         raise ValueError("native package intent missing private metadata")
     return PackageIntent.from_dict(payload, runtime_private_metadata=runtime_private_metadata)
-
-
-def supply_chain_cloud_transport_available() -> bool:
-    """Whether native evaluation can own authenticated Cloud service calls."""
-    status = native_runtime_status()
-    return bool(
-        status.available
-        and status.compatible
-        and status.capabilities is not None
-        and "supply-chain-cloud-transport-v1" in status.capabilities.features
-    )
-
-
-def supply_chain_eval_native(
-    artifact: Mapping[str, object],
-    *,
-    store_path: Path,
-    guard_home: Path,
-    workspace_dir: Path | None = None,
-    now: str | None = None,
-    external_archive_network_authorized: bool = False,
-    retain_external_archive_blob: bool = False,
-    runtime_private_metadata: Mapping[str, object] | None = None,
-    timeout_seconds: float = 10.0,
-) -> dict[str, object] | None:
-    """``supply_chain_eval`` op — returns the evaluation payload dict."""
-    request: dict[str, object] = {
-        "schema": _REQUEST_SCHEMA,
-        "request_id": _request_id(),
-        "store_path": str(store_path),
-        "guard_home": str(guard_home),
-        "artifact": dict(artifact),
-        "workspace_dir": str(workspace_dir) if workspace_dir is not None else None,
-        "now": now,
-        "external_archive_network_authorized": bool(external_archive_network_authorized),
-        "retain_external_archive_blob": bool(retain_external_archive_blob),
-    }
-    if runtime_private_metadata:
-        request["runtime_private_metadata"] = dict(runtime_private_metadata)
-    # Test-only seam: when running under pytest and the env exports a Guard
-    # Cloud auth-context override, forward it to the resident so coverage tests
-    # exercise the native auth-expired / cloud-transport branches hermetically
-    # (the resident subprocess does not run Python monkeypatches). Mirrors the
-    # in-process `runner._test_sync_auth_context_from_env` seam.
-    if os.environ.get("PYTEST_CURRENT_TEST"):
-        raw_override = os.environ.get("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON")
-        if raw_override:
-            try:
-                parsed = json.loads(raw_override)
-            except (TypeError, ValueError):
-                parsed = None
-            if isinstance(parsed, dict):
-                request["sync_auth_context_override"] = parsed
-        # Companion test-only seam: forward a Guard Cloud package entitlement
-        # override so the resident's unpaid-entitlement fallback
-        # (`paid_guard_cloud_required`) runs without monkeypatching the
-        # store-reading resolver the resident performs natively.
-        raw_entitlement = os.environ.get("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON")
-        if raw_entitlement:
-            try:
-                parsed_entitlement = json.loads(raw_entitlement)
-            except (TypeError, ValueError):
-                parsed_entitlement = None
-            if isinstance(parsed_entitlement, dict):
-                request["package_entitlement_override"] = parsed_entitlement
-    response = _resident_request(
-        operation="supply_chain_eval",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
-    )
-    if response is None:
-        return None
-    payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
 
 
 def package_authority_decide_native(

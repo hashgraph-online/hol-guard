@@ -31,7 +31,7 @@ pub(super) fn finalize_evaluation(
         "monitor" => format!("{prefix} `{package_ref}` for continued monitoring."),
         _ => format!("{prefix} `{package_ref}` as trusted by policy."),
     };
-    let reason_message = draft
+    let mut reason_message = draft
         .reasons
         .first()
         .and_then(|r| optional_string(r.get("message")));
@@ -46,6 +46,7 @@ pub(super) fn finalize_evaluation(
                 .map(|c| c != "installed_release_reinstall")
                 .unwrap_or(false)
         }) {
+            reason_message = optional_string(restrictive_reason.get("message"));
             reason_code = optional_string(restrictive_reason.get("code"));
         }
     }
@@ -57,12 +58,16 @@ pub(super) fn finalize_evaluation(
         };
     let source_risk_summaries: HashMap<&str, &str> = HashMap::from([
         (
-            "dependency_confusion",
-            "matches a known dependency-confusion risk",
+            "insecure_source_url",
+            "from insecure HTTP source before install",
         ),
         (
-            "malicious_package",
-            "matches a known malicious-package risk",
+            "external_tarball_source",
+            "from external tarball source before install",
+        ),
+        (
+            "git_dependency_source",
+            "from git dependency source before install",
         ),
     ]);
     if let Some(code) = &reason_code {
@@ -86,13 +91,20 @@ pub(super) fn finalize_evaluation(
         _ => "Allowed by policy",
     }
     .to_string();
-    let mut summary = match draft.decision.as_str() {
-        "block" => "Guard blocked this package before install.".to_string(),
-        "ask" => "Guard paused this package for review before install.".to_string(),
-        "warn" => "Guard found risk signals for this package.".to_string(),
-        "monitor" => "Guard recorded this package for continued monitoring.".to_string(),
-        _ => "Guard recorded this package as trusted by policy.".to_string(),
-    };
+    let mut summary = reason_message
+        .clone()
+        .unwrap_or_else(|| match draft.decision.as_str() {
+            "block" => format!("{package_display} needs a safer version before you continue."),
+            "ask" => format!("{package_display} needs a human review before Guard allows it."),
+            "warn" => {
+                format!("Guard found risk signals for {package_display}. Proceed with caution.")
+            }
+            "monitor" => {
+                "Guard recorded the package intent and will keep watching for new intelligence."
+                    .to_string()
+            }
+            _ => "Guard matched a scoped allow rule for this package request.".to_string(),
+        });
     if draft.packages.len() > 1 {
         let others: Vec<String> = draft
             .packages
