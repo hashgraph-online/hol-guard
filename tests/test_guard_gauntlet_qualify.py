@@ -345,11 +345,39 @@ def test_private_dir_requires_an_owned_mode_700_directory(tmp_path: Path) -> Non
     not_dir.write_text("x")
     with pytest.raises(RuntimeError, match="real directory"):
         qualify_setup.private_dir(not_dir)
-    # A pre-existing owned-but-shared directory is tightened, not rejected.
+
+
+def test_private_dir_rejects_a_shared_directory_it_does_not_own(tmp_path: Path) -> None:
     shared = tmp_path / "shared"
     shared.mkdir(mode=0o770)
-    assert qualify_setup.private_dir(shared) == shared
+    before = shared.stat().st_mode & 0o777
+    assert before & 0o077
+    with pytest.raises(RuntimeError, match="not private"):
+        qualify_setup.private_dir(shared)
+    # The directory is never modified, only verified.
+    assert (shared.stat().st_mode & 0o777) == before
+
+
+def test_private_dir_tightens_only_inside_the_driver_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    shared = tmp_path / "shared"
+    shared.mkdir(mode=0o770)
+    assert shared.stat().st_mode & 0o077
+    with pytest.raises(RuntimeError, match="not private"):
+        qualify_setup.private_dir(shared, tighten=False)
+    # Explicit tighten (granted by the caller for driver-owned roots) fixes the mode.
+    assert qualify_setup.private_dir(shared, tighten=True) == shared
     assert (shared.stat().st_mode & 0o777) == 0o700
+    # driver_owned marks paths inside the monkeypatched default roots.
+    monkeypatch.setattr(qualify_setup, "DEFAULT_TMP_ROOT", tmp_path / "tmp-root")
+    assert qualify_setup.driver_owned(tmp_path / "tmp-root" / "w" / "1")
+    assert not qualify_setup.driver_owned(tmp_path / "elsewhere")
+    nested = tmp_path / "tmp-root" / "nested"
+    monkeypatch.setattr(qualify_setup, "DEFAULT_CACHE_ROOT", tmp_path / "cache-root")
+    assert qualify_setup.driver_owned(nested)
+    nested.mkdir(mode=0o755, parents=True)
+    tighten = qualify_setup.driver_owned(nested)
+    assert qualify_setup.private_dir(nested, tighten=tighten) == nested
+    assert (nested.stat().st_mode & 0o777) == 0o700
 
 
 def test_mkdir_private_creates_every_missing_component_mode_700(tmp_path: Path) -> None:

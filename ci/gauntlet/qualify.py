@@ -115,7 +115,7 @@ def attempt_env(base: dict[str, str], *, venv_bin: Path, sdk_root: Path, gnu_sed
 
 def attempt_work_root(parent: Path) -> Path:
     """Allocate a short copy-safe attempt workspace; never reuse an existing entry."""
-    return create_numbered_dir(qualify_setup.private_dir(parent))
+    return create_numbered_dir(qualify_setup.private_dir(parent, tighten=qualify_setup.driver_owned(parent)))
 
 
 def summarize_attempt(
@@ -276,10 +276,10 @@ def main(args: Any) -> int:
         if value is not None:
             setattr(args, field, Path(value).resolve())
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_root = (args.run_root or Path(f"/tmp/hol-guard-gauntlet-{os.getuid()}") / f"{sha[:12]}-{stamp}").resolve()
+    run_root = (args.run_root or qualify_setup.DEFAULT_TMP_ROOT / f"{sha[:12]}-{stamp}").resolve()
     if run_root.exists():
         raise ValueError("run root must not already exist: " + str(run_root))
-    qualify_setup.private_dir(run_root.parent)
+    qualify_setup.private_dir(run_root.parent, tighten=qualify_setup.driver_owned(run_root.parent))
     run_root.mkdir(mode=0o700, parents=True)
     (run_root / "logs").mkdir()
 
@@ -293,7 +293,7 @@ def main(args: Any) -> int:
     error = None
     try:
         with terminate_as_exit():
-            qualify_setup.private_dir(args.cache_root)
+            qualify_setup.private_dir(args.cache_root, tighten=qualify_setup.driver_owned(args.cache_root))
             info = qualify_setup.preflight(REPO)
             progress(f"preflight independent_verifier={info['independent_verifier']}")
             qualify_setup.ensure_commit(REPO, sha)

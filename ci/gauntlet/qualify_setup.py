@@ -91,8 +91,24 @@ def git_show(repo: Path, sha: str, path: str) -> bytes:
     )
 
 
-def private_dir(path: Path) -> Path:
-    """Create or verify a directory only this user can enter, rejecting shared parents."""
+DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "hol-guard-gauntlet"
+DEFAULT_TMP_ROOT = Path("/tmp") / f"hol-guard-gauntlet-{os.getuid()}"
+
+
+def driver_owned(path: Path) -> bool:
+    """Whether path sits inside one of the driver's own default roots."""
+    resolved = path.resolve()
+    return resolved.is_relative_to(DEFAULT_CACHE_ROOT.resolve()) or resolved.is_relative_to(DEFAULT_TMP_ROOT.resolve())
+
+
+def private_dir(path: Path, *, tighten: bool = False) -> Path:
+    """Create or verify a directory only this user can enter.
+
+    Missing components are created with mode 0o700. An existing directory with
+    group or other permissions is only tightened when ``tighten`` is set (the
+    driver's own default roots); every other location is verified, never
+    modified, and rejected outright.
+    """
     mkdir_private(path)
     info = os.lstat(path)
     if not stat.S_ISDIR(info.st_mode):
@@ -100,10 +116,10 @@ def private_dir(path: Path) -> Path:
     if info.st_uid != os.getuid():
         raise RuntimeError("not owned by this user: " + str(path))
     if info.st_mode & 0o077:
-        # An older version left group/other bits on this user's own directories;
-        # tighten rather than refuse, then re-verify the result.
-        with suppress(OSError):
-            os.chmod(path, 0o700)
+        if tighten:
+            # An older version left group/other bits on this user's own roots.
+            with suppress(OSError):
+                os.chmod(path, 0o700)
         if os.lstat(path).st_mode & 0o077:
             raise RuntimeError("directory is not private to this user: " + str(path))
     return path
@@ -114,7 +130,7 @@ def file_lock(path: Path) -> Iterator[None]:
     """Serialize cache writers across driver processes; POSIX flock only."""
     import fcntl
 
-    private_dir(path.parent)
+    private_dir(path.parent, tighten=driver_owned(path.parent))
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX)
@@ -189,8 +205,8 @@ def ensure_sdk(cache_root: Path, repo: Path, sha: str, log: Path) -> dict[str, A
     package = git_show(repo, sha, f"{LOCK_DIR}/package.json")
     lock = git_show(repo, sha, f"{LOCK_DIR}/package-lock.json")
     lock_digest = hashlib.sha256(lock).hexdigest()
-    private_dir(cache_root / "sdk")
-    private_dir(cache_root / "locks")
+    private_dir(cache_root / "sdk", tighten=driver_owned(cache_root / "sdk"))
+    private_dir(cache_root / "locks", tighten=driver_owned(cache_root / "locks"))
     root = cache_root / "sdk" / lock_digest
     pinned = json.loads(package)["dependencies"]["@oh-my-pi/pi-coding-agent"]
     with file_lock(cache_root / "locks" / f"sdk-{lock_digest}.lock"):
@@ -305,7 +321,7 @@ def ensure_wheel(
     if wheel is not None:
         return {"path": str(wheel), "sha256": digest_file(wheel), "cached": False}
     tag, target, deployment = macos_platform()
-    private_dir(cache_root / "wheels")
+    private_dir(cache_root / "wheels", tighten=driver_owned(cache_root / "wheels"))
     store = cache_root / "wheels" / f"{sha}-{tag}"
     store.mkdir(parents=True, exist_ok=True)
     cached = _cached_wheel(store)
