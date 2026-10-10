@@ -1,0 +1,280 @@
+{
+  "extension": {
+    "action_classes": [
+      "drip setup command",
+      "drip ledger import command",
+      "drip agent launch command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews drip runs that change local setup (install), write the token ledger (sync) or launch another command (run), and keeps the read-only views (statusline, session, history, explain, open, splash, watch) unreviewed.",
+    "ecosystem_ids": [
+      "drip"
+    ],
+    "executables": [
+      "drip"
+    ],
+    "extension_id": "command.drip",
+    "homepage": "https://github.com/beausterling/drip-ai-water-usage",
+    "icon": {
+      "kind": "none"
+    },
+    "license": "MIT",
+    "name": "drip command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "drip setup command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `drip install`, which imports Claude Code and Codex history into the local ledger (~/.local/share/drip/usage.db), symlinks bin/drip into ~/.local/bin, and adds a statusLine command to ~/.claude/settings.json when none is set, so Claude Code runs drip on every status-line refresh. Without a TTY (for example from an agent) it also opens a new terminal window to play its intro. It has no preview form.",
+        "example_command": "drip install",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "drip setup",
+        "permission_id": "command.drip.permission.install",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `drip explain` or bare `drip` to see the estimates without changing any settings.",
+          "Check the statusLine entry in ~/.claude/settings.json first; install leaves an existing custom status line in place and prints the line to add instead."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "drip ledger import command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `drip sync`, which reads every Claude Code transcript under ~/.claude/projects and Codex rollout under ~/.codex/sessions and writes new token counts and file offsets into the local ledger (~/.local/share/drip/usage.db). It has no preview form.",
+        "example_command": "drip sync",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "drip ledger import",
+        "permission_id": "command.drip.permission.sync",
+        "replacement_permission_id": null,
+        "risk_tier": "low",
+        "safer_guidance": [
+          "Run `drip history` or `drip session` to read the current totals; they refresh the ledger only for display."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "drip agent launch command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `drip run <command>`, which resolves the given command on PATH or a known install location and replaces itself with it, after opening a meter pane through tmux, Ghostty or iTerm2 AppleScript, a Warp tab config (written to ~/.warp/tab_configs), or a separate Terminal window. Any command can follow `run`, so it is reviewed as execution.",
+        "example_command": "drip run codex",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "drip agent launch",
+        "permission_id": "command.drip.permission.run",
+        "replacement_permission_id": null,
+        "risk_tier": "high",
+        "safer_guidance": [
+          "Start the agent directly and run `drip watch` in a pane you split yourself."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Beau Sterling",
+      "id": "community.drip",
+      "url": "https://github.com/beausterling/drip-ai-water-usage"
+    },
+    "reference_urls": [
+      "https://github.com/beausterling/drip-ai-water-usage/blob/cd215045f2bf1bba448cd1a294936536867abeba/README.md",
+      "https://github.com/beausterling/drip-ai-water-usage/blob/cd215045f2bf1bba448cd1a294936536867abeba/drip/cli.py",
+      "https://github.com/beausterling/drip-ai-water-usage/blob/cd215045f2bf1bba448cd1a294936536867abeba/drip/run.py"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "execution"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "drip setup command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `drip install`, which imports Claude Code and Codex history into the local ledger (~/.local/share/drip/usage.db), symlinks bin/drip into ~/.local/bin, and adds a statusLine command to ~/.claude/settings.json when none is set, so Claude Code runs drip on every status-line refresh. Without a TTY (for example from an agent) it also opens a new terminal window to play its intro. It has no preview form.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "drip"
+                ],
+                "forbidden_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--b",
+                  "--ba",
+                  "--ban",
+                  "--band"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "install"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.drip.permission.install",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.drip.install",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run `drip explain` or bare `drip` to see the estimates without changing any settings.",
+          "Check the statusLine entry in ~/.claude/settings.json first; install leaves an existing custom status line in place and prints the line to add instead."
+        ],
+        "severity": "medium",
+        "title": "drip setup"
+      },
+      {
+        "action_classes": [
+          "drip ledger import command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `drip sync`, which reads every Claude Code transcript under ~/.claude/projects and Codex rollout under ~/.codex/sessions and writes new token counts and file offsets into the local ledger (~/.local/share/drip/usage.db). It has no preview form.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "drip"
+                ],
+                "forbidden_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--b",
+                  "--ba",
+                  "--ban",
+                  "--band"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "sync"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.drip.permission.sync",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.drip.sync",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Run `drip history` or `drip session` to read the current totals; they refresh the ledger only for display."
+        ],
+        "severity": "low",
+        "title": "drip ledger import"
+      },
+      {
+        "action_classes": [
+          "drip agent launch command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `drip run <command>`, which resolves the given command on PATH or a known install location and replaces itself with it, after opening a meter pane through tmux, Ghostty or iTerm2 AppleScript, a Warp tab config (written to ~/.warp/tab_configs), or a separate Terminal window. Any command can follow `run`, so it is reviewed as execution.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "executables": [
+                  "drip"
+                ],
+                "forbidden_flags": [
+                  "--help",
+                  "-h"
+                ],
+                "options_with_values": [
+                  "--b",
+                  "--ba",
+                  "--ban",
+                  "--band"
+                ],
+                "required_flags_anywhere": [],
+                "subcommands": [
+                  "run"
+                ]
+              },
+              "op": "leading-subcommand.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.drip.permission.run",
+        "risk_classes": [
+          "execution"
+        ],
+        "rule_id": "command.drip.run",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Start the agent directly and run `drip watch` in a pane you split yourself."
+        ],
+        "severity": "high",
+        "title": "drip agent launch"
+      }
+    ],
+    "safer_alternatives": [
+      "Read with `drip`, `drip session`, `drip history` or `drip explain`; start agents directly and run `drip watch` in your own split pane."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
