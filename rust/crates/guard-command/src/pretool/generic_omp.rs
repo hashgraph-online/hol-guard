@@ -172,6 +172,8 @@ fn listing(
         }
     }
     let target = input_path(input, signals)?.unwrap_or(".");
+    let has_glob_selector =
+        signals.tool_name.as_deref() == Some("glob") && target.contains(['*', '?', '[', '{']);
     // OMP glob uses `path` for the complete selector, not just a directory.
     // Prove its fixed directory prefix; the tool returns names, not contents.
     let target = if signals.tool_name.as_deref() == Some("glob") {
@@ -179,6 +181,17 @@ fn listing(
     } else {
         target
     };
+    // A wildcard can traverse hidden or symlinked children even when the
+    // literal prefix is ordinary. Prove the entire reachable prefix tree.
+    if has_glob_selector
+        && !super::super::search_scope::unfiltered_directory_scope_proven(
+            target,
+            context.path.home_dir,
+            context.path.cwd,
+        )
+    {
+        return None;
+    }
     super::super::safe_reads::bounded_omp_directory_read_target(
         target,
         context.path.home_dir,

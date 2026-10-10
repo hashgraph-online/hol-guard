@@ -270,7 +270,7 @@ fn listings_allow_verified_directories_only() {
 #[test]
 fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
     let f = fixture();
-    for path in ["src/**/*.ts", "src/*.rs", "*.py", "~/clean/*"] {
+    for path in ["src/**/*.ts", "src/*.rs", "~/clean/*"] {
         let result = omp(
             &f,
             "glob",
@@ -289,6 +289,9 @@ fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
         "src/{safe,../clean}/*",
         "src/*../clean/*",
         "src/[.][.]/clean/*",
+        "~/.ss*/*",
+        "~/*/*",
+        "*.py",
     ] {
         assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
     }
@@ -301,6 +304,9 @@ fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
     let link = f.project.join("linked");
     std::os::unix::fs::symlink(f.home.join("clean"), &link).unwrap();
     assert!(!allowed(&omp(&f, "glob", json!({"path": "linked/*"}))));
+    assert!(!allowed(&omp(&f, "glob", json!({"path": "linke?/*"}))));
+    write(f.project.join("src/.env"), "synthetic marker\n");
+    assert!(!allowed(&omp(&f, "glob", json!({"path": "src/**/*.ts"}))));
 }
 
 #[test]
