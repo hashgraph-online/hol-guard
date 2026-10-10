@@ -78,7 +78,7 @@ fn create_verifier_weak_password_errors() {
     let r: Value = serde_json::from_slice(&evaluate_approval_gate_request(&req).unwrap()).unwrap();
     assert_eq!(r["status"].as_str().unwrap(), "error");
     assert_eq!(r["code"].as_str().unwrap(), "approval_gate_weak_password");
-    assert_eq!(r["error_status"].as_i64().unwrap(), 400);
+    assert_eq!(r["error_status"].as_i64().unwrap(), 403);
     let _ = std::fs::remove_dir_all(&home);
 }
 

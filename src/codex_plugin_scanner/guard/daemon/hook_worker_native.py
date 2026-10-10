@@ -594,7 +594,8 @@ class HookWorkerNativeMixin:
             )
         raw_receipt = edge.get("receipt")
         accepted_receipt = self._record_native_decision_receipt(raw_receipt)
-        _persist_native_application(self.store, edge)
+        if isinstance(edge.get("native_application_v4"), Mapping):
+            _persist_native_application(self.store, edge)
         if accepted_receipt is not None and capture_receipts is not None and native_harness == "codex":
             capture_receipts.append(accepted_receipt)
         if native_event == "UserPromptSubmit":
@@ -841,7 +842,8 @@ class HookWorkerNativeMixin:
         if not isinstance(native_result, Mapping):
             return unavailable("native_hook_edge_invalid_response")
         receipt = self._record_native_decision_receipt(edge.get("receipt"))
-        _persist_native_application(self.store, edge)
+        if isinstance(edge.get("native_application_v4"), Mapping):
+            _persist_native_application(self.store, edge)
         native_event = str(edge["event_name"])
         native_harness = str(edge["harness"])
         native_result = self._apply_structured_mediation(

@@ -29,6 +29,7 @@ ACTIVE_RUST_FILES: Final = (
     Path("rust/crates/guard-runtime/src/approval_context.rs"),
     Path("rust/crates/guard-runtime/src/approval_enrollment.rs"),
     Path("rust/crates/guard-runtime/src/approval_enrollment_platform.rs"),
+    Path("rust/crates/guard-runtime/src/approval_enrollment_platform_transport.rs"),
     Path("rust/crates/guard-runtime/src/approval_replay_memory.rs"),
     Path("rust/crates/guard-runtime/src/approval_replay_memory_tests.rs"),
     Path("rust/crates/guard-runtime/src/approval_v4.rs"),

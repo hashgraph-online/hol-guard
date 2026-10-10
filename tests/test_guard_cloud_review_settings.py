@@ -283,7 +283,7 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
         assert remote_origin.value.code == 403
         with pytest.raises(urllib.error.HTTPError) as missing_proof:
             send(headers, {k: v for k, v in _payload().items() if k != "approval_password"})
-        assert missing_proof.value.code == 409
+        assert missing_proof.value.code == 403
         assert send(headers)["enabled"] is False
         assert send(headers, _payload(approval_password="test-pass"))["enabled"] is True
         assert send(headers)["enabled"] is True
