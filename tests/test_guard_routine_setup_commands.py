@@ -357,7 +357,9 @@ def test_safe_git_worktree_add_rejects_executable_fsmonitor(tmp_path: Path) -> N
     assert not marker.exists()
 
 
-def test_worktree_filter_check_is_scoped_to_selected_ref(tmp_path: Path) -> None:
+def test_worktree_add_is_refused_when_the_selected_ref_uses_a_filter(tmp_path: Path) -> None:
+    # Positive and ref-scoping vectors live in the Rust real-git tests, where host
+    # filter drivers are accounted for. This pins the refusal through the bridge.
     repository = _repository(tmp_path)
     (repository / "a.txt").write_text("data\n")
     (repository / ".gitattributes").write_text("*.txt filter=guard-test\n")
