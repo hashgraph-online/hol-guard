@@ -267,7 +267,8 @@ def _still_broken_after_reinstall(context: HarnessContext, store: GuardStore, re
     try:
         remaining = {str(item["harness"]) for item in broken_hook_harnesses(context, store)}
     except Exception:
-        return []
+        # An unverified reinstall is not proof the hooks work again.
+        return list(reinstalled)
     return [name for name in reinstalled if name in remaining]
 
 

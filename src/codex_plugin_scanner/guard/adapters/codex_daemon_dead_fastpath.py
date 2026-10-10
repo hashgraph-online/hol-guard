@@ -35,7 +35,12 @@ def _marker_path(state_path: str | Path) -> Path:
 
 
 def _state_pid(state_path: Path) -> tuple[bool, int | None]:
-    """Return ``(readable, pid)``; ``readable`` is False for unparseable state."""
+    """Return ``(readable, pid)``.
+
+    ``readable`` is False for unparseable state and for objects that are neither
+    a live-style record with a pid nor the empty tombstone, so unknown shapes are
+    never taken as proof that the daemon is gone.
+    """
 
     try:
         payload = json.loads(state_path.read_text(encoding="utf-8"))
@@ -48,7 +53,7 @@ def _state_pid(state_path: Path) -> tuple[bool, int | None]:
     pid = payload.get("pid")
     if isinstance(pid, int) and not isinstance(pid, bool) and pid > 0:
         return True, pid
-    return True, None
+    return not payload, None
 
 
 def daemon_provably_dead(state_path: str | Path) -> bool:

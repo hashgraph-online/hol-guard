@@ -38,7 +38,7 @@ _is_guard_hook_command = _hook_config.is_guard_hook_command
 _is_guard_hook_url = _hook_config.is_guard_hook_url
 _manifest_notes = _hook_config.manifest_notes
 _merge_hook_group = _hook_config.merge_hook_group
-_missing_guard_hook_events = _hook_config.missing_guard_hook_events
+_mark_missing_guard_hooks = _hook_config.mark_missing_guard_hooks
 _prune_guard_hook_entries = _hook_config.prune_guard_hook_entries
 _remove_unsupported_guard_hook_groups = _hook_config.remove_unsupported_guard_hook_groups
 _sync_runtime_hook_groups = _hook_config.sync_runtime_hook_groups
@@ -429,21 +429,9 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
 
     def diagnostics(self, context: HarnessContext) -> dict[str, object]:
         payload = super().diagnostics(context)
-        # The launcher shim alone makes Guard look managed, so confirm the hook
-        # entries themselves still exist in the settings file Guard writes.
-        if payload.get("setup_status") != "active":
-            return payload
-        settings_path = _claude_managed_settings_path(context)
-        missing = _missing_guard_hook_events(_json_payload(settings_path))
-        if not missing:
-            return payload
-        warnings = payload.get("warnings")
-        payload["warnings"] = [
-            *(warnings if isinstance(warnings, list) else []),
-            f"Managed Claude Code hooks are missing from {settings_path} ({', '.join(missing)}). "
-            "Run `hol-guard repair` or `hol-guard install claude-code` to restore protection.",
-        ]
-        payload["setup_status"] = "broken"
+        if payload.get("setup_status") == "active":
+            settings_path = _claude_managed_settings_path(context)
+            _mark_missing_guard_hooks(payload, settings_path, _json_payload(settings_path))
         return payload
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:

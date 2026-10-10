@@ -167,6 +167,26 @@ def missing_guard_hook_events(payload: dict[str, object]) -> list[str]:
     return missing
 
 
+def mark_missing_guard_hooks(
+    diagnostics: dict[str, object], settings_path: object, settings: dict[str, object]
+) -> None:
+    """Downgrade an "active" setup whose settings file lost the Guard hook entries.
+
+    The launcher shim alone makes Guard look managed, so confirm the entries.
+    """
+
+    missing = missing_guard_hook_events(settings)
+    if not missing:
+        return
+    warnings = diagnostics.get("warnings")
+    diagnostics["warnings"] = [
+        *(warnings if isinstance(warnings, list) else []),
+        f"Managed Claude Code hooks are missing from {settings_path} ({', '.join(missing)}). "
+        "Run `hol-guard repair` or `hol-guard install claude-code` to restore protection.",
+    ]
+    diagnostics["setup_status"] = "broken"
+
+
 def _matcher_covers_guard_tools(matcher: object) -> bool:
     """An omitted matcher matches every tool. A set matcher must still name each protected tool."""
 

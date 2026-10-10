@@ -71,3 +71,24 @@ def test_fully_repaired_hooks_still_report_changed(tmp_path: Path, monkeypatch: 
     assert step["status"] == "changed"
     assert step["repaired"] == ["codex", "claude-code"]
     assert step["needs_attention"] == []
+
+
+def test_failed_post_reinstall_check_leaves_apps_unresolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context, store = _setup(tmp_path, monkeypatch, still_broken=set())
+    calls: list[int] = []
+
+    def flaky_broken(_context: HarnessContext, _store: GuardStore) -> list[dict[str, object]]:
+        calls.append(1)
+        if len(calls) > 1:
+            raise RuntimeError("store unavailable")
+        return [{"harness": "codex", "setup_status": "broken"}, {"harness": "claude-code", "setup_status": "broken"}]
+
+    monkeypatch.setattr(repair_engine, "broken_hook_harnesses", flaky_broken)
+
+    step = repair_engine.repair_hooks(context, store, dry_run=False)
+    report = repair_engine.build_report([step], dry_run=False)
+
+    assert step["status"] == "skipped"
+    assert step["repaired"] == []
+    assert step["needs_attention"] == ["codex", "claude-code"]
+    assert report["status"] == "partial"

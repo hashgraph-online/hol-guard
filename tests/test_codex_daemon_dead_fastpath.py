@@ -59,6 +59,15 @@ def test_live_pid_and_unreadable_state_are_not_provably_dead(tmp_path: Path) -> 
     assert not fastpath.daemon_provably_dead(tmp_path / "daemon-state.json")
 
 
+def test_pidless_state_with_other_fields_is_not_provably_dead(tmp_path: Path) -> None:
+    state = tmp_path / "daemon-state.json"
+    for payload in ({"port": 1234}, {"pid": 0, "port": 1234}, {"state": {"port": 1234}}):
+        state.write_text(json.dumps(payload), encoding="utf-8")
+        fastpath.record_start_failure(state)
+        assert not fastpath.daemon_provably_dead(state)
+        assert not fastpath.should_fail_fast(state)
+
+
 def test_marker_window_expires_and_clears(tmp_path: Path) -> None:
     state = _state(tmp_path, None)
     assert not fastpath.should_fail_fast(state)
