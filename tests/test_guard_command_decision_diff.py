@@ -347,6 +347,9 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
     spawn_overhead_seconds = 15
     environ = os.environ.copy()
+    # The test conftest defaults HOL_GUARD_NATIVE to "off" outside regression lanes;
+    # the report runner forces the supplied native binary only when the mode is unset.
+    environ.pop("HOL_GUARD_NATIVE", None)
     environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
     completed = subprocess.run(
         [sys.executable, str(script), "--metrics"],
