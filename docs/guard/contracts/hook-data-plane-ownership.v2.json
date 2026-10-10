@@ -368,6 +368,7 @@
     "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
     "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
     "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
+    "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",
     "src/codex_plugin_scanner/guard/native_package_authority.py",

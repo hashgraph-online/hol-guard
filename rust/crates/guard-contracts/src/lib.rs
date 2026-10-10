@@ -49,6 +49,8 @@ mod contributed_mcp_decision;
 pub use contributed_mcp_decision::*;
 mod local_mcp_grant;
 pub use local_mcp_grant::*;
+mod mcp_proxy_decision;
+pub use mcp_proxy_decision::*;
 mod request_context;
 pub use request_context::*;
 mod skill_directory_identity;
