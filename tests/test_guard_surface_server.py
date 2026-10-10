@@ -1307,9 +1307,15 @@ class TestGuardSurfaceServer:
                     assert last_post_error is not None
                     raise last_post_error
                 time.sleep(0.05)
+            # The first hook for this workspace pays the workspace-policy
+            # publication barrier inside the daemon's real 4s budget; under a
+            # slow/py3.14 spawn it can exhaust and fail closed. Both the
+            # "could not complete local review" and the deadline-exhaust
+            # denial are transient admission misses, not a wrong decision -
+            # retry after the worker pool has capacity.
             if str(hook_payload.get("reason", "")).startswith(
                 "HOL Guard blocked this action because isolated local review could not complete safely."
-            ):
+            ) or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted":
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
                     minimum_workers=1, timeout_seconds=15
                 )
