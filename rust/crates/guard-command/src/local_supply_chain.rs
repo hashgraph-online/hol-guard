@@ -3132,7 +3132,12 @@ pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
     if matched_policy.get("artifact_id").and_then(Value::as_str) != Some("family:package-request") {
         return false;
     }
-    if matched_policy.get("artifact_hash").is_some() {
+    // Python reads `artifact_hash is None`: a stored row carries the column, so
+    // JSON null means "absent" exactly like a missing key.
+    if matched_policy
+        .get("artifact_hash")
+        .is_some_and(|hash| !hash.is_null())
+    {
         return false;
     }
     if !matches!(scope, Some("harness") | Some("global")) {

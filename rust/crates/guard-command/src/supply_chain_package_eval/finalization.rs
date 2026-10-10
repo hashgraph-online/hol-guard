@@ -129,7 +129,7 @@ pub(super) fn finalize_evaluation(
         &SupplyChainUserCopy {
             title,
             summary,
-            next_step: None,
+            next_step: fix_command.clone(),
             dashboard_url: None,
             harness_message: harness_parts.join(" "),
         },

@@ -90,9 +90,9 @@ pub use bundle_contracts::{
 #[path = "supply_chain_package_eval/runtime_contracts.rs"]
 mod runtime_contracts;
 pub use runtime_contracts::{
-    ConfigLoaderApi, EntitlementRefreshApi, NativeArchiveApi, RestrictedArchiveApi,
-    RestrictedArchiveDownload, RestrictedArchiveDownloadResult, RestrictedArchiveFailure,
-    StoreExtrasApi, WorkspaceIoApi,
+    ConfigLoaderApi, EntitlementRefreshApi, NativeArchiveApi, RegistryDocument,
+    RegistryMetadataApi, RestrictedArchiveApi, RestrictedArchiveDownload,
+    RestrictedArchiveDownloadResult, RestrictedArchiveFailure, StoreExtrasApi, WorkspaceIoApi,
 };
 #[path = "supply_chain_package_eval/evaluation.rs"]
 mod evaluation;
@@ -101,7 +101,9 @@ use evaluation::{
     decision_rank, decision_to_guard_action_variant, empty_package_material_result,
     normalize_package_name, parse_evaluation_timestamp, reason_severity, severity_rank_value,
 };
-pub use evaluation::{evaluate_package_request_artifact, EvaluationDraft, SupplyChainEvalDeps};
+pub use evaluation::{
+    evaluate_package_request_artifact, EvaluationDraft, SavedPolicyProbe, SupplyChainEvalDeps,
+};
 
 #[path = "supply_chain_package_eval/decisions.rs"]
 mod decisions;
@@ -153,33 +155,40 @@ mod request_payload;
 use request_payload::{build_request_payload, workspace_fingerprint};
 #[path = "supply_chain_package_eval/package_resolution.rs"]
 mod package_resolution;
+/// Range -> concrete registry version, for resident replays of the recorded
+/// registry vectors.
+pub use package_resolution::registry_resolved_target_version as resolve_registry_target_version;
 use package_resolution::{
-    bundle_package, bundle_package_label, exact_version, first_dict_item, hash_paths,
-    lockfile_target_key, npm_source_spec, optional_string_map, registry_resolved_target_version,
-    resolved_target_version, split_namespace_name, stable_hash, value_to_plain_string,
+    exact_version, first_dict_item, hash_paths, lockfile_target_key, npm_source_spec,
+    optional_string_map, registry_resolved_target_version, split_namespace_name, stable_hash,
+    value_to_plain_string,
 };
 #[path = "supply_chain_package_eval/bundle_policy.rs"]
 mod bundle_policy;
 use bundle_policy::{
     bind_resolved_npm_policy_result, dependency_confusion_policy_package_result,
-    emergency_deny_bundle_message, matching_policy_rule, policy_package_result,
-    target_for_resolved_npm_policy_match,
+    matching_policy_rule, target_for_resolved_npm_policy_match,
 };
 #[path = "supply_chain_package_eval/package_results.rs"]
 mod package_results;
 use package_results::{
-    heuristic_package_result, lockfile_dependency_versions, package_target_result,
-    target_is_external_https_archive, transitive_lockfile_results,
+    direct_result_base, heuristic_package_result, optional_value, package_target_result,
+    target_is_external_https_archive,
 };
+#[path = "supply_chain_package_eval/bundle_results.rs"]
+mod bundle_results;
+#[path = "supply_chain_package_eval/bundle_transitive.rs"]
+mod bundle_transitive;
+use bundle_transitive::lockfile_dependency_versions;
 #[path = "supply_chain_package_eval/archive_dependencies.rs"]
 mod archive_dependencies;
 use archive_dependencies::external_tarball_dependency_result;
 #[path = "supply_chain_package_eval/fallbacks.rs"]
 mod fallbacks;
 use fallbacks::{
-    block_package_from_offline, bundle_package_result, cloud_fallback_reason,
-    cloud_result_should_defer_to_bundle, incomplete_lockfile_fallback_target, lockfile_ecosystem,
-    lockfile_parse_warning_result, python_lockfile_version, target_candidate_names,
+    cloud_fallback_reason, cloud_result_should_defer_to_bundle,
+    incomplete_lockfile_fallback_target, lockfile_ecosystem, lockfile_parse_warning_result,
+    python_lockfile_version, target_candidate_names,
 };
 #[path = "supply_chain_package_eval/version_selectors.rs"]
 mod version_selectors;
@@ -262,13 +271,13 @@ use fallback_packages::{
 };
 #[path = "supply_chain_package_eval/cloud_transport.rs"]
 mod cloud_transport;
-use cloud_transport::{
-    cloud_http_fail_closed_evaluation_full, fetch_package_evaluation_response,
-    resolve_guard_sync_context,
-};
+use cloud_transport::cloud_http_fail_closed_evaluation_full;
 #[path = "supply_chain_package_eval/cloud_evaluation.rs"]
 mod cloud_evaluation;
 use cloud_evaluation::evaluate_with_cloud;
+#[path = "supply_chain_package_eval/saved_policy.rs"]
+mod saved_policy;
+use saved_policy::{saved_policy_keeps_cached_error, SavedPolicyOutcome};
 #[path = "supply_chain_package_eval/orchestration.rs"]
 mod orchestration;
 use orchestration::evaluate_package_request_artifact_uncached;

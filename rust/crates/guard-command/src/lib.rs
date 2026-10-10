@@ -434,6 +434,8 @@ pub mod cloud_audit_sync;
 pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
+#[cfg(test)]
+mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;
 pub mod package_policy_override;
 pub mod package_protect_projection;
@@ -456,6 +458,8 @@ pub mod decisions;
 pub mod detectors;
 #[cfg(unix)]
 pub mod direct_vitest;
+pub mod egress_broker;
+mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
 mod hook_adapter_cline_tables;
@@ -487,6 +491,7 @@ mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;
+pub mod registry_metadata_transport;
 pub mod restricted_archive;
 pub mod restricted_archive_transport;
 #[cfg(unix)]

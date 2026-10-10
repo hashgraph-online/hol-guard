@@ -124,6 +124,37 @@ pub struct SupplyChainEvalRequestV1 {
     /// Python-only resolver the resident never runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_entitlement_override: Option<Value>,
+    /// Test-only public-registry metadata fixtures, keyed by the exact
+    /// metadata URL the resolver requests (`https://registry.npmjs.org/<name>`
+    /// or `https://pypi.org/pypi/<name>/json`) with the registry JSON object
+    /// as the value (`null` or an absent key means unresolved). Replaces the
+    /// network fetch so range-resolution tests are hermetic; the resolver's
+    /// URL selection and version choice still run for real.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_metadata_override: Option<Value>,
+    /// Saved-policy lookup the caller hydrated after the resident answered
+    /// `saved_policy_probe_required` for a cached Cloud validation error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_policy_probe: Option<SavedPolicyProbeV1>,
+    /// Outcomes of the network exchanges the resident asked the caller to
+    /// perform under its managed network policy (`supply_chain_egress_required`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub egress_supplied: Option<Vec<crate::EgressSuppliedV1>>,
+    /// Caller-owned private directory holding response bodies too large to
+    /// inline. The resident reads plain file names inside it and never writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub egress_spool_dir: Option<String>,
+}
+
+/// The `lookup["decision"]` row the caller read for a cached Cloud validation
+/// error, or `None` when no saved policy matched. The resident applies the
+/// stale-family and block-only rules; it does not trust the row for anything
+/// else.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SavedPolicyProbeV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

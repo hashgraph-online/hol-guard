@@ -12,6 +12,8 @@ mod approval_proof_op;
 mod approval_reuse;
 mod archive_inspect;
 mod archive_inspect_containment;
+#[cfg(test)]
+mod bundle_parse_reuse_tests;
 mod business_document_compile;
 mod business_source_codec;
 mod claim_approval_reuse_op;
@@ -143,6 +145,8 @@ mod policy_integrity_resolver;
 mod policy_snapshot_build;
 mod policy_store;
 mod prompt_analyze_op;
+#[cfg(test)]
+mod registry_vectors_tests;
 mod request_context_op;
 mod request_context_shell;
 mod resident_client;
@@ -177,6 +181,10 @@ mod skill_identity_walk;
 #[cfg(unix)]
 mod state_directory_lock;
 mod strict_json;
+#[cfg(test)]
+mod supply_chain_cloud_vectors_tests;
+mod supply_chain_egress;
+mod supply_chain_eval_seams;
 mod totp;
 mod workflow_capability_store;
 

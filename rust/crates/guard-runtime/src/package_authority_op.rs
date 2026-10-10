@@ -35,8 +35,9 @@ use guard_command::supply_chain_package_eval::{
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
     PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
-    RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
-    SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
+    RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
+    SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
+    WorkspaceIoApi,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
@@ -47,6 +48,15 @@ use guard_contracts::{
 };
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
+
+use crate::supply_chain_egress::{enter_scope, required_reply};
+use crate::supply_chain_eval_seams::*;
+
+#[path = "supply_chain_eval_op.rs"]
+mod supply_chain_eval_op;
+pub(crate) use supply_chain_eval_op::evaluate_supply_chain_eval;
+#[cfg(test)]
+pub(crate) use supply_chain_eval_op::evaluate_supply_chain_eval_with_seams;
 // ---------------------------------------------------------------------------
 // Shared result helpers
 // ---------------------------------------------------------------------------
@@ -109,6 +119,7 @@ fn eval_error_code(e: &EvalError) -> &'static str {
         EvalError::NotFound(_) => "not_found",
         EvalError::Internal(_) => "internal",
         EvalError::HttpStatus(_, _) => "http_status",
+        EvalError::SavedPolicyProbeRequired(_) => "saved_policy_probe_required",
     }
 }
 
@@ -133,7 +144,7 @@ impl ResidentSupplyChainStore {
     }
 
     fn conn(&self) -> Result<Connection, rusqlite::Error> {
-        Connection::open(&self.store_path)
+        crate::supply_chain_egress::open_store(&self.store_path)
     }
 
     fn oauth_local_credentials(&self) -> Option<Value> {
@@ -1322,6 +1333,9 @@ impl SupplyChainStore for ResidentSupplyChainStore {
 ///     `EvalError::Validation`, which `evaluate_with_cloud` maps to the
 ///     `cloud_auth_error` fail-closed path (parity with
 ///     `GuardSyncAuthorizationExpiredError`).
+///   * `{"error": "trusted_session_failure"}` — surfaces as
+///     `EvalError::Internal`, the availability failure (for example a token
+///     refresh error) that every level routes to review.
 struct ResidentGuardSyncRunner {
     auth_context_override: Option<Map<String, Value>>,
 }
@@ -1338,6 +1352,12 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
             if override_ctx.get("error").and_then(Value::as_str) == Some("authorization_expired") {
                 return Err(EvalError::Validation(
                     "guard sync authorization expired (test override)".into(),
+                ));
+            }
+            if override_ctx.get("error").and_then(Value::as_str) == Some("trusted_session_failure")
+            {
+                return Err(EvalError::Internal(
+                    "guard sync trusted session unavailable (test override)".into(),
                 ));
             }
             let mut ctx = override_ctx.clone();
@@ -1549,16 +1569,21 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
             .is_some_and(|e| matches!(e, EvalError::Internal(m) if m.starts_with("timeout:")))
     }
     fn normalized_receipts_sync_url(&self, sync_url: &str) -> String {
-        // `_normalized_receipts_sync_url` (:4927) — trailing `/`s trimmed,
-        // the sync endpoint suffix stripped so error detail + nonce paths
-        // compare origins.
-        let trimmed = sync_url.trim_end_matches('/');
-        let lower = trimmed.to_lowercase();
-        if lower.ends_with("/api/guard/receipts/sync") {
-            trimmed[..trimmed.len() - "/api/guard/receipts/sync".len()].to_owned()
-        } else {
-            trimmed.to_owned()
+        // `_normalized_receipts_sync_url` — only a bare `/registry/api/v1`
+        // endpoint is rewritten to the receipts sync path.
+        let parsed = guard_command::local_supply_chain::urlsplit(sync_url);
+        if parsed.path.trim_end_matches('/') != "/registry/api/v1" {
+            return sync_url.to_owned();
         }
+        let query = if parsed.query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", parsed.query)
+        };
+        format!(
+            "{}://{}/registry/api/v1/guard/receipts/sync{query}",
+            parsed.scheme, parsed.netloc
+        )
     }
 }
 
@@ -1615,7 +1640,7 @@ impl LockfileParseApi for ResidentLockfileParse {
 }
 
 /// Bundle seam — delegates to `guard_command::supply_chain_bundle` loaders.
-struct ResidentBundle;
+pub(crate) struct ResidentBundle;
 
 impl SupplyChainBundleApi for ResidentBundle {
     fn load_supply_chain_bundle_response(
@@ -1631,15 +1656,16 @@ impl SupplyChainBundleApi for ResidentBundle {
                 .as_object()
                 .cloned()
                 .unwrap_or_default(),
-            signed_bundle: resp.signed_bundle,
-            payload_hash: resp.payload_hash,
-            signature: resp.signature,
-            signature_algorithm: resp.signature_algorithm,
+            signed_bundle: resp.signed_bundle.clone(),
+            payload_hash: resp.payload_hash.clone(),
+            signature: resp.signature.clone(),
+            signature_algorithm: resp.signature_algorithm.clone(),
             verification_keys: resp
                 .verification_keys
                 .iter()
                 .filter_map(|k| k.to_dict().as_object().cloned())
                 .collect(),
+            parsed: Some(std::sync::Arc::new(resp)),
         })
     }
 
@@ -1662,11 +1688,19 @@ impl SupplyChainBundleApi for ResidentBundle {
         ecosystem: Option<&str>,
         now: Option<f64>,
     ) -> EvalResult<Map<String, Value>> {
-        let raw = response_to_bundle_json(response);
-        let typed = supply_chain_bundle::load_supply_chain_bundle_response(&raw)
-            .map_err(|e| EvalError::Validation(e.to_string()))?;
+        let reparsed;
+        let typed = match response.parsed.as_deref() {
+            Some(typed) => typed,
+            None => {
+                reparsed = supply_chain_bundle::load_supply_chain_bundle_response(
+                    &response_to_bundle_json(response),
+                )
+                .map_err(|e| EvalError::Validation(e.to_string()))?;
+                &reparsed
+            }
+        };
         let decision = supply_chain_bundle::evaluate_cached_supply_chain_bundle(
-            &typed,
+            typed,
             package_name,
             package_version,
             ecosystem,
@@ -1849,9 +1883,10 @@ impl PackageIdentityApi for ResidentPackageIdentity {
     }
 }
 
-/// Restricted-archive seam — bounded public-HTTPS-only acquisition via the
-/// `guard_command::restricted_archive` policy engine over the ureq-backed
-/// pinned transport.
+/// Restricted-archive seam. The download is performed by the caller under its
+/// managed network policy (`egress_broker`); this process never dials out for
+/// it. The resident cannot inspect an archive, so a success carries no blob:
+/// only the caller's refusal (`Failure`) changes the verdict.
 struct ResidentRestrictedArchive;
 
 impl RestrictedArchiveApi for ResidentRestrictedArchive {
@@ -1861,37 +1896,39 @@ impl RestrictedArchiveApi for ResidentRestrictedArchive {
         max_bytes: u64,
         max_redirects: u32,
         timeout_seconds: f64,
-        temp_dir: Option<&Path>,
+        _temp_dir: Option<&Path>,
     ) -> EvalResult<RestrictedArchiveDownloadResult> {
-        let resolver = guard_command::restricted_archive_transport::SystemDnsResolver;
-        let transport = guard_command::restricted_archive_transport::UreqPinnedTransport;
-        Ok(
-            match guard_command::restricted_archive::download_restricted_archive(
-                source_url,
-                max_bytes,
-                max_redirects,
-                timeout_seconds,
-                temp_dir,
-                &resolver,
-                &transport,
-            ) {
-                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Success(
-                    blob,
-                ) => RestrictedArchiveDownloadResult::Success(EvalRestrictedArchiveDownload {
-                    path: blob.path,
-                    sha256: blob.sha256,
-                    size: blob.size,
-                    source_url: blob.source_url,
-                    final_url: blob.final_url,
+        use guard_command::egress_broker::{exchange_archive, ArchiveExchange, NO_BROKERED_CALLER};
+        match exchange_archive(source_url, max_bytes, max_redirects, timeout_seconds) {
+            ArchiveExchange::Downloaded {
+                sha256,
+                size,
+                final_url,
+            } => Ok(RestrictedArchiveDownloadResult::Success(
+                EvalRestrictedArchiveDownload {
+                    path: PathBuf::new(),
+                    sha256,
+                    size,
+                    source_url: source_url.to_owned(),
+                    final_url,
+                },
+            )),
+            ArchiveExchange::Failed { code, message } => {
+                Ok(RestrictedArchiveDownloadResult::Failure(
+                    RestrictedArchiveFailure { code, message },
+                ))
+            }
+            // A scope that denies all egress behaves as an unreachable network, exactly as
+            // a failed connection did before archive transfers were brokered. Any other
+            // unavailable state (recorded or deferred need) still aborts the evaluation.
+            ArchiveExchange::Unavailable(reason) if reason == NO_BROKERED_CALLER => Ok(
+                RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
+                    code: "external_archive_connection_failed".to_owned(),
+                    message: "External archive connection failed.".to_owned(),
                 }),
-                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Failure(
-                    failure,
-                ) => RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
-                    code: failure.code,
-                    message: failure.message,
-                }),
-            },
-        )
+            ),
+            ArchiveExchange::Unavailable(reason) => Err(EvalError::Internal(reason)),
+        }
     }
 }
 
@@ -1947,7 +1984,7 @@ struct ResidentStoreExtras {
 
 impl ResidentStoreExtras {
     fn conn(&self) -> Result<Connection, rusqlite::Error> {
-        Connection::open(&self.store_path)
+        crate::supply_chain_egress::open_store(&self.store_path)
     }
 
     /// `oauth_local_credentials` sync_state payload (`state_key` =
@@ -2375,6 +2412,8 @@ pub struct ResidentEvalDeps {
     store_extras: ResidentStoreExtras,
     entitlement: ResidentEntitlementRefresh,
     config: ResidentConfigLoader,
+    registry: ResidentRegistryMetadata,
+    saved_policy: SavedPolicyProbe,
 }
 
 impl ResidentEvalDeps {
@@ -2411,7 +2450,24 @@ impl ResidentEvalDeps {
                 entitlement_override,
             },
             config: ResidentConfigLoader,
+            registry: ResidentRegistryMetadata {
+                metadata_override: None,
+            },
+            saved_policy: SavedPolicyProbe::Unsupported,
         }
+    }
+
+    /// Test-only registry metadata fixtures keyed by metadata URL. With a map
+    /// present the network is never used: an absent key is unresolved.
+    pub fn with_registry_metadata_override(mut self, fixtures: Option<Map<String, Value>>) -> Self {
+        self.registry.metadata_override = fixtures;
+        self
+    }
+
+    /// The caller can hydrate a saved-policy lookup for a cached Cloud error.
+    pub fn with_saved_policy(mut self, probe: SavedPolicyProbe) -> Self {
+        self.saved_policy = probe;
+        self
     }
 
     pub fn as_deps(&self) -> SupplyChainEvalDeps<'_> {
@@ -2429,6 +2485,8 @@ impl ResidentEvalDeps {
             store_extras: &self.store_extras,
             entitlement: &self.entitlement,
             config: &self.config,
+            registry: &self.registry,
+            saved_policy: &self.saved_policy,
         }
     }
 }
@@ -2739,82 +2797,6 @@ pub(crate) fn evaluate_apply_stored_package_policy(
     crate::encode_response(&payload)
 }
 
-/// `SupplyChainEval` — `evaluate_package_request_artifact` port.
-pub(crate) fn evaluate_supply_chain_eval(
-    request: &SupplyChainEvalRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest(request)?;
-    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
-        return serde_json::to_vec(&err_result(
-            &request.request_id,
-            &request_sha256,
-            "schema_mismatch",
-        ))
-        .map_err(|e| e.to_string());
-    }
-    if let Some(rejected) = reject_empty_resident_paths(
-        &request.request_id,
-        &request_sha256,
-        &request.store_path,
-        &request.guard_home,
-    ) {
-        return rejected;
-    }
-    let store_path = PathBuf::from(&request.store_path);
-    let guard_home = PathBuf::from(&request.guard_home);
-    let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
-    let test_overrides = std::env::var_os("HOL_GUARD_RESIDENT_TEST_SEAMS").is_some();
-    let deps_holder = ResidentEvalDeps::with_sync_auth_override(
-        &store_path,
-        &guard_home,
-        request
-            .sync_auth_context_override
-            .as_ref()
-            .filter(|_| test_overrides)
-            .and_then(Value::as_object)
-            .cloned(),
-        request
-            .package_entitlement_override
-            .as_ref()
-            .filter(|_| test_overrides)
-            .and_then(Value::as_object)
-            .cloned(),
-    );
-    let deps = deps_holder.as_deps();
-    let mut artifact = artifact_from_value(&request.artifact);
-    if let Some(private) = &request.runtime_private_metadata {
-        artifact.runtime_private_metadata = private.clone();
-    }
-    let workspace = request.workspace_dir.as_deref().map(Path::new);
-    let result = match evaluate_package_request_artifact(
-        &artifact,
-        &store,
-        &deps,
-        workspace,
-        request.now.as_deref(),
-        request.external_archive_network_authorized,
-        request.retain_external_archive_blob,
-    ) {
-        Ok(eval) => SupplyChainEvalResultV1 {
-            schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-            request_id: request.request_id.clone(),
-            request_sha256,
-            status: "ok".to_owned(),
-            code: "ok".to_owned(),
-            payload: Some(eval.to_dict()),
-        },
-        Err(e) => SupplyChainEvalResultV1 {
-            schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-            request_id: request.request_id.clone(),
-            request_sha256,
-            status: "error".to_owned(),
-            code: format!("native_supply_chain_eval_failed:{}", eval_error_code(&e)),
-            payload: None,
-        },
-    };
-    crate::encode_response(&result)
-}
-
 /// `PackageAuthorityDecide` — parse → artifact → eval in one call.
 pub(crate) fn evaluate_package_authority_decide(
     request: &PackageAuthorityDecideRequestV1,
@@ -2865,6 +2847,10 @@ pub(crate) fn evaluate_package_authority_decide(
     let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
     let deps_holder = ResidentEvalDeps::new(&store_path, &guard_home);
     let deps = deps_holder.as_deps();
+    // This op cannot ask a caller to perform an exchange, so the evaluation
+    // sees the network as unreachable instead of dialing out.
+    let _no_egress = crate::supply_chain_egress::deny_egress()
+        .map_err(|code| format!("native_package_authority_decide_{code}"))?;
     let result = match evaluate_package_request_artifact(
         &artifact,
         &store,
@@ -3154,3 +3140,7 @@ mod package_advisory_tests {
 #[cfg(test)]
 #[path = "apply_stored_package_policy_tests.rs"]
 mod apply_stored_package_policy_tests;
+
+#[cfg(test)]
+#[path = "supply_chain_eval_seam_tests.rs"]
+mod supply_chain_eval_seam_tests;

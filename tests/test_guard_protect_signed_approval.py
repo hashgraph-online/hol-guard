@@ -23,7 +23,7 @@ def test_guard_protect_human_output_signs_loopback_link_without_persisting_token
     native_context_digest,
 ) -> None:
     import codex_plugin_scanner.guard.cli.commands as commands_module
-    import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -34,10 +34,9 @@ def test_guard_protect_human_output_signs_loopback_link_without_persisting_token
     token_path.write_text("synthetic-daemon-token", encoding="utf-8")
     token_path.chmod(0o600)
 
-    def raise_trusted_session_error(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise RuntimeError("cloud token refresh failed")
-
-    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_trusted_session_error)
+    # The resident resolves the Cloud session itself; this override surfaces a
+    # trusted-session (token refresh) failure there rather than in Python.
+    guard_runner_module._test_sync_auth_context_override = {"error": "trusted_session_failure"}
     monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda *args, **kwargs: None)
     monkeypatch.setattr(commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 
