@@ -149,7 +149,7 @@ def policy_bundle_is_version_downgrade(
 
     try:
         accepted_chunks = None if accepted_bundle is None else policy_bundle_chunks(_ordering_view(accepted_bundle))
-        request = {
+        request: dict[str, object] = {
             "accepted_chunks": accepted_chunks,
             "bundle_chunks": policy_bundle_chunks(_ordering_view(candidate_bundle)),
         }
