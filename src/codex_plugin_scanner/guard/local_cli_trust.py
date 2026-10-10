@@ -95,7 +95,7 @@ def _contributed_mcp_decision(
 ) -> tuple[GuardAction, str, str] | None:
     """Return the resident's contributed decision.
 
-    The resident owns it. With no answer, an otherwise allowed call is held for
+    The resident owns it. With no answer, an allowed or reviewed call is held in
     review rather than guessed at or allowed.
     """
 
@@ -117,7 +117,10 @@ def _contributed_mcp_decision(
 def _hold_unverified_contributed_decision(
     current_action: GuardAction,
 ) -> tuple[GuardAction, str, str] | None:
-    if current_action not in {"allow", "warn"}:
+    # A review is held too: with no decisive answer, a time-bounded approval
+    # could upgrade it to allow past a catalog block that was not checked.
+    # Stricter actions are left alone: replacing them with review would loosen them.
+    if current_action not in {"allow", "warn", "review"}:
         return None
     return (
         "review",

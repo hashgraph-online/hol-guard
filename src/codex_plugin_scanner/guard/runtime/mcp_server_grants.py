@@ -13,17 +13,19 @@ for review. There is no Python verdict and no silent allow.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
 from ..models import GuardAction, GuardArtifact
-from ..native_contributed_mcp_decision import native_contributed_mcp_decision
+from ..native_contributed_mcp_decision import NativeContributedMcpFailure, native_contributed_mcp_decision
 from ..native_local_cli_identity import LocalCliIdentityUnavailableError
 from .extension_control_contract import ControlTargetKind, ExtensionControlLayer
 
 _IDENTITY_KEYS = ("package_name", "command", "transport", "package_source", "package_version", "env_keys")
 _UNAVAILABLE = "native_contributed_mcp_unavailable"
+_LOGGER = logging.getLogger(__name__)
 
 
 def apply_contributed_mcp_decision(
@@ -52,8 +54,11 @@ def apply_contributed_mcp_decision(
         tool_name=tool_identity.get("tool_name") if isinstance(tool_identity, Mapping) else None,
         layers=_layer_inputs(_authority_layers(store)),
     )
-    if native is None:
-        raise LocalCliIdentityUnavailableError(_UNAVAILABLE)
+    if isinstance(native, NativeContributedMcpFailure):
+        # Callers hold the call for review without an answer; record why so a
+        # held call can be traced to its cause.
+        _LOGGER.warning("contributed MCP decision unavailable: %s", native.code)
+        raise LocalCliIdentityUnavailableError(native.code)
     if native.state == "decided" and native.action is not None:
         return cast(GuardAction, native.action), native.source or "", native.reason or ""
     return None

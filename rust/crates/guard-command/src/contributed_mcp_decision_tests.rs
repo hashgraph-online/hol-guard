@@ -5,6 +5,7 @@ use crate::extension_control::{ControlTarget, ExtensionControl, CONTROL_SCHEMA_V
 use crate::native_command_program::{ProgramMcp, ProgramMcpLaunch, ProgramMcpTool};
 
 const PARITY: &str = include_str!("../testdata/contributed-mcp-decision-parity-v1.json");
+const MATCHING: &str = include_str!("../testdata/contributed-mcp-matching-v1.json");
 const ZERO_DIGEST: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
 struct Owned {
@@ -71,7 +72,7 @@ fn identity_map(value: &Value) -> Option<&Map<String, Value>> {
 }
 
 #[test]
-fn decisions_match_python_reference() {
+fn decisions_match_recorded_parity_fixture() {
     let fixture: Value = serde_json::from_str(PARITY).unwrap();
     let owned_items: Vec<Owned> = fixture["contributions"]
         .as_array()
@@ -319,4 +320,99 @@ fn direct_command_names_follow_python_rules() {
     ] {
         assert_eq!(direct_mcp_command_name(raw).as_deref(), expected, "{raw}");
     }
+}
+
+fn unit_item(launch: Value, tools: Value) -> Owned {
+    owned(&json!({
+        "catalog_id": "command.mcp-unit",
+        "trust_class": "external",
+        "mcp": {"surface": "mcp", "mcp_launch": launch, "mcp_tools": tools},
+    }))
+}
+
+fn enabled_unit(lockdown: bool) -> Vec<ExtensionControlLayer> {
+    layers(&json!([{
+        "kind": "local-admin", "global_lockdown": lockdown,
+        "controls": [{"target_id": "command.mcp-unit", "state": "enabled"}]
+    }]))
+}
+
+fn package_identity_for_matrix() -> Value {
+    json!({"package_name": "pkg", "command": "npx", "transport": "stdio",
+           "package_source": "default", "package_version": null, "env_keys": []})
+}
+
+#[test]
+fn decision_table_matches_recorded_expectations() {
+    let fixture: Value = serde_json::from_str(MATCHING).unwrap();
+    let item = unit_item(
+        json!({"kind": "package-launcher", "command": "npx", "package": "pkg"}),
+        json!([
+            {"name": "t_allow", "state": "allow"},
+            {"name": "t_review", "state": "review"},
+            {"name": "t_block", "state": "block"},
+            {"name": "t_inherit", "state": "inherit"},
+        ]),
+    );
+    let items = borrowed(std::slice::from_ref(&item));
+    let identity = package_identity_for_matrix();
+    let rows = fixture["decision_table"].as_array().unwrap();
+    assert_eq!(rows.len(), 40);
+    for row in rows {
+        let state = row["state"].as_str().unwrap();
+        let control_layers = enabled_unit(row["lockdown"].as_bool().unwrap());
+        let tool = json!(format!("t_{state}"));
+        let input = ContributedMcpInput {
+            current_action: row["action"].as_str().unwrap(),
+            server_identity: identity.as_object(),
+            artifact_transport: None,
+            server_name: None,
+            tool_name: Some(&tool),
+            layers: &control_layers,
+        };
+        let outcome = decide_contributed_mcp(&items, &input);
+        assert_eq!(
+            outcome.map(|item| item.action),
+            row["expected"].as_str(),
+            "{row}"
+        );
+        if let Some(outcome) = outcome {
+            assert_eq!(outcome.source, fixture["source"].as_str().unwrap());
+            assert_eq!(
+                outcome.reason,
+                fixture["reasons"][outcome.action].as_str().unwrap()
+            );
+        }
+    }
+}
+
+#[test]
+fn contribution_matching_follows_recorded_cases() {
+    let fixture: Value = serde_json::from_str(MATCHING).unwrap();
+    let cases = fixture["matching_cases"].as_array().unwrap();
+    assert!(cases.len() > 40);
+    let mut matched = 0_usize;
+    for case in cases {
+        let item = unit_item(case["launch"].clone(), json!([]));
+        let items = borrowed(std::slice::from_ref(&item));
+        let no_layers: Vec<ExtensionControlLayer> = Vec::new();
+        let optional = |key: &str| Some(&case[key]).filter(|value| !value.is_null());
+        let input = ContributedMcpInput {
+            current_action: "allow",
+            server_identity: identity_map(&case["identity"]),
+            artifact_transport: optional("transport"),
+            server_name: optional("server_name"),
+            tool_name: optional("tool_name"),
+            layers: &no_layers,
+        };
+        let found = matching_contribution(&items, &input).is_some();
+        assert_eq!(
+            found,
+            case["matches"].as_bool().unwrap(),
+            "{}",
+            case["name"]
+        );
+        matched += usize::from(found);
+    }
+    assert!(matched > 20, "fixture must exercise matching cases");
 }
