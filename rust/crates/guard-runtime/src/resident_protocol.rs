@@ -7,16 +7,16 @@ use guard_contracts::{
     ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
     ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
     ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
-    ContextDigestRequestV1, GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1,
-    GuardHookEnvelopeV2, LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1,
-    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
-    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
-    McpToolPolicyDecideRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
-    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
-    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
-    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ContextDigestRequestV1, DataFlowAnalyzeRequestV1, GitExecutionSafetyRequestV1,
+    GithubCliClassifyRequestV1, GuardHookEnvelopeV2, LocalCliGrantRequestV1,
+    LocalMcpGrantRequestV1, McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1,
+    McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
+    McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1, McpToolPolicyDecideRequestV1,
+    NativeHookRequestV1, PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
+    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -85,12 +85,14 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
+        guard_contracts::DATA_FLOW_ANALYZE_FEATURE.into(),
         guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
         guard_contracts::GIT_EXECUTION_SAFETY_FEATURE.into(),
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
-        guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
         guard_contracts::APPROVAL_PROOF_FEATURE.into(),
+        guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
+        guard_contracts::LOCAL_MCP_GRANT_FEATURE.into(),
         guard_contracts::MCP_TOOL_POLICY_DECIDE_FEATURE.into(),
     ];
     if cfg!(windows) {
@@ -173,12 +175,14 @@ pub(crate) enum ResidentOperationV1 {
     GitExecutionSafety(GitExecutionSafetyRequestV1),
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
-    McpToolEvidence(McpToolEvidenceRequestV1),
-    SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     ApprovalProofDecide(ApprovalProofRequestV1),
+    McpToolEvidence(McpToolEvidenceRequestV1),
+    LocalMcpGrantDecide(LocalMcpGrantRequestV1),
     McpToolPolicyDecide(McpToolPolicyDecideRequestV1),
+    SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
+    DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     Health(Value),
     Shutdown(Value),
 }
@@ -404,6 +408,9 @@ mod capability_platform_tests {
         assert!(features
             .iter()
             .any(|feature| feature == guard_contracts::PROMPT_ANALYZE_FEATURE));
+        assert!(features
+            .iter()
+            .any(|feature| feature == guard_contracts::DATA_FLOW_ANALYZE_FEATURE));
         assert_eq!(
             features
                 .iter()

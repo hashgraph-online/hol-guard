@@ -26,7 +26,7 @@ ADAPTER = Path(__file__).with_name("luna_adapter.ts")
 PINNED_PACKAGE = Path(__file__).resolve().parents[1] / "pi-exact-continuation" / "package.json"
 ADAPTER_ID = "pinned-omp-native-luna-stream-v3"
 REQUEST_MODEL = "native-luna"
-BACKEND = ("openai-codex", "gpt-5.6-luna")
+BACKEND = ("openai-codex", "gpt-6-luna")
 # Medium is the default: it qualifies the same catalog faster and at lower cost than high.
 # Low is accepted only as an explicit opt-in for A/B cost comparisons.
 EFFORTS = ("medium", "high", "low")

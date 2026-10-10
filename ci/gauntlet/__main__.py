@@ -38,7 +38,7 @@ def main() -> int:
     run.add_argument(
         "--native-luna-route",
         action="store_true",
-        help="Run OpenAI Luna (openai-codex/gpt-5.6-luna) through the existing Oh My Pi ChatGPT login; "
+        help="Run OpenAI Luna (openai-codex/gpt-6-luna) through the existing Oh My Pi ChatGPT login; "
         "medium effort unless --reasoning-effort high or low",
     )
     run.add_argument("--sdk-root", type=Path, help="Pinned SDK directory for --native-luna-route (default: from omp)")
