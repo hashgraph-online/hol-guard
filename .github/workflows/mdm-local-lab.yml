@@ -4,8 +4,14 @@ on:
   pull_request:
     paths:
       - ".github/workflows/mdm-local-lab.yml"
+      - ".github/actions/setup-rust/**"
+      - "rust/Cargo.lock"
+      - "rust/crates/guard-contracts/src/policy_bundle_*.rs"
+      - "rust/crates/guard-runtime/src/policy_bundle_*.rs"
+      - "rust/crates/guard-runtime/src/resident_*.rs"
       - "scripts/mdm/**"
       - "src/codex_plugin_scanner/guard/mdm/**"
+      - "src/codex_plugin_scanner/guard/*policy_bundle*.py"
       - "tests/test_guard_mdm_*.py"
       - "tests/test_guard_self_protection_schemas.py"
   workflow_dispatch:
