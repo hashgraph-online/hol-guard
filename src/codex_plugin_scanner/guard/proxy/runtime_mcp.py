@@ -1355,7 +1355,9 @@ class RuntimeMcpGuardProxy:
             return {"native_prompt_allows": bool(self._allow_after_native_prompt(effective(need)))}
 
         def inline_approval(need: Mapping[str, Any]) -> dict[str, object]:
-            result = approval_callback(self._inline_approval_request(tool_name, effective(need).summary))  # type: ignore[misc]
+            if approval_callback is None:
+                return {"inline_approval": "fallthrough"}
+            result = approval_callback(self._inline_approval_request(tool_name, effective(need).summary))
             held["approval_result"] = result
             return {"inline_approval": _inline_approval_kind(result)}
 
@@ -1407,7 +1409,7 @@ class RuntimeMcpGuardProxy:
         route = routed["route"]
         kind = route["kind"]
         tool_policy_action = routed["tool_policy_action"]
-        boundary = {
+        boundary: dict[str, Any] = {
             "expected_catalog_generation": authority.catalog_generation,
             "expected_catalog_state": authority.catalog_state,
             "expected_catalog_fingerprint": authority.catalog_fingerprint,
@@ -2103,7 +2105,9 @@ class RuntimeMcpGuardProxy:
             return {
                 "package": {
                     "facts": package_facts(resolution),
-                    "artifact_id": postclaim_package_artifact.artifact_id,
+                    "artifact_id": (
+                        postclaim_package_artifact.artifact_id if postclaim_package_artifact is not None else None
+                    ),
                     "expected_artifact_id": artifact.artifact_id,
                     "digest": resolution.artifact_digest,
                     "expected_digest": fresh_package_resolution.artifact_digest,

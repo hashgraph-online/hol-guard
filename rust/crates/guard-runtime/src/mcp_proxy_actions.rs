@@ -149,11 +149,11 @@ pub(crate) fn observe_mode_item(observed: GuardAction, executed: GuardAction) ->
 /// `composio_requires_action_review`: meta-tools that route or execute other
 /// tools never inherit a remembered approval.
 pub(crate) fn composio_requires_action_review(tool_name: &str) -> bool {
-    let suffix = tool_name
-        .rsplit("__")
-        .next()
-        .unwrap_or(tool_name)
-        .to_lowercase();
+    // Python's `str.casefold()` is full Unicode case folding (`ſ` -> `s`,
+    // `ß` -> `ss`); `to_lowercase()` leaves those unchanged and would let a
+    // fold-equivalent spelling of a meta-tool inherit a remembered approval.
+    let suffix =
+        caseless::default_case_fold_str(tool_name.rsplit("__").next().unwrap_or(tool_name));
     match suffix.as_str() {
         "composio_search_tools" | "composio_get_tool_schemas" => false,
         "composio_multi_execute_tool"
@@ -176,4 +176,23 @@ pub(crate) fn decision_source(action: &str, source: &str) -> String {
 pub(crate) fn same_context(query: &McpToolPostclaimQueryV1) -> bool {
     query.artifact_id == query.expected_artifact_id
         && query.artifact_hash == query.expected_artifact_hash
+}
+
+#[cfg(test)]
+mod composio_fold_tests {
+    use super::composio_requires_action_review;
+
+    #[test]
+    fn fold_equivalent_meta_tool_names_still_require_review() {
+        assert!(composio_requires_action_review(
+            "srv__compo\u{17f}io_multi_execute_tool"
+        ));
+        assert!(composio_requires_action_review(
+            "srv__COMPOSIO_MULTI_EXECUTE_TOOL"
+        ));
+        assert!(!composio_requires_action_review(
+            "srv__composio_search_tools"
+        ));
+        assert!(!composio_requires_action_review("srv__other_tool"));
+    }
 }
