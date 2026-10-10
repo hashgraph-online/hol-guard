@@ -15,6 +15,8 @@ pub(crate) enum StoreError {
     Value(String),
     /// Python `sqlite3.IntegrityError` raised by the method itself.
     Integrity(String),
+    /// Python `RuntimeError` with its exact message.
+    Runtime(String),
     /// A request or stored value outside the contract; fail closed.
     Invalid(&'static str),
     Sqlite(rusqlite::Error),
@@ -32,12 +34,17 @@ pub(crate) fn value_error<T>(message: &str) -> StoreResult<T> {
     Err(StoreError::Value(message.to_owned()))
 }
 
+pub(crate) fn runtime_error<T>(message: &str) -> StoreResult<T> {
+    Err(StoreError::Runtime(message.to_owned()))
+}
+
 impl StoreError {
     /// Stable failure code in the `native_guard_store_*` namespace.
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Self::Value(_) => "native_guard_store_value_error",
             Self::Integrity(_) => "native_guard_store_integrity_error",
+            Self::Runtime(_) => "native_guard_store_runtime_error",
             Self::Invalid(_) => "native_guard_store_invalid",
             Self::Sqlite(error) => match error.sqlite_error_code() {
                 Some(ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked) => {
@@ -55,7 +62,9 @@ impl StoreError {
 
     pub(crate) fn message(&self) -> String {
         match self {
-            Self::Value(message) | Self::Integrity(message) => message.clone(),
+            Self::Value(message) | Self::Integrity(message) | Self::Runtime(message) => {
+                message.clone()
+            }
             Self::Invalid(reason) => (*reason).to_owned(),
             Self::Sqlite(error) => error.to_string(),
         }
