@@ -343,3 +343,45 @@ def test_fatal_claim_failure_reaches_storage_recovery() -> None:
     with pytest.raises(sqlite3.DatabaseError) as raised:
         effects.close()
     assert raised.value is failure
+
+
+@pytest.mark.parametrize(
+    ("reply", "recorded"),
+    [
+        (None, []),
+        ({"schema": "wrong"}, ["native_mcp_tool_policy_transport"]),
+        ({"status": "maybe"}, ["native_mcp_tool_policy_transport"]),
+    ],
+)
+def test_rejected_reply_counts_as_resident_failure(monkeypatch, tmp_path: Path, reply, recorded) -> None:
+    failures: list[str] = []
+
+    def fake_request(*, request, **_kwargs):
+        if reply is None:
+            return None
+        bound = {
+            "schema": native_mcp_tool_policy._RESULT_SCHEMA,
+            "request_id": request["request_id"],
+            "request_sha256": "sha256:" + native_mcp_tool_policy._canonical_request_sha256(request),
+            "status": "ok",
+            "code": "ok",
+        }
+        return {**bound, **reply}
+
+    class _Identity:
+        sha256 = "sha256:resident"
+
+    class _Status:
+        identity = _Identity()
+
+    monkeypatch.setattr(native_mcp_tool_policy, "_resident_request", fake_request)
+    monkeypatch.setattr(native_mcp_tool_policy, "native_runtime_status", lambda: _Status())
+    monkeypatch.setattr(
+        native_mcp_tool_policy,
+        "native_record_resident_failure",
+        lambda _sha, _home, *, reason: failures.append(reason),
+    )
+    with pytest.raises(native_mcp_tool_policy.NativeMcpToolPolicyError) as raised:
+        native_mcp_tool_policy._round_trip(tmp_path, subject={}, claim_saved_approval=False, observations=[])
+    assert raised.value.code == "transport"
+    assert failures == recorded
