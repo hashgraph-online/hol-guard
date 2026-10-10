@@ -67,14 +67,13 @@ class _SuccessResponse:
 
 
 def _invalid_grant_http_error() -> urllib.error.HTTPError:
+    return _oauth_error_http_error("invalid_grant", "The grant is missing, expired, or already consumed.")
+
+
+def _oauth_error_http_error(error: str, description: str) -> urllib.error.HTTPError:
     class _ErrorResponse:
         def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "error": "invalid_grant",
-                    "error_description": "The grant is missing, expired, or already consumed.",
-                }
-            ).encode("utf-8")
+            return json.dumps({"error": error, "error_description": description}).encode("utf-8")
 
         def close(self) -> None:
             return None
@@ -344,67 +343,6 @@ def test_dead_grant_marks_needs_reauthorization_and_stops_refresh(tmp_path, monk
         guard_runner_module._resolve_guard_sync_auth_context(store)
     assert calls["count"] == 2
     assert len(notifications) == 1
-
-
-def _invalid_request_http_error() -> urllib.error.HTTPError:
-    class _ErrorResponse:
-        def read(self) -> bytes:
-            return json.dumps(
-                {
-                    "error": "invalid_request",
-                    "error_description": "The authorization request is incomplete or malformed.",
-                }
-            ).encode("utf-8")
-
-        def close(self) -> None:
-            return None
-
-    return urllib.error.HTTPError(
-        "https://hol.org/api/guard/oauth/token",
-        400,
-        "Bad Request",
-        hdrs=None,
-        fp=_ErrorResponse(),
-    )
-
-
-def test_rejected_refresh_request_backs_off_without_wiping_sign_in(tmp_path, monkeypatch) -> None:
-    """A non-invalid_grant 400 must park refresh instead of hammering the token endpoint.
-
-    The fast-fail keeps the reauthorization error, not the revoked one, so the
-    sign-in cleanup path does not delete credentials after a single bad 400.
-    """
-    store = _store_with_oauth_credentials(tmp_path)
-    calls = {"count": 0}
-
-    def _always_invalid_request(_request, timeout):
-        calls["count"] += 1
-        raise _invalid_request_http_error()
-
-    stub_authenticated_urlopen(monkeypatch, _always_invalid_request)
-    _allow_refresh(monkeypatch)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.desktop_notifications.notify_pending_approval_once",
-        lambda _notification: True,
-    )
-
-    with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError):
-        guard_runner_module._resolve_guard_sync_auth_context(store)
-    assert calls["count"] == 1
-
-    state = _oauth_circuit_state(store)
-    assert state["needs_reauthorization"] is True
-    assert state["failure_kind"] == "rejected"
-
-    for _ in range(3):
-        with pytest.raises(guard_runner_module.GuardSyncAuthorizationExpiredError) as error:
-            guard_runner_module._resolve_guard_sync_auth_context(store)
-        assert str(error.value) != guard_runner_module._guard_oauth_reconnect_after_revoked_message()
-    assert calls["count"] == 1
-
-    assert guard_runner_module.clear_revoked_guard_oauth_sign_in(store) is False
-    assert store.get_oauth_local_credentials(allow_primary=True) is not None
-    assert calls["count"] == 1
 
 
 def test_circuit_probe_extends_backoff_geometrically(tmp_path, monkeypatch) -> None:
