@@ -1280,7 +1280,7 @@ fn emergency_deny_identity_matches(
 }
 
 /// `_is_high_confidence_block` (:310).
-fn is_high_confidence_block(package: &SupplyChainBundlePackage) -> bool {
+pub fn is_high_confidence_block(package: &SupplyChainBundlePackage) -> bool {
     package.default_action == "block"
         && (package.known_exploited
             || package.malware_state == "known"

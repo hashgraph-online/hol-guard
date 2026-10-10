@@ -106,6 +106,8 @@ mod skill_identity_walk;
 #[cfg(unix)]
 mod state_directory_lock;
 mod strict_json;
+#[cfg(test)]
+mod supply_chain_cloud_vectors_tests;
 mod totp;
 mod workflow_capability_store;
 

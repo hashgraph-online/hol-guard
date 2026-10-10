@@ -1,0 +1,299 @@
+//! Replay of the shared cloud-connected supply-chain evaluation vectors.
+//!
+//! `tests/fixtures/supply-chain-eval/cloud-cases.v1.json` was recorded from the
+//! Python evaluator (see `record_cloud_vectors.py` and the file's
+//! `recorded_from_commit`). Each case seeds a store from recorded rows, serves
+//! the recorded cloud response from a loopback server, and requires the
+//! resident evaluation to equal the recorded Python result and to send the
+//! recorded cloud request.
+
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+
+use guard_contracts::{
+    SupplyChainEvalRequestV1, SupplyChainEvalResultV1, PACKAGE_AUTHORITY_REQUEST_SCHEMA,
+};
+use rusqlite::types::Value as SqlValue;
+use serde_json::{json, Value};
+
+use crate::package_authority_op::evaluate_supply_chain_eval_with_seams;
+
+const VECTORS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../tests/fixtures/supply-chain-eval/cloud-cases.v1.json"
+));
+static CASE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+type Seen = Arc<Mutex<Vec<(String, Value)>>>;
+
+struct CloudServer {
+    port: u16,
+    seen: Seen,
+    stop: Arc<AtomicBool>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl CloudServer {
+    fn start(spec: &Value) -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind loopback");
+        let port = listener.local_addr().expect("addr").port();
+        let seen: Seen = Arc::default();
+        let stop = Arc::new(AtomicBool::new(false));
+        let (thread_seen, thread_stop, spec) = (seen.clone(), stop.clone(), spec.clone());
+        let handle = thread::spawn(move || {
+            for stream in listener.incoming() {
+                if thread_stop.load(Ordering::SeqCst) {
+                    break;
+                }
+                if let Ok(stream) = stream {
+                    serve(stream, &spec, &thread_seen);
+                }
+            }
+        });
+        Self {
+            port,
+            seen,
+            stop,
+            handle: Some(handle),
+        }
+    }
+
+    fn finish(mut self) -> Vec<(String, Value)> {
+        self.stop.store(true, Ordering::SeqCst);
+        let _ = TcpStream::connect(("127.0.0.1", self.port));
+        if let Some(handle) = self.handle.take() {
+            handle.join().expect("server thread");
+        }
+        self.seen.lock().expect("seen").clone()
+    }
+}
+
+fn serve(mut stream: TcpStream, spec: &Value, seen: &Seen) {
+    let mut buffer = Vec::new();
+    let mut chunk = [0_u8; 4096];
+    let header_end = loop {
+        let read = stream.read(&mut chunk).unwrap_or(0);
+        if read == 0 {
+            return;
+        }
+        buffer.extend_from_slice(&chunk[..read]);
+        if let Some(index) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+            break index + 4;
+        }
+    };
+    let head = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+    let length = head
+        .lines()
+        .find_map(|line| {
+            line.to_ascii_lowercase()
+                .strip_prefix("content-length:")
+                .map(str::to_owned)
+        })
+        .and_then(|value| value.trim().parse::<usize>().ok())
+        .unwrap_or(0);
+    while buffer.len() < header_end + length {
+        let read = stream.read(&mut chunk).unwrap_or(0);
+        if read == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..read]);
+    }
+    let path = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|target| target.split('?').next())
+        .unwrap_or("")
+        .to_owned();
+    let body: Value = serde_json::from_slice(&buffer[header_end..]).unwrap_or(Value::Null);
+    seen.lock().expect("seen").push((path, body));
+    if spec["mode"] == "dropped" {
+        return;
+    }
+    let payload = spec["payload"].to_string();
+    let status = spec["status"].as_u64().unwrap_or(200);
+    let response = format!(
+        "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+        payload.len()
+    );
+    let _ = stream.write_all(response.as_bytes());
+}
+
+fn sql_value(value: &Value) -> SqlValue {
+    match value {
+        Value::Null => SqlValue::Null,
+        Value::Bool(flag) => SqlValue::Integer(i64::from(*flag)),
+        Value::Number(number) => number
+            .as_i64()
+            .map(SqlValue::Integer)
+            .unwrap_or_else(|| SqlValue::Real(number.as_f64().unwrap_or(0.0))),
+        Value::String(text) => SqlValue::Text(text.clone()),
+        other => SqlValue::Text(other.to_string()),
+    }
+}
+
+fn seed_store(db_path: &Path, vectors: &Value, case: &Value) {
+    let connection = rusqlite::Connection::open(db_path).expect("open store");
+    for ddl in vectors["schema_sql"].as_object().expect("schema").values() {
+        connection
+            .execute(ddl.as_str().expect("ddl"), [])
+            .expect("create table");
+    }
+    for (table, rows) in case["rows"].as_object().expect("rows") {
+        for row in rows.as_array().expect("row list") {
+            let columns: Vec<&String> = row.as_object().expect("row").keys().collect();
+            let placeholders = vec!["?"; columns.len()].join(", ");
+            let names = columns
+                .iter()
+                .map(|c| c.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            let values: Vec<SqlValue> = columns
+                .iter()
+                .map(|c| sql_value(&row[c.as_str()]))
+                .collect();
+            connection
+                .execute(
+                    &format!("INSERT INTO {table} ({names}) VALUES ({placeholders})"),
+                    rusqlite::params_from_iter(values),
+                )
+                .expect("seed row");
+        }
+    }
+}
+
+fn case_dir(name: &str) -> PathBuf {
+    let unique = CASE_SEQUENCE.fetch_add(1, Ordering::SeqCst);
+    let root = std::env::temp_dir().join(format!(
+        "guard-cloud-vectors-{}-{unique}-{name}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(root.join("home")).expect("home");
+    std::fs::create_dir_all(root.join("ws")).expect("ws");
+    root
+}
+
+fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
+    let name = case["name"].as_str().expect("name");
+    let root = case_dir(name);
+    let db_path = root.join("home").join("guard.db");
+    seed_store(&db_path, vectors, case);
+    for (file, spec) in case["files"].as_object().expect("files") {
+        std::fs::write(
+            root.join("ws").join(file),
+            spec["text"].as_str().expect("text"),
+        )
+        .expect("write file");
+    }
+    let server = (!case["network"].is_null()).then(|| CloudServer::start(&case["network"]));
+    let mut request = SupplyChainEvalRequestV1 {
+        schema: PACKAGE_AUTHORITY_REQUEST_SCHEMA.to_owned(),
+        request_id: format!("vector-{name}"),
+        store_path: db_path.to_string_lossy().into_owned(),
+        guard_home: root.join("home").to_string_lossy().into_owned(),
+        artifact: case["artifact"].clone(),
+        workspace_dir: Some(root.join("ws").to_string_lossy().into_owned()),
+        now: vectors["now"].as_str().map(str::to_owned),
+        external_archive_network_authorized: false,
+        retain_external_archive_blob: false,
+        runtime_private_metadata: None,
+        sync_auth_context_override: None,
+        package_entitlement_override: None,
+    };
+    if let Some(server) = &server {
+        request.sync_auth_context_override = Some(json!({
+            "sync_url": format!("http://127.0.0.1:{}/api/guard/receipts/sync", server.port),
+            "access_token": vectors["sync_token"],
+            "dpop_key_material": null,
+        }));
+    }
+    if !case["entitlement"].is_null() {
+        request.package_entitlement_override = Some(case["entitlement"].clone());
+    }
+    let reply = evaluate_supply_chain_eval_with_seams(&request, true)?;
+    let sent = server.map(CloudServer::finish).unwrap_or_default();
+    let _ = std::fs::remove_dir_all(&root);
+    let result: SupplyChainEvalResultV1 =
+        serde_json::from_slice(&reply).map_err(|e| e.to_string())?;
+    if result.status != "ok" {
+        return Err(format!(
+            "{name}: status {} code {}",
+            result.status, result.code
+        ));
+    }
+    let payload = result.payload.unwrap_or(Value::Null);
+    if payload != case["expect"] {
+        return Err(format!(
+            "{name}: evaluation differs\n{}",
+            diff(&case["expect"], &payload)
+        ));
+    }
+    let bodies: Vec<&Value> = sent.iter().map(|(_, body)| body).collect();
+    let recorded: Vec<&Value> = case["cloud_requests"]
+        .as_array()
+        .expect("requests")
+        .iter()
+        .collect();
+    if bodies != recorded {
+        return Err(format!(
+            "{name}: cloud requests differ\nexpected {recorded:?}\nactual {bodies:?}"
+        ));
+    }
+    let paths: Vec<&str> = sent.iter().map(|(path, _)| path.as_str()).collect();
+    let recorded_paths: Vec<&str> = case["cloud_request_paths"]
+        .as_array()
+        .expect("paths")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    if paths != recorded_paths {
+        return Err(format!(
+            "{name}: cloud paths differ {recorded_paths:?} vs {paths:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn diff(expected: &Value, actual: &Value) -> String {
+    let empty = serde_json::Map::new();
+    let (left, right) = (
+        expected.as_object().unwrap_or(&empty),
+        actual.as_object().unwrap_or(&empty),
+    );
+    let mut lines = Vec::new();
+    for key in left
+        .keys()
+        .chain(right.keys().filter(|k| !left.contains_key(*k)))
+    {
+        if left.get(key) != right.get(key) {
+            lines.push(format!(
+                "  {key}: expected {}\n  {key}: actual   {}",
+                left.get(key)
+                    .map_or("<absent>".to_owned(), Value::to_string),
+                right
+                    .get(key)
+                    .map_or("<absent>".to_owned(), Value::to_string)
+            ));
+        }
+    }
+    lines.join("\n")
+}
+
+#[test]
+fn resident_cloud_evaluation_matches_recorded_python_vectors() {
+    let vectors: Value = serde_json::from_str(VECTORS).expect("vectors parse");
+    let failures: Vec<String> = vectors["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .filter_map(|case| run_case(&vectors, case).err())
+        .collect();
+    let report = failures.join("\n\n");
+    if let Some(path) = std::env::var_os("GUARD_VECTOR_REPORT") {
+        std::fs::write(path, &report).expect("write report");
+    }
+    assert!(failures.is_empty(), "{} case(s) differ", failures.len());
+}

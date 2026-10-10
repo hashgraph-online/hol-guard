@@ -74,6 +74,19 @@ pub(super) fn heuristic_package_result(
     message: &str,
     severity: &str,
 ) -> Map<String, Value> {
+    heuristic_package_result_with(target, decision, code, message, severity, None, None)
+}
+
+/// `_heuristic_package_result` with the optional resolved and recommended-fix versions.
+pub(super) fn heuristic_package_result_with(
+    target: &Map<String, Value>,
+    decision: &str,
+    code: &str,
+    message: &str,
+    severity: &str,
+    resolved_version: Option<&str>,
+    recommended_fix_version: Option<&str>,
+) -> Map<String, Value> {
     let mut reason = Map::new();
     reason.insert("code".to_string(), Value::String(code.to_string()));
     reason.insert("message".to_string(), Value::String(message.to_string()));
@@ -83,6 +96,18 @@ pub(super) fn heuristic_package_result(
         Value::String("guard-local".to_string()),
     );
     let mut r = package_target_result(target, decision, vec![reason], None);
+    if let Some(version) = resolved_version {
+        r.insert(
+            "resolvedVersion".to_owned(),
+            Value::String(version.to_owned()),
+        );
+    }
+    if let Some(version) = recommended_fix_version {
+        r.insert(
+            "recommendedFixVersion".to_owned(),
+            Value::String(version.to_owned()),
+        );
+    }
     for (key, src) in [
         ("sourceIdentity", "source_identity"),
         ("sourceRepository", "source_repository"),
@@ -96,66 +121,6 @@ pub(super) fn heuristic_package_result(
         );
     }
     r
-}
-
-#[allow(dead_code)]
-pub(super) fn lockfile_dependency_versions(
-    deps: &SupplyChainEvalDeps<'_>,
-    workspace_dir: Option<&Path>,
-    artifact: &GuardArtifact,
-    targets: &[Map<String, Value>],
-) -> BTreeMap<String, String> {
-    let Some(ws) = workspace_dir else {
-        return BTreeMap::new();
-    };
-    let results = lockfile_parse_results(deps, ws, artifact);
-    let mut out = BTreeMap::new();
-    for result in &results {
-        if !result.complete {
-            continue;
-        }
-        for entry in &result.entries {
-            let eco = lockfile_ecosystem(&result.format);
-            let name = entry.package_name.clone();
-            let version = entry.version.clone();
-            if !name.is_empty() && !version.is_empty() {
-                out.entry(format!("{eco}:{name}"))
-                    .or_insert_with(|| version.clone());
-                out.entry(name).or_insert(version);
-            }
-        }
-    }
-    let _ = targets;
-    out
-}
-
-#[allow(dead_code)]
-pub(super) fn transitive_lockfile_results(
-    deps: &SupplyChainEvalDeps<'_>,
-    workspace_dir: Option<&Path>,
-    artifact: &GuardArtifact,
-    targets: &[Map<String, Value>],
-) -> Vec<Map<String, Value>> {
-    let versions = lockfile_dependency_versions(deps, workspace_dir, artifact, targets);
-    targets
-        .iter()
-        .filter_map(|t| {
-            let resolved = resolved_target_version(deps, t, &versions)?;
-            let mut pkg = Map::new();
-            pkg.insert(
-                "name".to_string(),
-                t.get("package_name").cloned().unwrap_or(Value::Null),
-            );
-            pkg.insert("version".to_string(), Value::String(resolved));
-            pkg.insert("decision".to_string(), Value::String("monitor".into()));
-            Some(pkg)
-        })
-        .collect()
-}
-
-#[allow(dead_code)]
-pub(super) fn transitive_lockfile_decision(_results: &[Map<String, Value>]) -> Option<String> {
-    None
 }
 
 #[allow(dead_code)]

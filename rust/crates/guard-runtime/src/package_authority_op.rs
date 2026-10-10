@@ -1549,16 +1549,21 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
             .is_some_and(|e| matches!(e, EvalError::Internal(m) if m.starts_with("timeout:")))
     }
     fn normalized_receipts_sync_url(&self, sync_url: &str) -> String {
-        // `_normalized_receipts_sync_url` (:4927) — trailing `/`s trimmed,
-        // the sync endpoint suffix stripped so error detail + nonce paths
-        // compare origins.
-        let trimmed = sync_url.trim_end_matches('/');
-        let lower = trimmed.to_lowercase();
-        if lower.ends_with("/api/guard/receipts/sync") {
-            trimmed[..trimmed.len() - "/api/guard/receipts/sync".len()].to_owned()
-        } else {
-            trimmed.to_owned()
+        // `_normalized_receipts_sync_url` — only a bare `/registry/api/v1`
+        // endpoint is rewritten to the receipts sync path.
+        let parsed = guard_command::local_supply_chain::urlsplit(sync_url);
+        if parsed.path.trim_end_matches('/') != "/registry/api/v1" {
+            return sync_url.to_owned();
         }
+        let query = if parsed.query.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", parsed.query)
+        };
+        format!(
+            "{}://{}/registry/api/v1/guard/receipts/sync{query}",
+            parsed.scheme, parsed.netloc
+        )
     }
 }
 
@@ -2743,6 +2748,17 @@ pub(crate) fn evaluate_apply_stored_package_policy(
 pub(crate) fn evaluate_supply_chain_eval(
     request: &SupplyChainEvalRequestV1,
 ) -> Result<Vec<u8>, String> {
+    let test_overrides = std::env::var_os("HOL_GUARD_RESIDENT_TEST_SEAMS").is_some();
+    evaluate_supply_chain_eval_with_seams(request, test_overrides)
+}
+
+/// `evaluate_supply_chain_eval` with the test-seam gate injected, so in-process
+/// tests can honor the auth/entitlement overrides without mutating the
+/// process environment.
+pub(crate) fn evaluate_supply_chain_eval_with_seams(
+    request: &SupplyChainEvalRequestV1,
+    test_overrides: bool,
+) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
     if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
         return serde_json::to_vec(&err_result(
@@ -2763,7 +2779,6 @@ pub(crate) fn evaluate_supply_chain_eval(
     let store_path = PathBuf::from(&request.store_path);
     let guard_home = PathBuf::from(&request.guard_home);
     let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
-    let test_overrides = std::env::var_os("HOL_GUARD_RESIDENT_TEST_SEAMS").is_some();
     let deps_holder = ResidentEvalDeps::with_sync_auth_override(
         &store_path,
         &guard_home,

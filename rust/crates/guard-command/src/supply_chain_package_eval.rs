@@ -154,32 +154,35 @@ use request_payload::{build_request_payload, workspace_fingerprint};
 #[path = "supply_chain_package_eval/package_resolution.rs"]
 mod package_resolution;
 use package_resolution::{
-    bundle_package, bundle_package_label, exact_version, first_dict_item, hash_paths,
-    lockfile_target_key, npm_source_spec, optional_string_map, registry_resolved_target_version,
-    resolved_target_version, split_namespace_name, stable_hash, value_to_plain_string,
+    exact_version, first_dict_item, hash_paths, lockfile_target_key, npm_source_spec,
+    optional_string_map, registry_resolved_target_version, split_namespace_name, stable_hash,
+    value_to_plain_string,
 };
 #[path = "supply_chain_package_eval/bundle_policy.rs"]
 mod bundle_policy;
 use bundle_policy::{
     bind_resolved_npm_policy_result, dependency_confusion_policy_package_result,
-    emergency_deny_bundle_message, matching_policy_rule, policy_package_result,
-    target_for_resolved_npm_policy_match,
+    matching_policy_rule, target_for_resolved_npm_policy_match,
 };
 #[path = "supply_chain_package_eval/package_results.rs"]
 mod package_results;
 use package_results::{
-    heuristic_package_result, lockfile_dependency_versions, package_target_result,
-    target_is_external_https_archive, transitive_lockfile_results,
+    heuristic_package_result, package_target_result, target_is_external_https_archive,
 };
+#[path = "supply_chain_package_eval/bundle_results.rs"]
+mod bundle_results;
+#[path = "supply_chain_package_eval/bundle_transitive.rs"]
+mod bundle_transitive;
+use bundle_transitive::lockfile_dependency_versions;
 #[path = "supply_chain_package_eval/archive_dependencies.rs"]
 mod archive_dependencies;
 use archive_dependencies::external_tarball_dependency_result;
 #[path = "supply_chain_package_eval/fallbacks.rs"]
 mod fallbacks;
 use fallbacks::{
-    block_package_from_offline, bundle_package_result, cloud_fallback_reason,
-    cloud_result_should_defer_to_bundle, incomplete_lockfile_fallback_target, lockfile_ecosystem,
-    lockfile_parse_warning_result, python_lockfile_version, target_candidate_names,
+    cloud_fallback_reason, cloud_result_should_defer_to_bundle,
+    incomplete_lockfile_fallback_target, lockfile_ecosystem, lockfile_parse_warning_result,
+    python_lockfile_version, target_candidate_names,
 };
 #[path = "supply_chain_package_eval/version_selectors.rs"]
 mod version_selectors;
@@ -262,10 +265,7 @@ use fallback_packages::{
 };
 #[path = "supply_chain_package_eval/cloud_transport.rs"]
 mod cloud_transport;
-use cloud_transport::{
-    cloud_http_fail_closed_evaluation_full, fetch_package_evaluation_response,
-    resolve_guard_sync_context,
-};
+use cloud_transport::cloud_http_fail_closed_evaluation_full;
 #[path = "supply_chain_package_eval/cloud_evaluation.rs"]
 mod cloud_evaluation;
 use cloud_evaluation::evaluate_with_cloud;

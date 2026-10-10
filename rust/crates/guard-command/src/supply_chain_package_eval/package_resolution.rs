@@ -80,25 +80,27 @@ pub(super) fn npm_source_spec(value: Option<&str>, ecosystem: &str) -> Option<Np
     }
 }
 
-#[allow(dead_code)]
+/// `_lockfile_target_key`: `(normalized_name, alias)` flattened into one key.
 pub(super) fn lockfile_target_key(target: &Map<String, Value>) -> Option<String> {
-    let eco = optional_string(target.get("ecosystem"))?;
-    let name = optional_string(target.get("package_name"))
-        .or_else(|| optional_string(target.get("name")))?;
-    Some(format!("{eco}:{name}"))
+    let normalized = optional_string(target.get("normalized_name"))?;
+    let alias = optional_string(target.get("alias")).unwrap_or_default();
+    Some(format!("{normalized}\u{1f}{alias}"))
 }
 
-#[allow(dead_code)]
-pub(super) fn exact_version(spec: &str) -> Option<String> {
-    let s = spec.trim();
-    if s.is_empty() {
+/// `_exact_version`.
+pub(super) fn exact_version(value: &str) -> Option<String> {
+    let normalized = value.trim();
+    if normalized.is_empty() || parse_npm_source_spec(Some(normalized)).is_some() {
         return None;
     }
-    let mut chars = s.chars();
-    match chars.next() {
-        Some(c) if c.is_ascii_digit() => Some(s.to_string()),
-        _ => None,
+    if normalized.starts_with(['^', '~', '<', '>', '!', '*'])
+        || normalized.contains("||")
+        || normalized.contains(" - ")
+        || normalized.contains(',')
+    {
+        return None;
     }
+    Some(normalized.to_owned())
 }
 
 #[allow(dead_code)]
@@ -108,105 +110,4 @@ pub(super) fn registry_resolved_target_version(
 ) -> Option<String> {
     let _ = target;
     None
-}
-
-#[allow(dead_code)]
-pub(super) fn resolved_target_version(
-    deps: &SupplyChainEvalDeps<'_>,
-    target: &Map<String, Value>,
-    lockfile_versions: &BTreeMap<String, String>,
-) -> Option<String> {
-    if let Some(key) = lockfile_target_key(target) {
-        if let Some(v) = lockfile_versions.get(&key) {
-            return Some(v.clone());
-        }
-    }
-    if let Some(name) = optional_string(target.get("package_name")) {
-        if let Some(v) = lockfile_versions.get(&name) {
-            return Some(v.clone());
-        }
-    }
-    if let Some(version) = optional_string(target.get("version")) {
-        if !version.is_empty() {
-            return Some(version);
-        }
-    }
-    if let Some(requested) = optional_string(target.get("requested_specifier"))
-        .or_else(|| optional_string(target.get("range")))
-    {
-        let ecosystem = optional_string(target.get("ecosystem")).unwrap_or_else(|| "npm".into());
-        if !requested_specifier_is_range(Some(requested.as_str()), &ecosystem) {
-            if let Some(exact) = exact_version(&requested) {
-                return Some(exact);
-            }
-        }
-    }
-    registry_resolved_target_version(deps, target)
-}
-
-#[allow(dead_code)]
-pub(super) fn bundle_package_index(
-    bundle_response: &SupplyChainBundleResponse,
-) -> Vec<Map<String, Value>> {
-    dict_items(bundle_response.bundle.get("packages"))
-}
-
-#[allow(dead_code)]
-pub(super) fn bundle_package_name_matches(pkg: &Map<String, Value>, name: &str) -> bool {
-    let pkg_name = optional_string_map(pkg, "name").unwrap_or_default();
-    let normalized = pkg_name.trim().to_lowercase();
-    let needle = name.trim().to_lowercase();
-    normalized == needle || pkg_name.eq_ignore_ascii_case(name)
-}
-
-#[allow(dead_code)]
-pub(super) fn bundle_package_from_index(
-    index: &[Map<String, Value>],
-    target: &Map<String, Value>,
-) -> Option<Map<String, Value>> {
-    let eco = optional_string(target.get("ecosystem"))?;
-    let name = optional_string(target.get("package_name"))
-        .or_else(|| optional_string(target.get("name")))?;
-    for pkg in index {
-        if optional_string_map(pkg, "ecosystem").as_deref() != Some(eco.as_str()) {
-            continue;
-        }
-        if bundle_package_name_matches(pkg, &name) {
-            return Some(pkg.clone());
-        }
-    }
-    None
-}
-
-#[allow(dead_code)]
-pub(super) fn bundle_package(
-    bundle_response: &SupplyChainBundleResponse,
-    target: &Map<String, Value>,
-    version: &str,
-) -> Option<Map<String, Value>> {
-    let index = bundle_package_index(bundle_response);
-    let pkg = bundle_package_from_index(&index, target)?;
-    if let Some(pkg_version) = optional_string_map(&pkg, "version") {
-        if !pkg_version.is_empty() && pkg_version != version {
-            return None;
-        }
-    }
-    Some(pkg)
-}
-
-#[allow(dead_code)]
-pub(super) fn bundle_package_label(pkg: &Map<String, Value>) -> String {
-    optional_string_map(pkg, "packageName")
-        .or_else(|| optional_string_map(pkg, "name"))
-        .unwrap_or_else(|| "package".to_string())
-}
-
-#[allow(dead_code)]
-pub(super) fn is_bundle_stale(
-    _deps: &SupplyChainEvalDeps<'_>,
-    bundle_response: &SupplyChainBundleResponse,
-    _now_timestamp: Option<f64>,
-) -> bool {
-    let _ = bundle_response;
-    false
 }
