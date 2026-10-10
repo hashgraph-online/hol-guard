@@ -36,6 +36,22 @@ jobs:
           enable-cache: true
       - run: uv sync --python 3.12 --extra dev --frozen
       - uses: ./.github/actions/stage-command-projections
+      - name: Set up Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key: mdm-local-lab-native
+      # Managed policy keyrings and policy bundle snapshots are decided by the
+      # resident runtime, which fails closed when no binary is bound.
+      - name: Build and bind the native runtime
+        shell: bash
+        run: |
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+          suffix=""
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            suffix=".exe"
+          fi
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime$suffix" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - run: uv run --python 3.12 --no-sync python scripts/mdm/run-local-lab.py --json --output mdm-local-conformance.json ${{ matrix.suites }}
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
