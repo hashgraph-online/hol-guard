@@ -23,6 +23,10 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Stage external contribution trust defaults
+      shell: bash
+      # Compile and package the same conservative defaults as builder CI.
+      run: python scripts/refresh_extension_artifacts.py --trust-only
     - name: Install pinned Rust toolchain
       shell: bash
       env:
