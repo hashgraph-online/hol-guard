@@ -53,8 +53,8 @@ fn damaged_schema_marker_fails_instead_of_authorizing() {
     assert_eq!(state(&fixture, &identity, "review", None), "allowed");
     for (version, checksum) in [
         (11, "checksum".to_owned()),
-        (11, super::super::schema_checksum(10)),
-        (0, super::super::schema_checksum(0)),
+        (11, crate::local_store_read::schema_checksum(10)),
+        (0, crate::local_store_read::schema_checksum(0)),
     ] {
         fixture
             .connection

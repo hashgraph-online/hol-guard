@@ -32,6 +32,7 @@ from .store_local_cli_rows import (
     _row_text,
     _row_values,
     _with_suggestable,
+    local_cli_rules_exist,
 )
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import load_mcp_catalogs, review_catalog_changes, write_mcp_catalog
@@ -227,11 +228,12 @@ class StoreLocalCliMixin:
     def has_local_cli_block_rules(self) -> bool:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            row = connection.execute(
-                "select exists(select 1 from local_cli_grant where state = 'blocked')"
-                " or exists(select 1 from local_cli_command_grant where state = 'block')"
-            ).fetchone()
-        return bool(row and row[0])
+            return local_cli_rules_exist(connection, blocks_only=True)
+
+    def has_local_cli_grant_rules(self) -> bool:
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            return local_cli_rules_exist(connection, blocks_only=False)
 
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:

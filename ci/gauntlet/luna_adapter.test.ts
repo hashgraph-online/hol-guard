@@ -41,7 +41,7 @@ test('completion emits only missing bytes and rejects disagreement with delivere
 });
 
 test('conversation conversion drops system text, keeps call ids and rejects orphan results', () => {
-  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-5.6-luna' });
+  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-6-luna' });
   const converted = convertMessages([
     { role: 'system', content: 'ignored here' },
     { role: 'user', content: 'go' },
@@ -77,7 +77,7 @@ test('requests must select the adapter model, streaming and the configured effor
     expect(() => requireTransportSelection(body, thinking)).not.toThrow();
     const other = thinking === 'medium' ? 'high' : 'medium';
     for (const bad of [{ ...body, reasoning_effort: other }, { ...body, reasoning_effort: undefined },
-      { ...body, model: 'gpt-5.6-luna' }, { ...body, stream: false }, null])
+      { ...body, model: 'gpt-6-luna' }, { ...body, stream: false }, null])
       expect(() => requireTransportSelection(bad, thinking)).toThrow('Unexpected transport selection');
   }
 });
@@ -120,8 +120,8 @@ test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna m
   const { Agent } = await load('@oh-my-pi/pi-agent-core');
   const { discoverAuthStorage, ModelRegistry } = await load('@oh-my-pi/pi-coding-agent');
   const registry = new ModelRegistry(await discoverAuthStorage());
-  const model = registry.find('openai-codex', 'gpt-5.6-luna');
-  expect(model?.id).toBe('gpt-5.6-luna');
+  const model = registry.find('openai-codex', 'gpt-6-luna');
+  expect(model?.id).toBe('gpt-6-luna');
   const seen: unknown[] = [];
   for (const thinkingLevel of THINKING_LEVELS) {
     const agent = new Agent({ initialState: { model, thinkingLevel, systemPrompt: '', tools: [], messages: [] },
@@ -134,7 +134,7 @@ test.skipIf(!process.env.GUARD_GAUNTLET_SDK_ROOT)('pinned SDK exposes the Luna m
 });
 
 test('a conversation must end with a user or tool message', () => {
-  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-5.6-luna' });
+  setModel({ api: 'openai-codex-responses', provider: 'openai-codex', id: 'gpt-6-luna' });
   expect(() => requirePromptable(convertMessages([{ role: 'system', content: 's' }]))).toThrow();
   expect(() => requirePromptable(convertMessages([{ role: 'user', content: 'u' },
     { role: 'assistant', content: 'a' }]))).toThrow();

@@ -74,6 +74,7 @@ def _resident_request(
     timeout_seconds: float,
     required_feature: str,
     response_schema: str | None = None,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops."""
     status = native_runtime_status()
@@ -92,7 +93,7 @@ def _resident_request(
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
         return None
-    if len(payload) > _MAX_REQUEST_BYTES:
+    if len(payload) > max_request_bytes:
         return None
     environment = _isolated_environment()
     response = native_resident_client_request(
@@ -130,7 +131,12 @@ def _resident_request(
         # ("opened") / recv ("event") / close ("closed") and forced a silent
         # Python fallback the resident should own.
         accepted = _MCP_SESSION_ACCEPTED_STATUS.get(operation)
-        if operation in {"policy_decision_lookup", "local_cli_grant_decide"}:
+        if operation in {
+            "policy_decision_lookup",
+            "local_cli_grant_decide",
+            "local_mcp_grant_decide",
+            "approval_proof_decide",
+        }:
             accepted = frozenset({"ok", "error"})
         if accepted is not None:
             if decoded.get("status") not in accepted:
