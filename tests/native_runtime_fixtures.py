@@ -80,11 +80,13 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
         previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
         previous_test_mode = os.environ.get("HOL_GUARD_TEST_MODE")
         previous_diagnostic = os.environ.get("HOL_GUARD_NATIVE_DIAGNOSTIC")
+        previous_seams = os.environ.get("HOL_GUARD_RESIDENT_TEST_SEAMS")
         os.environ["HOL_GUARD_NATIVE"] = "force"
         os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
         # The resident pool captures its environment when the prewarm starts.
         os.environ["HOL_GUARD_TEST_MODE"] = "1"
         os.environ["HOL_GUARD_NATIVE_DIAGNOSTIC"] = "1"
+        os.environ["HOL_GUARD_RESIDENT_TEST_SEAMS"] = "1"
         try:
             native_context.native_context_digest(
                 "launch_argv_digest",
@@ -108,6 +110,10 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
                 os.environ.pop("HOL_GUARD_NATIVE_DIAGNOSTIC", None)
             else:
                 os.environ["HOL_GUARD_NATIVE_DIAGNOSTIC"] = previous_diagnostic
+            if previous_seams is None:
+                os.environ.pop("HOL_GUARD_RESIDENT_TEST_SEAMS", None)
+            else:
+                os.environ["HOL_GUARD_RESIDENT_TEST_SEAMS"] = previous_seams
     yield guard_home
     close_native_residents(guard_home)
 

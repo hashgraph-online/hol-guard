@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import native_supply_chain_eval as native_supply_chain_eval_module
 from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -37,7 +38,6 @@ from codex_plugin_scanner.guard.package_shim_gate import (
 from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1651,10 +1651,12 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(
     assert result.stdout.strip() == "fake-manager-stdout"
 
 
-def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_local_approval(
+@pytest.mark.parametrize("as_json", [True, False])
+def test_guard_protect_terminal_cloud_auth_error_offers_reconnect_not_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
+    as_json: bool,
 ) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -1687,7 +1689,7 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
                 str(home_dir),
                 "--workspace",
                 str(workspace_dir),
-                "--json",
+                *(["--json"] if as_json else []),
                 "--dry-run",
                 "npm",
                 "install",
@@ -1697,15 +1699,22 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
     finally:
         _stop_cloud_eval_server(server, thread)
 
-    payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr().out
     store = GuardStore(home_dir)
     stored_receipt = store.list_receipts(limit=1)[0]
 
     assert rc == 2
-    assert payload["verdict"]["action"] == "block"
-    assert "approval_center_url" not in payload
-    assert "primary_approval_request_id" not in payload
-    assert payload["receipt"]["approval_request_id"] is None
+    if as_json:
+        payload = json.loads(output)
+        assert payload["verdict"]["action"] == "block"
+        assert "approval_center_url" not in payload
+        assert "primary_approval_request_id" not in payload
+        assert payload["receipt"]["approval_request_id"] is None
+    else:
+        assert "Run hol-guard connect" in output
+        assert "needs review" not in output
+        assert "approve or keep this blocked" not in output
+        assert "http://127.0.0.1:5474/requests/" not in output
     assert stored_receipt["approval_request_id"] is None
     assert store.list_approval_requests(limit=None) == []
 
@@ -1725,9 +1734,9 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
     )
     try:
         monkeypatch.setattr(
-            package_services,
-            "_registry_resolved_target_version",
-            lambda **_kwargs: "1.2.3",
+            native_supply_chain_eval_module,
+            "_test_registry_metadata_override",
+            {"https://registry.npmjs.org/%40openai%2Fcodex": {"versions": {"1.2.3": {}}}},
         )
         _seed_bundle_cache_only(
             home_dir=home_dir,
