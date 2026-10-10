@@ -182,9 +182,9 @@ class _PersistentNativeClientPool:
         client = self._lease(deadline_monotonic=deadline_monotonic)
         if client is None:
             return None
-        _record_resident_request()
         response: bytes | None = None
         try:
+            _record_resident_request()
             response = client.request(payload, deadline_monotonic=deadline_monotonic)
             return response
         finally:

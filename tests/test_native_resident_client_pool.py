@@ -438,6 +438,39 @@ def test_pool_registry_cleanup_is_scoped_and_closes_idle_clients(
     assert closed == [pool_a, pool_b]
 
 
+def test_failed_request_log_releases_the_leased_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clients: list[object] = []
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.closed = False
+            clients.append(self)
+
+        def request(self, _payload: bytes, *, deadline_monotonic: float) -> bytes:
+            return b'{"schema":"ok"}'
+
+        def close(self, *, deadline_monotonic: float) -> bool:
+            self.closed = True
+            return True
+
+    monkeypatch.setattr(client_module, "_PersistentNativeClient", Client)
+    monkeypatch.setattr(client_module, "_MAX_PERSISTENT_CLIENTS", 1)
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_bytes(b"x")
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(blocker / "resident-requests.log"))
+    pool = _pool(tmp_path)
+    with pytest.raises(OSError):
+        pool.request(b"counted", deadline_monotonic=time.monotonic() + 1)
+    leased = clients[0]
+    assert leased.closed is True  # type: ignore[attr-defined]
+    assert leased not in pool._clients  # pyright: ignore[reportPrivateUsage]
+    log_path = tmp_path / "resident-requests.log"
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
+    assert pool.request(b"next", deadline_monotonic=time.monotonic() + 1) == b'{"schema":"ok"}'
+    assert log_path.read_bytes() == b"1\n"
+    assert len(pool._clients) == 1  # pyright: ignore[reportPrivateUsage]
+
+
 def test_missing_runtime_directory_is_not_pinned_by_resolve(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

@@ -26,9 +26,10 @@ def _round_trips(monkeypatch: pytest.MonkeyPatch, root: Path, requests: int) -> 
     monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
     result = run_workload(_pi_workload(requests), root=root)
     assert result.requests == requests
-    if not log_path.is_file():
-        return 0
-    return len(log_path.read_bytes().splitlines())
+    assert log_path.is_file(), "no resident request was recorded"
+    recorded = len(log_path.read_bytes().splitlines())
+    assert recorded > 0
+    return recorded
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -41,6 +42,7 @@ def test_pi_post_tool_hook_resident_round_trips_per_request_are_bounded(
     small_root.mkdir()
     large_root.mkdir()
     small = _round_trips(monkeypatch, small_root, 24)
+    assert small > 0
     large = _round_trips(monkeypatch, large_root, 48)
     # The difference isolates per-request cost from daemon start-up traffic.
     assert (large - small) <= 24 * _RESIDENT_ROUND_TRIPS_PER_PI_HOOK, (small, large)
