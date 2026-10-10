@@ -47,3 +47,29 @@ fn python_whitespace_helpers_match_str_semantics() {
     assert_eq!(py_splitlines("a\r\nb\u{2028}c\n"), ["a", "b", "c"]);
     assert_eq!(py_splitlines(""), Vec::<&str>::new());
 }
+
+#[test]
+fn regex_whitespace_matches_python_separators() {
+    assert_eq!(
+        py_whitespace_pattern(r"a\sb\S"),
+        r"a[\s\x1c-\x1f]b[^\s\x1c-\x1f]"
+    );
+    assert_eq!(py_whitespace_pattern(r"[\s;&|]\\s"), r"[\s\x1c-\x1f;&|]\\s");
+    assert_eq!(py_whitespace_pattern(r"\[\s\]"), r"\[[\s\x1c-\x1f]\]");
+    // Python `re` treats U+001C..U+001F as `\s`; so must every ported pattern.
+    for separator in ['\u{1c}', '\u{1d}', '\u{1e}', '\u{1f}'] {
+        // A mutating option after a Python-only separator must still be seen,
+        // or the fetch would be classified read-only where Python never did.
+        for command in [
+            format!("curl https://x.com{separator}--data{separator}x"),
+            format!("curl https://x.com{separator}-X{separator}POST"),
+            format!("curl https://x.com{separator}-o{separator}out"),
+        ] {
+            assert_eq!(classify_read_only_http_fetch(&command), None, "{command:?}");
+        }
+        assert_eq!(
+            classify_read_only_http_fetch(&format!("x{separator}curl https://x.com")),
+            Some("curl")
+        );
+    }
+}

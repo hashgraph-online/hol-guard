@@ -302,3 +302,78 @@ def test_client_exceptions_become_typed_errors(monkeypatch: pytest.MonkeyPatch) 
         monkeypatch.setattr(module, "native_resident_client_request", client)
         with pytest.raises(NativeFalsePositiveRulesError, match="resident_unavailable"):
             _signals()
+
+
+def _reply_with(monkeypatch: pytest.MonkeyPatch, payload_signals: object) -> None:
+    def client(**kwargs: object) -> bytes:
+        request = json.loads(kwargs["payload"])["request"]  # type: ignore[arg-type]
+        return json.dumps(
+            {
+                "schema": module._RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": module._canonical_request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+                "payload": {"signals": payload_signals},
+            }
+        ).encode()
+
+    monkeypatch.setattr(module, "native_resident_client_request", client)
+
+
+def test_malformed_signal_records_a_failure_not_a_healthy_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    _force_available(monkeypatch)
+    recorded: list[str] = []
+    monkeypatch.setattr(module, "native_record_resident_failure", lambda *_a, **k: recorded.append(k["reason"]))
+    monkeypatch.setattr(module, "native_record_resident_success", lambda *_a, **_k: recorded.append("success"))
+    foreign = {"signal_id": "x", "category": "secret", "detector": "other"}
+    for bad in ([{"signal_id": "fp:source-search:rg"}], [foreign]):
+        _reply_with(monkeypatch, bad)
+        with pytest.raises(NativeFalsePositiveRulesError, match="result_invalid"):
+            _signals()
+    assert recorded == [module._INVALID_RESULT, module._INVALID_RESULT]
+
+
+def test_deadline_is_bounded_and_shared_with_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    _force_available(monkeypatch)
+    seen: list[tuple[int, float]] = []
+    clock = 1_000.0
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock)
+
+    def client(**kwargs: object) -> None:
+        budget = json.loads(kwargs["payload"])["deadline_budget_ms"]  # type: ignore[arg-type]
+        seen.append((budget, kwargs["deadline_monotonic"] - clock))  # type: ignore[operator]
+
+    monkeypatch.setattr(module, "native_resident_client_request", client)
+    monkeypatch.setattr(module, "native_resident_client_ready", lambda *_a: True)
+    for requested, expected_ms in ((None, 500), (0.05, 500), (2.0, 2_000), (60.0, 9_000)):
+        with pytest.raises(NativeFalsePositiveRulesError):
+            _signals(timeout_seconds=requested)
+        assert seen[-1] == (expected_ms, expected_ms / 1_000)
+    monkeypatch.setattr(module, "native_resident_client_ready", lambda *_a: False)
+    with pytest.raises(NativeFalsePositiveRulesError):
+        _signals()
+    assert seen[-1][0] == int((module._TIMEOUT_SECONDS + module._COLD_START_ALLOWANCE_SECONDS) * 1_000)
+
+
+def test_detector_asks_the_configured_guard_home_within_its_budget(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen: list[dict[str, object]] = []
+
+    def record(**kwargs: object) -> list[dict[str, object]]:
+        seen.append(kwargs)
+        return []
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.runtime.detectors.native_false_positive_signals", record)
+    home = tmp_path / "custom-home"
+    context = DetectorContext(
+        config=GuardConfig(guard_home=home, workspace=tmp_path / "workspace", runtime_detector_timeout_ms=1_500),
+        workspace=tmp_path / "workspace",
+        prior_decisions={},
+        threat_intel={},
+        redaction_settings={},
+    )
+    FalsePositiveSuppressorDetector().detect(_action("shell_command", "rg foo src/", []), context)
+    assert seen[0]["guard_home"] == home
+    assert seen[0]["timeout_seconds"] == 1.5

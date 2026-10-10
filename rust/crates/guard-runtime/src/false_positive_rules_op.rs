@@ -25,11 +25,28 @@ const ERR_SCHEMA: &str = "native_false_positive_rules_schema_mismatch";
 const ERR_TOO_LARGE: &str = "native_false_positive_rules_request_too_large";
 
 /// Digest of the canonical request, matching Python `_canonical_request_sha256`.
+///
+/// The size bound is applied before and during encoding so a request the
+/// resident will reject is never copied or escaped in full.
 fn request_digest(request: &FalsePositiveRulesRequestV1) -> Result<String, &'static str> {
+    // The ASCII-escaped canonical form is never shorter than the UTF-8 text it
+    // encodes, so the raw component bytes are a lower bound on its size.
+    let component_bytes = request.command.as_ref().map_or(0, String::len)
+        + request.target_paths.iter().map(String::len).sum::<usize>();
+    if component_bytes > FALSE_POSITIVE_RULES_MAX_BYTES {
+        return Err(ERR_TOO_LARGE);
+    }
     let material = serde_json::to_value(request).map_err(|_| ERR_INVALID)?;
     let mut canonical = Vec::with_capacity(512);
-    write_canonical_json_with_limit(&material, &mut canonical, usize::MAX)
-        .map_err(|_| ERR_INVALID)?;
+    if write_canonical_json_with_limit(&material, &mut canonical, FALSE_POSITIVE_RULES_MAX_BYTES)
+        .is_err()
+    {
+        return Err(if canonical.len() > FALSE_POSITIVE_RULES_MAX_BYTES {
+            ERR_TOO_LARGE
+        } else {
+            ERR_INVALID
+        });
+    }
     if canonical.len() > FALSE_POSITIVE_RULES_MAX_BYTES {
         return Err(ERR_TOO_LARGE);
     }

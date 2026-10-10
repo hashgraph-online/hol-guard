@@ -20,31 +20,52 @@ from pathlib import Path
 from typing import Any
 
 from .native_context import (
+    _COLD_START_ALLOWANCE_SECONDS,
     _canonical_request_sha256,
     _native_error,
     _native_runtime_status_memo,
     _resolve_digest_home,
     ensure_resident_prerequisite,
 )
-from .native_resident_client import native_resident_client_request
+from .native_resident_client import native_resident_client_ready, native_resident_client_request
 from .native_runtime import _isolated_environment
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,
     native_record_resident_success,
 )
+from .runtime.signals import RiskSignalV2
 
 _FEATURE = "false-positive-rules-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _REQUEST_SCHEMA = "guard-false-positive-rules-request.v1"
 _RESULT_SCHEMA = "guard-false-positive-rules-result.v1"
 _MAX_REQUEST_BYTES = 256 * 1024
-_TIMEOUT_SECONDS = 5.0
+# Steady-state round-trip budget for this advisory call. It is deliberately
+# small: the signals only annotate a decision, so a slow resident must degrade
+# to "no signals" rather than hold up the detector registry. A resident that
+# still has to be spawned gets the same one-off allowance the context digest
+# grants, so a cold start is not recorded as a resident failure.
+_TIMEOUT_SECONDS = 0.5
+_MAX_DEADLINE_BUDGET_MS = 9_000
 _INVALID_RESULT = "native_false_positive_rules_result_invalid"
+DETECTOR_ID = "false_positive.suppressor"
 
 
 class NativeFalsePositiveRulesError(ValueError):
     """The native owner could not supply bound, typed false-positive signals."""
+
+
+def validate_false_positive_signals(payloads: Sequence[dict[str, object]]) -> tuple[RiskSignalV2, ...]:
+    """Parse resident signals, rejecting malformed ones and ones this owner does not emit."""
+
+    try:
+        signals = tuple(RiskSignalV2.from_dict(payload) for payload in payloads)
+    except ValueError as error:
+        raise NativeFalsePositiveRulesError(_INVALID_RESULT) from error
+    if any(signal.category != "false_positive" or signal.detector != DETECTOR_ID for signal in signals):
+        raise NativeFalsePositiveRulesError(_INVALID_RESULT)
+    return signals
 
 
 def native_false_positive_signals(
@@ -53,8 +74,14 @@ def native_false_positive_signals(
     command: str | None,
     target_paths: Sequence[str],
     guard_home: Path | None = None,
+    timeout_seconds: float | None = None,
 ) -> list[dict[str, object]]:
-    """Return the resident's ``RiskSignalV2`` dicts for the action, in emission order."""
+    """Return the resident's ``RiskSignalV2`` dicts for the action, in emission order.
+
+    ``timeout_seconds`` is the caller's budget; it never drops below the
+    steady-state floor, and the resident is told the same deadline the client
+    enforces, so neither side waits past it.
+    """
 
     guard_home = _resolve_digest_home(guard_home)
     request: dict[str, Any] = {
@@ -89,8 +116,12 @@ def native_false_positive_signals(
         canonical_size = len(
             json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
         )
+        budget_seconds = max(_TIMEOUT_SECONDS, timeout_seconds or 0.0)
+        if not native_resident_client_ready(status.identity.path, guard_home):
+            budget_seconds += _COLD_START_ALLOWANCE_SECONDS
+        deadline_budget_ms = max(1, min(_MAX_DEADLINE_BUDGET_MS, int(budget_seconds * 1_000)))
         envelope = json.dumps(
-            {"operation": "false_positive_rules", "deadline_budget_ms": 5_000, "request": request},
+            {"operation": "false_positive_rules", "deadline_budget_ms": deadline_budget_ms, "request": request},
             separators=(",", ":"),
             ensure_ascii=False,
             allow_nan=False,
@@ -105,7 +136,7 @@ def native_false_positive_signals(
             guard_home=guard_home,
             environment=_isolated_environment(),
             payload=envelope,
-            deadline_monotonic=time.monotonic() + _TIMEOUT_SECONDS,
+            deadline_monotonic=time.monotonic() + deadline_budget_ms / 1_000,
         )
     except Exception:
         # RuntimeError (thread start), OSError, timeouts: all one typed failure.
@@ -145,5 +176,10 @@ def native_false_positive_signals(
     if not isinstance(signals, list) or not all(isinstance(signal, dict) for signal in signals):
         native_record_resident_failure(status.identity.sha256, guard_home, reason=_INVALID_RESULT)
         raise NativeFalsePositiveRulesError(_INVALID_RESULT)
+    try:
+        validate_false_positive_signals(signals)
+    except NativeFalsePositiveRulesError:
+        native_record_resident_failure(status.identity.sha256, guard_home, reason=_INVALID_RESULT)
+        raise
     native_record_resident_success(status.identity.sha256, guard_home)
     return signals

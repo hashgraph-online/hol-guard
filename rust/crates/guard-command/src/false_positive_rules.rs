@@ -67,6 +67,63 @@ fn py_splitlines(text: &str) -> Vec<&str> {
     lines
 }
 
+/// Rewrite `\s` / `\S` so a pattern matches Python `re`'s Unicode whitespace.
+///
+/// Python's `\s` is `str.isspace`, which includes U+001C..U+001F; Rust's `\s`
+/// (Unicode White_Space) does not. Every ported pattern is compiled through
+/// this so a separator Python treats as whitespace is one here too, whether
+/// the pattern withholds or grants a signal. `\S` is only rewritten outside a
+/// character class (none of the ported patterns use it inside one).
+fn py_whitespace_pattern(pattern: &str) -> String {
+    const EXTRA: &str = r"\x1c-\x1f";
+    let mut out = String::with_capacity(pattern.len() + 16);
+    let mut in_class = false;
+    let mut chars = pattern.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' => match chars.next() {
+                Some('s') if in_class => {
+                    out.push_str(r"\s");
+                    out.push_str(EXTRA);
+                }
+                Some('s') => {
+                    out.push_str(r"[\s");
+                    out.push_str(EXTRA);
+                    out.push(']');
+                }
+                Some('S') if !in_class => {
+                    out.push_str(r"[^\s");
+                    out.push_str(EXTRA);
+                    out.push(']');
+                }
+                Some(next) => {
+                    out.push('\\');
+                    out.push(next);
+                }
+                None => out.push('\\'),
+            },
+            '[' => {
+                in_class = true;
+                out.push(c);
+            }
+            ']' => {
+                in_class = false;
+                out.push(c);
+            }
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn py_regex(pattern: &str) -> Result<Regex, regex::Error> {
+    Regex::new(&py_whitespace_pattern(pattern))
+}
+
+fn py_fancy_regex(pattern: &str) -> Result<FancyRegex, fancy_regex::Error> {
+    FancyRegex::new(&py_whitespace_pattern(pattern))
+}
+
 const SOURCE_SEARCH_TOOLS: &[&str] = &[
     "rg", "ripgrep", "grep", "egrep", "fgrep", "fd", "find", "ls",
 ];
@@ -136,71 +193,71 @@ const FD_OPTION_VALUE_FLAGS: &[&str] = &[
 
 #[allow(clippy::invalid_regex)]
 static SECRET_FILE_NAMES: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(
+    py_fancy_regex(
         r"(?i)(?<![A-Za-z0-9_.-])(?:\.env(?:\.[A-Za-z0-9_-]+)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|credentials|wallet\.key|private[_-]?key\.pem|terraform\.tfvars)(?![A-Za-z0-9_.-])",
     )
     .expect("SECRET_FILE_NAMES")
 });
 
 static PIPE_TO_EXFIL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)[|;]\s*(?:curl|wget|nc|ncat|netcat|scp|rsync|aws\s+s3|gsutil|gcloud)\b")
+    py_regex(r"(?i)[|;]\s*(?:curl|wget|nc|ncat|netcat|scp|rsync|aws\s+s3|gsutil|gcloud)\b")
         .expect("PIPE_TO_EXFIL")
 });
 
 static FIND_MUTATING_FLAGS: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)(?:^|[\s])-(?:delete|exec\s+rm|exec\s+unlink|exec\s+shred|execdir\s+rm)\b|(?:^|[\s])-exec\s+\S+[^\r\n;&|]{0,100}\{.*\}\s*(?:\\;|;|\+)",
     )
     .expect("FIND_MUTATING_FLAGS")
 });
 
 static OUTPUT_REDIRECT_TO_EXFIL: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)>\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)").expect("OUTPUT_REDIRECT_TO_EXFIL")
+    py_regex(r"(?i)>\s*(?:/proc/\S+|/dev/tcp/|/dev/udp/)").expect("OUTPUT_REDIRECT_TO_EXFIL")
 });
 
 #[allow(clippy::invalid_regex)]
 static SHELL_CHAINING_PATTERN: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(r"&&|\|\||(?<!<);|(?:^|[\s])&(?![&|])(?:[\s]|$)")
+    py_fancy_regex(r"&&|\|\||(?<!<);|(?:^|[\s])&(?![&|])(?:[\s]|$)")
         .expect("SHELL_CHAINING_PATTERN")
 });
 
 #[allow(clippy::invalid_regex)]
 static OUTPUT_REDIRECT_TO_LOCAL_FILE: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(r"(?i)(?:^|[\s;&|])(?:\d+)?>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+")
+    py_fancy_regex(r"(?i)(?:^|[\s;&|])(?:\d+)?>>?\s*(?!&?\d\b|/dev/null(?:\s|$))\S+")
         .expect("OUTPUT_REDIRECT_TO_LOCAL_FILE")
 });
 
 static CLIPBOARD_PIPE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)[|;]\s*(?:pbcopy|xclip|xsel|wl-copy|clip)\b").expect("CLIPBOARD_PIPE")
+    py_regex(r"(?i)[|;]\s*(?:pbcopy|xclip|xsel|wl-copy|clip)\b").expect("CLIPBOARD_PIPE")
 });
 
 static LOCALHOST_HEALTH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r#"(?i)(?:^|[\s;&|])(?:curl|wget|fetch|http\.get|requests\.get)\b[^\r\n;&|]{0,80}(?:localhost|127\.0\.0\.1|::1|\[::1\]|0\.0\.0\.0)(?::\d{1,5})?(?:/(?:healthz?|readiness|ready|liveness|live|ping|status|metrics|info|version))?(?:\s|$|[;&|'\"])"#,
     )
     .expect("LOCALHOST_HEALTH_PATTERN")
 });
 
 static CURL_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|[\s;&|])(?P<tool>curl|curl\.exe)\b[^\r\n;&|]*https?://")
+    py_regex(r"(?i)(?:^|[\s;&|])(?P<tool>curl|curl\.exe)\b[^\r\n;&|]*https?://")
         .expect("CURL_READ_ONLY_HTTP_FETCH_PATTERN")
 });
 
 #[allow(clippy::invalid_regex)]
 static WGET_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(
+    py_fancy_regex(
         r"(?i)(?:^|[\s;&|])(?P<tool>wget)\b(?=[^\r\n;&|]*(?<!\S)--spider\b)[^\r\n;&|]*https?://",
     )
     .expect("WGET_READ_ONLY_HTTP_FETCH_PATTERN")
 });
 
 static NODE_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|[\s;&|])(?P<tool>node)\b(?s:.*?)(?:\bfetch\s*\(|\bhttps?\.get\s*\()")
+    py_regex(r"(?i)(?:^|[\s;&|])(?P<tool>node)\b(?s:.*?)(?:\bfetch\s*\(|\bhttps?\.get\s*\()")
         .expect("NODE_READ_ONLY_HTTP_FETCH_PATTERN")
 });
 
 static PYTHON_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)(?:^|[\s;&|])(?P<tool>python|python3)\b(?s:.*?)(?:\brequests\.get\s*\(|\burllib\.request\.urlopen\s*\()",
     )
     .expect("PYTHON_READ_ONLY_HTTP_FETCH_PATTERN")
@@ -226,14 +283,14 @@ fn read_only_http_fetch_tool(command: &str) -> Option<String> {
 }
 
 static MUTATING_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r#"(?i)\b(?:POST|PUT|PATCH|DELETE)\b|\bmethod\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]|(?:^|[\s;&|])(?:--request|-X)\s*(?:POST|PUT|PATCH|DELETE)\b|(?:^|[\s;&|])(?:--data(?:-binary|-raw|-urlencode)?(?:[=\s]|$)|-d(?:\S|\s|$)|--form(?:[=\s]|$)|-F(?:\S|\s|$)|--json(?:[=\s]|$)|--upload-file(?:[=\s]|$)|-T(?:\S|\s|$)|--header(?:[=\s]|$)|-H(?:\S|\s|$)|--config(?:[=\s]|$)|-K(?:\S|\s|$)|--cookie(?:[=\s]|$)|-b(?:\S|\s|$))|\b(?:body|data)\s*:"#,
     )
     .expect("MUTATING_HTTP_FETCH_PATTERN")
 });
 
 static HTTP_FETCH_FILE_WRITE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)(?:^|[\s;&|])(?:--output(?:[=\s]|$)|-o(?:\S|\s|$)|--remote-name(?:[=\s]|$)|-[A-Za-z]*O[A-Za-z]*|--output-document(?:[=\s]|$)|--remote-header-name(?:[=\s]|$)|--dump-header(?:[=\s]|$)|-D(?:\S|\s|$)|--trace(?:-ascii|-ids|-time)?(?:[=\s]|$)|--stderr(?:[=\s]|$)|--cookie-jar(?:[=\s]|$)|-c(?:\S|\s|$))",
     )
     .expect("HTTP_FETCH_FILE_WRITE_PATTERN")
@@ -256,35 +313,35 @@ const CURL_LONG_AUTH_FLAGS: &[&str] = &[
 ];
 
 static LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)\b(?:readFileSync|open|createReadStream)\s*\(|\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:read_text|read_bytes|open)\s*\(|\bcat\s+",
     )
     .expect("LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN")
 });
 
 static LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)\b(?:writeFileSync|appendFileSync|createWriteStream)\s*\(|\bPath\s*\([^)]{0,240}\)\s*\.\s*(?:write_text|write_bytes)\s*\(",
     )
     .expect("LOCAL_FILE_WRITE_IN_HTTP_SCRIPT_PATTERN")
 });
 
 static PROCESS_EXECUTION_IN_HTTP_SCRIPT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r#"(?i)\b(?:require\s*\(\s*['\"]child_process['\"]\s*\)\s*\.\s*(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnSync)|child_process\s*\.\s*(?:exec|execFile|execFileSync|execSync|fork|spawn|spawnSync)|subprocess\s*\.\s*(?:run|Popen|call|check_call|check_output)|os\.system)\s*\("#,
     )
     .expect("PROCESS_EXECUTION_IN_HTTP_SCRIPT_PATTERN")
 });
 
 static PIPE_TO_LOCAL_FILE_WRITE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)[|;]\s*(?:tee|dd)\b").expect("PIPE_TO_LOCAL_FILE_WRITE_PATTERN")
+    py_regex(r"(?i)[|;]\s*(?:tee|dd)\b").expect("PIPE_TO_LOCAL_FILE_WRITE_PATTERN")
 });
 
 static PIPE_SEGMENT_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?:\|&?|;)\s*([^\r\n;&|]+)").expect("PIPE_SEGMENT_PATTERN"));
+    LazyLock::new(|| py_regex(r"(?:\|&?|;)\s*([^\r\n;&|]+)").expect("PIPE_SEGMENT_PATTERN"));
 
 static ENV_ASSIGNMENT_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*=").expect("ENV_ASSIGNMENT_PATTERN"));
+    LazyLock::new(|| py_regex(r"^[A-Za-z_][A-Za-z0-9_]*=").expect("ENV_ASSIGNMENT_PATTERN"));
 
 const EXECUTION_TOOLS: &[&str] = &[
     ".",
@@ -324,13 +381,13 @@ const SUDO_ARG_LONG_FLAGS: &[&str] = &[
 ];
 
 static FAKE_CREDENTIAL_PATTERN_A: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)(?:your[_-]?api[_-]?key|example[_-]?token|fake[_-]?(?:secret|token|key|credential)|placeholder|<[A-Z_]{2,}(?:[_-][A-Z]+)*>|x{4,}|\b1234(?:5678)?\b|test[_-]?token|dummy[_-]?(?:key|secret|token)|replace[_-]?me|insert[_-]?(?:your|token)|changeme|secret123|password123|\babc123\b|my[_-]?(?:secret|key|token|api[_-]?key)|sample[_-]?(?:key|token|credential))",
     )
     .expect("FAKE_CREDENTIAL_PATTERN_A")
 });
 static FAKE_CREDENTIAL_PATTERN_B: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)\b(?:todo|fixme|hack|stub|mock|fake|demo|sample|example)\b.*?(?:key|token|secret|credential)",
     )
     .expect("FAKE_CREDENTIAL_PATTERN_B")
@@ -340,7 +397,7 @@ fn fake_credential_patterns() -> [&'static Regex; 2] {
 }
 
 static DOCS_EXAMPLE_CONTEXT: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+    py_regex(
         r"(?i)(?:README|CHANGELOG|CONTRIBUTING|SECURITY|LICENSE|NOTICE|\.md|\.rst|\.txt|\.adoc)|(?:example|demo|tutorial|sample|docs?/|documentation/|spec/|test/fixtures?/)",
     )
     .expect("DOCS_EXAMPLE_CONTEXT")
@@ -348,7 +405,7 @@ static DOCS_EXAMPLE_CONTEXT: LazyLock<Regex> = LazyLock::new(|| {
 
 #[allow(clippy::invalid_regex)]
 static VERSION_FILE_NAMES: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(
+    py_fancy_regex(
         r"(?i)(?<![A-Za-z0-9_.-])(?:\.nvmrc|\.node-version|\.python-version|\.ruby-version|\.tool-versions|\.java-version)(?![A-Za-z0-9_.-])",
     )
     .expect("VERSION_FILE_NAMES")
@@ -356,19 +413,19 @@ static VERSION_FILE_NAMES: LazyLock<FancyRegex> = LazyLock::new(|| {
 
 #[allow(clippy::invalid_regex)]
 static PACKAGE_METADATA_FILES: LazyLock<FancyRegex> = LazyLock::new(|| {
-    FancyRegex::new(
+    py_fancy_regex(
         r"(?i)(?<![A-Za-z0-9_.-])(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|setup\.py|setup\.cfg|pyproject\.toml|Pipfile(?:\.lock)?|go\.(?:mod|sum)|Cargo\.(?:toml|lock)|composer\.json|Gemfile(?:\.lock)?)(?![A-Za-z0-9_.-])",
     )
     .expect("PACKAGE_METADATA_FILES")
 });
 
 static HEREDOC_SCRIPT_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^\s*(?:node|python|python3)\b[^\r\n]*<<").expect("HEREDOC_SCRIPT_PATTERN")
+    py_regex(r"^\s*(?:node|python|python3)\b[^\r\n]*<<").expect("HEREDOC_SCRIPT_PATTERN")
 });
 static NEWLINE_COMMAND_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\n\s*\S+").expect("NEWLINE_COMMAND_PATTERN"));
+    LazyLock::new(|| py_regex(r"\n\s*\S+").expect("NEWLINE_COMMAND_PATTERN"));
 static HEREDOC_DELIMITER_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?"#).expect("HEREDOC_DELIMITER_PATTERN")
+    py_regex(r#"<<-?\s*['\"]?([A-Za-z_][A-Za-z0-9_]*)['\"]?"#).expect("HEREDOC_DELIMITER_PATTERN")
 });
 
 /// `SourceSearchClassification` (:487-494).

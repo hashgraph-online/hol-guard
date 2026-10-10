@@ -133,6 +133,25 @@ fn oversized_request_is_a_typed_error_with_no_digest() {
 }
 
 #[test]
+fn size_bound_covers_every_component_and_the_escaped_form() {
+    // Many paths, each under the bound, that together exceed it.
+    let path = "p".repeat(FALSE_POSITIVE_RULES_MAX_BYTES / 4 + 1);
+    let paths = [path.as_str(); 5];
+    let result = run(&request("file_read", None, &paths));
+    assert_eq!(result.code, "native_false_positive_rules_request_too_large");
+    assert!(result.request_sha256.is_empty());
+
+    // Within the UTF-8 bound, but the ASCII-escaped canonical form is over it.
+    let emoji = "\u{1f600}".repeat(FALSE_POSITIVE_RULES_MAX_BYTES / 8);
+    assert!(emoji.len() < FALSE_POSITIVE_RULES_MAX_BYTES);
+    let result = run(&request("shell_command", Some(&emoji), &[]));
+    assert_eq!(result.code, "native_false_positive_rules_request_too_large");
+
+    // A request comfortably inside the bound is still digested.
+    assert!(request_digest(&request("shell_command", Some("ls"), &[])).is_ok());
+}
+
+#[test]
 fn result_binds_to_the_request_digest() {
     let request = request("shell_command", Some("ls"), &[]);
     let result = run(&request);

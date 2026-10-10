@@ -11,8 +11,11 @@ from typing import Literal, Protocol
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.native_false_positive_rules import (
-    NativeFalsePositiveRulesError,
+    DETECTOR_ID as FALSE_POSITIVE_DETECTOR_ID,
+)
+from codex_plugin_scanner.guard.native_false_positive_rules import (
     native_false_positive_signals,
+    validate_false_positive_signals,
 )
 from codex_plugin_scanner.guard.native_prompt import NativePromptAnalysisError
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
@@ -366,7 +369,7 @@ class FalsePositiveSuppressorDetector:
     policy composition rules and operators can use to reduce unnecessary blocks.
     """
 
-    detector_id = "false_positive.suppressor"
+    detector_id = FALSE_POSITIVE_DETECTOR_ID
     categories: tuple[RiskSignalCategory, ...] = ("false_positive",)
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
@@ -375,7 +378,6 @@ class FalsePositiveSuppressorDetector:
         The registry records a raised error as a detector failure with no
         signals, so an unavailable resident never suppresses anything.
         """
-        del context
         has_command = action.action_type == "shell_command" and action.command is not None
         has_paths = action.action_type == "file_read" and bool(action.target_paths)
         if not has_command and not has_paths:
@@ -384,14 +386,10 @@ class FalsePositiveSuppressorDetector:
             action_type=action.action_type,
             command=action.command if has_command else None,
             target_paths=action.target_paths if has_paths else (),
+            guard_home=context.config.guard_home,
+            timeout_seconds=context.config.runtime_detector_timeout_ms / 1_000,
         )
-        try:
-            signals = tuple(RiskSignalV2.from_dict(payload) for payload in payloads)
-        except ValueError as error:
-            raise NativeFalsePositiveRulesError("native_false_positive_rules_result_invalid") from error
-        if any(signal.category != "false_positive" or signal.detector != self.detector_id for signal in signals):
-            raise NativeFalsePositiveRulesError("native_false_positive_rules_result_invalid")
-        return signals
+        return validate_false_positive_signals(payloads)
 
 
 class PersistenceDetector:
