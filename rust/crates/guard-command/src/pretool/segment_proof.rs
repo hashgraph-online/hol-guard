@@ -85,6 +85,7 @@ pub(super) fn exact_safe_cwd_compound(
                     | "pgrep"
                     | "ls"
                     | "cat"
+                    | "base64"
                     | "stat"
                     | "test"
                     | "find"
@@ -194,6 +195,7 @@ pub(crate) fn benign_command_segments(
                 && matches!(
                     basename,
                     "ls" | "cat"
+                        | "base64"
                         | "cp"
                         | "mkdir"
                         | "touch"
@@ -283,6 +285,9 @@ pub(super) fn exact_safe_segment_with_context(
     {
         return false;
     }
+    if super::version_probes::safe_version_probe(basename, &segment.arguments) {
+        return true;
+    }
     match basename {
         "cd" => {
             model.segments.len() == 1
@@ -294,14 +299,17 @@ pub(super) fn exact_safe_segment_with_context(
         "sleep" => safe_reads::safe_sleep_arguments(&segment.arguments),
         "uptime" => segment.arguments.is_empty(),
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
-        "ls" => safe_reads::safe_listing_arguments(&segment.arguments, context),
+        "ls" => {
+            super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
+        }
         "test" => safe_reads::safe_file_predicate_arguments(&segment.arguments, context),
-        "find" => safe_reads::safe_find_listing_arguments(&segment.arguments, context),
+        "find" => super::find_reads::safe_find_listing_arguments(&segment.arguments, context),
         // Operand-free `cat` after a pipe only copies the proven producer's output.
         "cat" => {
             (segment.pipeline_index > 0 && segment.arguments.is_empty())
                 || safe_reads::safe_plain_file_arguments(&segment.arguments, context)
         }
+        "base64" => super::base64_reads::safe_base64_arguments(&segment.arguments, context),
         "stat" => matches!(segment.arguments.as_slice(), [target]
             if !target.starts_with('-')
                 && safe_reads::bounded_read_target(target, context.home_dir, context.cwd, false)),
@@ -323,7 +331,7 @@ pub(super) fn exact_safe_segment_with_context(
             safe_git_arguments(&segment.arguments, allow_git_helper_context, context)
                 && super::directory_targets::drive_targets_quoted(segment)
         }
-        "gh" => safe_gh_arguments(&segment.arguments),
+        "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
         "hol-guard" => {
             super::guard_diagnostics::safe_hol_guard_segment(&segment.arguments, context.cwd)

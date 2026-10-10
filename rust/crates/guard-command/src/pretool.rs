@@ -14,12 +14,15 @@ pub struct PathContext<'a> {
 mod contained_wrapper;
 pub(crate) mod directory_targets;
 pub(crate) use directory_targets::safe_directory_target;
+mod base64_reads;
+mod find_reads;
 mod git_config;
 mod git_helper_context;
 mod git_probe;
 mod git_routes;
 mod git_worktree;
 mod guard_diagnostics;
+mod listing_reads;
 pub(crate) use git_routes::git_route_within_workspace;
 mod apply_patch_writes;
 mod pure_expression;
@@ -36,6 +39,7 @@ mod search_scope_ignore;
 mod segment_proof;
 mod shell_script;
 mod stdin_filters;
+mod version_probes;
 mod worktree_add;
 mod worktree_writes;
 mod wrangler_reads;
@@ -260,10 +264,10 @@ fn exfiltration_command(value: &str) -> bool {
         && upload.iter().any(|needle| lowered.contains(needle))
 }
 
-fn safe_gh_arguments(arguments: &[String]) -> bool {
+fn safe_gh_arguments(arguments: &[String], text: &str) -> bool {
     matches!(arguments, [auth, status, flag]
         if auth == "auth" && status == "status" && matches!(flag.as_str(), "--help" | "-h"))
-        || crate::command_compatibility::github_arguments_are_read_only(arguments)
+        || crate::command_compatibility::github_arguments_are_read_only(arguments, text)
 }
 
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
@@ -500,3 +504,5 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 mod tests;
 #[cfg(test)]
 mod tests_benign_probes;
+#[cfg(test)]
+mod tests_listing_find_probes;

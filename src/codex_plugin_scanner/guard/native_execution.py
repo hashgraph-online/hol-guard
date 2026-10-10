@@ -159,6 +159,8 @@ def _resident_request(
             "hook_decide",
             "hook_adapter",
             "request_context_build",
+            "claim_approval_reuse_decisions",
+            "approval_reuse_diagnostic",
             "daemon_route",
         }:
             accepted = frozenset({"ok", "error"})
@@ -340,62 +342,6 @@ def contained_workspace_write_execute_native(
         return _contained_workspace_write_result(result)
     except (KeyError, TypeError, ValueError):
         return None
-
-
-def contained_execute_native(
-    request_payload: dict[str, object],
-    policy_payload: dict[str, object],
-    *,
-    guard_home: Path,
-    run_id: str,
-    timeout_seconds: float = 60.0,
-) -> dict[str, object] | None:
-    request: dict[str, object] = {
-        "schema": "guard-contained-execute-request.v1",
-        "request_id": _request_id("contained_execute"),
-        "request": request_payload,
-        "policy": policy_payload,
-        "guard_home": str(guard_home),
-        "run_id": run_id,
-    }
-    decoded = _resident_request(
-        operation="contained_execute",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
-        required_feature=_CONTAINED_EXECUTION_FEATURE,
-    )
-    if decoded is None:
-        return None
-    result = decoded.get("result")
-    return result if isinstance(result, dict) else None
-
-
-def contained_test_hook_native(
-    workspace: Path,
-    command_text: str,
-    *,
-    guard_home: Path,
-    timeout_seconds: float = 10.0,
-) -> dict[str, object] | None:
-    request: dict[str, object] = {
-        "schema": "guard-contained-test-hook-request.v1",
-        "request_id": _request_id("contained_test_hook"),
-        "workspace": str(workspace),
-        "command_text": command_text,
-        "guard_home": str(guard_home),
-    }
-    decoded = _resident_request(
-        operation="contained_test_hook",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
-        required_feature=_CONTAINED_EXECUTION_FEATURE,
-    )
-    if decoded is None:
-        return None
-    result = decoded.get("result")
-    return result if isinstance(result, dict) else None
 
 
 # ---------------------------------------------------------------------------

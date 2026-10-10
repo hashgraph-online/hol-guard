@@ -1,5 +1,5 @@
 import { X as isUnsupportedPlatformCheck, i as harnessDisplayName, j as jsxRuntimeExports, Y as RECHECK_UNAVAILABLE_SIGNATURE, Z as protectionReasonText, r as reactExports, A as ActionButton, _ as HiMiniExclamationCircle, $ as hasRepairableProtectionGap, a0 as remainingProtectionRepairParts, a1 as protectionGapSignature, a2 as repairOutcomeIsStalled, a3 as ProtectionRepairFlowError, a4 as nextProtectionRepairOutcome, a5 as waitForAuthorizeUrl, a6 as startOrRecoverCloudConnect, a7 as safeCloudConnectUrl, a8 as openPackageFirewallAuthorizeFallback, a9 as waitForCloudConnection, aa as activeFailedHarnesses, ab as resetRepairOutcomeTracker, ac as HiMiniWrenchScrewdriver, s as HiMiniCheckCircle, K as HiMiniChevronDown, k as isConnectableAppHarness, p as protectionHealthFor, l as useProtectionPresentationState, v as GuardHero, ad as ProofStrip, S as SectionLabel, n as EmptyState, c as HiMiniChevronRight, ae as HiMiniEye, af as HiMiniXCircle, ag as HiMiniClipboardDocumentCheck, ah as HiMiniClipboard } from "../guard-dashboard.js";
-import { S as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, A as APP_STATUS_LABELS } from "./app-catalog.js";
+import { S as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, G as GuardRepairControl, A as APP_STATUS_LABELS } from "./guard-repair-control.js";
 import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
@@ -508,6 +508,7 @@ function FleetProtectionRecovery(props) {
           },
           harness
         )) }) : null,
+        hasRepairableGaps && repairableGaps.some((check) => check.check_id === "harness_hooks") ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 border-t border-slate-200 pt-3", id: "guard-repair-banner", children: /* @__PURE__ */ jsxRuntimeExports.jsx(GuardRepairControl, { description: "Hooks timing out or an app stuck blocked? Repair Guard restarts what is stuck, clears stale state, and reinstalls broken hooks." }) }) : null,
         /* @__PURE__ */ jsxRuntimeExports.jsxs(
           "button",
           {

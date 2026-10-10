@@ -74,7 +74,6 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    computed_policy_bundle_hash,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -241,10 +240,6 @@ def get_adapter(harness: str) -> HarnessAdapter:
     from ..adapters import get_adapter as _get_adapter
 
     return _get_adapter(harness)
-
-
-def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
-    return computed_policy_bundle_hash(policy_bundle)
 
 
 _APPROVAL_METADATA_KEYS = (
@@ -2985,24 +2980,6 @@ def sync_pain_signals(
     return uploaded_count
 
 
-def _persist_cloud_exceptions(
-    store: GuardStore,
-    *,
-    device_id: str | None = None,
-    sync_exceptions: list[dict[str, object]] | None = None,
-    policy_bundle: dict[str, object] | None = None,
-    now: str,
-) -> list[dict[str, object]]:
-    serialized = _policy_bundle_cloud_exception_items(
-        store,
-        device_id=device_id,
-        sync_exceptions=sync_exceptions,
-        policy_bundle=policy_bundle,
-    )
-    store.set_cloud_exceptions(serialized, now)
-    return serialized
-
-
 def _policy_bundle_cloud_exception_items(
     store: GuardStore,
     *,
@@ -3461,7 +3438,6 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
 _OAUTH_INVALID_GRANT_MAX_ATTEMPTS = 2
 _OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS = 0.75
-_oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
 
 
 class _GuardOAuthRefreshRateLimitedError(RuntimeError):

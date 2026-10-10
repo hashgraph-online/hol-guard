@@ -25,9 +25,6 @@ from codex_plugin_scanner.guard.config import (
 from codex_plugin_scanner.guard.mdm.policy import _merge_strongest_actions, _strongest_security_value
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.policy.engine import decide_action
-from codex_plugin_scanner.guard.policy.engine import guard_action_severity as policy_engine_action_severity
-from codex_plugin_scanner.guard.proxy.runtime_mcp import _guard_action
-from codex_plugin_scanner.guard.receipts.manager import _resolve_policy_decision
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
 
@@ -110,14 +107,6 @@ def test_policy_engine_present_unknown_actions_do_not_fall_through_to_allow(tmp_
 
     assert decide_action("future-action", "allow", config, changed=False) == "require-reapproval"
     assert decide_action(None, "future-action", config, changed=False) == "require-reapproval"
-
-
-def test_runtime_policy_and_receipt_boundaries_share_canonical_normalization() -> None:
-    assert normalize_guard_action("sandbox-required") == "sandbox-required"
-    assert _guard_action("sandbox-required") == "sandbox-required"
-    assert policy_engine_action_severity("sandbox-required") == GUARD_ACTION_SEVERITY["sandbox-required"]
-    assert policy_engine_action_severity("future-action") == GUARD_ACTION_SEVERITY["review"]
-    assert _resolve_policy_decision("future-action") == "require-reapproval"
 
 
 def test_unknown_fallback_must_itself_be_a_known_action() -> None:

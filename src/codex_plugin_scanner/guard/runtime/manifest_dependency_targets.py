@@ -45,13 +45,6 @@ def evaluation_targets(
     return _manifest_dependency_targets(artifact, workspace_dir, include_locked=include_locked)
 
 
-def unsynced_manifest_dependency_targets(
-    artifact: GuardArtifact,
-    workspace_dir: Path | None,
-) -> tuple[dict[str, object], ...]:
-    return _manifest_dependency_targets(artifact, workspace_dir, include_locked=False)
-
-
 def _manifest_dependency_targets(
     artifact: GuardArtifact,
     workspace_dir: Path | None,
