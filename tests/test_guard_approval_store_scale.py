@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
+import tempfile
 import time
 import uuid
+from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.store_approvals import (
     add_approval_request,
     approval_index_statements,
@@ -26,6 +29,7 @@ from tests.coverage_ci import under_coverage_scale
 def _make_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
+    bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
     conn.execute("pragma journal_mode=wal")
     conn.execute(approval_schema_statement())
     for stmt in approval_index_statements():
@@ -489,6 +493,7 @@ class TestMigrationFromOldSchema:
     def test_migration_from_schema_without_indexes(self) -> None:
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
+        bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
         conn.execute(approval_schema_statement())
         req = _make_request()
         add_approval_request(conn, req, "2026-01-01T00:00:00Z")

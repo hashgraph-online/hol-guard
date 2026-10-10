@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import tempfile
 import urllib.request
 from dataclasses import replace
 from pathlib import Path
@@ -13,6 +14,7 @@ from codex_plugin_scanner.guard.daemon.approval_extension_recommendation import 
     with_approval_extension_recommendation,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import EXTENSION_ALLOW_HINT_SCHEMA
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
@@ -122,6 +124,7 @@ def _request(request_id: str, *, hint: dict[str, object] | None) -> GuardApprova
 def _connection() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
+    bind_connection_guard_home(connection, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
     connection.execute(approval_schema_statement())
     for statement in approval_index_statements():
         connection.execute(statement)
