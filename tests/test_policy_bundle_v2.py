@@ -528,9 +528,9 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         ),
     ]
 
-    assert guard_runner._policy_shadow_mismatch_reason_codes([], equivalent) == ("legacy_unavailable",)
-    assert guard_runner._policy_shadow_mismatch_reason_codes(legacy, equivalent) == ()
-    assert guard_runner._policy_shadow_mismatch_reason_codes(legacy, changed) == (
+    assert guard_runner._authority.policy_shadow_mismatch([], equivalent) == ("legacy_unavailable",)
+    assert guard_runner._authority.policy_shadow_mismatch(legacy, equivalent) == ()
+    assert guard_runner._authority.policy_shadow_mismatch(legacy, changed) == (
         "row_count",
         "selector_set",
         "action",

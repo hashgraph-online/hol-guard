@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import service as consumer_service
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
+from codex_plugin_scanner.guard.runtime import runner_native_authority
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.decisions import (
@@ -22,7 +23,6 @@ from codex_plugin_scanner.guard.runtime.decisions import (
     authoritative_decision_from_artifact,
     build_authoritative_decision,
     evaluation_authority_error,
-    rebuild_artifact_authority,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
@@ -708,12 +708,6 @@ def test_authoritative_schema_rejects_contradictory_alias_and_enforcement_state(
             authority_finalized=True,
         )
 
-    with pytest.raises(ValueError, match="required at the launch boundary"):
-        rebuild_artifact_authority(
-            {"policy_action": "allow"},
-            composition_updates={"runtime_detector_action": "warn"},
-        )
-
 
 @pytest.mark.parametrize(
     "hidden_trace",
@@ -795,11 +789,18 @@ def test_runtime_detector_signals_require_their_exact_composed_authority(
         severity="critical",
         confidence="strong",
     )
-    output["artifacts"][0] = rebuild_artifact_authority(
-        output["artifacts"][0],
-        composition_updates={"runtime_detector_action": "allow"},
-        additional_signals=(signal,),
-    )
+    output["artifacts"][0] = runner_native_authority.with_recorded_detector_result(
+        output,
+        {
+            "runtime_detector_signals_v2": [signal.to_dict()],
+            "runtime_detector_composition": {
+                "action": "allow",
+                "reason": "detector allowed",
+                "downgraded": False,
+                "upgraded": False,
+            },
+        },
+    )["artifacts"][0]
     output["runtime_detector_signals_v2"] = [signal.to_dict()]
     if runtime_composition is not None:
         output["runtime_detector_composition"] = runtime_composition
@@ -838,7 +839,7 @@ def test_terminal_runtime_detector_signal_is_bound_without_synthetic_scanner_evi
     composition = compose_action_from_signals((signal,), "allow")
     assert composition.action == "block"
 
-    recorded = guard_runner._evaluation_with_recorded_detector_result(
+    recorded = runner_native_authority.with_recorded_detector_result(
         output,
         {
             "blocked": True,

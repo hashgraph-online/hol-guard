@@ -479,32 +479,6 @@ def evaluation_authority_error(
     return None
 
 
-def rebuild_artifact_authority(
-    payload: Mapping[str, object],
-    *,
-    reason: str | None = None,
-    composition_updates: Mapping[str, object] | None = None,
-    additional_signals: Sequence[RiskSignalV2] = (),
-) -> dict[str, object]:
-    """Synchronize runner-added trace/reason fields across every projection."""
-
-    # Runner-added evidence may update an existing authority, but it must
-    # never mint launch authority from a legacy compatibility projection.
-    decision = authoritative_decision_from_artifact(payload, require_authoritative=True)
-    composition = dict(decision.composition_trace)
-    composition.update(composition_updates or {})
-    merged_signals = _merge_signals(decision.signals, additional_signals)
-    rebuilt = build_authoritative_decision(
-        decision.action,
-        reason=reason or decision.reason,
-        composition_trace=composition,
-        signals=merged_signals,
-        authority_finalized=decision.enforcement.authority_finalized,
-        source=decision.source,
-    )
-    return {**dict(payload), **rebuilt.to_artifact_projection()}
-
-
 def decision_from_legacy_policy_action(
     policy_action: GuardAction,
     *,
@@ -790,20 +764,6 @@ def _validate_run_decision_projection(
     blocked_reason = evaluation.get("blocked_by_detector")
     if decision.enforcement.blocking and blocked_reason != decision.reason:
         raise ValueError("blocked_by_detector must match run authority reason")
-
-
-def _merge_signals(
-    existing: Sequence[RiskSignalV2],
-    additional: Sequence[RiskSignalV2],
-) -> tuple[RiskSignalV2, ...]:
-    merged: list[RiskSignalV2] = []
-    seen: set[str] = set()
-    for signal in (*existing, *additional):
-        if signal.signal_id in seen:
-            continue
-        seen.add(signal.signal_id)
-        merged.append(signal)
-    return tuple(merged)
 
 
 def _validate_artifact_projection(

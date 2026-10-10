@@ -268,7 +268,7 @@ fn parse_confidence(v: &Value) -> Res<RiskConfidenceLabel> {
     parse_risk_confidence(v).map_err(|e| DecisionError(e.0.to_string()))
 }
 /// `_parse_signals`.
-fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
+pub fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
     let arr = match v {
         Value::Array(a) => a,
         _ => return err("signals must be a list"),
