@@ -45,6 +45,8 @@ mod browser_mcp_intent;
 pub use browser_mcp_intent::*;
 mod mcp_runtime_evidence;
 pub use mcp_runtime_evidence::*;
+mod mcp_tool_evidence;
+pub use mcp_tool_evidence::*;
 mod mcp_tool_policy;
 pub use mcp_tool_policy::*;
 mod mcp_stdio_session;
