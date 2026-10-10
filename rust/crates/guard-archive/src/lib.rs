@@ -10,8 +10,12 @@
 use std::path::Path;
 use std::time::Instant;
 
+mod framing_guard;
 mod manifest;
+mod member_paths;
+mod member_policy;
 mod posix_path;
+mod stream;
 mod tar_policy;
 
 /// Numeric inspection bounds supplied by the caller. Every bound is enforced
@@ -130,9 +134,14 @@ pub fn inspect_path(
 // Blob admission is a Unix-only contract (descriptor walk, nlink/mode
 // checks); the retired Python path also refused non-POSIX platforms, so the
 // behavioral suite only runs there.
+#[cfg(test)]
+extern crate self as guard_archive;
 #[cfg(all(test, unix))]
 #[path = "lib_tests_admission.rs"]
 mod admission_tests;
+#[cfg(all(test, unix))]
+#[path = "framing_guard_tests.rs"]
+mod framing_guard_tests;
 #[cfg(all(test, unix))]
 #[path = "lib_tests.rs"]
 mod tests;
