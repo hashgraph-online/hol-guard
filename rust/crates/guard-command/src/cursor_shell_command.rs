@@ -118,3 +118,92 @@ pub fn normalize_cursor_shell_command(command: &str) -> CursorShellNormalization
     }
     CursorShellNormalization::Command(stripped.to_owned())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Read, Write};
+    use std::process::{Command, Stdio};
+
+    use super::{normalize_cursor_shell_command, CursorShellNormalization};
+
+    fn as_command(value: CursorShellNormalization) -> String {
+        match value {
+            CursorShellNormalization::Command(command) => command,
+            CursorShellNormalization::Unnormalizable => panic!("python helper returns a string"),
+        }
+    }
+
+    #[test]
+    fn normalisation_matches_the_live_python_helper() {
+        let commands = vec![
+            "git status".to_owned(),
+            "  git status  ".to_owned(),
+            "/usr/bin/lean-ctx -c echo hi".to_owned(),
+            "lean-ctx -c 'lean-ctx -c git status'".to_owned(),
+            String::new(),
+            "a".repeat(8193),
+        ];
+        let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let script = r#"
+import json, sys
+from codex_plugin_scanner.guard.adapters.cursor_native_approval import (
+    normalize_cursor_shell_command,
+)
+commands = json.load(sys.stdin)
+json.dump(
+    [
+        [
+            normalize_cursor_shell_command(command),
+            normalize_cursor_shell_command(normalize_cursor_shell_command(command)),
+        ]
+        for command in commands
+    ],
+    sys.stdout,
+)
+"#;
+        let mut child = Command::new("python3")
+            .arg("-c")
+            .arg(script)
+            .current_dir(&root)
+            .env("PYTHONPATH", root.join("src"))
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("python3");
+        child
+            .stdin
+            .take()
+            .expect("stdin")
+            .write_all(
+                serde_json::to_string(&commands)
+                    .expect("commands")
+                    .as_bytes(),
+            )
+            .expect("write commands");
+        let mut stderr = String::new();
+        let mut stdout = String::new();
+        child
+            .stderr
+            .take()
+            .expect("stderr")
+            .read_to_string(&mut stderr)
+            .expect("read stderr");
+        child
+            .stdout
+            .take()
+            .expect("stdout")
+            .read_to_string(&mut stdout)
+            .expect("read stdout");
+        let status = child.wait().expect("wait");
+        assert!(status.success(), "python helper failed: {stderr}");
+        let parsed: Vec<(String, String)> = serde_json::from_str(&stdout).expect("python json");
+        assert_eq!(parsed.len(), commands.len());
+        for (command, (python_once, python_twice)) in commands.iter().zip(parsed) {
+            let once = as_command(normalize_cursor_shell_command(command));
+            let twice = as_command(normalize_cursor_shell_command(&once));
+            assert_eq!(once, python_once, "once {command:?}");
+            assert_eq!(twice, python_twice, "twice {command:?}");
+        }
+    }
+}

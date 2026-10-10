@@ -54,9 +54,7 @@ fn verify(request: &CursorObserverProofRequestV1) -> bool {
     }
     if request.require_pending_match {
         let pending = request.pending_proof.as_deref().map(py_strip).unwrap_or("");
-        if pending.is_empty()
-            || !crate::resident_transport::constant_time_eq(pending.as_bytes(), proof.as_bytes())
-        {
+        if pending.is_empty() || !constant_time_eq(pending.as_bytes(), proof.as_bytes()) {
             return false;
         }
     }
@@ -77,7 +75,7 @@ fn verify(request: &CursorObserverProofRequestV1) -> bool {
             py_strip(&request.observer_event),
         ],
     );
-    crate::resident_transport::constant_time_eq(expected.as_bytes(), proof.as_bytes())
+    constant_time_eq(expected.as_bytes(), proof.as_bytes())
 }
 
 fn normalized_once_more(command: &str) -> Option<String> {
@@ -114,7 +112,8 @@ fn read_attestation_key(guard_home: &Path) -> Option<Vec<u8>> {
     }
     let file = options.open(&path).ok()?;
     let metadata = file.metadata().ok()?;
-    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_KEY_BYTES {
+    let size = metadata.len();
+    if !metadata.is_file() || size == 0 || size > MAX_KEY_BYTES {
         return None;
     }
     #[cfg(unix)]
@@ -126,8 +125,8 @@ fn read_attestation_key(guard_home: &Path) -> Option<Vec<u8>> {
         }
     }
     let mut bytes = Vec::new();
-    file.take(MAX_KEY_BYTES).read_to_end(&mut bytes).ok()?;
-    (!bytes.is_empty()).then_some(bytes)
+    file.take(size).read_to_end(&mut bytes).ok()?;
+    (bytes.len() as u64 == size).then_some(bytes)
 }
 
 #[cfg(test)]

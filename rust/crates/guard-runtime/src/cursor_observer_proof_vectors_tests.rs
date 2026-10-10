@@ -114,7 +114,11 @@ fn an_unusable_attestation_key_never_verifies() {
     fs::create_dir(&key).expect("directory key");
     assert!(read_attestation_key(&home).is_none(), "directory key");
     fs::remove_dir(&key).expect("remove directory key");
-    write_key(&home, &vec![b'k'; (super::MAX_KEY_BYTES as usize) + 1], 0o600);
+    write_key(
+        &home,
+        &vec![b'k'; (super::MAX_KEY_BYTES as usize) + 1],
+        0o600,
+    );
     assert!(read_attestation_key(&home).is_none(), "oversize key");
     let _ = fs::remove_dir_all(&home);
 }
