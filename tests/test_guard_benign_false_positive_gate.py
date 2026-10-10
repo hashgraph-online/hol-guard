@@ -274,7 +274,7 @@ def test_pending_entries_are_consistent_and_name_their_fix() -> None:
     assert set(_PENDING_PR) == set(_PENDING_FIX)
     assert set(_PENDING_PR.values()) <= _ALLOWED_PR, sorted(set(_PENDING_PR.values()) - _ALLOWED_PR)
     assert set(_PENDING_ALWAYS) <= set(_PENDING_FIX)
-    assert set(_PENDING_ALWAYS.values()) <= {"#3961"}
+    assert set(_PENDING_ALWAYS.values()) <= _ALLOWED_PR, sorted(set(_PENDING_ALWAYS.values()) - _ALLOWED_PR)
 
 
 def test_every_confirmed_false_positive_class_has_a_gate_case() -> None:

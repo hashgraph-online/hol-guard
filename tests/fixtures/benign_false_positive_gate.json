@@ -1620,18 +1620,5 @@
     "uv-version@zcode": "#3973",
     "zcode-mcp-js@zcode": "unassigned"
   },
-  "pending_always": {
-    "git-nested-log@omp": "#3961",
-    "git-parent-diff-stat@omp": "#3961",
-    "git-parent-inner-worktree-diff-stat@omp": "#3961",
-    "git-parent-inner-worktree-diff-stat@zcode": "#3961",
-    "git-tmp-worktree-log-oneline-3@omp": "#3961",
-    "git-tmp-worktree-log-oneline-3@zcode": "#3961",
-    "git-worktree-diff-stat@omp": "#3961",
-    "git-worktree-diff@omp": "#3961",
-    "git-worktree-log-1@omp": "#3961",
-    "git-worktree-log-oneline-3@omp": "#3961",
-    "git-worktree-show-stat@omp": "#3961",
-    "omp-ls@omp": "#3961"
-  }
+  "pending_always": {}
 }
