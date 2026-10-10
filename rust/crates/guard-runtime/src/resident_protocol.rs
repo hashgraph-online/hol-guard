@@ -2,20 +2,20 @@ use guard_command::CommandModelRequestV1;
 use guard_contracts::{
     ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
     ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
-    ApprovalReuseRequestV1, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
-    ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1, ContainedExecuteRequestV1,
-    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
-    ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, GitExecutionSafetyRequestV1,
-    GithubCliClassifyRequestV1, GuardHookEnvelopeV2, LocalCliGrantRequestV1,
-    McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1,
-    McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1,
-    McpToolEvidenceRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
-    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
-    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
-    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ApprovalProofRequestV1, ApprovalReuseRequestV1, ApprovalValidateRequestV3,
+    ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1,
+    ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
+    ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
+    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
+    ContextDigestRequestV1, GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1,
+    GuardHookEnvelopeV2, LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1,
+    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
+    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
+    NativeHookRequestV1, PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
+    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -89,6 +89,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
         guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
+        guard_contracts::APPROVAL_PROOF_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -172,6 +173,7 @@ pub(crate) enum ResidentOperationV1 {
     LocalCliGrantDecide(LocalCliGrantRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
+    ApprovalProofDecide(ApprovalProofRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     Health(Value),

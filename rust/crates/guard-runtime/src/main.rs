@@ -8,6 +8,7 @@ mod approval_gate_op;
 mod approval_gate_settings;
 mod approval_gate_state;
 mod approval_gate_verify;
+mod approval_proof_op;
 mod approval_reuse;
 mod archive_inspect;
 mod archive_inspect_containment;
