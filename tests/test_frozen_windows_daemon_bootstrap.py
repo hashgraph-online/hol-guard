@@ -115,6 +115,10 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
             "LOCALAPPDATA": str(local_appdata),
             "HOL_GUARD_HOME": str(guard_home),
             "HOL_GUARD_DESKTOP": "1",
+            # The guard home lives under pytest's tmp path, which opts the daemon into
+            # a 5 s idle shutdown. Each packaged CLI step here takes longer than that
+            # on a cold runner, so keep the daemon up between steps.
+            "GUARD_DAEMON_IDLE_TIMEOUT_SECONDS": "600",
         }
     )
 
