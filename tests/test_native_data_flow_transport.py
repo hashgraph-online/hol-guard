@@ -75,6 +75,11 @@ def _install(monkeypatch: pytest.MonkeyPatch, mutate) -> list[dict[str, Any]]:
     return seen
 
 
+@pytest.fixture(autouse=True)
+def _provisioned_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(native_data_flow, "ensure_resident_prerequisite", lambda _home: True)
+
+
 def _call(tmp_path):
     return native_data_flow.detect_data_flow_exfiltration(_action(), workspace=None, guard_home=tmp_path)
 
@@ -150,4 +155,22 @@ def test_request_uses_the_supplied_guard_home(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr(native_execution, "_resident_request", fake)
     _call(tmp_path)
+    assert homes == [tmp_path]
+
+
+def test_unprovisioned_home_fails_closed_without_contacting_the_resident(monkeypatch, tmp_path) -> None:
+    contacted: list[object] = []
+    monkeypatch.setattr(native_data_flow, "ensure_resident_prerequisite", lambda _home: False)
+    monkeypatch.setattr(native_execution, "_resident_request", lambda **kwargs: contacted.append(kwargs))
+    with pytest.raises(native_data_flow.NativeDataFlowError, match="native_data_flow_unavailable"):
+        _call(tmp_path)
+    assert contacted == []
+
+
+def test_missing_guard_home_uses_the_bound_digest_home(monkeypatch, tmp_path) -> None:
+    homes: list[object] = []
+    monkeypatch.setattr(native_data_flow, "_resolve_digest_home", lambda _home: tmp_path)
+    monkeypatch.setattr(native_execution, "_resident_request", lambda **kwargs: homes.append(kwargs["guard_home"]))
+    with pytest.raises(native_data_flow.NativeDataFlowError):
+        native_data_flow.detect_data_flow_exfiltration(_action(), workspace=None)
     assert homes == [tmp_path]

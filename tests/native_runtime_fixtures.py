@@ -440,5 +440,9 @@ def native_data_flow_runtime(
 
     from codex_plugin_scanner.guard import native_data_flow
 
-    monkeypatch.setattr(native_data_flow, "resolve_guard_home", lambda: _native_context_home)
+    monkeypatch.setattr(
+        native_data_flow,
+        "_resolve_digest_home",
+        lambda guard_home: guard_home if guard_home is not None else _native_context_home,
+    )
     return _native_context_home

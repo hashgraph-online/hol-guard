@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from . import native_execution
-from .config import resolve_guard_home
-from .native_context import _canonical_request_sha256
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .runtime.actions import GuardActionEnvelope
 from .runtime.signals import RiskSignalV2
 
@@ -46,11 +45,14 @@ def detect_data_flow_exfiltration(
         "workspace": str(workspace) if workspace is not None else None,
     }
     try:
+        home = _resolve_digest_home(guard_home)
+        if not ensure_resident_prerequisite(home):
+            raise NativeDataFlowError("native_data_flow_unavailable")
         request_sha256 = _canonical_request_sha256(request)
         decoded = native_execution._resident_request(
             operation="data_flow_analyze",
             request=request,
-            guard_home=guard_home if guard_home is not None else resolve_guard_home(),
+            guard_home=home,
             timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
