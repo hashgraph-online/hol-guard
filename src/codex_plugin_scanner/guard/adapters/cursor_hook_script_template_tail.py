@@ -232,7 +232,7 @@ def _compute_cursor_after_observer_proof(
     secret = _load_cursor_hook_attestation_secret()
     if conversation_id is None or command is None or resolved_binding is None or secret is None:
         return None
-    command = _normalize_cursor_shell_command(command)
+    command = _normalize_cursor_shell_command(_normalize_cursor_shell_command(command))
     message = chr(0).join(
         (conversation_id, command, resolved_binding, observer_event.strip())
     ).encode("utf-8")
