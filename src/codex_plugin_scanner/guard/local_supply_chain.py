@@ -2280,6 +2280,7 @@ def compose_current_package_policy_action(
     )
 
 
+@binds_store_guard_home
 def package_current_action_and_hash(
     artifact: GuardArtifact,
     *,
