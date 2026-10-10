@@ -35,6 +35,13 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _aware_instant(now: str) -> str:
+    """Validate an ISO instant; a naive one means host-local time, as `datetime.timestamp()` reads it."""
+
+    parsed = datetime.fromisoformat(now)
+    return now if parsed.tzinfo is not None else parsed.astimezone().isoformat()
+
+
 def _guard_session_row(row: Mapping[str, Any]) -> dict[str, object]:
     return {
         "session_id": str(row["session_id"]),
@@ -248,7 +255,7 @@ class StoreSessionsMixin:
         lease_seconds: int,
         now: str,
     ) -> dict[str, object]:
-        datetime.fromisoformat(now)
+        now = _aware_instant(now)
         row = self._native_store_call(
             "attach_guard_client",
             {
@@ -271,7 +278,7 @@ class StoreSessionsMixin:
         lease_seconds: int,
         now: str,
     ) -> dict[str, object] | None:
-        datetime.fromisoformat(now)
+        now = _aware_instant(now)
         row = self._native_store_call(
             "renew_guard_client_attachment",
             {"client_id": client_id, "lease_id": lease_id, "lease_seconds": lease_seconds, "now": now},

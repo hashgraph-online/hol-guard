@@ -27,10 +27,12 @@ fn invalid_isoformat<T>(text: &str) -> StoreResult<T> {
 /// `(datetime.fromisoformat(now) + timedelta(seconds=max(lease_seconds, 1))).isoformat()`
 fn lease_expiry(now: &str, lease_seconds: i64) -> StoreResult<String> {
     let delta = lease_seconds.max(1).saturating_mul(MICROS);
-    match add_seconds_isoformat(now, delta) {
-        Some(expiry) => Ok(expiry),
-        None => invalid_isoformat(now),
+    if epoch_micros(now).is_none() {
+        return invalid_isoformat(now);
     }
+    // A parseable instant that cannot take the lease is CPython's OverflowError.
+    add_seconds_isoformat(now, delta)
+        .ok_or_else(|| StoreError::Value("date value out of range".to_owned()))
 }
 
 fn fetch_attachment(connection: &Connection, client_id: &str) -> StoreResult<Value> {
