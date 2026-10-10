@@ -23,14 +23,15 @@ _RESULT_SCHEMA = "guard-approval-resolution-plan-result.v1"
 _TIMEOUT_SECONDS = 10.0
 _MAX_REQUEST_BYTES = 256 * 1024
 UNAVAILABLE = "native_approval_resolution_plan_unavailable"
+INTEGRITY_UNAVAILABLE = "native_approval_resolution_plan_integrity_unavailable"
 _PERSISTENCE_MODES = frozenset({"none", "persisted", "once", "exact_once"})
 
 
 class ApprovalResolutionPlanUnavailableError(ValueError):
     """The resident could not plan the resolution; nothing was recomputed."""
 
-    def __init__(self) -> None:
-        super().__init__(UNAVAILABLE)
+    def __init__(self, code: str = UNAVAILABLE) -> None:
+        super().__init__(code)
 
 
 def _text(value: object) -> str | None:
@@ -45,7 +46,9 @@ def _sequence(value: object) -> list[object] | None:
 
 def _chain(value: object) -> list[str | None] | None:
     items = _sequence(value)
-    return None if items is None else [item if isinstance(item, str) else None for item in items]
+    if items is None:
+        return None
+    return [item if isinstance(item, str) else None for item in items]
 
 
 def _envelope(value: object) -> dict[str, object] | None:

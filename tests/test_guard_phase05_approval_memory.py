@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _codex_p
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.native_approval_resolution import ApprovalResolutionPlanUnavailableError
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
@@ -1141,6 +1142,24 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
         )
         is None
     )
+
+
+def test_resolution_without_any_integrity_backend_names_the_missing_key(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    store._policy_integrity_secret_store = None
+    shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
+    store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
+
+    with pytest.raises(ApprovalResolutionPlanUnavailableError, match="integrity_unavailable"):
+        apply_approval_resolution(
+            store=store,
+            request_id="req-shell",
+            action="allow",
+            scope="artifact",
+            workspace=shell_request.workspace,
+            reason="no verifier key",
+            now="2026-05-13T00:01:00+00:00",
+        )
 
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

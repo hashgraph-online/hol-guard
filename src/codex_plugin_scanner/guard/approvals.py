@@ -9,7 +9,6 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import suppress
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from functools import wraps
@@ -68,7 +67,11 @@ from .models import (
     HarnessDetection,
     PolicyDecision,
 )
-from .native_approval_resolution import native_approval_resolution_plan
+from .native_approval_resolution import (
+    INTEGRITY_UNAVAILABLE,
+    ApprovalResolutionPlanUnavailableError,
+    native_approval_resolution_plan,
+)
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .protection_capabilities import protection_capability_payloads
 from .redaction import redact_text
@@ -746,25 +749,34 @@ def apply_approval_resolution(
     from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 
     # The resident refuses every request until this home's verifier key exists.
-    # A store that cannot derive one leaves the plan request to fail closed.
-    with suppress(NativePolicySnapshotError):
+    # A store that cannot derive one may still have a key from an earlier run, so
+    # try the plan anyway and name the missing integrity backend if it fails.
+    integrity_unavailable = False
+    try:
         provision_native_verifier_key_for_store(store)
-    plan = native_approval_resolution_plan(
-        request,
-        guard_home=store.guard_home,
-        action=action,
-        scope=scope,
-        persist_policy=persist_policy,
-        temporary_mcp=temporary_mcp_selection is not None,
-        local_tool=local_tool_selection is not None,
-        resolve_scope_matches=resolve_scope_matches,
-        requires_local_once=action == "allow" and requires_local_once_approval(request),
-        resolved_workspace=resolved_workspace,
-        native_exact_token=(
-            tool_call_exact_context_token(request) if persist_policy is True and scope == "artifact" else None
-        ),
-        resolved_at=resolved_at,
-    )
+    except NativePolicySnapshotError:
+        integrity_unavailable = True
+    try:
+        plan = native_approval_resolution_plan(
+            request,
+            guard_home=store.guard_home,
+            action=action,
+            scope=scope,
+            persist_policy=persist_policy,
+            temporary_mcp=temporary_mcp_selection is not None,
+            local_tool=local_tool_selection is not None,
+            resolve_scope_matches=resolve_scope_matches,
+            requires_local_once=action == "allow" and requires_local_once_approval(request),
+            resolved_workspace=resolved_workspace,
+            native_exact_token=(
+                tool_call_exact_context_token(request) if persist_policy is True and scope == "artifact" else None
+            ),
+            resolved_at=resolved_at,
+        )
+    except ApprovalResolutionPlanUnavailableError as error:
+        if integrity_unavailable:
+            raise ApprovalResolutionPlanUnavailableError(INTEGRITY_UNAVAILABLE) from error
+        raise
     planned = cast(Mapping[str, object], plan["decision"])
     decision = PolicyDecision(
         harness=str(planned["harness"]),

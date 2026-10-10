@@ -10,7 +10,6 @@ mod approval_gate_state;
 mod approval_gate_verify;
 mod approval_proof_op;
 mod approval_resolution_plan_op;
-mod approval_resolution_plan_token;
 mod approval_reuse;
 mod approval_reuse_diagnostic_op;
 mod approval_reuse_diagnostic_probes;

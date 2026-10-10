@@ -42,7 +42,8 @@ fn plans_match_the_retired_python() {
 
 #[test]
 fn malformed_tokens_are_not_context_tokens() {
-    use crate::approval_resolution_plan_token::is_valid_approval_context_token as valid;
+    use crate::context_digest::parse_context_token;
+    let valid = |token: &str| parse_context_token(&Value::String(token.to_owned())).is_some();
     assert!(!valid("guard-approval-context:v1:"));
     assert!(!valid("guard-approval-context:v1:@@@"));
     assert!(!valid("guard-approval-context:v1:A"));

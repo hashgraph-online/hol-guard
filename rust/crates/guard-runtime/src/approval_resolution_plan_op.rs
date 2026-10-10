@@ -16,7 +16,7 @@ use guard_contracts::{
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
-use crate::approval_resolution_plan_token::is_valid_approval_context_token;
+use crate::context_digest::parse_context_token;
 use crate::guard_store_json::{add_seconds_isoformat, dumps_sorted, py_strip};
 use crate::package_authority_op::request_digest_with_limit;
 
@@ -357,7 +357,7 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
     let request_artifact_hash = text(&approval.artifact_hash).map(str::to_owned);
     let context_token = request_artifact_hash
         .clone()
-        .filter(|hash| is_valid_approval_context_token(hash));
+        .filter(|hash| parse_context_token(&Value::String(hash.clone())).is_some());
     let exact_context_allow = allow && context_token.is_some();
     let persist = request.persist_policy;
 
