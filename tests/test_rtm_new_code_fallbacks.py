@@ -237,7 +237,7 @@ def test_package_evaluation_without_resident_blocks_and_never_runs_python_evalua
             artifact_id="package:npm:left-pad",
             to_dict=lambda: {"artifact_id": "package:npm:left-pad"},
         ),
-        store=SimpleNamespace(guard_home=tmp_path, path=tmp_path / "guard.db"),
+        store=SimpleNamespace(guard_home=tmp_path, path=tmp_path / "guard.db", get_cloud_workspace_id=lambda: None),
         workspace_dir=tmp_path,
     )
     assert result.decision == "block"
