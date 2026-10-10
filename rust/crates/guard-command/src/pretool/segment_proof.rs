@@ -325,6 +325,7 @@ pub(super) fn exact_safe_segment_with_context(
         }
         "gh" => safe_gh_arguments(&segment.arguments),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
+        "hol-guard" => super::guard_diagnostics::safe_hol_guard_arguments(&segment.arguments),
         "jq" => {
             segment.pipeline_index > 0 && safe_reads::safe_jq_stdin_arguments(&segment.arguments)
         }

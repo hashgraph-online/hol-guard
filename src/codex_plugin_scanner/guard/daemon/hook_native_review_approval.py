@@ -19,6 +19,7 @@ from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.actions import normalize_harness_payload
 from .hook_native_local_cli import native_local_cli_grant_response
+from .native_review_allow_hint import native_review_extension_allow_hint
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
@@ -385,6 +386,14 @@ def queue_native_pre_tool_review(
         risk_summary=reason,
         action_envelope_json=action_envelope,
         raw_command_text=pre_tool_command(payload),
+        extension_allow_hint=native_review_extension_allow_hint(
+            store,
+            payload=payload,
+            native_result=native_result,
+            workspace=workspace,
+            home_dir=home_dir,
+            deadline=deadline,
+        ),
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
