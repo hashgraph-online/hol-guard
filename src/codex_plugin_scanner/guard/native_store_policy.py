@@ -203,9 +203,11 @@ def native_approval_reuse_diagnostic(
             request["evidence"] = {key: value for key, value in evidence.items() if value is not None}
             continue
         reason, stored_hash = payload.get("reason"), payload.get("stored_hash")
-        if set(payload) == {"reason", "stored_hash"} and all(
-            value is None or isinstance(value, str) for value in (reason, stored_hash)
+        if (
+            set(payload) == {"reason", "stored_hash"}
+            and (reason is None or isinstance(reason, str))
+            and (stored_hash is None or isinstance(stored_hash, str))
         ):
-            return reason, stored_hash  # type: ignore[return-value]
+            return reason, stored_hash
         break
     raise ApprovalReuseDiagnosticUnavailableError
