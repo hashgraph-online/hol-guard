@@ -17,6 +17,8 @@ mod compound_git_inspection;
 pub use compound_git_inspection::*;
 mod codex_tool_output;
 pub use codex_tool_output::*;
+mod policy_bundle_authority;
+pub use policy_bundle_authority::*;
 mod claim_approval_reuse;
 pub use claim_approval_reuse::*;
 mod guard_store;
