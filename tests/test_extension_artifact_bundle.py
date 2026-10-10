@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import re
 import stat
 import subprocess
 import sys
@@ -382,7 +383,21 @@ def test_publication_is_postmerge_and_never_writes_a_branch():
     assert "scripts/publish_extension_snapshot.py" in commands
 
 
-def test_legacy_directory_changes_are_accepted_by_existing_path_gate():
+def test_contribution_gate_accepts_public_records_and_rejects_shared_catalogs():
     workflow = (ROOT / ".github/workflows/generated-artifacts-guard.yml").read_text()
-    assert "owned+='|^docs/guard/extensions/" not in workflow
-    assert "native-command-program|command-catalog" in workflow
+    patterns = re.findall(r"^\s*owned\+?='([^']*)'$", workflow, flags=re.MULTILINE)
+    assert patterns
+    owned = re.compile("".join(patterns))
+    for path in (
+        "contributions/extensions/command.example.json",
+        "contributions/command-sources/command.example.json",
+        "contracts/extensions/trust/command.example.v1.json",
+    ):
+        assert not owned.search(path), path
+    for path in (
+        "docs/guard/extensions/catalog.v1.json",
+        "docs/guard/extensions/catalog.v2.json",
+        "contracts/extensions/command-catalog.v1.json",
+        "contracts/extensions/build-descriptors/command.example.json",
+    ):
+        assert owned.search(path), path
