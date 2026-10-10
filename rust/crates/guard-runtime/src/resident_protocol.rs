@@ -354,6 +354,13 @@ mod tests {
         .expect("known lifecycle error is JSON");
         assert_eq!(lifecycle["error"], "native_resident_start_in_progress");
 
+        let unsupported: Value = serde_json::from_slice(&safe_error_response(
+            "native_request_schema_unsupported",
+            false,
+        ))
+        .expect("schema-unsupported error is JSON");
+        assert_eq!(unsupported["error"], "native_request_schema_unsupported");
+
         let unknown_lifecycle: Value = serde_json::from_slice(&safe_error_response(
             "native_resident_future_unregistered_code",
             false,
