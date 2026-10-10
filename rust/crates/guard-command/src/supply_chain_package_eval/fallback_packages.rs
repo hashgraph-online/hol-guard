@@ -40,8 +40,9 @@ pub(super) fn fallback_package_results(
                 .map(|k| lockfile_versions.contains_key(&k))
                 .unwrap_or(false))
             || (verify_registry_identity
-                && optional_string(target.get("range")).is_some()
-                && registry_resolved_target_version(deps, target).is_some());
+                && optional_string(target.get("range")).is_some_and(|range| {
+                    registry_resolved_target_version(deps, target, &range).is_some()
+                }));
         results.push(unknown_package_result(
             deps,
             target,

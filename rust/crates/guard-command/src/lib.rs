@@ -434,6 +434,8 @@ pub mod cloud_audit_sync;
 pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
+#[cfg(test)]
+mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;
 pub mod package_policy_override;
 pub mod package_protect_projection;
@@ -456,8 +458,27 @@ pub mod decisions;
 pub mod detectors;
 #[cfg(unix)]
 pub mod direct_vitest;
+pub mod egress_broker;
+mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
+mod hook_adapter_cline_tables;
+pub mod hook_adapter_envelope;
+mod hook_adapter_envelope_tables;
+mod hook_adapter_envelope_text;
+#[cfg(test)]
+mod hook_adapter_omp_tests;
+pub mod hook_adapter_paths;
+pub mod hook_adapter_prepare;
+pub mod hook_adapter_prepare_cline;
+mod hook_adapter_prepare_cursor;
+mod hook_adapter_pyjson;
+mod hook_adapter_pytext;
+mod hook_adapter_redact;
+mod hook_adapter_secret_path;
+pub mod hook_adapter_value;
+#[cfg(all(test, unix))]
+mod hook_adapter_vector_tests;
 pub mod hook_evidence_writer;
 pub mod hook_responses;
 pub mod inventory_contract;
@@ -472,6 +493,7 @@ mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;
+pub mod registry_metadata_transport;
 pub mod restricted_archive;
 pub mod restricted_archive_transport;
 #[cfg(unix)]

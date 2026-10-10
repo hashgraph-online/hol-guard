@@ -39,6 +39,9 @@ _HOOK_ENVIRONMENT_KEYS = frozenset(
         # contained hook process keeps the same boundary as its parent.
         "HOL_GUARD_TEST_MODE",
         "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        # Dedicated opt-in for the resident's supply-chain test seams. Kept
+        # separate from diagnostics so diagnostics alone never enable them.
+        "HOL_GUARD_RESIDENT_TEST_SEAMS",
         "LANG",
         "PATH",
         "PATHEXT",

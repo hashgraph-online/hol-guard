@@ -41,12 +41,21 @@ def review_command_native(
     compatibility_action_class: str | None = None,
     compatibility_reason: str | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    timeout_seconds: float = 0.5,
+    record_health: bool = True,
 ) -> NativeCommandEvaluation | None:
     """Return a bound native projection, or None without a usable native result."""
     snapshot = extension_control_snapshot or current_extension_control_snapshot()
     if snapshot is None or snapshot.authority_failure is not None:
         return None
-    native = review_pre_tool_native(command, guard_home=guard_home, cwd=cwd, home_dir=home_dir)
+    native = review_pre_tool_native(
+        command,
+        guard_home=guard_home,
+        cwd=cwd,
+        home_dir=home_dir,
+        timeout_seconds=timeout_seconds,
+        record_health=record_health,
+    )
     if native is None:
         return None
     model = native.get("command_model")

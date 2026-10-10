@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.actions import apply_patch_target_paths
 from ..runtime.secret_sensitivity import classify_secret_path
 from .commands_support_codex_git_config import git_common_dir, git_dir_from_file
@@ -85,7 +86,11 @@ def verified_non_sensitive_codex_apply_patch(
     )
     if not patch_texts or any("*** Delete File:" in text or "*** Move to:" in text for text in patch_texts):
         return False
-    target_paths = apply_patch_target_paths(typed_input)
+    try:
+        target_paths = apply_patch_target_paths(typed_input)
+    except NativeHookAdapterError:
+        # No authoritative parse means the patch cannot be proven non-sensitive.
+        return False
     if not target_paths:
         return False
     try:

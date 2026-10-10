@@ -19,6 +19,7 @@ mod git_helper_context;
 mod git_probe;
 mod git_routes;
 mod git_worktree;
+mod guard_diagnostics;
 pub(crate) use git_routes::git_route_within_workspace;
 mod apply_patch_writes;
 mod pure_expression;

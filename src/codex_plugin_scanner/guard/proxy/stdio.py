@@ -30,6 +30,7 @@ from ..browser_opener import open_browser_url
 from ..config import GuardConfig, resolve_risk_action
 from ..consumer import artifact_hash
 from ..daemon.manager import load_guard_daemon_auth_token
+from ..harness_posture import config_for_harness, harness_posture_override
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_execution import (
     _native_session_feature_available,
@@ -81,6 +82,9 @@ def _sensitive_read_current_action(
 ) -> GuardAction:
     if not isinstance(config, GuardConfig):
         return "require-reapproval"
+    # Evaluate as this app sees the config, matching the posture bound into
+    # the approval hash.
+    config = config_for_harness(config, harness)
     configured_override = config.resolve_action_override(
         harness,
         artifact.artifact_id,
@@ -131,6 +135,11 @@ def build_sensitive_read_approval_hash(
                 else {}
             ),
             "security_level": config.security_level,
+            **(
+                {"harness_posture": harness_posture}
+                if (harness_posture := harness_posture_override(config, artifact.harness)) is not None
+                else {}
+            ),
         }
         sandbox_context: dict[str, object] = {"analysis": config.sandbox_analysis}
     else:
