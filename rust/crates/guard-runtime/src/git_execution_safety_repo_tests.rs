@@ -308,7 +308,17 @@ fn worktree_filter_check_is_scoped_to_the_selected_reference() {
     assert!(uses("HEAD"));
     assert!(uses("--help"));
     // A filter attribute alone is inert; a configured driver makes it block.
-    assert!(fixture.allowed(Check::WorktreeAdd));
+    // Hosts that ship system-level filter drivers (for example git-lfs on CI
+    // images) already configure one, so the baseline follows the host.
+    let host_configures_filters = Command::new(&git_path)
+        .args(["config", "--system", "--get-regexp", "^filter\\."])
+        .env("HOME", &fixture.home)
+        .output()
+        .is_ok_and(|output| output.status.success() && !output.stdout.is_empty());
+    assert_eq!(
+        fixture.allowed(Check::WorktreeAdd),
+        !host_configures_filters
+    );
     fixture.config("filter.guard-test.clean", "cat");
     assert!(!fixture.allowed(Check::WorktreeAdd));
 }
