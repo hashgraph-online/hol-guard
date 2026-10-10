@@ -33,6 +33,9 @@ from .native_runtime_resilience import native_record_resident_failure
 from .native_supply_chain_egress import EGRESS_REQUIRED_CODE, EgressExchanger, EgressProtocolError, private_spool_dir
 
 SUPPLY_CHAIN_EVAL_FEATURE = "supply-chain-eval-v1"
+# Replayed egress outcomes (up to EGRESS_MAX_SUPPLIED) ride in every round's request, so the
+# generic 256 KiB package-authority cap is too small; stay under the native 6 MiB frame cap.
+_EVAL_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _EVAL_TIMEOUT_SECONDS = 25.0
 _PROBE_REQUIRED_CODE = "saved_policy_probe_required"
 # Each round either performs the exchanges the resident asked for or answers its
@@ -167,6 +170,7 @@ def _send_eval_request(request: dict[str, object], guard_home: Path) -> dict[str
         guard_home=guard_home,
         timeout_seconds=_EVAL_TIMEOUT_SECONDS,
         required_features=(SUPPLY_CHAIN_EVAL_FEATURE,),
+        max_request_bytes=_EVAL_MAX_REQUEST_BYTES,
     )
     if response is None:
         # `_resident_request` already recorded why (transport, schema) or that the

@@ -76,6 +76,15 @@ fn diagnostics_alone_never_enable_the_test_seams() {
     assert!(test_seams_enabled_from(only(
         "HOL_GUARD_RESIDENT_TEST_SEAMS"
     )));
+    // The opt-in is the exact value "1": a set-but-falsey variable is not consent.
+    let valued = |value: &'static str| {
+        move |name: &str| {
+            (name == "HOL_GUARD_RESIDENT_TEST_SEAMS").then(|| std::ffi::OsString::from(value))
+        }
+    };
+    for refused in ["", "0", "false", "no", "true", "yes", " 1", "1 "] {
+        assert!(!test_seams_enabled_from(valued(refused)), "{refused:?}");
+    }
 }
 
 #[test]

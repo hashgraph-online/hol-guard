@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 pub const EGRESS_REQUIRED_CODE: &str = "supply_chain_egress_required";
 
 /// Most supplied outcomes one request may carry.
-pub const EGRESS_MAX_SUPPLIED: usize = 64;
+pub const EGRESS_MAX_SUPPLIED: usize = 256;
 /// Most needs one answer may carry.
 pub const EGRESS_MAX_NEEDS: usize = 16;
 /// Largest response body the caller may inline in the request; bigger bodies

@@ -54,7 +54,7 @@ pub(crate) const RESIDENT_TEST_SEAMS_ENV: &str = "HOL_GUARD_RESIDENT_TEST_SEAMS"
 /// the dedicated variable counts; the lookup is injected so tests can prove
 /// diagnostics alone never enable them without mutating the process env.
 pub(crate) fn test_seams_enabled_from(lookup: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
-    lookup(RESIDENT_TEST_SEAMS_ENV).is_some()
+    lookup(RESIDENT_TEST_SEAMS_ENV).is_some_and(|value| value == "1")
 }
 
 pub(crate) const TEST_SEAM_MAX_BYTES: usize = 8192;

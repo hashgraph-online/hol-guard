@@ -30,10 +30,22 @@ EGRESS_REQUIRED_CODE = "supply_chain_egress_required"
 # Resident-side limits (``EGRESS_MAX_*`` in guard-contracts supply_chain_egress.rs).
 INLINE_BODY_MAX_BYTES = 32 * 1024
 # The whole request is capped at 256 KiB by ``_resident_request``; inline bodies
-# stop well short of that so headers and the artifact always fit.
-INLINE_BUDGET_BYTES = 128 * 1024
+# stop well short of that so the supplied outcomes (url, headers, body names) and
+# the artifact always fit.
+INLINE_BUDGET_BYTES = 64 * 1024
 MAX_NEEDS = 16
-MAX_SUPPLIED = 64
+# The resident replays the whole evaluation every round, so a request carries
+# every outcome collected so far: a command with many ranged packages needs one
+# registry GET each, on top of Cloud and OAuth exchanges and gateway retries.
+# Sized to the request-size budget (about 600 bytes per outcome with a registry
+# response's headers and a spooled body), not to a handful of packages.
+MAX_SUPPLIED = 256
+# One exchange is bounded in wall-clock time, not only per socket operation: the
+# ``timeout`` the resident asks for is the connect and per-read stall limit (the
+# semantics ``urllib`` always had), and this caps a peer that keeps every read
+# just inside it. It stays inside the 25 second resident evaluation timeout.
+MAX_EXCHANGE_SECONDS = 20.0
+_READ_CHUNK_BYTES = 64 * 1024
 # A retry pause the resident asked for. Bounded so a hostile value cannot stall.
 MAX_DELAY_SECONDS = 30.0
 _MAX_HEADERS = 64
@@ -105,6 +117,7 @@ class EgressExchanger:
             method=str(need["method"]),
         )
         limit = int(need["max_response_bytes"])
+        deadline = time.monotonic() + MAX_EXCHANGE_SECONDS
         try:
             with managed_urlopen(
                 request,
@@ -114,12 +127,18 @@ class EgressExchanger:
                 return self._response_outcome(
                     int(response.status),
                     response.headers.items(),
-                    response.read(limit + 1),
+                    _read_bounded(response, limit, deadline),
                     limit,
                 )
         except urllib.error.HTTPError as error:
             try:
-                return self._response_outcome(int(error.code), error.headers.items(), error.read(limit + 1), limit)
+                return self._response_outcome(
+                    int(error.code), error.headers.items(), _read_bounded(error, limit, deadline), limit
+                )
+            except (TimeoutError, OSError) as read_error:
+                if isinstance(read_error, TimeoutError):
+                    return {"kind": "timeout"}
+                return {"kind": "error", "message": type(read_error).__name__}
             finally:
                 error.close()
         except ManagedNetworkError as error:
@@ -181,6 +200,21 @@ class EgressExchanger:
                 return {"kind": "archive", "sha256": result.sha256, "size": result.size, "final_url": result.final_url}
             finally:
                 result.cleanup()
+
+
+def _read_bounded(stream: Any, limit: int, deadline: float) -> bytes:
+    """Read at most ``limit + 1`` bytes (so an oversized body is detectable) before ``deadline``."""
+    chunks: list[bytes] = []
+    remaining = limit + 1
+    while remaining > 0:
+        if time.monotonic() >= deadline:
+            raise TimeoutError("exchange deadline exceeded")
+        chunk = stream.read(min(_READ_CHUNK_BYTES, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
 
 
 def _inline_text(body: bytes) -> str | None:

@@ -10,6 +10,7 @@ Rust crate; here the resident is replaced by a scripted fake.
 from __future__ import annotations
 
 import http.server
+import json
 import socket
 import threading
 from pathlib import Path
@@ -185,6 +186,92 @@ def test_inline_budget_keeps_the_request_under_the_transport_cap(tmp_path: Path)
     inline = sum(len(str(o.get("body", ""))) for o in outcomes)
     assert inline <= egress.INLINE_BUDGET_BYTES
     assert any("body_file" in o for o in outcomes)
+
+
+def test_a_command_with_many_ranged_packages_is_not_capped_at_sixty_four_exchanges(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _unmanaged(monkeypatch)
+    exchanger = egress.EgressExchanger(tmp_path)
+    monkeypatch.setattr(exchanger, "_answer", lambda need: {"url": need["url"], "outcome": {"kind": "timeout"}})
+    for start in range(0, 100, egress.MAX_NEEDS):
+        exchanger.fulfil({"needs": [_need(f"https://registry.npmjs.org/p{n}") for n in range(start, start + 16)]})
+    assert len(exchanger.supplied) == 112
+    # The cap is real, not absent: the resident refuses more than it can replay.
+    while len(exchanger.supplied) < egress.MAX_SUPPLIED:
+        exchanger.supplied.append({})
+    with pytest.raises(egress.EgressProtocolError):
+        exchanger.fulfil({"needs": [_need("https://registry.npmjs.org/one-too-many")]})
+
+
+def test_a_full_set_of_replayed_registry_outcomes_fits_the_request_cap(tmp_path: Path) -> None:
+    exchanger = egress.EgressExchanger(tmp_path)
+    headers = [(f"X-Registry-Header-{index}", "v" * 40) for index in range(12)]
+    body = b"{" + b" " * (egress.INLINE_BODY_MAX_BYTES + 1) + b"}"
+    for index in range(egress.MAX_SUPPLIED):
+        outcome = exchanger._response_outcome(200, headers, body, 1 << 20)
+        exchanger.supplied.append(
+            {
+                "class": "registry",
+                "method": "GET",
+                "url": f"https://registry.npmjs.org/some-scoped-package-name-{index}",
+                "body_sha256": "",
+                "occurrence": 1,
+                "outcome": outcome,
+            }
+        )
+    encoded = len(json.dumps({"egress_supplied": exchanger.supplied}).encode("utf-8"))
+    # A full replay overflows the generic package-authority cap, so the eval op raises its own;
+    # it must still leave headroom under the native 6 MiB frame cap.
+    assert encoded > 256 * 1024
+    assert encoded + 512 * 1024 < transport._EVAL_MAX_REQUEST_BYTES
+    assert transport._EVAL_MAX_REQUEST_BYTES < 6 * 1024 * 1024
+
+
+class _Trickle:
+    """A body that never stalls a single read but never finishes either."""
+
+    def __init__(self, clock: list[float]) -> None:
+        self.clock = clock
+
+    def read(self, size: int) -> bytes:
+        self.clock[0] += 5.0  # every read lands just inside the per-read timeout
+        return b"x"
+
+
+def test_a_peer_that_keeps_every_read_inside_the_timeout_still_hits_the_exchange_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = [1000.0]
+    monkeypatch.setattr(egress.time, "monotonic", lambda: clock[0])
+    deadline = clock[0] + egress.MAX_EXCHANGE_SECONDS
+    with pytest.raises(TimeoutError):
+        egress._read_bounded(_Trickle(clock), 1 << 30, deadline)
+    assert clock[0] - 1000.0 <= egress.MAX_EXCHANGE_SECONDS + 5.0
+
+
+def test_registry_documents_above_the_ten_megabyte_library_default_are_spooled_whole(tmp_path: Path) -> None:
+    exchanger = egress.EgressExchanger(tmp_path)
+    limit = 32 * 1024 * 1024
+    body = b'{"versions":{}}' + b" " * (26 * 1024 * 1024)  # about the size of the abbreviated npm document for `next`
+
+    class _Reader:
+        def __init__(self, data: bytes) -> None:
+            self.data, self.at = data, 0
+
+        def read(self, size: int) -> bytes:
+            chunk = self.data[self.at : self.at + size]
+            self.at += len(chunk)
+            return chunk
+
+    read = egress._read_bounded(_Reader(body), limit, float("inf"))
+    assert read == body
+    outcome = exchanger._response_outcome(200, [], read, limit)
+    assert (tmp_path / str(outcome["body_file"])).stat().st_size == len(body)
+    assert exchanger._response_outcome(200, [], b"x" * (limit + 1), limit) == {
+        "kind": "error",
+        "message": "response too large",
+    }
 
 
 @pytest.mark.parametrize(

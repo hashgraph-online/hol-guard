@@ -231,6 +231,25 @@ fn malformed_supplied_entries_are_refused() {
 }
 
 #[test]
+fn a_request_may_carry_more_than_sixty_four_replayed_outcomes() {
+    let many = |count: usize| -> Vec<EgressSuppliedV1> {
+        (0..count)
+            .map(|index| {
+                let request = get(&format!("https://registry.npmjs.org/package-{index}"));
+                supplied("registry", &request, 1, ok_response("{}"))
+            })
+            .collect()
+    };
+    // A command with ~100 ranged packages replays 100 registry outcomes.
+    let scope = EgressScope::enter(&many(100), None).expect("100 outcomes are within the cap");
+    let request = get("https://registry.npmjs.org/package-99");
+    assert!(exchange(EgressClass::Registry, &request, 1.0, 0, 1024).is_ok());
+    drop(scope);
+    assert!(EgressScope::enter(&many(EGRESS_MAX_SUPPLIED), None).is_ok());
+    assert!(EgressScope::enter(&many(EGRESS_MAX_SUPPLIED + 1), None).is_err());
+}
+
+#[test]
 fn inline_body_over_the_inline_or_response_cap_is_refused() {
     let request = get(REGISTRY_URL);
     let _scope = EgressScope::enter(
