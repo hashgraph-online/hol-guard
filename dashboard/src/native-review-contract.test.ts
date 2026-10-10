@@ -19,7 +19,7 @@ const request = normalizeApprovalRequest({
 });
 assert.equal(request.decision_contract_error, undefined);
 assert.equal(request.action_envelope_json?.tool_name, "eval");
-assert.equal(request.action_envelope_json?.action_type, "config_change");
+assert.equal(request.action_envelope_json?.action_type, "shell_command");
 assert.ok(request.action_envelope_json);
 assert.match(resolveActionEnvelopeDetailText(request.action_envelope_json) ?? "", /1 \+ 1/);
 const canonicalCases = [

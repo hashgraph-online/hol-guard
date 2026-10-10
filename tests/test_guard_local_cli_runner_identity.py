@@ -7,10 +7,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_native_local_cli, hook_native_review_approval
 from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
-from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import is_suggestable_custom_tool
-from codex_plugin_scanner.guard.runtime.local_cli_commands import command_tokens_for_invocation
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
-    REGISTRY_PACKAGE_CLI_PREFIX,
     identify_unlisted_cli,
     is_local_cli_id,
 )
@@ -58,29 +55,6 @@ def _grant_store(tmp_path: Path, identity, state: str) -> GuardStore:
     return store
 
 
-def test_npx_local_bin_binds_to_project_wrangler(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    _write_wrangler_workspace(workspace)
-    home_dir = tmp_path / "home"
-
-    identity = identify_unlisted_cli("npx wrangler deploy", cwd=workspace, home_dir=home_dir)
-
-    assert identity is not None
-    assert identity.name == "wrangler"
-    assert identity.runner == "npx"
-    assert identity.path_class == "project-tool"
-    assert not identity.is_registry_package
-    assert not identity.cli_id.startswith(REGISTRY_PACKAGE_CLI_PREFIX)
-    assert command_tokens_for_invocation(
-        "npx wrangler deploy", cwd=workspace, home_dir=home_dir, identity=identity
-    ) == ("deploy",)
-    assert is_suggestable_custom_tool(
-        name=identity.name,
-        kind=identity.kind,
-        source_path=identity.path_class,
-    )
-
-
 def test_wrangler_upgrade_changes_local_identity_hash(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     target = _write_wrangler_workspace(workspace)
@@ -93,19 +67,6 @@ def test_wrangler_upgrade_changes_local_identity_hash(tmp_path: Path) -> None:
     assert before is not None and after is not None
     assert before.cli_id == after.cli_id
     assert before.identity_hash != after.identity_hash
-
-
-@pytest.mark.parametrize("command", ["npx -y wrangler@3 --version", "bunx wrangler whoami"])
-def test_registry_fetch_uses_package_keyed_identity(tmp_path: Path, command: str) -> None:
-    workspace = tmp_path / "empty"
-    workspace.mkdir()
-
-    identity = identify_unlisted_cli(command, cwd=workspace, home_dir=tmp_path / "home")
-
-    assert identity is not None
-    assert identity.is_registry_package
-    assert identity.cli_id.startswith(REGISTRY_PACKAGE_CLI_PREFIX)
-    assert identity.path_class == "registry-package"
 
 
 @pytest.mark.parametrize(

@@ -466,6 +466,8 @@ mod hook_adapter_cline_tables;
 pub mod hook_adapter_envelope;
 mod hook_adapter_envelope_tables;
 mod hook_adapter_envelope_text;
+#[cfg(test)]
+mod hook_adapter_omp_tests;
 pub mod hook_adapter_paths;
 pub mod hook_adapter_prepare;
 pub mod hook_adapter_prepare_cline;

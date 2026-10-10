@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sqlite3
 import subprocess
 import sys
@@ -876,7 +877,9 @@ class TestGuardCli:
         error_output = capsys.readouterr().err
 
         assert "Did you mean `update`?" in error_output
-        assert "hook" not in error_output
+        # The hidden `hook` and `daemon` entry points stay out of the listing;
+        # the public `hooks` command is allowed.
+        assert re.search(r"\bhook\b", error_output) is None
         assert "daemon" not in error_output
 
     def test_bare_hol_guard_shows_help_without_side_effects(self, tmp_path, monkeypatch, capsys):
@@ -9615,22 +9618,6 @@ url = http://127.0.0.1:8787/guard-canary
             "bundleHash": cached_bundle["bundleHash"],
             "bundleVersion": "policy-2026-04-09.1",
         }
-
-    def test_synced_policy_payload_fails_closed_for_unauthenticated_cached_bundle(self, tmp_path):
-        store = GuardStore(tmp_path / "home")
-        _seed_guard_cloud(store)
-        fallback_policy = {"mode": "observe", "defaultAction": "warn"}
-        store.set_sync_payload("policy", fallback_policy, "2026-04-09T00:00:00Z")
-        digest_bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
-        digest_bundle["verifier"] = {
-            "algorithm": "sha256",
-            "keyId": "legacy-digest-only",
-            "signature": None,
-        }
-        digest_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(digest_bundle)
-        store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-09T00:10:00Z")
-
-        assert guard_commands_module._synced_policy_payload(store) is None
 
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

@@ -323,10 +323,6 @@ def validate_mcp_contribution(payload: Mapping[str, object], *, filename: str = 
             raise ValueError(f"{filename} direct-command contributions cannot declare allow defaults")
 
 
-def mcp_catalog_ids(root: Path | None = None) -> frozenset[str]:
-    return frozenset(catalog_id_for_mcp_id(str(item["id"])) for item in load_mcp_contribution_payloads(root))
-
-
 def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
     tools = payload.get("tools")
     if not isinstance(tools, list):
@@ -344,15 +340,6 @@ def mcp_tool_state(payload: Mapping[str, object], tool_name: str) -> str:
         if normalized == wanted and state in _TOOL_STATES:
             return cast(str, state)
     return fallback
-
-
-def mcp_payload_for_catalog_id(extension_id: str) -> dict[str, object] | None:
-    return _contribution_index().get(extension_id)
-
-
-def reset_mcp_contribution_cache() -> None:
-    _contribution_index.cache_clear()
-    _validator.cache_clear()
 
 
 def _load_from_directory(directory: Path) -> tuple[dict[str, object], ...]:
@@ -450,16 +437,6 @@ def _finalize_payloads(payloads: tuple[dict[str, object], ...]) -> tuple[dict[st
                 raise ValueError(f"duplicate MCP remote server name {raw_name} for {previous_name} and {mcp_id}")
             remote_names[server_name] = mcp_id
     return payloads
-
-
-@lru_cache(maxsize=1)
-def _contribution_index() -> dict[str, dict[str, object]]:
-    index: dict[str, dict[str, object]] = {}
-    for payload in load_mcp_contribution_payloads():
-        mcp_id = payload.get("id")
-        if isinstance(mcp_id, str):
-            index[catalog_id_for_mcp_id(mcp_id)] = payload
-    return index
 
 
 @lru_cache(maxsize=1)

@@ -19,7 +19,6 @@ from .local_cli_commands import (
 )
 from .local_cli_identity import UnlistedCliIdentity, unlisted_cli_invocation_is_safe
 
-_PACKAGE_SCRIPT_SURFACE = "package-scripts"
 _MANAGERS = ("npm", "pnpm", "yarn", "bun")
 _NPM_SHORTHAND = frozenset({"start", "test", "stop", "restart"})
 _RUN_TOKENS = frozenset({"run", "run-script"})

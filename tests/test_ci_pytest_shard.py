@@ -195,9 +195,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     }
 
     cache_consumers = (
-        ("compatibility", "deep-compatibility", 1),
-        ("deep-compatibility", "mutation-baseline", 1),
-        ("mutation-baseline", "ci-python-312", 1),
+        ("compatibility", "ci-python-312", 1),
         ("cross-platform", "windows-updater", 2),
         ("windows-updater", None, 2),
     )
