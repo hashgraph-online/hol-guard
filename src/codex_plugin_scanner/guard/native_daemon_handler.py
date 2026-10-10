@@ -292,7 +292,7 @@ def native_supply_chain_error(
         kind = "not_available"
     else:
         kind = "other"
-    query = {
+    query: dict[str, object] = {
         "kind": "supply_chain_sync_error",
         "operation": operation,
         "error": kind,

@@ -3738,10 +3738,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return error.status, error.to_payload()
         except ValueError as error:
             return failure(operation, str(error))
-        try:
-            state = native_headless_action_state(adapter.harness, operation, result, guard_home=guard_home)
-        except NativeDaemonHandlerError:
-            return _NATIVE_HANDLER_UNAVAILABLE
         location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
             payload.get("locationId")
         )
@@ -3759,6 +3755,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             managed_controls_publish=_managed_controls_publish_for(self.server),
         )
         receipt["cloud_sync"] = cloud_sync
+        try:
+            state = native_headless_action_state(adapter.harness, operation, result, guard_home=guard_home)
+        except NativeDaemonHandlerError:
+            # The action already ran and its receipt is recorded; say so, so a client does not blindly retry.
+            return 503, {
+                **_NATIVE_HANDLER_UNAVAILABLE[1],
+                "action_applied": True,
+                "cloud_sync": cloud_sync,
+                "harness": adapter.harness,
+                "operation": operation,
+                "receipt": receipt,
+            }
         return 200, {
             "cloud_sync": cloud_sync,
             "harness": adapter.harness,
