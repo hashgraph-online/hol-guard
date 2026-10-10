@@ -2359,5 +2359,105 @@
    "exact_raw_text": true,
    "parser_profile": "posix-simple-v1"
   }
+ },
+ {
+  "command": "hol-guard hooks remove --all",
+  "factors": [
+   {
+    "source": "policy",
+    "reason_code": "critical.guard-self-protection",
+    "action": "block",
+    "proof_route": null,
+    "segment_ref": "segment:0"
+   }
+  ],
+  "v1": {
+   "normalized_text": "hol-guard hooks remove --all",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "hol-guard hooks remove --all",
+     "tokens": [
+      "hol-guard",
+      "hooks",
+      "remove",
+      "--all"
+     ],
+     "executable": "hol-guard",
+     "arguments": [
+      "hooks",
+      "remove",
+      "--all"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 28
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": true,
+   "parser_profile": "posix-simple-v1"
+  }
+ },
+ {
+  "command": "hol-guard hooks remove",
+  "factors": [
+   {
+    "source": "policy",
+    "reason_code": "critical.guard-self-protection",
+    "action": "block",
+    "proof_route": null,
+    "segment_ref": "segment:0"
+   }
+  ],
+  "v1": {
+   "normalized_text": "hol-guard hooks remove",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "hol-guard hooks remove",
+     "tokens": [
+      "hol-guard",
+      "hooks",
+      "remove"
+     ],
+     "executable": "hol-guard",
+     "arguments": [
+      "hooks",
+      "remove"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 22
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": true,
+   "parser_profile": "posix-simple-v1"
+  }
  }
 ]

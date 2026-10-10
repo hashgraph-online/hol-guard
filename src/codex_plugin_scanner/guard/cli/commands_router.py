@@ -91,6 +91,8 @@ _COMMON_HANDLERS = {
     "cloud-review": "_run_guard_cloud_review_command",
     "daemon": "_run_guard_daemon_command",
     "hook": "_run_guard_hook_command",
+    "hooks": "_run_guard_hooks_command",
+    "repair": "_run_guard_repair_command",
 }
 
 

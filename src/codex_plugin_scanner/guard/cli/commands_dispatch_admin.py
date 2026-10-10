@@ -364,6 +364,17 @@ def _run_guard_doctor_command(
     if getattr(args, "repair", False):
         command_queue_payload["repair"] = repair_command_queue_state(store)
     payload["command_queue"] = command_queue_payload
+    if getattr(args, "repair", False):
+        # `doctor --repair` and `hol-guard repair` share one engine. Shims and
+        # the queue were repaired above with doctor's own payload shape.
+        from ..repair_engine import run_repair
+
+        payload["guard_repair"] = run_repair(
+            guard_home=guard_home,
+            context=context,
+            store=store,
+            skip_steps=frozenset({"package_shims", "command_queue"}),
+        )
     with nullcontext() if args.harness else without_command_probes():
         availability = doctor_native_availability()
     payload["native_runtime"] = {
