@@ -476,3 +476,7 @@ mod compound_regressions;
 #[cfg(test)]
 #[path = "native_command_script_controls_tests.rs"]
 mod script_regressions;
+
+#[cfg(test)]
+#[path = "native_command_powershell_tests.rs"]
+mod powershell_regressions;

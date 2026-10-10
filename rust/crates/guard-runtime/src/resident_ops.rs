@@ -247,6 +247,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::PolicyBundleAuthority(request) => {
+                crate::policy_bundle_op::evaluate_policy_bundle_authority_request(&request)
+            }
             ResidentOperationV1::McpProxyDecide(request) => {
                 crate::mcp_proxy_decision_op::evaluate_mcp_proxy_decision(&request)
             }

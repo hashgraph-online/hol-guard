@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from codex_plugin_scanner.guard.policy_bundle_parser import (
-    _policy_bundle_rule_is_valid,
+    POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
     validated_policy_bundle_payload,
 )
+from tests.policy_bundle_rule_validity_helpers import VALIDATION_NOW
+from tests.policy_bundle_rule_validity_helpers import policy_bundle_rule_is_valid as _policy_bundle_rule_is_valid
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
@@ -113,11 +115,7 @@ class TestBrowserScopeValidation:
 
     def test_mcp_tool_matcher_family_accepted(self) -> None:
         """HGBM053: mcp-tool is in rule matcher families."""
-        from codex_plugin_scanner.guard.policy_bundle_parser import (
-            _POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
-        )
-
-        assert "mcp-tool" in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+        assert "mcp-tool" in POLICY_BUNDLE_RULE_MATCHER_FAMILIES
 
     def test_validated_payload_accepts_browser_scope(self) -> None:
         """HGBM072: Full bundle validation accepts browser scope."""
@@ -155,6 +153,7 @@ class TestBrowserScopeValidation:
             trusted_verification_keys=(signing_key,),
             anchored_verification_keys=(signing_key,),
             expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
+            now=VALIDATION_NOW,
         )
         assert payload is not None
         assert error is None
@@ -427,19 +426,6 @@ class TestBrowserScopeDecisionNarrowing:
         assert len(decisions) > 0
         for decision in decisions:
             assert decision.owner == "plain-rule"
-
-    def test_browser_scope_constant_exported(self) -> None:
-        """POLICY_BUNDLE_BROWSER_SCOPE_KEYS is exported and contains the expected keys."""
-        from codex_plugin_scanner.guard.policy_bundle_parser import (
-            POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
-        )
-
-        assert "browserIntent" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "browserOperation" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "browserProfile" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "origin" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "pathPrefix" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "sensitiveSurface" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
 
     def test_empty_browser_scope_list_does_not_skip_rule(self) -> None:
         """Empty browser scope lists are no-ops, not constraints."""

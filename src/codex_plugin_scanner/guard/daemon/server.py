@@ -156,6 +156,12 @@ from ..native_daemon_route import (
 )
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
+from ..native_policy_bundle import (
+    NATIVE_UNAVAILABLE_REJECTION,
+    PolicyBundleNativeError,
+    PolicyBundleNativeUnavailableError,
+    native_rejection_code,
+)
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -3937,6 +3943,35 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_headless_policy_sync(self, payload: dict[str, object]) -> None:
+        try:
+            self._handle_headless_policy_sync_checked(payload)
+        except PolicyBundleNativeUnavailableError:
+            # The resident owns policy bundle authority. Without its verdict
+            # nothing is accepted, activated, or acknowledged, and the caller
+            # gets an explicit retryable outage rather than a policy verdict.
+            self._write_native_policy_bundle_unavailable()
+        except PolicyBundleNativeError as error:
+            # A native verdict or input rejection is final for this bundle;
+            # report its code instead of a retryable outage.
+            self._write_native_policy_bundle_rejection(native_rejection_code(error))
+
+    def _write_native_policy_bundle_rejection(self, code: str) -> None:
+        error_payload: dict[str, object] = {"error": code}
+        remediation = policy_bundle_rejection_message(code)
+        if remediation is not None:
+            error_payload["message"] = remediation
+        self._write_json(error_payload, status=400)
+
+    def _write_native_policy_bundle_unavailable(self) -> None:
+        self._write_json(
+            {
+                "error": NATIVE_UNAVAILABLE_REJECTION,
+                "message": policy_bundle_rejection_message(NATIVE_UNAVAILABLE_REJECTION),
+            },
+            status=503,
+        )
+
+    def _handle_headless_policy_sync_checked(self, payload: dict[str, object]) -> None:
         harness = self._optional_string(payload.get("harness"))
         if harness is None:
             self._write_json({"error": "missing_harness"}, status=400)
@@ -3983,6 +4018,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self.server.store,  # type: ignore[attr-defined]
                 self.server.store.get_sync_payload("policy_bundle"),  # type: ignore[attr-defined]
             )
+            if (
+                rejection_reason == NATIVE_UNAVAILABLE_REJECTION
+                or _existing_bundle_error == NATIVE_UNAVAILABLE_REJECTION
+            ):
+                self._write_native_policy_bundle_unavailable()
+                return
             if validated_policy_bundle is None:
                 resolved_reason = rejection_reason or "invalid_policy_bundle"
                 error_payload: dict[str, object] = {"error": resolved_reason}
@@ -4067,6 +4108,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     approval_gate_grant=approval_gate_grant,
                     remote_write_authorized=True,
                 )
+            except PolicyBundleNativeError:
+                raise
             except (ExtensionControlAuthorityError, ValueError):
                 self._write_json({"error": "managed_runtime_publish_failed"}, status=503)
                 return

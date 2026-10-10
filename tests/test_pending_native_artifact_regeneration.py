@@ -129,7 +129,8 @@ def test_verifier_preserves_original_compiler_target_without_rebuilding(
     calls = []
     monkeypatch.setattr(verifier, "_run", calls.append)
     assert verifier.main() == 0
-    assert len(calls) == 2
+    assert len(calls) == 3
+    assert calls[0][-1] == "--check-public-descriptors"
     assert all(command[command.index("--compiler") + 1] == compiler for command in calls)
     assert all(command[0] != "cargo" for command in calls)
 
@@ -160,8 +161,9 @@ def test_preparation_retains_generated_outputs_and_checks_without_rebuild(verifi
     monkeypatch.setattr(verifier, "_run", commands.append)
     assert verifier.main() == 0
     assert commands[-1][-1] == "--check"
-    assert len(commands) == 2
-    assert "--check" not in commands[0]
+    assert len(commands) == 3
+    assert commands[0][-1] == "--check-public-descriptors"
+    assert "--check" not in commands[1]
     assert all(command[0] != "cargo" for command in commands)
     assert all(command[0] != "git" for command in commands)
 
