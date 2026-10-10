@@ -167,6 +167,9 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
+        # Publisher-written, HMAC-bound per-harness posture sidecar for the
+        # ACKed snapshot; read only to decide record-only versus enforce.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_harness_postures.py",
         # Native-authenticated source binding and asynchronous snapshot bytes;
         # Rust remains the document compiler and resident admission authority.
         "src/codex_plugin_scanner/guard/native_policy_snapshot_codec.py",

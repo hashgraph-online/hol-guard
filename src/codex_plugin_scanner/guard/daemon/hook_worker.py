@@ -42,6 +42,7 @@ from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
 from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
+from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_runtime import NativeRuntimeStatus, native_mode, native_runtime_status, review_post_tool_native
 from ..runtime.hook_review_types import (
     HookReviewRequest,
@@ -381,7 +382,7 @@ class HookWorker(HookWorkerNativeMixin):
         native_required = mode in {"auto", "force"}
         if native_required:
             policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
-            recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+            recording_only = recording_only_for_binding(policy_snapshot, harness)
             response = review_post_tool_native(
                 request,
                 observe_mode=recording_only,

@@ -10,6 +10,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, TypeAlias
 
+from ..harness_posture import harness_posture_line
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
@@ -866,6 +867,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
     protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+    protection_line += harness_posture_line(payload)
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
@@ -1014,6 +1016,9 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if name:
             value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
             summary.add_row("Protection", value)
+            per_app = harness_posture_line(payload).strip()
+            if per_app:
+                summary.add_row("Per app", per_app.removeprefix("per app: "))
         console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
         if warnings:
             warning_text = "\n".join(

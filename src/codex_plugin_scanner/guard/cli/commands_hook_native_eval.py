@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
 from ..action_lattice import coerce_guard_action, guard_action_severity, most_restrictive_guard_action
 from ..approval_scope_support import package_request_runtime_workspace_scope
+from ..harness_posture import harness_is_recording_only
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
     package_external_archive_override,
@@ -1156,7 +1157,7 @@ def evaluate_native_artifact_hook(
         )
     if (
         _canonical_harness_name(args.harness) == "cursor"
-        and config.mode != "observe"
+        and not harness_is_recording_only(config, args.harness)
         and event_name == "PreToolUse"
         and runtime_artifact.artifact_type == "tool_action_request"
     ):

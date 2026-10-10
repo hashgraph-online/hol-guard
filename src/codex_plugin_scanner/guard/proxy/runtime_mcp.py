@@ -31,6 +31,7 @@ from ..browser_opener import open_browser_url
 from ..config import GuardConfig
 from ..daemon import ensure_guard_daemon
 from ..daemon.manager import load_guard_daemon_auth_token
+from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
     _package_evaluation_requires_external_archive_binding,
@@ -603,7 +604,7 @@ class RuntimeMcpGuardProxy:
         from ..native_context import bind_context_digest_home
 
         bind_context_digest_home(context.guard_home)
-        self.config = config
+        self.config = config_for_harness(config, harness)
         self.source_scope = source_scope
         self.config_path = config_path
         self.transport = transport
@@ -936,7 +937,7 @@ class RuntimeMcpGuardProxy:
         config = provider()
         if not isinstance(config, GuardConfig):
             raise RuntimeError("runtime_mcp_current_config_provider_invalid")
-        return config
+        return config_for_harness(config, self.harness)
 
     def _catalog_boundary_failure_response(
         self,

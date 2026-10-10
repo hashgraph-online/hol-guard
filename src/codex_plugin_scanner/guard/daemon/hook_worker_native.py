@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Protocol
 from ..cli.commands_support_command_activity import hook_post_succeeded
 from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
@@ -767,7 +768,7 @@ class HookWorkerNativeMixin:
                 "failure_reason_code": "native_runtime_unavailable",
             }
         policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
-        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+        recording_only = recording_only_for_binding(policy_snapshot, harness)
         fenced: bool | None = None
 
         def unavailable(reason_code: str) -> dict[str, object]:

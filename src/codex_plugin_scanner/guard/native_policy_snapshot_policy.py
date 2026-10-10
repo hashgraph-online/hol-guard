@@ -182,6 +182,14 @@ def effective_native_policy_v3(config: GuardConfig | Mapping[str, object]) -> di
         "sandbox_analysis": sandbox_analysis,
         "receipt_redaction_level": redaction_level,
     }
+    if (
+        not isinstance(config, Mapping)
+        and isinstance(getattr(config, "harness_postures", None), Mapping)
+        and config.harness_postures
+    ):
+        from .native_policy_snapshot_harness_postures import posture_risk_overlay
+
+        policy["harness_risk_actions"] = _harness_risk_map(posture_risk_overlay(policy["harness_risk_actions"], config))
     mcp_actions = _observed_mcp_action_map(_config_value(config, "mcp_tool_actions"))
     if mcp_actions:
         policy["mcp_tool_actions"] = mcp_actions
@@ -392,6 +400,13 @@ def _merge_effective_native_policies(
     _merge_action_maps(policies, merged)
     merged["harness_actions"] = _merge_harness_actions(policies)
     merged["harness_risk_actions"] = _merge_harness_risk_actions(policies)
+    from .native_policy_snapshot_harness_postures import HARNESS_POSTURES_BINDING_KEY, merge_harness_postures
+
+    # Side channel, not a snapshot field: it never reaches the Rust digest.
+    merged.pop(HARNESS_POSTURES_BINDING_KEY, None)
+    carried = merge_harness_postures(policies)
+    if carried:
+        merged[HARNESS_POSTURES_BINDING_KEY] = carried
     _merge_named_floor(policies, merged, "protection_posture", _POSTURE_SEVERITY)
     _merge_named_floor(policies, merged, "security_level", _SECURITY_LEVEL_SEVERITY)
     # Derive mode from the selected posture so an observe-only workspace
