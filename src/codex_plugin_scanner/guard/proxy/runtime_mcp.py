@@ -585,9 +585,8 @@ class RuntimeMcpGuardProxy:
         self.command = command
         self.context = context
         self.store = store
-        from ..native_context import bind_context_digest_home
+        from ..native_context import bound_context_digest_home
 
-        bind_context_digest_home(context.guard_home)
         self.config = config_for_harness(config, harness)
         self.source_scope = source_scope
         self.config_path = config_path
@@ -595,16 +594,17 @@ class RuntimeMcpGuardProxy:
         self.server_id = server_id
         self._current_config_provider = current_config_provider
         self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
-        _ensure_native_launch_resident_verifier(self.store)
-        initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
-        self.server_identity = server_identity or build_mcp_server_identity(
-            config_path=self.config_path,
-            command=self.command[0] if self.command else "",
-            args=tuple(self.command[1:]),
-            transport=self.transport,
-            env=_configured_server_environment(initial_launch_env, self.server_env_keys),
-            env_keys=self.server_env_keys,
-        )
+        with bound_context_digest_home(context.guard_home):
+            _ensure_native_launch_resident_verifier(self.store)
+            initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
+            self.server_identity = server_identity or build_mcp_server_identity(
+                config_path=self.config_path,
+                command=self.command[0] if self.command else "",
+                args=tuple(self.command[1:]),
+                transport=self.transport,
+                env=_configured_server_environment(initial_launch_env, self.server_env_keys),
+                env_keys=self.server_env_keys,
+            )
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}

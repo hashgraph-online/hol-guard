@@ -14,8 +14,6 @@ from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, Policy
 from codex_plugin_scanner.guard.proxy._env import _build_scrubbed_env
 from codex_plugin_scanner.guard.proxy.stdio import (
     StdioGuardProxy,
-    _sensitive_read_current_action,
-    build_sensitive_read_approval_hash,
 )
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
@@ -27,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_read_request,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_sensitive_read_support import sensitive_read_current_action, sensitive_read_token
 
 _GENERIC_HARNESS = "generic-test"
 _GENERIC_ARTIFACT_ID = "generic-test:project:opaque-request"
@@ -113,9 +112,9 @@ def _save_sensitive_read_policy(
     workspace: Path,
     command: list[str],
 ) -> str:
-    current_action = _sensitive_read_current_action(config, artifact=artifact, harness="codex")
+    current_action = sensitive_read_current_action(config, artifact=artifact, harness="codex")
     launch_env = _build_scrubbed_env()
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,
@@ -170,16 +169,16 @@ def test_sensitive_read_context_binds_exact_configured_override(
     else:
         changed_kwargs = {"publisher_actions": {"trusted-publisher": "block"}}
     changed_config = replace(base_config, **changed_kwargs)
-    base_action = _sensitive_read_current_action(base_config, artifact=artifact, harness="codex")
-    changed_action = _sensitive_read_current_action(changed_config, artifact=artifact, harness="codex")
+    base_action = sensitive_read_current_action(base_config, artifact=artifact, harness="codex")
+    changed_action = sensitive_read_current_action(changed_config, artifact=artifact, harness="codex")
 
-    base_token = build_sensitive_read_approval_hash(
+    base_token = sensitive_read_token(
         artifact,
         config=base_config,
         cwd=workspace,
         current_action=base_action,
     )
-    changed_token = build_sensitive_read_approval_hash(
+    changed_token = sensitive_read_token(
         artifact,
         config=changed_config,
         cwd=workspace,
@@ -204,7 +203,7 @@ def test_sensitive_read_exact_allow_overrides_global_block_before_independent_ri
         risk_actions={"local_secret_read": "review"},
     )
 
-    action = _sensitive_read_current_action(config, artifact=artifact, harness="codex")
+    action = sensitive_read_current_action(config, artifact=artifact, harness="codex")
 
     assert action == "review"
 
@@ -222,7 +221,7 @@ def test_sensitive_read_risk_block_outranks_exact_allow(tmp_path: Path) -> None:
         risk_actions={"local_secret_read": "block"},
     )
 
-    action = _sensitive_read_current_action(config, artifact=artifact, harness="codex")
+    action = sensitive_read_current_action(config, artifact=artifact, harness="codex")
 
     assert action == "block"
 
@@ -300,7 +299,7 @@ def test_stdio_sensitive_read_old_allow_cannot_survive_new_default_block(
     )
     block_config = replace(review_config, default_action="block")
     launch_env = _build_scrubbed_env()
-    blocked_hash = build_sensitive_read_approval_hash(
+    blocked_hash = sensitive_read_token(
         artifact,
         config=block_config,
         cwd=workspace,
@@ -528,7 +527,7 @@ def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
     marker = tmp_path / "unchanged-one-shot-forwarded.json"
     command = _marker_child_command(marker)
     launch_env = _build_scrubbed_env()
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,
@@ -607,7 +606,7 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
     marker = tmp_path / "postclaim-sensitive-read-must-not-forward.json"
     command = _marker_child_command(marker)
     launch_env = _build_scrubbed_env()
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=review_config,
         cwd=workspace,
@@ -790,7 +789,7 @@ def test_sensitive_read_legacy_artifact_digest_is_not_approval_authority(tmp_pat
         risk_actions={"local_secret_read": "review"},
     )
 
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,

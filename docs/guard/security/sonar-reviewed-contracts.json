@@ -41,7 +41,6 @@
     ["AaBsqHF1kSbnfNaazfuO", "variadic", "guard/adapters/codex_remote_control.py", "guarded_codex_launch_command_candidates"],
     ["AaBsqHKQkSbnfNaazfvQ", "variadic", "guard/consumer/service.py", "_approval_reuse_scanner_evidence"],
     ["AaBsqHKQkSbnfNaazfvR", "variadic", "guard/consumer/service.py", "_runtime_detector_scanner_evidence"],
-    ["AaBsqHL7kSbnfNaazfvb", "variadic", "guard/proxy/stdio.py", "_approval_reuse_evidence"],
     ["AaBsqHMXkSbnfNaazfvf", "lattice", "guard/action_lattice.py", "<module>"],
     ["AaBsqHMXkSbnfNaazfve", "lattice", "guard/action_lattice.py", "<module>"],
     ["AaBsqG74kSbnfNaazftG", "variadic", "guard/runtime/command_rules.py", "PipelineMatcher.match"],

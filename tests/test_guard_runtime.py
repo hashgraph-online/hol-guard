@@ -66,6 +66,7 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
 )
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
+from codex_plugin_scanner.guard.proxy import stdio_sensitive_read as stdio_sensitive_read_module
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import runner_native_sync
@@ -20013,7 +20014,7 @@ def test_stdio_proxy_rewrites_stale_request_url_to_active_approval_center(tmp_pa
     workspace_dir.mkdir(parents=True, exist_ok=True)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
     monkeypatch.setattr(
-        stdio_proxy_module,
+        stdio_sensitive_read_module,
         "queue_blocked_approvals",
         lambda **_kwargs: [
             {
