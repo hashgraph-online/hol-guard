@@ -42,7 +42,8 @@ from ..runtime.approval_reuse import (
     approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
-from ..runtime.decisions import build_authoritative_decision, evaluation_authority_error
+from ..runtime.decisions import build_authoritative_decision
+from ..runtime.runner_native_authority import authority_error as native_authority_error
 from ..runtime.signals import RiskSignalV2
 from ..schemas import build_consumer_mode_contract
 from ..skill_directory_identity import validated_complete_skill_directory_hash
@@ -1881,7 +1882,7 @@ def evaluate_detection(
         "blocked": blocked,
         "receipts_recorded": receipts_recorded,
     }
-    authority_error = evaluation_authority_error(evaluation)
+    authority_error = native_authority_error(evaluation, require_launch_permitted=False)
     if authority_error is not None:
         raise RuntimeError(authority_error)
     if persist and prior_receipts == 0 and receipts_recorded > 0:

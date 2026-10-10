@@ -17,11 +17,9 @@ from codex_plugin_scanner.guard.codex_skill_config import (
 )
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime.decisions import (
-    AUTHORITATIVE_DECISION_INCONSISTENT,
-    evaluation_authority_error,
-)
+from codex_plugin_scanner.guard.runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from codex_plugin_scanner.guard.runtime.runner import _detection_with_prompt_artifacts, evaluate_detection
+from codex_plugin_scanner.guard.runtime.runner_native_authority import authority_error
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
@@ -240,10 +238,10 @@ def test_disabled_codex_skill_is_recorded_without_launch_review(tmp_path: Path) 
     assert result["blocked"] is False
     assert result["artifacts"][0]["inventory_only"] is True
     assert result["artifacts"][0]["authoritative_decision"]["enforcement"]["launch_permitted"] is False
-    assert evaluation_authority_error(result, require_launch_permitted=True) is None
+    assert authority_error(result, require_launch_permitted=True) is None
 
     forged = {**result, "artifacts": [{**result["artifacts"][0], "artifact_type": "mcp_server"}]}
-    assert evaluation_authority_error(forged, require_launch_permitted=True) == AUTHORITATIVE_DECISION_INCONSISTENT
+    assert authority_error(forged, require_launch_permitted=True) == AUTHORITATIVE_DECISION_INCONSISTENT
 
 
 def test_untrusted_inventory_only_metadata_cannot_skip_mcp_policy(tmp_path: Path) -> None:
