@@ -1,7 +1,7 @@
 {
   "schemaVersion": "guard.extension-listing.v2",
   "extensionId": "command.faf-cli",
-  "tagline": "Reviewed HOL Guard coverage for faf-cli commands that write agent context.",
+  "tagline": "faf-cli works with HOL Guard: commands that write files or reach the network are reviewed; other commands stay subject to Guard default policy.",
   "summary": "Reviews faf-cli commands that write agent instruction files, wire an MCP server into an agent config, install git hooks or CI workflows, send project context off the machine, or rewrite faf's own project files.",
   "category": "specialized-tools",
   "limitations": [
