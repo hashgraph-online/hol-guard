@@ -14601,7 +14601,26 @@ def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp
         "tool_input": {"command": "echo scope-matrix"},
         "source_scope": "project",
     }
+    # Warm the native resident for this fresh guard_home before the first real
+    # hook. The direct evaluator's PreToolUse floor has a 0.5s deadline; cold
+    # resident spawn + verifier-key provision (~440ms on py3.14) consumes it
+    # before evaluation, producing a fail-closed block instead of the saved
+    # review. Provisioning + a context_digest primes the resident outside the
+    # asserted hook call. The digest result is intentionally unused: it is a
+    # best-effort warm, and a None (transport/startup failure) must not mask the
+    # real call - which runs next and is what the asserts actually exercise.
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+    from codex_plugin_scanner.guard.native_context import native_context_digest
 
+    provision_native_verifier_key_for_store(store)
+    native_context_digest(
+        "tool_action_request",
+        {"tool_name": "Bash"},
+        guard_home=home_dir,
+        timeout_seconds=10.0,
+    )
     first = guard_commands_module.evaluate_native_artifact_hook(
         args,
         action_envelope=None,
@@ -14652,6 +14671,10 @@ def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp
     assert second.runtime_artifact_hash == token
     assert second.policy_action == "allow"
     assert second.response_payload["approval_reuse"]["status"] == "accepted"
+
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    close_native_residents(home_dir)
 
 
 def test_runtime_hook_browser_exact_override_atomically_claims_one_waiter(tmp_path: Path) -> None:
