@@ -69,10 +69,10 @@ _UNSPECIFIED_CURRENT = object()
 # single-operation cap in total while every step is individually healthy.
 MUTATION_BUDGET_SECONDS = 30.0
 # Last verified installation per Guard home, keyed by the exact authenticated
-# inputs. Verification is a pure function of these bytes and the key, so an
-# unchanged installation does not need three more native processes on every
-# database write the publisher observes. Any changed byte re-verifies; failures
-# are never retained.
+# inputs. Byte verification is a pure function of these bytes and the key, so an
+# unchanged installation does not need to re-verify anchor and record on every
+# database write the publisher observes. The runtime current-fence check still
+# runs on every read. Any changed byte re-verifies; failures are never retained.
 _VERIFIED_LOCK = threading.Lock()
 _VERIFIED: dict[str, tuple[tuple[bytes, bytes, bytes, bytes, bytes], KeyAuthenticatedBusinessSource]] = {}
 
@@ -156,6 +156,13 @@ def _write_private(store: GuardStore, name: str, wire: bytes, limit: int, deadli
     _remaining(deadline)
 
 
+def _require_current_fence(deadline: float) -> None:
+    status = _consumer(deadline, anchor=True)
+    assert status.capabilities is not None
+    if CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
+        raise _error("native_business_source_current_fence_unavailable")
+
+
 def _verify_installed(
     record: bytes | None,
     marker: bytes | None,
@@ -168,10 +175,7 @@ def _verify_installed(
         return None
     if any(value is None for value in (record, marker, retained, witness)) or marker != retained:
         raise _error()
-    status = _consumer(deadline, anchor=True)
-    assert status.capabilities is not None
-    if CURRENT_FENCE_CAPABILITY not in status.capabilities.features:
-        raise _error("native_business_source_current_fence_unavailable")
+    _require_current_fence(deadline)
     assert record is not None and marker is not None
     anchor = verify_business_source_anchor(marker, key, deadline_monotonic=deadline)
     if anchor.phase != "committed" or witness != _witness(anchor):
@@ -196,7 +200,9 @@ def read_installed_business_source(
         witness = _database_witness(store)
         cached = _cached_verified(store, record, marker, retained, witness, verifier_key)
         if cached is not None:
-            _remaining(deadline)
+            # The installed runtime is checked on every read: a memo hit only
+            # skips re-verifying bytes, never the current-fence requirement.
+            _require_current_fence(deadline)
             return cached
         result = _verify_installed(record, marker, retained, witness, verifier_key, deadline)
         if result is not None:

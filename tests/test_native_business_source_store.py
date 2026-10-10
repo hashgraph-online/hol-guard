@@ -264,3 +264,22 @@ def test_changed_installation_bytes_or_key_are_verified_again(tmp_path: Path, na
         owner.read_installed_business_source(store, _key(store))
     record_path.write_bytes(original)
     assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_memo_hit_still_refuses_runtime_without_current_fence(tmp_path: Path, native_mcp_probe, monkeypatch):
+    from types import SimpleNamespace
+
+    store = GuardStore(tmp_path / "memo-fence-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    monkeypatch.setattr(
+        owner,
+        "_consumer",
+        lambda *args, **kwargs: SimpleNamespace(
+            capabilities=SimpleNamespace(features=("native-business-source-current-fence-v1",))
+        ),
+    )
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_current_fence_unavailable"):
+        owner.read_installed_business_source(store, _key(store))
