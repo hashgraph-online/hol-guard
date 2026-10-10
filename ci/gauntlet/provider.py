@@ -50,6 +50,26 @@ def canary_present(body: bytes, canary: str) -> bool:
     return any(value in body for value in candidates)
 
 
+def stream_usage(usage: dict[str, Any]) -> dict[str, int]:
+    """Keep only the five non-negative integer counters from a streamed usage object."""
+    prompt_details = usage.get("prompt_tokens_details")
+    completion_details = usage.get("completion_tokens_details")
+    values = {
+        "prompt_tokens": usage.get("prompt_tokens"),
+        "completion_tokens": usage.get("completion_tokens"),
+        "total_tokens": usage.get("total_tokens"),
+        "cached_tokens": prompt_details.get("cached_tokens") if isinstance(prompt_details, dict) else None,
+        "reasoning_tokens": (
+            completion_details.get("reasoning_tokens") if isinstance(completion_details, dict) else None
+        ),
+    }
+    return {
+        key: value
+        for key, value in values.items()
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    }
+
+
 class InferenceRelay:
     """Keep real provider authentication out of the agent's environment."""
 
@@ -134,6 +154,7 @@ class InferenceRelay:
                     started = time.monotonic()
                     digest = hashlib.sha256()
                     size = 0
+                    usage: dict[str, Any] | None = None
                     models: set[str] = set()
                     completed = False
                     finish_seen = False
@@ -161,6 +182,8 @@ class InferenceRelay:
                                         chunk = json.loads(data)
                                         if isinstance(chunk.get("model"), str):
                                             models.add(chunk["model"])
+                                        if isinstance(chunk.get("usage"), dict):
+                                            usage = chunk["usage"]
                                         finish_seen = finish_seen or any(
                                             isinstance(choice, dict) and choice.get("finish_reason")
                                             for choice in chunk.get("choices") or []
@@ -201,6 +224,8 @@ class InferenceRelay:
                             response_bytes=size,
                             response_models=sorted(models),
                         )
+                        if usage is not None:
+                            row["usage"] = stream_usage(usage)
                         relay._settled.notify_all()
                 except Exception as exc:
                     with relay._lock:

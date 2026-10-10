@@ -206,6 +206,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
             }
+            ResidentOperationV1::GithubCliClassify(request) => {
+                crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
+            }
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
             }
@@ -235,6 +238,12 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
+            }
+            #[cfg(unix)]
+            ResidentOperationV1::SkillDirectoryIdentity(request) => {
+                crate::skill_directory_identity_op::evaluate_skill_directory_identity_request(
+                    &request,
+                )
             }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
@@ -294,7 +303,8 @@ pub(crate) fn evaluate_resident_bytes(
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
             #[cfg(not(unix))]
-            ResidentOperationV1::ContainedNodeExecute(_)
+            ResidentOperationV1::SkillDirectoryIdentity(_)
+            | ResidentOperationV1::ContainedNodeExecute(_)
             | ResidentOperationV1::ContainedTypescriptExecute(_)
             | ResidentOperationV1::ContainedPackageScriptExecute(_)
             | ResidentOperationV1::ContainedWorkspaceWriteExecute(_)
@@ -347,6 +357,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
+        ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
         _ => None,
     }
 }

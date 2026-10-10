@@ -33,6 +33,7 @@ mod git_execution_safety_probe;
 mod git_execution_safety_repo_tests;
 #[cfg(test)]
 mod git_execution_safety_tests;
+mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod hardening;
 mod hook_process_spawn;
@@ -72,6 +73,16 @@ mod resident_transport_service;
 mod resident_update_lock;
 mod runtime_cli;
 mod shim_op;
+#[cfg(unix)]
+mod skill_directory_identity_op;
+#[cfg(unix)]
+mod skill_identity_canon;
+#[cfg(unix)]
+mod skill_identity_discovery;
+#[cfg(unix)]
+mod skill_identity_inspect;
+#[cfg(unix)]
+mod skill_identity_walk;
 #[cfg(unix)]
 mod state_directory_lock;
 mod strict_json;

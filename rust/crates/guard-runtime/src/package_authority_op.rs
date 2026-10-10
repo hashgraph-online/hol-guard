@@ -2528,10 +2528,18 @@ impl ResidentEvalDeps {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn request_digest<T: serde::Serialize>(request: &T) -> Result<String, String> {
+    request_digest_with_limit(request, usize::MAX)
+}
+
+/// Canonical request digest that refuses to serialize more than `limit` bytes.
+pub(crate) fn request_digest_with_limit<T: serde::Serialize>(
+    request: &T,
+    limit: usize,
+) -> Result<String, String> {
     let material =
         serde_json::to_value(request).map_err(|_| "native_package_authority_invalid".to_owned())?;
     let mut bytes = Vec::new();
-    crate::context_digest_json::write_canonical_json_with_limit(&material, &mut bytes, usize::MAX)
+    crate::context_digest_json::write_canonical_json_with_limit(&material, &mut bytes, limit)
         .map_err(|_| "native_package_authority_invalid".to_owned())?;
     Ok(format!(
         "sha256:{}",

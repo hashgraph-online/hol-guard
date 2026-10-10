@@ -7,14 +7,15 @@ use guard_contracts::{
     ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
     ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
     ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, GitExecutionSafetyRequestV1,
-    GuardHookEnvelopeV2, LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1,
-    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
-    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
-    NativeHookRequestV1, PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
-    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
-    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    GithubCliClassifyRequestV1, GuardHookEnvelopeV2, LocalCliGrantRequestV1,
+    McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1,
+    McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1,
+    McpToolEvidenceRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
+    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
+    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
+    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
+    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -75,6 +76,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::CONTEXT_DIGEST_FEATURE.into(),
         guard_contracts::COMMAND_EFFECT_FEATURE.into(),
         guard_contracts::APPROVAL_REUSE_FEATURE.into(),
+        guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE.into(),
         guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE.into(),
         guard_contracts::APPROVAL_GATE_FEATURE.into(),
         guard_contracts::PACKAGE_AUTHORITY_FEATURE.into(),
@@ -99,6 +101,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
         features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
+        features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     }
     let (program_digest, catalog_digest, trust_digest) =
         guard_command::native_command_program::packaged_program_digests();
@@ -135,6 +138,7 @@ pub(crate) enum ResidentOperationV1 {
     ContextDigest(ContextDigestRequestV1),
     CommandEffectDecide(CommandEffectRequestV1),
     ApprovalReuseDecide(ApprovalReuseRequestV1),
+    GithubCliClassify(GithubCliClassifyRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
@@ -167,6 +171,7 @@ pub(crate) enum ResidentOperationV1 {
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
+    SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     Health(Value),

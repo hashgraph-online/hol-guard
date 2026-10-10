@@ -2,13 +2,10 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal
 
 SKILL_DIRECTORY_IDENTITY_SCHEMA = "guard.skill-directory-identity.v1"
 
@@ -33,6 +30,7 @@ SkillDirectoryIdentityFailure = Literal[
     "max_file_bytes_exceeded",
     "max_total_bytes_exceeded",
     "tree_changed_during_hash",
+    "native_unavailable",
 ]
 
 
@@ -71,6 +69,7 @@ class SkillDocumentDiscoveryIssue:
     relative_path: str
     failure_reason: SkillDirectoryIdentityFailure
     issue_id: str
+    identity: SkillDirectoryIdentity
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,32 +78,6 @@ class SkillDocumentDiscovery:
 
     documents: tuple[Path, ...]
     issues: tuple[SkillDocumentDiscoveryIssue, ...]
-
-
-@dataclass(frozen=True, slots=True)
-class _TreeEntry:
-    path: Path
-    relative_path: str
-    entry_type: Literal["directory", "file", "symlink"]
-    metadata_key: tuple[int, ...]
-    raw_link_target: str | None = None
-
-
-@dataclass(slots=True)
-class _InspectionState:
-    entry_count: int = 0
-    total_bytes: int = 0
-    primary_content_hash: str | None = None
-
-
-class _Digest(Protocol):
-    def update(self, data: bytes, /) -> None: ...
-
-
-class _IncompleteIdentityError(Exception):
-    def __init__(self, reason: SkillDirectoryIdentityFailure) -> None:
-        super().__init__(reason)
-        self.reason: SkillDirectoryIdentityFailure = reason
 
 
 def skill_directory_identity_metadata(
@@ -134,7 +107,9 @@ def skill_directory_identity_metadata(
             envelope["reason"] = identity.failure_reason
         if identity.incomplete_state_hash is not None:
             envelope["incompleteStateHash"] = identity.incomplete_state_hash
-        version_hash = identity.incomplete_state_hash or _incomplete_state_hash(identity)
+        if identity.incomplete_state_hash is None:
+            raise ValueError("an incomplete skill directory identity must carry its native state hash")
+        version_hash = identity.incomplete_state_hash
 
     metadata["versionInfo"] = {
         "versionLabel": version_label,
@@ -222,73 +197,3 @@ def _canonical_sha256(value: object) -> str | None:
     if len(normalized) != 64 or any(character not in "0123456789abcdef" for character in normalized):
         return None
     return f"sha256:{normalized}"
-
-
-def _canonical_component(value: str) -> str:
-    _validate_text_path(value)
-    normalized = unicodedata.normalize("NFC", value)
-    if normalized in {"", ".", ".."} or "/" in normalized or "\\" in normalized:
-        raise _IncompleteIdentityError("invalid_relative_path")
-    return normalized
-
-
-def _canonical_relative_path(parts: tuple[str, ...]) -> str:
-    return "/".join(_canonical_component(part) for part in parts)
-
-
-def _validate_text_path(value: str) -> None:
-    if any(0xD800 <= ord(character) <= 0xDFFF for character in value):
-        raise _IncompleteIdentityError("invalid_path_encoding")
-
-
-def _update_canonical_digest(digest: _Digest, record: dict[str, object]) -> None:
-    encoded = json.dumps(record, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("ascii")
-    digest.update(encoded)
-    digest.update(b"\n")
-
-
-def _incomplete_result(
-    state: _InspectionState,
-    reason: SkillDirectoryIdentityFailure,
-) -> SkillDirectoryIdentity:
-    provisional = SkillDirectoryIdentity(
-        schema_version=SKILL_DIRECTORY_IDENTITY_SCHEMA,
-        status="incomplete",
-        directory_hash=None,
-        primary_content_hash=state.primary_content_hash,
-        entry_count=state.entry_count,
-        total_bytes=state.total_bytes,
-        failure_reason=reason,
-        incomplete_state_hash=None,
-    )
-    return SkillDirectoryIdentity(
-        schema_version=provisional.schema_version,
-        status=provisional.status,
-        directory_hash=None,
-        primary_content_hash=provisional.primary_content_hash,
-        entry_count=provisional.entry_count,
-        total_bytes=provisional.total_bytes,
-        failure_reason=provisional.failure_reason,
-        incomplete_state_hash=_incomplete_state_hash(provisional),
-    )
-
-
-def incomplete_skill_directory_identity(
-    reason: SkillDirectoryIdentityFailure,
-) -> SkillDirectoryIdentity:
-    """Create a stable, explicitly non-reusable identity for discovery gaps."""
-
-    return _incomplete_result(_InspectionState(), reason)
-
-
-def _incomplete_state_hash(identity: SkillDirectoryIdentity) -> str:
-    material = {
-        "schema": identity.schema_version,
-        "status": "incomplete",
-        "reason": identity.failure_reason,
-        "primaryContentHash": identity.primary_content_hash,
-        "entryCount": identity.entry_count,
-        "totalBytes": identity.total_bytes,
-    }
-    digest = hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-    return f"sha256:{digest.hexdigest()}"
