@@ -13,7 +13,6 @@ from codex_plugin_scanner.guard.action_lattice import (
     most_restrictive_guard_action,
 )
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
-from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.signals import (
     RiskConfidenceLabel,
     RiskSignalV2,
@@ -384,101 +383,6 @@ def authoritative_decision_from_artifact(
     return decision
 
 
-def _is_disabled_codex_skill_inventory(raw_item: Mapping[str, object], decision: AuthoritativeGuardDecision) -> bool:
-    """Only a disabled Codex skill inventory row may omit launch authority."""
-
-    artifact_id = raw_item.get("artifact_id")
-    return (
-        raw_item.get("inventory_only") is True
-        and raw_item.get("artifact_type") == "skill"
-        and isinstance(artifact_id, str)
-        and artifact_id.startswith("codex:")
-        and decision.action == "allow"
-        and decision.reason == "inventory_only"
-        and decision.composition_trace.get("inventory_only") is True
-        and decision.enforcement.authority_finalized is False
-    )
-
-
-def evaluation_authority_error(
-    evaluation: Mapping[str, object],
-    *,
-    require_launch_permitted: bool = False,
-) -> str | None:
-    """Return a stable fail-closed code when an evaluation contradicts itself."""
-
-    if evaluation.get("decision_contract_error") is not None:
-        return AUTHORITATIVE_DECISION_INCONSISTENT
-    raw_artifacts = evaluation.get("artifacts")
-    if not isinstance(raw_artifacts, list):
-        return AUTHORITATIVE_DECISION_INCONSISTENT
-    artifact_decisions: list[AuthoritativeGuardDecision] = []
-    decisions: list[AuthoritativeGuardDecision] = []
-    try:
-        for raw_item in raw_artifacts:
-            if not isinstance(raw_item, Mapping):
-                raise ValueError("artifact decision must be an object")
-            if raw_item.get("decision_contract_error") is not None:
-                raise ValueError("artifact decision carries a contract error")
-            artifact_decision = authoritative_decision_from_artifact(
-                raw_item,
-                require_authoritative=require_launch_permitted,
-            )
-            artifact_decisions.append(artifact_decision)
-            decisions.append(artifact_decision)
-        raw_run_decision = evaluation.get("run_authoritative_decision")
-        if raw_run_decision is not None:
-            if not isinstance(raw_run_decision, Mapping):
-                raise ValueError("run_authoritative_decision must be an object")
-            run_decision = AuthoritativeGuardDecision.from_dict(raw_run_decision)
-            _validate_run_decision_projection(evaluation, run_decision)
-            decisions.append(run_decision)
-
-        raw_runtime_signals = evaluation.get("runtime_detector_signals_v2")
-        runtime_composition = evaluation.get("runtime_detector_composition")
-        has_runtime_result = raw_runtime_signals is not None or runtime_composition is not None
-        if has_runtime_result:
-            if raw_runtime_signals is None or not isinstance(runtime_composition, Mapping):
-                raise ValueError("runtime detector signals and composition must be projected together")
-            runtime_signals = _parse_signals(raw_runtime_signals)
-            recomposed = compose_action_from_signals(runtime_signals, "allow")
-            if (
-                runtime_composition.get("action") != recomposed.action
-                or runtime_composition.get("reason") != recomposed.reason
-                or runtime_composition.get("downgraded") is not recomposed.downgraded
-                or runtime_composition.get("upgraded") is not recomposed.upgraded
-            ):
-                raise ValueError("runtime detector composition must derive from its signals")
-            for artifact_decision in artifact_decisions:
-                if any(signal not in artifact_decision.signals for signal in runtime_signals):
-                    raise ValueError("artifact authority must include every runtime detector signal")
-            if not artifact_decisions and evaluation.get("run_authoritative_decision") is None:
-                raise ValueError("zero-artifact detector results require run authority")
-
-        runtime_action = runtime_composition.get("action") if isinstance(runtime_composition, Mapping) else None
-        if has_runtime_result:
-            for artifact_decision in artifact_decisions:
-                if artifact_decision.composition_trace.get("runtime_detector_action") != runtime_action:
-                    raise ValueError("artifact trace must include the runtime detector action")
-    except (TypeError, ValueError):
-        return AUTHORITATIVE_DECISION_INCONSISTENT
-    blocked = evaluation.get("blocked")
-    if not isinstance(blocked, bool):
-        return AUTHORITATIVE_DECISION_INCONSISTENT
-    if blocked != any(decision.enforcement.blocking for decision in decisions):
-        return AUTHORITATIVE_DECISION_INCONSISTENT
-    if require_launch_permitted:
-        for raw_item, decision in zip(raw_artifacts, artifact_decisions, strict=True):
-            if decision.enforcement.launch_permitted:
-                continue
-            if isinstance(raw_item, Mapping) and _is_disabled_codex_skill_inventory(raw_item, decision):
-                continue
-            return AUTHORITATIVE_DECISION_INCONSISTENT
-        if any(not decision.enforcement.launch_permitted for decision in decisions[len(artifact_decisions) :]):
-            return AUTHORITATIVE_DECISION_INCONSISTENT
-    return None
-
-
 def decision_from_legacy_policy_action(
     policy_action: GuardAction,
     *,
@@ -743,27 +647,6 @@ def _reject_unknown_composition_action_fields(trace: Mapping[str, object]) -> No
                 visit(nested, path=f"{path}[{index}]", top_level=False)
 
     visit(trace, path="composition_trace", top_level=True)
-
-
-def _validate_run_decision_projection(
-    evaluation: Mapping[str, object],
-    decision: AuthoritativeGuardDecision,
-) -> None:
-    composition = evaluation.get("runtime_detector_composition")
-    if not isinstance(composition, Mapping):
-        raise ValueError("run authority requires runtime_detector_composition")
-    if composition.get("action") != decision.action or composition.get("reason") != decision.reason:
-        raise ValueError("runtime detector composition must match run authority")
-    if decision.composition_trace.get("runtime_detector_action") != decision.action:
-        raise ValueError("run authority trace must match the runtime detector action")
-    raw_signals = evaluation.get("runtime_detector_signals_v2")
-    if not isinstance(raw_signals, list):
-        raise ValueError("run authority requires runtime detector signals")
-    if [signal.to_dict() for signal in decision.signals] != raw_signals:
-        raise ValueError("runtime detector signals must match run authority")
-    blocked_reason = evaluation.get("blocked_by_detector")
-    if decision.enforcement.blocking and blocked_reason != decision.reason:
-        raise ValueError("blocked_by_detector must match run authority reason")
 
 
 def _validate_artifact_projection(

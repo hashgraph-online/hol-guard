@@ -22,13 +22,16 @@ from codex_plugin_scanner.guard.runtime.decisions import (
     AuthoritativeGuardDecision,
     authoritative_decision_from_artifact,
     build_authoritative_decision,
-    evaluation_authority_error,
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.types import GuardVerdict, GuardVerdictAction
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
+
+def evaluation_authority_error(evaluation: object, *, require_launch_permitted: bool = False) -> str | None:
+    return runner_native_authority.authority_error(evaluation, require_launch_permitted=require_launch_permitted)  # type: ignore[arg-type]
 
 
 def _artifact(tmp_path: Path) -> GuardArtifact:
