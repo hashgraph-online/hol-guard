@@ -1429,17 +1429,11 @@ def test_gr122_duplicate_resolution_returns_idempotent_already_resolved_result(t
     assert second["item"]["resolution_action"] == "allow"
 
 
-def test_gr123_request_resolution_requires_local_auth_token(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.daemon import server as daemon_server
+def test_gr123_request_resolution_requires_local_auth_token(native_approval_reuse_runtime: Path) -> None:
+    from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
-    assert daemon_server._GuardDaemonHandler._requires_header_token(
-        "/v1/requests/req-auth/approve",
-        ["v1", "requests", "req-auth", "approve"],
-    )
-    assert daemon_server._GuardDaemonHandler._requires_header_token(
-        "/v1/requests/req-auth/resume",
-        ["v1", "requests", "req-auth", "resume"],
-    )
+    for path in ("/v1/requests/req-auth/approve", "/v1/requests/req-auth/resume"):
+        assert native_route_facts("POST", path, guard_home=native_approval_reuse_runtime).requires_header_token
 
 
 def test_gr121_legacy_expired_requests_reopen_as_pending(tmp_path: Path) -> None:

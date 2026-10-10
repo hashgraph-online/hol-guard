@@ -239,7 +239,28 @@ def _daemon_launcher_env(
         env["USERPROFILE"] = str(trusted_home)
     if guard_home is not None and not _guard_home_is_ephemeral(guard_home):
         env["GUARD_DAEMON_IDLE_TIMEOUT_SECONDS"] = "0"
+    _bind_native_runtime_override(env)
     return env
+
+
+def _bind_native_runtime_override(env: dict[str, str]) -> None:
+    """Hand the daemon the caller's pinned native runtime.
+
+    The daemon's route policy has no Python answer, so a daemon without a
+    native runtime fails every POST closed. A shadow/force override with an
+    explicit binary is how a source checkout names its runtime; without this
+    the minimal environment would drop it and the detached daemon would find no
+    runtime. ``off`` and ``auto`` are never forwarded, so an ambient value
+    can name a runtime but cannot switch the native path off for the daemon.
+    """
+
+    from ..native_runtime import native_mode
+
+    binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+    mode = native_mode()
+    if binary and Path(binary).is_absolute() and mode in {"shadow", "force"}:
+        env["HOL_GUARD_NATIVE"] = mode
+        env["HOL_GUARD_NATIVE_BINARY"] = binary
 
 
 def _trusted_daemon_prefix(value: str) -> Path:
