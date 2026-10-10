@@ -29,6 +29,14 @@ mod claim_reuse_binding;
 mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
+mod cloud_action_envelope;
+mod cloud_action_envelope_fields;
+mod cloud_request_payload;
+mod cloud_request_snapshot;
+mod cloud_request_text;
+#[cfg(test)]
+mod cloud_request_vectors_tests;
+mod cloud_sync_privacy;
 mod codex_tool_output_git;
 mod codex_tool_output_op;
 #[cfg(all(test, unix))]

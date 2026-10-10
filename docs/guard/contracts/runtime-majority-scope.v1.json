@@ -243,7 +243,6 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/cloud_review_*.py",
           "src/codex_plugin_scanner/guard/runtime/review_event_delivery.py",
-          "src/codex_plugin_scanner/guard/runtime/review_event_display.py",
           "src/codex_plugin_scanner/guard/runtime/review_policy_memory_executor.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_replay*.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_enrollment.py",
