@@ -255,28 +255,6 @@ def _run_guard_scan_command(
     _emit("scan", payload, args.json or args.consumer_mode)
     return 0
 
-def _run_guard_preflight_command(
-    args: argparse.Namespace,
-    *,
-    guard_home: Path | None = None,
-    workspace: Path | None = None,
-    context: HarnessContext | None = None,
-    store: GuardStore | None = None,
-    config: GuardConfig | None = None,
-    input_text: str | None = None,
-    output_stream: TextIO | None = None,
-) -> int:
-    payload = _run_consumer_scan_with_mode(
-        Path(args.target).resolve(),
-        intended_harness=getattr(args, "harness", None),
-        cisco_mode=args.cisco_mode,
-    )
-    _emit("preflight", payload, getattr(args, "json", False))
-    if getattr(args, "enforce", False):
-        install_verdict = payload.get("install_verdict")
-        if isinstance(install_verdict, dict) and str(install_verdict.get("action")) != "allow":
-            return 2
-    return 0
 
 def _run_guard_update_command(
     args: argparse.Namespace,
@@ -705,14 +683,6 @@ def _run_guard_mcp_command(
     return server.run_stdio()
 
 
-def _guard_package_version() -> str:
-    """Return the installed guard package version, or empty string."""
-    try:
-        from importlib.metadata import version
-
-        return version("codex-plugin-scanner")
-    except Exception:
-        return ""
 
 __all__ = [
     "_run_guard_apps_command",
@@ -725,7 +695,6 @@ __all__ = [
     "_run_guard_install_command",
     "_run_guard_mcp_command",
     "_run_guard_network_command",
-    "_run_guard_preflight_command",
     "_run_guard_protect_command",
     "_run_guard_pytest_contained_command",
     "_run_guard_scan_command",

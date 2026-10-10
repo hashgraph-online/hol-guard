@@ -20,6 +20,12 @@ use serde_json::{json, Value};
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_args::Args;
+use crate::guard_store_cmd_activity as activity;
+use crate::guard_store_cmd_api as api;
+use crate::guard_store_cmd_feedback as feedback;
+use crate::guard_store_cmd_lifecycle as lifecycle;
+use crate::guard_store_cmd_maintenance as maintenance;
+use crate::guard_store_cmd_privacy as privacy;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_outbox_binding::{
     count_recoverable_unbound, load_binding, normalized_binding, reassign_quarantined,
@@ -79,10 +85,11 @@ fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> 
     let path =
         crate::local_store_read::require_store_path(&request.store_path, &request.guard_home)
             .map_err(|_| StoreError::Invalid("native_guard_store_path_invalid"))?;
-    let writes = match method_kind(&request.method) {
-        Some(kind) => kind == Kind::Write,
+    let kind = match method_kind(&request.method) {
+        Some(kind) => kind,
         None => return invalid("native_guard_store_method_unknown"),
     };
+    let writes = kind == Kind::Write;
     let connection = Connection::open_with_flags(
         &path,
         OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -90,21 +97,27 @@ fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> 
     connection.busy_timeout(Duration::from_millis(request.busy_timeout_ms))?;
     apply_pragmas(&connection)?;
     let initial_changes = connection.total_changes();
-    if writes {
-        connection.execute_batch("BEGIN IMMEDIATE")?;
+    match kind {
+        Kind::Write => connection.execute_batch("BEGIN IMMEDIATE")?,
+        Kind::Snapshot => connection.execute_batch("BEGIN")?,
+        Kind::Read => {}
     }
     let args = Args(&request.args);
     let outcome = dispatch(&connection, &request.source, &request.method, &args);
     let payload = match outcome {
         Ok(payload) => payload,
         Err(error) => {
-            if writes {
+            if kind != Kind::Read {
                 let _ = connection.execute_batch("ROLLBACK");
             }
             return Err(error);
         }
     };
-    finalize_and_commit(&connection, writes)?;
+    if kind == Kind::Snapshot {
+        connection.execute_batch("ROLLBACK")?;
+    } else {
+        finalize_and_commit(&connection, writes)?;
+    }
     let generation = (connection.total_changes() > initial_changes)
         .then(|| outbox_generation(&connection))
         .transpose()?;
@@ -193,6 +206,8 @@ fn outbox_generation(connection: &Connection) -> StoreResult<i64> {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Read,
+    /// Several reads inside one deferred transaction for a consistent view.
+    Snapshot,
     Write,
 }
 
@@ -203,7 +218,16 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_review_event_snapshots"
         | "get_review_event_oauth_binding"
         | "count_recoverable_unbound_review_events"
-        | "list_pending_review_request_ids" => Kind::Read,
+        | "list_pending_review_request_ids"
+        | "command_activity_by_request_correlation"
+        | "is_exact_command_activity_pre_replay"
+        | "command_activity_rollups_are_reconciled"
+        | "count_command_shadow_observations" => Kind::Read,
+        "list_command_activity_page"
+        | "command_activity_analytics"
+        | "list_command_activity_invalidations"
+        | "command_activity_diagnostics"
+        | "list_command_shadow_observations" => Kind::Snapshot,
         "refresh_review_event_outbox_binding_for_identity"
         | "refresh_review_event_outbox_binding"
         | "reassign_quarantined_review_events"
@@ -213,7 +237,16 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "requeue_pending_review_events"
         | "requeue_pending_review_events_with_marker"
         | "repair_rejected_review_correlation"
-        | "recover_review_snapshot_sequences" => Kind::Write,
+        | "recover_review_snapshot_sequences"
+        | "record_command_activity"
+        | "probe_command_activity_persistence"
+        | "transition_command_activity"
+        | "record_command_activity_persistence_failure"
+        | "record_command_activity_observation_conflict"
+        | "maintain_command_activity"
+        | "rebuild_command_activity_rollups"
+        | "record_command_activity_feedback"
+        | "clear_command_activity_evidence" => Kind::Write,
         _ => return None,
     })
 }
@@ -281,6 +314,32 @@ fn dispatch(
             repair_rejected_correlation(connection, source, args)
         }
         "recover_review_snapshot_sequences" => recover_sequences(connection, source, args),
+        "record_command_activity" => activity::record_command_activity(connection, args),
+        "probe_command_activity_persistence" => activity::probe_persistence(connection, args),
+        "transition_command_activity" => lifecycle::transition(connection, args),
+        "record_command_activity_persistence_failure" => {
+            lifecycle::persistence_failure(connection, args)
+        }
+        "record_command_activity_observation_conflict" => {
+            lifecycle::observation_conflict(connection, args)
+        }
+        "command_activity_by_request_correlation" => {
+            lifecycle::activity_by_correlation(connection, args)
+        }
+        "is_exact_command_activity_pre_replay" => lifecycle::is_exact_pre_replay(connection, args),
+        "maintain_command_activity" => maintenance::maintain(connection, args),
+        "rebuild_command_activity_rollups" => maintenance::rebuild_rollups(connection, args),
+        "command_activity_rollups_are_reconciled" => {
+            maintenance::rollups_are_reconciled(connection)
+        }
+        "list_command_activity_page" => api::list_page(connection, args),
+        "command_activity_analytics" => api::analytics(connection, args),
+        "record_command_activity_feedback" => feedback::record_feedback(connection, args),
+        "list_command_activity_invalidations" => feedback::list_invalidations(connection, args),
+        "clear_command_activity_evidence" => privacy::clear_evidence(connection),
+        "command_activity_diagnostics" => privacy::diagnostics(connection, args),
+        "count_command_shadow_observations" => privacy::count_shadow(connection),
+        "list_command_shadow_observations" => privacy::list_shadow(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

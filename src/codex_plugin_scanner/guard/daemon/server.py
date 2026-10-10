@@ -315,7 +315,6 @@ from .discovery import (
 )
 from .extension_control_api import ExtensionControlApiError, ExtensionControlApiService
 from .first_cloud_sync import maybe_queue_first_cloud_sync, queue_sync_with_optional_publish
-from .hook_process_runner import HookProcessRunner
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
 from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
@@ -350,7 +349,6 @@ from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane,
 from .service_lifecycle import (
     begin_service,
     contain_failed_service_start,
-    enable_full_capacity_for_generation,
     start_serve_thread,
     startup_generation_is_current,
 )
@@ -558,7 +556,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     hook_harness_rejected: dict[str, int]
     hook_capacity_lock: threading.Lock
     runtime_hook_scheduler: RuntimeHookScheduler
-    runtime_hook_process_scheduler: RuntimeHookScheduler
     runtime_hook_evidence_writer: RuntimeHookEvidenceWriter
     request_capacity: threading.BoundedSemaphore
     request_capacity_limit: int
@@ -581,7 +578,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     unclassified_connections_lock: threading.Lock
     unclassified_watchdog_stop: threading.Event
     unclassified_watchdog_thread: threading.Thread | None
-    hook_process_runner: HookProcessRunner
     runtime_heartbeat: RuntimeHeartbeatWriter
     general_request_executor: _BoundedRequestExecutor
     control_request_executor: _BoundedRequestExecutor
@@ -698,11 +694,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             active_limit=_MAX_CONCURRENT_RUNTIME_HOOKS,
             per_harness_active_limit=_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
         )
-        self.runtime_hook_process_scheduler = RuntimeHookScheduler(
-            active_limit=0,
-            per_harness_active_limit=_MAX_CONCURRENT_RUNTIME_HOOKS_PER_HARNESS,
-            retained_bytes_limit=1,
-        )
         self.request_capacity_limit = _MAX_CONCURRENT_DAEMON_REQUESTS
         self.request_capacity = threading.BoundedSemaphore(self.request_capacity_limit)
         self.connection_capacity_limit = _MAX_CONCURRENT_DAEMON_CONNECTIONS
@@ -724,9 +715,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.unclassified_connections_lock = threading.Lock()
         self.unclassified_watchdog_stop = threading.Event()
         self.unclassified_watchdog_thread = None
-        self.hook_process_runner = HookProcessRunner(guard_home=store.guard_home)
-        self.hook_process_runner.set_capacity_listener(self.runtime_hook_process_scheduler.set_active_limit)
-        self.runtime_hook_process_scheduler.set_queue_listener(self.hook_process_runner.notify_queued_work)
         self.runtime_heartbeat = RuntimeHeartbeatWriter(
             store=store,
             session_id=runtime_session_id,
@@ -786,7 +774,6 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             _ = self.runtime_hook_evidence_writer.stop(timeout_seconds=1.0)
             if self.codex_binding_capture_writer is not None:
                 self.codex_binding_capture_writer.stop_capture()
-            _ = self.hook_process_runner.close_contained()
             raise
 
     def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
@@ -6092,18 +6079,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             claimed_saved_allow_hash=claimed_saved_allow_hash,
             claimed_approval_request_id=claimed_approval_request_id,
             reviewer=lambda hook_payload, workspace, claimed_hash, claimed_request_id: (
-                daemon_server.hook_process_runner.review(
-                    payload=hook_payload,
-                    harness="codex",
+                daemon_server.hook_worker.review_http_payload(
+                    payload=dict(hook_payload),
+                    params={},
+                    default_harness="codex",
                     home_dir=home_dir,
                     guard_home=daemon_server.store.guard_home,
                     workspace=workspace,
-                    hook_env={},
                     deadline=time.monotonic() + _RUNTIME_HOOK_PROCESS_TIMEOUT_SECONDS,
                     claim_saved_approval=False,
                     claimed_saved_allow_hash=claimed_hash,
                     claimed_approval_request_id=claimed_request_id,
-                ).payload
+                )
             ),
         )
 
@@ -6212,18 +6199,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             )
             return
 
-        remaining_seconds = max(0.0, readiness_deadline - time.monotonic())
-        worker_ready = daemon_server.hook_process_runner.wait_for_capacity(
-            minimum_workers=1,
-            timeout_seconds=remaining_seconds,
-        )
-        if not worker_ready:
-            self._write_json(
-                {"ready": False, "reason_code": "native_worker_not_ready"},
-                status=503,
-                extra_headers={"Cache-Control": "no-store"},
-            )
-            return
         self._write_json(
             {
                 "ready": True,
@@ -7289,7 +7264,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         pending_approvals = store.count_approval_requests()
         activity_health = store.get_command_activity_persistence_health()
         scheduler_stats = daemon_server.runtime_hook_scheduler.stats()
-        process_scheduler_stats = daemon_server.runtime_hook_process_scheduler.stats()
         evidence_writer_stats = daemon_server.runtime_hook_evidence_writer.stats()
         sqlite_profile = store.sqlite_profile()
         sqlite_migration_gate = store.sqlite_migration_gate_report()
@@ -7328,10 +7302,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if evidence_writer_stats["failures"] and evidence_writer_stats["queued"]:
             load_state = "store-contended"
             load_detail = "Evidence persistence is retrying outside the security decision path."
-        elif scheduler_stats["expired"] or process_scheduler_stats["expired"] or daemon_server.rejected_hook_requests:
+        elif scheduler_stats["expired"] or daemon_server.rejected_hook_requests:
             load_state = "saturated"
             load_detail = "Secure review capacity was exhausted; recovery is automatic as load falls."
-        elif scheduler_stats["queued"] or process_scheduler_stats["queued"]:
+        elif scheduler_stats["queued"]:
             load_state = "backlogged"
             load_detail = "Queued reviews are draining automatically."
         else:
@@ -7376,18 +7350,14 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "state": load_state,
                 "detail": load_detail,
             },
-            "hook_process_capacity": process_scheduler_stats,
-            "hook_workers": daemon_server.hook_process_runner.stats(),
             "request_capacity": request_capacity,
         }
 
     def _operator_health_payload(self) -> dict[str, object]:
         daemon_server = self._daemon_server()
         scheduler = daemon_server.runtime_hook_scheduler.stats()
-        workers = daemon_server.hook_process_runner.stats()
         evidence_writer = daemon_server.runtime_hook_evidence_writer.stats()
         activity_health = daemon_server.store.get_command_activity_persistence_health()
-        worker_fault = workers["configured"] > 0 and workers["workers"] == 0
         evidence_fault = not evidence_writer["running"]
         store_busy = (
             activity_health.persistence_error_count > 0
@@ -7396,7 +7366,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
         saturated = scheduler["queued_limit"] > 0 and scheduler["queued"] >= scheduler["queued_limit"]
 
-        if worker_fault or evidence_fault:
+        if evidence_fault:
             state = "saturated"
             cause = "A local processing component stopped and needs repair."
         elif store_busy:
@@ -7412,7 +7382,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             state = "healthy"
             cause = "Local reviews are processing within available capacity."
 
-        repairable = worker_fault or evidence_fault
+        repairable = evidence_fault
         return {
             "state": state,
             "cause": cause,
@@ -7425,9 +7395,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "queue_depth": scheduler["queued"],
             "queue_limit": scheduler["queued_limit"],
             "oldest_wait_ms": scheduler["oldest_queued_ms"],
-            "workers_busy": workers["busy"],
-            "workers_ready": workers["ready"],
-            "workers_configured": workers["configured"],
+            "workers_busy": scheduler["active"],
+            "workers_ready": max(0, scheduler["active_limit"] - scheduler["active"]),
+            "workers_configured": scheduler["active_limit"],
         }
 
     @staticmethod
@@ -7969,7 +7939,8 @@ class GuardDaemonServer:
             serve_thread_started = True
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
-            enable_full_capacity_for_generation(self, generation)
+            if not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
         except BaseException as error:
             contain_failed_service_start(
                 self,
@@ -7989,7 +7960,8 @@ class GuardDaemonServer:
         generation = self._active_start_generation
         serve_thread = self._thread
         try:
-            enable_full_capacity_for_generation(self, generation)
+            if not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
             if serve_thread is None:
                 self._serve_forever()
                 return
@@ -8069,7 +8041,6 @@ class GuardDaemonServer:
                 raise RuntimeError("AIBOM inventory refresh is still stopping")
             self._aibom_refresh_thread = None
         self._require_command_activity_maintenance_stopped()
-        self._server.hook_process_runner.start(defer_backfill=publish_before_workers)
         if publish_before_workers:
             # Desktop `desktop bootstrap --json` waits for the daemon state
             # file, not for hook workers or artifact reconciliation. Accept
@@ -8097,7 +8068,6 @@ class GuardDaemonServer:
     ) -> None:
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
-        self._server.hook_process_runner.require_initial_capacity()
         self._reconcile_runtime_artifacts_best_effort()
         if not startup_generation_is_current(self, generation):
             raise RuntimeError("Guard daemon stopped during startup")
@@ -8501,16 +8471,6 @@ class GuardDaemonServer:
                     contained = close_contained() is not False and contained
                 else:
                     contained = hook_worker.close() is not False and contained
-            except Exception:
-                contained = False
-        hook_process_runner = getattr(self._server, "hook_process_runner", None)
-        if hook_process_runner is not None:
-            try:
-                close_contained = getattr(hook_process_runner, "close_contained", None)
-                if callable(close_contained):
-                    contained = close_contained() is not False and contained
-                else:
-                    contained = hook_process_runner.close() is not False and contained
             except Exception:
                 contained = False
         contained = self._join_service_background_threads() and contained

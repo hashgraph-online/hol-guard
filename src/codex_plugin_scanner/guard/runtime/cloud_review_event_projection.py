@@ -12,6 +12,7 @@ from ..continuation_snapshot import (
     non_resumable_continuation_snapshot,
     validated_continuation_snapshot,
 )
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -19,18 +20,16 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION
-from .local_request_snapshots import (
-    _cloud_safe_local_request_payload,  # pyright: ignore[reportPrivateUsage]
-)
+from .cloud_request_native import NATIVE_ROW_REFUSAL_CODES, cloud_review_event_display
 from .native_workspace_review_context import (
     NativeWorkspaceReviewContextProbeState,
     build_native_workspace_review_context,
     native_workspace_review_context_cache_key,
 )
 from .review_event_delivery import StoredReviewEventError, decode_stored_review_event
-from .review_event_display import build_display_command, resolve_display_provenance
 from .time_support import parse_utc_timestamp
 
+_NATIVE_UNAVAILABLE_REASON = "cloud_native_projection_unavailable"
 _EVENT_TYPE_MAP = {
     "pending": "request_created",
     "resolved": "request_resolved",
@@ -181,8 +180,8 @@ def build_cloud_review_event(
             claim = None
     if strip_expired_capability and native_context is not None and claim is not None:
         claim = _strip_expired_replay_capability(claim)
-    display_command, display_summary, raw_command, redacted_command = build_display_command(item, redaction_level)
-    request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
+    display = cloud_review_event_display(item, redaction_level=redaction_level)
+    request_payload = display["payload"]
     continuation = frozen_continuation or continuation_offer_payload(store, request_row=item, now=_now(), headless=True)
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
@@ -193,14 +192,11 @@ def build_cloud_review_event(
         "eventType": _EVENT_TYPE_MAP[stored_status],
         "harnessId": str(item.get("harness") or "guard-review"),
         "requestKind": str(item.get("review_kind") or item.get("harness") or "guard-review"),
-        "displayProvenance": resolve_display_provenance(
-            has_command_details=bool(request_payload.get("command_text")),
-            redaction_level=redaction_level,
-        ),
-        "displayCommand": display_command,
-        "displaySummary": display_summary,
-        "rawCommand": raw_command,
-        "redactedCommand": redacted_command,
+        "displayProvenance": display["display_provenance"],
+        "displayCommand": display["display_command"],
+        "displaySummary": display["display_summary"],
+        "rawCommand": display["raw_command"],
+        "redactedCommand": display["redacted_command"],
         "reviewClaim": claim,
         "requestPayload": request_payload,
         "continuationCapability": continuation["capability"],
@@ -258,16 +254,28 @@ def project_cloud_review_event(
                     "continuation_snapshot_invalid",
                     "Stored Review event continuation snapshot is invalid.",
                 )
-        event = build_cloud_review_event(
-            stored_event.snapshot,
-            redaction_level=redaction_level,
-            oauth=oauth,
-            store=store,
-            event_sequence=stored_event.request_sequence,
-            frozen_continuation=continuation,
-            strip_expired_capability=stored_event.event_type == "review.request.snapshot_requeued",
-            native_context_probe_state=native_context_probe_state,
-        )
+        try:
+            event = build_cloud_review_event(
+                stored_event.snapshot,
+                redaction_level=redaction_level,
+                oauth=oauth,
+                store=store,
+                event_sequence=stored_event.request_sequence,
+                frozen_continuation=continuation,
+                strip_expired_capability=stored_event.event_type == "review.request.snapshot_requeued",
+                native_context_probe_state=native_context_probe_state,
+            )
+        except NativeRunnerAuthorityError as native_error:
+            # A row the resident refuses is quarantined; an outage retries the row.
+            if str(native_error) in NATIVE_ROW_REFUSAL_CODES:
+                raise StoredReviewEventError(
+                    "payload_snapshot_invalid",
+                    "Stored Review event snapshot cannot be projected into a Cloud-safe payload.",
+                ) from native_error
+            raise StoredReviewEventError(
+                _NATIVE_UNAVAILABLE_REASON,
+                "Native Cloud projection is unavailable; the Review event will be retried.",
+            ) from native_error
         if event is None:
             raise StoredReviewEventError(
                 "payload_snapshot_invalid",
@@ -289,7 +297,7 @@ def project_cloud_review_event(
             native_replay = stored_event.native_replay is True or marker_status == "native"
         _require_native_replay_context(stored_event.event_type, event, native_replay=native_replay)
     except StoredReviewEventError as error:
-        if error.reason == "native_replay_context_unavailable":
+        if error.reason in {"native_replay_context_unavailable", _NATIVE_UNAVAILABLE_REASON}:
             store.retry_review_events(
                 [sequence],
                 now=_now(),

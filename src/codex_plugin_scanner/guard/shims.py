@@ -24,7 +24,6 @@ from .package_shim_frozen import (
     classify_installed_package_shim_integrity,
     frozen_package_shim_python_path,
     installed_package_shim_attestation_bytes,
-    normalized_package_shim_content,
     package_shim_interpreter,
     resolve_frozen_package_shim_path,
     run_frozen_package_shim,
@@ -294,10 +293,6 @@ def _home_override_args(context: HarnessContextLike) -> list[str]:
 def build_shim_content_hash(content: bytes) -> str:
     """Return hex SHA-256 of shim content bytes."""
     return hashlib.sha256(content).hexdigest()
-
-
-def _normalized_package_shim_content(content: bytes) -> str:
-    return normalized_package_shim_content(content)
 
 
 def get_real_binary_info(

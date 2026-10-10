@@ -63,6 +63,10 @@ runs:
       "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       "HOL_GUARD_BUILD_SOURCE_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
   - name: Run trusted updater and daemon regressions
+    env:
+      # The binding step verified this source SHA. Regression mode selects
+      # that compiled authority; auto mode ignores external test binaries.
+      HOL_GUARD_NATIVE_REGRESSION: "1"
     run: uv run --no-sync pytest tests/test_guard_update_artifact.py tests/test_guard_update_subprocess.py tests/test_guard_update_isolation.py
       tests/test_guard_phase03_local_install.py tests/test_guard_phase03_remainder.py tests/test_dashboard_update.py tests/test_guard_daemon_manager.py
       tests/test_guard_mdm_policy.py --tb=short

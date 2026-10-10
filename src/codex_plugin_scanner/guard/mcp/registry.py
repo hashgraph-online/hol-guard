@@ -255,10 +255,6 @@ def build_tool_registry() -> list[ToolDefinition]:
     ]
 
 
-def list_tool_names() -> list[str]:
-    return [tool.name for tool in build_tool_registry()]
-
-
 def get_tool_definition(name: str) -> ToolDefinition | None:
     for tool in build_tool_registry():
         if tool.name == name:
@@ -271,6 +267,5 @@ __all__ = [
     "ToolDefinition",
     "build_tool_registry",
     "get_tool_definition",
-    "list_tool_names",
     "parse_loopback_origin",
 ]

@@ -421,34 +421,18 @@ def test_rss_measurement_is_current_and_requires_ten_percent_bound() -> None:
     )["rss"]
 
 
-def test_worker_stabilization_forces_and_verifies_ready_target() -> None:
-    events: list[tuple[str, object]] = []
+def test_worker_stabilization_requires_an_idle_scheduler_and_caps_warmup() -> None:
+    def session_with(stats: dict[str, int]) -> AdapterSession:
+        scheduler = SimpleNamespace(stats=lambda: stats)
+        return cast(
+            AdapterSession,
+            SimpleNamespace(daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=scheduler))),
+        )
 
-    class FakeRunner:
-        def notify_queued_work(self) -> None:
-            events.append(("notify", None))
-
-        def enable_full_capacity(self, *, delay_seconds: float, active_deferral_seconds: float) -> None:
-            events.append(("enable", (delay_seconds, active_deferral_seconds)))
-
-        def wait_for_capacity(self, *, minimum_workers: int, timeout_seconds: float) -> bool:
-            events.append(("wait", (minimum_workers, timeout_seconds)))
-            return True
-
-        def stats(self) -> dict[str, object]:
-            return {"target": 4, "workers": 4, "ready": 4, "busy": 0}
-
-    def fake_session() -> object:
-        return SimpleNamespace(daemon=SimpleNamespace(_server=SimpleNamespace(hook_process_runner=FakeRunner())))
-
-    session = cast(AdapterSession, fake_session())
-
-    assert _stabilize_ready_hook_workers(session) == 4
-    assert events == [
-        ("notify", None),
-        ("enable", (0.0, 0.0)),
-        ("wait", (4, 30.0)),
-    ]
+    assert _stabilize_ready_hook_workers(session_with({"active_limit": 4, "active": 0})) == 4
+    assert _stabilize_ready_hook_workers(session_with({"active_limit": 64, "active": 0})) == 16
+    with pytest.raises(RuntimeError, match="not idle"):
+        _stabilize_ready_hook_workers(session_with({"active_limit": 4, "active": 1}))
 
 
 def test_installed_adapter_corpus_covers_all_declared_routes_and_sizes(

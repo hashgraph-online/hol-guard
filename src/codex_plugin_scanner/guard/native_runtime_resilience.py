@@ -198,23 +198,6 @@ def native_record_oneshot_success(identity_sha256: str, guard_home: Path) -> Non
         state.circuit_until = 0.0
 
 
-def native_record_oneshot_failure(
-    identity_sha256: str,
-    guard_home: Path,
-    *,
-    reason: str,
-) -> None:
-    with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
-        state.oneshot_failures += 1
-        _record_failure(
-            state,
-            reason=reason,
-            fallback_reason="native_oneshot_failed",
-            now=time.monotonic(),
-        )
-
-
 def native_record_overload(identity_sha256: str, guard_home: Path) -> None:
     with _STATE_LOCK:
         state = _state(identity_sha256, guard_home)
@@ -313,7 +296,6 @@ __all__ = [
     "NativeRuntimeHealthSnapshot",
     "native_oneshot_lease",
     "native_record_integrity_failure",
-    "native_record_oneshot_failure",
     "native_record_oneshot_success",
     "native_record_overload",
     "native_record_resident_failure",

@@ -45,7 +45,7 @@ def test_failure_after_rss_readiness_keeps_its_stage(monkeypatch: pytest.MonkeyP
     )
     monkeypatch.setattr(capacity, "process_rss_bytes", fail)
     session = SimpleNamespace(
-        daemon=SimpleNamespace(_server=SimpleNamespace(hook_process_runner=SimpleNamespace(stats=lambda: {})))
+        daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=lambda: {})))
     )
     with pytest.raises(ConnectionResetError):
         capacity._measure_rss_and_c64(session, (), 2, include_capacity=True, progress=progress)
@@ -80,7 +80,7 @@ def test_baseline_requests_do_not_keep_the_enclosing_failure_stage(monkeypatch: 
     monkeypatch.setattr(capacity, "_require_ready_hook_workers", lambda *_args: None)
     monkeypatch.setattr(capacity, "process_rss_bytes", lambda: 10)
     session = SimpleNamespace(
-        daemon=SimpleNamespace(_server=SimpleNamespace(hook_process_runner=SimpleNamespace(stats=lambda: {})))
+        daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=lambda: {})))
     )
     capacity._measure_rss_and_c64(
         session,

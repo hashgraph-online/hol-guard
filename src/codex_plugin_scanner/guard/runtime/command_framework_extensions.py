@@ -7,7 +7,7 @@ from typing import final
 
 from .command_extension_matchers import executable_matcher, with_required_flag
 from .command_extension_specs import CommandExtensionSpec
-from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
 from .command_option_parsing import argument_semantics
 from .command_rules import (
@@ -85,14 +85,6 @@ class PhpArtisanScriptMatcher:
                 )
             )
         return tuple(evidence)
-
-
-def framework_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[str], frozenset[str]] | None:
-    """Return conservative registry hints for the php-launched artisan matcher."""
-
-    if not isinstance(matcher, PhpArtisanScriptMatcher):
-        return None
-    return _PHP_LAUNCHER_BASENAMES, frozenset(matcher.subcommands)
 
 
 def _artisan_matchers(*subcommands: str) -> tuple[ExecutableMatcher, ...]:
