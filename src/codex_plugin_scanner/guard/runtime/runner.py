@@ -54,6 +54,7 @@ from ..native_prompt import artifact_from_dict as _guard_artifact_from_dict
 from ..native_prompt import extract_prompt_requests as extract_prompt_requests
 from ..native_prompt import request_from_dict as _prompt_request_from_dict  # noqa: F401
 from ..native_prompt import should_force_reapproval as should_force_reapproval
+from ..native_runner_authority import NativeRunnerAuthorityError
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_oauth_access_token_claims
 from ..oauth_token_claims import oauth_binding_from_credentials, oauth_binding_metadata, oauth_refresh_binding
 from ..package_firewall_defaults import extract_cloud_user_profile
@@ -433,6 +434,10 @@ def _guard_run_finalize_authorized_launch_plan(
     return None
 
 
+_RECEIPT_PAGE_ROWS = 500
+_RECEIPT_BATCH_BYTES = 512 * 1024
+
+
 def _receipt_rowid_cursor(store: GuardStore) -> int:
     with store._connect() as connection:
         row = connection.execute("select coalesce(max(rowid), 0) as cursor from runtime_receipts").fetchone()
@@ -466,35 +471,63 @@ def _append_authority_evidence_to_receipts(
     # Runtime detector authority is composed in this aggregate, so its receipt
     # evidence is amended in the same local transaction boundary. Rust owns
     # which rows change and how; this function only reads and writes the rows.
+    # Only rows of this evaluation's artifacts are projected, in batches that
+    # stay under the transport envelope, so unrelated receipts never count.
     with store._connect() as connection:
-        rows = connection.execute(
-            """
-            select rowid, artifact_id, policy_decision, scanner_evidence_json, approval_source
-            from runtime_receipts
-            where rowid > ?
-            order by rowid asc
-            """,
-            (after_rowid,),
-        ).fetchall()
-        if not rows:
-            return
-        updates = _authority.receipt_evidence_updates(
-            rows,
-            artifact_ids=artifact_ids,
-            evidence=evidence,
-            approval_source=approval_source,
-            source_actions=source_actions,
-            replace_existing_source=replace_existing_source,
-        )
-        for update in updates:
-            connection.execute(
-                """
-                update runtime_receipts
-                set scanner_evidence_json = ?, approval_source = ?
-                where rowid = ?
-                """,
-                (json.dumps(update["scanner_evidence"], sort_keys=True), update["approval_source"], update["rowid"]),
+        batch: list[Mapping[str, object]] = []
+        batch_bytes = 0
+
+        def flush() -> None:
+            nonlocal batch, batch_bytes
+            if not batch:
+                return
+            updates = _authority.receipt_evidence_updates(
+                batch,
+                artifact_ids=artifact_ids,
+                evidence=evidence,
+                approval_source=approval_source,
+                source_actions=source_actions,
+                replace_existing_source=replace_existing_source,
             )
+            for update in updates:
+                connection.execute(
+                    """
+                    update runtime_receipts
+                    set scanner_evidence_json = ?, approval_source = ?
+                    where rowid = ?
+                    """,
+                    (
+                        json.dumps(update["scanner_evidence"], sort_keys=True),
+                        update["approval_source"],
+                        update["rowid"],
+                    ),
+                )
+            batch, batch_bytes = [], 0
+
+        cursor = after_rowid
+        while True:
+            page = connection.execute(
+                """
+                select rowid, artifact_id, policy_decision, scanner_evidence_json, approval_source
+                from runtime_receipts
+                where rowid > ?
+                order by rowid asc
+                limit ?
+                """,
+                (cursor, _RECEIPT_PAGE_ROWS),
+            ).fetchall()
+            if not page:
+                break
+            cursor = int(page[-1]["rowid"])
+            for row in page:
+                if row["artifact_id"] not in artifact_ids:
+                    continue
+                row_bytes = len(str(row["scanner_evidence_json"])) + 512
+                if batch and batch_bytes + row_bytes > _RECEIPT_BATCH_BYTES:
+                    flush()
+                batch.append(row)
+                batch_bytes += row_bytes
+        flush()
 
 
 _DEFAULT_DETECTOR_REGISTRY: tuple[Callable[[], tuple[Any, ...]], DetectorRegistry] | None = None
@@ -1955,10 +1988,19 @@ def sync_receipts(
                         if isinstance(legacy_payload, dict)
                         else []
                     )
-                    mismatch_reasons = _authority.policy_shadow_mismatch(
-                        legacy_decisions,
-                        canonical_decisions,
-                    )
+                    native_shadow_unavailable = False
+                    try:
+                        mismatch_reasons = _authority.policy_shadow_mismatch(
+                            legacy_decisions,
+                            canonical_decisions,
+                        )
+                    except NativeRunnerAuthorityError:
+                        # Rust owns the shadow comparison. Without its verdict
+                        # the candidate cannot be proven equivalent, so treat it
+                        # as a blocking mismatch: keep the existing policy and
+                        # never activate the new bundle.
+                        native_shadow_unavailable = True
+                        mismatch_reasons = ("native_shadow_unavailable",)
                     blocking_mismatch_reasons = tuple(
                         reason for reason in mismatch_reasons if reason != "legacy_unavailable"
                     )
@@ -1978,7 +2020,10 @@ def sync_receipts(
                             },
                             now,
                         )
-                    if canonical_enforcement and blocking_mismatch_reasons:
+                    if native_shadow_unavailable:
+                        validated_policy_bundle = None
+                        policy_bundle_rejection_reason = "native_shadow_unavailable"
+                    elif canonical_enforcement and blocking_mismatch_reasons:
                         validated_policy_bundle = None
                         policy_bundle_rejection_reason = "canonical_shadow_mismatch"
                 else:

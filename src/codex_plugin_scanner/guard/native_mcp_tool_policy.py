@@ -29,9 +29,10 @@ from .native_context import (
     ensure_resident_prerequisite,
 )
 from .native_execution import _resident_request
-from .native_mcp_tool_evidence import _arguments_dto, _json_value
+from .native_mcp_tool_evidence import _arguments_dto
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
+from .runtime.json_safe_copy import json_safe_copy
 
 if TYPE_CHECKING:
     from .config import GuardConfig
@@ -147,9 +148,9 @@ def _subject(
     from .mcp_tool_calls import _tool_call_configuration
 
     return {
-        "config": _json_value(_tool_call_configuration(config)),
+        "config": json_safe_copy(_tool_call_configuration(config)),
         "workspace": str(config.workspace) if config.workspace is not None else None,
-        "artifact": _json_value(
+        "artifact": json_safe_copy(
             {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)}
         ),
         "artifact_type": artifact.artifact_type,
@@ -267,7 +268,7 @@ class _Effects:
         return getattr(self, f"_need_{kind}")(need)
 
     def _need_provider_choices(self, _need: Mapping[str, Any]) -> object:
-        return _json_value(dict(self.store.read_mcp_provider_choices()))
+        return json_safe_copy(dict(self.store.read_mcp_provider_choices()))
 
     def _need_provider_authority_hash(self, _need: Mapping[str, Any]) -> object:
         return {"hash": self.store.read_mcp_provider_authority_hash()}
@@ -283,7 +284,7 @@ class _Effects:
     def _need_grant_lookup(self, need: Mapping[str, Any]) -> object:
         lookup = self.store.resolve_policy_decision_lookup(need["harness"], need["selector"], consume_one_shot=False)
         decision = lookup["decision"]
-        return {"decision": None if decision is None else _json_value(dict(decision))}
+        return {"decision": None if decision is None else json_safe_copy(dict(decision))}
 
     def _need_policy_lookup(self, need: Mapping[str, Any]) -> object:
         lookup = self.store.resolve_policy_decision_lookup_with_memory_pattern(
@@ -300,7 +301,7 @@ class _Effects:
         )
         decision = lookup["decision"]
         return {
-            "decision": None if decision is None else _json_value(dict(decision)),
+            "decision": None if decision is None else json_safe_copy(dict(decision)),
             "ignored_local_integrity": lookup["ignored_local_integrity"] is not None,
         }
 

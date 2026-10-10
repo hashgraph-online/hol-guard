@@ -13,10 +13,25 @@ fn vectors() -> Vec<Value> {
     document["vectors"].as_array().unwrap().clone()
 }
 
+/// Applies a result patch the way the Python adapter does: `set` keys replace
+/// evaluation keys and `artifact_patches` update artifacts by request index.
 fn merged(base: &Value, patch: &Value) -> Value {
     let mut out = base.as_object().cloned().unwrap_or_default();
     for (key, value) in patch["set"].as_object().unwrap() {
-        out.insert(key.clone(), value.clone());
+        if key != "artifact_patches" {
+            out.insert(key.clone(), value.clone());
+        }
+    }
+    if let Some(patches) = patch["set"].get("artifact_patches") {
+        let mut artifacts = base["artifacts"].as_array().cloned().unwrap_or_default();
+        for entry in patches.as_array().unwrap() {
+            let index = entry["index"].as_u64().unwrap() as usize;
+            let artifact = artifacts[index].as_object_mut().unwrap();
+            for (key, value) in entry["set"].as_object().unwrap() {
+                artifact.insert(key.clone(), value.clone());
+            }
+        }
+        out.insert("artifacts".to_owned(), Value::Array(artifacts));
     }
     Value::Object(out)
 }
@@ -103,6 +118,40 @@ fn oversized_request_is_rejected_before_evaluation() {
     let result = run(&request("detector_composition", json!({"signals": [huge]})));
     assert_eq!(result.code, "native_runner_authority_request_too_large");
     assert!(result.request_sha256.is_empty());
+}
+
+#[test]
+fn oversized_result_is_a_typed_error_not_a_transport_failure() {
+    // Each row echoes back as an update, so a request under the 4 MiB request
+    // bound can still produce a result over the 2 MiB response bound.
+    let pad = "p".repeat(600 * 1024);
+    let entries = serde_json::to_string(&json!([{"source": "other", "pad": pad}])).unwrap();
+    let rows: Vec<Value> = (0..4)
+        .map(|rowid| {
+            json!({
+                "rowid": rowid,
+                "artifact_id": "a",
+                "policy_decision": "allow",
+                "scanner_evidence_json": entries,
+                "approval_source": null,
+            })
+        })
+        .collect();
+    let result = run(&request(
+        "receipt_evidence_merge",
+        json!({
+            "rows": rows,
+            "artifact_ids": ["a"],
+            "evidence": {"source": "approval_reuse", "reason_code": "x"},
+            "approval_source": null,
+            "source_actions": [],
+            "replace_existing_source": false,
+        }),
+    ));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_runner_authority_response_too_large");
+    assert!(result.payload.is_none());
+    assert_eq!(result.request_sha256.len(), 64);
 }
 
 #[test]

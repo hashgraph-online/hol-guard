@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
@@ -492,6 +493,7 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
     ]
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
     legacy = [
         PolicyDecision(

@@ -17,6 +17,7 @@ from typing import Any, cast
 from ..config import GuardConfig
 from ..models import GuardAction, HarnessDetection, PolicyDecision
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+from .json_safe_copy import json_safe_copy
 
 _DETECTOR_KEYS = (
     "runtime_detector_composition",
@@ -32,6 +33,35 @@ _SAVED_DECISION_KEYS = (
     "fresh_local_approval",
     "durable_exact_approval",
 )
+# Top-level artifact keys the owner reads (values) when it validates or rebuilds
+# an artifact's authority. Every other key is sent as ``null``: its NAME still
+# takes part in the owner's action-bearing-field check, but its (possibly very
+# large) value never crosses the transport.
+_AUTHORITY_ARTIFACT_KEYS = frozenset(
+    {
+        "artifact_id",
+        "artifact_type",
+        "inventory_only",
+        "approval_context_hash",
+        "policy_action",
+        "verdict_action",
+        "policy_composition",
+        "decision_v2_json",
+        "action_envelope_json",
+        "authoritative_decision",
+        "approval_reuse",
+        "approval_reuse_status",
+        "approval_reuse_reason_code",
+        "trusted_request_override",
+        "approval_claim",
+        "scanner_evidence",
+        "decision_contract_error",
+        "user_override",
+    }
+)
+# Per-request budget for the slimmed artifacts of one chunk (the transport cap
+# is 4 MiB; the reply is a patch, so it stays far below its own 2 MiB cap).
+_CHUNK_BYTES = 512 * 1024
 _SHADOW_KEYS = ("harness", "scope", "artifact_id", "artifact_hash", "workspace", "publisher", "action", "expires_at")
 
 
@@ -66,6 +96,94 @@ def _subset(source: Mapping[str, object], keys: Iterable[str]) -> dict[str, obje
 def _artifact_list(evaluation: Mapping[str, object]) -> list[object] | None:
     raw = evaluation.get("artifacts")
     return list(raw) if isinstance(raw, list) else None
+
+
+def _slim_artifact(item: object) -> object:
+    """Authority-relevant projection of one artifact; non-objects carry no authority."""
+
+    if not isinstance(item, Mapping):
+        return None
+    return {key: value if key in _AUTHORITY_ARTIFACT_KEYS else None for key, value in item.items()}
+
+
+def _slim_artifacts(artifacts: Sequence[object] | None) -> list[object] | None:
+    return None if artifacts is None else [_slim_artifact(item) for item in artifacts]
+
+
+def _artifact_chunks(slim: Sequence[object]) -> list[tuple[int, list[object]]]:
+    """Split slimmed artifacts into ``(offset, items)`` chunks under the budget."""
+
+    chunks: list[tuple[int, list[object]]] = []
+    start, used = 0, 0
+    for index, item in enumerate(slim):
+        size = len(json.dumps(item, default=str, separators=(",", ":")))
+        if index > start and used + size > _CHUNK_BYTES:
+            chunks.append((start, list(slim[start:index])))
+            start, used = index, 0
+        used += size
+    chunks.append((start, list(slim[start:])))
+    return chunks
+
+
+def _artifact_call(
+    kind: str,
+    evaluation: Mapping[str, object],
+    args: dict[str, object],
+    *,
+    absent: list[object] | None,
+) -> dict[str, Any]:
+    """Run an artifact-rewriting kind over bounded chunks of slimmed artifacts.
+
+    The owner answers with per-artifact patches keyed by the artifact's index in
+    its request; chunk offsets turn them back into global indices. Everything
+    else in ``set`` (and ``receipt_evidence``) is identical for every chunk.
+    """
+
+    artifacts = _artifact_list(evaluation)
+    if not artifacts:
+        return native_runner_authority(kind, {**args, "artifacts": absent})
+    merged: dict[str, Any] | None = None
+    patches: list[object] = []
+    for offset, chunk in _artifact_chunks(_slim_artifacts(artifacts) or []):
+        payload = native_runner_authority(kind, {**args, "artifacts": chunk})
+        chunk_set = _typed(payload, "set", dict)
+        if merged is None:
+            merged = payload
+        if "artifact_patches" in chunk_set:
+            for patch in _typed(chunk_set, "artifact_patches", list):
+                if not isinstance(patch, dict) or not isinstance(patch.get("index"), int):
+                    raise _malformed()
+                patches.append({**patch, "index": patch["index"] + offset})
+    if merged is None:
+        raise _malformed()
+    result_set = dict(_typed(merged, "set", dict))
+    if "artifact_patches" in result_set:
+        result_set["artifact_patches"] = patches
+    return {**merged, "set": result_set}
+
+
+def _with_set(evaluation: Mapping[str, Any], result_set: Mapping[str, Any]) -> dict[str, Any]:
+    """Merge an owner ``set`` into the evaluation, applying artifact patches by index."""
+
+    fields = dict(result_set)
+    patches = fields.pop("artifact_patches", None)
+    merged = {**evaluation, **fields}
+    if patches is not None:
+        raw = evaluation.get("artifacts")
+        artifacts = list(raw) if isinstance(raw, list) else []
+        if not isinstance(patches, list):
+            raise _malformed()
+        for patch in patches:
+            if not isinstance(patch, Mapping):
+                raise _malformed()
+            index, changes = patch.get("index"), patch.get("set")
+            if not isinstance(index, int) or not 0 <= index < len(artifacts) or not isinstance(changes, dict):
+                raise _malformed()
+            if not isinstance(artifacts[index], Mapping):
+                raise _malformed()
+            artifacts[index] = {**artifacts[index], **changes}
+        merged["artifacts"] = artifacts
+    return merged
 
 
 def detector_authority(evaluation: Mapping[str, object]) -> DetectorAuthority:
@@ -137,7 +255,11 @@ def interactive_request_overrides(evaluation: Mapping[str, object]) -> tuple[dic
 
     payload = native_runner_authority(
         "request_overrides",
-        {"mode": "interactive", "approval_wait": None, "artifacts": _artifact_list(evaluation)},
+        {
+            "mode": "interactive",
+            "approval_wait": None,
+            "artifacts": _slim_artifacts(_artifact_list(evaluation)),
+        },
     )
     return _typed(payload, "overrides", dict), _typed(payload, "labels", dict)
 
@@ -174,15 +296,13 @@ def with_recorded_detector_result(
 ) -> dict[str, Any]:
     """Carry one pre-launch detector result across persistence without rerunning it."""
 
-    payload = native_runner_authority(
+    payload = _artifact_call(
         "apply_detector_result",
-        {
-            "artifacts": evaluation.get("artifacts"),
-            "blocked": evaluation.get("blocked"),
-            "detector": _subset(detector_evaluation, _DETECTOR_RESULT_KEYS),
-        },
+        evaluation,
+        {"blocked": evaluation.get("blocked"), "detector": _subset(detector_evaluation, _DETECTOR_RESULT_KEYS)},
+        absent=None,
     )
-    return {**evaluation, **_typed(payload, "set", dict)}
+    return _with_set(evaluation, _typed(payload, "set", dict))
 
 
 def with_preclaim_failure(
@@ -193,15 +313,13 @@ def with_preclaim_failure(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Terminal failure before claiming; returns ``(evaluation, receipt_evidence)``."""
 
-    payload = native_runner_authority(
+    payload = _artifact_call(
         "preclaim_failure",
-        {
-            "artifacts": evaluation.get("artifacts", []),
-            "affected_artifact_ids": sorted(affected_artifact_ids),
-            "reason_code": reason_code,
-        },
+        evaluation,
+        {"affected_artifact_ids": sorted(affected_artifact_ids), "reason_code": reason_code},
+        absent=[],
     )
-    return {**evaluation, **_typed(payload, "set", dict)}, _typed(payload, "receipt_evidence", dict)
+    return _with_set(evaluation, _typed(payload, "set", dict)), _typed(payload, "receipt_evidence", dict)
 
 
 def with_claim_context_failure(
@@ -211,15 +329,27 @@ def with_claim_context_failure(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Changed post-claim authority; returns ``(evaluation, receipt_evidence)``."""
 
-    payload = native_runner_authority(
+    payload = _artifact_call(
         "claim_context_failure",
-        {"artifacts": evaluation.get("artifacts", []), "claimed_artifact_ids": sorted(claimed_artifact_ids)},
+        evaluation,
+        {"claimed_artifact_ids": sorted(claimed_artifact_ids)},
+        absent=[],
     )
-    return {**evaluation, **_typed(payload, "set", dict)}, _typed(payload, "receipt_evidence", dict)
+    return _with_set(evaluation, _typed(payload, "set", dict)), _typed(payload, "receipt_evidence", dict)
 
 
-def _jsonable(value: object) -> Any:
-    return json.loads(json.dumps(value, default=str))
+def _signature_artifacts(artifacts: Sequence[object] | None) -> list[object] | None:
+    """Only the identity, context hash and action bind launch authority."""
+
+    if artifacts is None:
+        return None
+    projected: list[object] = []
+    for item in artifacts:
+        if isinstance(item, Mapping):
+            projected.append(_subset(item, ("artifact_id", "approval_context_hash", "policy_action")))
+        else:
+            projected.append(item)
+    return projected
 
 
 def authority_signature(
@@ -237,20 +367,13 @@ def authority_signature(
             "installed": detection.installed,
             "command_available": detection.command_available,
             "config_paths": list(detection.config_paths),
-            "artifacts": None
-            if artifacts is None
-            else [
-                _subset(item, ("artifact_id", "approval_context_hash", "policy_action"))
-                if isinstance(item, Mapping)
-                else item
-                for item in artifacts
-            ],
+            "artifacts": _signature_artifacts(artifacts),
             "detector": _subset(evaluation, _DETECTOR_KEYS),
             "launch_previews": [
                 {
                     "adapter_command": list(plan.adapter_command),
                     "environment_sha256": plan.environment_sha256,
-                    "identity": _jsonable(dict(plan.identity)),
+                    "identity": json_safe_copy(dict(plan.identity)),
                     "reusable": plan.reusable,
                 }
                 for plan in launch_previews
@@ -272,9 +395,13 @@ def authority_error(evaluation: Mapping[str, object], *, require_launch_permitte
         "blocked_by_detector",
         "blocked",
     )
+    projected = _subset(evaluation, gate_keys)
+    artifacts = _artifact_list(evaluation)
+    if artifacts is not None:
+        projected["artifacts"] = _slim_artifacts(artifacts)
     payload = native_runner_authority(
         "authority_gate",
-        {"evaluation": _subset(evaluation, gate_keys), "require_launch_permitted": require_launch_permitted},
+        {"evaluation": projected, "require_launch_permitted": require_launch_permitted},
     )
     return _typed(payload, "authority_error", str, nullable=True)
 

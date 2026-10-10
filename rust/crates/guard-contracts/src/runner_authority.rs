@@ -19,9 +19,11 @@ pub const RUNNER_AUTHORITY_RESULT_SCHEMA: &str = "guard-runner-authority-result.
 /// Capability advertised by the runtime when this operation is available.
 pub const RUNNER_AUTHORITY_FEATURE: &str = "runner-authority-v1";
 
-/// Largest canonical request serialization the op will accept. Patch results
-/// echo the evaluation's artifacts, so the resident's response bound applies
-/// as well; an evaluation past either bound fails closed.
+/// Largest canonical request serialization the op will accept. Artifact
+/// results are compact patches, but the resident's 2 MiB response bound still
+/// applies; a result past it is a typed
+/// `native_runner_authority_response_too_large` error. An evaluation past
+/// either bound fails closed.
 pub const RUNNER_AUTHORITY_MAX_BYTES: usize = 4 * 1024 * 1024;
 
 /// Every field is required (no serde defaults) so the canonical request digest

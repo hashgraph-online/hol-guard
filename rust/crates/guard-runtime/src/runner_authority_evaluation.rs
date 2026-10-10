@@ -66,6 +66,30 @@ fn rebuilt(
     }
 }
 
+/// Per-artifact patches: only the keys a rewrite changed, so the reply never
+/// echoes untouched artifact payloads. `index` is the artifact's position in
+/// the request; non-object entries are never rewritten.
+fn artifact_patches<F>(artifacts: &[Value], rewrite: F) -> Vec<Value>
+where
+    F: Fn(&Map<String, Value>) -> Option<Value>,
+{
+    artifacts
+        .iter()
+        .enumerate()
+        .filter_map(|(index, raw)| {
+            let original = raw.as_object()?;
+            let Value::Object(next) = rewrite(original)? else {
+                return None;
+            };
+            let changed: Map<String, Value> = next
+                .into_iter()
+                .filter(|(key, value)| original.get(key) != Some(value))
+                .collect();
+            (!changed.is_empty()).then(|| json!({"index": index, "set": changed}))
+        })
+        .collect()
+}
+
 fn detector_signals(detector: &Map<String, Value>) -> Result<Vec<RiskSignalV2>, ()> {
     match detector.get("runtime_detector_signals_v2") {
         None | Some(Value::Null) => Ok(Vec::new()),
@@ -184,16 +208,16 @@ pub(crate) fn apply_detector_result(args: &Value) -> KindResult {
         }
         return Ok(json!({"set": set}));
     };
-    let rewritten: Vec<Value> = artifacts
-        .iter()
-        .map(|raw| match raw.as_object() {
-            Some(item) => {
-                recorded_artifact(item, evidence.as_ref(), action, reason.as_deref(), &signals)
-            }
-            None => raw.clone(),
-        })
-        .collect();
-    set.insert("artifacts".to_owned(), Value::Array(rewritten));
+    let patches = artifact_patches(artifacts, |item| {
+        Some(recorded_artifact(
+            item,
+            evidence.as_ref(),
+            action,
+            reason.as_deref(),
+            &signals,
+        ))
+    });
+    set.insert("artifact_patches".to_owned(), Value::Array(patches));
     Ok(json!({"set": set}))
 }
 
@@ -258,33 +282,25 @@ fn terminal_failure(
         "source": REUSE_SOURCE, "status": "rejected", "reason_code": code, "reason": reason,
     });
     let mut ids: Vec<&str> = affected.cloned().unwrap_or_default();
-    let artifacts: Vec<Value> = args
-        .get("artifacts")
-        .and_then(Value::as_array)
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .map(|raw| {
-            let Some(item) = raw.as_object() else {
-                return raw.clone();
-            };
+    let artifacts = artifact_patches(
+        args.get("artifacts")
+            .and_then(Value::as_array)
+            .map(Vec::as_slice)
+            .unwrap_or_default(),
+        |item| {
             let in_scope = affected.is_none_or(|ids| {
                 item.get("artifact_id")
                     .and_then(Value::as_str)
                     .is_some_and(|id| ids.contains(&id))
             });
-            if in_scope {
-                rejected_reuse_artifact(item, &evidence, code, revalidation)
-            } else {
-                raw.clone()
-            }
-        })
-        .collect();
+            in_scope.then(|| rejected_reuse_artifact(item, &evidence, code, revalidation))
+        },
+    );
     ids.sort_unstable();
     ids.dedup();
     Ok(json!({
         "set": {
-            "artifacts": artifacts,
+            "artifact_patches": artifacts,
             "blocked": true,
             "approval_claim": {"status": claim_status, "reason_code": code, "artifact_ids": ids},
         },

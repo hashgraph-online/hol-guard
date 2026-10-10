@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import service as consumer_service
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
-from codex_plugin_scanner.guard.runtime import runner_native_authority
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.decisions import (
@@ -26,12 +25,9 @@ from codex_plugin_scanner.guard.runtime.decisions import (
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.types import GuardVerdict, GuardVerdictAction
+from tests.guard_authority_gate_support import evaluation_authority_error, runner_native_authority
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
-
-
-def evaluation_authority_error(evaluation: object, *, require_launch_permitted: bool = False) -> str | None:
-    return runner_native_authority.authority_error(evaluation, require_launch_permitted=require_launch_permitted)  # type: ignore[arg-type]
 
 
 def _artifact(tmp_path: Path) -> GuardArtifact:

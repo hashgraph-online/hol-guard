@@ -22,6 +22,7 @@ use super::{runner_authority_detector as detector, runner_authority_evaluation a
 pub(crate) const ERR_INVALID: &str = "native_runner_authority_invalid";
 const ERR_SCHEMA: &str = "native_runner_authority_schema_mismatch";
 const ERR_TOO_LARGE: &str = "native_runner_authority_request_too_large";
+const ERR_RESPONSE_TOO_LARGE: &str = "native_runner_authority_response_too_large";
 const ERR_KIND: &str = "native_runner_authority_unknown_kind";
 
 /// Result of one kind: its payload, or a stable failure code.
@@ -96,14 +97,30 @@ pub(crate) fn evaluate_runner_authority(
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
-    crate::encode_response(&RunnerAuthorityResultV1 {
+    let encoded = crate::encode_response(&RunnerAuthorityResultV1 {
         schema: RUNNER_AUTHORITY_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
-        request_sha256,
+        request_sha256: request_sha256.clone(),
         status,
         code,
         payload,
-    })
+    });
+    // The request bound (4 MiB) is wider than the resident response bound
+    // (2 MiB). A result past that bound is this op's own typed refusal, never
+    // a bare transport error and never a partial answer.
+    match encoded {
+        Err(reason) if reason == "native_response_too_large" => {
+            crate::encode_response(&RunnerAuthorityResultV1 {
+                schema: RUNNER_AUTHORITY_RESULT_SCHEMA.to_owned(),
+                request_id: request.request_id.clone(),
+                request_sha256,
+                status: "error".to_owned(),
+                code: ERR_RESPONSE_TOO_LARGE.to_owned(),
+                payload: None,
+            })
+        }
+        other => other,
+    }
 }
 
 #[cfg(test)]
