@@ -103,7 +103,8 @@ fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
         {
             let operator_end = index + 2;
             let declaration = if line.get(operator_end) == Some(&'-') {
-                // The optional operator dash backtracks for delimiters such as --END.
+                // Bash reads `<<-` greedily, so `<<--END` strips tabs and closes
+                // at `-END`. Only fall back to `<<` when no `<<-` delimiter parses.
                 heredoc_declaration(line, index, operator_end + 1, true)
                     .or_else(|| heredoc_declaration(line, index, operator_end, false))
             } else {
@@ -148,6 +149,15 @@ fn heredoc_declaration(
                 .is_some_and(|ch| ch.is_ascii_alphanumeric()) =>
         {
             cursor += 3;
+            true
+        }
+        // After the `<<-` operator a single leading hyphen belongs to the delimiter.
+        '-' if strip_tabs
+            && line
+                .get(cursor + 1)
+                .is_some_and(|ch| ch.is_ascii_alphanumeric()) =>
+        {
+            cursor += 2;
             true
         }
         _ => return None,

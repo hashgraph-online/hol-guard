@@ -105,7 +105,12 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
-        assert set(execution_job["needs"]) == {planner, "plan", "native-command-evaluators"}
+        assert set(execution_job["needs"]) == {
+            planner,
+            "plan",
+            "native-command-evaluators",
+            "native-consumer-coverage",
+        }
         # Coverage consumes the planner-emitted shard indices via a dynamic matrix
         # rather than a static literal range, so assert the expression references
         # the coverage-plan output and that the planner emits the expected count.

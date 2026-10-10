@@ -13,6 +13,46 @@ def write_metadata(directory, metadata):
     (directory / "metadata.json").write_text(json.dumps(metadata), encoding="utf-8")
 
 
+def test_altered_instrumented_executable_is_rejected_before_execution(bundle):
+    root, directory, selected, _ = bundle
+    (directory / "bin/hol-guard-runtime").write_bytes(b"different executable")
+    with pytest.raises(ValueError):
+        consumer.verify_bundle(root, directory, selected)
+
+
+def test_profile_destination_cannot_be_redirected_outside_the_checkout(bundle):
+    root, directory, selected, metadata = bundle
+    metadata["profile_directory"] = str(root.parent)
+    (directory / "metadata.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError):
+        consumer.verify_bundle(root, directory, selected)
+
+
+def test_stale_attempt_cannot_supply_instrumented_native_code(bundle):
+    root, directory, selected, metadata = bundle
+    metadata["attempt"] = 1
+    (directory / "metadata.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError):
+        consumer.verify_bundle(root, directory, selected)
+
+
+def test_bundle_parent_symlink_cannot_bless_an_external_native_file(bundle):
+    root, directory, selected, _ = bundle
+    external = root / "outside-bundle"
+    (directory / "bin").rename(external)
+    (directory / "bin").symlink_to(external, target_is_directory=True)
+    with pytest.raises(ValueError):
+        consumer.verify_bundle(root, directory, selected)
+
+
+def test_colliding_profile_signatures_cannot_mix_native_code_counters(bundle):
+    root, directory, selected, metadata = bundle
+    metadata["profile_signatures"] = {name: "101" for name in consumer.BINS}
+    (directory / "metadata.json").write_text(json.dumps(metadata))
+    with pytest.raises(ValueError):
+        consumer.verify_bundle(root, directory, selected)
+
+
 def test_another_current_successful_producer_cannot_qualify_native_shard(artifact_consumer):
     fixture = artifact_consumer
     directory, metadata = fixture.make_shard(0)
@@ -137,7 +177,7 @@ def test_rejected_shard_cannot_poison_git_tracked_source_authority(artifact_cons
 
 
 @pytest.mark.parametrize("boundary", ["failed", "cloned-prior-attempt", "foreign-source", "pre-execution-artifact"])
-def test_shared_selection_requires_entitlement_for_the_last_of_all_128_shards(artifact_consumer, boundary):
+def test_shared_selection_requires_entitlement_for_the_last_of_all_planned_shards(artifact_consumer, boundary):
     fixture = artifact_consumer
     final_job = fixture.jobs[-1]
     final_artifact = fixture.artifacts[-1]
@@ -157,9 +197,9 @@ def test_shared_selection_requires_entitlement_for_the_last_of_all_128_shards(ar
         consumer.coverage.select_shards(fixture.root)
 
 
-def test_merging_all_128_empty_profile_shards_preserves_unhit_rust_maps(artifact_consumer, monkeypatch):
+def test_merging_all_planned_empty_profile_shards_preserves_unhit_rust_maps(artifact_consumer, monkeypatch):
     fixture = artifact_consumer
-    for shard in range(128):
+    for shard in range(fixture.shard_total):
         fixture.make_shard(shard)
     rust_expected = {"schema": consumer.coverage.SCHEMA, **fixture.expected}
     monkeypatch.setattr(consumer.coverage, "identity", lambda _root: deepcopy(rust_expected))

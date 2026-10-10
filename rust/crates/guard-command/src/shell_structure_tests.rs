@@ -21,7 +21,8 @@ fn real_heredocs_mask_bodies_and_preserve_following_commands() {
         ("'EOF'", true, false, "npm install hidden\n", "EOF"),
         ("\"EOF\"", true, false, "npm install hidden\n", "EOF"),
         ("-EOF", false, true, "\tnpm install hidden\n", "\tEOF"),
-        ("--END", false, false, "npm install hidden\n", "--END"),
+        ("--END", false, true, "npm install hidden\n", "-END"),
+        ("---END", false, true, "npm install hidden\n", "--END"),
     ] {
         for prefix in ["cat ", "printf 'é🙂' | cat ", "printf \\é | cat "] {
             let command = format!("{prefix}<<{declaration}\n{body}{closing}\nnpm install visible");
@@ -44,6 +45,16 @@ fn real_heredocs_mask_bodies_and_preserve_following_commands() {
 }
 
 #[test]
+fn tab_stripping_heredoc_with_hyphen_delimiter_closes_at_the_bash_delimiter() {
+    let command = "cat <<--END\nx\n-END\nnpm install malicious\n--END";
+    let heredocs = extract_heredocs(command);
+    assert_eq!(heredocs.len(), 1);
+    assert_eq!(heredocs[0].delimiter, "-END");
+    assert!(heredocs[0].strip_tabs);
+    assert!(mask_heredoc_bodies(command, &heredocs).contains("npm install malicious"));
+}
+
+#[test]
 fn here_string_before_real_heredoc_does_not_consume_its_body() {
     let command =
         "cat <<<x; printf 'é🙂' | cat <<'EOF'\nnpm install hidden\nEOF\nnpm install visible";
@@ -63,14 +74,7 @@ fn delimiter_prefixes_preserve_unmatched_header_suffixes() {
         ("cat <<EOF-tail", "EOF", false, false, 9, "cat      -tail\n"),
         ("cat <<EOFé", "EOF", false, false, 9, "cat      é\n"),
         ("cat <<_9.name", "_9", false, false, 8, "cat     .name\n"),
-        (
-            "cat <<--9-A_.",
-            "--9-A_",
-            false,
-            false,
-            12,
-            "cat         .\n",
-        ),
+        ("cat <<--9-A_.", "-9-A_", false, true, 12, "cat         .\n"),
         ("cat <<---END", "--END", false, true, 12, "cat         \n"),
         ("cat << 'EOF'x", "EOF", true, false, 12, "cat         x\n"),
         ("cat <<\t\"EOF\"", "EOF", true, false, 12, "cat         \n"),

@@ -179,7 +179,7 @@ def test_failed_native_execution_removes_previous_qualifying_artifact(tmp_path):
     for name, body in {
         "cargo": "exit 7\n",
         "rustup": "exit 0\n",
-        "python": 'if [[ "$1" == -c ]]; then echo 1.88.0; else echo "$COVERAGE_BIN"; fi\n',
+        "python3": 'if [[ "$1" == -c ]]; then echo 1.88.0; else echo "$COVERAGE_BIN"; fi\n',
     }.items():
         stub = binaries / name
         stub.write_text(f"#!{bash}\n" + body, encoding="utf-8")

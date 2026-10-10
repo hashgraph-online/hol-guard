@@ -45,46 +45,6 @@ def bundle(tmp_path: Path, monkeypatch):
     return tmp_path, directory, identity, metadata
 
 
-def test_altered_instrumented_executable_is_rejected_before_execution(bundle):
-    root, directory, selected, _ = bundle
-    (directory / "bin/hol-guard-runtime").write_bytes(b"different executable")
-    with pytest.raises(ValueError):
-        consumer.verify_bundle(root, directory, selected)
-
-
-def test_profile_destination_cannot_be_redirected_outside_the_checkout(bundle):
-    root, directory, selected, metadata = bundle
-    metadata["profile_directory"] = str(root.parent)
-    (directory / "metadata.json").write_text(json.dumps(metadata))
-    with pytest.raises(ValueError):
-        consumer.verify_bundle(root, directory, selected)
-
-
-def test_stale_attempt_cannot_supply_instrumented_native_code(bundle):
-    root, directory, selected, metadata = bundle
-    metadata["attempt"] = 1
-    (directory / "metadata.json").write_text(json.dumps(metadata))
-    with pytest.raises(ValueError):
-        consumer.verify_bundle(root, directory, selected)
-
-
-def test_bundle_parent_symlink_cannot_bless_an_external_native_file(bundle):
-    root, directory, selected, _ = bundle
-    external = root / "outside-bundle"
-    (directory / "bin").rename(external)
-    (directory / "bin").symlink_to(external, target_is_directory=True)
-    with pytest.raises(ValueError):
-        consumer.verify_bundle(root, directory, selected)
-
-
-def test_colliding_profile_signatures_cannot_mix_native_code_counters(bundle):
-    root, directory, selected, metadata = bundle
-    metadata["profile_signatures"] = {name: "101" for name in consumer.BINS}
-    (directory / "metadata.json").write_text(json.dumps(metadata))
-    with pytest.raises(ValueError):
-        consumer.verify_bundle(root, directory, selected)
-
-
 @pytest.fixture
 def artifact_consumer(bundle, monkeypatch):
     root, directory, identity, manifest = bundle
@@ -125,12 +85,15 @@ def artifact_consumer(bundle, monkeypatch):
     (directory / "metadata.json").write_text(json.dumps(manifest), encoding="utf-8")
     monkeypatch.setattr(consumer, "context", lambda _root: deepcopy(expected))
 
+    # The planned inventory size is import-time state shared with the production
+    # selector, so the fixture follows it instead of assuming a fixed count.
+    shard_total = consumer.coverage.barrier.SHARD_COUNT
     environment = MappingProxyType(
         {
             "GITHUB_REPOSITORY": expected["repository"],
             "GITHUB_RUN_ID": str(expected["run_id"]),
             "GITHUB_RUN_ATTEMPT": str(expected["attempt"]),
-            "CI_PYTEST_COVERAGE_SHARDS": "128",
+            "CI_PYTEST_COVERAGE_SHARDS": str(shard_total),
         }
     )
     # Replace the module references, not the process-wide os.environ object.
@@ -178,7 +141,7 @@ def artifact_consumer(bundle, monkeypatch):
         artifact(5001, f"{consumer.PREFIX}-metadata-2"),
         artifact(6000, "native-command-evaluators-2"),
     ]
-    for shard in range(128):
+    for shard in range(shard_total):
         jobs.append(job(1000 + shard, f"coverage (3.12, {shard})"))
         artifacts.append(artifact(7000 + shard, f"rust-consumer-coverage-2-3.12-{shard}"))
 
@@ -192,7 +155,7 @@ def artifact_consumer(bundle, monkeypatch):
         for prefix, field, values in ((jobs_path, "jobs", jobs), (artifacts_path, "artifacts", artifacts)):
             if path.startswith(prefix):
                 page = int(path.removeprefix(prefix))
-                assert 1 <= page <= 2, "fixture API pagination exceeded its bounded inventory"
+                assert 1 <= page <= -(-len(values) // 100), "fixture API pagination exceeded its bounded inventory"
                 start = (page - 1) * 100
                 return {"total_count": len(values), field: deepcopy(values[start : start + 100])}
         raise AssertionError(f"Unexpected fixture API endpoint: {path}")
@@ -239,7 +202,7 @@ def artifact_consumer(bundle, monkeypatch):
             **deepcopy(expected),
             "schema": consumer.SHARD_SCHEMA,
             "shard": shard,
-            "shard_count": 128,
+            "shard_count": shard_total,
             "native_manifest": deepcopy(manifest),
             "native_producer": deepcopy(producer_selection["artifact"]),
             "report_hash": consumer.coverage.digest(report),
@@ -266,4 +229,5 @@ def artifact_consumer(bundle, monkeypatch):
         shard_directory=shard_directory,
         zero_lcov=zero_lcov,
         make_shard=make_shard,
+        shard_total=shard_total,
     )
