@@ -26,6 +26,7 @@ mod daemon_policy_authority;
 mod data_flow_analyze_op;
 mod edge;
 mod encrypted_secret_store;
+mod false_positive_rules_op;
 mod git_execution_safety_binary;
 mod git_execution_safety_checks;
 mod git_execution_safety_config;
