@@ -30,6 +30,7 @@ on:
       - scripts/publish_extension_snapshot.py
       - scripts/extension_claim_provenance.py
       - scripts/extension_claim_authority.py
+      - scripts/extension_claim_github_history.py
       - scripts/reconcile_extension_claim_notices.py
       - scripts/notify_merged_extension_claimants.py
       - docs/guard/extensions/contributing.md

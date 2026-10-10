@@ -80,6 +80,7 @@ def create_bundle(root: Path, output: Path, expected_sha: str, *, resolve_claima
     scripts_dir = str(Path(__file__).resolve().parent)
     sys.path.insert(0, scripts_dir)
     try:
+        from extension_claim_github_history import SnapshotClaimHistory
         from extension_claim_provenance import populate_snapshot_claimants
         from extension_trust_projection import repository_trust_map
         from notify_merged_extension_claimants import GitHubApi
@@ -90,7 +91,7 @@ def create_bundle(root: Path, output: Path, expected_sha: str, *, resolve_claima
 
     if resolve_claimants:
         client = GitHubApi(os.environ.get("GH_TOKEN", ""), "hashgraph-online/hol-guard", source_root=root)
-        claimants = populate_snapshot_claimants(files, client, expected_sha)
+        claimants = populate_snapshot_claimants(files, client, expected_sha, batch_history=SnapshotClaimHistory)
         files["docs/guard/extensions/claim-invitations.v1.json"] = (json.dumps({
             "schemaVersion": "guard.extension-claim-invitations.v1",
             "sourceSha": expected_sha,

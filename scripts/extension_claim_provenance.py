@@ -31,6 +31,11 @@ def _sha(value: object) -> str:
 
 
 def _history_changes(client: Any, source_path: str, source_sha: str, get: Any) -> list[tuple[str, str]]:
+    prepared = getattr(client, "prepared_history", None)
+    if prepared is not None:
+        if source_path not in prepared:
+            raise ClaimProvenanceError("Trusted source history is unavailable")
+        return prepared[source_path]
     root = getattr(client, "source_root", None)
     if root is not None:
         available = subprocess.run(
@@ -148,7 +153,7 @@ def resolve_introducing_claimant(client: Any, source_path: str, source_sha: str)
 
 
 def populate_snapshot_claimants(
-    files: dict[str, bytes], client: Any, source_sha: str
+    files: dict[str, bytes], client: Any, source_sha: str, *, batch_history: Any | None = None
 ) -> dict[str, IntroducingClaimant]:
     """Enrich generated catalogs only; never change committed contribution JSON."""
     names = ["docs/guard/extensions/catalog.v1.json", "docs/guard/extensions/catalog.v2.json"]
@@ -164,6 +169,15 @@ def populate_snapshot_claimants(
         if content is None or f"sha256:{hashlib.sha256(content).hexdigest()}" != entry["contributionDigest"]:
             raise ClaimProvenanceError("Catalog contribution digest does not match bundled source")
         candidates.append(entry)
+
+    if batch_history is not None:
+        paths = []
+        for entry in candidates:
+            paths.append(entry["sourcePath"])
+            authored = f"contributions/command-sources/{entry['id']}.json"
+            if entry["id"].startswith("command.") and authored in files:
+                paths.append(authored)
+        client = batch_history(client, paths, source_sha)
 
     def resolve(entry: dict[str, Any]) -> tuple[str, IntroducingClaimant | None]:
         try:
@@ -225,12 +239,12 @@ def resolve_initial_contribution(client: Any, paths: list[str], source_sha: str)
         def get(path: str) -> Any:
             return client._request(f"{client.base_url}/{path}")
         selected_history = _history_changes(client, selected, source_sha, get)
-        if not selected_history:
+        if not 1 <= len(selected_history) <= 40:
             raise ClaimProvenanceError("Contribution introduction is unavailable")
         oldest = selected_history[-1][0]
         for path in paths[1:]:
             history = _history_changes(client, path, source_sha, get)
-            if not history:
+            if not 1 <= len(history) <= 40:
                 raise ClaimProvenanceError("Contribution introduction is unavailable")
             other = history[-1][0]
             relation = client.compare(oldest, other).get("status")

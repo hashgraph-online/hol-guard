@@ -167,3 +167,12 @@ def test_snapshot_api_failure_preserves_existing_catalog_authority(monkeypatch: 
     with pytest.raises(OSError):
         populate_snapshot_claimants(files, client, SHA)
     assert files == before
+
+
+def test_truncated_alternative_path_cannot_change_original_attribution(monkeypatch: pytest.MonkeyPatch) -> None:
+    from scripts import extension_claim_provenance as module
+    authored = "contributions/command-sources/command.example.json"
+    monkeypatch.setattr(module, "_history_changes", lambda client, path, *args:
+                        [(OLD, "added")] if path == PATH else [(SHA, "modified")] * 41)
+    with pytest.raises(ClaimProvenanceError, match="introduction is unavailable"):
+        resolve_initial_contribution(GitHub(), [PATH, authored], SHA)
