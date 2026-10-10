@@ -247,44 +247,6 @@ def _remove_cursor_pending_shell_permission(
     )
 
 
-def _persist_cursor_native_permission_policy(
-    *,
-    store: GuardStore,
-    artifact_id: str,
-    artifact_hash: str,
-    action: str,
-    reason: str,
-    now: str,
-    source: str = "cursor-native-approval",
-) -> bool:
-    try:
-        store.upsert_policy(
-            PolicyDecision(
-                harness="cursor",
-                scope="artifact",
-                action="allow" if action == "allow" else "block",
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                reason=reason,
-                source=source,
-            ),
-            now,
-        )
-        store.add_event(
-            "cursor/native_permission_saved",
-            {
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-                "action": action,
-                "reason": reason,
-            },
-            now,
-        )
-    except (ApprovalGateError, OSError, sqlite3.Error):
-        return False
-    return True
-
-
 def _resolve_cursor_pending_approval_requests(
     *,
     store: GuardStore,
@@ -629,7 +591,6 @@ __all__ = [
     "_persist_claude_native_permission_for_runtime_artifact",
     "_persist_claude_native_permission_policy",
     "_persist_cursor_native_permission_after_shell",
-    "_persist_cursor_native_permission_policy",
     "_record_cursor_pending_shell_permission",
     "_remove_cursor_pending_shell_permission",
     "_resolve_cursor_pending_approval_requests",

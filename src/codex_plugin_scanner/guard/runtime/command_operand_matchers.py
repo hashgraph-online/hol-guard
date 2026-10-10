@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
-from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
 from .command_structured_matchers import (
     _normalize_option_token,
@@ -317,15 +317,3 @@ class OperandGatedFlagMatcher:
                 )
             )
         return tuple(evidence)
-
-
-def operand_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[str], frozenset[str]] | None:
-    """Return conservative registry hints for matchers in this module."""
-
-    if isinstance(matcher, (TrailingOperandPrefixMatcher, TrailingOperandHostTargetMatcher)):
-        return matcher.executables, frozenset()
-    if isinstance(matcher, TrailingOperandRemoteAliasMatcher):
-        return matcher.executables, frozenset()
-    if isinstance(matcher, OperandGatedFlagMatcher):
-        return matcher.executables, frozenset()
-    return None

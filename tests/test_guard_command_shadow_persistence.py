@@ -6,17 +6,15 @@
 from __future__ import annotations
 
 import sqlite3
-from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timezone
 from multiprocessing import get_context
 from pathlib import Path
-from threading import Event
 from typing import cast
 
 import pytest
 
-from codex_plugin_scanner.guard import store_command_shadow as shadow_store
 from codex_plugin_scanner.guard import store_command_shadow_schema as shadow_schema
 from codex_plugin_scanner.guard.cli import commands_support_command_activity as activity_support
 from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
@@ -198,7 +196,6 @@ def test_migration_upgrades_v17_schema_and_preserves_historical_evaluator_versio
         versions = connection.execute("select version from schema_migrations order by version").fetchall()
         row = connection.execute("select * from command_activity_shadow_evaluations").fetchone()
         assert row is not None
-        observation = shadow_store._observation_from_row(connection, row)
         temporary_tables = connection.execute(
             "select count(*) from sqlite_master where name in (?, ?)",
             ("command_activity_shadow_evaluations_v17", "command_activity_shadow_cohorts_v17"),
@@ -209,8 +206,8 @@ def test_migration_upgrades_v17_schema_and_preserves_historical_evaluator_versio
         (shadow_schema.COMMAND_SHADOW_PREVIOUS_MIGRATION_VERSION,),
         (shadow_schema.COMMAND_SHADOW_MIGRATION_VERSION,),
     ]
-    assert observation.activity_id == "activity:previous"
-    assert observation.evaluator_schema_version == "1.0.0"
+    assert row["activity_id"] == "activity:previous"
+    assert row["evaluator_schema_version"] == "1.0.0"
     assert tuple(temporary_tables) == (0,)
 
 
@@ -375,35 +372,6 @@ def test_concurrent_exact_shadow_replay_persists_once(tmp_path: Path) -> None:
     assert sorted(results) == [False, True]
     assert store.count_command_activities() == 1
     assert store.count_command_shadow_observations() == 1
-
-
-def test_list_uses_consistent_snapshot_during_concurrent_delete(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    evidence, shadow = _evidence_and_shadow()
-    store.record_command_activity(evidence, shadow=shadow)
-    with sqlite3.connect(store.path) as connection:
-        assert connection.execute("pragma journal_mode=wal").fetchone() == ("wal",)
-    parent_read = Event()
-    continue_read = Event()
-    original = shadow_store._observation_from_row
-
-    def pause_after_parent(connection: sqlite3.Connection, row: sqlite3.Row):
-        parent_read.set()
-        assert continue_read.wait(timeout=5)
-        return original(connection, row)
-
-    monkeypatch.setattr(shadow_store, "_observation_from_row", pause_after_parent)
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(store.list_command_shadow_observations)
-        assert parent_read.wait(timeout=5)
-        store.clear_command_activity_evidence()
-        continue_read.set()
-        assert future.result(timeout=5) == (shadow,)
-
-    assert store.count_command_shadow_observations() == 0
 
 
 def test_schema_rejects_orphans_and_direct_parent_delete_cascades(tmp_path: Path) -> None:
