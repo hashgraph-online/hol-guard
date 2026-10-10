@@ -143,10 +143,20 @@ remote targets, destructive flags, unexpected arguments, inactive extensions,
 disabled permissions, and compound commands. Do not execute destructive
 commands to satisfy a test.
 
+## Installed-wheel matrix
+
+The [Extension Builder workflow](../../../.github/workflows/extension-builder-ci.yml)
+builds and installs a wheel on Linux with Python 3.10 and 3.13, macOS ARM64
+with Python 3.13, and Windows with Python 3.13. The
+[installed verifier](../../../scripts/ci/verify_extension_builder_install.py)
+runs outside the checkout and checks CLI/MCP generation, native rebuild-based
+validation, identical snapshot replay, diff, read-only planning,
+expected-plan-bound writes, idempotence, and the maximum CLI inventory.
+
 Native package checks also verify source-compiler manifest identity, source
 and compiler hashes, package/runtime version agreement, compiler permissions,
 and the absence of a checkout or Python semantic fallback. Each matrix job
-uploads its test report and locked dependency
+uploads its test report, installed-verification result, and locked dependency
 export. Linux Python 3.13 additionally produces isolated coverage and
 source-bound command-decision evidence. Windows omits only tests requiring
 POSIX named-pipe or mode semantics.
