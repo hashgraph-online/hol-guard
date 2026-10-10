@@ -97,7 +97,10 @@ pub(super) fn read_mounts(mounts: &[Value], bundle_root: Option<&str>) -> MountE
     evidence
 }
 
-/// `str(port)` for a scalar port entry; containers are refused.
+/// `str(port)` for a scalar port entry. Container entries cannot match
+/// Python's insertion-ordered `repr` (the wire map is key-sorted), and the
+/// mapping text is only ever tested for presence, so they render as compact
+/// JSON instead of blocking the plan.
 fn port_text(port: &Value) -> Result<String, &'static str> {
     match port {
         Value::String(text) => Ok(text.clone()),
@@ -111,7 +114,7 @@ fn port_text(port: &Value) -> Result<String, &'static str> {
             let float: f64 = text.parse().map_err(|_| ERR_INVALID)?;
             Ok(guard_contracts::python_float_repr(float))
         }
-        Value::Array(_) | Value::Object(_) => Err(ERR_INVALID),
+        Value::Array(_) | Value::Object(_) => serde_json::to_string(port).map_err(|_| ERR_INVALID),
     }
 }
 
@@ -135,4 +138,20 @@ pub(super) fn read_network(linux: &LinuxEvidence) -> Result<NetworkEvidence, &'s
         network.loopback_only = false;
     }
     Ok(network)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::port_text;
+    use serde_json::json;
+
+    #[test]
+    fn container_port_entries_render_instead_of_blocking_the_plan() {
+        assert_eq!(port_text(&json!([1])).as_deref(), Ok("[1]"));
+        assert_eq!(
+            port_text(&json!({"hostPort": 8080})).as_deref(),
+            Ok("{\"hostPort\":8080}")
+        );
+        assert_eq!(port_text(&json!(8080)).as_deref(), Ok("8080"));
+    }
 }

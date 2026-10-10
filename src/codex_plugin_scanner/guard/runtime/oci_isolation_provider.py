@@ -317,7 +317,7 @@ class OCIIsolationProvider:
             ("rootfs", rootfs_spec),
             ("process", process_spec),
             ("linux", linux_spec),
-            ("bundle_root", None if bundle_root is None else str(bundle_root)),
+            ("bundle_root", None if bundle_root is None else str(Path(bundle_root).absolute())),
         ):
             if value is not None:
                 args[key] = value
@@ -469,7 +469,7 @@ def build_oci_evidence(
         ("rootfs", rootfs),
         ("process", process),
         ("linux", linux),
-        ("bundle_root", None if bundle_root is None else str(bundle_root)),
+        ("bundle_root", None if bundle_root is None else str(Path(bundle_root).absolute())),
     ):
         if value is not None:
             args[key] = value
