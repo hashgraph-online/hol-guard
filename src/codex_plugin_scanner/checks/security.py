@@ -137,6 +137,14 @@ APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0"
 LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 
 
+# Only known root-level license filenames count; arbitrary LICENSE.* templates do not.
+_LICENSE_FILENAMES = tuple(
+    f"{stem}{suffix}"
+    for stem in ("LICENSE", "LICENCE", "COPYING", "license", "licence", "copying")
+    for suffix in ("", ".md", ".txt", ".rst")
+)
+
+
 class ScanBudgetExceededError(RuntimeError):
     """Raised when analysis would be incomplete because a scan budget was exhausted."""
 
@@ -598,8 +606,13 @@ def check_security_md(plugin_dir: Path) -> CheckResult:
 
 
 def check_license(plugin_dir: Path) -> CheckResult:
-    lp = plugin_dir / "LICENSE"
-    if not lp.exists():
+    lp: Path | None = None
+    for filename in _LICENSE_FILENAMES:
+        candidate = plugin_dir / filename
+        if path_entry_exists(candidate):
+            lp = candidate
+            break
+    if lp is None:
         return CheckResult(
             name="LICENSE found",
             passed=False,
@@ -613,7 +626,7 @@ def check_license(plugin_dir: Path) -> CheckResult:
                     category="security",
                     title="LICENSE file is missing",
                     description="Plugins should ship a LICENSE file so consumers can review usage rights.",
-                    remediation="Add a LICENSE file that matches the manifest license metadata.",
+                    remediation="Add a LICENSE or LICENSE.md file that matches the manifest license metadata.",
                     file_path="LICENSE",
                 ),
             ),
