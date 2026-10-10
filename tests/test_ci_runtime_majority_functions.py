@@ -178,7 +178,7 @@ def test_runtime_roots_cannot_be_partially_excluded(tmp_path: Path) -> None:
 def test_missing_symbol_and_unknown_entry_point_are_rejected(tmp_path: Path) -> None:
     render = RENDER.replace('\n\n_TABLE["x"] = _human\n', "\n")
     repo, scope = _repo(tmp_path / "a", entries=[_entry(symbols=["_nope"])], render=render)
-    with pytest.raises(ScopeError, match="not found at module level"):
+    with pytest.raises(ScopeError, match="excluded symbols not found"):
         build_report(repo, scope)
     repo, scope = _repo(tmp_path / "b", entries=[_entry(entry_points=["ghost"])], render=render)
     with pytest.raises(ScopeError, match="entry_points are not retained"):
@@ -204,3 +204,62 @@ def test_shipped_render_exclusion_keeps_hook_json_and_redaction_in_scope() -> No
     }
     assert retained_required.isdisjoint(entry["symbols"])
     assert entry["entry_points"] == ["emit_guard_payload"]
+
+
+ADAPTER = """\
+from __future__ import annotations
+
+import json
+
+
+class Adapter:
+    def run(self):
+        return self._keep()
+
+    def _keep(self):
+        return 1
+
+    def install(self, context):
+        return self._write(json.dumps(context))
+
+    def _write(self, text):
+        return text
+"""
+
+
+def _method_entry(**overrides: object) -> dict:
+    return _entry(
+        path="src/pkg/render.py",
+        symbols=["Adapter.install", "Adapter._write"],
+        entry_points=[],
+        **overrides,
+    )
+
+
+def test_method_exclusion_removes_methods_and_their_imports(tmp_path: Path) -> None:
+    repo, scope = _repo(tmp_path / "base", entries=[], render=ADAPTER)
+    whole = build_report(repo, scope)
+    repo, scope = _repo(tmp_path / "cut", entries=[_method_entry()], render=ADAPTER)
+    cut = build_report(repo, scope)
+    # install (2) + _write (2) + the json import used only by install (1).
+    assert _loc(whole, "src/pkg/render.py") - _loc(cut, "src/pkg/render.py") == 5
+    [record] = [item for item in cut["exclusions"] if item["kind"] == "function"]
+    assert record["symbols"] == ["Adapter._write", "Adapter.install"]
+
+
+def test_retained_method_calling_an_excluded_method_is_rejected(tmp_path: Path) -> None:
+    render = ADAPTER.replace("return self._keep()", "return self.install({})")
+    repo, scope = _repo(tmp_path, entries=[_method_entry()], render=render)
+    with pytest.raises(ScopeError, match=r"Adapter\.run references excluded"):
+        build_report(repo, scope)
+
+
+def test_other_module_using_an_excluded_method_name_is_rejected(tmp_path: Path) -> None:
+    repo, scope = _repo(
+        tmp_path,
+        entries=[_method_entry()],
+        render=ADAPTER,
+        root_extra="from pkg.render import Adapter\n\n\ndef go():\n    return Adapter().install({})\n",
+    )
+    with pytest.raises(ScopeError, match="uses attribute install"):
+        build_report(repo, scope)

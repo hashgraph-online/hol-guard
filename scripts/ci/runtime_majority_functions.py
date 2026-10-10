@@ -113,11 +113,48 @@ def _name_uses(nodes: list[ast.AST]) -> tuple[set[str], str]:
     return used, "\n".join(strings)
 
 
-def _owner_refs(node: ast.stmt, excluded: set[str]) -> set[str]:
-    return {item.id for item in ast.walk(node) if isinstance(item, ast.Name) and item.id in excluded}
+def _owner_refs(node: ast.AST, names: set[str], attrs: frozenset[str] | set[str]) -> set[str]:
+    found: set[str] = set()
+    for item in ast.walk(node):
+        if isinstance(item, ast.Name) and item.id in names:
+            found.add(item.id)
+        elif isinstance(item, ast.Attribute) and item.attr in attrs:
+            found.add(f".{item.attr}")
+    return found
 
 
-def plan_module(path: str, source: str, entries: list[dict[str, Any]], *, root_paths: set[str]) -> ModulePlan:
+def _is_function(node: ast.AST) -> bool:
+    return isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+
+
+def _class_units(
+    node: ast.ClassDef, wanted: dict[str, str], plan: ModulePlan, excluded_nodes: list[ast.stmt]
+) -> list[tuple[str, ast.AST]]:
+    """Retained pieces of a class that loses some methods, one unit per member."""
+    units: list[tuple[str, ast.AST]] = [
+        (node.name, header) for header in [*node.decorator_list, *node.bases, *node.keywords]
+    ]
+    for child in node.body:
+        full = f"{node.name}.{child.name}" if _is_function(child) else ""
+        if full in wanted:
+            start, end = _node_range(child)
+            plan.symbol_lines[full] = (start, end)
+            plan.symbol_entry[full] = wanted[full]
+            plan.skip_linenos.add(child.lineno)
+            excluded_nodes.append(child)
+        else:
+            units.append((full or node.name, child))
+    return units
+
+
+def plan_module(
+    path: str,
+    source: str,
+    entries: list[dict[str, Any]],
+    *,
+    root_paths: set[str],
+    method_names: frozenset[str] = frozenset(),
+) -> ModulePlan:
     if path in root_paths:
         raise ScopeError(f"function exclusion {entries[0]['id']!r}: {path} is a runtime root and stays whole")
     tree = ast.parse(source)
@@ -129,38 +166,42 @@ def plan_module(path: str, source: str, entries: list[dict[str, Any]], *, root_p
                 raise ScopeError(f"function exclusion {entry['id']!r}: {symbol} is listed twice for {path}")
             wanted[symbol] = entry["id"]
     entry_points = {str(point) for entry in entries for point in entry.get("entry_points", [])}
-    retained: list[ast.stmt] = []
+    units: list[tuple[str, ast.AST]] = []
     excluded_nodes: list[ast.stmt] = []
     for node in tree.body:
-        hit = [name for name in _symbol_names(node) if name in wanted]
+        names = _symbol_names(node)
+        hit = [name for name in names if name in wanted]
         if hit:
-            if len(hit) != len(_symbol_names(node)):
-                raise ScopeError(f"{path}: statement binds both excluded and retained names {_symbol_names(node)}")
+            if len(hit) != len(names):
+                raise ScopeError(f"{path}: statement binds both excluded and retained names {names}")
             start, end = _node_range(node)
             for name in hit:
                 plan.symbol_lines[name] = (start, end)
                 plan.symbol_entry[name] = wanted[name]
             plan.skip_linenos.add(node.lineno)
             excluded_nodes.append(node)
+        elif isinstance(node, ast.ClassDef):
+            units.extend(_class_units(node, wanted, plan, excluded_nodes))
         else:
-            retained.append(node)
+            units.append((names[0] if names else MODULE_OWNER, node))
     missing = sorted(set(wanted) - set(plan.symbol_lines))
     if missing:
-        raise ScopeError(f"{path}: excluded symbols not found at module level: {missing}")
-    present = {name for node in retained for name in _symbol_names(node)}
+        raise ScopeError(f"{path}: excluded symbols not found: {missing}")
+    present = {owner for owner, _ in units}
     absent = sorted(entry_points - present - {MODULE_OWNER})
     if absent:
         raise ScopeError(f"{path}: entry_points are not retained module-level symbols: {absent}")
-    excluded = set(wanted)
-    for node in retained:
+    names = {item for item in wanted if "." not in item}
+    attrs = {item.split(".", 1)[1] for item in wanted if "." in item} | set(method_names)
+    for owner, node in units:
         if isinstance(node, ast.Import | ast.ImportFrom):
             continue
-        refs = _owner_refs(node, excluded)
-        owners = _symbol_names(node) or [MODULE_OWNER]
-        if refs and not any(owner in entry_points for owner in owners):
+        refs = _owner_refs(node, names, attrs)
+        if refs and owner not in entry_points:
             raise ScopeError(
-                f"{path}: retained {owners[0]} references excluded {sorted(refs)} but is not a listed entry_point"
+                f"{path}: retained {owner} references excluded {sorted(refs)} but is not a listed entry_point"
             )
+    retained = [node for _, node in units]
     pruned_ids = _prune_imports(plan, retained, excluded_nodes)
     counted = counted_lines(source)
     ranges = [*plan.symbol_lines.values(), *plan.import_ranges]
@@ -179,7 +220,7 @@ def plan_module(path: str, source: str, entries: list[dict[str, Any]], *, root_p
     return plan
 
 
-def _prune_imports(plan: ModulePlan, retained: list[ast.stmt], excluded_nodes: list[ast.stmt]) -> set[int]:
+def _prune_imports(plan: ModulePlan, retained: list[ast.AST], excluded_nodes: list[ast.stmt]) -> set[int]:
     pruned: set[int] = set()
     others = [node for node in retained if not isinstance(node, ast.Import | ast.ImportFrom)]
     used_kept, strings_kept = _name_uses(others)
@@ -220,6 +261,7 @@ def check_external_references(
 ) -> None:
     """Reject retained code in any in-scope module that reaches an excluded symbol."""
     by_module = {name: plans[module.path] for name, module in modules.items() if module.path in plans}
+    method_names = method_names_of(plans)
     for name in sorted(in_scope):
         module = modules[name]
         try:
@@ -228,6 +270,10 @@ def check_external_references(
             continue
         own = plans.get(module.path)
         nodes = list(_retained_nodes(tree, own.skip_linenos if own else set()))
+        if own is None:
+            for node in nodes:
+                if isinstance(node, ast.Attribute) and node.attr in method_names:
+                    raise ScopeError(f"{module.path} uses attribute {node.attr}, which function exclusions remove")
         bindings = _check_imports(nodes, name, module, {m: p for m, p in by_module.items() if p is not own})
         _check_attribute_chains(nodes, module.path, bindings, {m: p for m, p in by_module.items() if p is not own})
 
@@ -284,6 +330,10 @@ def _check_attribute_chains(
                         raise ScopeError(f"{path} uses excluded {symbol} of {plan.path}")
 
 
+def method_names_of(plans: dict[str, ModulePlan]) -> frozenset[str]:
+    return frozenset(name.split(".", 1)[1] for plan in plans.values() for name in plan.symbol_lines if "." in name)
+
+
 def validate_entries(entries: list[dict[str, Any]], taken_ids: frozenset[str] = frozenset()) -> None:
     seen = set(taken_ids)
     for entry in entries:
@@ -310,10 +360,15 @@ def plan_modules(repo: Path, entries: list[dict[str, Any]], *, root_paths: set[s
     grouped: dict[str, list[dict[str, Any]]] = {}
     for entry in entries:
         grouped.setdefault(entry["path"], []).append(entry)
+    method_names = frozenset(
+        symbol.split(".", 1)[1] for entry in entries for symbol in entry["symbols"] if "." in symbol
+    )
     plans: dict[str, ModulePlan] = {}
     for path, group in sorted(grouped.items()):
         file = repo / path
         if not file.is_file():
             raise ScopeError(f"function exclusion {group[0]['id']!r}: {path} does not exist")
-        plans[path] = plan_module(path, file.read_text(encoding="utf-8"), group, root_paths=root_paths)
+        plans[path] = plan_module(
+            path, file.read_text(encoding="utf-8"), group, root_paths=root_paths, method_names=method_names
+        )
     return plans
