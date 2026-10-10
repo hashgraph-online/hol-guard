@@ -30,7 +30,9 @@ def test_posix_daemon_retirement_waits_for_sigkill_to_finish(monkeypatch) -> Non
     monkeypatch.setattr(daemon_manager_module.signal, "SIGKILL", sigkill, raising=False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:terminate-generation")
+    monkeypatch.setattr(
+        daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:terminate-generation"
+    )
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     monkeypatch.setattr(
         daemon_manager_module,
@@ -81,7 +83,7 @@ def test_posix_retirement_refuses_unbound_live_pid_before_signaling(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "os", _PosixOSProxy())
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:live-generation")
+    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:live-generation")
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     monkeypatch.setattr(daemon_manager_module, "_wait_for_guard_daemon_pid_death", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(daemon_manager_module.os, "kill", lambda _pid, sig: signals.append(sig))
@@ -96,7 +98,7 @@ def test_generation_retirement_rejects_owner_mismatch_before_signal(monkeypatch)
     monkeypatch.setattr(daemon_manager_module, "os", _PosixOSProxy())
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:daemon-generation")
+    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:daemon-generation")
     monkeypatch.setattr(
         daemon_manager_module,
         "process_owner_marker",
@@ -179,7 +181,9 @@ def test_inventory_retirement_forwards_captured_generation_and_owner(tmp_path, m
         "_guard_daemon_process_inventory_for_guard_home",
         lambda _home: next(inventories),
     )
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:inventory-generation")
+    monkeypatch.setattr(
+        daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:inventory-generation"
+    )
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
     monkeypatch.setattr(daemon_manager_module, "_reconcile_invalid_daemon_lifecycle_artifacts", lambda _home: True)
@@ -211,7 +215,7 @@ def test_inventory_retirement_skips_process_without_identity_evidence(tmp_path, 
         "_guard_daemon_process_inventory_for_guard_home",
         lambda _home: next(inventories),
     )
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _candidate: None)
+    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _candidate, **_kwargs: None)
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _candidate: "uid:501")
     monkeypatch.setattr(
         daemon_manager_module,
@@ -233,7 +237,9 @@ def test_duplicate_retirement_forwards_generation_and_owner(tmp_path, monkeypatc
         "_running_guard_daemon_processes_for_guard_home",
         lambda _home: next(process_lists),
     )
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:duplicate-generation")
+    monkeypatch.setattr(
+        daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:duplicate-generation"
+    )
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     monkeypatch.setattr(daemon_manager_module, "_rewrite_kept_daemon_state_if_missing", lambda _home, **_kwargs: None)
 
@@ -265,7 +271,9 @@ def test_ephemeral_retirement_forwards_generation_and_owner(tmp_path, monkeypatc
         lambda: [(pid, guard_home, 60.0)],
     )
     monkeypatch.setattr(daemon_manager_module, "_ephemeral_guard_home_is_inactive", lambda *_args, **_kwargs: True)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:ephemeral-generation")
+    monkeypatch.setattr(
+        daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:ephemeral-generation"
+    )
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     monkeypatch.setattr(daemon_manager_module, "clear_guard_daemon_state", lambda _home: None)
 
@@ -294,7 +302,9 @@ def test_posix_daemon_retirement_bounds_both_escalation_waits(monkeypatch) -> No
     monkeypatch.setattr(daemon_manager_module.signal, "SIGKILL", sigkill, raising=False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "linux:bounded-generation")
+    monkeypatch.setattr(
+        daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: "linux:bounded-generation"
+    )
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     clock = {"value": 100.0}
     monkeypatch.setattr(daemon_manager_module.time, "monotonic", lambda: clock["value"])
@@ -329,13 +339,14 @@ def test_posix_daemon_retirement_rechecks_generation_before_sigkill(monkeypatch)
     signals: list[int] = []
     waits: list[float] = []
     sigkill = getattr(signal, "SIGKILL", 9)
-    markers = iter(("start-1", "start-2"))
+    # Admission and the pre-SIGTERM check see the exact generation; it changes before SIGKILL.
+    markers = iter(("start-1", "start-1", "start-2"))
 
     monkeypatch.setattr(daemon_manager_module, "os", _PosixOSProxy())
     monkeypatch.setattr(daemon_manager_module.signal, "SIGKILL", sigkill, raising=False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: False)
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_matches_command", lambda *_args: True)
-    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: next(markers))
+    monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kwargs: next(markers))
     monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "uid:501")
     monkeypatch.setattr(
         daemon_manager_module,

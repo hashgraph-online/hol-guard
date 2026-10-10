@@ -587,7 +587,8 @@ class TestSpawnedDaemonStartClassification:
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_start_in_progress", lambda _gh: False)
         monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _: None)
         monkeypatch.setattr(daemon_manager_module.subprocess, "Popen", lambda *a, **k: process)
-        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: "posix:token")
+        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kw: "posix:token")
+        monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "posix:owner")
         monkeypatch.setattr(
             start_classification,
             "daemon_owner_lock_is_held",
@@ -665,10 +666,10 @@ class TestSpawnedDaemonStartClassification:
         guard_home.mkdir()
         process = _FakeSpawnedDaemonProcess()
         self._patch_ensure_deadline(monkeypatch, guard_home, process, owner_lock_held=True)
-        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid: None)
+        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kw: None)
 
-        with pytest.raises(RuntimeError, match=r"^Guard approval center did not start"):
-            # The patched readiness wait models expiry after the process spawns.
+        with pytest.raises(RuntimeError, match=r"^Guard daemon process start marker could not be recorded"):
+            # The launch identity cannot be recorded, so the spawned child is retired fail-closed.
             daemon_manager_module.ensure_guard_daemon(guard_home, start_timeout=30.0, home_dir=tmp_path)
 
         assert process.terminated is True
@@ -680,6 +681,8 @@ class TestStillStartingAdoption:
 
     def _patch_baseline(self, monkeypatch, guard_home: Path) -> dict[str, list]:
         calls: dict[str, list] = {"popen": [], "retire": []}
+        monkeypatch.setattr(daemon_manager_module, "process_start_token", lambda _pid, **_kw: "posix:token")
+        monkeypatch.setattr(daemon_manager_module, "process_owner_marker", lambda _pid: "posix:owner")
         monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_: None)
         monkeypatch.setattr(
             daemon_manager_module,

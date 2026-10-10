@@ -36,7 +36,8 @@ from ..frozen_runtime_commands import (
     decode_frozen_daemon_serve_payload,
     frozen_daemon_serve_command,
 )
-from ..live_process_identity import process_owner_marker, process_start_token
+from ..live_process_identity import process_owner_marker
+from ..live_process_identity import process_start_token as _live_process_start_token
 from ..mdm.file_lock import release_file_lock
 from ..private_file_io import read_private_regular_text
 from ..windows_paths import (
@@ -697,12 +698,15 @@ def ensure_guard_daemon(
                         f"Guard daemon is still starting; retry shortly. Expected state file at {state_path}."
                     )
                 retirement_attempted = True
-                if not _terminate_spawned_guard_daemon(process, deadline_monotonic=start_deadline):
-                    raise RuntimeError("Guard daemon startup process could not be retired safely.")
+                root_retired = _terminate_spawned_guard_daemon(process, deadline_monotonic=start_deadline)
                 if launch.receipt_recorded:
+                    # The signed launch receipt stays in place, so replacement is blocked
+                    # until a matching handoff or a proven-dead generation resolves it.
                     raise RuntimeError(
                         "Guard approval center did not start; launch ownership could not be proven contained."
                     )
+                if not root_retired:
+                    raise RuntimeError("Guard daemon startup process could not be retired safely.")
                 if not _clear_spawned_guard_daemon_pending_launch(
                     guard_home, launch=launch, creation_time=pending_creation_time
                 ):
@@ -899,8 +903,13 @@ def retire_all_guard_daemons_for_home(
                         ),
                     )
                 else:
-                    # Markerless live state cannot identify a PID generation.
-                    retirement_succeeded = _guard_daemon_pid_is_proven_dead(state_pid)
+                    # Markerless live state cannot identify a PID generation: only a proven-dead
+                    # PID may be treated as retired, and no signal is ever sent to it.
+                    retirement_succeeded = (
+                        _guard_daemon_pid_is_proven_dead(state_pid)
+                        if os.name == "nt"
+                        else retire_pid(state_pid, expected_guard_home=guard_home)
+                    )
                 if retirement_succeeded:
                     if _guard_daemon_pid_is_proven_dead(state_pid):
                         _clear_authenticated_guard_daemon_state_if_current(
@@ -3982,6 +3991,14 @@ def _release_guard_daemon_launch_gate(process: subprocess.Popen[bytes]) -> None:
             process.stdin.close()
 
 
+def process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
+    """Resolve the live process generation marker through the identity module at call time."""
+
+    if deadline_monotonic is None:
+        return _live_process_start_token(pid)
+    return _live_process_start_token(pid, deadline_monotonic=deadline_monotonic)
+
+
 def _retire_guard_daemon_pid(
     pid: int,
     *,
@@ -4006,8 +4023,8 @@ def _retire_guard_daemon_pid(
             return True
         actual_start_marker = (
             process_start_token(pid)
-            if retirement_deadline is None
-            else process_start_token(pid, deadline_monotonic=retirement_deadline)
+            if deadline_monotonic is None
+            else process_start_token(pid, deadline_monotonic=deadline_monotonic)
         )
         return isinstance(actual_start_marker, str) and secrets.compare_digest(
             actual_start_marker,
@@ -4053,6 +4070,10 @@ def _retire_guard_daemon_pid(
     if retirement_deadline is not None and time.monotonic() >= retirement_deadline:
         return False
     if os.name != "nt" and (not isinstance(start_marker, str) or not start_marker):
+        return False
+    # Admit the exact process generation before any further probing; it is
+    # re-verified immediately before each signal below.
+    if not start_marker_matches():
         return False
     if os.name == "nt" and expected_creation_time is not None:
         return terminate_exact(expected_creation_time)

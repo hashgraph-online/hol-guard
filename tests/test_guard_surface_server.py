@@ -1314,9 +1314,12 @@ class TestGuardSurfaceServer:
             # "could not complete local review" and the deadline-exhaust
             # denial are transient admission misses, not a wrong decision -
             # retry after the worker pool has capacity.
-            if str(hook_payload.get("reason", "")).startswith(
-                "HOL Guard blocked this action because isolated local review could not complete safely."
-            ) or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted":
+            if (
+                str(hook_payload.get("reason", "")).startswith(
+                    "HOL Guard blocked this action because isolated local review could not complete safely."
+                )
+                or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted"
+            ):
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
                     minimum_workers=1, timeout_seconds=15
                 )
@@ -2395,7 +2398,9 @@ class TestGuardSurfaceServer:
         )
 
         assert len(responses) == 1
-        assert responses[0].get("reason_code") == "daemon_hook_process_deadline_exhausted"
+        # An expired prompt review is rendered through the availability policy, which denies the prompt
+        # with the native prompt-unavailable code instead of returning the late review payload.
+        assert responses[0].get("reason_code") == "native_prompt_unavailable"
         assert responses[0] is not review_payload
         assert receipts == []
 

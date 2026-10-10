@@ -148,11 +148,16 @@ def _proxy_disabled_health_details(
     auth_token: str,
     *,
     timeout: float | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, object] | None:
     """Use the bounded loopback client without changing authenticated identity checks."""
     from .client import read_guard_health_details
 
-    return read_guard_health_details(url, auth_token, timeout=timeout)
+    if deadline_monotonic is None:
+        return read_guard_health_details(url, auth_token, timeout=timeout)
+    if timeout is None:
+        return read_guard_health_details(url, auth_token, deadline_monotonic=deadline_monotonic)
+    return read_guard_health_details(url, auth_token, timeout=timeout, deadline_monotonic=deadline_monotonic)
 
 
 def _proxy_dashboard_session_capabilities(
@@ -235,13 +240,18 @@ def probe_live_guard_daemon_identity(
     health_timeout = remaining()
     if health_timeout <= 0.0:
         return None, "service_unresponsive"
-    details = _proxy_disabled_health_details(daemon_url, token, timeout=health_timeout)
+    details = (
+        _proxy_disabled_health_details(daemon_url, token, timeout=health_timeout)
+        if deadline_monotonic is None
+        else _proxy_disabled_health_details(daemon_url, token, deadline_monotonic=deadline_monotonic)
+    )
     if not _health_details_match(details, state, guard_home):
         return None, "service_unresponsive"
     identity = {**state, "daemon_url": daemon_url}
     if not verify_dashboard:
         # The state file must still describe the process that passed the health probe.
-        if time.monotonic() >= deadline or load_authenticated_daemon_state(guard_home) != state:
+        refreshed_identity_state = load_authenticated_daemon_state(guard_home)
+        if refreshed_identity_state != state or time.monotonic() >= deadline:
             return None, "identity_unverified"
         return identity, "healthy"
     session_timeout_remaining = remaining()
