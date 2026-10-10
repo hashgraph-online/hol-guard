@@ -39,7 +39,8 @@ else
     fi
     [[ -n "$release" ]] || continue
     printf '%s\n' "$release" > "$INVENTORY"
-    if [[ -n "$(python3 -I scripts/release/ready_core_releases.py --inventory "$INVENTORY" --platform "$PLATFORM")" ]]; then
+    ready=$(python3 -I scripts/release/ready_core_releases.py --inventory "$INVENTORY" --platform "$PLATFORM") || exit 1
+    if [[ -n "$ready" ]]; then
       found=true
       break
     fi

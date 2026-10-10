@@ -78,6 +78,7 @@ def _discover(
     releases: list[dict[str, object]] | None = None,
     git_tags: tuple[str, ...] = ("v1.2.3", "v1.3.0", "v1.2.4", "v1.2.10-rc.1", "extensions-2026"),
     failing_tag: str = "",
+    failing_readiness: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     releases = RELEASES if releases is None else releases
     stubs = tmp_path / "bin"
@@ -95,6 +96,10 @@ def _discover(
         encoding="utf-8",
     )
     git.chmod(0o755)
+    if failing_readiness:
+        python = stubs / "python3"
+        python.write_text("#!/bin/sh\necho 'readiness check crashed' >&2\nexit 3\n", encoding="utf-8")
+        python.chmod(0o755)
     if failing_tag:
         (fixtures / f"{failing_tag}.json").write_text("rate limited", encoding="utf-8")
     gh = stubs / "gh"
@@ -173,6 +178,19 @@ def test_unnamed_discovery_falls_back_to_the_full_scan_when_no_tag_is_ready(tmp_
     assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == [
         "repos/example/core/releases/tags/v1.3.0",
         "repos/example/core/releases?per_page=100",
+    ]
+
+
+def test_unnamed_discovery_fails_when_the_readiness_check_fails(tmp_path: Path) -> None:
+    result = _discover(tmp_path, "", failing_readiness=True)
+    assert result.returncode != 0
+    assert "readiness check crashed" in result.stderr
+    assert "available=true" not in result.stdout
+    # v1.3.0 is a prerelease; the check first runs for v1.2.4 and the failure
+    # stops discovery instead of moving on to older releases.
+    assert (tmp_path / "gh-requests.txt").read_text(encoding="utf-8").split() == [
+        "repos/example/core/releases/tags/v1.3.0",
+        "repos/example/core/releases/tags/v1.2.4",
     ]
 
 
