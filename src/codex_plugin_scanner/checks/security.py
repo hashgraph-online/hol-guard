@@ -13,7 +13,12 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..models import CheckResult, Finding, Severity
-from ..path_support import path_entry_exists, read_text_file_within_root, resolves_within_root
+from ..path_support import (
+    LICENSE_FILENAMES,
+    path_entry_exists,
+    read_text_file_within_root,
+    resolves_within_root,
+)
 from .security_failures import ScanInputUnreadableError, unreadable_scan_input_failure
 from .security_secret_patterns import (
     DOCUMENTATION_EXTS,
@@ -136,13 +141,6 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
 APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0", re.I)
 LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 
-
-# Only known root-level license filenames count; arbitrary LICENSE.* templates do not.
-_LICENSE_FILENAMES = tuple(
-    f"{stem}{suffix}"
-    for stem in ("LICENSE", "LICENCE", "COPYING", "license", "licence", "copying")
-    for suffix in ("", ".md", ".txt", ".rst")
-)
 
 
 class ScanBudgetExceededError(RuntimeError):
@@ -607,7 +605,7 @@ def check_security_md(plugin_dir: Path) -> CheckResult:
 
 def check_license(plugin_dir: Path) -> CheckResult:
     lp: Path | None = None
-    for filename in _LICENSE_FILENAMES:
+    for filename in LICENSE_FILENAMES:
         candidate = plugin_dir / filename
         if path_entry_exists(candidate):
             lp = candidate
