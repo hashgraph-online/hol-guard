@@ -70,44 +70,6 @@ def _cloud_exception_is_active(item: CloudException, *, now: str | None = None) 
     return expiry > current
 
 
-def _policy_bundle_cloud_exception_is_valid(item: object) -> bool:
-    if not isinstance(item, dict):
-        return False
-    exception_id = _non_empty_string(item.get("exceptionId") or item.get("id"))
-    if exception_id is None:
-        return False
-    effect = item.get("effect") or "allow"
-    if effect not in _CLOUD_EXCEPTION_EFFECTS:
-        return False
-    scope = item.get("scope")
-    if scope not in _CLOUD_EXCEPTION_SCOPES:
-        return False
-    if _non_empty_string(item.get("owner")) is None:
-        return False
-    if _normalized_timestamp_string(item.get("expiresAt") or item.get("expiry")) is None:
-        return False
-    harness = item.get("harness")
-    if scope == "harness":
-        if not isinstance(harness, str) or not harness.strip():
-            return False
-    elif harness is not None and not isinstance(harness, str):
-        return False
-    approver = item.get("approver")
-    if approver is not None and _non_empty_string(approver) is None:
-        return False
-    source_receipt_id = item.get("sourceReceiptId")
-    return source_receipt_id is None or _non_empty_string(source_receipt_id) is not None
-
-
-def policy_bundle_cloud_exceptions_are_valid(policy_bundle: dict[str, object]) -> bool:
-    if "cloudExceptions" not in policy_bundle:
-        return True
-    cloud_exceptions = policy_bundle.get("cloudExceptions")
-    if not isinstance(cloud_exceptions, list):
-        return False
-    return all(_policy_bundle_cloud_exception_is_valid(item) for item in cloud_exceptions)
-
-
 def _resolve_cloud_exception_ack_status(
     *,
     device_id: str | None,

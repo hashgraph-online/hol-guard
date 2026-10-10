@@ -12,6 +12,16 @@ runs:
     with:
       name: pytest-native-command-projections
       path: .
+  - name: Download native command evaluators
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: pytest-native-command-evaluators
+      path: rust/target/release
+  - name: Bind the compiled native runtime
+    run: |
+      chmod 0755 rust/target/release/hol-guard-runtime rust/target/release/guard-command-source
+      echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+    shell: bash
   - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
     with:
       python-version: ${{ inputs.python-version }}
@@ -36,5 +46,10 @@ runs:
     shell: bash
   - name: Run cross-version compatibility contracts
     run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py tests/test_cisco_install_surfaces.py
-      tests/test_policy.py tests/test_policy_bundle_parser.py --tb=short
+      tests/test_policy.py --tb=short
+    shell: bash
+  - name: Run native-backed cross-version compatibility contracts
+    env:
+      HOL_GUARD_NATIVE_REGRESSION: "1"
+    run: uv run --no-sync pytest tests/test_policy_bundle_parser.py --tb=short
     shell: bash

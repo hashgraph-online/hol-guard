@@ -81,6 +81,21 @@ fn acquire_lock(path: &Path, timeout: Duration) -> Result<File, EvalError> {
 const RECONNECT_AFTER_REVOKED: &str =
     "Guard Cloud sign-in is no longer valid. Reconnect Guard Cloud to continue.";
 
+/// Mirrors `_guard_oauth_reauthorization_message`; Python parks refresh with
+/// `failure_kind = "rejected"` when the token endpoint rejected the request
+/// with an error other than invalid_grant.
+const REAUTHORIZATION_REQUIRED: &str =
+    "Guard authorization expired. Run `hol-guard connect` to sign in again.";
+
+/// The error a parked needs-reauthorization circuit reports. State written
+/// before `failure_kind` existed keeps the revoked-grant error.
+fn parked_reauthorization_message(state: &Value) -> &'static str {
+    match state.get("failure_kind").and_then(Value::as_str) {
+        Some("rejected") => REAUTHORIZATION_REQUIRED,
+        _ => RECONNECT_AFTER_REVOKED,
+    }
+}
+
 fn now_unix() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -197,7 +212,9 @@ fn circuit_check(
         .and_then(Value::as_bool)
         .unwrap_or(false)
     {
-        return Err(EvalError::Validation(RECONNECT_AFTER_REVOKED.to_owned()));
+        return Err(EvalError::Validation(
+            parked_reauthorization_message(&state).to_owned(),
+        ));
     }
     let remaining = (next_allowed_unix.unwrap() - now_unix_s).max(1) as f64;
     Ok(Some(remaining))
@@ -264,17 +281,18 @@ fn circuit_record_rate_limit(store: &dyn SupplyChainStore, refresh_token: &str, 
         MAX_BACKOFF_DEFAULT,
     ));
     let next_allowed = now_timestamp().add_seconds_f64(bounded).isoformat();
-    save_circuit(
-        store,
-        serde_json::json!({
-            "refresh_token_fingerprint": fingerprint,
-            "consecutive_failures": state.get("consecutive_failures").and_then(Value::as_i64).unwrap_or(0),
-            "needs_reauthorization": state.get("needs_reauthorization").and_then(Value::as_bool).unwrap_or(false),
-            "notice_sent": state.get("notice_sent").and_then(Value::as_bool).unwrap_or(false),
-            "backoff_seconds": bounded,
-            "next_refresh_allowed_at": next_allowed,
-        }),
-    );
+    let mut parked = serde_json::json!({
+        "refresh_token_fingerprint": fingerprint,
+        "consecutive_failures": state.get("consecutive_failures").and_then(Value::as_i64).unwrap_or(0),
+        "needs_reauthorization": state.get("needs_reauthorization").and_then(Value::as_bool).unwrap_or(false),
+        "notice_sent": state.get("notice_sent").and_then(Value::as_bool).unwrap_or(false),
+        "backoff_seconds": bounded,
+        "next_refresh_allowed_at": next_allowed,
+    });
+    if let Some(kind) = state.get("failure_kind").filter(|kind| kind.is_string()) {
+        parked["failure_kind"] = kind.clone();
+    }
+    save_circuit(store, parked);
 }
 
 /// `runner.py:_oauth_refresh_circuit_record_success` — a successful refresh
@@ -684,4 +702,32 @@ pub(crate) fn refresh_oauth_access_token(
     // breaker and demand reauthorization.
     circuit_record_dead_grant(store, &attempt_refresh_token);
     Err(EvalError::Validation(RECONNECT_AFTER_REVOKED.to_owned()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parked_rejected_circuit_reports_reauthorization() {
+        let state = serde_json::json!({"needs_reauthorization": true, "failure_kind": "rejected"});
+        assert_eq!(
+            parked_reauthorization_message(&state),
+            REAUTHORIZATION_REQUIRED
+        );
+    }
+
+    #[test]
+    fn parked_circuit_without_failure_kind_reports_revoked_grant() {
+        let state = serde_json::json!({"needs_reauthorization": true});
+        assert_eq!(
+            parked_reauthorization_message(&state),
+            RECONNECT_AFTER_REVOKED
+        );
+        let revoked = serde_json::json!({"needs_reauthorization": true, "failure_kind": "revoked"});
+        assert_eq!(
+            parked_reauthorization_message(&revoked),
+            RECONNECT_AFTER_REVOKED
+        );
+    }
 }
