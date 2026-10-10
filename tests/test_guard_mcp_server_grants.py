@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from dataclasses import replace
 from pathlib import Path
 
@@ -35,7 +34,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
 
 
 def _identity():
@@ -84,17 +83,15 @@ def _layer(
     )
 
 
-_SHARED_HOME = Path(tempfile.mkdtemp(prefix="contributed-mcp-"))
-
-
 class _AuthorityStore:
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
-        self.guard_home = _SHARED_HOME
-        self.path = _SHARED_HOME / "guard.db"
+        self.guard_home = native_test_guard_home()
+        self.path = self.guard_home / "guard.db"
 
-    def read_local_mcp_grant(self, *_args: object, **_kwargs: object) -> None:
-        return None
+    def has_local_cli_grant_rules(self) -> bool:
+        """No device grant rows exist, so an unavailable resident cannot hide one."""
+        return False
 
     def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
         digest = getattr(registry, "catalog_digest", "0" * 64)

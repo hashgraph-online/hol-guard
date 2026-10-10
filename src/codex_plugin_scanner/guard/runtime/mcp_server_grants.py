@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from ..models import GuardAction, GuardArtifact
 from ..native_contributed_mcp_decision import native_contributed_mcp_decision
@@ -54,7 +55,7 @@ def apply_contributed_mcp_decision(
     if native is None:
         raise LocalCliIdentityUnavailableError(_UNAVAILABLE)
     if native.state == "decided" and native.action is not None:
-        return native.action, native.source or "", native.reason or ""  # type: ignore[return-value]
+        return cast(GuardAction, native.action), native.source or "", native.reason or ""
     return None
 
 

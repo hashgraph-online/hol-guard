@@ -8,6 +8,7 @@ from __future__ import annotations
 
 _RECOVERY_ACTIONS = {
     "approval_required": "provide_local_approval",
+    "authority_apply_failed": "refresh_effective_controls",
     "authority_conflict": "refresh_effective_controls",
     "authority_unavailable": "enroll_or_repair_authority",
     "catalog_conflict": "refresh_catalog",

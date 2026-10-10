@@ -2073,26 +2073,6 @@ class CodexHarnessAdapter(HarnessAdapter):
             raise
         return target_hooks_path
 
-    def _install_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
-        target_hooks_path = self._hooks_path(context)
-        hook_payloads = payloads or self._load_hook_payloads(context)
-        for hooks_path in self._all_hook_paths(context):
-            original_payload = deepcopy(hook_payloads.get(hooks_path, {}))
-            payload = deepcopy(original_payload)
-            hooks = payload.get("hooks")
-            if not isinstance(hooks, dict):
-                hooks = {}
-            legacy_bindings = _current_install_legacy_bindings(context, hooks)
-            cleaned_hooks, managed_removed = _remove_manifest_bound_hook_events(hooks, legacy_bindings)
-            if not managed_removed:
-                payload = deepcopy(original_payload)
-            elif cleaned_hooks:
-                payload["hooks"] = cleaned_hooks
-            else:
-                payload.pop("hooks", None)
-            self._write_hooks_payload(hooks_path, payload, original_payload=original_payload)
-        return target_hooks_path
-
     @staticmethod
     def _install_config_hooks(
         payload: dict[str, object],
@@ -2274,28 +2254,9 @@ class CodexHarnessAdapter(HarnessAdapter):
         for change in prepare_codex_shell_cleanup(context):
             _publish_codex_alternate_cleanup(change)
 
-    @staticmethod
-    def _remove_shell_guard_block(path: Path) -> None:
-        _publish_codex_alternate_cleanup(_prepare_codex_shell_cleanup_file(path))
-
     def _remove_hooks(self, context: HarnessContext, *, payloads: dict[Path, dict[str, object]] | None = None) -> Path:
         target_hooks_path = self._hooks_path(context)
         # JSON hook files created after install are foreign to the authenticated
         # TOML registration and must be preserved byte-for-byte on uninstall.
         del payloads
         return target_hooks_path
-
-    @staticmethod
-    def _write_hooks_payload(
-        hooks_path: Path,
-        payload: dict[str, object],
-        *,
-        original_payload: dict[str, object] | None = None,
-    ) -> None:
-        if original_payload is not None and payload == original_payload:
-            return
-        if payload:
-            hooks_path.parent.mkdir(parents=True, exist_ok=True)
-            hooks_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        elif hooks_path.exists():
-            hooks_path.unlink()

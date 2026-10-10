@@ -95,6 +95,7 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -127,7 +128,9 @@ type RawGuardApprovalRequest = Omit<
   | "recommended_scope_by_action"
   | "scope_restrictions"
   | "task_capability_eligibility"
+  | "extension_recommendation"
 > & {
+  extension_recommendation?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -1449,7 +1452,12 @@ function parseOptionalString(value: unknown): string | null {
 }
 
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
-  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const {
+    decision_contract_error: rawContractError,
+    extension_recommendation: rawExtensionRecommendation,
+    ...baseItem
+  } = item;
+  const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1547,6 +1555,9 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...(extensionRecommendation !== null && !hasDecisionContractError
+      ? { extension_recommendation: extensionRecommendation }
+      : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),

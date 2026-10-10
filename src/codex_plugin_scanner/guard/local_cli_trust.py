@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -15,15 +14,6 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_c
 from .runtime.package_json_scripts import identify_package_json_scripts
 
 LocalCliGrantState = Literal["allowed", "blocked"]
-
-
-@dataclass(frozen=True, slots=True)
-class LocalCliGrant:
-    cli_id: str
-    identity_hash: str
-    state: LocalCliGrantState
-    revision: int
-    updated_at: str
 
 
 def matching_local_cli_grant(
@@ -145,12 +135,18 @@ def _hold_unverified_mcp_decision(
 
     Unlike CLI grants, MCP grants also produce review-only outcomes (per-tool
     review, unseen tools under an enrolled server, changed tool authority), and
-    each needs a grant row. Any row therefore holds an otherwise allowed call.
+    each needs a grant row. Any row therefore holds an otherwise allowed call,
+    and a call already under review stays decisively in review so a temporary
+    approval cannot upgrade it past a stored block.
     """
 
     contributed = _contributed_mcp_decision(store, artifact, current_action)
+    if contributed is not None and contributed[0] in {"block", "review"}:
+        return contributed
     effective = contributed[0] if contributed is not None else current_action
-    if effective in {"allow", "warn"} and _may_hold_mcp_grants(store):
+    # A review is held too: with no decisive answer, the caller would let a
+    # time-bounded approval upgrade it to allow past a stored device block.
+    if effective in {"allow", "warn", "review"} and _may_hold_mcp_grants(store):
         return (
             "review",
             "local-mcp-extension",

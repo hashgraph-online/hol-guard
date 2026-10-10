@@ -120,11 +120,6 @@ def decode_cache_key(
     return f"{detector_version}:{max_input_bytes}:{max_decoded_bytes}:{max_depth}:{digest}"
 
 
-def clear_decode_cache() -> None:
-    _DECODE_CACHE.clear()
-    _DECODE_CACHE_ORDER.clear()
-
-
 def _clone_decode_result(result: DecodeResult) -> DecodeResult:
     return DecodeResult(
         layers=list(result.layers),
@@ -253,29 +248,8 @@ def _try_base64_utf16le(data: str) -> str | None:
         return None
 
 
-def _extract_powershell_encoded(text: str) -> str | None:
-    m = _POWERSHELL_ENCODED.search(text)
-    if not m:
-        return None
-    return _try_base64_utf16le(m.group(1)) or _try_base64(m.group(1))
-
-
 def _unescape_command_argument(value: str) -> str:
     return value.replace("\\\\", "\\").replace('\\"', '"').replace("\\'", "'")
-
-
-def _extract_heredoc(text: str) -> str | None:
-    m = _HEREDOC.search(text)
-    if not m:
-        return None
-    return m.group(2)
-
-
-def _extract_js_atob(text: str) -> str | None:
-    m = _JS_ATOB.search(text)
-    if not m:
-        return None
-    return _try_base64(m.group(1))
 
 
 def _detect_eval_signals(text: str) -> list[str]:

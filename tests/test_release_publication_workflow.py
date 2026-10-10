@@ -132,7 +132,14 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "validate-local" in native_validate["run"] and "--artifact-set full" in native_validate["run"]
     main_quota = next(step for step in main_steps if step.get("name") == "Check PyPI quota admission")
     assert main_quota["id"] == "pypi_quota"
-    assert "--fail-if-over-limit --pending-dir dist-hol-guard" in main_quota["run"]
+    assert "--fail-if-over-limit --pending-dir pypi-hol-guard" in main_quota["run"]
+    stage_wheels = next(step for step in main_steps if step.get("name") == "Stage wheels-only PyPI upload")
+    assert "cp dist-hol-guard/*.whl pypi-hol-guard/" in stage_wheels["run"]
+    assert "cp dist-hol-guard/*.whl dist-hol-guard/*.tar.gz pypi-hol-guard/" in stage_wheels["run"]
+    assert "wheels_only_flag=--wheels-only" in stage_wheels["run"]
+    assert "artifact_set=wheels" in stage_wheels["run"]
+    assert "artifact_set=full" in stage_wheels["run"]
+    assert main_steps.index(native_validate) < main_steps.index(stage_wheels) < main_steps.index(main_quota)
     assert "jq -e '.over_limit == true'" in main_quota["run"]
     assert 'echo "blocked=true"' in main_quota["run"]
     guard_publish = next(step for step in main_steps if step.get("name") == "Publish HOL Guard to PyPI")
@@ -144,7 +151,9 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         "steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'"
     )
     assert jobs["publish-main-pypi"]["outputs"]["pypi_deferred"] == "${{ steps.pypi_quota.outputs.blocked }}"
-    assert "--artifact-set full" in main_verify["run"]
+    assert '--dist-dir dist-hol-guard --artifact-set "$ARTIFACT_SET"' in main_verify["run"]
+    assert '--dist-dir dist-hol-guard ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}' in main_verify["run"]
+    assert main_verify["env"]["ARTIFACT_SET"] == "${{ steps.pypi_stage.outputs.artifact_set }}"
     assert (
         main_verify["run"].find("for attempt in {1..60}")
         < main_verify["run"].find("retry_verify_published.py")
@@ -319,10 +328,12 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
             "steps.pypi.outputs.plugin_scanner_upload == 'true'",
         }
         assert {step["with"]["packages-dir"] for step in publish_steps} == {
-            "dist-hol-guard/",
+            "pypi-hol-guard/",
             "dist-plugin-scanner/",
         }
-        assert "dist-hol-guard/*.publish.attestation" in cleanup_step["run"]
+        assert '${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"}' in inspect_step["run"]
+        assert inspect_step["env"]["WHEELS_ONLY_FLAG"] == "${{ steps.pypi_stage.outputs.wheels_only_flag }}"
+        assert "pypi-hol-guard/*.publish.attestation" in cleanup_step["run"]
         assert "dist-plugin-scanner/*.publish.attestation" in cleanup_step["run"]
         assert all(steps.index(step) < steps.index(cleanup_step) for step in publish_steps)
         assert steps.index(cleanup_step) < steps.index(verify_step)
@@ -372,3 +383,22 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
     )
     assert "scripts/pypi_project_storage.py --fail-if-over-limit" in alpha_quota["run"]
     assert "packaging==25.0" in alpha_quota["run"]
+
+
+def test_repair_runs_reuse_attested_release_wheels_instead_of_rebuilt_ones() -> None:
+    jobs = _workflow(PUBLISH_WORKFLOW)["jobs"]
+    steps = jobs["assemble-native-guard-distributions"]["steps"]
+    names = [step.get("name") for step in steps]
+    reuse_name = "Reuse wheels already attested on the GitHub release"
+    assert names.index(reuse_name) < names.index("Validate exact native artifact set")
+    assert names.index(reuse_name) < names.index("Record aggregate immutable hashes")
+    step = steps[names.index(reuse_name)]
+    assert step["if"] == "needs.build.outputs.channel == 'stable'"
+    assert step["working-directory"] == "${{ runner.temp }}"
+    script = step["run"]
+    assert 'gh release download "$tag"' in script
+    assert 'gh attestation verify "$release_file"' in script
+    assert '--source-digest "$SOURCE_SHA"' in script
+    assert "refusing to publish unverified wheels" in script
+    assert "Release wheel set does not match" in script
+    assert script.index("gh attestation verify") < script.index('cp -f "${release_files[@]}" "$DIST_DIR/"')

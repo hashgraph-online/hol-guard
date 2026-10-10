@@ -163,8 +163,15 @@ fn decide(request: &LocalMcpGrantRequestV1) -> Result<Value, &'static str> {
     else {
         return Ok(outcome(McpGrantState::None, None));
     };
-    require_readable_schema(&connection)?;
-    let (state, observation) = grant_decision(&connection, request, &target)?;
+    // One deferred read transaction pins a single snapshot for the schema check
+    // and every grant read below. Autocommit reads would each see the latest
+    // commit, so a writer revoking a server while allowing one of its tools could
+    // be read as the old parent grant plus the new tool state.
+    let snapshot = connection
+        .unchecked_transaction()
+        .map_err(|_| STORE_UNAVAILABLE)?;
+    require_readable_schema(&snapshot)?;
+    let (state, observation) = grant_decision(&snapshot, request, &target)?;
     Ok(outcome(state, observation.as_ref()))
 }
 
@@ -221,6 +228,11 @@ fn grant_decision(
     target: &Target,
 ) -> Result<(McpGrantState, Option<Observation>), &'static str> {
     const NONE: (McpGrantState, Option<Observation>) = (McpGrantState::None, Option::None);
+    // Every read below must share one snapshot; see `decide`.
+    debug_assert!(
+        !connection.is_autocommit(),
+        "grant decision reads must run inside one read transaction"
+    );
     if !table_exists(connection, "local_cli_observation")?
         || !table_exists(connection, "local_cli_grant")?
     {

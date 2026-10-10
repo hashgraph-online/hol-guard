@@ -61,17 +61,32 @@ def effective_decision(response: Any) -> str:
     return {"deny": "deny", "ask": "ask", "block": "deny"}.get(str(permission or "").lower(), "allow")
 
 
+_WINDOWS_ROOTS = ("{{workspace}}\\", "{{home}}\\", ".\\")
+
+
+def _windows_shaped(value: str) -> bool:
+    """Windows hosts render fixture roots with backslash separators."""
+    return any(root in value for root in _WINDOWS_ROOTS)
+
+
 def _relative(value: str) -> str:
+    if value.startswith(_WINDOWS_ROOTS):
+        value = value.replace("\\", "/")
     for prefix in ("{{workspace}}/", "./"):
         value = value.removeprefix(prefix)
     return value
 
 
 def _tokens(command: str) -> tuple[str, ...]:
+    windows = _windows_shaped(command)
     try:
-        return tuple(_relative(token) for token in shlex.split(command))
+        # POSIX splitting would read Windows separators as escapes.
+        tokens = shlex.split(command, posix=not windows)
     except ValueError:
         return (command.strip(),)
+    if windows:
+        tokens = [token.strip("\"'") for token in tokens]
+    return tuple(_relative(token) for token in tokens)
 
 
 def _request(payload: dict[str, Any]) -> tuple[str | None, str | None]:

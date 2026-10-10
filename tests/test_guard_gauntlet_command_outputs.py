@@ -106,7 +106,7 @@ def test_windows_discovery_separators_still_bind_every_source():
 
 @pytest.mark.parametrize("identifier", OUTPUTS)
 def test_pinned_omp_timing_notice_preserves_required_stdout(identifier):
-    """OMP 18.1.18 appends timing after stdout, including its trailing newline."""
+    """OMP 18.4.12 appends timing after stdout, including its trailing newline."""
     case = _observed(identifier)
     for event in case["events"]:
         if event["type"] == "tool_execution_end":

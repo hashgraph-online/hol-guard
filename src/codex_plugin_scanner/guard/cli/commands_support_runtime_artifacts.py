@@ -10,6 +10,7 @@ from ..runtime.direct_vitest import (
     direct_local_typescript_execution_context,
     direct_local_vitest_execution_context,
 )
+from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..runtime.jsonc import loads_jsonc
 from ..runtime.kubernetes_commands import kubernetes_secret_read_source
@@ -479,6 +480,9 @@ def _compound_runtime_artifact(
     )
     compound_summary = "Compound command findings: " + " ".join(deduped_summaries)
     metadata = dict(primary.metadata)
+    if len(artifacts) > 1:
+        # The hint only covers the extension evaluation; other findings keep reviewing.
+        metadata.pop("extension_allow_hint", None)
     metadata.update(
         {
             "compound_complete": canonical_command is not None and canonical_command.confidence == "exact",
@@ -713,6 +717,18 @@ def _hook_runtime_artifact(
                 extension_control_snapshot=(native_review.snapshot if native_review is not None else None),
                 native_extension_evidence=(native_review.payload if native_review is not None else None),
                 native_evaluation=(native_review.evaluation if native_review is not None else None),
+                extension_allow_hint=(
+                    compute_extension_allow_hint(
+                        native_review.evaluation,
+                        command_text=raw_command_text,
+                        snapshot=native_review.snapshot,
+                        native_evidence=native_review.payload,
+                        cwd=workspace,
+                        home_dir=home_dir,
+                    )
+                    if native_review is not None and raw_command_text is not None
+                    else None
+                ),
             )
         )
     if raw_command_text is not None and (action_envelope is None or action_envelope.action_type == "shell_command"):

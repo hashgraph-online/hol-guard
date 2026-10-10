@@ -59,6 +59,7 @@ import {
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -96,6 +97,7 @@ export function ReviewDecisionCard(props: {
     requestId: string;
     action: "allow" | "block";
     persistedExactAction: boolean;
+    message?: string;
   } | null>(null);
   const resolved = resolvedStateForItem(resolvedState, item);
   const isStillShown = useShownRequestCheck(item?.request_id ?? null);
@@ -107,6 +109,7 @@ export function ReviewDecisionCard(props: {
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [extensionDialogActive, setExtensionDialogActive] = useState(false);
   const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
   const [rememberExactAction, setRememberExactAction] = useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = useState(props.approvalGate);
@@ -329,7 +332,15 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
+      if (
+        submitting !== null ||
+        pendingAction !== null ||
+        extensionDialogActive ||
+        resolved !== null ||
+        resolutionBlockReason !== null
+      ) {
+        return;
+      }
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -349,7 +360,15 @@ export function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
+  }, [
+    availableScopeChoices,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    submitting,
+  ]);
 
   const handleModalSubmit = useCallback(() => {
     if (pendingAction === null || submitting !== null) {
@@ -391,6 +410,15 @@ export function ReviewDecisionCard(props: {
   const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setApprovalTotpCode(event.target.value);
   }, []);
+
+  const reviewedRequestId = item?.request_id ?? null;
+  const handleExtensionApproved = useCallback(
+    (message: string) => {
+      if (reviewedRequestId === null) return;
+      setResolved({ requestId: reviewedRequestId, action: "allow", persistedExactAction: false, message });
+    },
+    [reviewedRequestId],
+  );
 
   const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setUseCooldown(event.target.checked);
@@ -465,7 +493,7 @@ export function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
+            {resolved.message ?? resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
           </p>
         </div>
       )}
@@ -548,6 +576,19 @@ export function ReviewDecisionCard(props: {
               </div>
             )}
           </div>
+        )}
+
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionRecommendationCard
+            key={item.request_id}
+            item={item}
+            approvalGate={approvalGate}
+            allowScope={allowScope}
+            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            onResolve={props.onResolve}
+            onApproved={handleExtensionApproved}
+            onDialogActiveChange={setExtensionDialogActive}
+          />
         )}
 
         {resolutionBlockReason === null && resolved === null && (

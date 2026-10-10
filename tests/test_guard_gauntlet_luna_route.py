@@ -18,7 +18,7 @@ READY = {
     "port": 40123,
     "adapter": ADAPTER_ID,
     "provider": "openai-codex",
-    "model": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
     "thinking": "medium",
 }
 
@@ -74,7 +74,9 @@ def test_sdk_root_comes_from_the_omp_executable_and_must_hold_the_packages(tmp_p
         sdk_root_for(None, tmp_path)
 
 
-@pytest.mark.parametrize(("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high")])
+@pytest.mark.parametrize(
+    ("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high"), ({"effort": "low"}, "low")]
+)
 def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monkeypatch, requested, effort):
     _root, omp = _sdk(tmp_path)
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
@@ -84,14 +86,14 @@ def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monk
     assert provider["base_url"] == "http://127.0.0.1:40123/v1"
     assert provider["allow_loopback"] is True and bool(provider["api_key"])
     assert provider["reasoning_effort"] == effort
-    assert f"openai-codex/gpt-5.6-luna/{effort} via" in provider["identity"]
+    assert f"openai-codex/gpt-6-luna/{effort} via" in provider["identity"]
 
 
 def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
     _root, omp = _sdk(tmp_path)
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
     with pytest.raises(ValueError):
-        NativeLunaRoute(omp=str(omp), effort="low")
+        NativeLunaRoute(omp=str(omp), effort="xhigh")
 
 
 def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch):
@@ -226,7 +228,7 @@ def test_cli_rejects_an_unsupported_luna_effort(tmp_path):
             str(tmp_path / "e"),
             "--native-luna-route",
             "--reasoning-effort",
-            "low",
+            "xhigh",
         ],
         capture_output=True,
         text=True,

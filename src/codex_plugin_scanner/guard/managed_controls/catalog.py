@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from typing import cast
 
 from ..runtime.extension_control_limits import (
+    CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CATALOG_EXTENSIONS,
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_PERMISSIONS_PER_EXTENSION,
 )
 
@@ -137,7 +137,7 @@ class CatalogProjection:
         ]
         if len(permission_ids) != len(set(permission_ids)):
             raise CatalogValidationError("duplicate permission id")
-        if len(self.canonical_bytes()) > MAX_CATALOG_PAYLOAD_BYTES:
+        if len(self.canonical_bytes()) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
             raise CatalogValidationError("catalog payload limit exceeded")
 
     def payload(self) -> dict[str, object]:

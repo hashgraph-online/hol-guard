@@ -15,7 +15,6 @@ from .models import GuardArtifact, HarnessDetection
 from .runtime.approval_context import build_configured_environment_hash, build_configured_header_values_hash
 from .skill_directory_identity import (
     discover_skill_documents,
-    incomplete_skill_directory_identity,
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
@@ -414,7 +413,7 @@ def _discover_codex_skills(
             )
         for issue in discovery.issues:
             relative_id = f".guard-discovery/{issue.issue_id}"
-            identity = incomplete_skill_directory_identity(issue.failure_reason)
+            identity = issue.identity
             metadata = {
                 "enabled": True,
                 "skill_root": relative_root,

@@ -3,8 +3,9 @@
 The resident reads ``guard.db`` and decides whether a live MCP ``tools/call``
 is covered by a this-device grant. Python sends the server identity material
 recorded in artifact metadata, the tool name, and the live authority digests,
-and presents the answer. A missing, malformed, or unbound reply is ``None``, which callers
-must treat as "no authoritative answer", never as an allow.
+and presents the answer. A missing, malformed, or unbound reply is a
+``NativeLocalMcpGrantFailure`` carrying a reason code, which callers must treat
+as "no authoritative answer", never as an allow.
 """
 
 from __future__ import annotations
@@ -16,14 +17,22 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from .native_context import _canonical_request_sha256
+from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_execution import _resident_request
 
 LOCAL_MCP_GRANT_FEATURE = "local-mcp-grant-v1"
 _REQUEST_SCHEMA = "guard-local-mcp-grant-request.v1"
 _RESULT_SCHEMA = "guard-local-mcp-grant-result.v1"
+_STATES: dict[str, NativeMcpGrantState] = {
+    "allowed": "allowed",
+    "blocked": "blocked",
+    "review": "review",
+    "none": "none",
+}
 _PAYLOAD_KEYS = frozenset({"state", "cli_id", "identity_hash"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_RESIDENT_CODE = re.compile(r"^native_local_mcp_grant_[a-z_]{1,64}$")
+_UNAVAILABLE = "native_local_mcp_grant_unavailable"
 
 NativeMcpGrantState = Literal["allowed", "blocked", "review", "none"]
 
@@ -33,6 +42,13 @@ class NativeLocalMcpGrant:
     state: NativeMcpGrantState
     cli_id: str | None
     identity_hash: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class NativeLocalMcpGrantFailure:
+    """No authoritative answer; ``code`` says why, for diagnostics only."""
+
+    code: str
 
 
 def native_local_mcp_grant(
@@ -47,8 +63,8 @@ def native_local_mcp_grant(
     tool_authority_hash: str | None,
     launcher_path: str | None,
     launcher_home: str | None,
-) -> NativeLocalMcpGrant | None:
-    """Return the resident's MCP grant decision, or ``None`` without an answer."""
+) -> NativeLocalMcpGrant | NativeLocalMcpGrantFailure:
+    """Return the resident's MCP grant decision, or why there is none."""
 
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
@@ -67,7 +83,9 @@ def native_local_mcp_grant(
     try:
         digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
-        return None
+        return NativeLocalMcpGrantFailure("native_local_mcp_grant_request_invalid")
+    if not ensure_resident_prerequisite(guard_home):
+        return NativeLocalMcpGrantFailure("native_local_mcp_grant_prerequisite_unavailable")
     response = _resident_request(
         operation="local_mcp_grant_decide",
         request=request,
@@ -81,11 +99,18 @@ def native_local_mcp_grant(
         or response.get("schema") != _RESULT_SCHEMA
         or response.get("request_id") != request["request_id"]
         or response.get("request_sha256") != digest
-        or response.get("status") != "ok"
-        or response.get("code") != "ok"
     ):
-        return None
-    return _decode_payload(response.get("payload"))
+        return NativeLocalMcpGrantFailure(_UNAVAILABLE)
+    status, code = response.get("status"), response.get("code")
+    if status == "error":
+        # A bound refusal names its reason. Keep only codes in the resident's
+        # own namespace so arbitrary text never reaches diagnostics.
+        reason = code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
+        return NativeLocalMcpGrantFailure(reason)
+    if status != "ok" or code != "ok":
+        return NativeLocalMcpGrantFailure(_UNAVAILABLE)
+    decoded = _decode_payload(response.get("payload"))
+    return decoded if decoded is not None else NativeLocalMcpGrantFailure("native_local_mcp_grant_payload_invalid")
 
 
 def _decode_payload(payload: object) -> NativeLocalMcpGrant | None:
@@ -94,7 +119,7 @@ def _decode_payload(payload: object) -> NativeLocalMcpGrant | None:
     state = payload["state"]
     cli_id = payload["cli_id"]
     identity_hash = payload["identity_hash"]
-    if state not in {"allowed", "blocked", "review", "none"}:
+    if not isinstance(state, str) or state not in _STATES:
         return None
     if cli_id is not None and not isinstance(cli_id, str):
         return None
@@ -102,7 +127,12 @@ def _decode_payload(payload: object) -> NativeLocalMcpGrant | None:
         return None
     if state != "none" and (cli_id is None or identity_hash is None):
         return None
-    return NativeLocalMcpGrant(state, cli_id, identity_hash)
+    return NativeLocalMcpGrant(_STATES[state], cli_id, identity_hash)
 
 
-__all__ = ["LOCAL_MCP_GRANT_FEATURE", "NativeLocalMcpGrant", "native_local_mcp_grant"]
+__all__ = [
+    "LOCAL_MCP_GRANT_FEATURE",
+    "NativeLocalMcpGrant",
+    "NativeLocalMcpGrantFailure",
+    "native_local_mcp_grant",
+]

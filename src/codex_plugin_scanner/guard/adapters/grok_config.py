@@ -26,7 +26,6 @@ GUARD_MANAGED_MARKER = "HOL GUARD MANAGED GROK"
 GUARD_HOOK_PRETOOL_FILE = "hol-guard-pretooluse.json"
 GUARD_HOOK_PROMPT_FILE = "hol-guard-prompt.json"
 # Kept empty: a per-tool matcher list double-fired after Grok aliased Bash→run_terminal_command.
-PRETOOL_MATCHERS: tuple[str, ...] = ()
 MANAGED_DENY_RULES = (
     "Bash(hol-guard apps disconnect grok*)",
     "Bash(hol-guard apps uninstall*)",

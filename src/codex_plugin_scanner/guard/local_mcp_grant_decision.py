@@ -14,6 +14,7 @@ never reads grant rows to substitute.
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -21,7 +22,9 @@ from typing import Literal
 
 from .models import GuardAction, GuardArtifact
 from .native_local_cli_identity import LocalCliIdentityUnavailableError
-from .native_local_mcp_grant import native_local_mcp_grant
+from .native_local_mcp_grant import NativeLocalMcpGrantFailure, native_local_mcp_grant
+
+_LOGGER = logging.getLogger(__name__)
 
 McpGrantOutcome = Literal["allowed", "blocked", "review"]
 
@@ -60,14 +63,38 @@ def decide_local_mcp_grant(
             None if server_hash is None else _configured_mcp_connection_hash(artifact, server_hash)
         ),
         tool_authority_hash=_tool_authority_hash(artifact),
-        launcher_path=os.environ.get("PATH"),
+        launcher_path=_caller_launcher_path(os.environ.get("PATH")),
         launcher_home=os.path.expanduser("~"),
     )
-    if native is None:
-        raise LocalCliIdentityUnavailableError("native_local_mcp_grant_unavailable")
-    if native.state in {"allowed", "blocked", "review"}:
-        return native.state  # type: ignore[return-value]
+    if isinstance(native, NativeLocalMcpGrantFailure):
+        # Callers hold the call for review without an answer; record why so a
+        # grant that stopped applying can be traced to its cause.
+        _LOGGER.warning("local MCP grant decision unavailable: %s", native.code)
+        raise LocalCliIdentityUnavailableError(native.code)
+    state = native.state
+    if state == "allowed" or state == "blocked" or state == "review":
+        return state
     return None
+
+
+def _caller_launcher_path(path_value: str | None) -> str | None:
+    """Anchor relative ``PATH`` entries to this process's working directory.
+
+    The resident runs elsewhere, so a relative entry such as
+    ``node_modules/.bin`` would otherwise resolve against its own directory.
+    """
+
+    if path_value is None:
+        return None
+    parts = path_value.split(os.pathsep)
+    if all(not part or os.path.isabs(part) for part in parts):
+        return path_value
+    try:
+        cwd = os.getcwd()
+    except OSError as error:
+        # A deleted working directory cannot anchor relative entries; hold for review.
+        raise LocalCliIdentityUnavailableError("native_local_mcp_grant_unavailable") from error
+    return os.pathsep.join(part if not part or os.path.isabs(part) else os.path.join(cwd, part) for part in parts)
 
 
 def _tool_authority_hash(artifact: GuardArtifact) -> str | None:
