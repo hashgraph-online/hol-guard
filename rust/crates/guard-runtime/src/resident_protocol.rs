@@ -2,24 +2,25 @@ use guard_command::CommandModelRequestV1;
 use guard_contracts::{
     ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
     ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
-    ApprovalProofRequestV1, ApprovalReuseRequestV1, ApprovalValidateRequestV3,
-    ApprovalReuseDiagnosticRequestV1, ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1, CommandEffectBatchRequestV1,
-    CommandEffectRequestV1, CompoundGitInspectionRequestV1, ContainedExecuteRequestV1,
-    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
-    ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1,
-    ContributedMcpDecisionRequestV1, DataFlowAnalyzeRequestV1, FalsePositiveRulesRequestV1,
-    GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1, GuardHookEnvelopeV2,
-    HookArtifactComposeRequestV1, HookDecisionRequestV1, LocalCliGrantRequestV1,
-    LocalMcpGrantRequestV1, McpProxyDecisionRequestV1, McpRuntimeEvidenceRequestV1,
-    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
-    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
-    McpToolPolicyDecideRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
-    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
-    RequestContextRequestV1, RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
-    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
-    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ApprovalProofRequestV1, ApprovalReuseDiagnosticRequestV1, ApprovalReuseRequestV1,
+    ApprovalValidateRequestV3, ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1,
+    CommandEffectBatchRequestV1, CommandEffectRequestV1, CompoundGitInspectionRequestV1,
+    ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
+    ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
+    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
+    ContextDigestRequestV1, ContributedMcpDecisionRequestV1, DataFlowAnalyzeRequestV1,
+    FalsePositiveRulesRequestV1, GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1,
+    GuardHookEnvelopeV2, GuardStoreRequestV1, HookArtifactComposeRequestV1, HookDecisionRequestV1,
+    LocalCliGrantRequestV1, LocalMcpGrantRequestV1, McpProxyDecisionRequestV1,
+    McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1,
+    McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1,
+    McpToolEvidenceRequestV1, McpToolPolicyDecideRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
+    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
+    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -84,6 +85,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE.into(),
         guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE.into(),
         guard_contracts::APPROVAL_REUSE_DIAGNOSTIC_FEATURE.into(),
+        guard_contracts::GUARD_STORE_FEATURE.into(),
         guard_contracts::APPROVAL_GATE_FEATURE.into(),
         guard_contracts::PACKAGE_AUTHORITY_FEATURE.into(),
         guard_contracts::PACKAGE_EVALUATION_COMPOSE_FEATURE.into(),
@@ -162,6 +164,7 @@ pub(crate) enum ResidentOperationV1 {
     GithubCliClassify(GithubCliClassifyRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),
+    GuardStore(GuardStoreRequestV1),
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
     SupplyChainEval(SupplyChainEvalRequestV1),
@@ -352,6 +355,13 @@ mod tests {
         ))
         .expect("known lifecycle error is JSON");
         assert_eq!(lifecycle["error"], "native_resident_start_in_progress");
+
+        let unsupported: Value = serde_json::from_slice(&safe_error_response(
+            "native_request_schema_unsupported",
+            false,
+        ))
+        .expect("schema-unsupported error is JSON");
+        assert_eq!(unsupported["error"], "native_request_schema_unsupported");
 
         let unknown_lifecycle: Value = serde_json::from_slice(&safe_error_response(
             "native_resident_future_unregistered_code",

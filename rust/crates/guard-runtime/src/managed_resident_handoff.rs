@@ -51,21 +51,30 @@ pub(super) fn retire_orphaned_foreign_resident(
 /// that admits only snapshots bound to its own runtime. Every push is then
 /// rejected and hooks fail closed on a stale snapshot indefinitely.
 ///
+/// The same holds for a request shape the foreign resident does not support:
+/// a capability bump adds fields its strict typed parser denies, so it answers
+/// `native_request_schema_unsupported`. That code is emitted only when typed
+/// request deserialization fails; transient failures and other errors, which
+/// the safe-error mapping folds into `native_request_invalid_json`, never
+/// retire a resident.
+///
 /// The resident's rejection is the authoritative signal: it never admits this
-/// runtime's policy. Stop it even while clients of its runtime still hold
-/// leases, so the publisher's caller can start a resident of its own runtime.
+/// runtime's policy or request. Stop it even while clients of its runtime
+/// still hold leases, so the caller can start a resident of its own runtime.
 /// Those clients keep working because they already reach a resident of
 /// another runtime through the same discovery path. Returns false when the
 /// resident is ours, the shutdown was not acknowledged or the resident did
-/// not exit, in which case the caller returns the rejection unchanged.
-pub(super) fn retire_foreign_resident_rejecting_policy(
+/// not exit, in which case the caller returns the rejection unchanged. A
+/// genuinely malformed request is answered the same way by our own resident,
+/// which is never retired, so it still fails closed.
+pub(super) fn retire_foreign_resident_rejecting_request(
     scope: &Path,
     state: &ResidentState,
     runtime_digest: &str,
     response: &[u8],
     deadline: Instant,
 ) -> bool {
-    if state.runtime_sha256 == runtime_digest || !rejects_runtime_policy(response) {
+    if state.runtime_sha256 == runtime_digest || !rejects_runtime_request(response) {
         return false;
     }
     let deadline = deadline.min(Instant::now() + MANAGED_STOP_TIMEOUT);
@@ -76,10 +85,12 @@ pub(super) fn retire_foreign_resident_rejecting_policy(
     ) && wait_for_resident_stop_containment(scope, state, deadline, &process_ids).is_ok()
 }
 
-fn rejects_runtime_policy(response: &[u8]) -> bool {
+fn rejects_runtime_request(response: &[u8]) -> bool {
     crate::strict_json_value(response).is_ok_and(|response| {
-        response.get("error").and_then(serde_json::Value::as_str)
-            == Some("snapshot_runtime_identity_mismatch")
+        matches!(
+            response.get("error").and_then(serde_json::Value::as_str),
+            Some("snapshot_runtime_identity_mismatch" | "native_request_schema_unsupported")
+        )
     })
 }
 

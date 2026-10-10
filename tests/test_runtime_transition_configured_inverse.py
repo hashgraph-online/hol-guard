@@ -48,7 +48,7 @@ DAEMON_PROCESS = r"""
 import os, sys, time
 from pathlib import Path
 from codex_plugin_scanner.guard.daemon import server
-from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+from codex_plugin_scanner.guard.native_resident_client import close_native_resident_clients
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.owned_daemon_test_support import publish_ready_pid
 home, guard, ready = map(Path, sys.argv[1:])
@@ -66,8 +66,10 @@ try:
         raise RuntimeError('Exact fixture stop required')
 finally:
     daemon.stop()
-    if not close_native_residents(guard, deadline_monotonic=time.monotonic() + 5):
-        raise RuntimeError('Native residents not retired')
+    # The shared resident holds the approval-gate grants and outlives the daemon,
+    # exactly as in production. Only this process's resident clients are closed.
+    if not close_native_resident_clients(guard, deadline_monotonic=time.monotonic() + 5):
+        raise RuntimeError('Native resident clients not closed')
 """
 
 
