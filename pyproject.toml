@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.29.0"
+version = "3.38.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -83,6 +83,7 @@ ci-test = [
     "build>=1.5.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
     "ruff>=0.15.15",
 ]
 cisco-mcp = [
@@ -161,7 +162,6 @@ path = "scripts/build_command_projection_hook.py"
 "docs/guard/contracts/guard-cloud-review.md" = "codex_plugin_scanner/guard/contracts/data/guard-cloud-review/guard-cloud-review.md"
 "contracts/extensions/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v1.schema.json"
 "contracts/extensions/contribution.v2.schema.json" = "codex_plugin_scanner/guard/contracts/data/extensions/contribution.v2.schema.json"
-"contributions/extensions" = "codex_plugin_scanner/guard/contracts/data/extensions/contributions"
 "contracts/mcp-servers/contribution.v1.schema.json" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contribution.v1.schema.json"
 "contributions/mcp-servers" = "codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions"
 
@@ -171,6 +171,8 @@ artifacts = [
     "src/codex_plugin_scanner/guard/schemas/**",
 ]
 exclude = [
+    "contributions/extensions/**",
+    "contracts/extensions/trust-class-map.v1.json",
     "src/codex_plugin_scanner/_native/guard-command-source",
     "src/codex_plugin_scanner/_native/source-compiler-manifest.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",

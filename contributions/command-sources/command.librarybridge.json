@@ -1,0 +1,2765 @@
+{
+  "schema": "guard.command-extension-source.v1",
+  "extension": {
+    "extension_id": "command.librarybridge",
+    "version": "1.0.0",
+    "name": "LibraryBridge",
+    "description": "Reviews LibraryBridge commands that relocate or restore Steam Proton data, remove retained originals, record evidence, or write Lutris plans and import state.",
+    "action_classes": [
+      "LibraryBridge fix command",
+      "LibraryBridge undo command",
+      "LibraryBridge backup command",
+      "LibraryBridge Lutris import command",
+      "LibraryBridge evidence recording command",
+      "LibraryBridge Lutris plan command",
+      "LibraryBridge Lutris forget command"
+    ],
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "safer_alternatives": [
+      "Review the matching --dry-run or -n plan before applying changes. Inspect evidence without --record; evidence recording is not a dry run."
+    ],
+    "reference_urls": [
+      "https://github.com/amcdev7/LibraryBridge",
+      "https://github.com/amcdev7/LibraryBridge/blob/24308cf5aa9aa03efc6b9c27f173daacf90c256b/src/main.rs"
+    ],
+    "required": false,
+    "source": "built-in",
+    "aliases": [],
+    "dependencies": [],
+    "conflicts": [],
+    "ecosystem_ids": [
+      "librarybridge"
+    ],
+    "executables": [
+      "librarybridge"
+    ],
+    "project_markers": [],
+    "delegated_protection": null,
+    "publisher": {
+      "id": "community.amcdev7",
+      "display_name": "Community",
+      "url": "https://github.com/amcdev7/LibraryBridge"
+    },
+    "icon": {
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine",
+      "background": "#2563EB"
+    },
+    "homepage": "https://github.com/amcdev7/LibraryBridge",
+    "license": "MIT",
+    "permissions": [
+      {
+        "permission_id": "command.librarybridge.permission.fix",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge repair",
+        "description": "Reviews LibraryBridge repairs that copy Proton compatdata, retain the original, and change the Steam library path.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge fix command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge fix with --dry-run and review the complete plan first."
+        ],
+        "example_command": "librarybridge fix 01234567 --force",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.librarybridge.permission.undo",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge repair undo",
+        "description": "Reviews LibraryBridge undo operations that restore Proton compatdata to the Steam library and remove its routing link.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge undo command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge undo with --dry-run and review the restore plan first."
+        ],
+        "example_command": "librarybridge undo 01234567",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.librarybridge.permission.backup",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge backup removal",
+        "description": "Reviews LibraryBridge backup cleanup that permanently removes retained original compatdata after its recovery checks.",
+        "risk_tier": "critical",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge backup command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge backup with --dry-run and confirm the original is recoverable."
+        ],
+        "example_command": "librarybridge backup 01234567",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.librarybridge.permission.lutris-import",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge Lutris import",
+        "description": "Reviews LibraryBridge Lutris imports that write selected game definitions and import records into Lutris state.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge Lutris import command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge lutris import with --dry-run and review the selected games first."
+        ],
+        "example_command": "librarybridge lutris import --plan /tmp/librarybridge-plan.json",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.librarybridge.permission.evidence-record",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge evidence recording",
+        "description": "Reviews LibraryBridge evidence recording that writes a user's launch or save result for a library. The upstream evidence command still records evidence with -n or --dry-run.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge evidence recording command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge evidence <id> without --record to inspect the current evidence."
+        ],
+        "example_command": "librarybridge evidence 01234567 --record launch=yes",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.librarybridge.permission.lutris-plan",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge Lutris plan creation",
+        "description": "Reviews LibraryBridge Lutris plan creation that writes a reviewable import plan to the requested output path.",
+        "risk_tier": "medium",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge Lutris plan command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge lutris plan with --dry-run and review the proposed games first."
+        ],
+        "example_command": "librarybridge lutris plan --candidate 01234567 --output /tmp/librarybridge-plan.json",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      },
+      {
+        "permission_id": "command.librarybridge.permission.lutris-forget",
+        "implementation_version": "1.0.0",
+        "label": "LibraryBridge Lutris import record removal",
+        "description": "Reviews LibraryBridge Lutris forget operations that remove the tool's record of an imported game.",
+        "risk_tier": "high",
+        "baseline_floor": "review",
+        "default_enabled": true,
+        "configurable": true,
+        "typed_capabilities": [],
+        "action_classes": [
+          "LibraryBridge Lutris forget command"
+        ],
+        "dependencies": [],
+        "conflicts": [],
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "deprecated": false,
+        "safer_guidance": [
+          "Run librarybridge lutris forget with --dry-run before removing the import record."
+        ],
+        "example_command": "librarybridge lutris forget --entry game-slug",
+        "family": null,
+        "fixed_reason": null,
+        "replacement_permission_id": null
+      }
+    ],
+    "rules": [
+      {
+        "rule_id": "command.librarybridge.fix",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.fix",
+        "title": "LibraryBridge repair",
+        "description": "Reviews LibraryBridge repairs that copy Proton compatdata, retain the original, and change the Steam library path.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge fix command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge fix with --dry-run and review the complete plan first."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "fix"
+            ],
+            "required_flags": [],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--data-dir",
+              "--expect",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--expect",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [
+              "--expect"
+            ],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "LibraryBridge repair dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "fix"
+                ],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--expect"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "no-act",
+            "title": "LibraryBridge repair no-act",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "fix"
+                ],
+                "required_flags": [
+                  "-n"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--expect"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "fix"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--expect"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "fix"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--expect"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "fix"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--expect"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "fix"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--expect",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--expect"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.librarybridge.undo",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.undo",
+        "title": "LibraryBridge repair undo",
+        "description": "Reviews LibraryBridge undo operations that restore Proton compatdata to the Steam library and remove its routing link.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge undo command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge undo with --dry-run and review the restore plan first."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "undo"
+            ],
+            "required_flags": [],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--data-dir",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "LibraryBridge repair undo dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "undo"
+                ],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "no-act",
+            "title": "LibraryBridge repair undo no-act",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "undo"
+                ],
+                "required_flags": [
+                  "-n"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "undo"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "undo"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "undo"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "undo"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.librarybridge.backup",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.backup",
+        "title": "LibraryBridge backup removal",
+        "description": "Reviews LibraryBridge backup cleanup that permanently removes retained original compatdata after its recovery checks.",
+        "severity": "critical",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge backup command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge backup with --dry-run and confirm the original is recoverable."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "backup"
+            ],
+            "required_flags": [],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--data-dir",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "LibraryBridge backup removal dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "backup"
+                ],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "no-act",
+            "title": "LibraryBridge backup removal no-act",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "backup"
+                ],
+                "required_flags": [
+                  "-n"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "backup"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "backup"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "backup"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "backup"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.librarybridge.lutris-import",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.lutris-import",
+        "title": "LibraryBridge Lutris import",
+        "description": "Reviews LibraryBridge Lutris imports that write selected game definitions and import records into Lutris state.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge Lutris import command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge lutris import with --dry-run and review the selected games first."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "lutris",
+              "import"
+            ],
+            "required_flags": [],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--data-dir",
+              "--plan",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--plan",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [
+              "--plan"
+            ],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "LibraryBridge Lutris import dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "import"
+                ],
+                "required_flags": [
+                  "--dry-run"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--plan"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "no-act",
+            "title": "LibraryBridge Lutris import no-act",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "import"
+                ],
+                "required_flags": [
+                  "-n"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--plan"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "import"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--plan"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "import"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--plan"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "import"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--plan"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "import"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--plan",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--plan"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.librarybridge.evidence-record",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.evidence-record",
+        "title": "LibraryBridge evidence recording",
+        "description": "Reviews LibraryBridge evidence recording that writes a user's launch or save result for a library. The upstream evidence command still records evidence with -n or --dry-run.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge evidence recording command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge evidence <id> without --record to inspect the current evidence."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "evidence"
+            ],
+            "required_flags": [
+              "--record"
+            ],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--data-dir",
+              "--record",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--record",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [
+              "--record"
+            ],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "evidence"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--record"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "evidence"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--record"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "evidence"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--record"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "evidence"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--record",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--record"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.librarybridge.lutris-plan",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.lutris-plan",
+        "title": "LibraryBridge Lutris plan creation",
+        "description": "Reviews LibraryBridge Lutris plan creation that writes a reviewable import plan to the requested output path.",
+        "severity": "medium",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge Lutris plan command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge lutris plan with --dry-run and review the proposed games first."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "lutris",
+              "plan"
+            ],
+            "required_flags": [
+              "--output"
+            ],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--candidate",
+              "--data-dir",
+              "--output",
+              "--root",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--candidate",
+              "--data-dir",
+              "--output",
+              "--root",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [
+              "--candidate",
+              "--output",
+              "--root"
+            ],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "LibraryBridge Lutris plan creation dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "plan"
+                ],
+                "required_flags": [
+                  "--output",
+                  "--dry-run"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--candidate",
+                  "--output",
+                  "--root"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "no-act",
+            "title": "LibraryBridge Lutris plan creation no-act",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "plan"
+                ],
+                "required_flags": [
+                  "--output",
+                  "-n"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--candidate",
+                  "--output",
+                  "--root"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "plan"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--candidate",
+                  "--output",
+                  "--root"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "plan"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--candidate",
+                  "--output",
+                  "--root"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "plan"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--candidate",
+                  "--output",
+                  "--root"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "plan"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--candidate",
+                  "--data-dir",
+                  "--output",
+                  "--root",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--candidate",
+                  "--output",
+                  "--root"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      },
+      {
+        "rule_id": "command.librarybridge.lutris-forget",
+        "rule_version": "1.0.0",
+        "permission_id": "command.librarybridge.permission.lutris-forget",
+        "title": "LibraryBridge Lutris import record removal",
+        "description": "Reviews LibraryBridge Lutris forget operations that remove the tool's record of an imported game.",
+        "severity": "high",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "action_classes": [
+          "LibraryBridge Lutris forget command"
+        ],
+        "safer_alternatives": [
+          "Run librarybridge lutris forget with --dry-run before removing the import record."
+        ],
+        "default_mode": "review",
+        "family": null,
+        "matcher": {
+          "op": "executable.v1",
+          "config": {
+            "executables": [
+              "librarybridge"
+            ],
+            "subcommands": [
+              "lutris",
+              "forget"
+            ],
+            "required_flags": [
+              "--entry"
+            ],
+            "forbidden_flags": [],
+            "allow_leading_options": true,
+            "leading_options_with_values": [
+              "--data-dir",
+              "--entry",
+              "--steam-root"
+            ],
+            "interspersed_options_with_values": [
+              "--data-dir",
+              "--entry",
+              "--steam-root"
+            ],
+            "interspersed_flags": [
+              "--dry-run",
+              "--force",
+              "--help",
+              "--json",
+              "--keep-destination",
+              "--replace-destination",
+              "--version",
+              "--yes",
+              "-h",
+              "-n",
+              "-V",
+              "-y"
+            ],
+            "options_with_values": [
+              "--entry"
+            ],
+            "required_flags_in_all_arguments": true,
+            "fail_secure_unknown_options": true,
+            "inverse_flag_pairs": [],
+            "required_option_values": []
+          }
+        },
+        "native_capability": null,
+        "safe_variants": [
+          {
+            "variant_id": "dry-run",
+            "title": "LibraryBridge Lutris import record removal dry run",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "forget"
+                ],
+                "required_flags": [
+                  "--entry",
+                  "--dry-run"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--entry"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "no-act",
+            "title": "LibraryBridge Lutris import record removal no-act",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "forget"
+                ],
+                "required_flags": [
+                  "--entry",
+                  "-n"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--entry"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "forget"
+                ],
+                "required_flags": [
+                  "--help"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--entry"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "help-short",
+            "title": "LibraryBridge help",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "forget"
+                ],
+                "required_flags": [
+                  "-h"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--entry"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "forget"
+                ],
+                "required_flags": [
+                  "--version"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--entry"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          },
+          {
+            "variant_id": "version-short",
+            "title": "LibraryBridge version",
+            "matcher": {
+              "op": "executable.v1",
+              "config": {
+                "executables": [
+                  "librarybridge"
+                ],
+                "subcommands": [
+                  "lutris",
+                  "forget"
+                ],
+                "required_flags": [
+                  "-V"
+                ],
+                "forbidden_flags": [],
+                "allow_leading_options": true,
+                "leading_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_options_with_values": [
+                  "--data-dir",
+                  "--entry",
+                  "--steam-root"
+                ],
+                "interspersed_flags": [
+                  "--dry-run",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--keep-destination",
+                  "--replace-destination",
+                  "--version",
+                  "--yes",
+                  "-h",
+                  "-n",
+                  "-V",
+                  "-y"
+                ],
+                "options_with_values": [
+                  "--entry"
+                ],
+                "required_flags_in_all_arguments": true,
+                "fail_secure_unknown_options": true,
+                "inverse_flag_pairs": [],
+                "required_option_values": []
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

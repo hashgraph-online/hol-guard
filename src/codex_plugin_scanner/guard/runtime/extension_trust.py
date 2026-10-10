@@ -95,7 +95,7 @@ def _load_map() -> dict[str, object]:
     if packaged is None:
         if bool(getattr(sys, "frozen", False)):
             raise FileNotFoundError("frozen Guard is missing packaged extension trust-class map")
-        packaged = _repo_map_path().read_bytes()
+        raise FileNotFoundError("Guard requires authored trust bindings or a packaged extension trust-class map")
     raw = packaged
     payload = json.loads(raw.decode("utf-8"))
     if not isinstance(payload, dict) or payload.get("schemaVersion") != _MAP_SCHEMA:
@@ -142,10 +142,6 @@ def _packaged_map_bytes() -> bytes | None:
 
         frozen = frozen_package_data("extensions", "trust-class-map.v1.json")
         return frozen.read_bytes() if frozen is not None and frozen.is_file() else None
-
-
-def _repo_map_path() -> Path:
-    return Path(__file__).resolve().parents[4] / "contracts" / "extensions" / "trust-class-map.v1.json"
 
 
 def trust_class_for(extension_id: str) -> TrustClass:
@@ -253,13 +249,3 @@ def filter_inert_external_observations(
         for item in observations
         if extension_is_active(item.extension.extension_id, layer_values, required=item.extension.required)
     )
-
-
-def reset_trust_map_cache() -> None:
-    from .extension_contribution import reset_contribution_cache
-
-    _trust_map.cache_clear()
-    reset_contribution_cache()
-    from .mcp_server_contribution import reset_mcp_contribution_cache
-
-    reset_mcp_contribution_cache()

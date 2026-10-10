@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 import type { BulkGateCredentials } from "./approval-gate-utils";
+import { countRetryBlockedActions } from "./approval-retry-guidance";
 import type { GuardApprovalGatePublicConfig, GuardApprovalRequest } from "./guard-types";
 import {
   bulkApproveActionCount,
@@ -73,6 +74,7 @@ export type QueueBulkDrawerProps = {
   step: QueueBulkDrawerStep;
   selectedGroups: QueueGroup[];
   selectedActionCount: number;
+  retryBlockedActionCount?: number;
   sensitiveFileReadCount: number;
   riskDisclosure: BulkRiskDisclosure;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -173,6 +175,7 @@ export function useQueueBulkApprove(props: {
     let highActionCount = 0;
     let elevatedActionCount = 0;
     let lowActionCount = 0;
+    const retryBlockedActionCount = countRetryBlockedActions(selectedBulkGroups, props.items);
     for (const group of selectedBulkGroups) {
       const tier = bulkApprovalRiskTier(group);
       const count = 1 + group.duplicateCount;
@@ -189,8 +192,9 @@ export function useQueueBulkApprove(props: {
       highActionCount,
       elevatedActionCount,
       lowActionCount,
+      retryBlockedActionCount,
     };
-  }, [selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
+  }, [props.items, selectedActionCount, selectedGroupCount, selectedBulkGroups, sensitiveSummary]);
 
   const riskDisclosure = useMemo(
     () => buildBulkRiskDisclosure(selectionStats),
@@ -454,6 +458,7 @@ export function useQueueBulkApprove(props: {
       step: drawerStep,
       selectedGroups: selectedBulkGroups,
       selectedActionCount,
+      retryBlockedActionCount: selectionStats.retryBlockedActionCount ?? 0,
       sensitiveFileReadCount,
       riskDisclosure,
       approvalGate: props.approvalGate ?? null,

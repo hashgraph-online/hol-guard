@@ -109,6 +109,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
             crate::pretool::PathContext {
                 home_dir: request.home_dir.as_deref(),
                 cwd: request.cwd.as_deref(),
+                cdpath_unset: false,
             },
             request.execution_environment.as_ref(),
         );
@@ -222,6 +223,10 @@ mod tests {
                 payload["reason_code"],
                 "native_command_control_authority_block"
             );
+            assert!(!payload["reason"]
+                .as_str()
+                .unwrap()
+                .contains("hol-guard command controls"));
             assert_ne!(
                 blocked["control_binding"]["effective_digest"],
                 allowed["control_binding"]["effective_digest"]

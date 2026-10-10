@@ -461,4 +461,6 @@ def require_native_http_admission(response: Mapping[str, object]) -> None:
         "native_decision_budget_exhausted",
         "native_review_unavailable",
     ):
-        raise RuntimeError("installed_native_extensions_failed:http_native_admission_failed")
+        # Only the fixed codes above may enter diagnostics, never request data.
+        reason = response["reason_code"]
+        raise RuntimeError(f"installed_native_extensions_failed:http_native_admission_failed:{reason}")

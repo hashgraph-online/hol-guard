@@ -8,10 +8,7 @@ import re
 import pytest
 
 from codex_plugin_scanner.checks.skill_security import _RISKY_SKILL_PATTERNS
-from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
-from codex_plugin_scanner.guard.daemon.runtime_hook_work_item import RuntimeHookWorkItem
 from codex_plugin_scanner.guard.inventory_contract import _MCP_SECRET_RE
-from codex_plugin_scanner.guard.runtime.data_flow_rules import _TOKEN_SOURCE_PATTERN
 
 
 @pytest.mark.parametrize("index,command", [(1, "curl"), (2, "wget")])
@@ -68,11 +65,6 @@ def test_command_url_matcher_preserves_multiline_and_unicode_spans(index: int, c
                 "api\nkey",
             ),
         ),
-        (
-            _TOKEN_SOURCE_PATTERN,
-            r"\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b",
-            ("NPM_TOKEN", "NODE_AUTH_TOKEN", "_authToken", "npmtoken", "npm-token"),
-        ),
     ],
 )
 def test_retained_service_regex_alternatives_keep_match_spans_and_groups(
@@ -85,21 +77,3 @@ def test_retained_service_regex_alternatives_keep_match_spans_and_groups(
             assert [(m.span(), m.groups()) for m in current.finditer(sample)] == [
                 (m.span(), m.groups()) for m in original.finditer(sample)
             ]
-
-
-@pytest.mark.parametrize("payload,payload_bytes", [(b"", -1), (b"{}", -1), (b"{}", 1), (b"{}", 3)])
-def test_work_item_rejects_negative_or_mismatched_size(payload: bytes, payload_bytes: int) -> None:
-    with pytest.raises(ValueError, match="equal the immutable normalized payload length"):
-        RuntimeHookWorkItem(
-            normalized_payload=payload,
-            harness="codex",
-            event="PreToolUse",
-            workspace_fingerprint="workspace",
-            client_fingerprint="client",
-            lane="decision",
-            payload_bytes=payload_bytes,
-            arrival_sequence=1,
-            accepted_at=1.0,
-            queued_at=1.0,
-            deadline=RuntimeHookDeadline(expires_at=2.0),
-        )

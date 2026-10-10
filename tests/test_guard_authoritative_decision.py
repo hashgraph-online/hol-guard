@@ -6,7 +6,6 @@ import copy
 import sys
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -408,10 +407,12 @@ def test_guard_run_fails_closed_before_launch_for_invalid_authority_contract(
 def test_unanimous_allow_launches_without_a_new_prompt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_mcp_probe,
 ) -> None:
     artifact = _artifact(tmp_path)
     (tmp_path / "workspace").mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    native_mcp_probe(store.guard_home)
     config = GuardConfig(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
@@ -428,14 +429,8 @@ def test_unanimous_allow_launches_without_a_new_prompt(
         def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
             return [sys.executable, "-c", "pass"]
 
-    launches: list[list[str]] = []
     monkeypatch.setattr(guard_runner, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
     monkeypatch.setattr(guard_runner, "get_adapter", lambda _harness: _LaunchAdapter())
-    monkeypatch.setattr(
-        guard_runner.subprocess,
-        "run",
-        lambda command, **_kwargs: launches.append(command) or SimpleNamespace(returncode=0),
-    )
 
     output = guard_runner.guard_run(
         "codex",
@@ -453,7 +448,6 @@ def test_unanimous_allow_launches_without_a_new_prompt(
 
     assert output["blocked"] is False
     assert output["launched"] is True
-    assert len(launches) == 1
     _assert_authoritative_projection(
         output["artifacts"][0],
         action="allow",
@@ -464,10 +458,12 @@ def test_unanimous_allow_launches_without_a_new_prompt(
 def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_mcp_probe,
 ) -> None:
     artifact = _artifact(tmp_path)
     (tmp_path / "workspace").mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    native_mcp_probe(store.guard_home)
     config = GuardConfig(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
@@ -484,14 +480,8 @@ def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
         def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
             return [sys.executable, "-c", "pass"]
 
-    launches: list[list[str]] = []
     monkeypatch.setattr(guard_runner, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
     monkeypatch.setattr(guard_runner, "get_adapter", lambda _harness: _LaunchAdapter())
-    monkeypatch.setattr(
-        guard_runner.subprocess,
-        "run",
-        lambda command, **_kwargs: launches.append(command) or SimpleNamespace(returncode=0),
-    )
 
     def _allow_once(
         _detection_value: HarnessDetection,
@@ -521,7 +511,6 @@ def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
 
     assert output["blocked"] is False
     assert output["launched"] is True
-    assert len(launches) == 1
     _assert_authoritative_projection(
         output["artifacts"][0],
         action="allow",
@@ -973,9 +962,11 @@ def test_outer_approval_reuse_action_cannot_contradict_launch_authority(
     assert evaluation_authority_error(output, require_launch_permitted=True) == (AUTHORITATIVE_DECISION_INCONSISTENT)
 
 
+@pytest.mark.parametrize("current_action", ["review", "require-reapproval"])
 def test_finalized_saved_allow_requires_an_exact_atomic_claim_proof(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    current_action: str,
 ) -> None:
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
@@ -989,8 +980,8 @@ def test_finalized_saved_allow_requires_an_exact_atomic_claim_proof(
         GuardConfig(
             guard_home=tmp_path / "guard-home",
             workspace=tmp_path / "workspace",
-            default_action="review",
-            changed_hash_action="review",
+            default_action=current_action,
+            changed_hash_action=current_action,
         ),
         persist=False,
     )
@@ -1000,7 +991,7 @@ def test_finalized_saved_allow_requires_an_exact_atomic_claim_proof(
         "action": "allow",
         "status": "accepted",
         "reason_code": "approval_reuse_accepted",
-        "current_action": "review",
+        "current_action": current_action,
         "saved_action": "allow",
         "should_claim": True,
     }

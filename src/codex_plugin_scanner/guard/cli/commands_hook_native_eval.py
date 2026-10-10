@@ -46,13 +46,9 @@ from ..action_lattice import (
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
-    _package_policy_override_evaluation,
+    package_external_archive_override,
 )
 from ..models import GuardAction
-from ..native_package_authority import (
-    apply_stored_package_policy_native,
-    evaluation_from_native_payload,
-)
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
@@ -61,6 +57,7 @@ from ..runtime.approval_reuse import (
     APPROVAL_REUSE_REAPPROVAL_REQUIRED,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
     with_saved_artifact_hash_provenance,
 )
@@ -260,41 +257,6 @@ def _runtime_cisco_scanner_evidence(
     return tuple(evidence)
 
 
-def _apply_stored_package_policy_via_resident(
-    package_evaluation,
-    *,
-    store,
-    guard_home: Path,
-    artifact,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    current_action: object | None,
-    claim_saved_approval: bool,
-):
-    """Route the saved-package-policy claim through the resident.
-
-    The resident is the sole authority for the stored-approval claim. When it
-    is unreachable (``None`` — transport/identity failure) the evaluation is
-    returned unchanged: no saved approval is applied, matching the resident's
-    own no-saved-approval result rather than re-running a Python path.
-    """
-    payload = apply_stored_package_policy_native(
-        package_evaluation.to_dict(),
-        artifact.to_dict(),
-        store_path=store.path,
-        guard_home=guard_home,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        now=now,
-        current_action=current_action,
-        claim_saved_approval=claim_saved_approval,
-    )
-    if payload is None:
-        return package_evaluation
-    return evaluation_from_native_payload(payload)
-
-
 def evaluate_native_artifact_hook(
     args: argparse.Namespace,
     *,
@@ -402,41 +364,18 @@ def evaluate_native_artifact_hook(
                 runtime_workspace=runtime_workspace,
             )
             if not has_binding_sink:
-                package_evaluation = _package_policy_override_evaluation(
+                package_evaluation = package_external_archive_override(
                     package_evaluation,
-                    decision="block",
-                    policy_action="block",
-                    title="External archive binding unavailable",
-                    summary="Guard cannot prove this command will execute through its digest-binding package shim.",
-                    harness_message=(
-                        "HOL Guard blocked the external archive because the verified package shim is not the "
-                        "resolved executable. Repair or activate package shims and retry."
-                    ),
-                    reason_code="external_archive_binding_unavailable",
-                    reason_message=(
-                        "External archives may run only through a verified Guard package shim that installs the "
-                        "already inspected blob."
-                    ),
+                    variant="binding_unavailable",
                 )
             else:
                 # The verified shim is the sole approval owner: it performs
                 # the post-approval restricted download, digest binding, and
                 # launch.  Asking under the hook artifact as well would create
                 # a second, unrelated approval that cannot authorize the shim.
-                package_evaluation = _package_policy_override_evaluation(
+                package_evaluation = package_external_archive_override(
                     package_evaluation,
-                    decision="allow",
-                    policy_action="allow",
-                    title="External archive delegated to Guard shim",
-                    summary="The verified package shim will own approval and digest-bound execution.",
-                    harness_message=(
-                        "HOL Guard delegated this package request to its verified digest-binding package shim."
-                    ),
-                    reason_code="external_archive_delegated_to_binding_shim",
-                    reason_message=(
-                        "The runtime hook permits only the exact verified shim; that shim requires approval before "
-                        "restricted download and executes only the inspected digest-bound blob."
-                    ),
+                    variant="shim_delegated",
                 )
         effective_package_workspace = runtime_workspace or Path.cwd()
         package_execution_context = build_package_execution_context(
@@ -774,6 +713,10 @@ def evaluate_native_artifact_hook(
             "allow",
             saved_decision_present=True,
         )
+        if native_reuse is None:
+            # Resident unreachable: the observed approval is recorded against
+            # the recomputed current action; no saved approval is claimed.
+            native_reuse = approval_reuse_authority_unavailable(current_policy_action)
         claude_native_approval_observed, claude_native_approval_saved = (
             _persist_claude_native_permission_for_runtime_artifact(
                 store=store,
@@ -953,12 +896,13 @@ def evaluate_native_artifact_hook(
             else current_policy_action
         )
         if stored_policy_action == "block":
+            block_reuse = evaluate_approval_reuse(
+                current_policy_action,
+                "block",
+                saved_decision_present=True,
+            )
             approval_reuse = with_saved_artifact_hash_provenance(
-                evaluate_approval_reuse(
-                    current_policy_action,
-                    "block",
-                    saved_decision_present=True,
-                ),
+                block_reuse if block_reuse is not None else approval_reuse_authority_unavailable(current_policy_action),
                 stored_policy_decision.get("artifact_hash") if stored_policy_decision is not None else None,
             )
             policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
@@ -1023,13 +967,18 @@ def evaluate_native_artifact_hook(
                 if validation_reason == "approval_reuse_integrity_failure"
                 else "invalidated_saved_policy"
             )
+        saved_reuse = evaluate_approval_reuse(
+            current_policy_action,
+            saved_action,
+            saved_decision_present=saved_present,
+            validation_reason=validation_reason,
+        )
         approval_reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                current_policy_action,
-                saved_action,
-                saved_decision_present=saved_present,
-                validation_reason=validation_reason,
-            ),
+            saved_reuse
+            if saved_reuse is not None
+            # Resident unreachable: preserve the recomputed action; the saved
+            # policy decision is not claimed.
+            else approval_reuse_authority_unavailable(current_policy_action),
             (
                 stored_policy_decision.get("artifact_hash")
                 if stored_policy_decision is not None
@@ -1055,13 +1004,16 @@ def evaluate_native_artifact_hook(
             and _claim_saved_approval
         ):
             if not store.claim_approval_reuse_decision(stored_policy_decision, now=_now()):
+                claim_failed_reuse = evaluate_approval_reuse(
+                    current_policy_action,
+                    saved_action,
+                    saved_decision_present=True,
+                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+                )
                 approval_reuse = with_saved_artifact_hash_provenance(
-                    evaluate_approval_reuse(
-                        current_policy_action,
-                        saved_action,
-                        saved_decision_present=True,
-                        validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-                    ),
+                    claim_failed_reuse
+                    if claim_failed_reuse is not None
+                    else approval_reuse_authority_unavailable(current_policy_action),
                     stored_policy_decision.get("artifact_hash"),
                 )
             else:
@@ -1174,14 +1126,19 @@ def evaluate_native_artifact_hook(
             # only after its one-shot row has been claimed and the complete
             # runtime authority has been rebuilt.
             post_claim_current_action = "review"
+        claimed_reuse = evaluate_approval_reuse(
+            post_claim_current_action,
+            "allow",
+            saved_decision_present=True,
+            validation_reason=claimed_validation_reason,
+            fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
+        )
         approval_reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                post_claim_current_action,
-                "allow",
-                saved_decision_present=True,
-                validation_reason=claimed_validation_reason,
-                fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
-            ),
+            claimed_reuse
+            if claimed_reuse is not None
+            # Resident unreachable after the atomic claim: keep the consumed
+            # claim's projected action rather than inventing a new grant.
+            else approval_reuse_authority_unavailable(post_claim_current_action),
             _claimed_saved_allow_hash,
         )
         policy_action = approval_reuse.action

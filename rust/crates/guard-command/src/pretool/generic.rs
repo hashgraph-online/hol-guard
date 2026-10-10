@@ -2,12 +2,15 @@
 mod evaluate;
 use evaluate::evaluate_signals;
 
+#[path = "generic_command_rewrite.rs"]
+mod command_rewrite;
 #[path = "generic_extract.rs"]
 mod extract;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
 mod result;
+use command_rewrite::payload_with_command;
 
 use crate::native_command_controls::CompiledNativeCommandControls;
 use crate::CommandModelRequestV1;
@@ -107,7 +110,11 @@ pub fn evaluate_pre_tool_envelope_with_context(
         payload,
         controls,
         deadline,
-        crate::pretool::PathContext { home_dir, cwd },
+        crate::pretool::PathContext {
+            home_dir,
+            cwd,
+            cdpath_unset: false,
+        },
         None,
     )
 }
@@ -133,28 +140,6 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     )
 }
 
-fn payload_with_command(payload: &Value, command: &str) -> Value {
-    let mut projected = payload.clone();
-    let Some(object) = projected.as_object_mut() else {
-        return projected;
-    };
-    for key in ["tool_input", "arguments", "input"] {
-        if let Some(nested) = object.get_mut(key).and_then(|value| value.as_object_mut()) {
-            for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
-                if nested.contains_key(command_key) {
-                    nested.insert(command_key.to_owned(), command.into());
-                }
-            }
-        }
-    }
-    for command_key in ["command", "cmd", "shell_command", "shellCommand"] {
-        if object.contains_key(command_key) {
-            object.insert(command_key.to_owned(), command.into());
-        }
-    }
-    projected
-}
-
 #[allow(clippy::too_many_arguments)]
 fn evaluate_envelope(
     harness: &str,
@@ -166,7 +151,9 @@ fn evaluate_envelope(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     project_redirects: bool,
 ) -> PreToolResultV1 {
-    let super::PathContext { home_dir, cwd } = context;
+    let context =
+        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let super::PathContext { home_dir, cwd, .. } = context;
     let mut signals = match extract_generic_signals(payload) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
@@ -178,13 +165,28 @@ fn evaluate_envelope(
         && signals.tool_name.as_deref() == Some("Grep")
         && signals.url_values.is_empty()
         && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
+    // Codex sends an edit as `apply_patch` with the patch body in `command`.
+    // That body is an edit description, not shell, so it has its own proof.
+    let apply_patch_proven = event == "PreToolUse"
+        && harness == "codex"
+        && signals.tool_name.as_deref() == Some("apply_patch")
+        && signals.url_values.is_empty()
+        && signals.path_values.is_empty()
+        && !signals.independent_sensitive_target
+        && signals.command.as_deref().is_some_and(|patch| {
+            super::apply_patch_writes::routine_apply_patch(patch, home_dir, cwd)
+        });
     if let Some(projection) = signals
         .command
         .as_deref()
-        .filter(|_| project_redirects && !search_scope_proven)
+        .filter(|_| project_redirects && !search_scope_proven && !apply_patch_proven)
         .and_then(|command| redirect_projection::project(command, context))
     {
-        let projected_payload = payload_with_command(payload, &projection.command);
+        let projected_payload = payload_with_command(
+            payload,
+            signals.command.as_deref().unwrap_or_default(),
+            &projection.command,
+        );
         let projected = evaluate_envelope(
             harness,
             event,
@@ -218,7 +220,7 @@ fn evaluate_envelope(
     let command_decision = signals
         .command
         .as_deref()
-        .filter(|_| !search_scope_proven)
+        .filter(|_| !search_scope_proven && !apply_patch_proven)
         .map(|command| {
             evaluate_pre_tool_with_execution_context(
                 &CommandModelRequestV1 {
@@ -255,6 +257,20 @@ fn evaluate_envelope(
             "allow",
             "native_bounded_search_scope",
             "The Rust authority proved this directory search cannot reach a sensitive file.",
+        )
+    } else if apply_patch_proven {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::FileWrite,
+                PreToolOperationV1::Write,
+                true,
+                false,
+            ),
+            "allow",
+            "native_exact_safe_file_write",
+            "The Rust authority proved every file this patch adds or updates is an ordinary workspace file that clears sensitive-path checks.",
         )
     } else if task_metadata {
         generic_result(
@@ -309,7 +325,11 @@ fn evaluate_envelope(
             signals.tool_name.as_deref(),
             &signals.package_values,
             deadline,
-            super::PathContext { home_dir, cwd },
+            super::PathContext {
+                home_dir,
+                cwd,
+                ..context
+            },
         ),
         (Some(controls), _) => controls.apply_with_tool(
             None,
@@ -326,9 +346,9 @@ fn evaluate_envelope(
         && result.reason_code != "native_git_helper_context_review"
         && command_model.is_some_and(|model| {
             let destination =
-                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd });
-            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd) };
-            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd });
+                super::segment_proof::verified_cwd_compound_context(model, super::PathContext { home_dir, cwd, ..context });
+            let context = super::PathContext { home_dir, cwd: destination.as_deref().or(cwd), ..context };
+            let benign = super::segment_proof::benign_command_segments(model, super::PathContext { home_dir, cwd, ..context });
             model.segments.iter().enumerate().any(|(index, segment)| {
                 segment.executable.as_deref().is_some_and(|executable| {
                     if super::executable_basename(executable) != "git" {
@@ -340,8 +360,10 @@ fn evaluate_envelope(
                         context,
                         deadline,
                         execution_environment,
+                        super::git_helper_context::stdout_piped(model, index),
                     );
                     !segment.environment_names.is_empty()
+                        || !super::directory_targets::drive_targets_quoted(segment)
                         || inspection == Some(false)
                         // Only inspection operations have a configuration proof
                         // to invalidate. Other Git operations retain their own
@@ -364,8 +386,20 @@ fn evaluate_envelope(
         result.reason_code = "native_git_execution_context_review".into();
         result.reason = "HOL Guard requires review because this Git read may execute a configured helper, or its effective configuration could not be verified.".into();
     }
-    let contained_test_reason =
-        command_model.and_then(super::restricted_tests::readonly_test_reason);
+    let contained_test_reason = command_model.and_then(|model| {
+        super::restricted_tests::readonly_test_reason(model).or_else(|| {
+            super::contained_wrapper::contained_core(
+                model,
+                super::PathContext {
+                    home_dir,
+                    cwd,
+                    ..context
+                },
+            )
+            .and_then(|core| super::restricted_tests::readonly_test_reason(&core))
+            .filter(|reason| *reason != "native_git_readonly_containment_required")
+        })
+    });
     // The read-only credential-filtering backend currently exists on macOS.
     // Other platforms retain review until they can enforce the same profile.
     if cfg!(target_os = "macos")

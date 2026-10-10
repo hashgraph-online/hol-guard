@@ -55,6 +55,8 @@ def test_feed_preserves_trusted_push_without_publication_completion_overlap() ->
     branches: [main]
     paths:
       - .github/workflows/desktop-core-alpha-feed.yml
+      - scripts/release/wait_for_core_publication.py
+      - scripts/release/ready_core_releases.py
       - scripts/release/desktop_core_alpha_feed.py"""
     assert trusted_push in text
     assert "branches: [main]" in text
@@ -100,7 +102,13 @@ def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     text = workflow_text()
     provenance = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text(encoding="utf-8")
     job = publish_job()
-    assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
+    assert job["permissions"] == {
+        "actions": "read",
+        "statuses": "read",
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
     assert 'test "$GITHUB_REF" = "refs/heads/main"' in text
     assert "ref: ${{ github.sha }}" in text
     assert "persist-credentials: false" in text
@@ -150,7 +158,9 @@ def test_feed_uses_apple_trust_and_no_redundant_manifest_key() -> None:
     assert "json.sig" not in text
     assert "minisign" not in helper.lower()
     assert "bunx @tauri-apps/cli" not in text
-    assert steps["Import Apple signing identity"]["if"] == "steps.release.outputs.available == 'true'"
+    assert steps["Import Apple signing identity"]["if"] == (
+        "steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'"
+    )
     assert "security find-identity -v -p codesigning" in text
     assert "apple-signing-fingerprint.txt" in text
     assert 'CERT_DIR="$RUNNER_TEMP/codesign-certs"' in text
@@ -294,7 +304,13 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
     assert job["runs-on"] == "ubuntu-22.04"
     assert job["env"]["RELEASE_TARGET"] == "x86_64-unknown-linux-gnu"
     assert job["env"]["NATIVE_RUNTIME_TARGET"] == "x86_64-unknown-linux-musl"
-    assert job["permissions"] == {"contents": "write", "id-token": "write", "attestations": "write"}
+    assert job["permissions"] == {
+        "actions": "read",
+        "statuses": "read",
+        "contents": "write",
+        "id-token": "write",
+        "attestations": "write",
+    }
     assert 'test "$(uname -m)" = "x86_64"' in text
     assert '--pattern "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text
     assert '-name "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-import shutil
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.native_git_execution_safety import git_execution_safety_native
 from codex_plugin_scanner.guard.runtime import git_execution_safety, routine_setup_commands
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.benign_requests import (
     is_explicitly_benign_tool_action_request,
@@ -358,30 +359,25 @@ def test_safe_git_worktree_add_rejects_executable_fsmonitor(tmp_path: Path) -> N
     assert not marker.exists()
 
 
-def test_worktree_filter_check_is_scoped_to_selected_ref(tmp_path: Path) -> None:
+def test_worktree_add_is_refused_when_the_selected_ref_uses_a_filter(tmp_path: Path) -> None:
+    # Positive and ref-scoping vectors live in the Rust real-git tests, where host
+    # filter drivers are accounted for. This pins the refusal through the bridge.
     repository = _repository(tmp_path)
-    git_binary_text = shutil.which("git")
-    assert git_binary_text is not None
-    git_binary = Path(git_binary_text).resolve()
-    assert not git_execution_safety._git_ref_uses_checkout_filter(
-        git_binary,
-        repository,
-        "HEAD",
-    )
+    (repository / "a.txt").write_text("data\n")
     (repository / ".gitattributes").write_text("*.txt filter=guard-test\n")
-    _git(repository, "add", ".gitattributes")
+    _git(repository, "add", ".gitattributes", "a.txt")
     _git(repository, "commit", "-qm", "add filter")
 
-    assert git_execution_safety._git_ref_uses_checkout_filter(
-        git_binary,
-        repository,
-        "HEAD",
-    )
-    assert git_execution_safety._git_ref_uses_checkout_filter(
-        git_binary,
-        repository,
-        "--help",
-    )
+    _git(repository, "config", "filter.guard-test.clean", "cat")
+
+    answer = git_execution_safety_native("worktree_add", cwd=repository, reference="HEAD")
+    if answer is None:
+        if os.environ.get("HOL_GUARD_NATIVE_REGRESSION", "").strip().lower() in {"1", "true", "yes"}:
+            pytest.fail("the native resident did not answer the worktree filter check")
+        pytest.skip("the native resident is unavailable, so a refusal would not show filter detection")
+    assert answer.allowed is False
+    assert not routine_setup_commands.git_worktree_add_has_execution_free_config(repository)
+    assert not routine_setup_commands.git_worktree_add_has_execution_free_config(repository, ref="--help")
 
 
 def test_codex_memory_registry_search_is_exact_and_nonexecuting(

@@ -91,7 +91,9 @@ def _read_hook_input(deadline_monotonic: float) -> str:
     raw = b"".join(chunks)
     if size > limit:
         raise _HookInputError(raw[:limit].decode("utf-8", errors="replace"))
-    return raw.decode("utf-8")
+    # Windows PowerShell 5 pipes a UTF-8 BOM when $OutputEncoding is UTF8, which
+    # Cursor sets before piping the hook payload; JSON parsing rejects the mark.
+    return raw.decode("utf-8-sig")
 """
 
 _reader_namespace: dict[str, object] = {}

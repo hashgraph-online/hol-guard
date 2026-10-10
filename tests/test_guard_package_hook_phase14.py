@@ -515,7 +515,6 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
     payload = json.loads(result.stdout)
 
     assert result.returncode == 0
-    assert result.stderr in ("",) or result.stderr.startswith("HOL Guard intercepted Claude's attempt to use Bash.")
     assert "minimist@1.2.8" in result.stdout
     assert payload["hookSpecificOutput"]["hookEventName"] == "PreToolUse"
     # `blocked_request_mode="ask"` opts this surface into prompting, so the

@@ -101,5 +101,9 @@ def test_missing_package_metadata_stays_unavailable(monkeypatch: pytest.MonkeyPa
     def missing(_name: str) -> str:
         raise values.importlib.metadata.PackageNotFoundError("hol-guard")
 
+    bridge._python_package_version.cache_clear()
     monkeypatch.setattr(values.importlib.metadata, "version", missing)
-    assert bridge._python_package_version() is None
+    try:
+        assert bridge._python_package_version() is None
+    finally:
+        bridge._python_package_version.cache_clear()

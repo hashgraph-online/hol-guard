@@ -335,7 +335,7 @@ def package_firewall_action_states(
     local_recovery_state = "available" if has_installed_managers else "disabled"
     return {
         "install": blocked_state,
-        "repair": local_recovery_state,
+        "repair": "available" if allowed or has_installed_managers else blocked_state,
         "test": blocked_state,
         "audit": blocked_state,
         "sync": blocked_state,
@@ -370,7 +370,9 @@ def package_firewall_operation_allowed(
     # Existing local protection must remain repairable even when Cloud access
     # needs reconnecting or the paid entitlement cannot currently be proven.
     # This does not authorize new installs, tests, audits, or policy sync.
-    if normalized_operation in {"repair", "remove"}:
+    if normalized_operation == "repair":
+        return bool(entitlement.get("allowed")) or has_installed_managers
+    if normalized_operation == "remove":
         return has_installed_managers
     reason = str(entitlement.get("reason") or "").strip().lower()
     if reason == "guard_cloud_reconnect_required":

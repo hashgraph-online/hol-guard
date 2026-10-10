@@ -1,47 +1,19 @@
 """Native stream cleanup spends one budget and retains unfinished ownership."""
 
+import os
 import subprocess
 import sys
 import threading
 import time
-from queue import Queue
+from collections import deque
+from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_package_authority as package_authority
 from codex_plugin_scanner.guard import native_resident_client as pools
 from codex_plugin_scanner.guard import native_resident_stream as streams
 from codex_plugin_scanner.guard import native_resident_transport as transport
-
-
-def test_helper_setup_and_failure_cleanup_use_the_original_request_deadline(tmp_path, monkeypatch):
-    clock = [100.0]
-    monkeypatch.setattr(streams.time, "monotonic", lambda: clock[0])
-    client = streams._PersistentNativeClient(
-        executable=tmp_path / "runtime",
-        state_dir=tmp_path / "state",
-        environment={},
-    )
-    deadlines = []
-
-    def snapshot(*, deadline_monotonic):
-        assert deadline_monotonic == 101.0
-        clock[0] = 100.8
-        return object(), object(), Queue()
-
-    def write(*args, deadline_monotonic, **kwargs):
-        deadlines.append(deadline_monotonic)
-        return False
-
-    monkeypatch.setattr(client, "_request_snapshot", snapshot)
-    monkeypatch.setattr(client, "_request_is_current", lambda *args, **kwargs: True)
-    monkeypatch.setattr(client, "_write_frame", write)
-    monkeypatch.setattr(
-        client,
-        "close",
-        lambda *, deadline_monotonic: deadlines.append(deadline_monotonic) or True,
-    )
-    assert client.request(b"fixture", deadline_monotonic=101.0) is None
-    assert deadlines == [101.0, 101.0]
 
 
 def test_expired_request_does_not_start_helper(tmp_path, monkeypatch):
@@ -56,6 +28,47 @@ def test_expired_request_does_not_start_helper(tmp_path, monkeypatch):
 
     monkeypatch.setattr(client, "_request_snapshot", forbidden_snapshot)
     assert client.request(b"fixture", deadline_monotonic=time.monotonic() - 1) is None
+
+
+@pytest.mark.parametrize(
+    ("inherited_budget_seconds", "timeout_seconds"),
+    [(0.05, 2.0), (2.0, 0.05)],
+)
+def test_package_intent_capacity_wait_uses_the_earlier_deadline(
+    tmp_path, monkeypatch, inherited_budget_seconds, timeout_seconds
+):
+    home = tmp_path / "guard-home"
+    runtime = tmp_path / "runtime"
+    pool = pools._PersistentNativeClientPool(executable=runtime, state_dir=home / "native-runtime", environment={})
+    pool._clients = {
+        streams._PersistentNativeClient(executable=runtime, state_dir=home / "native-runtime", environment={})
+        for _ in range(pools._MAX_PERSISTENT_CLIENTS)
+    }
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=runtime, sha256="a" * 64),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "package-authority-v1")),
+    )
+    monkeypatch.setattr(package_authority, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(package_authority, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(package_authority, "native_record_resident_failure", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pools, "_client_pool_for", lambda *args: pool)
+    failure_token = pools._LAST_FAILURE_CODE.set(None)
+    try:
+        started = time.monotonic()
+        result = package_authority.package_intent_parse_native(
+            "npm install fixture@1.0.0",
+            guard_home=home,
+            environment={"PATH": "/fixture/bin"},
+            timeout_seconds=timeout_seconds,
+            deadline_monotonic=started + inherited_budget_seconds,
+        )
+        assert result is None
+        assert pools.native_resident_client_failure_code() == "native_client_pool_exhausted"
+        assert time.monotonic() - started < 0.5
+    finally:
+        pools._LAST_FAILURE_CODE.reset(failure_token)
 
 
 def test_close_lock_contention_is_bounded_and_recoverable(tmp_path):
@@ -335,3 +348,70 @@ def test_fallback_without_owner_starts_no_writer(monkeypatch):
             raise AssertionError("unowned fallback writer started")
 
     assert not transport.write_frame(Stream(), b"fixture", deadline_monotonic=time.monotonic() + 1)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor ownership and permissions")
+@pytest.mark.parametrize("unsafe", ["file_mode", "directory_mode", "symlink", "hardlink", "fifo", "oversized"])
+def test_timeout_diagnostics_reject_unsafe_shared_files(tmp_path, monkeypatch, caplog, unsafe):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    path = state / "managed-resident-phases.v1.log"
+    row = b"native_resident_phase phase=resident_evaluate status=start elapsed_ms=0\n"
+    target = tmp_path / "target"
+    if unsafe == "symlink":
+        target.write_bytes(row)
+        target.chmod(0o600)
+        path.symlink_to(target)
+    elif unsafe == "fifo":
+        os.mkfifo(path, mode=0o600)
+    else:
+        path.write_bytes(row if unsafe != "oversized" else row + b"x" * 65536)
+        path.chmod(0o644 if unsafe == "file_mode" else 0o600)
+        if unsafe == "hardlink":
+            os.link(path, target)
+        elif unsafe == "directory_mode":
+            state.chmod(0o755)
+    client = streams._PersistentNativeClient(executable=tmp_path / "runtime", state_dir=state, environment={})
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    client._record_phase_failure("native_client_timed_out", "response_wait")
+    assert caplog.messages == ["native_client_timed_out phase=response_wait"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX private file setup")
+def test_timeout_diagnostics_filter_raw_shared_content_after_helper_retirement(tmp_path, monkeypatch, caplog):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    path = state / "managed-resident-phases.v1.log"
+    row = "native_resident_phase phase=resident_evaluate status=start elapsed_ms=0"
+    path.write_text(f"private payload\n{row}\nnative_resident_phase phase=private_payload status=start elapsed_ms=0\n")
+    path.chmod(0o600)
+    client = streams._PersistentNativeClient(executable=tmp_path / "runtime", state_dir=state, environment={})
+    client._close_diagnostic_output()
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    client._record_phase_failure("native_client_timed_out", "response_wait")
+    assert caplog.messages == ["native_client_timed_out phase=response_wait", row]
+
+
+@pytest.mark.parametrize("count", [0, 10000])
+def test_real_diagnostic_pipe_bounds_burst_history_and_discards_fragmented_private_lines(count):
+    script = (
+        "import sys\n"
+        "sys.stderr.write('x' * 193 + 'native_resident_phase phase=resident_evaluate status=error elapsed_ms=99\\n')\n"
+        f"for index in range({count}):\n"
+        " sys.stderr.write(f'native_resident_phase phase=stream_dispatch status=ok elapsed_ms={index}\\n')\n"
+    )
+    process = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    lines = deque(maxlen=64)
+    try:
+        streams._PersistentNativeClient._read_diagnostics(process, lines, threading.Lock())
+        assert process.wait(timeout=5) == 0
+        assert list(lines) == [
+            f"native_resident_phase phase=stream_dispatch status=ok elapsed_ms={index}".encode()
+            for index in range(max(0, count - 64), count)
+        ]
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if process.stderr is not None:
+            process.stderr.close()

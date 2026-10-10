@@ -29,6 +29,7 @@ def prepare_workspace_policy(
 
     if owner.native_mode() not in {"auto", "force", "shadow"}:
         return None
+    workspace_pending = getattr(worker.policy_snapshot_publisher, "workspace_policy_pending", None)
     if worker._publish_native_policy:
         register_workspace = getattr(worker.policy_snapshot_publisher, "register_workspace", None)
         if callable(register_workspace):
@@ -50,7 +51,13 @@ def prepare_workspace_policy(
                 readiness_deadline = now + owner._NATIVE_POLICY_READY_TIMEOUT_SECONDS
                 if deadline is not None:
                     readiness_deadline = min(readiness_deadline, deadline)
-                _ = wait_until_ready(readiness_deadline)
+                if callable(workspace_pending) and workspace_pending(workspace):
+                    _ = wait_until_ready(readiness_deadline, workspace=workspace)
+                else:
+                    _ = wait_until_ready(readiness_deadline)
+        if callable(workspace_pending) and workspace_pending(workspace):
+            # Never admit a new workspace on a snapshot without its overlay.
+            return None
     current_snapshot_binding = getattr(worker.policy_snapshot_publisher, "current_snapshot_binding", None)
     if callable(current_snapshot_binding):
         snapshot = current_snapshot_binding()

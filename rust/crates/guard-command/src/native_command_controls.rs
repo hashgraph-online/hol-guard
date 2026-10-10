@@ -399,6 +399,12 @@ impl CompiledNativeCommandControls {
             reason = "native_command_extension_evaluation_failed";
         }
         strengthen(&mut result, floor, reason);
+        let global_lockdown = self
+            .binding
+            .layers
+            .iter()
+            .any(|layer| layer.global_lockdown);
+        add_authority_repair_hint(&mut result, &self.binding.health, global_lockdown);
         result
     }
 
@@ -453,7 +459,7 @@ pub(crate) use delegated::normalized_tool;
 
 #[path = "native_command_controls_floor.rs"]
 mod floor;
-use floor::{rank, rule_floor, strengthen};
+use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]

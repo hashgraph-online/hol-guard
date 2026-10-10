@@ -15,7 +15,7 @@ import time
 from collections.abc import Mapping
 from itertools import pairwise
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, native_runtime_status
@@ -23,6 +23,9 @@ from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
 )
+
+if TYPE_CHECKING:
+    from .runtime.package_intent_common import PackageIntent
 
 _MAX_REQUEST_BYTES = 256 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
@@ -53,19 +56,29 @@ def _resident_request(
     request: dict[str, object],
     guard_home: Path,
     timeout_seconds: float,
+    deadline_monotonic: float | None = None,
+    required_features: tuple[str, ...] = (_PACKAGE_AUTHORITY_FEATURE,),
 ) -> dict[str, object] | None:
     """Transport shared by package-authority operations; callers own failure handling."""
+    if deadline_monotonic is not None:
+        now = time.monotonic()
+        deadline_monotonic = min(deadline_monotonic, now + timeout_seconds)
+        if deadline_monotonic <= now:
+            return None
     status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return None
     features = set(status.capabilities.features)
-    if _RESIDENT_PROTOCOL_FEATURE not in features or _PACKAGE_AUTHORITY_FEATURE not in features:
+    if _RESIDENT_PROTOCOL_FEATURE not in features or any(item not in features for item in required_features):
+        return None
+    remaining_seconds = timeout_seconds if deadline_monotonic is None else deadline_monotonic - time.monotonic()
+    if remaining_seconds <= 0:
         return None
 
     envelope = {
         "operation": operation,
         "request": request,
-        "deadline_budget_ms": max(1, int(timeout_seconds * 1000)),
+        "deadline_budget_ms": max(1, int(remaining_seconds * 1000)),
     }
     try:
         payload = json.dumps(envelope).encode("utf-8")
@@ -79,7 +92,8 @@ def _resident_request(
         guard_home=guard_home,
         environment=environment,
         payload=payload,
-        timeout_seconds=timeout_seconds,
+        timeout_seconds=remaining_seconds,
+        deadline_monotonic=deadline_monotonic,
     )
     if response is None:
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_transport")
@@ -131,8 +145,11 @@ def package_intent_parse_native(
     environment: Mapping[str, str] | None = None,
     guard_home: Path,
     timeout_seconds: float = 5.0,
-) -> dict[str, object] | None:
-    """``package_intent_parse`` op — returns the decoded payload dict."""
+    deadline_monotonic: float | None = None,
+) -> PackageIntent | None:
+    """Hydrate exact intent targets and argv from the bound private channel."""
+    from .runtime.package_intent_common import PackageIntent
+
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": _request_id(),
@@ -147,11 +164,17 @@ def package_intent_parse_native(
         request=request,
         guard_home=guard_home,
         timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
     )
     if response is None:
         return None
     payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    runtime_private_metadata = response.get("runtime_private_metadata")
+    if not isinstance(runtime_private_metadata, Mapping):
+        raise ValueError("native package intent missing private metadata")
+    return PackageIntent.from_dict(payload, runtime_private_metadata=runtime_private_metadata)
 
 
 def supply_chain_cloud_transport_available() -> bool:
@@ -258,46 +281,6 @@ def package_authority_decide_native(
     }
     response = _resident_request(
         operation="package_authority_decide",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
-    )
-    if response is None:
-        return None
-    payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
-
-
-def apply_stored_package_policy_native(
-    evaluation: Mapping[str, object],
-    artifact: Mapping[str, object],
-    *,
-    store_path: Path,
-    guard_home: Path,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    current_action: object | None = None,
-    claim_saved_approval: bool = True,
-    timeout_seconds: float = 10.0,
-) -> dict[str, object] | None:
-    """``apply_stored_package_policy`` op — returns the updated evaluation dict."""
-    request: dict[str, object] = {
-        "schema": _REQUEST_SCHEMA,
-        "request_id": _request_id(),
-        "store_path": str(store_path),
-        "guard_home": str(guard_home),
-        "evaluation": dict(evaluation),
-        "artifact": dict(artifact),
-        "artifact_hash": artifact_hash,
-        "workspace_dir": str(workspace_dir),
-        "now": now,
-        "claim_saved_approval": bool(claim_saved_approval),
-    }
-    if current_action is not None:
-        request["current_action"] = current_action
-    response = _resident_request(
-        operation="apply_stored_package_policy",
         request=request,
         guard_home=guard_home,
         timeout_seconds=timeout_seconds,

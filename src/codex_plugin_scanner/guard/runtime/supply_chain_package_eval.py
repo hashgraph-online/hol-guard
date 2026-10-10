@@ -3331,6 +3331,8 @@ def _local_python_project_path(target: dict[str, object], workspace_dir: Path) -
     raw_spec = _optional_string(target.get("raw_spec"))
     source_url = _optional_string(target.get("source_url"))
     editable = bool(target.get("editable"))
+    if source_url is not None and not source_url.startswith("file:"):
+        return None
     if source_url is not None and source_url.startswith("file:"):
         raw_spec = source_url.partition("file:")[2]
     if raw_spec is None:
@@ -4235,10 +4237,6 @@ def _resolved_target_version(
     if registry_version is not None:
         return registry_version
     return None
-
-
-def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
-    return [item.version for item in bundle_response.bundle.packages if _bundle_package_name_matches(item, target)]
 
 
 def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:

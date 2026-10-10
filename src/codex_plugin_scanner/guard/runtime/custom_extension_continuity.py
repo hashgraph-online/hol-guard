@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, cast
 
 from ..store_custom_extension_continuity import CustomExtensionContinuityMutation
-from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommandState, is_local_cli_command_id
+from .local_cli_commands import MAX_LOCAL_CLI_COMMANDS, LocalCliCommand, LocalCliCommandState, is_local_cli_command_id
 from .local_cli_identity import LocalCliKind, UnlistedCliIdentity, is_local_cli_id
 
 if TYPE_CHECKING:
@@ -197,6 +197,7 @@ def record_local_custom_extension_mutation(
     command_states: Mapping[str, LocalCliCommandState],
     now: str,
     provider_updates: Sequence[tuple[str, str, int]] = (),
+    catalog_seed: Sequence[LocalCliCommand] = (),
 ) -> int:
     """Commit a local grant and its continuity tombstone/state/receipt atomically."""
 
@@ -270,6 +271,7 @@ def record_local_custom_extension_mutation(
             },
             observation_preconditions={identity.cli_id: _observation_precondition(local)},
             provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
+            catalog_seeds={identity.cli_id: catalog_seed} if catalog_seed else None,
         )
     except ValueError as error:
         if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:
@@ -382,40 +384,6 @@ def _plan_exact_settings(
     ):
         return None
     return _AuthorityUpdate(identity, cast(str, settings["state"]), commands)
-
-
-def _mark_cloud_removed(store: GuardStore, *, now: str) -> dict[str, object]:
-    previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
-    if not isinstance(previous, dict):
-        return {}
-    raw_items = previous.get("items")
-    items: dict[str, object] = {}
-    if isinstance(raw_items, dict):
-        for cli_id, raw in raw_items.items():
-            if isinstance(cli_id, str) and isinstance(raw, dict):
-                item = dict(raw)
-                item.update({"status": "removed", "reason": "removed_from_cloud_observation"})
-                items[cli_id] = item
-    events = [
-        (
-            "custom_extension_continuity/removed",
-            {"cli_id": cli_id, "status": "removed", "reason": "removed_from_cloud_observation"},
-        )
-        for cli_id in items
-    ]
-    state = {**previous, "items": items, "stale": False}
-    try:
-        _ = store.apply_custom_extension_continuity_transaction(
-            expected_revision=store.read_local_cli_revision(),
-            authority_updates=[],
-            sync_payloads={CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state},
-            events=events,
-            updated_at=now,
-            sync_preconditions={CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: previous},
-        )
-    except ValueError as error:
-        raise CustomExtensionContinuityError("local continuity state changed during Cloud removal") from error
-    return state
 
 
 def _updated_item_status(

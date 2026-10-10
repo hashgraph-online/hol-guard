@@ -257,12 +257,22 @@ def _package_firewall_entitlement_module():
     return importlib.import_module(".package_firewall_entitlement", __package__)
 
 
-def _package_intent_parser_module():
-    return importlib.import_module(".runtime.package_intent_parser", __package__)
-
-
 def _native_package_authority_module():
     return importlib.import_module(".native_package_authority", __package__)
+
+
+def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Resident-owned package verdict rewrite; raises when the resident cannot answer."""
+
+    module = importlib.import_module(".native_package_evaluation_compose", __package__)
+    return module.compose_package_evaluation(kind, evaluation, **facts)
+
+
+def compose_blocking_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Resident-owned rewrite on a blocking path; a resident failure yields a terminal block."""
+
+    module = importlib.import_module(".native_package_evaluation_compose", __package__)
+    return module.compose_blocking_package_evaluation(kind, evaluation, **facts)
 
 
 def _supply_chain_package_eval_module():
@@ -303,10 +313,13 @@ def _parse_package_intent_native(
     workspace: Path | None,
     guard_home: Path,
 ) -> PackageIntent | None:
-    """Try the resident ``package_intent_parse`` op; ``None`` falls back to
-    the Python parser."""
+    """Try the resident ``package_intent_parse`` op.
+
+    ``None`` means the resident was unreachable or found no intent —
+    ``parse_package_intent`` is resident-sole-authority, so no Python
+    re-parse exists to fall back to."""
     try:
-        payload = _native_package_authority_module().package_intent_parse_native(
+        intent = _native_package_authority_module().package_intent_parse_native(
             raw_command,
             workspace=workspace,
             environment=dict(environment) if environment is not None else None,
@@ -314,12 +327,7 @@ def _parse_package_intent_native(
         )
     except Exception:
         return None
-    if not isinstance(payload, dict):
-        return None
-    try:
-        return PackageIntent.from_dict(payload)
-    except (TypeError, ValueError):
-        return None
+    return intent if isinstance(intent, PackageIntent) else None
 
 
 def _native_cloud_transport_unavailable(payload: dict[str, object]) -> bool:
@@ -1553,12 +1561,6 @@ def _build_package_protect_authority(
         guard_home=store.guard_home,
     )
     if intent is None:
-        intent = _package_intent_parser_module().parse_package_intent(
-            shlex.join(command),
-            workspace=launch_cwd,
-            environment=launch_environment,
-        )
-    if intent is None:
         return None
     sanitized_intent = replace(intent, redacted_command=shlex.join(redacted_command_tokens(command)))
     artifact = build_package_request_artifact(
@@ -1737,6 +1739,10 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
+        if reuse is None:
+            # Resident unreachable: preserve the initial evaluation unchanged —
+            # no saved approval is claimed.
+            return initial, initial.evaluation
         return initial, _package_evaluation_with_rejected_reuse(initial.evaluation, reuse)
     validation_reason: ApprovalReuseValidationFailure | None
     if current.artifact.artifact_id != initial.artifact.artifact_id:
@@ -1765,6 +1771,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=validation_reason,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         refreshed_saved_policy = _apply_stored_package_policy_override(
             current_evaluation,
@@ -1788,6 +1796,8 @@ def _final_package_protect_authority(
                 saved_decision_present=True,
                 validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
             )
+            if reuse is None:
+                return current, current_evaluation
             return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
         reuse = evaluate_approval_reuse(
             current.current_action,
@@ -1795,20 +1805,14 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             fresh_local_approval=True,
         )
+        if reuse is None:
+            return current, current_evaluation
         if reuse.accepted and reuse.saved_action == "allow":
-            return current, _package_policy_override_evaluation(
+            return current, compose_package_evaluation(
+                "saved_allow",
                 current_evaluation,
-                decision="allow",
-                policy_action="allow",
-                title="Allowed by saved approval",
-                summary="HOL Guard reused your saved approval for this package request.",
-                harness_message=(
-                    "HOL Guard revalidated the repository, package manager, dependency files, settings, "
-                    "registry environment, and current advisory authority after atomically claiming approval."
-                ),
-                reason_code="saved_package_approval",
-                reason_message="HOL Guard reused your saved approval for this package request.",
-                approval_reuse=reuse,
+                variant="claimed_revalidated",
+                approval_reuse=reuse.to_evidence(),
             )
         return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     if validation_reason is not None:
@@ -1818,6 +1822,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=validation_reason,
         )
+        if reuse is None:
+            return current, current_evaluation
         return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     resolved = _apply_stored_package_policy_override(
         current_evaluation,
@@ -1837,7 +1843,8 @@ def _final_package_protect_authority(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
         )
-        resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
+        if reuse is not None:
+            resolved = _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     return current, resolved
 
 
@@ -2153,41 +2160,42 @@ def build_package_protect_payload(
             saved_decision_present=True,
             validation_reason="approval_reuse_identity_changed",
         )
-        denied_evaluation = _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
-        denied = _package_protect_denied_after_final_boundary(
-            payload=payload,
-            authority=final_authority,
-            evaluation=denied_evaluation,
-            command=command,
-            store=store,
-            now=now,
+        denied_evaluation = (
+            final_authority.evaluation
+            if reuse is None
+            else compose_blocking_package_evaluation(
+                "rejected_reuse", final_authority.evaluation, approval_reuse=reuse.to_evidence()
+            )
         )
-        _cleanup_external_archive_downloads(final_evaluation)
+        try:
+            denied = _package_protect_denied_after_final_boundary(
+                payload=payload,
+                authority=final_authority,
+                evaluation=denied_evaluation,
+                command=command,
+                store=store,
+                now=now,
+            )
+        finally:
+            _cleanup_external_archive_downloads(final_evaluation)
         return denied
     bound_launch_command = _bound_external_archive_launch_command(
         launch_command,
         evaluation=final_evaluation,
     )
     if bound_launch_command is None:
-        denied_evaluation = _package_policy_override_evaluation(
-            final_evaluation,
-            decision="block",
-            policy_action="block",
-            title="External archive blocked",
-            summary="The inspected external archive could not be bound to the installer launch.",
-            harness_message="HOL Guard blocked an external archive whose digest-bound blob was unavailable.",
-            reason_code="external_archive_digest_mismatch",
-            reason_message="The inspected external archive changed or was not present in the installer command.",
-        )
-        denied = _package_protect_denied_after_final_boundary(
-            payload=payload,
-            authority=final_authority,
-            evaluation=denied_evaluation,
-            command=command,
-            store=store,
-            now=now,
-        )
-        _cleanup_external_archive_downloads(final_evaluation)
+        denied_evaluation = package_external_archive_override(final_evaluation, variant="launch_unbound")
+        try:
+            denied = _package_protect_denied_after_final_boundary(
+                payload=payload,
+                authority=final_authority,
+                evaluation=denied_evaluation,
+                command=command,
+                store=store,
+                now=now,
+            )
+        finally:
+            _cleanup_external_archive_downloads(final_evaluation)
         return denied
     authority = final_authority
     artifact = authority.artifact
@@ -2433,15 +2441,20 @@ def _resolve_stored_package_policy_override(
         _is_fresh_artifact_approval(decision, store=store) or legacy_local_approval
     )
     durable_exact_approval = isinstance(decision, dict) and _is_durable_exact_artifact_approval(decision)
+    reuse_native = evaluate_approval_reuse(
+        effective_current_action,
+        action,
+        saved_decision_present=True,
+        validation_reason=validation_reason,
+        fresh_local_approval=fresh_local_approval,
+        durable_exact_approval=durable_exact_approval,
+    )
+    if reuse_native is None:
+        # Resident unreachable: preserve the caller's evaluation unchanged —
+        # the saved approval is not claimed or consumed.
+        return _StoredPackagePolicyResolution(current_evaluation)
     reuse = with_saved_artifact_hash_provenance(
-        evaluate_approval_reuse(
-            effective_current_action,
-            action,
-            saved_decision_present=True,
-            validation_reason=validation_reason,
-            fresh_local_approval=fresh_local_approval,
-            durable_exact_approval=durable_exact_approval,
-        ),
+        reuse_native,
         decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
     )
     claim_disposition: _PackageApprovalClaimDisposition | None = None
@@ -2469,48 +2482,48 @@ def _resolve_stored_package_policy_override(
         else:
             claim_succeeded = store.claim_approval_reuse_decision(decision, now=now)
     if claim_saved_approval and reuse.should_claim and not claim_succeeded:
+        claim_failed_reuse = evaluate_approval_reuse(
+            effective_current_action,
+            action,
+            saved_decision_present=True,
+            validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+        )
+        if claim_failed_reuse is None:
+            # Resident unreachable after a failed claim: the claim already
+            # failed, so preserve the caller's evaluation unchanged.
+            return _StoredPackagePolicyResolution(current_evaluation)
         reuse = with_saved_artifact_hash_provenance(
-            evaluate_approval_reuse(
-                effective_current_action,
-                action,
-                saved_decision_present=True,
-                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-            ),
+            claim_failed_reuse,
             decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
         )
     if reuse.accepted and reuse.saved_action == "allow":
         if not isinstance(decision, dict) or decision.get("action") != "allow":
-            failed_reuse = with_saved_artifact_hash_provenance(
-                evaluate_approval_reuse(
-                    most_restrictive_guard_action(
-                        effective_current_action,
-                        "require-reapproval",
-                        unknown_action="block",
-                    ),
-                    "allow",
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            failed_reuse_native = evaluate_approval_reuse(
+                most_restrictive_guard_action(
+                    effective_current_action,
+                    "require-reapproval",
+                    unknown_action="block",
                 ),
+                "allow",
+                saved_decision_present=True,
+                validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
+            )
+            if failed_reuse_native is None:
+                return _StoredPackagePolicyResolution(current_evaluation)
+            failed_reuse = with_saved_artifact_hash_provenance(
+                failed_reuse_native,
                 decision.get("artifact_hash") if isinstance(decision, dict) else diagnosed_stored_hash,
             )
             return _StoredPackagePolicyResolution(
                 _package_evaluation_with_rejected_reuse(current_evaluation, failed_reuse)
             )
         return _StoredPackagePolicyResolution(
-            _package_policy_override_evaluation(
+            compose_package_evaluation(
+                "saved_allow",
                 current_evaluation,
-                decision="allow",
-                policy_action="allow",
-                title="Allowed by saved approval",
-                summary="HOL Guard reused your saved approval for this package request.",
-                harness_message=(
-                    "HOL Guard verified the same repository, package manager, dependency files, settings, and "
-                    "registry environment before reusing your saved approval."
-                ),
-                reason_code="saved_package_approval",
-                reason_message="HOL Guard reused your saved approval for this package request.",
-                approval_reuse=reuse,
-                approval_claim_disposition=claim_disposition,
+                variant="reused",
+                approval_reuse=reuse.to_evidence(),
+                claim_disposition=claim_disposition,
             ),
             approval_reuse_decision=decision,
             claim_disposition=claim_disposition,
@@ -2524,20 +2537,11 @@ def _resolve_stored_package_policy_override(
             workspace_dir=workspace_dir,
         )
         return _StoredPackagePolicyResolution(
-            _package_policy_override_evaluation(
+            compose_blocking_package_evaluation(
+                "saved_block",
                 current_evaluation,
-                decision="block",
-                policy_action="block",
-                title="Blocked by saved policy",
-                summary="HOL Guard kept this package blocked because a saved package policy already exists.",
-                harness_message=(
-                    "HOL Guard kept this package blocked because a saved package policy already exists. "
-                    f"To reconsider, run `{clear_command}`, then retry the install."
-                ),
-                next_step=clear_command,
-                reason_code="saved_package_block",
-                reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
-                approval_reuse=reuse,
+                approval_reuse=reuse.to_evidence(),
+                clear_command=clear_command,
             )
         )
     return _StoredPackagePolicyResolution(_package_evaluation_with_rejected_reuse(current_evaluation, reuse))
@@ -2623,62 +2627,14 @@ def _package_evaluation_with_current_policy_action(
     *,
     current_action: GuardAction,
 ) -> Any:
-    """Apply current package policy before consulting remembered user state."""
+    """Apply current package policy before consulting remembered user state.
+
+    The resident owns the rewrite; an unavailable resident raises.
+    """
 
     if current_action == evaluation.policy_action:
         return evaluation
-    decision = _package_decision_for_action(current_action)
-    rewritten_packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    action_label = {
-        "block": "blocks",
-        "sandbox-required": "requires sandbox enforcement for",
-        "require-reapproval": "requires fresh approval for",
-        "review": "requires review for",
-        "warn": "warns about",
-        "allow": "allows",
-    }[current_action]
-    package_label = "this package request"
-    package_label_entries = getattr(evaluation, "packages", ())
-    if (
-        isinstance(package_label_entries, tuple)
-        and package_label_entries
-        and isinstance(package_label_entries[0], dict)
-    ):
-        primary_package = package_label_entries[0]
-        package_name = primary_package.get("name")
-        package_version = primary_package.get("requestedVersion") or primary_package.get("resolvedVersion")
-        if isinstance(package_name, str) and package_name:
-            package_ref = (
-                f"{package_name}@{package_version}"
-                if isinstance(package_version, str) and package_version
-                else package_name
-            )
-            package_label = f"`{package_ref}`"
-    summary = f"HOL Guard's current package policy {action_label} {package_label}."
-    reason = {
-        "code": "current_package_policy",
-        "message": summary,
-        "severity": "high" if current_action in {"block", "sandbox-required"} else "medium",
-        "source": "guard-local",
-        "policy_action": current_action,
-    }
-    needs_review = current_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=current_action,
-        reasons=(reason, *tuple(item for item in evaluation.reasons if item.get("code") != reason["code"])),
-        packages=rewritten_packages,
-        risk_summary=summary,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title="Current package policy",
-            summary=summary,
-            next_step="Review the current package request in HOL Guard, then retry." if needs_review else None,
-            dashboard_url=None,
-            harness_message=summary,
-        ),
-        record_monitor_evidence=False,
-    )
+    return compose_package_evaluation("current_policy_action", evaluation, current_action=current_action)
 
 
 def _package_evaluation_with_rejected_reuse(
@@ -2687,81 +2643,16 @@ def _package_evaluation_with_rejected_reuse(
 ) -> Any:
     """Retain current package evidence while recording rejected saved state."""
 
-    reason = {
-        "code": reuse.reason_code,
-        "message": _approval_reuse_reason_message(reuse),
-        "severity": "high" if reuse.status == "rejected" else "low",
-        "source": "guard-local",
-        "approval_reuse": reuse.to_evidence(),
-    }
-    reasons = (reason, *tuple(item for item in evaluation.reasons if item.get("code") != reuse.reason_code))
-    if reuse.action == evaluation.policy_action:
-        return replace(evaluation, reasons=reasons)
-    decision = _package_decision_for_action(reuse.action)
-    packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    summary = _approval_reuse_reason_message(reuse)
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=reuse.action,
-        reasons=reasons,
-        packages=packages,
-        risk_summary=summary,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title="Saved approval not reusable",
-            summary=summary,
-            next_step="Review the current package request in HOL Guard, then retry.",
-            dashboard_url=None,
-            harness_message=summary,
-        ),
-        record_monitor_evidence=False,
-    )
+    return compose_package_evaluation("rejected_reuse", evaluation, approval_reuse=reuse.to_evidence())
 
 
-def _approval_reuse_reason_message(reuse: ApprovalReuseDecision) -> str:
-    messages = {
-        "approval_reuse_current_block": (
-            "Saved approval was rejected because current package policy blocks this request."
-        ),
-        "approval_reuse_sandbox_required": (
-            "Saved approval was rejected because current package policy requires sandbox enforcement."
-        ),
-        "approval_reuse_reapproval_required": (
-            "Saved approval was rejected because current package policy requires fresh approval."
-        ),
-        "approval_reuse_integrity_failure": (
-            "Saved approval was rejected because its integrity could not be verified."
-        ),
-        "approval_reuse_identity_changed": (
-            "Saved approval was rejected because the current package identity or scope changed."
-        ),
-        "approval_reuse_content_changed": (
-            "Saved approval was rejected because the current package content or execution context changed."
-        ),
-        "approval_reuse_claim_failed": (
-            "Saved approval was rejected because it changed, expired, or was already consumed."
-        ),
-        "approval_reuse_context_changed_after_claim": (
-            "Saved approval was rejected because retained authority changed after it was claimed."
-        ),
-        "approval_reuse_saved_action_unknown": (
-            "Saved approval was rejected because its action is unknown or malformed."
-        ),
-    }
-    return messages.get(
-        reuse.reason_code,
-        f"Saved package policy was not reused ({reuse.reason_code}).",
-    )
+def package_external_archive_override(evaluation: Any, *, variant: str) -> Any:
+    """Resident-owned external-archive binding verdict (block or shim delegation).
 
+    Every variant fails closed: an unavailable resident yields a terminal block.
+    """
 
-def _package_decision_for_action(action: GuardAction) -> str:
-    if action == "block":
-        return "block"
-    if action in {"review", "require-reapproval", "sandbox-required"}:
-        return "ask"
-    if action == "warn":
-        return "warn"
-    return "allow"
+    return compose_blocking_package_evaluation("external_archive_override", evaluation, variant=variant)
 
 
 def _package_policy_workspace_candidates(
@@ -3199,49 +3090,6 @@ def _package_approval_reuse_evidence(evaluation: Any) -> tuple[dict[str, object]
         evidence.update({str(key): value for key, value in reuse_evidence.items()})
         evidence_items.append(evidence)
     return tuple(evidence_items)
-
-
-def _package_policy_override_evaluation(
-    evaluation: Any,
-    *,
-    decision: str,
-    policy_action: str,
-    title: str,
-    summary: str,
-    harness_message: str,
-    next_step: str | None = None,
-    reason_code: str,
-    reason_message: str,
-    approval_reuse: ApprovalReuseDecision | None = None,
-    approval_claim_disposition: _PackageApprovalClaimDisposition | None = None,
-) -> Any:
-    reason: dict[str, object] = {
-        "code": reason_code,
-        "message": reason_message,
-        "severity": "low",
-        "source": "guard-local",
-    }
-    if approval_reuse is not None:
-        reason["approval_reuse"] = approval_reuse.to_evidence()
-    if approval_claim_disposition is not None:
-        reason["approval_claim_disposition"] = approval_claim_disposition
-    packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=policy_action,
-        reasons=(reason, *tuple(item for item in evaluation.reasons if item != reason)),
-        packages=packages,
-        risk_summary=harness_message,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title=title,
-            summary=summary,
-            next_step=next_step,
-            dashboard_url=None,
-            harness_message=harness_message,
-        ),
-        record_monitor_evidence=False,
-    )
 
 
 def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:

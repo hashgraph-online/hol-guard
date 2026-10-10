@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-from typing import cast
 
 from .models import GuardReceipt
 from .schemas.guard_event_v1 import HARNESS_USAGE_EVENT_TYPES, GuardEventType, GuardEventV1
@@ -35,29 +34,6 @@ def build_receipt_event(
         event_type="receipt.created",
         source="edge",
         occurred_at=receipt.timestamp,
-        workspace_id=workspace_id,
-        device_id=device_id,
-        payload=payload,
-    )
-
-
-def build_approval_event(
-    *,
-    request_id: str,
-    event_type: str,
-    occurred_at: str,
-    payload: dict[str, object],
-    device_id: str | None = None,
-    workspace_id: str | None = None,
-) -> GuardEventV1:
-    if event_type not in {"approval.created", "approval.resolved"}:
-        raise ValueError("Approval event type must be approval.created or approval.resolved")
-    return GuardEventV1(
-        event_id=f"guard-event-{_fingerprint(event_type, request_id, occurred_at)[:32]}",
-        idempotency_key=f"{event_type}:{request_id}:{occurred_at}",
-        event_type=cast(GuardEventType, event_type),
-        source="approval-center",
-        occurred_at=occurred_at,
         workspace_id=workspace_id,
         device_id=device_id,
         payload=payload,

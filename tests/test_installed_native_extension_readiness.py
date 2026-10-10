@@ -155,10 +155,22 @@ def test_request_phase_diagnostic_does_not_serialize_the_policy_binding() -> Non
     assert private not in json.dumps(diagnostic)
 
 
-@pytest.mark.parametrize("reason", ["native_policy_not_ready", "daemon_hook_deadline_exhausted"])
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "native_policy_not_ready",
+        "daemon_hook_deadline_exhausted",
+        "daemon_hook_worker_unavailable",
+        "native_runtime_unavailable",
+        "native_decision_budget_exhausted",
+        "native_review_unavailable",
+    ],
+)
 def test_late_receipt_cannot_accept_failed_production_http_admission(reason: str) -> None:
-    with pytest.raises(RuntimeError, match="http_native_admission_failed"):
-        probe.require_native_http_admission({"decision": "deny", "reason_code": reason})
+    private = "private-request-data"
+    with pytest.raises(RuntimeError, match=f"http_native_admission_failed:{reason}$") as error:
+        probe.require_native_http_admission({"decision": "deny", "reason_code": reason, "payload": private})
+    assert private not in str(error.value)
 
 
 def test_native_policy_denial_remains_a_valid_production_response() -> None:

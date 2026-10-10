@@ -80,6 +80,14 @@ pub(super) fn retire_clients_for_update(
             let _ = record.identity.remove_if_same(&path);
             continue;
         }
+        // On Windows an exited process keeps its start time while any handle
+        // to it stays open, but its image can no longer be queried. The
+        // marker already proved this is the lease owner, so it needs no
+        // termination and its lease is stale.
+        if process_is_definitively_gone(record.process_id).unwrap_or(false) {
+            let _ = record.identity.remove_if_same(&path);
+            continue;
+        }
         if record.process_id == std::process::id()
             || crate::resident_process_identity::validate_runtime_process_identity(
                 record.process_id,

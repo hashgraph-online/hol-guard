@@ -1,15 +1,14 @@
 //! Source-faithful shell heredoc and command-substitution structures
 //! (`runtime/shell_structure.py`, 323 lines — verbatim).
 
-use regex::Regex;
+use fancy_regex::Regex;
 use std::sync::OnceLock;
 
-#[allow(clippy::invalid_regex)]
 fn heredoc_operator_pattern() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(
-            r#"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['"]?)(?P<delimiter>(?:[A-Za-z_][A-Za-z0-9_]*|--[A-Za-z0-9][A-Za-z0-9_-]*))(?P=quote)"#,
+            r#"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['"]?)(?P<delimiter>(?:[A-Za-z_][A-Za-z0-9_]*|--[A-Za-z0-9][A-Za-z0-9_-]*))(?P=quote)"#, // NOSONAR: rust:S5856; fancy_regex supports the fixed-width (?<!<) lookbehind.
         )
         .unwrap()
     })
@@ -102,20 +101,27 @@ struct HeredocDecl {
 /// `_heredoc_declarations` (:91-107).
 fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
     let mut matches = Vec::new();
+    let line_text: String = line.iter().collect();
     let mut state = ShellScanState::new();
     let mut index = 0usize;
+    let mut byte_index = 0usize;
     while index < line.len() {
         let next_index = state.advance(line, index);
         if next_index != index + 1 {
+            byte_index += line[index..next_index]
+                .iter()
+                .map(|ch| ch.len_utf8())
+                .sum::<usize>();
             index = next_index;
             continue;
         }
         if state.is_top_level() && starts_with(line, index, "<<") {
-            // `pattern.match(line, index)` — anchored at index only.
-            let tail: String = line[index..].iter().collect();
-            if let Some(caps) = heredoc_operator_pattern().captures(&tail) {
+            // Match the original line so lookbehind can reject here-strings.
+            if let Ok(Some(caps)) =
+                heredoc_operator_pattern().captures_from_pos(&line_text, byte_index)
+            {
                 let whole = caps.get(0).unwrap();
-                if whole.start() == 0 {
+                if whole.start() == byte_index {
                     let byte_end = whole.end();
                     let delim = caps.name("delimiter").unwrap().as_str().to_owned();
                     let quoted = caps
@@ -123,7 +129,7 @@ fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
                         .map(|q| !q.as_str().is_empty())
                         .unwrap_or(false);
                     let strip_tabs = caps.name("operator").unwrap().as_str() == "<<-";
-                    let char_end = tail[..byte_end].chars().count();
+                    let char_end = line_text[byte_index..byte_end].chars().count();
                     matches.push(HeredocDecl {
                         start: index,
                         end: index + char_end,
@@ -132,10 +138,12 @@ fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
                         strip_tabs,
                     });
                     index += char_end;
+                    byte_index = byte_end;
                     continue;
                 }
             }
         }
+        byte_index += line[index].len_utf8();
         index += 1;
     }
     matches
@@ -429,4 +437,65 @@ fn find_newline(chars: &[char], from: usize) -> Option<usize> {
         .iter()
         .position(|&c| c == '\n')
         .map(|p| from + p)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{extract_heredocs, mask_heredoc_bodies};
+
+    #[test]
+    fn here_strings_do_not_mask_following_package_commands() {
+        for word in ["EOF", "'EOF'", "\"EOF\"", "x"] {
+            for prefix in ["cat ", "printf 'é🙂' | cat ", "printf \\é | cat "] {
+                let command = format!("{prefix}<<<{word}\nnpm install lodash");
+                let heredocs = extract_heredocs(&command);
+                assert!(heredocs.is_empty(), "{command}");
+                assert_eq!(mask_heredoc_bodies(&command, &heredocs), command);
+            }
+        }
+    }
+
+    #[test]
+    fn real_heredocs_mask_bodies_and_preserve_following_commands() {
+        for (declaration, quoted, strip_tabs, body, closing) in [
+            ("EOF", false, false, "npm install hidden\n", "EOF"),
+            ("'EOF'", true, false, "npm install hidden\n", "EOF"),
+            ("\"EOF\"", true, false, "npm install hidden\n", "EOF"),
+            ("-EOF", false, true, "\tnpm install hidden\n", "\tEOF"),
+            ("--END", false, false, "npm install hidden\n", "--END"),
+        ] {
+            for prefix in ["cat ", "printf 'é🙂' | cat ", "printf \\é | cat "] {
+                let command =
+                    format!("{prefix}<<{declaration}\n{body}{closing}\nnpm install visible");
+                let heredocs = extract_heredocs(&command);
+                assert_eq!(heredocs.len(), 1, "{command}");
+                let heredoc = &heredocs[0];
+                assert_eq!(heredoc.body, body);
+                assert_eq!(heredoc.quoted, quoted);
+                assert_eq!(heredoc.strip_tabs, strip_tabs);
+                assert_eq!(heredoc.operator_start, prefix.chars().count());
+                assert_eq!(
+                    heredoc.declaration_end,
+                    prefix.chars().count() + 2 + declaration.chars().count()
+                );
+                let masked = mask_heredoc_bodies(&command, &heredocs);
+                assert!(!masked.contains("npm install hidden"), "{command}");
+                assert!(masked.ends_with("\nnpm install visible"), "{command}");
+            }
+        }
+    }
+
+    #[test]
+    fn here_string_before_real_heredoc_does_not_consume_its_body() {
+        let command =
+            "cat <<<x; printf 'é🙂' | cat <<'EOF'\nnpm install hidden\nEOF\nnpm install visible";
+        let heredocs = extract_heredocs(command);
+        assert_eq!(heredocs.len(), 1);
+        assert_eq!(heredocs[0].delimiter, "EOF");
+        assert_eq!(heredocs[0].body, "npm install hidden\n");
+        let masked = mask_heredoc_bodies(command, &heredocs);
+        assert!(masked.starts_with("cat <<<x;"));
+        assert!(!masked.contains("npm install hidden"));
+        assert!(masked.ends_with("\nnpm install visible"));
+    }
 }

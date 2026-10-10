@@ -22,6 +22,8 @@ from .guard_python_phase12_support import (
     write_text,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def test_evaluate_package_request_artifact_blocks_exact_vulnerable_pip_version(
     tmp_path: Path,
@@ -221,9 +223,7 @@ def test_resolved_target_version_uses_fake_pypi_registry_metadata_for_ranges(
             }
         }
 
-    monkeypatch.setattr(
-        package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry
-    )
+    monkeypatch.setattr(package_services, "_urlopen_json_with_timeout_retry", fake_urlopen_json_with_timeout_retry)
     resolved = supply_chain_package_eval_module._resolved_target_version(
         target={
             "ecosystem": "pypi",

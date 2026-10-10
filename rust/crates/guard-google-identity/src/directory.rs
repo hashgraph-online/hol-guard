@@ -27,12 +27,12 @@ pub enum DirectoryError {
 pub struct GoogleDirectoryAuthorization {
     pending: GoogleSendAuthorization,
     customer_id: String,
-    namespace_key: Zeroizing<[u8; 32]>,
+    identity_key: Zeroizing<[u8; 32]>,
 }
 pub struct GoogleDirectoryCredential {
     credential: GoogleSendCredential,
     customer_id: String,
-    namespace_key: Zeroizing<[u8; 32]>,
+    identity_key: Zeroizing<[u8; 32]>,
 }
 
 impl GoogleDirectoryAuthorization {
@@ -52,7 +52,7 @@ impl GoogleDirectoryAuthorization {
         {
             return Err(IdentityError::Invalid);
         }
-        let namespace_key = Zeroizing::new(challenge.namespace_key);
+        let identity_key = Zeroizing::new(challenge.identity_key);
         let pending = GoogleSendAuthorization::begin_directory(
             challenge,
             secret,
@@ -62,7 +62,7 @@ impl GoogleDirectoryAuthorization {
         Ok(Self {
             pending,
             customer_id: registered_customer_id,
-            namespace_key,
+            identity_key,
         })
     }
     pub fn authorization_url(&self) -> &str {
@@ -77,7 +77,7 @@ impl GoogleDirectoryAuthorization {
         Ok(GoogleDirectoryCredential {
             credential: self.pending.complete(state, code, authenticated_session)?,
             customer_id: self.customer_id,
-            namespace_key: self.namespace_key,
+            identity_key: self.identity_key,
         })
     }
 }
@@ -169,7 +169,7 @@ impl GoogleDirectoryCredential {
         let mut hash = Sha256::new();
         hash.update(b"hol-guard.google-directory-resolution.v1\0");
         let customer_binding = binding(
-            &self.namespace_key,
+            &self.identity_key,
             b"hol-guard.google-directory-customer.v1\0",
             &[self.identity().tenant_binding(), &self.customer_id],
         );
@@ -192,7 +192,7 @@ impl GoogleDirectoryCredential {
             let bytes = lookup(&self.credential, literal.address())?;
             let user = User::from_bytes(&bytes, literal.address(), &self.customer_id)?;
             let principal_binding = binding(
-                &self.namespace_key,
+                &self.identity_key,
                 b"hol-guard.google-directory-user.v1\0",
                 &[&customer_binding, &user.id],
             );

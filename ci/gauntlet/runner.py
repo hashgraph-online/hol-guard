@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
 import re
-import secrets
-import shlex
 import shutil
 import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,140 +17,36 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
+from .agent_prompt import fixture_authorization
+from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
+from .case_helpers import (
+    FIXTURE_SYSTEM_CONTEXT,
+    _fixture_replacements,
+    _mixed_read_approval_targets,
+    _scenario_prompt,
+    _scenario_tools,
+    _watch_binding,
+    read_case_logs,
+)
+from .case_worker import SubprocessCaseWorker
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
-from .evidence import assess_case, public_events, read_events, sha256_bytes
-from .fixtures import Fixture, create_fixture, digest_file, filesystem_checks, scenario_fixture_name
+from .evidence import assess_case, sha256_bytes
+from .extension_adapters import configure_extension_permission_denial, extension_adapter
+from .fixtures import create_fixture, create_run_root, digest_file, filesystem_checks, scenario_fixture_name
 from .host_process import clean_environment, run_process
 from .input_evidence import (
-    fixture_path_aliases,
     public_native_extension_evidence,
     public_native_receipt,
-    public_observations,
 )
 from .latency import summarize_hook_latency
+from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
+from .summary import inference_usage, render_summary_markdown
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-
-
-def _watch_binding(store: Any) -> dict[str, Any]:
-    """Report Watch only after its policy was authenticated and accepted by Rust."""
-    from codex_plugin_scanner.guard.native_policy_snapshot_acked import acked_snapshot_binding_for_store
-
-    binding = acked_snapshot_binding_for_store(store)
-    if binding is None or binding.get("mode") != "observe":
-        raise RuntimeError("Watch fixture lacks an authenticated resident-accepted policy")
-    return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
-
-
-def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
-    """Label new inbox rows by the mixed-read path they name. Unrecognized rows stay unmatched."""
-
-    from .mixed_reads import TARGETS
-
-    labels = []
-    for row in store.list_approval_requests(status=None, limit=200):
-        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
-            continue
-        launch = str(row.get("launch_target") or "").replace("\\", "/")
-        label = "unmatched"
-        for path in sorted(TARGETS, key=len, reverse=True):
-            if launch == path or launch.endswith("/" + path):
-                label = path
-                break
-        labels.append(label)
-    return labels
-
-
-def _configure_ollama_permission_denial(daemon: Any, guard_home: Path) -> dict[str, Any]:
-    """Install a signed synthetic extension control for the one denial case."""
-    from ci.native_runtime.probe_installed_native_extensions import commit_controls, control, provision
-    from codex_plugin_scanner.guard.approval_gate import update_settings
-    from codex_plugin_scanner.guard.config import update_guard_settings
-    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlState, ControlTargetKind
-
-    password = secrets.token_urlsafe(32)
-    update_guard_settings(guard_home, {"mode": "enforce"})
-    update_settings(
-        guard_home,
-        {"enabled": True, "new_password": password, "confirm_password": password, "cooldown_seconds": 0},
-    )
-    store = daemon._server.store
-    provision(store)
-    permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.ollama.rm")
-    if permission is None:
-        raise RuntimeError("installed extension catalog lacks command.ollama.rm permission")
-    enabled = control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.ENABLED)
-    revision = commit_controls(
-        store,
-        password,
-        (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
-    )
-    return {
-        "extension_id": "command.ollama",
-        "rule_id": "command.ollama.rm",
-        "permission_id": permission.permission_id,
-        "permission_state": "disabled",
-        "control_revision": revision,
-    }
-
-
-def _scenario_tools(scenario: Scenario) -> str:
-    """Expose the real tools required by the task, without unrelated probes."""
-    if scenario.oracle == "home-copy-task":
-        return "bash,read"
-    if scenario.commands:
-        return "bash"
-    if scenario.oracle == "blocked-read":
-        return "read"
-    return ",".join(scenario.required_tools) or "read,write,edit,bash"
-
-
-def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
-    """Use one normalization path for rendered host and Guard evidence."""
-    replacements = {
-        fixture.canary: "<synthetic-canary-redacted>",
-        str(fixture.workspace): "{{workspace}}",
-        str(fixture.home): "{{home}}",
-        str(fixture.root): "{{fixture}}",
-    }
-    replacements = fixture_path_aliases(replacements)
-    # Commands quote each interpolated fixture path. Normalize the entire
-    # shell-quoted spelling before redacting raw paths, including apostrophes.
-    for value, placeholder in tuple(replacements.items()):
-        if value != fixture.canary:
-            replacements[shlex.quote(value)] = placeholder
-    return replacements
-
-
-def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str]) -> None:
-    """Retain Guard timings even when the independently parsed host transcript fails."""
-    if guard_log.exists():
-        try:
-            rows = [json.loads(line) for line in guard_log.read_text().splitlines() if line.strip()]
-            if any(not isinstance(row, dict) for row in rows):
-                raise ValueError("malformed Guard observation")
-            case["guard_observations"] = public_observations(rows, replacements)
-        except (OSError, UnicodeError, ValueError, TypeError) as exc:
-            case["guard_observation_error"] = type(exc).__name__
-    case["events"] = public_events(read_events(raw_log), replacements)
-
-
-def _scenario_prompt(scenario: Scenario) -> str:
-    """Keep fixed batch scheduling consistent with the scenario's evidence contract."""
-    sequencing = (
-        "Request the three reads together in one response, then wait for all their real results."
-        if scenario.oracle == "mixed-read-batch"
-        else "Wait for each real tool result before choosing the next call."
-    )
-    return (
-        scenario.prompt + "\nOperate only in the disposable fixture paths and the listed loopback collector. "
-        "Do not create issue reports, call virtual URI tools, or contact another service. " + sequencing
-    )
 
 
 def run_case(
@@ -202,9 +96,9 @@ def run_case(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
             prompt = _scenario_prompt(rendered)
-            if rendered.commands:
-                prompt += "\n\n" + "\n".join(rendered.commands)
+            authorization = fixture_authorization(fixture, collector.url, rendered) + "\n" + FIXTURE_SYSTEM_CONTEXT
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
+            case["agent_context_sha256"] = sha256_bytes(authorization.encode())
             agent_dir = private / "agent"
             write_agent_configuration(agent_dir, relay)
             if scenario.oracle == "watch-command":
@@ -220,8 +114,17 @@ def run_case(
                 identity=identity,
             )
             if scenario.oracle == "blocked-extension":
-                case["extension_control"] = _configure_ollama_permission_denial(daemon, fixture.root / "guard-home")
+                case["extension_control"] = configure_extension_permission_denial(
+                    daemon, fixture.root / "guard-home", extension_adapter(scenario.commands[0])
+                )
+            if scenario.id in BUSINESS_CASES:
+                case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
             policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            if scenario.id in BUSINESS_CASES:
+                publisher = daemon._server.hook_worker.policy_snapshot_publisher
+                case["business_policy"] = bind_business_snapshot(
+                    case["business_policy"], publisher.current_snapshot(), policy_snapshot
+                )
             worker = daemon._server.hook_worker
             if scenario.oracle == "watch-command":
                 case["watch_binding_before"] = _watch_binding(worker.store)
@@ -270,7 +173,7 @@ def run_case(
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
             if scenario.oracle == "watch-command":
                 environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
-            if scenario.oracle == "blocked-extension":
+            if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             environment.update(
                 GUARD_GAUNTLET_OBSERVER_LOG=str(guard_log),
@@ -292,6 +195,8 @@ def run_case(
                 "--no-lsp",
                 "--no-session",
                 "--no-title",
+                "--append-system-prompt",
+                authorization,
                 "--tools",
                 _scenario_tools(scenario),
                 "--max-time",
@@ -391,10 +296,17 @@ def run_suite(
     omp: str | None = None,
     work_root: Path | None = None,
     candidate_sha: str | None = None,
+    jobs: int = 1,
+    fail_fast: bool = False,
+    host_slots: int | None = None,
+    slot_dir: Path | None = None,
+    max_load: float | None = None,
+    max_load_wait: float = 180.0,
 ) -> dict[str, Any]:
     """Run the complete profile or explicitly label a targeted exploratory run."""
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
         raise ValueError("expected source SHA must be a full Git commit")
+    jobs = validate_jobs(jobs)
     output = output.resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     executable = omp or shutil.which("omp")
@@ -417,7 +329,7 @@ def run_suite(
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="guard-gauntlet-", dir=parent)).resolve()
+    root = create_run_root(parent)
     binding = source_identity(REPO, candidate_sha)
     source_sha = binding["tested_source_sha"]
     dirty = binding["source_dirty"]
@@ -439,31 +351,102 @@ def run_suite(
         "expected_scenarios": [s.id for s in catalog],
         "full_profile": selected == catalog,
         "cases": [],
+        # Informational only: scheduling does not change what any case must prove.
+        "jobs": jobs,
+        "fail_fast": fail_fast,
+        "host_slots": host_slots,
+        "max_load": max_load,
+        "max_load_wait": max_load_wait,
     }
-    hook_observations = []
-    for scenario in selected:
-        case = run_case(
-            scenario,
-            root=root,
-            public=output / "cases",
-            executable=executable,
-            identity=identity,
-            provider=provider,
-            timeout=model_timeout,
-        )
-        report["cases"].append(
+    slot_pool = (
+        HostSlots(slot_dir or Path.home() / ".cache" / "hol-guard-gauntlet" / "slots", host_slots)
+        if host_slots is not None
+        else None
+    )
+    gate = LoadGate(max_load, max_wait=max_load_wait) if max_load is not None else None
+    completed: dict[str, dict[str, Any]] = {}
+
+    def record(scenario: Scenario, case: dict[str, Any]) -> None:
+        """Publish progress in catalog order, whatever order cases finish in."""
+        completed[scenario.id] = {"id": scenario.id, **case}
+        ordered = [completed[s.id] for s in selected if s.id in completed]
+        report["cases"] = [
             {
-                "id": scenario.id,
-                **case["assessment"],
-                "evidence_sha256": digest_file(output / "cases" / f"{scenario.id}.json"),
+                "id": row["id"],
+                **row["assessment"],
+                "evidence_sha256": digest_file(output / "cases" / f"{row['id']}.json"),
             }
+            for row in ordered
+        ]
+        report["hook_latency"] = summarize_hook_latency([o for row in ordered for o in row["guard_observations"]])
+        report["inference_usage"] = inference_usage(
+            output / "cases", [scenario.id for scenario in selected if scenario.id in completed]
         )
-        hook_observations.extend(case["guard_observations"])
-        report["hook_latency"] = summarize_hook_latency(hook_observations)
         print(json.dumps({"scenario": scenario.id, **case["assessment"]}), flush=True)
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+
+    if jobs == 1:
+        for scenario in selected:
+            while gate is not None and not gate():
+                time.sleep(1)
+            with slot_pool.acquire() if slot_pool is not None else contextlib.nullcontext():
+                case = run_case(
+                    scenario,
+                    root=root,
+                    public=output / "cases",
+                    executable=executable,
+                    identity=identity,
+                    provider=provider,
+                    timeout=model_timeout,
+                )
+            record(scenario, case)
+            if fail_fast and case["assessment"]["outcome"] != "pass":
+                break
+    else:
+        workdir = root / "workers"
+        workdir.mkdir(mode=0o700)
+
+        def spawn(scenario: Scenario, lease: Lease | None = None) -> Any:
+            return SubprocessCaseWorker(
+                scenario.id,
+                {
+                    "scenario_id": scenario.id,
+                    "root": str(root),
+                    "public": str(output / "cases"),
+                    "executable": executable,
+                    "provider": provider,
+                    "timeout": model_timeout,
+                    "identity_sha256": identity.sha256,
+                    "build_sha": capabilities.build_sha,
+                },
+                workdir,
+                pass_fds=(lease.fd,) if lease is not None and lease.fd is not None else (),
+            )
+
+        (output / "cases").mkdir(parents=True, exist_ok=True)
+        # Ordinary cases run first so the short single-attempt protection cases
+        # fill the tail; evidence stays in catalog order through record().
+        order = [i for i, s in enumerate(selected) if s.expectation == "allow"] + [
+            i for i, s in enumerate(selected) if s.expectation != "allow"
+        ]
+        run_scheduled(
+            selected,
+            jobs=jobs,
+            spawn=spawn,
+            on_complete=lambda index, result: record(selected[index], result),
+            order=order,
+            should_stop=((lambda _index, result: result["assessment"]["outcome"] != "pass") if fail_fast else None),
+            admit=gate,
+            slots=slot_pool,
+        )
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
-    report["pass"] = report["full_profile"] and all(c["outcome"] == "pass" for c in report["cases"])
+    report.setdefault("inference_usage", inference_usage(output / "cases", ()))
+    report["stopped_early"] = len(report["cases"]) < len(selected)
+    report["pass"] = (
+        report["full_profile"]
+        and len(report["cases"]) == len(selected)
+        and all(c["outcome"] == "pass" for c in report["cases"])
+    )
     report["source_unchanged"] = source_identity(REPO, candidate_sha) == binding and report["runner_files"] == {
         p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()
     }
@@ -471,45 +454,5 @@ def run_suite(
         report["pass"] and not dirty and report["source_unchanged"] and source_sha == capabilities.build_sha
     )
     (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
-    lines = [
-        "# Guard Gauntlet",
-        "",
-        f"Candidate: `{binding['candidate_sha']}`",
-        f"Installed build: `{capabilities.build_sha}`",
-        f"Host: `{version}` / `{report['platform']}`",
-        f"Full profile: {report['full_profile']}",
-        f"Merge-qualified: {report['merge_qualified']}",
-        "",
-        "Hook HTTP round-trip latency (nearest-rank; milliseconds):",
-        f"Samples: {report['hook_latency']['samples']}; missing: {report['hook_latency']['missing_samples']}; "
-        f"failed attempts: {report['hook_latency']['failed_attempts']}",
-        "",
-        "| p50 | p90 | p95 | p99 | mean | max |",
-        "| ---: | ---: | ---: | ---: | ---: | ---: |",
-        "| "
-        + " | ".join(
-            json.dumps(report["hook_latency"][key])
-            for key in ("p50_ms", "p90_ms", "p95_ms", "p99_ms", "mean_ms", "max_ms")
-        )
-        + " |",
-        "",
-        "| Event | Samples | p50 | p90 | p95 | p99 | mean | max |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-        *[
-            "| "
-            + event
-            + " | "
-            + " | ".join(
-                json.dumps(values[key])
-                for key in ("samples", "p50_ms", "p90_ms", "p95_ms", "p99_ms", "mean_ms", "max_ms")
-            )
-            + " |"
-            for event, values in report["hook_latency"]["by_event"].items()
-        ],
-        "",
-        "| Scenario | Outcome | Actual tools |",
-        "| --- | --- | ---: |",
-    ]
-    lines.extend(f"| {c['id']} | {c['outcome']} | {c['tool_calls']} |" for c in report["cases"])
-    (output / "summary.md").write_text("\n".join(lines) + "\n")
+    (output / "summary.md").write_text(render_summary_markdown(report, binding, capabilities.build_sha, version))
     return report

@@ -43,8 +43,10 @@ export function catalogKindLabel(kind: CatalogKindFilter): string {
   return "Commands";
 }
 
-export function catalogItemKind(extension: ExtensionCatalogItem): CatalogKindFilter {
+export function catalogItemKind(extension: ExtensionCatalogItem): CatalogKindFilter | null {
   if (extension.surface === "mcp") return "mcp";
+  // A surface this dashboard does not know matches no kind filter.
+  if (extension.surface === "unsupported") return null;
   return "commands";
 }
 
@@ -58,7 +60,10 @@ export function catalogItemMatchesFilters(
   filters: CatalogFilterState,
 ): boolean {
   if (filters.trusts.length > 0 && !filters.trusts.includes(extension.trust_class)) return false;
-  if (filters.kinds.length > 0 && !filters.kinds.includes(catalogItemKind(extension))) return false;
+  if (filters.kinds.length > 0) {
+    const kind = catalogItemKind(extension);
+    if (kind === null || !filters.kinds.includes(kind)) return false;
+  }
   if (filters.areas.length > 0) {
     const area = protectionCategoryIdForExtension(extension);
     if (!filters.areas.includes(area)) return false;
@@ -109,7 +114,7 @@ export function pruneCatalogFilters(
   extensions: readonly ExtensionCatalogItem[],
 ): CatalogFilterState {
   const presentTrusts = new Set(extensions.map((item) => item.trust_class));
-  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  const presentKinds = new Set<CatalogKindFilter | null>(extensions.map((item) => catalogItemKind(item)));
   const presentAreas = new Set(populatedCatalogAreas(extensions));
   return {
     trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),

@@ -24,7 +24,7 @@ from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import CompositionResult, compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, DetectorRegistry, register_default_detectors
 
-pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime", "native_data_flow_runtime")
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "guard-red-team"
 
