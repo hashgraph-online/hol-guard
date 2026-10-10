@@ -155,6 +155,7 @@ from ..native_policy_bundle import (
     PolicyBundleNativeUnavailableError,
     native_rejection_code,
 )
+from ..native_runtime import native_status_request_scope
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -3352,7 +3353,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             handle_command_activity_feedback(self, payload)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
-            self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            # One hook request shares a single native-binary validation across
+            # its decision, approval/review, queue, and response handling.
+            with native_status_request_scope():
+                self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
             self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])

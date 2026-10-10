@@ -14,7 +14,9 @@ import stat
 import sys
 import threading
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
@@ -322,7 +324,67 @@ def _capabilities_for_identity(
     return capabilities
 
 
+def _status_binary_unchanged(status: NativeRuntimeStatus) -> bool:
+    """True while the on-disk binary still matches the validated identity.
+
+    ``stat()`` is cheap relative to re-hashing the whole binary, so checking
+    ``size``/``mtime_ns`` per read keeps a reused status honest against a
+    mid-request binary swap without paying the full re-validation cost.
+    """
+
+    identity = status.identity
+    if identity is None:
+        # Nothing was validated (mode=off / unavailable); there is no file to
+        # keep fresh.
+        return True
+    try:
+        meta = Path(identity.path).stat()
+    except OSError:
+        return False
+    return meta.st_size == identity.size and meta.st_mtime_ns == identity.mtime_ns
+
+
+# One hook request validates the runtime binary once: review paths probe
+# ``native_runtime_status`` from several call sites, and every probe re-hashes
+# the whole binary.  The request-scoped store shares that single validation.
+# Every new hook request still re-validates, and Windows keeps uncached
+# hashing across requests (``native_binary_identity._CACHE_ENABLED`` is
+# POSIX-only).
+_REQUEST_STATUS: ContextVar[dict[str, NativeRuntimeStatus] | None] = ContextVar(
+    "guard_native_runtime_status_request",
+    default=None,
+)
+
+
+@contextmanager
+def native_status_request_scope() -> Iterator[dict[str, NativeRuntimeStatus]]:
+    """Bind a per-request status store; nested scopes share the active one."""
+
+    existing = _REQUEST_STATUS.get()
+    if existing is not None:
+        yield existing
+        return
+    scope: dict[str, NativeRuntimeStatus] = {}
+    token = _REQUEST_STATUS.set(scope)
+    try:
+        yield scope
+    finally:
+        _REQUEST_STATUS.reset(token)
+
+
 def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+    scope = _REQUEST_STATUS.get()
+    if scope is not None:
+        for cached in scope.values():
+            if cached.identity is not None and _status_binary_unchanged(cached):
+                return cached
+    status = _compute_runtime_status(deadline_monotonic=deadline_monotonic)
+    if scope is not None and status.identity is not None:
+        scope[str(status.identity.path)] = status
+    return status
+
+
+def _compute_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
     mode = native_mode()
     if mode == "off":
         return NativeRuntimeStatus(
