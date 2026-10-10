@@ -17,6 +17,13 @@ sys.modules[SPEC.name] = pypi_project_storage
 SPEC.loader.exec_module(pypi_project_storage)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_actions_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv(pypi_project_storage.LIMIT_ENV, raising=False)
+
+
 def test_reclaimable_extras_keep_pure_wheels() -> None:
     payload = {
         "releases": {
@@ -259,3 +266,47 @@ def test_configured_limit_overrides_default(
 
     assert pypi_project_storage.main(["--payload", str(payload_path), "--limit-bytes", "0"]) == 1
     assert "positive integer" in capsys.readouterr().err
+
+
+def test_outlook_thresholds_use_unrounded_values() -> None:
+    limit = 100_000
+    just_under_runway = pypi_project_storage.quota_outlook(50_000, limit, growth_bytes_per_day=2_386)
+    assert just_under_runway["days_until_full"] == 21.0
+    assert just_under_runway["near_limit"] is True
+
+    just_under_ratio = pypi_project_storage.quota_outlook(79_996, limit, growth_bytes_per_day=0)
+    assert just_under_ratio["near_limit"] is False
+
+
+def test_pending_upload_crossing_warning_threshold_warns(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    payload = tmp_path / "pypi.json"
+    payload.write_text(
+        json.dumps({"releases": {"1.0.0": [{"filename": "a.whl", "size": 790}]}}),
+        encoding="utf-8",
+    )
+    pending = tmp_path / "dist"
+    pending.mkdir()
+    (pending / "b.whl").write_bytes(b"x" * 20)
+
+    args = ["--payload", str(payload), "--pending-dir", str(pending), "--limit-bytes", "1000"]
+    assert pypi_project_storage.main(args) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["used_bytes"] == 790
+    assert report["near_limit"] is True
+
+
+def test_unwritable_step_summary_keeps_quota_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "missing" / "summary.md"))
+    payload = tmp_path / "pypi.json"
+    limit = pypi_project_storage.PYPI_PROJECT_LIMIT_BYTES
+    payload.write_text(
+        json.dumps({"releases": {"1.0.0": [{"filename": "a.whl", "size": int(limit * 0.9)}]}}),
+        encoding="utf-8",
+    )
+
+    assert pypi_project_storage.main(["--payload", str(payload), "--fail-if-over-limit"]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["over_limit"] is False
+    assert "Could not write the PyPI quota warning" in captured.err

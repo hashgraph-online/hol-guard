@@ -130,18 +130,19 @@ def recent_growth_bytes_per_day(
 def quota_outlook(used_bytes: int, limit_bytes: int, growth_bytes_per_day: int) -> dict[str, Any]:
     """Project when the quota runs out and whether maintainers should act now."""
     remaining = max(limit_bytes - used_bytes, 0)
-    days_until_full = round(remaining / growth_bytes_per_day, 1) if growth_bytes_per_day > 0 else None
-    usage_ratio = round(used_bytes / limit_bytes, 4)
+    days_until_full = remaining / growth_bytes_per_day if growth_bytes_per_day > 0 else None
+    usage_ratio = used_bytes / limit_bytes
     reasons = []
     if usage_ratio >= WARN_USAGE_RATIO:
         reasons.append(f"usage is {usage_ratio:.0%} of the project limit")
     if days_until_full is not None and days_until_full < WARN_DAYS_UNTIL_FULL:
-        reasons.append(f"about {days_until_full:g} days until full at the {GROWTH_WINDOW_DAYS}-day upload rate")
+        shown_days = round(days_until_full, 1)
+        reasons.append(f"about {shown_days:g} days until full at the {GROWTH_WINDOW_DAYS}-day upload rate")
     return {
-        "usage_ratio": usage_ratio,
+        "usage_ratio": round(usage_ratio, 4),
         "growth_window_days": GROWTH_WINDOW_DAYS,
         "growth_bytes_per_day": growth_bytes_per_day,
-        "days_until_full": days_until_full,
+        "days_until_full": None if days_until_full is None else round(days_until_full, 1),
         "near_limit": bool(reasons),
         "near_limit_reasons": reasons,
     }
@@ -157,8 +158,11 @@ def report_near_limit(outlook: Mapping[str, Any]) -> None:
         print(f"::warning title=PyPI project quota::{message}", file=sys.stderr)
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as summary:
-            summary.write(f"### PyPI project quota\n{message}\n")
+        try:
+            with open(summary_path, "a", encoding="utf-8") as summary:
+                summary.write(f"### PyPI project quota\n{message}\n")
+        except OSError:
+            print("Could not write the PyPI quota warning to the step summary.", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -207,7 +211,9 @@ def main(argv: list[str] | None = None) -> int:
             print("Pending distribution directory is missing or unreadable.", file=sys.stderr)
             return 1
     over_limit = over_project_limit(total, pending_bytes, limit_bytes)
-    outlook = quota_outlook(total, limit_bytes, recent_growth_bytes_per_day(payload, datetime.now(timezone.utc)))
+    growth = recent_growth_bytes_per_day(payload, datetime.now(timezone.utc))
+    # Assess the warning against post-upload usage so a pending upload that crosses a threshold warns now.
+    outlook = quota_outlook(total + pending_bytes, limit_bytes, growth)
     print(
         json.dumps(
             {
