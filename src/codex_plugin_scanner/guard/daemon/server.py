@@ -300,7 +300,7 @@ from .manager import (
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
     current_guard_daemon_source_root,
-    load_guard_daemon_auth_token,
+    ensure_guard_daemon_auth_token,
     release_guard_daemon_owner_lock,
     repair_approval_center_locator,
     write_guard_daemon_state,
@@ -368,6 +368,7 @@ _LOCAL_CLI_PATHS = frozenset(
         "/v1/local-clis/apply",
         "/v1/local-clis/recognize",
         "/v1/local-clis/discover",
+        "/v1/local-clis/forget",
         "/v1/local-clis/provider-actions",
         "/v1/local-clis/provider-workflows",
         "/v1/local-clis/registry-search",
@@ -528,6 +529,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     runtime_started_at: str
     idle_timeout_seconds: float | None
     last_activity_monotonic: float
+    idle_shutdown_claimed: bool
     start_monotonic: float
     active_stream_clients: int
     active_stream_clients_lock: threading.Lock
@@ -653,6 +655,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.workspace_dir = workspace_dir.resolve(strict=False) if workspace_dir is not None else None
         self.idle_timeout_seconds = idle_timeout_seconds
         self.last_activity_monotonic = time.monotonic()
+        self.idle_shutdown_claimed = False
         self.start_monotonic = time.monotonic()
         self.active_stream_clients = 0
         self.active_stream_clients_lock = threading.Lock()
@@ -876,11 +879,28 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 with self.request_capacity_lock:
                     self.normal_connections.discard(id(request_socket))
             return
+        # Admission and the idle watchdog's shutdown claim share this lock, so a
+        # request is either counted before the claim or refused here, never
+        # admitted into a server that is closing.
+        with self.request_capacity_lock:
+            closing = self.idle_shutdown_claimed
+            if closing:
+                self.rejected_requests += 1
+            else:
+                self.active_requests += 1
+                self.last_activity_monotonic = time.monotonic()
+        if closing:
+            try:
+                self.shutdown_request(request_socket)
+            finally:
+                self.connection_capacity.release()
+                self._guard_release_request()
+                with self.request_capacity_lock:
+                    self.normal_connections.discard(id(request_socket))
+            return
         with suppress(OSError):
             request_socket.settimeout(_DAEMON_REQUEST_READ_TIMEOUT_SECONDS)
         self._register_unclassified_connection(request_socket, accepted_at=accepted_at)
-        with self.request_capacity_lock:
-            self.active_requests += 1
         if pending:
             # Do not serialize partial-header waits on the accept thread.
             # These sockets still own both outer permits; the existing bounded
@@ -982,6 +1002,8 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.normal_connections.discard(id(request))
             if was_active:
                 self.active_requests -= 1
+                # The idle clock starts when the last request finishes, not when it started.
+                self.last_activity_monotonic = time.monotonic()
             capacity_kind = self.request_capacity_kinds.pop(id(request), None)
         if capacity_kind is not None:
             self._request_capacity_for_kind(capacity_kind).release()
@@ -1292,6 +1314,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.store.guard_home,
             self.daemon_port(),
             self.auth_token,
+            write_auth_token=False,
             host=self.daemon_host(),
             state_id=self.runtime_session_id,
             started_at=self.runtime_started_at,
@@ -2956,7 +2979,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=404,
                 )
                 return
-            self._write_json(approval)
+            self._write_json(self._approval_with_extension_recommendation(approval))
             return
         if parsed.path == "/v1/receipts":
             query = parse_qs(parsed.query)
@@ -7958,6 +7981,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
+    def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
+        from .approval_extension_recommendation import with_approval_extension_recommendation
+
+        include = not self._is_hosted_dashboard_origin()
+        api = getattr(self._daemon_server(), "extension_control_api", None)
+        if not include or api is None:
+            return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
+        registry, snapshot = api.recommendation_inputs()
+        hint = self._daemon_server().store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
+        return with_approval_extension_recommendation(
+            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
+        )
+
     def _is_hosted_dashboard_origin(self) -> bool:
         origin = self._normalize_origin(self.headers.get("Origin"))
         return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
@@ -8416,15 +8452,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
 
     @staticmethod
-    def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
-        candidate_path = os.fspath(candidate)
-        root_path = os.fspath(root)
-        try:
-            return os.path.commonpath([candidate_path, root_path]) == root_path
-        except ValueError:
-            return False
-
-    @staticmethod
     def _scope_target_is_valid(
         scope: str,
         *,
@@ -8744,7 +8771,7 @@ class GuardDaemonServer:
                 (host, port),
                 _GuardDaemonHandler,
                 store=store,
-                auth_token=load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex,
+                auth_token=ensure_guard_daemon_auth_token(store.guard_home),
                 runtime_host=host,
                 runtime_session_id=uuid.uuid4().hex,
                 runtime_started_at=_now(),
@@ -9475,7 +9502,15 @@ class GuardDaemonServer:
             ):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
-            if time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds:
+            with self._server.request_capacity_lock:
+                # A request that outlives the idle window is activity, not idleness.
+                idle = (
+                    self._server.active_requests == 0
+                    and time.monotonic() - self._server.last_activity_monotonic >= idle_timeout_seconds
+                )
+                if idle:
+                    self._server.idle_shutdown_claimed = True
+            if idle:
                 self._shutdown_started.set()
                 self._server.shutdown()
                 return
@@ -9751,19 +9786,6 @@ def _decode_dashboard_session_payload(payload: str) -> dict[str, object]:
 def _parse_iso_timestamp(value: str) -> float:
     normalized = value.replace("Z", "+00:00")
     return datetime.fromisoformat(normalized).timestamp()
-
-
-def _normalized_iso_timestamp_string(value: object) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _now() -> str:

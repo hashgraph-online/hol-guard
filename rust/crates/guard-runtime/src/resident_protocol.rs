@@ -2,16 +2,20 @@ use guard_command::CommandModelRequestV1;
 use guard_contracts::{
     ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
     ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
-    ApprovalReuseRequestV1, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
-    ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1, ContainedExecuteRequestV1,
-    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
-    ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, GuardHookEnvelopeV2,
-    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
-    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, NativeHookRequestV1,
-    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1,
-    PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1, RuntimeCapabilitiesV1,
-    ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    ApprovalProofRequestV1, ApprovalReuseRequestV1, ApprovalValidateRequestV3,
+    ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1,
+    ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
+    ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
+    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
+    ContextDigestRequestV1, DataFlowAnalyzeRequestV1, GitExecutionSafetyRequestV1,
+    GithubCliClassifyRequestV1, GuardHookEnvelopeV2, LocalCliGrantRequestV1,
+    LocalMcpGrantRequestV1, McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1,
+    McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
+    McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
+    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
     NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
@@ -73,13 +77,22 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::CONTEXT_DIGEST_FEATURE.into(),
         guard_contracts::COMMAND_EFFECT_FEATURE.into(),
         guard_contracts::APPROVAL_REUSE_FEATURE.into(),
+        guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE.into(),
         guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE.into(),
         guard_contracts::APPROVAL_GATE_FEATURE.into(),
         guard_contracts::PACKAGE_AUTHORITY_FEATURE.into(),
+        guard_contracts::PACKAGE_EVALUATION_COMPOSE_FEATURE.into(),
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
+        guard_contracts::DATA_FLOW_ANALYZE_FEATURE.into(),
         guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
+        guard_contracts::GIT_EXECUTION_SAFETY_FEATURE.into(),
+        guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
+        guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
+        guard_contracts::APPROVAL_PROOF_FEATURE.into(),
+        guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
+        guard_contracts::LOCAL_MCP_GRANT_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -92,6 +105,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         // cannot honor.
         features.push(guard_contracts::CONTAINED_EXECUTION_FEATURE.into());
         features.push(guard_contracts::MCP_STDIO_SESSION_FEATURE.into());
+        features.push(guard_contracts::SKILL_DIRECTORY_IDENTITY_FEATURE.into());
     }
     let (program_digest, catalog_digest, trust_digest) =
         guard_command::native_command_program::packaged_program_digests();
@@ -128,6 +142,7 @@ pub(crate) enum ResidentOperationV1 {
     ContextDigest(ContextDigestRequestV1),
     CommandEffectDecide(CommandEffectRequestV1),
     ApprovalReuseDecide(ApprovalReuseRequestV1),
+    GithubCliClassify(GithubCliClassifyRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
@@ -154,9 +169,18 @@ pub(crate) enum ResidentOperationV1 {
     McpStdioSessionRecv(McpStdioSessionRecvRequestV1),
     McpStdioSessionClose(McpStdioSessionCloseRequestV1),
     PackageAdvisoryIds(PackageAdvisoryIdsRequestV1),
+    PackageEvaluationCompose(PackageEvaluationComposeRequestV1),
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
+    GitExecutionSafety(GitExecutionSafetyRequestV1),
+    McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
+    LocalCliGrantDecide(LocalCliGrantRequestV1),
+    ApprovalProofDecide(ApprovalProofRequestV1),
+    McpToolEvidence(McpToolEvidenceRequestV1),
+    LocalMcpGrantDecide(LocalMcpGrantRequestV1),
+    SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
+    DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     Health(Value),
     Shutdown(Value),
 }
@@ -382,6 +406,9 @@ mod capability_platform_tests {
         assert!(features
             .iter()
             .any(|feature| feature == guard_contracts::PROMPT_ANALYZE_FEATURE));
+        assert!(features
+            .iter()
+            .any(|feature| feature == guard_contracts::DATA_FLOW_ANALYZE_FEATURE));
         assert_eq!(
             features
                 .iter()

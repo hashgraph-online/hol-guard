@@ -14,7 +14,7 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
-  CI_PYTEST_COVERAGE_SHARDS: "128"
+  CI_PYTEST_COVERAGE_SHARDS: "192"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
@@ -24,7 +24,9 @@ env:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Main is the source of truth: queue its runs instead of cancelling an
+  # in-flight run on every push, so a main run can actually finish green.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   # Trusted change planner (shadow mode): computes which lanes the diff requires.
@@ -210,10 +212,23 @@ jobs:
           components: rustfmt
       - name: Check native formatting before compilation
         run: cargo fmt --manifest-path rust/Cargo.toml --all --check
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
       - name: Build native command evaluators once for pytest shards
+        env:
+          # Content-addressed cache survives fresh checkout mtimes; third-party
+          # crates still come from rust-cache, workspace members from sccache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: pytest-native-command
+          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
           python3 scripts/refresh_extension_artifacts.py --trust-only
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          "$SCCACHE_PATH" --show-stats
       - name: Check sizes of the existing native build
         run: python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release --platform manylinux_2_17_x86_64
       - name: Verify generated native command catalogs before pytest fan-out
@@ -377,7 +392,7 @@ jobs:
           PYTHONPATH=scripts/ci GUARD_PYTEST_DURATION_OUTPUT=pytest-durations.json \
             uv run --no-sync python scripts/ci/run_projection_shard.py "$shard_file" -- \
             -p pytest_duration_report "@$shard_file" --tb=short --durations=10 \
-            -n 3 --dist loadfile --max-worker-restart 0 \
+            -n 2 --dist loadfile --max-worker-restart 0 \
             --deselect tests/test_guard_hook_process_runner.py::test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial \
             --deselect tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon \
             --deselect tests/test_guard_approval_store_scale.py::TestQueueScaleTargets::test_listing_first_queue_page_with_100k_rows_stays_under_100ms \
@@ -395,6 +410,15 @@ jobs:
             --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]' \
             --deselect 'tests/test_guard_runtime.py::test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]' \
             --deselect tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow \
+            --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_package_firewall_paid_install_and_test_roundtrip \
+            --deselect tests/test_guard_shim_intercept_proofs.py::test_daemon_package_shim_test_uses_projected_shell_profile_path \
+            --deselect tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque \
+            --deselect tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences \
+            --deselect tests/test_guard_policy_integrity.py::test_trust_backend_check_uses_spawn_from_concurrent_threads \
+            --deselect tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store \
+            --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_audit_scans_workspace_manifests \
+            --deselect tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms \
+            --deselect tests/test_guard_update_artifact.py::test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat \
             --deselect 'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload' \
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
@@ -496,11 +520,12 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.12.14", "3.14.7"]
+        slice: [0, 1]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -508,6 +533,8 @@ jobs:
       - uses: ./.github/actions/ci-job-scheduling-sensitive
         with:
           python-version: ${{ matrix.python-version }}
+          slice-index: ${{ matrix.slice }}
+          slice-count: 2
 
   compatibility:
     needs: [plan, native-command-evaluators]

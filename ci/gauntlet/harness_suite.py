@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import platform
 import re
-import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,10 +14,10 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .case_worker import SubprocessCaseWorker
 from .catalog import Scenario, catalog_digest, load_catalog
-from .fixtures import digest_file
+from .fixtures import create_run_root, digest_file
 from .harness_case import run_harness_case
 from .harnesses import adapter
-from .parallel import run_scheduled, terminate_as_exit, validate_jobs
+from .parallel import Lease, run_scheduled, terminate_as_exit, validate_jobs
 from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
@@ -56,7 +55,7 @@ def run_harness_suite(
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="guard-gauntlet-", dir=parent)).resolve()
+    root = create_run_root(parent)
     binding = source_identity(REPO, candidate_sha)
     report: dict[str, Any] = {
         "started_at": datetime.now(timezone.utc).isoformat(),
@@ -115,7 +114,7 @@ def run_harness_suite(
         workdir = root / "workers"
         workdir.mkdir(mode=0o700)
 
-        def spawn(scenario: Scenario) -> Any:
+        def spawn(scenario: Scenario, lease: Lease | None = None) -> Any:
             return SubprocessCaseWorker(
                 scenario.id,
                 {
@@ -130,6 +129,7 @@ def run_harness_suite(
                     "build_sha": capabilities.build_sha,
                 },
                 workdir,
+                pass_fds=(lease.fd,) if lease is not None and lease.fd is not None else (),
             )
 
         (output / "cases").mkdir(parents=True, exist_ok=True)

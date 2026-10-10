@@ -92,6 +92,9 @@ from .store_approvals import (
     get_approval_request as load_approval_request,
 )
 from .store_approvals import (
+    get_approval_extension_allow_hint,
+)
+from .store_approvals import (
     get_next_pending_request as load_next_pending_request,
 )
 from .store_approvals import (

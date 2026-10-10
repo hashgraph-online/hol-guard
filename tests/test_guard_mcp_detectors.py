@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import ClassVar
 
+import pytest
+
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.detectors import (
@@ -170,6 +172,7 @@ class TestMcpDescriptionDeceptionDetector:
         assert len(signals) == 0, "Deception detector must only fire on MCP actions"
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 class TestDetectorSuiteBenignMaliciousMatrix:
     """L243: Detector fixture matrix — benign commands must not produce risk signals."""
 
@@ -278,6 +281,7 @@ class TestDetectorSuiteBenignMaliciousMatrix:
         assert supply_chain_signals, "supply-chain detector missed risky command when prompt_text was also set"
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 class TestDetectorBenchmark:
     """L244: Detector benchmark — 1000 actions under 200ms per action average."""
 
@@ -316,6 +320,7 @@ class TestDetectorBenchmark:
         assert avg_ms < 10.0, f"Average detector latency {avg_ms:.2f}ms exceeds 10ms target"
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 class TestDetectorExplanations:
     """L245: Every ask/block signal must have a user-readable plain_reason."""
 

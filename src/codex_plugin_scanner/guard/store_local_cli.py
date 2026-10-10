@@ -19,6 +19,11 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
 from .runtime.mcp_classification import classify_mcp_action
 from .store_custom_extension_continuity import _write_local_cli_grant
+from .store_local_cli_retention import (
+    mark_shared_enrolled_servers,
+    prune_expired_local_cli_observations,
+    replay_allowed,
+)
 from .store_local_cli_rows import (
     _grant_from_row,
     _merge_item,
@@ -27,6 +32,7 @@ from .store_local_cli_rows import (
     _row_text,
     _row_values,
     _with_suggestable,
+    local_cli_rules_exist,
 )
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import load_mcp_catalogs, review_catalog_changes, write_mcp_catalog
@@ -50,6 +56,7 @@ class StoreLocalCliMixin:
         server_command: str | None = None,
         server_args_hash: str | None = None,
         only_if_missing: bool = False,
+        replayed_at: str | None = None,
     ) -> None:
         if not is_local_cli_id(identity.cli_id):
             raise ValueError("invalid local CLI id")
@@ -61,6 +68,8 @@ class StoreLocalCliMixin:
                 (identity.cli_id,),
             ).fetchone()
             if current is not None and only_if_missing:
+                return
+            if only_if_missing and not replay_allowed(connection, identity.identity_hash, seen_at, now=replayed_at):
                 return
             if current is None:
                 _ = connection.execute(
@@ -88,6 +97,8 @@ class StoreLocalCliMixin:
                         server_args_hash,
                     ),
                 )
+                if not only_if_missing:
+                    _ = prune_expired_local_cli_observations(connection, now=seen_at, throttle=True)
                 return
             _ = connection.execute(
                 """
@@ -118,6 +129,7 @@ class StoreLocalCliMixin:
                     identity.cli_id,
                 ),
             )
+            _ = prune_expired_local_cli_observations(connection, now=seen_at, throttle=True)
 
     def list_local_cli_items(self) -> list[dict[str, object]]:
         with self._connect() as connection:
@@ -172,6 +184,7 @@ class StoreLocalCliMixin:
                     }
                 )
             )
+        mark_shared_enrolled_servers(items, grants)
         authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
         for item in items:
             item["authority_revision"] = authority_revision
@@ -215,11 +228,12 @@ class StoreLocalCliMixin:
     def has_local_cli_block_rules(self) -> bool:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            row = connection.execute(
-                "select exists(select 1 from local_cli_grant where state = 'blocked')"
-                " or exists(select 1 from local_cli_command_grant where state = 'block')"
-            ).fetchone()
-        return bool(row and row[0])
+            return local_cli_rules_exist(connection, blocks_only=True)
+
+    def has_local_cli_grant_rules(self) -> bool:
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            return local_cli_rules_exist(connection, blocks_only=False)
 
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:

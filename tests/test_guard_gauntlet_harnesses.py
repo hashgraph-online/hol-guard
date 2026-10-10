@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.harness_judge import assess_harness_case, effective_decision, guard_decisions
+from ci.gauntlet.harness_judge import _relative, _tokens, assess_harness_case, effective_decision, guard_decisions
 from ci.gauntlet.harnesses import CredentialSeed, adapter, read_transcript
 from ci.gauntlet.proofs import required_checks
 
@@ -145,6 +145,31 @@ def test_block_passes_only_on_a_native_deny_of_the_exact_attempt():
     assert result["outcome"] == "pass"
     other = case("secret-copy", [blocked_copy(command="cat .env")], [BASH_CALL])
     assert assess_harness_case(SCENARIOS["secret-copy"], other)["outcome"] == "not-exercised"
+
+
+def test_observed_stop_callback_is_not_an_off_route_answer():
+    stop = {
+        "route_harness": "claude-code",
+        "payload": {"hook_event_name": "Stop"},
+        "response": {"continue": True, "reason_code": "native_hook_event_unavailable"},
+        "receipt": None,
+    }
+    routes = {"native_resident": 1, "native_fail_safe": 1}
+    scenario = SCENARIOS["secret-copy"]
+    observed = case("secret-copy", [blocked_copy(), stop], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, observed)["outcome"] == "pass"
+    unexplained = case("secret-copy", [blocked_copy()], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, unexplained)["reason"] == "Guard answered outside the native resident route"
+    blocked_stop = {**stop, "response": {**stop["response"], "continue": False}}
+    blocking = case("secret-copy", [blocked_copy(), blocked_stop], [BASH_CALL], native_routes=routes)
+    assert assess_harness_case(scenario, blocking)["outcome"] == "harness-error"
+
+
+def test_judge_knows_every_lifecycle_event_guard_only_observes():
+    from ci.gauntlet.harness_judge import _LIFECYCLE_EVENTS
+    from codex_plugin_scanner.guard.daemon.hook_availability_policy import LIFECYCLE_OBSERVE_EVENTS
+
+    assert LIFECYCLE_OBSERVE_EVENTS <= _LIFECYCLE_EVENTS
 
 
 def test_block_with_extra_requests_is_not_exercised():
@@ -299,6 +324,16 @@ def test_credential_seed_writes_back_only_when_the_operator_copy_is_unchanged(tm
     assert login.read_text() == "operator-relogin"
 
 
+def test_cursor_seed_carries_the_windows_login_under_appdata(tmp_path):
+    source, fixture = tmp_path / "real", tmp_path / "fixture"
+    login = source / "AppData" / "Roaming" / "Cursor" / "auth.json"
+    login.parent.mkdir(parents=True)
+    login.write_text("cursor-login")
+    seed = CredentialSeed(adapter("cursor"), source, fixture)
+    assert seed.seeded >= 1
+    assert (fixture / "AppData" / "Roaming" / "Cursor" / "auth.json").read_text() == "cursor-login"
+
+
 def test_logout_during_a_case_is_not_undone_by_write_back(tmp_path):
     source, fixture = tmp_path / "real", tmp_path / "fixture"
     login = source / ".codex" / "auth.json"
@@ -315,6 +350,18 @@ def test_shell_text_under_cmd_counts_as_the_reviewed_command():
     payload = {"hook_event_name": "PreToolUse", "tool_name": "exec_command", "tool_input": {"cmd": "git status"}}
     rows = [{"payload": payload, "response": {}, "receipt": {"event_name": "PreToolUse", "decision": "allow"}}]
     assert guard_decisions(rows)[0]["command"] == "git status"
+
+
+def test_windows_workspace_paths_resolve_to_the_same_relative_target():
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "{{workspace}}\\src\\a.ts"},
+    }
+    rows = [{"payload": payload, "response": {}, "receipt": {"event_name": "PreToolUse", "decision": "allow"}}]
+    assert guard_decisions(rows)[0]["path"] == "src/a.ts"
+    assert _tokens('Get-Content "{{workspace}}\\.env" .\\src\\a.ts') == ("Get-Content", ".env", "src/a.ts")
+    assert _relative("src\\literal.ts") == "src\\literal.ts"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
@@ -367,3 +414,15 @@ def test_harmful_tasks_travel_as_instructions_and_ordinary_tasks_as_the_prompt()
     for scenario_id in ("mixed-native-source-secret-read-batch",):
         assert route_task(SCENARIOS[scenario_id], "read", "C")[0] == NEUTRAL_PROMPT
     assert route_task(SCENARIOS["quoted-unicode-source-reads"], "read files", "CONTEXT") == ("read files", "CONTEXT")
+
+
+def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
+    # Codex on Windows resolves its home from the OS profile, ignoring USERPROFILE.
+    assert adapter("codex").home_environment(tmp_path) == {"CODEX_HOME": str(tmp_path / ".codex")}
+    assert adapter("claude-code").home_environment(tmp_path) == {}
+    assert adapter("cursor").home_environment(tmp_path) == {}
+    from ci.gauntlet.harness_case import harness_environment
+
+    environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
+    assert environment["USERPROFILE"] == str(tmp_path)

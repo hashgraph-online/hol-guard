@@ -61,6 +61,7 @@ export type LocalCliItem = {
   help_status: "ok" | "empty" | "failed" | null;
   surface: LocalCliSurface;
   server_identity_hash: string | null;
+  shares_enrolled_server?: boolean;
   source_label: string | null;
   state: LocalCliState;
   stale: boolean;
@@ -350,7 +351,7 @@ function suggestionMatchesQuery(item: LocalCliItem, needle: string): boolean {
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
 
-async function readJson(response: Response): Promise<unknown> {
+export async function readJson(response: Response): Promise<unknown> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const record = isRecord(payload) ? payload : {};

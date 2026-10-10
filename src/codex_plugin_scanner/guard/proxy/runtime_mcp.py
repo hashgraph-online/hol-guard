@@ -20,7 +20,6 @@ from typing import IO, Any, Literal, TextIO, cast
 from uuid import uuid4
 
 from ..action_lattice import (
-    GuardActionNormalization,
     most_restrictive_guard_action,
     normalize_guard_action,
 )
@@ -36,28 +35,30 @@ from ..daemon.manager import load_guard_daemon_auth_token
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
     _package_evaluation_requires_external_archive_binding,
-    _package_policy_override_evaluation,
     _resolve_stored_package_policy_override,
     _verified_external_archive_replacements,
     compose_current_package_policy_action,
     evaluate_package_request_artifact,
+    package_external_archive_override,
     package_request_policy_hash,
 )
-from ..mcp_fresh_approval import fresh_claim_allows_reapproval
 from ..mcp_tool_calls import (
-    ApprovalReuseClaimDisposition,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
     build_tool_call_artifact,
     build_tool_call_hash,
-    claimed_approval_authorizes_postclaim_review,
     evaluate_tool_call,
     resolve_tool_call_policy_action,
     tool_call_risk_categories,
     tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_approval_proof import (
+    ApprovalReuseClaimDisposition,
+    claimed_approval_authorizes_postclaim_review,
+    fresh_claim_allows_reapproval,
+)
 from ..native_execution import (
     mcp_stdio_session_close_native,
     mcp_stdio_session_open_native,
@@ -228,22 +229,6 @@ def _most_restrictive_package_policy_action(stored_action: object | None, curren
     if stored_action is None:
         return normalize_guard_action(current_action)
     return most_restrictive_guard_action(stored_action, current_action)
-
-
-def _guard_action_normalization_evidence(
-    source: str,
-    normalization: GuardActionNormalization,
-) -> dict[str, object] | None:
-    if normalization.recognized:
-        return None
-    return {
-        "source": "guard_action_normalizer",
-        "input_source": source,
-        "reason_code": normalization.reason_code,
-        "original_action": normalization.original_action,
-        "original_type": normalization.original_type,
-        "normalized_action": normalization.action,
-    }
 
 
 def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: str) -> ToolCallDecision:
@@ -879,28 +864,6 @@ class RuntimeMcpGuardProxy:
         self._buffered_client_responses.clear()
         self._child_output_queue = None
         self._active_child_stdout = None
-
-    def _activate_child_output_pump(self, child_stdout: IO[str] | _NativeMcpChildIo) -> None:
-        output_queue: queue.Queue[_ChildOutputFrame] = queue.Queue()
-        self._child_output_queue = output_queue
-        self._active_child_stdout = child_stdout
-
-        def pump() -> None:
-            try:
-                while True:
-                    line = child_stdout.readline()
-                    if not line:
-                        output_queue.put(_ChildOutputFrame())
-                        return
-                    output_queue.put(_ChildOutputFrame(line=line))
-            except BaseException as exc:  # pragma: no cover - surfaced by the synchronous consumer
-                output_queue.put(_ChildOutputFrame(error=exc))
-
-        threading.Thread(
-            target=pump,
-            name=f"guard-mcp-child-output-{self.harness}-{self.server_name}",
-            daemon=True,
-        ).start()
 
     def _prepare_launch(self) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
         """Compute launch identity/env shared by the Popen and native paths.
@@ -2287,11 +2250,13 @@ class RuntimeMcpGuardProxy:
                 claim_disposition=claimed_tool_disposition,
                 claimed_decision=claimed_tool_decision,
                 current_decision=postclaim_tool_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             package_claim_authorizes_review = claimed_approval_authorizes_postclaim_review(
                 claim_disposition=claimed_package_disposition,
                 claimed_decision=claimed_package_decision,
                 current_decision=postclaim_package_resolution.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             postclaim_tool_evidence = _postclaim_claim_evidence(
                 postclaim_tool_evidence,
@@ -2380,28 +2345,23 @@ class RuntimeMcpGuardProxy:
             evaluation=fresh_package_resolution.evaluation,
         )
         if bound_request is None:
-            binding_failure = _package_policy_override_evaluation(
-                fresh_package_resolution.evaluation,
-                decision="block",
-                policy_action="block",
-                title="External archive blocked",
-                summary="The inspected external archive could not be bound to the forwarded installer request.",
-                harness_message="HOL Guard blocked an external archive whose digest-bound blob was unavailable.",
-                reason_code="external_archive_digest_mismatch",
-                reason_message="The inspected external archive changed or was absent from the forwarded request.",
-            )
-            response = self._terminal_package_response(
-                message_id=message.get("id"),
-                artifact=artifact,
-                artifact_hash=fresh_package_resolution.artifact_digest,
-                tool_name=tool_name,
-                params=params,
-                package_evaluation=binding_failure,
-                policy_action="block",
-                scanner_evidence=fresh_scanner_evidence,
-            )
-            _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
-            return response
+            try:
+                binding_failure = package_external_archive_override(
+                    fresh_package_resolution.evaluation,
+                    variant="mcp_unbound",
+                )
+                return self._terminal_package_response(
+                    message_id=message.get("id"),
+                    artifact=artifact,
+                    artifact_hash=fresh_package_resolution.artifact_digest,
+                    tool_name=tool_name,
+                    params=params,
+                    package_evaluation=binding_failure,
+                    policy_action="block",
+                    scanner_evidence=fresh_scanner_evidence,
+                )
+            finally:
+                _cleanup_external_archive_downloads(fresh_package_resolution.evaluation)
         bound_message, bound_params = bound_request
         try:
             return self._record_package_forward(
@@ -3042,6 +3002,7 @@ class RuntimeMcpGuardProxy:
                 claim_disposition=claim_disposition,
                 claimed_decision=pending,
                 current_decision=fresh_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             postclaim_evidence = _postclaim_claim_evidence(
                 postclaim_evidence,
@@ -3082,6 +3043,7 @@ class RuntimeMcpGuardProxy:
                         decision=pending,
                         artifact=fresh_authority.artifact,
                         artifact_hash=fresh_authority.artifact_hash,
+                        guard_home=self.store.guard_home,
                     )
                 )
                 or (fresh_action == "review" and not claim_authorizes_review)

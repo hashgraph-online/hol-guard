@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import BinaryIO, cast
 
+from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .stable_guard_cli import resolve_frozen_guard_cli
 
 FROZEN_CODEX_BRIDGE_ARG = "--_hol-guard-codex-bridge"
@@ -26,8 +27,8 @@ def frozen_codex_bridge_tokens_are_live(tokens: Sequence[str]) -> bool:
     if flag_index + 1 >= len(tokens):
         return False
     try:
-        payload = json.loads(tokens[flag_index + 1])
-    except (json.JSONDecodeError, TypeError, ValueError):
+        payload = json.loads(decode_bridge_config_argument(tokens[flag_index + 1]))
+    except (AttributeError, TypeError, ValueError):
         return False
     return isinstance(payload, dict)
 

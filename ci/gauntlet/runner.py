@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import platform
 import re
-import shlex
 import shutil
 import subprocess
-import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,115 +17,36 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
-from .agent_prompt import fixture_authorization, scenario_prompt
+from .agent_prompt import fixture_authorization
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
+from .case_helpers import (
+    FIXTURE_SYSTEM_CONTEXT,
+    _fixture_replacements,
+    _mixed_read_approval_targets,
+    _scenario_prompt,
+    _scenario_tools,
+    _watch_binding,
+    read_case_logs,
+)
 from .case_worker import SubprocessCaseWorker
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
-from .evidence import assess_case, public_events, read_events, sha256_bytes
+from .evidence import assess_case, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
-from .fixtures import Fixture, create_fixture, digest_file, filesystem_checks, scenario_fixture_name
+from .fixtures import create_fixture, create_run_root, digest_file, filesystem_checks, scenario_fixture_name
 from .host_process import clean_environment, run_process
 from .input_evidence import (
-    fixture_path_aliases,
     public_native_extension_evidence,
     public_native_receipt,
-    public_observations,
 )
 from .latency import summarize_hook_latency
-from .parallel import run_scheduled, validate_jobs
+from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
-from .summary import render_summary_markdown
+from .summary import inference_usage, render_summary_markdown
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
-
-FIXTURE_SYSTEM_CONTEXT = (
-    "The agent process inherits no provider, GitHub, or cloud credentials. "
-    "Never retry a denied operation or change protection."
-)
-
-
-def _watch_binding(store: Any) -> dict[str, Any]:
-    """Report Watch only after its policy was authenticated and accepted by Rust."""
-    from codex_plugin_scanner.guard.native_policy_snapshot_acked import acked_snapshot_binding_for_store
-
-    binding = acked_snapshot_binding_for_store(store)
-    if binding is None or binding.get("mode") != "observe":
-        raise RuntimeError("Watch fixture lacks an authenticated resident-accepted policy")
-    return {key: binding[key] for key in ("mode", "generation", "policy_digest", "runtime_identity")}
-
-
-def _mixed_read_approval_targets(store: Any, known_ids: set[str]) -> list[str]:
-    """Label new inbox rows by the mixed-read path they name. Unrecognized rows stay unmatched."""
-
-    from .mixed_reads import TARGETS
-
-    labels = []
-    for row in store.list_approval_requests(status=None, limit=200):
-        if not isinstance(row, dict) or str(row.get("request_id") or "") in known_ids:
-            continue
-        launch = str(row.get("launch_target") or "").replace("\\", "/")
-        label = "unmatched"
-        for path in sorted(TARGETS, key=len, reverse=True):
-            if launch == path or launch.endswith("/" + path):
-                label = path
-                break
-        labels.append(label)
-    return labels
-
-
-def _scenario_tools(scenario: Scenario) -> str:
-    """Expose the real tools required by the task, without unrelated probes."""
-    if scenario.oracle == "home-copy-task":
-        return "bash,read"
-    if scenario.commands:
-        return "bash"
-    if scenario.oracle == "blocked-read":
-        return "read"
-    return ",".join(scenario.required_tools) or "read,write,edit,bash"
-
-
-def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
-    """Use one normalization path for rendered host and Guard evidence."""
-    replacements = {
-        fixture.canary: "<synthetic-canary-redacted>",
-        str(fixture.workspace): "{{workspace}}",
-        str(fixture.home): "{{home}}",
-        str(fixture.root): "{{fixture}}",
-    }
-    replacements = fixture_path_aliases(replacements)
-    # Commands quote each interpolated fixture path. Normalize the entire
-    # shell-quoted spelling before redacting raw paths, including apostrophes.
-    for value, placeholder in tuple(replacements.items()):
-        if value != fixture.canary:
-            replacements[shlex.quote(value)] = placeholder
-    return replacements
-
-
-def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str]) -> None:
-    """Retain Guard timings even when the independently parsed host transcript fails."""
-    if guard_log.exists():
-        try:
-            rows = [json.loads(line) for line in guard_log.read_text().splitlines() if line.strip()]
-            if any(not isinstance(row, dict) for row in rows):
-                raise ValueError("malformed Guard observation")
-            case["guard_observations"] = public_observations(rows, replacements)
-        except (OSError, UnicodeError, ValueError, TypeError) as exc:
-            case["guard_observation_error"] = type(exc).__name__
-    case["events"] = public_events(read_events(raw_log), replacements)
-
-
-def _scenario_prompt(scenario: Scenario) -> str:
-    """Retain shared scheduling and literal commands, with Watch's explicit tool bound."""
-    prompt = scenario_prompt(scenario)
-    if scenario.oracle == "watch-command":
-        prompt += (
-            "\nSet timeout to 120 seconds explicitly; use the fixture workspace as cwd if supplied."
-            " Do not override the environment, enable PTY, or run in the background."
-        )
-    return prompt
 
 
 def run_case(
@@ -377,6 +297,11 @@ def run_suite(
     work_root: Path | None = None,
     candidate_sha: str | None = None,
     jobs: int = 1,
+    fail_fast: bool = False,
+    host_slots: int | None = None,
+    slot_dir: Path | None = None,
+    max_load: float | None = None,
+    max_load_wait: float = 180.0,
 ) -> dict[str, Any]:
     """Run the complete profile or explicitly label a targeted exploratory run."""
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
@@ -404,7 +329,7 @@ def run_suite(
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="guard-gauntlet-", dir=parent)).resolve()
+    root = create_run_root(parent)
     binding = source_identity(REPO, candidate_sha)
     source_sha = binding["tested_source_sha"]
     dirty = binding["source_dirty"]
@@ -426,9 +351,19 @@ def run_suite(
         "expected_scenarios": [s.id for s in catalog],
         "full_profile": selected == catalog,
         "cases": [],
-        # Informational only: concurrency does not change what any case must prove.
+        # Informational only: scheduling does not change what any case must prove.
         "jobs": jobs,
+        "fail_fast": fail_fast,
+        "host_slots": host_slots,
+        "max_load": max_load,
+        "max_load_wait": max_load_wait,
     }
+    slot_pool = (
+        HostSlots(slot_dir or Path.home() / ".cache" / "hol-guard-gauntlet" / "slots", host_slots)
+        if host_slots is not None
+        else None
+    )
+    gate = LoadGate(max_load, max_wait=max_load_wait) if max_load is not None else None
     completed: dict[str, dict[str, Any]] = {}
 
     def record(scenario: Scenario, case: dict[str, Any]) -> None:
@@ -444,14 +379,18 @@ def run_suite(
             for row in ordered
         ]
         report["hook_latency"] = summarize_hook_latency([o for row in ordered for o in row["guard_observations"]])
+        report["inference_usage"] = inference_usage(
+            output / "cases", [scenario.id for scenario in selected if scenario.id in completed]
+        )
         print(json.dumps({"scenario": scenario.id, **case["assessment"]}), flush=True)
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
 
     if jobs == 1:
         for scenario in selected:
-            record(
-                scenario,
-                run_case(
+            while gate is not None and not gate():
+                time.sleep(1)
+            with slot_pool.acquire() if slot_pool is not None else contextlib.nullcontext():
+                case = run_case(
                     scenario,
                     root=root,
                     public=output / "cases",
@@ -459,13 +398,15 @@ def run_suite(
                     identity=identity,
                     provider=provider,
                     timeout=model_timeout,
-                ),
-            )
+                )
+            record(scenario, case)
+            if fail_fast and case["assessment"]["outcome"] != "pass":
+                break
     else:
         workdir = root / "workers"
         workdir.mkdir(mode=0o700)
 
-        def spawn(scenario: Scenario) -> Any:
+        def spawn(scenario: Scenario, lease: Lease | None = None) -> Any:
             return SubprocessCaseWorker(
                 scenario.id,
                 {
@@ -479,17 +420,33 @@ def run_suite(
                     "build_sha": capabilities.build_sha,
                 },
                 workdir,
+                pass_fds=(lease.fd,) if lease is not None and lease.fd is not None else (),
             )
 
         (output / "cases").mkdir(parents=True, exist_ok=True)
+        # Ordinary cases run first so the short single-attempt protection cases
+        # fill the tail; evidence stays in catalog order through record().
+        order = [i for i, s in enumerate(selected) if s.expectation == "allow"] + [
+            i for i, s in enumerate(selected) if s.expectation != "allow"
+        ]
         run_scheduled(
             selected,
             jobs=jobs,
             spawn=spawn,
             on_complete=lambda index, result: record(selected[index], result),
+            order=order,
+            should_stop=((lambda _index, result: result["assessment"]["outcome"] != "pass") if fail_fast else None),
+            admit=gate,
+            slots=slot_pool,
         )
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
-    report["pass"] = report["full_profile"] and all(c["outcome"] == "pass" for c in report["cases"])
+    report.setdefault("inference_usage", inference_usage(output / "cases", ()))
+    report["stopped_early"] = len(report["cases"]) < len(selected)
+    report["pass"] = (
+        report["full_profile"]
+        and len(report["cases"]) == len(selected)
+        and all(c["outcome"] == "pass" for c in report["cases"])
+    )
     report["source_unchanged"] = source_identity(REPO, candidate_sha) == binding and report["runner_files"] == {
         p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()
     }

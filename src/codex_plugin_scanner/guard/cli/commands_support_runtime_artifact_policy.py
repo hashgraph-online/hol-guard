@@ -41,24 +41,6 @@ def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardActi
     return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
 
 
-def _runtime_artifact_fail_closed_floor(artifact: GuardArtifact) -> bool:
-    """Return whether the native decision plane blocked on matcher uncertainty.
-
-    A matcher failure means the evaluator could not fully prove the command,
-    so the block is a fail-closed boundary rather than a classified deny.
-    """
-    plane = artifact.metadata.get("command_decision_plane")
-    if not isinstance(plane, Mapping):
-        return False
-    controlling = plane.get("controlling_reasons")
-    if not isinstance(controlling, Sequence) or isinstance(controlling, str):
-        return False
-    return any(
-        isinstance(reason, Mapping) and reason.get("reason_code") in {"matcher-failure", "uncertainty.matcher-failure"}
-        for reason in controlling
-    )
-
-
 def _runtime_artifact_has_explicit_permission_allow(artifact: GuardArtifact) -> bool:
     if _runtime_artifact_command_action_floor(artifact) != "allow":
         return False

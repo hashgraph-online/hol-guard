@@ -27,6 +27,7 @@ import { ProviderWorkflows } from "./provider-workflows";
 import { bulkPolicyCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
 import { customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates } from "./custom-extension-profile";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
+import { canForgetLocalCli, ForgetLocalCliButton, lastSeenCopy } from "./local-cli-forget";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";
 
@@ -185,6 +186,9 @@ export function LocalCliDetail(props: {
           <p className="mt-2 text-sm text-slate-600">{props.item.source_label}</p>
         ) : null}
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
+        {lastSeenCopy(props.item.last_seen_at) ? (
+          <p className="mt-1 text-xs leading-5 text-slate-500">{lastSeenCopy(props.item.last_seen_at)}</p>
+        ) : null}
         {continuityCopy(props.item) ? (
           <div className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="custom-extension-continuity">
             <p className="text-sm font-semibold text-brand-dark">{continuityCopy(props.item)?.title}</p>
@@ -222,9 +226,15 @@ export function LocalCliDetail(props: {
               </button>
             </>
           ) : (
-            <button type="button" className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestAdd}>
-              Add custom extension
-            </button>
+            <>
+              <button type="button" className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestAdd}>
+                Add custom extension
+              </button>
+            </>
+          )}
+          {canForgetLocalCli(props.item) && (
+            <ForgetLocalCliButton item={props.item} disabled={busy}
+              onForgotten={async () => { props.onBack(); await props.onRefresh(); }} />
           )}
         </div>
       </header>

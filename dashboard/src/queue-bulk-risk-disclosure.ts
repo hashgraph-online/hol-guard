@@ -23,6 +23,8 @@ export type BulkSelectionStats = {
   elevatedActionCount: number;
   /** Selected actions classified as low risk (file reads, docs edits). */
   lowActionCount: number;
+  /** Selected actions whose one-time approval never lets the agent's next call through. */
+  retryBlockedActionCount?: number;
   /**
    * Sensitive file-read groups currently in the queue. These are never approved
    * by bulk approval — they stay in the queue for individual review — but their
@@ -155,8 +157,11 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     };
   }
 
+  // Restricted commands stay blocked for the agent, so never claim they run.
+  const retryBlocked = stats.retryBlockedActionCount ?? 0;
+  const onceVerb = retryBlocked > 0 ? "is approved once" : "runs once";
   const bullets: string[] = [
-    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
+    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each ${onceVerb}; the decision is not remembered.`,
   ];
 
   if (stats.highActionCount > 0) {
@@ -170,6 +175,16 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
       `${stats.elevatedActionCount} of the selected ${pluralActions(stats.actionCount)} ${
         stats.elevatedActionCount === 1 ? "is an elevated-risk action" : "are elevated-risk actions"
       } (shell, file edits, network, or similar). Confirm you expected each one.`,
+    );
+  }
+
+  if (retryBlocked > 0) {
+    bullets.push(
+      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${
+        retryBlocked === 1 ? "is a command the agent" : "are commands the agent"
+      } will still be blocked on after approval. Approving records your decision only. To let the agent run ${
+        retryBlocked === 1 ? "it" : "them"
+      }, open ${retryBlocked === 1 ? "it" : "each one"} and use "Always allow exact action" where Guard offers it, set a matching Extensions pattern to Allow, or run ${retryBlocked === 1 ? "it" : "them"} yourself.`,
     );
   }
 
@@ -209,8 +224,8 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
       headline: `Approving ${mix}`,
       body:
         stats.elevatedActionCount > 0
-          ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming."
-          : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
+          ? `This batch includes elevated-risk actions (shell, edits, network). Each ${onceVerb} and the decision is not remembered. Skim the list before confirming.`
+          : `Each selected action ${onceVerb} and the decision is not remembered. Skim the list before confirming.`,
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase,
@@ -221,7 +236,7 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     tier,
     tone: "green",
     headline: `Approving ${mix}`,
-    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
+    body: `Each selected action ${onceVerb}. The decision is not remembered, so these will ask again next time.`,
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase,

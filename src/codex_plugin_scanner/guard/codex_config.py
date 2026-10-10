@@ -24,11 +24,6 @@ def read_toml_payload(path: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def write_toml_payload(path: Path, payload: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dump_toml(payload), encoding="utf-8")
-
-
 def dump_toml(payload: dict[str, object]) -> str:
     lines: list[str] = []
     _emit_table(lines, (), payload)

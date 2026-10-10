@@ -267,6 +267,7 @@ def approval_schema_statement() -> str:
           desktop_notified_at text,
           raw_command_text text,
           continuation_snapshot_json text,
+          extension_allow_hint_json text,
           guard_version text,
           first_seen_guard_version text,
           last_seen_guard_version text,
@@ -344,7 +345,7 @@ def list_approval_requests(
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
                 fallback_cli_command, scanner_evidence_json, watch_only_observation,
-                browser_intent_json, continuation_snapshot_json,
+                browser_intent_json, continuation_snapshot_json, extension_allow_hint_json,
                 review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
                 raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
@@ -383,6 +384,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 {_column_expr(columns, "watch_only_observation", "0")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 {_column_expr(columns, "continuation_snapshot_json", "NULL")},
+                {_column_expr(columns, "extension_allow_hint_json", "NULL")},
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -426,6 +428,18 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
             ):
                 payload["superseded_by_request_id"] = replacement
     return payload
+
+
+def get_approval_extension_allow_hint(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
+    """Return the private queue-time hint; it never rides along on request payloads."""
+
+    if "extension_allow_hint_json" not in _approval_columns(connection):
+        return None
+    row = connection.execute(
+        "select extension_allow_hint_json from approval_requests where request_id = ?",
+        (request_id,),
+    ).fetchone()
+    return _json_object(row[0]) if row is not None else None
 
 
 def _approval_columns(connection: sqlite3.Connection) -> set[str]:
@@ -1126,29 +1140,6 @@ def _resolve_request_ids(
         )
 
 
-def _approval_summary(item: dict[str, object]) -> dict[str, object]:
-    return {
-        "request_id": item["request_id"],
-        "harness": item["harness"],
-        "artifact_id": item["artifact_id"],
-        "artifact_name": item["artifact_name"],
-        "artifact_type": item["artifact_type"],
-        "policy_action": item["policy_action"],
-        "source_scope": item["source_scope"],
-        "config_path": item["config_path"],
-        "workspace": item["workspace"],
-        "launch_target": item["launch_target"],
-        "risk_summary": item["risk_summary"],
-        "risk_headline": item["risk_headline"],
-        "action_identity": item["action_identity"],
-        "queue_group_id": item["queue_group_id"],
-        "dedupe_count": item["dedupe_count"],
-        "created_at": item["created_at"],
-        "last_seen_at": item["last_seen_at"],
-        "display_status": item["display_status"],
-    }
-
-
 def _encode_page_cursor(item: dict[str, object]) -> str:
     raw = json.dumps(
         {"last_seen_at": item["last_seen_at"], "request_id": item["request_id"]},
@@ -1229,63 +1220,6 @@ def bulk_resolve_approval_requests(
         """,
         [resolution_action, resolution_scope, reason, resolved_at, *request_ids],
     )
-
-
-def clear_approval_requests_by_harness(connection: sqlite3.Connection, harness: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where harness = ? and status = 'resolved'",
-        (harness,),
-    )
-    return cursor.rowcount
-
-
-def clear_approval_requests_by_workspace(connection: sqlite3.Connection, workspace: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where workspace = ? and status = 'resolved'",
-        (workspace,),
-    )
-    return cursor.rowcount
-
-
-def clear_approval_requests_by_scope(connection: sqlite3.Connection, source_scope: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where source_scope = ? and status = 'resolved'",
-        (source_scope,),
-    )
-    return cursor.rowcount
-
-
-def clear_resolved_approval_requests_before(connection: sqlite3.Connection, before_timestamp: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where status = 'resolved' and resolved_at < ?",
-        (before_timestamp,),
-    )
-    return cursor.rowcount
-
-
-def compact_approval_requests(connection: sqlite3.Connection) -> int:
-    rows = connection.execute(
-        """
-        select artifact_id, max(created_at) as latest_created
-        from approval_requests
-        where status = 'resolved'
-        group by artifact_id
-        having count(*) > 1
-        """
-    ).fetchall()
-    total_removed = 0
-    for row in rows:
-        cursor = connection.execute(
-            """
-            delete from approval_requests
-            where artifact_id = ?
-              and status = 'resolved'
-              and created_at < ?
-            """,
-            (row["artifact_id"], row["latest_created"]),
-        )
-        total_removed += cursor.rowcount
-    return total_removed
 
 
 def _optional_json_object(value: object) -> dict[str, object] | None:
