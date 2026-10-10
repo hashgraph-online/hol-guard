@@ -296,3 +296,16 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
         assert send(headers)["enabled"] is True
     finally:
         daemon.stop()
+
+
+def test_stale_outbox_401_text_after_sync_start_does_not_demand_new_sign_in(tmp_path: Path) -> None:
+    store = connected_exact_review_store(tmp_path)
+    store.set_sync_payload(
+        "guard_cloud_review_sync_state",
+        {"state": "error", "last_error": "HTTP Error 401: Unauthorized", "last_error_code": None},
+        datetime.now(timezone.utc).isoformat(),
+    )
+
+    status = cloud_review_settings_status(store)
+    assert status["reconnect_required"] is False
+    assert _guard_cloud_connect_required_for_insights(store) is False

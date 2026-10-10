@@ -40,6 +40,10 @@ def cloud_review_reconnect_required(store: GuardStore, sync: dict[str, object] |
     error_code = sync.get("last_error_code")
     if isinstance(error_code, str):
         return error_code in {"cloud_auth_expired", "cloud_connect_required"}
+    if "last_error_code" in sync:
+        # A sync attempt clears the code once authentication succeeds. Outbox rows
+        # that still carry an older 401 text must not demand a second sign-in.
+        return False
     error = sync.get("last_error")
     return isinstance(error, str) and error.startswith(
         (
