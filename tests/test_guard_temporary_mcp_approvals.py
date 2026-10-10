@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
@@ -13,6 +14,11 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     tool_call_risk_categories,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.native_policy_snapshot import (
+    _PUBLISHER_LOCK,
+    _PUBLISHERS,
+    _publisher_key,
+)
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.temporary_mcp_approvals import (
@@ -513,6 +519,75 @@ def test_resolution_persists_integrity_protected_category_grant(tmp_path) -> Non
     decision = lookup["decision"]
     assert decision is not None
     assert decision["integrity_status"] == "valid"
+
+
+def test_unacknowledged_snapshot_leaves_temporary_mcp_grant_pending(tmp_path: Path) -> None:
+    artifact = _artifact(tool_name="click")
+    browser_intent = _browser_request(artifact, ("browser_interaction",))["browser_intent"]
+    assert isinstance(browser_intent, dict)
+    store = GuardStore(tmp_path / "guard-home")
+    store.add_approval_request(
+        GuardApprovalRequest(
+            request_id="mcp-request-pending",
+            harness="codex",
+            artifact_id=artifact.artifact_id,
+            artifact_name=artifact.name,
+            artifact_type="tool_call",
+            artifact_hash="exact-hash",
+            policy_action="review",
+            recommended_scope="artifact",
+            changed_fields=("runtime_browser_tool_call",),
+            source_scope="project",
+            config_path=".mcp.json",
+            review_command="hol-guard approvals approve mcp-request-pending",
+            approval_url="http://127.0.0.1/approvals/mcp-request-pending",
+            browser_intent=browser_intent,
+        ),
+        "2026-07-21T12:00:00+00:00",
+    )
+
+    class _Publisher:
+        closed = False
+
+        def has_served_snapshot(self) -> bool:
+            return True
+
+        def is_ready(self) -> bool:
+            return True
+
+        def request_publish(self) -> None:
+            return None
+
+        def wait_until_ready(self, deadline_monotonic: float) -> bool:
+            del deadline_monotonic
+            return False
+
+    key = _publisher_key(Path(store.guard_home))
+    publisher = _Publisher()
+    with _PUBLISHER_LOCK:
+        _PUBLISHERS.setdefault(key, set()).add(publisher)
+    try:
+        with pytest.raises(ValueError, match="native_policy_snapshot_unacknowledged"):
+            apply_approval_resolution(
+                store=store,
+                request_id="mcp-request-pending",
+                action="allow",
+                scope="artifact",
+                workspace=None,
+                reason="temporary browser QA",
+                now="2026-07-21T12:01:00+00:00",
+                mcp_grant_target="category",
+                mcp_grant_duration="5h",
+            )
+    finally:
+        with _PUBLISHER_LOCK:
+            publishers = _PUBLISHERS.get(key)
+            if publishers is not None:
+                publishers.discard(publisher)
+                if not publishers:
+                    _PUBLISHERS.pop(key, None)
+    stored = store.get_approval_request("mcp-request-pending")
+    assert stored is not None and stored["status"] == "pending"
 
 
 def test_server_grant_resolves_existing_routine_requests_but_keeps_sensitive_requests(tmp_path) -> None:

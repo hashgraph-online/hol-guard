@@ -184,6 +184,7 @@ def test_native_error_accepts_exact_lifecycle_codes_only() -> None:
 @pytest.mark.parametrize(
     "code",
     [
+        "native_cloud_review_v4_nonactionable_origin",
         "native_business_policy_floor_invalid",
         "native_business_policy_removal_requires_authority",
         "native_business_source_authority_invalid",

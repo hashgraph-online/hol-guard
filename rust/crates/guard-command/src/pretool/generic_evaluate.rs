@@ -184,7 +184,7 @@ pub(super) fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_omp_directory_read_target(
+        && super::super::read_paths::selectors::bounded_omp_directory_read_target(
             &signals.path_values[0],
             home_dir,
             cwd,
@@ -226,7 +226,7 @@ pub(super) fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_omp_selector_requires_review(
+        && super::super::read_paths::selectors::bounded_omp_selector_requires_review(
             &signals.path_values[0],
             home_dir,
             cwd,

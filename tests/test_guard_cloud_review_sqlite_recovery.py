@@ -31,7 +31,7 @@ from tests.guard_exact_cloud_review_support import (
 
 def _prepare(tmp_path: Path) -> GuardStore:
     store = connected_exact_review_store(tmp_path)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     add_review_request(store, review_request("recover-pending"))
     with sqlite3.connect(store.path) as connection:
         connection.execute(
@@ -269,3 +269,174 @@ def test_independent_cli_recovery_failure_does_not_discard_complete_review_state
     assert not store._recover_fatal_sqlite_store(ValueError("not a storage failure"))
     assert store._last_sqlite_recovery == "skipped"
     assert store._last_sqlite_recovery_details is None
+
+
+def test_partial_cloud_salvage_persists_recovery_health_without_consent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(recovery, "salvage_cloud_review_state", lambda **_kwargs: False)
+    monkeypatch.setattr(store_connection_schema, "salvage_local_cli_state", lambda **_kwargs: True)
+    recorded_now: list[object] = []
+    original_persist = recovery.persist_cloud_review_recovery_health
+
+    def persist_and_record(store: object, *, cloud_review: bool, local_cli: bool, now: str) -> None:
+        recorded_now.append(now)
+        original_persist(store, cloud_review=cloud_review, local_cli=local_cli, now=now)
+
+    monkeypatch.setattr(recovery, "persist_cloud_review_recovery_health", persist_and_record)
+    _recover(store, monkeypatch)
+    assert recorded_now
+    assert all(isinstance(value, str) for value in recorded_now)
+    assert store._last_sqlite_recovery_details == {"cloud_review": False, "local_cli": True}
+    assert store.get_sync_payload("oauth_local_credentials") is None
+    assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
+    health = recovery.read_cloud_review_recovery_health(store)
+    assert health is not None
+    assert health["reason"] == "cloud_review_salvage_failed"
+    assert health["repair"] == "authenticated_current_binding"
+    assert health["summary"] == recovery.PARTIAL_CLOUD_RECOVERY_DETAIL
+    store.set_sync_payload(
+        recovery.RECOVERY_HEALTH_STATE_KEY,
+        {**health, "summary": "do not display stored text"},
+        "2026-10-04T05:00:00+00:00",
+    )
+    assert recovery.read_cloud_review_recovery_health(store) == health
+    store.set_sync_payload(
+        recovery.RECOVERY_HEALTH_STATE_KEY,
+        {**health, "reason": "cloud_review_restored"},
+        "2026-10-04T05:00:01+00:00",
+    )
+    assert recovery.read_cloud_review_recovery_health(store) is None
+    store.set_sync_payload(recovery.RECOVERY_HEALTH_STATE_KEY, health, "2026-10-04T05:00:02+00:00")
+    reopened = GuardStore(store.guard_home)
+    assert recovery.read_cloud_review_recovery_health(reopened) == health
+    from codex_plugin_scanner.guard.approvals import _build_runtime_cloud_context
+
+    context = _build_runtime_cloud_context(reopened, None)
+    assert context["cloud_state_detail"] == recovery.PARTIAL_CLOUD_RECOVERY_DETAIL
+    assert context["cloud_pairing_state"]["detail"] == recovery.PARTIAL_CLOUD_RECOVERY_DETAIL
+    assert context["cloud_review_recovery"] == health
+    assert context["cloud_review_recovery_repair"] == {
+        "reason": "oauth_binding_missing",
+        "status": "authentication_required",
+    }
+
+
+def test_incomplete_local_recovery_is_not_confirmed_as_cloud_repair() -> None:
+    class _Store:
+        def __init__(self) -> None:
+            self.payloads: dict[str, object] = {
+                recovery.RECOVERY_HEALTH_STATE_KEY: recovery.cloud_review_recovery_health(
+                    cloud_review=False,
+                    local_cli=False,
+                )
+            }
+
+        def get_sync_payload(self, key: str) -> object:
+            return self.payloads.get(key)
+
+        def set_sync_payload(self, key: str, payload: object, now: str) -> None:
+            del now
+            self.payloads[key] = payload
+
+        def get_review_event_oauth_binding(self) -> dict[str, str] | None:
+            raise AssertionError("incomplete recovery must not read OAuth")
+
+    store = _Store()
+    health = store.payloads[recovery.RECOVERY_HEALTH_STATE_KEY]
+    assert isinstance(health, dict)
+    assert health["summary"] == recovery.INCOMPLETE_CLOUD_RECOVERY_DETAIL
+    assert "Local protection is working" not in str(health["summary"])
+    result = recovery.complete_authenticated_current_binding_repair(store, now="2026-10-04T05:00:00+00:00")
+    assert result == {"status": "recovery_incomplete", "reason": "local_recovery_incomplete"}
+    assert recovery.read_cloud_review_recovery_repair(store) == result
+    assert recovery.REPAIR_ATTEMPT_STATE_KEY not in store.payloads
+    recovery.note_authenticated_cloud_review_round_trip(store, now="2026-10-04T05:00:02+00:00")
+    restored = recovery.read_cloud_review_recovery_health(store)
+    assert restored is not None
+    assert restored["reason"] == "cloud_review_restored"
+    assert restored["localCli"] is False
+    assert recovery.read_cloud_review_recovery_repair(store) == {
+        "status": "not_required",
+        "reason": "no_pending_repair",
+    }
+    assert recovery.REPAIR_ATTEMPT_STATE_KEY not in store.payloads
+
+
+def test_authenticated_current_binding_repair_does_not_create_consent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "guard")
+    monkeypatch.setattr(recovery, "salvage_cloud_review_state", lambda **_kwargs: False)
+    monkeypatch.setattr(store_connection_schema, "salvage_local_cli_state", lambda **_kwargs: True)
+    _recover(store, monkeypatch)
+    installation_id = "11111111-1111-4111-8111-111111111111"
+    workspace_id = "22222222-2222-4222-8222-222222222222"
+    with sqlite3.connect(store.path) as connection:
+        connection.execute(
+            "insert into guard_exact_cloud_review_receipts values (?, ?, ?)",
+            ("consumed-receipt", "resolved-request", "2026-10-04T05:00:00+00:00"),
+        )
+    store.set_sync_payload(
+        "guard_exact_cloud_review_revocation",
+        {"marker": "keep"},
+        "2026-10-04T05:00:00+00:00",
+    )
+    waiting = recovery.complete_authenticated_current_binding_repair(store, now="2026-10-04T05:01:00+00:00")
+    assert waiting == {"status": "authentication_required", "reason": "oauth_binding_missing"}
+    assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {
+            "grant_id": "grant-1",
+            "workspace_id": workspace_id,
+            "machine_id": "machine-1",
+            "installation_id": "33333333-3333-4333-8333-333333333333",
+        },
+        "2026-10-04T05:02:00+00:00",
+    )
+    with store._connect() as connection:
+        updated = connection.execute(
+            "update guard_devices set installation_id = ? where device_key = 'local-device'",
+            (installation_id,),
+        )
+        assert updated.rowcount == 1
+    mismatch = recovery.complete_authenticated_current_binding_repair(store, now="2026-10-04T05:03:00+00:00")
+    assert mismatch == {"status": "binding_mismatch", "reason": "installation_disagrees"}
+    assert store.get_sync_payload(recovery.REPAIR_ATTEMPT_STATE_KEY) is None
+    assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
+    store.set_sync_payload(
+        "oauth_local_credentials",
+        {"grant_id": "grant-1", "workspace_id": workspace_id, "machine_id": "machine-1"},
+        "2026-10-04T05:04:00+00:00",
+    )
+    confirmed = recovery.complete_authenticated_current_binding_repair(store, now="2026-10-04T05:05:00+00:00")
+    assert confirmed == {"status": "completed", "reason": "current_binding_confirmed"}
+    assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
+    assert store.get_sync_payload("guard_exact_cloud_review_revocation") == {"marker": "keep"}
+    with sqlite3.connect(store.path) as connection:
+        kept = connection.execute(
+            "select request_id from guard_exact_cloud_review_receipts where receipt_id = ?",
+            ("consumed-receipt",),
+        ).fetchone()
+    assert kept == ("resolved-request",)
+    repeated = recovery.complete_authenticated_current_binding_repair(store, now="2026-10-04T05:06:00+00:00")
+    assert repeated == confirmed
+    assert store.get_sync_payload("guard_exact_cloud_review_capability") is None
+    reopened = GuardStore(store.guard_home)
+    monkeypatch.setattr(
+        reopened,
+        "get_oauth_local_credential_health",
+        lambda: {"configured": False, "state": "not_configured"},
+    )
+    monkeypatch.setattr(reopened, "get_oauth_local_credentials", lambda **_kwargs: None)
+    from codex_plugin_scanner.guard.approvals import _build_runtime_cloud_context
+
+    context = _build_runtime_cloud_context(reopened, None)
+    assert context["cloud_state_detail"] != recovery.PARTIAL_CLOUD_RECOVERY_DETAIL
+    assert context["cloud_review_recovery_repair"] == {
+        "reason": "current_binding_confirmed",
+        "status": "completed",
+    }
+    assert reopened.get_sync_payload("guard_exact_cloud_review_capability") is None

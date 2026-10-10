@@ -92,6 +92,8 @@ pub(super) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
         mcp_tool_actions: BTreeMap::new(),
         mcp_provider_actions: BTreeMap::new(),
         mcp_provider_catalog_hash: None,
+        cloud_workspace_id: None,
+        exact_command_actions: Vec::new(),
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }
@@ -442,3 +444,6 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
 
 #[path = "policy_enforcement_post_tool_tests.rs"]
 mod post_tool_tests;
+
+#[path = "policy_enforcement_exact_memory_tests.rs"]
+mod exact_memory_tests;

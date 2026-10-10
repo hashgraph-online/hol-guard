@@ -431,3 +431,6 @@ fn permanent_semantic_tombstones_fit_the_bounded_secure_state_budget() {
     drop(authority);
     fs::remove_dir_all(root).unwrap();
 }
+
+#[path = "workspace_review_decision_consumption_tests.rs"]
+mod consumption_tests;

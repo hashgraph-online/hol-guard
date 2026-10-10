@@ -49,6 +49,10 @@ _NODE_PROBE_TIMEOUT = 5.0
 # Cold policy publication is setup, not part of the timed hook request.
 # Match the production workspace-readiness cap without extending hook budgets.
 _DAEMON_READINESS_TIMEOUT = 25.0
+# Resident stop force-kills only at the end of its own 2s budget. This process
+# timeout has to outlast that budget so the stopper can retire a dead
+# generation before the probe kills it. The cleanup deadline stays 10s.
+_NATIVE_STOP_TIMEOUT_SECONDS = 3.0
 _NODE_PROBE_SOURCE = 'const typedValue: string = "node-capability-probe";\nprocess.stdout.write(typedValue);\n'
 _ENV_ALLOWLIST = {
     "COMSPEC",
@@ -989,7 +993,7 @@ def _cleanup_native(identity: Any, guard_home: Path) -> None:
                         executable=identity.path,
                         state_dir=guard_home / "native-runtime",
                         environment=_native_cleanup_environment(),
-                        timeout_seconds=min(2.0, remaining),
+                        timeout_seconds=min(_NATIVE_STOP_TIMEOUT_SECONDS, remaining),
                         # This isolated probe owns the fixture Guard home. Retire
                         # its verified clients too, so a retry can authenticate
                         # idempotent containment after the generation disappears.

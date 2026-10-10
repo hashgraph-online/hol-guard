@@ -47,13 +47,367 @@
         "contractVersion": {"const": "guard-cloud-review-command-result-v2"},
         "correlationId": {"$ref": "#/$defs/opaqueId"},
         "localRequestId": {"$ref": "#/$defs/opaqueId"},
+        "nativeApprovalRenewal": {"$ref": "#/$defs/nativeApprovalRenewal"},
         "protocolVersion": {"const": 2},
         "receiptId": {"$ref": "#/$defs/opaqueId"}
     },
     "$defs": {
-        "opaqueId": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"}
+        "opaqueId": {"type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"},
+        "nativeApprovalRenewal": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "schema",
+                "version",
+                "request_id",
+                "decision_receipt_id",
+                "source_claim_hash",
+                "original_nonce_digest",
+                "challenge",
+                "consent_revision",
+                "revocation_epoch"
+            ],
+            "properties": {
+                "schema": {
+                    "const": "guard-native-cloud-review-renewal-result.v4"
+                },
+                "version": {
+                    "const": 4
+                },
+                "request_id": {
+                    "$ref": "#/$defs/opaqueId"
+                },
+                "decision_receipt_id": {
+                    "type": "string",
+                    "format": "uuid"
+                },
+                "source_claim_hash": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                },
+                "original_nonce_digest": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                },
+                "challenge": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "request_digest",
+                        "action_digest",
+                        "policy_digest",
+                        "rule_digest",
+                        "runtime_identity",
+                        "runtime_binary_identity",
+                        "scope_contract_digest",
+                        "resident_epoch",
+                        "nonce",
+                        "signing_key_id",
+                        "request_id",
+                        "action_type",
+                        "operation",
+                        "intrinsic_action",
+                        "minimum_action",
+                        "floor_class",
+                        "runtime_package",
+                        "runtime_version",
+                        "harness",
+                        "scope_contract_version",
+                        "requested_action",
+                        "workspace_binding",
+                        "device_binding",
+                        "installation_binding",
+                        "publisher_binding",
+                        "artifact_binding",
+                        "scope_binding",
+                        "schema",
+                        "version",
+                        "approval_eligible",
+                        "policy_generation",
+                        "runtime_protocol_version",
+                        "issued_at_ms",
+                        "expires_at_ms",
+                        "webauthn"
+                    ],
+                    "properties": {
+                        "request_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "action_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "policy_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "rule_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runtime_identity": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "runtime_binary_identity": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "scope_contract_digest": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "resident_epoch": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "nonce": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "signing_key_id": {
+                            "type": "string",
+                            "pattern": "^[a-f0-9]{64}$"
+                        },
+                        "request_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "action_type": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "operation": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "intrinsic_action": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "minimum_action": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "floor_class": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "runtime_package": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "runtime_version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "harness": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "scope_contract_version": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "requested_action": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4096
+                        },
+                        "workspace_binding": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "device_binding": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "installation_binding": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "publisher_binding": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "artifact_binding": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "scope_binding": {
+                            "anyOf": [
+                                {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096
+                                },
+                                {
+                                    "type": "null"
+                                }
+                            ]
+                        },
+                        "schema": {
+                            "const": "guard-native-approval-challenge.v4"
+                        },
+                        "version": {
+                            "const": 4
+                        },
+                        "approval_eligible": {
+                            "const": true
+                        },
+                        "policy_generation": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                        },
+                        "runtime_protocol_version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 65535
+                        },
+                        "issued_at_ms": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                        },
+                        "expires_at_ms": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9007199254740991
+                        },
+                        "webauthn": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                                "rp_id",
+                                "origin",
+                                "credential_id",
+                                "algorithm",
+                                "challenge",
+                                "user_verification"
+                            ],
+                            "properties": {
+                                "rp_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 255
+                                },
+                                "origin": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048
+                                },
+                                "credential_id": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 2048,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "algorithm": {
+                                    "enum": [
+                                        -7,
+                                        -8
+                                    ]
+                                },
+                                "challenge": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 4096,
+                                    "pattern": "^[A-Za-z0-9_-]+$"
+                                },
+                                "user_verification": {
+                                    "const": "required"
+                                }
+                            }
+                        }
+                    }
+                },
+                "consent_revision": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 9007199254740991
+                },
+                "revocation_epoch": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                }
+            }
+        }
     },
     "allOf": [
+        {
+            "if": {
+                "required": [
+                    "nativeApprovalRenewal"
+                ]
+            },
+            "then": {
+                "required": ["applicationReason"],
+                "properties": {
+                    "applicationStatus": {
+                        "const": "failed_retryable"
+                    },
+                    "applicationReason": {
+                        "const": "native_approval_waiting_for_authorization"
+                    },
+                    "continuationStatus": {
+                        "const": "not_applicable"
+                    }
+                }
+            }
+        },
         {
             "if": {"properties": {"applicationStatus": {"const": "applied"}}, "required": ["applicationStatus"]},
             "then": {"properties": {"applicationReason": {"const": null}}}

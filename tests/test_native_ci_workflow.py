@@ -257,6 +257,9 @@ def test_parallel_windows_workspace_checks_remain_required(name: str, integratio
     assert "if" not in checks
     assert "continue-on-error" not in checks
     assert "needs" not in checks
+    # Both Windows workspace proofs run the permanent claim index past the
+    # 1024 replay limit. That insert loop has outlived a 20 minute job.
+    assert checks["timeout-minutes"] == 35
     assert "needs" not in integration
     commands = "\n".join(step.get("run", "") for step in checks["steps"])
     assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets -- -D warnings" in commands

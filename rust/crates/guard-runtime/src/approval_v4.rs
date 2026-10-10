@@ -8,11 +8,12 @@
 //! replay entry. Python only forwards the browser response.
 
 use super::approval_context::{
-    derive_context_with_snapshot, ensure_context_approvable, is_lower_hex, now_ms, replay_binding,
-    ApprovalContext,
+    derive_context_with_snapshot, ensure_context_approvable_v4 as ensure_context_approvable,
+    is_lower_hex, now_ms, replay_binding, ApprovalContext,
 };
 use super::approval_v4_crypto::{encode_base64url, verify_assertion, VerifiedAssertion};
 use crate::policy_store::approval_v4_authority as authority;
+use crate::policy_store::native_cloud_review_v4::DurableInstalledApproval;
 use guard_contracts::{
     ApprovalArtifactV4, ApprovalChallengeRequestV4, ApprovalChallengeV4, ApprovalConsumeRequestV4,
     ApprovalReceiptV4, ApprovalResultV4, ApprovalValidateRequestV4,
@@ -28,6 +29,9 @@ const RUNTIME_PACKAGE: &str = env!("CARGO_PKG_NAME");
 const RUNTIME_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DEFAULT_TTL_MS: u64 = 5 * 60 * 1000;
 const MAX_ARTIFACT_BYTES: usize = 64 * 1024;
+#[path = "approval_v4_challenge.rs"]
+mod challenge;
+pub(crate) use challenge::{create_challenge, create_cloud_review_challenge};
 
 fn encode_response<T: Serialize>(value: &T) -> Result<Vec<u8>, String> {
     let encoded = crate::encode_response(value)?;
@@ -45,65 +49,6 @@ fn nonce_bytes(nonce: &str) -> Result<[u8; 32], String> {
         .map_err(|_| "native_approval_nonce_invalid".to_owned())?
         .try_into()
         .map_err(|_| "native_approval_nonce_invalid".to_owned())
-}
-
-fn challenge_from_context(
-    context: &ApprovalContext,
-    nonce: String,
-    issued_at_ms: u64,
-    expires_at_ms: u64,
-    resident_epoch: String,
-    webauthn_challenge: String,
-    authority: &authority::ApprovalV4Authority,
-) -> ApprovalChallengeV4 {
-    ApprovalChallengeV4 {
-        schema: guard_contracts::NATIVE_APPROVAL_CHALLENGE_V4_SCHEMA.to_owned(),
-        version: 4,
-        request_id: context.request_id.clone(),
-        request_digest: context.request_digest.clone(),
-        action_digest: context.action_digest.clone(),
-        action_type: context.action_type,
-        operation: context.operation,
-        intrinsic_action: context.intrinsic_action.clone(),
-        minimum_action: context.minimum_action.clone(),
-        floor_class: context.action_identity.floor_class,
-        approval_eligible: context.action_identity.approval_eligible,
-        policy_generation: context.policy_generation,
-        policy_digest: context.policy_digest.clone(),
-        rule_digest: context.rule_digest.clone(),
-        runtime_identity: context.runtime_identity.clone(),
-        runtime_protocol_version: guard_contracts::NATIVE_PROTOCOL_VERSION,
-        runtime_package: RUNTIME_PACKAGE.to_owned(),
-        runtime_version: RUNTIME_VERSION.to_owned(),
-        runtime_binary_identity: context.runtime_identity.clone(),
-        harness: context.harness.clone(),
-        workspace_binding: context.workspace_binding.clone(),
-        device_binding: context.device_binding.clone(),
-        installation_binding: context.installation_binding.clone(),
-        publisher_binding: context.publisher_binding.clone(),
-        artifact_binding: context.artifact_binding.clone(),
-        scope_contract_version: context.scope_contract_version.clone(),
-        scope_contract_digest: context.scope_contract_digest.clone(),
-        scope_binding: context.scope_binding.clone(),
-        resident_epoch,
-        nonce,
-        issued_at_ms,
-        expires_at_ms,
-        requested_action: context.minimum_action.clone(),
-        signing_key_id: authority.key_id.clone(),
-        webauthn: guard_contracts::WebAuthnChallengeV4 {
-            rp_id: authority.rp_id.clone(),
-            origin: authority.origin.clone(),
-            // Browser WebAuthn options use the credential identifier's
-            // canonical, unpadded base64url representation. The enrollment
-            // record remains lower-case hex so Rust can perform exact byte
-            // comparisons without trusting a presentation decoder.
-            credential_id: super::approval_v4_crypto::encode_base64url(&authority.credential_id),
-            algorithm: authority.algorithm,
-            challenge: webauthn_challenge,
-            user_verification: "required".to_owned(),
-        },
-    }
 }
 
 fn common_matches(context: &ApprovalContext, artifact: &ApprovalArtifactV4) -> bool {
@@ -145,6 +90,7 @@ fn validate_artifact(
     context: &ApprovalContext,
     store: &crate::policy_store::PolicySnapshotStore,
     now: u64,
+    durable: Option<&DurableInstalledApproval>,
 ) -> Result<authority::ApprovalV4Authority, String> {
     let encoded = serde_json::to_vec(artifact)
         .map_err(|_| "native_approval_v4_artifact_invalid".to_owned())?;
@@ -157,7 +103,8 @@ fn validate_artifact(
     if !common_matches(context, artifact)
         || artifact.requested_action != context.minimum_action
         || artifact.approved_action != "allow"
-        || artifact.resident_epoch != store.approval_resident_epoch()
+        || (artifact.resident_epoch != store.approval_resident_epoch()
+            && !durable.is_some_and(|token| token.matches(artifact)))
         || artifact.scope_contract_version != APPROVAL_SCOPE_SCHEMA
         || artifact.runtime_protocol_version != guard_contracts::NATIVE_PROTOCOL_VERSION
         || artifact.runtime_package != RUNTIME_PACKAGE
@@ -174,6 +121,9 @@ fn validate_artifact(
         return Err("native_approval_v4_artifact_invalid".to_owned());
     }
     let authority = store.approval_v4_authority()?.clone();
+    if durable.is_some_and(|token| token.authority_fingerprint() != authority.fingerprint) {
+        return Err("native_approval_v4_authority_changed".to_owned());
+    }
     if !authority_bindings_match(context, &authority) || artifact.signing_key_id != authority.key_id
     {
         return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
@@ -196,6 +146,9 @@ fn context_and_store(
 ) -> Result<ApprovalContext, String> {
     store
         .with_approval_fence(envelope, |snapshot| {
+            if snapshot.mode != "enforce" {
+                return Err("native_cloud_review_v4_nonactionable_origin".into());
+            }
             derive_context_with_snapshot(envelope, store, snapshot)
         })
         .map_err(|error| {
@@ -208,46 +161,6 @@ fn context_and_store(
                 error
             }
         })
-}
-
-pub(crate) fn create_challenge(
-    request: ApprovalChallengeRequestV4,
-    store: &crate::policy_store::PolicySnapshotStore,
-) -> Result<Vec<u8>, String> {
-    if request.schema != NATIVE_APPROVAL_CHALLENGE_REQUEST_V4_SCHEMA || request.version != 4 {
-        return Err("native_approval_v4_challenge_request_invalid".to_owned());
-    }
-    store.with_approval_fence(&request.envelope, |snapshot| {
-        let context = derive_context_with_snapshot(&request.envelope, store, snapshot)?;
-        ensure_context_approvable(&context)?;
-        let authority = store.approval_v4_authority()?;
-        if !authority_bindings_match(&context, authority) {
-            return Err("native_approval_v4_authority_provenance_mismatch".to_owned());
-        }
-        let issued_at_ms = now_ms()?;
-        let expires_at_ms = issued_at_ms
-            .checked_add(DEFAULT_TTL_MS)
-            .ok_or_else(|| "native_approval_v4_artifact_invalid".to_owned())?;
-        let mut nonce = [0u8; 32];
-        getrandom::fill(&mut nonce).map_err(|_| "native_approval_random_failed".to_owned())?;
-        let nonce_hex = hex::encode(nonce);
-        let challenge = challenge_from_context(
-            &context,
-            nonce_hex.clone(),
-            issued_at_ms,
-            expires_at_ms,
-            store.approval_resident_epoch().to_owned(),
-            encode_base64url(&nonce),
-            authority,
-        );
-        let encoded = encode_response(&challenge)?;
-        store.register_approval_challenge(
-            &super::approval_context::encode_digest(&nonce),
-            replay_binding(&context, expires_at_ms),
-            issued_at_ms,
-        )?;
-        Ok(encoded)
-    })
 }
 
 fn receipt(
@@ -310,6 +223,7 @@ fn validate_common(
     envelope: &guard_contracts::GuardHookEnvelopeV2,
     artifact: &ApprovalArtifactV4,
     store: &crate::policy_store::PolicySnapshotStore,
+    durable: Option<&DurableInstalledApproval>,
 ) -> Result<
     (
         ApprovalContext,
@@ -322,7 +236,7 @@ fn validate_common(
     let context = context_and_store(envelope, store)?;
     ensure_context_approvable(&context)?;
     let now = now_ms()?;
-    let authority = validate_artifact(artifact, &context, store, now)?;
+    let authority = validate_artifact(artifact, &context, store, now, durable)?;
     let nonce = nonce_bytes(&artifact.nonce)?;
     let assertion = verify_assertion(
         &artifact.webauthn,
@@ -340,11 +254,22 @@ pub(crate) fn validate_approval(
     request: ApprovalValidateRequestV4,
     store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
+    validate_approval_with_emit(request, store, |_, _| Ok(()))
+}
+
+pub(crate) fn validate_approval_with_emit<F>(
+    request: ApprovalValidateRequestV4,
+    store: &crate::policy_store::PolicySnapshotStore,
+    persist_installed: F,
+) -> Result<Vec<u8>, String>
+where
+    F: FnOnce(&ApprovalResultV4, &str) -> Result<(), String>,
+{
     if request.schema != NATIVE_APPROVAL_VALIDATE_REQUEST_V4_SCHEMA || request.version != 4 {
         return Err("native_approval_v4_validate_request_invalid".to_owned());
     }
     let (context, authority, nonce, verified) =
-        validate_common(&request.envelope, &request.artifact, store)?;
+        validate_common(&request.envelope, &request.artifact, store, None)?;
     let current = authority::sign_count(&authority)?;
     if current != 0 && verified.sign_count <= current {
         return Err("native_approval_v4_counter_replay".to_owned());
@@ -358,60 +283,102 @@ pub(crate) fn validate_approval(
         rule_digest: &context.rule_digest,
         runtime_identity: &context.runtime_identity,
     };
-    store.claim_approval_nonce_fenced(
-        &request.artifact.resident_epoch,
-        &nonce_digest,
-        &binding,
-        now_ms()?,
-        &fence,
-        || {
-            let now = now_ms()?;
-            authority::remember_assertion(
-                &authority,
-                &nonce_digest,
-                assertion_digest.clone(),
-                request.artifact.expires_at_ms,
-                now,
-            )?;
-            let result = receipt(
-                &context,
-                &request.artifact,
-                &authority,
-                "validated",
-                "native_approval_v4_validated",
-                nonce_digest.clone(),
-                verified.sign_count,
-            );
-            let encoded = match encode_response(&result) {
-                Ok(encoded) => encoded,
-                Err(error) => {
+    authority::with_verified_authority(&authority, || {
+        store.claim_approval_nonce_fenced(
+            &request.artifact.resident_epoch,
+            &nonce_digest,
+            &binding,
+            now_ms()?,
+            &fence,
+            || {
+                let now = now_ms()?;
+                authority::remember_assertion(
+                    &authority,
+                    &nonce_digest,
+                    assertion_digest.clone(),
+                    request.artifact.expires_at_ms,
+                    now,
+                )?;
+                let result = receipt(
+                    &context,
+                    &request.artifact,
+                    &authority,
+                    "validated",
+                    "native_approval_v4_validated",
+                    nonce_digest.clone(),
+                    verified.sign_count,
+                );
+                let encoded = match encode_response(&result) {
+                    Ok(encoded) => encoded,
+                    Err(error) => {
+                        authority::forget_assertion(&authority, &nonce_digest)?;
+                        return Err(error);
+                    }
+                };
+                if let Err(error) = authority::advance_sign_count(&authority, verified.sign_count) {
                     authority::forget_assertion(&authority, &nonce_digest)?;
                     return Err(error);
                 }
-            };
-            if let Err(error) = authority::advance_sign_count(&authority, verified.sign_count) {
-                authority::forget_assertion(&authority, &nonce_digest)?;
-                return Err(error);
-            }
-            Ok(encoded)
-        },
-    )
+                persist_installed(&result, &authority.fingerprint)?;
+                Ok(encoded)
+            },
+        )
+    })
+}
+
+pub(crate) fn verify_installed_approval(
+    envelope: &guard_contracts::GuardHookEnvelopeV2,
+    artifact: &ApprovalArtifactV4,
+    store: &crate::policy_store::PolicySnapshotStore,
+    durable: &DurableInstalledApproval,
+) -> Result<(), String> {
+    let (_, authority, _, verified) = validate_common(envelope, artifact, store, Some(durable))?;
+    authority::with_verified_authority(&authority, || {
+        if authority::sign_count(&authority)? < verified.sign_count {
+            return Err("native_approval_v4_secure_state_mismatch".to_owned());
+        }
+        Ok(())
+    })
+}
+
+pub(crate) enum ApprovalConsumptionCommit<'a> {
+    Prepared {
+        nonce_digest: &'a str,
+        consumed_at_ms: u64,
+    },
+    Consumed {
+        receipt: &'a [u8],
+        consumed_at_ms: u64,
+    },
 }
 
 pub(crate) fn consume_approval(
     request: ApprovalConsumeRequestV4,
     store: &crate::policy_store::PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
+    crate::policy_store::native_cloud_review_v4::reject_standalone_cloud_consumption(
+        &request.artifact,
+        store,
+    )?;
+    consume_approval_with_emit(request, store, None, |_| Ok(()))
+}
+
+pub(crate) fn consume_approval_with_emit<F>(
+    request: ApprovalConsumeRequestV4,
+    store: &crate::policy_store::PolicySnapshotStore,
+    durable: Option<&DurableInstalledApproval>,
+    mut persist_commit: F,
+) -> Result<Vec<u8>, String>
+where
+    F: for<'receipt> FnMut(ApprovalConsumptionCommit<'receipt>) -> Result<(), String>,
+{
     if request.schema != NATIVE_APPROVAL_CONSUME_REQUEST_V4_SCHEMA || request.version != 4 {
         return Err("native_approval_v4_consume_request_invalid".to_owned());
     }
     let (context, authority, nonce, verified) =
-        validate_common(&request.envelope, &request.artifact, store)?;
+        validate_common(&request.envelope, &request.artifact, store, durable)?;
     let assertion_digest = hex::encode(verified.assertion_digest);
     let nonce_digest = super::approval_context::encode_digest(&nonce);
-    if !authority::assertion_matches(&authority, &nonce_digest, &assertion_digest, now_ms()?)? {
-        return Err("native_approval_v4_artifact_invalid".to_owned());
-    }
     let binding = replay_binding(&context, request.artifact.expires_at_ms);
     let fence = crate::policy_store::ApprovalPolicyFence {
         generation: context.policy_generation,
@@ -419,26 +386,60 @@ pub(crate) fn consume_approval(
         rule_digest: &context.rule_digest,
         runtime_identity: &context.runtime_identity,
     };
-    store.consume_approval_nonce_fenced(
-        &request.artifact.resident_epoch,
-        &nonce_digest,
-        &binding,
-        now_ms()?,
-        &fence,
-        || {
-            let encoded = encode_response(&receipt(
-                &context,
-                &request.artifact,
+    let consumed_at_ms = now_ms()?;
+    // Fence an unknown cloud outcome before restoring a claim or consuming it.
+    // The live native action and actual assertion were validated above.
+    persist_commit(ApprovalConsumptionCommit::Prepared {
+        nonce_digest: &nonce_digest,
+        consumed_at_ms,
+    })?;
+    authority::with_verified_authority(&authority, || {
+        if let Some(token) = durable {
+            if authority::sign_count(&authority)? < verified.sign_count {
+                return Err("native_approval_v4_secure_state_mismatch".to_owned());
+            }
+            store.restore_native_approval_claim(token, &nonce_digest, &binding, consumed_at_ms)?;
+            authority::remember_assertion(
                 &authority,
-                "consumed",
-                "native_approval_v4_consumed",
-                nonce_digest.clone(),
-                verified.sign_count,
-            ))?;
-            authority::forget_assertion(&authority, &nonce_digest)?;
-            Ok(encoded)
-        },
-    )
+                &nonce_digest,
+                assertion_digest.clone(),
+                request.artifact.expires_at_ms,
+                consumed_at_ms,
+            )?;
+        }
+        if !authority::assertion_matches(
+            &authority,
+            &nonce_digest,
+            &assertion_digest,
+            consumed_at_ms,
+        )? {
+            return Err("native_approval_v4_artifact_invalid".to_owned());
+        }
+        store.consume_approval_nonce_fenced(
+            &request.artifact.resident_epoch,
+            &nonce_digest,
+            &binding,
+            consumed_at_ms,
+            &fence,
+            || {
+                let encoded = encode_response(&receipt(
+                    &context,
+                    &request.artifact,
+                    &authority,
+                    "consumed",
+                    "native_approval_v4_consumed",
+                    nonce_digest.clone(),
+                    verified.sign_count,
+                ))?;
+                authority::forget_assertion(&authority, &nonce_digest)?;
+                persist_commit(ApprovalConsumptionCommit::Consumed {
+                    receipt: &encoded,
+                    consumed_at_ms,
+                })?;
+                Ok(encoded)
+            },
+        )
+    })
 }
 
 #[cfg(test)]

@@ -1145,6 +1145,9 @@ def run_guard_device_connect_command(
         access_token_expires_at=token_result.access_token_expires_at,
         now=timestamp,
     )
+    from ..sqlite_cloud_review_recovery import complete_authenticated_current_binding_repair
+
+    complete_authenticated_current_binding_repair(store, now=timestamp)
     sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)
     payload.update(
         {
@@ -1232,6 +1235,9 @@ def run_guard_browser_connect_command(
             access_token_expires_at=token_result.access_token_expires_at,
             now=timestamp,
         )
+        from ..sqlite_cloud_review_recovery import complete_authenticated_current_binding_repair
+
+        complete_authenticated_current_binding_repair(store, now=timestamp)
         bar.done("Authorization complete")
 
     sync_url = _oauth_sync_url_from_issuer(oauth_client.issuer)

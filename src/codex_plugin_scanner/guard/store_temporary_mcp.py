@@ -20,6 +20,7 @@ class StoreTemporaryMcpMixin:
         reason: str | None,
         resolved_at: str,
         approval_gate_grant: ApprovalGateGrant | None = None,
+        commit_resolution: bool = True,
     ) -> tuple[dict[str, object], list[str]]:
         for decision in decisions:
             validate_policy_write_authority(decision, remote_write_authorized=False)
@@ -63,22 +64,25 @@ class StoreTemporaryMcpMixin:
                         now=resolved_at,
                         secret_material=secret_material,
                     )
-                result = persist_queue_resolution(
-                    connection,
-                    request_id,
-                    resolution_action="allow",
-                    resolution_scope="artifact",
-                    reason=reason,
-                    resolved_at=resolved_at,
-                )
-                persist_bulk_resolution(
-                    connection,
-                    covered_ids,
-                    resolution_action="allow",
-                    resolution_scope="artifact",
-                    reason=reason,
-                    resolved_at=resolved_at,
-                )
+                if commit_resolution:
+                    result = persist_queue_resolution(
+                        connection,
+                        request_id,
+                        resolution_action="allow",
+                        resolution_scope="artifact",
+                        reason=reason,
+                        resolved_at=resolved_at,
+                    )
+                    persist_bulk_resolution(
+                        connection,
+                        covered_ids,
+                        resolution_action="allow",
+                        resolution_scope="artifact",
+                        reason=reason,
+                        resolved_at=resolved_at,
+                    )
+                else:
+                    result: dict[str, object] = {"resolved": False, "policy_written": True}
         if next_control_state is not None:
             self._finalize_policy_integrity_control_state(next_control_state)
         return result, covered_ids

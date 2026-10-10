@@ -39,6 +39,7 @@
         "deliveryStatus": {
             "enum": [
                 "none",
+                "pending_auth",
                 "queued",
                 "queued_offline",
                 "leased",
@@ -134,6 +135,7 @@
                         "properties": {
                             "status": {
                                 "enum": [
+                                    "pending_auth",
                                     "queued",
                                     "queued_offline",
                                     "leased",
@@ -482,6 +484,7 @@
                 "ifValue": "recorded",
                 "thenPath": "/delivery/status",
                 "thenValues": [
+                    "pending_auth",
                     "queued",
                     "queued_offline",
                     "leased",
@@ -498,6 +501,7 @@
                 "operator": "if_in_then_equals",
                 "ifPath": "/delivery/status",
                 "ifValues": [
+                    "pending_auth",
                     "queued",
                     "queued_offline",
                     "leased",
@@ -551,11 +555,11 @@
             },
             {
                 "id": "not-applicable-continuation-requires-not-applicable-application",
-                "operator": "if_equals_then_equals",
+                "operator": "if_equals_then_in",
                 "ifPath": "/continuation/status",
                 "ifValue": "not_applicable",
                 "thenPath": "/application/status",
-                "thenValue": "not_applicable"
+                "thenValues": ["not_applicable", "applied"]
             },
             {
                 "id": "failed-continuation-requires-compatible-application",
@@ -580,7 +584,7 @@
             "artifacts": {
                 "commandResult": {
                     "path": "contracts/guard-cloud-review/v2/command-result.json",
-                    "sha256": "6e093ce91e5ec581aad04ec2f9451ee768a9caca6eda8429e2741d7312f47cfd"
+                    "sha256": "e09eea124d485e1f03f54015ec09f5c1dcfbeaf50319194e9d0caf9bfde28df4"
                 },
                 "fixtures": {
                     "path": "contracts/guard-cloud-review/v2/fixtures.json",
@@ -588,7 +592,7 @@
                 },
                 "publicDocumentation": {
                     "path": "docs/guard/contracts/guard-cloud-review.md",
-                    "sha256": "99c976d7656be901348fd3599a47472c48e8bec4ab123f15e9ad2dcdd5bd4764"
+                    "sha256": "62d15a881d8727989e1877a3a2d966ac95609da2cbbaa70b2840a0f40b8fec41"
                 }
             }
         }

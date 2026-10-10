@@ -67,14 +67,14 @@ fn build_context_under_lock(
     let state_base = policy_store.state_base();
     let snapshot = policy_store.current_snapshot()?;
     let (workspace_binding, scope_binding) =
-        super::workspace_review_decision::current_native_workspace_review_bindings(
+        super::workspace_review_decision::verification::current_native_workspace_review_bindings(
             state_base,
             &snapshot.scope_contract.scope_digest,
         )?;
     let authority =
         super::workspace_review_authority::read_installed_record(state_base, now_ms()?)?
             .ok_or_else(|| "native_workspace_review_authority_missing".to_owned())?;
-    super::workspace_review_decision::ensure_current_native_workspace_review_provenance(
+    super::workspace_review_decision::verification::ensure_current_native_workspace_review_provenance(
         &authority,
         &workspace_binding,
         &scope_binding,

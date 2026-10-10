@@ -57,21 +57,25 @@ def _run_generated_callback_payload(
     )
     source_ref_start = source.index("function sourceFileRefForPostToolUse(")
     source_ref_end = source.index("\n\ntype BoundedValue", source_ref_start)
-    source_ref = source[source_ref_start:source_ref_end].replace(
-        (
-            "function sourceFileRefForPostToolUse(\n"
-            "  event: Record<string, unknown>,\n"
-            "  toolInput: Record<string, unknown>,\n"
-            "  digest: OutputDigest,\n"
-            "): { version: number; kind: string; path: string; tool_input_path: string; "
-            "output_sha256: string; output_chars: number } | null {"
-        ),
-        """function sourceFileRefForPostToolUse(
+    source_ref = (
+        source[source_ref_start:source_ref_end]
+        .replace(
+            (
+                "function sourceFileRefForPostToolUse(\n"
+                "  event: Record<string, unknown>,\n"
+                "  toolInput: Record<string, unknown>,\n"
+                "  digest: OutputDigest,\n"
+                "): { version: number; kind: string; path: string; tool_input_path: string; "
+                "output_sha256: string; output_chars: number } | null {"
+            ),
+            """function sourceFileRefForPostToolUse(
   event,
   toolInput,
   digest,
 ) {""",
-    ).replace("(details as Record<string, unknown>)", "details")
+        )
+        .replace("(details as Record<string, unknown>)", "details")
+    )
 
     event_json = json.dumps(
         {
@@ -219,21 +223,25 @@ def _run_generated_source_ref_fixture(
     )
     source_ref_start = source.index("function sourceFileRefForPostToolUse(")
     source_ref_end = source.index("\n\ntype BoundedValue", source_ref_start)
-    source_ref = source[source_ref_start:source_ref_end].replace(
-        (
-            "function sourceFileRefForPostToolUse(\n"
-            "  event: Record<string, unknown>,\n"
-            "  toolInput: Record<string, unknown>,\n"
-            "  digest: OutputDigest,\n"
-            "): { version: number; kind: string; path: string; tool_input_path: string; "
-            "output_sha256: string; output_chars: number } | null {"
-        ),
-        """function sourceFileRefForPostToolUse(
+    source_ref = (
+        source[source_ref_start:source_ref_end]
+        .replace(
+            (
+                "function sourceFileRefForPostToolUse(\n"
+                "  event: Record<string, unknown>,\n"
+                "  toolInput: Record<string, unknown>,\n"
+                "  digest: OutputDigest,\n"
+                "): { version: number; kind: string; path: string; tool_input_path: string; "
+                "output_sha256: string; output_chars: number } | null {"
+            ),
+            """function sourceFileRefForPostToolUse(
   event,
   toolInput,
   digest,
 ) {""",
-    ).replace("(details as Record<string, unknown>)", "details")
+        )
+        .replace("(details as Record<string, unknown>)", "details")
+    )
     javascript = f"""\
 import {{ createHash }} from "node:crypto";
 

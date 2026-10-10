@@ -1,4 +1,4 @@
-import { ai as PROTECTION_POSTURE_COPY, aj as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ak as harnessPostureRows, al as selectHarnessPosture, am as restartHarnessWatch, an as harnessPostureSummary, ao as harnessWatchPrompt, ap as harnessPostureOptions, aq as canRestartHarnessWatch, ar as getDefaultExportFromCjs, as as React, P as useFocusTrap, at as HiMiniKey, S as SectionLabel, A as ActionButton, y as HiMiniShieldCheck, au as HiMiniLockClosed, av as HiMiniBellAlert, aw as HiMiniAdjustmentsHorizontal, ax as HiMiniCircleStack, ay as TabBar, c as HiMiniChevronRight, az as fetchCloudReviewSettings, M as HiMiniCloud, aA as HiMiniArrowPath, I as HiMiniXMark, aB as ApprovalProofFieldInputs, aC as isApprovalProofSubmitDisabled, aD as buildApprovalProofCredentials, aE as changeCloudReviewSettings, aF as resolveProtectionLevelCopy, aG as fetchSettings, aH as fetchRuntimeSnapshot, aI as clearHarnessWatchOverrides, aJ as withHarnessPosturePatch, e as updateSettings, aK as clearPolicy, aL as clearReviewQueue, aM as revokeApprovalGateCooldown, aN as disableApprovalGateTotp, aO as importSettings, aP as resetSettings, aQ as enrollApprovalGateTotp, aR as verifyApprovalGateTotp, aS as clearEvidence, aT as exportDiagnostics, aU as repairApprovalCenter, aV as exportSettings, aW as setupDesktopNotifications, n as EmptyState, aX as settingsWatchBannerModel, aY as WorkspacePageHeader, W as WatchProtectionBanner, aZ as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, a_ as humanizeList, a$ as isProtectionPosture, b0 as deriveProtectionPosture, b1 as Tag, b2 as normalizeHarnessPostures, b3 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { ai as PROTECTION_POSTURE_COPY, aj as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ak as harnessPostureRows, al as selectHarnessPosture, am as restartHarnessWatch, an as harnessPostureSummary, ao as harnessWatchPrompt, ap as harnessPostureOptions, aq as canRestartHarnessWatch, ar as getDefaultExportFromCjs, as as React, P as useFocusTrap, at as HiMiniKey, S as SectionLabel, A as ActionButton, y as HiMiniShieldCheck, au as HiMiniLockClosed, av as HiMiniBellAlert, aw as HiMiniAdjustmentsHorizontal, ax as HiMiniCircleStack, ay as TabBar, c as HiMiniChevronRight, az as fetchCloudReviewSettings, M as HiMiniCloud, aA as HiMiniArrowPath, I as HiMiniXMark, aB as ApprovalProofFieldInputs, aC as isApprovalProofSubmitDisabled, aD as changeCloudReviewSettings, aE as resolveProtectionLevelCopy, aF as fetchSettings, aG as fetchRuntimeSnapshot, aH as clearHarnessWatchOverrides, aI as withHarnessPosturePatch, e as updateSettings, aJ as clearPolicy, aK as clearReviewQueue, aL as revokeApprovalGateCooldown, aM as disableApprovalGateTotp, aN as importSettings, aO as resetSettings, aP as enrollApprovalGateTotp, aQ as verifyApprovalGateTotp, aR as clearEvidence, aS as exportDiagnostics, aT as repairApprovalCenter, aU as exportSettings, aV as setupDesktopNotifications, n as EmptyState, aW as settingsWatchBannerModel, aX as WorkspacePageHeader, W as WatchProtectionBanner, aY as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, aZ as humanizeList, a_ as isProtectionPosture, a$ as deriveProtectionPosture, b0 as Tag, b1 as normalizeHarnessPostures, b2 as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
@@ -2663,7 +2663,7 @@ function ApprovalPasswordSection(props) {
   ] });
 }
 function cloudReviewProofIncomplete(gate, password, totp, requireFreshTotp) {
-  if (!gate?.enabled) return false;
+  if (!gate?.enabled || password.trim().length === 0) return true;
   if (isApprovalProofSubmitDisabled(
     gate,
     { approvalPassword: password, approvalTotpCode: totp },
@@ -2682,6 +2682,11 @@ function cloudReviewConfirmationError(message) {
   return message;
 }
 function cloudReviewStatusCopy(status) {
+  const recovery = status.cloud_review_recovery;
+  if (recovery && !recovery.cloudReview && status.cloud_review_recovery_repair.status !== "completed") {
+    if (!recovery.localCli) return "Cloud Review recovery is incomplete. Repair this device's local data before reconnecting.";
+    return `${recovery.summary} Restoring the connection does not authorize cloud decisions.`;
+  }
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
@@ -2691,7 +2696,7 @@ function cloudReviewStatusCopy(status) {
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
 }
-function CloudReviewSettings() {
+function CloudReviewSettings({ onOpenDataAndRepair }) {
   const [status, setStatus] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
   const [loading, setLoading] = reactExports.useState(true);
@@ -2700,9 +2705,18 @@ function CloudReviewSettings() {
   const [includeHeld, setIncludeHeld] = reactExports.useState(false);
   const [password, setPassword] = reactExports.useState("");
   const [totp, setTotp] = reactExports.useState("");
-  const dialog = reactExports.useRef(null);
+  const proofForm = reactExports.useRef(null);
+  const confirmationTrigger = reactExports.useRef(null);
   const revision = reactExports.useRef(0);
-  useFocusTrap(action !== null, dialog);
+  reactExports.useEffect(() => {
+    if (action === null) {
+      confirmationTrigger.current?.focus();
+      return;
+    }
+    proofForm.current?.scrollIntoView({ block: "nearest" });
+    const firstInput = proofForm.current?.querySelector("input:not([type='checkbox'])");
+    (firstInput ?? proofForm.current)?.focus();
+  }, [action]);
   const refresh = reactExports.useCallback(async (showLoading = true) => {
     const current = ++revision.current;
     if (showLoading) setLoading(true);
@@ -2738,7 +2752,8 @@ function CloudReviewSettings() {
       window.clearInterval(timer);
     };
   }, [refresh, action]);
-  function openConfirmation(nextAction) {
+  function openConfirmation(nextAction, trigger) {
+    confirmationTrigger.current = trigger;
     revision.current += 1;
     setAction(nextAction);
     setError(null);
@@ -2753,12 +2768,12 @@ function CloudReviewSettings() {
   async function confirm() {
     if (!status || !action || pending) return;
     const requireFreshTotp2 = status.approval_gate.totp_enabled === true;
-    if (cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp2)) return;
-    const proof = status.approval_gate.enabled ? buildApprovalProofCredentials(
-      status.approval_gate,
-      { approvalPassword: password, approvalTotpCode: totp },
-      requireFreshTotp2
-    ) : {};
+    if (action === "enable" && cloudReviewProofIncomplete(status.approval_gate, password, totp, requireFreshTotp2)) return;
+    const proof = {};
+    if (action === "enable") {
+      proof.approval_password = password;
+      if (requireFreshTotp2) proof.approval_totp_code = totp;
+    }
     revision.current += 1;
     setPending(true);
     setError(null);
@@ -2783,7 +2798,7 @@ function CloudReviewSettings() {
   }
   const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
   const requireFreshTotp = status?.approval_gate.totp_enabled === true;
-  const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
+  const disabled = pending || action === "enable" && cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
   if (action === "enable") confirmLabel = "Authorize this device";
   if (pending) confirmLabel = "Saving...";
@@ -2791,6 +2806,14 @@ function CloudReviewSettings() {
   if (status) statusCopy = cloudReviewStatusCopy(status);
   if (loading) statusCopy = "Checking device authorization...";
   const deliveredAt = status?.last_synced_at && Number.isFinite(Date.parse(status.last_synced_at)) ? new Date(status.last_synced_at) : null;
+  const cloudRecoveryIncomplete = status?.cloud_review_recovery?.cloudReview === false && status.cloud_review_recovery_repair.status !== "completed";
+  const connectionRepairNeeded = cloudRecoveryIncomplete && status?.cloud_review_recovery_repair.status === "authentication_required";
+  let connectionLabel = status?.connected ? "Connected" : "Not connected";
+  if (cloudRecoveryIncomplete) connectionLabel = "Recovery incomplete";
+  if (connectionRepairNeeded) connectionLabel = "Device sign-in needed";
+  const localDataRecoveryIncomplete = status?.cloud_review_recovery?.localCli === false;
+  const nativeRecovery = status?.native_observation_recovery;
+  const nativeRecoveryIncomplete = nativeRecovery?.state === "recovery_required" || nativeRecovery?.state === "unavailable";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "cloud-review-heading", className: "border-t border-slate-200 pt-4", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
@@ -2821,7 +2844,7 @@ function CloudReviewSettings() {
     status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.connected ? "Connected" : "Not connected" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: connectionLabel })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),
@@ -2837,13 +2860,49 @@ function CloudReviewSettings() {
         }) }) : "Not recorded yet" })
       ] })
     ] }) : null,
+    nativeRecoveryIncomplete ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold", children: "Native outcome recovery needs attention" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1", children: [
+        "Recovery failures: ",
+        nativeRecovery?.retrying_count ?? 0,
+        ";",
+        " ",
+        "isolated observations: ",
+        nativeRecovery?.quarantined_count ?? 0,
+        ".",
+        " ",
+        "Local evidence is retained. Ordinary cloud uploads can continue; missing outcomes do not authorize an action."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onOpenDataAndRepair,
+          className: "mt-2 min-h-10 rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white",
+          children: "View Data & repair"
+        }
+      )
+    ] }) : null,
+    localDataRecoveryIncomplete ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold", children: "Local data recovery incomplete" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1", children: "Earlier local reviews could not be fully restored. Missing history does not authorize an action." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: onOpenDataAndRepair,
+          className: "mt-2 min-h-10 rounded-md border border-slate-300 px-3 py-2 font-semibold hover:bg-white",
+          children: "Open Data & repair"
+        }
+      )
+    ] }) : null,
     status?.connected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
-      !status.enabled || needsRecovery ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      (!status.enabled || needsRecovery) && !cloudRecoveryIncomplete ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
           disabled: loading || pending,
-          onClick: () => openConfirmation("enable"),
+          onClick: (event) => openConfirmation("enable", event.currentTarget),
           className: "min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50",
           children: status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"
         }
@@ -2853,89 +2912,90 @@ function CloudReviewSettings() {
         {
           type: "button",
           disabled: loading || pending,
-          onClick: () => openConfirmation("disable"),
+          onClick: (event) => openConfirmation("disable", event.currentTarget),
           className: "min-h-10 rounded-md border border-slate-200 px-3 py-2 text-sm font-semibold text-brand-dark hover:bg-slate-50 disabled:opacity-50",
           children: "Turn off Cloud Review"
         }
       ) : null
     ] }) : null,
-    status && !status.connected ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { className: "mt-3" }) : null,
-    action && status ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
+    status && !(cloudRecoveryIncomplete && localDataRecoveryIncomplete) && (!status.connected || connectionRepairNeeded) ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ConnectGuardCloudButton,
       {
-        className: "fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4",
+        className: "mt-3",
+        label: connectionRepairNeeded ? "Restore this device's Cloud connection" : "Connect Guard Cloud"
+      }
+    ) : null,
+    action && status ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "form",
+      {
+        ref: proofForm,
+        "aria-labelledby": "cloud-review-confirm-title",
+        noValidate: true,
+        tabIndex: -1,
         onKeyDown: (event) => {
           if (event.key === "Escape") close();
         },
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-          "form",
-          {
-            ref: dialog,
-            role: "dialog",
-            "aria-modal": "true",
-            "aria-labelledby": "cloud-review-confirm-title",
-            noValidate: true,
-            onSubmit: (event) => {
-              event.preventDefault();
-              void confirm();
-            },
-            className: "max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl",
-            children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "cloud-review-confirm-title", className: "text-base font-semibold text-brand-dark", children: action === "enable" ? "Authorize Cloud Review" : "Turn off Cloud Review?" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "button",
-                    onClick: close,
-                    disabled: pending,
-                    "aria-label": "Close Cloud Review dialog",
-                    className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-slate-100",
-                    children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true", className: "h-5 w-5" })
-                  }
-                )
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: action === "enable" ? "Allow signed cloud decisions for exact requests from this device for 30 days. Existing pending requests will be refreshed automatically. Local protection stays on." : "Cloud decisions will stop on this device. You can still review requests locally; Cloud sync stays connected." }),
-              action === "enable" && status.held_events > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: includeHeld, onChange: (event) => setIncludeHeld(event.target.checked), disabled: pending, className: "mt-1" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
-                  "Also send ",
-                  status.held_events.toLocaleString(),
-                  " previously unassigned events to the connected workspace.",
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-slate-600", children: "Requests tied to another account or workspace stay isolated." }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1 block break-all text-xs text-slate-600", children: [
-                    "Workspace: ",
-                    status.workspace_id ?? "Not connected"
-                  ] })
-                ] })
-              ] }) : null,
-              status.approval_gate.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                ApprovalProofFieldInputs,
-                {
-                  approvalGate: status.approval_gate,
-                  approvalPassword: password,
-                  approvalTotpCode: totp,
-                  requireFreshTotp,
-                  onApprovalPasswordChange: (event) => setPassword(event.target.value),
-                  onApprovalTotpCodeChange: (event) => setTotp(event.target.value)
-                }
-              ) }) : null,
-              error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: cloudReviewConfirmationError(error) }) : null,
-              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap justify-end gap-2", children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: close, disabled: pending, className: "min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark", children: "Cancel" }),
-                /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  "button",
-                  {
-                    type: "submit",
-                    disabled,
-                    className: "min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50",
-                    children: confirmLabel
-                  }
-                )
+        onSubmit: (event) => {
+          event.preventDefault();
+          void confirm();
+        },
+        className: "mt-4 rounded-md border border-slate-200 bg-slate-50 p-4",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h4", { id: "cloud-review-confirm-title", className: "text-base font-semibold text-brand-dark", children: action === "enable" ? "Authorize Cloud Review" : "Turn off Cloud Review?" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: close,
+                disabled: pending,
+                "aria-label": "Cancel Cloud Review confirmation",
+                className: "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md hover:bg-slate-100",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { "aria-hidden": "true", className: "h-5 w-5" })
+              }
+            )
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: action === "enable" ? "Allow signed cloud decisions for exact requests from this device for 30 days. Existing pending requests will be refreshed automatically. Local protection stays on." : "Cloud decisions will stop on this device. You can still review requests locally; Cloud sync stays connected." }),
+          action === "enable" && status.held_events > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("input", { type: "checkbox", checked: includeHeld, onChange: (event) => setIncludeHeld(event.target.checked), disabled: pending, className: "mt-1" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
+              "Also send ",
+              status.held_events.toLocaleString(),
+              " previously unassigned events to the connected workspace.",
+              /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs text-slate-600", children: "Requests tied to another account or workspace stay isolated." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-1 block break-all text-xs text-slate-600", children: [
+                "Workspace: ",
+                status.workspace_id ?? "Not connected"
               ] })
-            ]
-          }
-        )
+            ] })
+          ] }) : null,
+          action === "enable" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ApprovalProofFieldInputs,
+            {
+              approvalGate: status.approval_gate,
+              approvalPassword: password,
+              approvalTotpCode: totp,
+              requireFreshTotp,
+              requirePassword: true,
+              requireGate: true,
+              onApprovalPasswordChange: (event) => setPassword(event.target.value),
+              onApprovalTotpCodeChange: (event) => setTotp(event.target.value)
+            }
+          ) }) : null,
+          error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: cloudReviewConfirmationError(error) }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap justify-end gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: close, disabled: pending, className: "min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark", children: "Cancel" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "submit",
+                disabled,
+                className: "min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50",
+                children: confirmLabel
+              }
+            )
+          ] })
+        ]
       }
     ) : null
   ] });
@@ -4445,7 +4505,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   onChange: handleSyncToggle
                 }
               ),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(CloudReviewSettings, {}),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(CloudReviewSettings, { onOpenDataAndRepair: () => handleTabChange("maintenance") }),
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 SettingsSelectRow,
                 {

@@ -10,11 +10,13 @@ bridges, approval queueing, receipt persistence, and per-harness emission.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..native_hook_decision import NativeHookDecisionError
+from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
@@ -39,6 +41,10 @@ from .commands_hook_native_copilot import (
 from .commands_hook_native_eval import evaluate_native_artifact_hook
 from .commands_hook_native_finish import finalize_native_artifact_hook
 from .commands_hook_native_generic import run_native_generic_payload as _run_native_generic_payload
+from .commands_hook_native_post_tool import (
+    post_tool_secret_block_without_native_edge,
+    runtime_error_is_symlink_loop,
+)
 from .commands_hook_native_prepare import prepare_native_hook_state
 from .commands_hook_native_review import review_native_artifact_hook
 from .commands_hook_native_state import NativeArtifactHookState
@@ -64,6 +70,7 @@ from .commands_support_runtime_resolution import (
 )
 from .commands_support_workspace import _workspace_from_hook_payload
 
+_LOGGER = logging.getLogger(__name__)
 _NATIVE_EDGE_EVENTS = frozenset({"PreToolUse", "PostToolUse", "UserPromptSubmit"})
 
 
@@ -126,19 +133,79 @@ def run_native_hook_pipeline(
             _persist_claude_guard_question_decision(store, payload)
             return 0
 
-    edge = worker.review_native_edge_decision(
-        payload=payload,
-        harness=args.harness,
-        default_harness=args.harness,
-        home_dir=context.home_dir,
-        guard_home=context.guard_home,
-        workspace=runtime_workspace,
-    )
+    event_name = _hook_event_name(payload) or runtime_hook_event_name(payload)
+    try:
+        edge = worker.review_native_edge_decision(
+            payload=payload,
+            harness=args.harness,
+            default_harness=args.harness,
+            home_dir=context.home_dir,
+            guard_home=context.guard_home,
+            workspace=runtime_workspace,
+        )
+    except RuntimeError as exc:
+        # A symlink loop is a missing edge. Any other RuntimeError is a worker
+        # bug: credential-looking output still pauses, and clean output keeps
+        # the worker-exception fail-safe.
+        if event_name != "PostToolUse":
+            raise
+        if not runtime_error_is_symlink_loop(exc):
+            blocked = post_tool_secret_block_without_native_edge(
+                args,
+                action_envelope=action_envelope,
+                config=config,
+                context=context,
+                managed_install=managed_install,
+                output_stream=output_stream,
+                payload=payload,
+                runtime_workspace=runtime_workspace,
+                store=store,
+                recording_only=recording_only_from_acked_snapshot(store),
+                _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+                _claimed_trusted_request_override=_claimed_trusted_request_override,
+                _claimed_approval_request_id=_claimed_approval_request_id,
+                _claim_saved_approval=_claim_saved_approval,
+            )
+            if blocked is None:
+                raise
+            _LOGGER.warning(
+                "PostToolUse native edge raised %s before a decision; credential-looking output stays paused",
+                type(exc).__name__,
+            )
+            return blocked
+        _LOGGER.warning("PostToolUse native edge raised %s on a symlink loop", type(exc).__name__)
+        edge = {
+            "event_name": "PostToolUse",
+            "harness": args.harness,
+            "result": None,
+            "receipt": None,
+            "recording_only": recording_only_from_acked_snapshot(store),
+            "failure_reason_code": "native_post_tool_unavailable",
+        }
     edge_result = edge.get("result") if isinstance(edge, Mapping) else None
     edge_receipt = edge.get("receipt") if isinstance(edge, Mapping) else None
     edge_failure = edge.get("failure_reason_code") if isinstance(edge, Mapping) else None
-    event_name = _hook_event_name(payload) or runtime_hook_event_name(payload)
+    recording_only = bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False
     if event_name in _NATIVE_EDGE_EVENTS and edge_result is None:
+        if event_name == "PostToolUse":
+            blocked = post_tool_secret_block_without_native_edge(
+                args,
+                action_envelope=action_envelope,
+                config=config,
+                context=context,
+                managed_install=managed_install,
+                output_stream=output_stream,
+                payload=payload,
+                runtime_workspace=runtime_workspace,
+                store=store,
+                recording_only=recording_only,
+                _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+                _claimed_trusted_request_override=_claimed_trusted_request_override,
+                _claimed_approval_request_id=_claimed_approval_request_id,
+                _claim_saved_approval=_claim_saved_approval,
+            )
+            if blocked is not None:
+                return blocked
         return _emit_native_unavailable(
             args,
             payload=payload,
@@ -147,7 +214,7 @@ def run_native_hook_pipeline(
             event_name=event_name,
             reason_code=str(edge_failure or "native_hook_event_unavailable"),
             worker=worker,
-            recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
+            recording_only=recording_only,
         )
 
     def fresh_copilot_tool_call_authority():

@@ -72,3 +72,19 @@ def test_process_identity_stops_matching_after_the_process_exits() -> None:
         _ = child.wait(timeout=5)
 
     assert process_identity_matches(identity) is False
+
+
+def test_proven_codex_wait_keeps_only_the_live_process_identity() -> None:
+    from codex_plugin_scanner.guard.daemon.hook_native_review_wait import _proven_codex_wait_process
+    from codex_plugin_scanner.guard.live_process_identity import CODEX_BROWSER_WAIT_PROCESS_KEY
+
+    identity = current_process_identity()
+    assert identity is not None
+    proven = _proven_codex_wait_process({CODEX_BROWSER_WAIT_PROCESS_KEY: identity})
+    assert proven == {"pid": identity["pid"], "startToken": identity["startToken"]}
+    stale = {"pid": identity["pid"], "startToken": "reused-process"}
+    assert _proven_codex_wait_process({CODEX_BROWSER_WAIT_PROCESS_KEY: stale}) is None
+    extra = {**identity, "extra": True}
+    assert _proven_codex_wait_process({CODEX_BROWSER_WAIT_PROCESS_KEY: extra}) is None
+    assert _proven_codex_wait_process({}) is None
+    assert _proven_codex_wait_process({CODEX_BROWSER_WAIT_PROCESS_KEY: {"pid": True, "startToken": "x"}}) is None

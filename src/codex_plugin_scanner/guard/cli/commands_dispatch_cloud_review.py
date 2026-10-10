@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import sqlite3
 import sys
@@ -10,7 +11,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TextIO
 
+from ..approval_gate import public_config
 from ..daemon.client import GuardDaemonRequestError, load_guard_surface_daemon_client
+from ..native_cloud_review_consent import NativeCloudReviewConsentError, native_cloud_review_consent
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from ..runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY,
     ExactCloudReviewError,
@@ -19,11 +24,12 @@ from ..runtime.exact_cloud_review import (
     exact_cloud_review_status,
 )
 from ..runtime.native_workspace_review import (
-    NativeWorkspaceReviewError,
     apply_native_workspace_review_decision,
     canonical_workspace_review_decision_bytes,
 )
+from ..runtime.native_workspace_review_error import NativeWorkspaceReviewError
 from ._commands_shared import GuardConfig, GuardStore, HarnessContext
+from .approval_gate_prompt import consume_desktop_cloud_review_factors
 from .commands_support_interaction import _emit
 
 
@@ -51,6 +57,25 @@ def _requeue_pending_cloud_review_requests(store: GuardStore) -> int:
         raise PendingReviewRequeueError from error
 
 
+def _native_consent_factors(store: GuardStore) -> dict[str, str]:
+    """Collect fresh factors for native verification, never a cached SDK grant."""
+    desktop_factors = consume_desktop_cloud_review_factors()
+    try:
+        provision_native_verifier_key_for_store(store)
+        _ = native_cloud_review_consent(store.guard_home, "read")
+    except (NativeCloudReviewConsentError, NativePolicySnapshotError) as error:
+        raise ExactCloudReviewError(str(error)) from error
+    if desktop_factors:
+        return desktop_factors
+    if not sys.stdin.isatty():
+        return {}
+    gate = public_config(store.guard_home)
+    factors = {"password": getpass.getpass("Approval password for Cloud Review: ")}
+    if gate.totp_enabled:
+        factors["totp_code"] = getpass.getpass("Authenticator code: ")
+    return factors
+
+
 def apply_connect_time_cloud_review_consent(
     *,
     args: argparse.Namespace,
@@ -67,7 +92,13 @@ def apply_connect_time_cloud_review_consent(
         return {**payload, "cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
     previously_enabled = exact_cloud_review_status(store).get("enabled") is True
     try:
-        capability = enable_exact_cloud_review(store, issuer="connect-consent")
+        factors = _native_consent_factors(store)
+        capability = enable_exact_cloud_review(
+            store,
+            issuer="connect-consent",
+            password=factors.get("password"),
+            totp_code=factors.get("totp_code"),
+        )
         pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
     except PendingReviewRequeueError:
         return {
@@ -163,6 +194,7 @@ def _run_guard_cloud_review_command(
             capability = enable_exact_cloud_review(
                 store,
                 ttl_seconds=int(getattr(args, "expires_in_days", 30)) * 24 * 60 * 60,
+                **_native_consent_factors(store),
             )
             pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
             status = "enabled"

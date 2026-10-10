@@ -8,7 +8,10 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.runtime import native_workspace_review as native
-from tests.test_native_workspace_review import _request, _status, _Store
+from codex_plugin_scanner.guard.runtime import native_workspace_review_staging as staging
+from codex_plugin_scanner.guard.runtime import native_workspace_review_transport as transport
+from codex_plugin_scanner.guard.runtime.native_workspace_review_error import NativeWorkspaceReviewError
+from tests.native_workspace_review_test_support import _request, _status, _Store
 
 
 def _native_response_call(
@@ -16,9 +19,9 @@ def _native_response_call(
     monkeypatch: pytest.MonkeyPatch,
     encoded: bytes,
 ) -> dict[str, object]:
-    monkeypatch.setattr(native, "native_runtime_status", _status)
-    monkeypatch.setattr(native, "native_resident_client_request", lambda **_: encoded)
-    return native._native_response(
+    monkeypatch.setattr(transport, "native_runtime_status", _status)
+    monkeypatch.setattr(transport, "native_resident_client_request", lambda **_: encoded)
+    return transport._native_response(
         guard_home=tmp_path,
         request_id="request-1",
         decision={"decision": "allow"},
@@ -28,7 +31,7 @@ def _native_response_call(
 
 @pytest.mark.parametrize("value", [b"bytes", float("nan"), {"value": "\ud800"}])
 def test_decision_canonicalization_rejects_unrepresentable_values(value: object) -> None:
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
+    with pytest.raises(NativeWorkspaceReviewError) as error:
         native.canonical_workspace_review_decision_bytes(value)
     assert error.value.code == "native_workspace_review_decision_invalid"
 
@@ -36,26 +39,26 @@ def test_decision_canonicalization_rejects_unrepresentable_values(value: object)
 def test_request_state_rejects_malformed_json_and_non_pending_rows(tmp_path: Path) -> None:
     malformed = _request()
     malformed["action_envelope_json"] = "{"  # exercise the persisted JSON boundary
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(malformed), tmp_path, "request-1")
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(malformed), tmp_path, "request-1")
     assert error.value.code == "native_workspace_review_request_invalid"
 
     resolved = _request()
     resolved["status"] = "resolved"
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(resolved), tmp_path, "request-1")
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(resolved), tmp_path, "request-1")
     assert error.value.code == "native_workspace_review_request_not_pending"
 
 
 def test_staging_rejects_missing_and_oversized_state(tmp_path: Path) -> None:
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(_request()), tmp_path, "missing")
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(_request()), tmp_path, "missing")
     assert error.value.code == "native_workspace_review_request_missing"
 
     oversized = _request()
-    oversized["raw_command_text"] = "x" * (native._MAX_REQUEST_STATE_BYTES + 1)
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(oversized), tmp_path / "oversized", "request-1")
+    oversized["raw_command_text"] = "x" * (staging._MAX_REQUEST_STATE_BYTES + 1)
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(oversized), tmp_path / "oversized", "request-1")
     assert error.value.code == "native_workspace_review_request_invalid"
 
 
@@ -66,8 +69,8 @@ def test_staging_rejects_symlinked_state(tmp_path: Path) -> None:
     target = tmp_path / "target.json"
     target.write_text("{}", encoding="utf-8")
     (request_directory / "request-1.json").symlink_to(target)
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(_request()), tmp_path / "symlink", "request-1")
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(_request()), tmp_path / "symlink", "request-1")
     assert error.value.code == "native_workspace_review_request_invalid"
 
 
@@ -78,9 +81,9 @@ def test_staging_maps_directory_and_atomic_write_failures_to_unavailable(
     def fail_mkdir(*_args: object, **_kwargs: object) -> None:
         raise OSError("directory unavailable")
 
-    monkeypatch.setattr(native.Path, "mkdir", fail_mkdir)
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(_request()), tmp_path / "mkdir", "request-1")
+    monkeypatch.setattr(staging.Path, "mkdir", fail_mkdir)
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(_request()), tmp_path / "mkdir", "request-1")
     assert error.value.code == "native_workspace_review_request_unavailable"
 
     monkeypatch.undo()
@@ -88,9 +91,9 @@ def test_staging_maps_directory_and_atomic_write_failures_to_unavailable(
     def fail_replace(*_args: object, **_kwargs: object) -> None:
         raise OSError("replace unavailable")
 
-    monkeypatch.setattr(native.os, "replace", fail_replace)
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(_request()), tmp_path / "replace", "request-1")
+    monkeypatch.setattr(staging.os, "replace", fail_replace)
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(_request()), tmp_path / "replace", "request-1")
     assert error.value.code == "native_workspace_review_request_unavailable"
 
 
@@ -98,14 +101,14 @@ def test_windows_directory_security_failure_is_unavailable(tmp_path: Path, monke
     def fail_ensure(_path: Path) -> None:
         raise OSError("ACL unavailable")
 
-    monkeypatch.setattr(native.os, "name", "nt")
+    monkeypatch.setattr(staging.os, "name", "nt")
     monkeypatch.setattr(
-        native,
+        staging,
         "_native_policy_snapshot",
         SimpleNamespace(_windows_ensure_private_directory=fail_ensure),
     )
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
-        native.stage_workspace_review_request(_Store(_request()), tmp_path, "request-1")
+    with pytest.raises(NativeWorkspaceReviewError) as error:
+        staging.stage_workspace_review_request(_Store(_request()), tmp_path, "request-1")
     assert error.value.code == "native_workspace_review_request_unavailable"
 
 
@@ -114,12 +117,12 @@ def test_native_response_rejects_unavailable_unsupported_and_oversized_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        native,
+        transport,
         "native_runtime_status",
         lambda: SimpleNamespace(available=False, compatible=False, identity=None, capabilities=None),
     )
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_unavailable"):
-        native._native_response(
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_unavailable"):
+        transport._native_response(
             guard_home=tmp_path,
             request_id="request-1",
             decision={},
@@ -127,7 +130,7 @@ def test_native_response_rejects_unavailable_unsupported_and_oversized_calls(
         )
 
     monkeypatch.setattr(
-        native,
+        transport,
         "native_runtime_status",
         lambda: SimpleNamespace(
             available=True,
@@ -136,20 +139,20 @@ def test_native_response_rejects_unavailable_unsupported_and_oversized_calls(
             capabilities=SimpleNamespace(features=("resident-protocol-v2",)),
         ),
     )
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_unsupported"):
-        native._native_response(
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_unsupported"):
+        transport._native_response(
             guard_home=tmp_path,
             request_id="request-1",
             decision={},
             request_snapshot_digest="snapshot",
         )
 
-    monkeypatch.setattr(native, "native_runtime_status", _status)
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_decision_invalid"):
-        native._native_response(
+    monkeypatch.setattr(transport, "native_runtime_status", _status)
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_decision_invalid"):
+        transport._native_response(
             guard_home=tmp_path,
             request_id="request-1",
-            decision={"value": "x" * native._MAX_DECISION_BYTES},
+            decision={"value": "x" * transport._MAX_DECISION_BYTES},
             request_snapshot_digest="snapshot",
         )
 
@@ -187,7 +190,7 @@ def test_native_response_rejects_bad_receipts(
     expected: str,
 ) -> None:
     encoded = json.dumps(response).encode("utf-8")
-    with pytest.raises(native.NativeWorkspaceReviewError) as error:
+    with pytest.raises(NativeWorkspaceReviewError) as error:
         _native_response_call(tmp_path, monkeypatch, encoded)
     assert error.value.code == expected
 
@@ -198,16 +201,16 @@ def test_native_response_rejects_non_json_objects(
     monkeypatch: pytest.MonkeyPatch,
     encoded: bytes,
 ) -> None:
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_response_invalid"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_response_invalid"):
         _native_response_call(tmp_path, monkeypatch, encoded)
 
 
 def test_native_response_reports_transport_failure(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(native, "native_runtime_status", _status)
-    monkeypatch.setattr(native, "native_resident_client_request", lambda **_: None)
-    monkeypatch.setattr(native, "native_resident_client_failure_code", lambda: "resident_timeout")
-    with pytest.raises(native.NativeWorkspaceReviewError, match="resident_timeout"):
-        native._native_response(
+    monkeypatch.setattr(transport, "native_runtime_status", _status)
+    monkeypatch.setattr(transport, "native_resident_client_request", lambda **_: None)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "resident_timeout")
+    with pytest.raises(NativeWorkspaceReviewError, match="resident_timeout"):
+        transport._native_response(
             guard_home=tmp_path,
             request_id="request-1",
             decision={},
@@ -221,19 +224,19 @@ def test_apply_handles_resolved_invalid_and_failed_local_transactions(
 ) -> None:
     resolved = _request()
     resolved["status"] = "resolved"
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_decision_invalid"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_decision_invalid"):
         native.apply_native_workspace_review_decision(_Store(resolved), tmp_path, "request-1", object())
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_request_resolved"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_request_resolved"):
         native.apply_native_workspace_review_decision(_Store(resolved), tmp_path, "request-1", {})
 
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_decision_invalid"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_decision_invalid"):
         native.apply_native_workspace_review_decision(_Store(_request()), tmp_path / "nonmapping", "request-1", [])
 
     invalid_response_home = tmp_path / "invalid-response"
     invalid_response_home.mkdir()
     store = _Store(_request())
     monkeypatch.setattr(native, "_native_response", lambda **_: {"decision": None})
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_response_invalid"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_response_invalid"):
         native.apply_native_workspace_review_decision(store, invalid_response_home, "request-1", {})
 
     failed_transaction_home = tmp_path / "failed-transaction"
@@ -249,5 +252,5 @@ def test_apply_handles_resolved_invalid_and_failed_local_transactions(
         "resolve_native_workspace_review_request",
         lambda *_args, **_kwargs: {"resolved": False, "error": "transaction_conflict"},
     )
-    with pytest.raises(native.NativeWorkspaceReviewError, match="transaction_conflict"):
+    with pytest.raises(NativeWorkspaceReviewError, match="transaction_conflict"):
         native.apply_native_workspace_review_decision(store, failed_transaction_home, "request-1", {})

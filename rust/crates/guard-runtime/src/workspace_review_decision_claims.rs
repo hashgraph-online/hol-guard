@@ -82,3 +82,61 @@ pub(super) fn consume_or_replay_claim(
     }
     Ok(false)
 }
+
+pub(super) fn query_consumed_claim(
+    state_base: &Path,
+    state: &super::super::workspace_review_secure_state::WorkspaceReviewSecureStateV1,
+    verified: &VerifiedWorkspaceReviewDecision,
+    semantic_digest: &str,
+) -> Result<bool, String> {
+    let indexed = if let Some(index) = state.claim_index.as_ref() {
+        let claim = super::super::workspace_review_claim_index::find_claim(
+            state_base,
+            index,
+            &verified.claim_id,
+        )?;
+        let semantic = super::super::workspace_review_claim_index::find_semantic(
+            state_base,
+            index,
+            semantic_digest,
+        )?;
+        match (claim, semantic) {
+            (Some(claim), Some(semantic))
+                if claim == semantic
+                    && claim.semantic_decision_digest.as_deref() == Some(semantic_digest)
+                    && (!claim.legacy_semantic_recovered
+                        || claim.envelope_digest == verified.envelope_digest) =>
+            {
+                Some(claim)
+            }
+            (None, None) => None,
+            (Some(claim), None)
+                if claim.semantic_decision_digest.as_deref() == Some(semantic_digest) =>
+            {
+                return Err("native_workspace_review_claim_index_invalid".to_owned());
+            }
+            _ => return Err("native_workspace_review_decision_replay".to_owned()),
+        }
+    } else {
+        None
+    };
+    let mut legacy_match = false;
+    for claim in &state.consumed_claims {
+        if claim.claim_id == verified.claim_id {
+            let semantic_match = claim.semantic_decision_digest.as_deref() == Some(semantic_digest);
+            let exact_match = claim.envelope_digest == verified.envelope_digest;
+            if !(semantic_match && (!claim.legacy_semantic_recovered || exact_match)
+                || claim.semantic_decision_digest.is_none() && exact_match)
+            {
+                return Err("native_workspace_review_decision_replay".to_owned());
+            }
+            if indexed.as_ref().is_some_and(|indexed| indexed != claim) {
+                return Err("native_workspace_review_claim_index_invalid".to_owned());
+            }
+            legacy_match = true;
+        } else if claim.semantic_decision_digest.as_deref() == Some(semantic_digest) {
+            return Err("native_workspace_review_decision_replay".to_owned());
+        }
+    }
+    Ok(indexed.is_some() || legacy_match)
+}

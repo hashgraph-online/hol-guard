@@ -9,7 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateError, update_settings
+from codex_plugin_scanner.guard.approval_gate import (
+    ApprovalGateInput,
+    require_high_risk,
+    update_settings,
+)
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     CloudReviewSettingsError,
@@ -17,7 +21,11 @@ from codex_plugin_scanner.guard.daemon.cloud_review_settings import (
     cloud_review_settings_status,
 )
 from codex_plugin_scanner.guard.review_contracts import build_local_review_request_claim
-from codex_plugin_scanner.guard.runtime.exact_cloud_review import _oauth_metadata
+from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
+    EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY,
+    _oauth_metadata,
+)
+from codex_plugin_scanner.guard.sqlite_cloud_review_recovery import persist_cloud_review_recovery_health
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_exact_cloud_review_support import add_review_request, connected_exact_review_store, review_request
 
@@ -28,6 +36,7 @@ def _payload(**changes: object) -> dict[str, object]:
         "confirm": "cloud-review.enable",
         "workspace_id": "workspace-1",
         "source": "default",
+        "approval_password": "cloud-review-native-test-pass",
         **changes,
     }
 
@@ -41,7 +50,7 @@ def test_dashboard_reports_real_consent_not_cloud_connection(tmp_path: Path) -> 
     initial = cloud_review_settings_status(store)
     assert initial["connected"] is True
     assert initial["enabled"] is False
-    assert initial["reason"] == "cloud_review_capability_missing"
+    assert initial["reason"] == "native_cloud_review_consent_disabled"
     assert not any(secret in repr(initial) for secret in ("refresh-token", "dpop_private_key", "access_token"))
     changed = change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
     assert changed["enabled"] is True
@@ -52,6 +61,40 @@ def test_dashboard_reports_real_consent_not_cloud_connection(tmp_path: Path) -> 
     )
     assert disabled["enabled"] is False
     assert disabled["connected"] is True
+
+
+@pytest.mark.parametrize("stored_state", ["confirmed", {"unexpected": "secret-state"}])
+def test_native_outcome_health_keeps_quarantine_visible_without_private_evidence(
+    tmp_path: Path, stored_state: object
+) -> None:
+    store = GuardStore(tmp_path)
+    store.set_sync_payload(
+        "guard_native_cloud_review_observation_recovery",
+        {"state": stored_state, "failureCount": 1000, "reason": "private-transport-detail"},
+        "2026-10-08T00:00:00Z",
+    )
+    store.set_sync_payload(
+        "guard_native_cloud_review_observation_recovery:quarantine",
+        {
+            "entries": {
+                "private-request-id": {
+                    "state": "quarantined",
+                    "reason": "private-reason",
+                    "observation": {"receipt": "private-receipt"},
+                }
+            }
+        },
+        "2026-10-08T00:00:00Z",
+    )
+
+    result = cloud_review_settings_status(store)
+
+    assert result["native_observation_recovery"] == {
+        "state": "recovery_required",
+        "retrying_count": 8,
+        "quarantined_count": 1,
+    }
+    assert "private-" not in json.dumps(result)
 
 
 def test_status_counts_only_current_binding_and_uses_source_sync_state(tmp_path: Path) -> None:
@@ -95,9 +138,19 @@ def test_reauthorization_refreshes_existing_pending_request(tmp_path: Path) -> N
 
 def test_inline_recovery_requires_mfa_and_explicit_workspace_confirmation(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
-    update_settings(store.guard_home, {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"})
-    with pytest.raises(ApprovalGateError):
-        change_cloud_review_settings(store, _payload(), refresh_workers=_refresh)
+    settings_grant = require_high_risk(
+        store.guard_home,
+        purpose="settings_write",
+        approval_gate_input=ApprovalGateInput(password="cloud-review-native-test-pass"),
+        action="settings.write",
+        scope="local-protection",
+        subject="dashboard password rotation",
+    )
+    update_settings(
+        store.guard_home,
+        {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"},
+        approval_gate_grant=settings_grant,
+    )
     assert cloud_review_settings_status(store)["enabled"] is False
     with pytest.raises(CloudReviewSettingsError, match="workspace changed"):
         change_cloud_review_settings(
@@ -196,7 +249,19 @@ def test_quick_recovery_checks_the_request_history_identity(tmp_path: Path) -> N
 
 def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
-    update_settings(store.guard_home, {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"})
+    settings_grant = require_high_risk(
+        store.guard_home,
+        purpose="settings_write",
+        approval_gate_input=ApprovalGateInput(password="cloud-review-native-test-pass"),
+        action="settings.write",
+        scope="local-protection",
+        subject="dashboard password rotation",
+    )
+    update_settings(
+        store.guard_home,
+        {"enabled": True, "new_password": "test-pass", "confirm_password": "test-pass"},
+        approval_gate_grant=settings_grant,
+    )
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -217,10 +282,55 @@ def test_dashboard_route_requires_local_origin_session_and_gate(tmp_path: Path) 
             send({**headers, "Origin": "https://hol.org"}, _payload())
         assert remote_origin.value.code == 403
         with pytest.raises(urllib.error.HTTPError) as missing_proof:
-            send(headers, _payload())
+            send(headers, {k: v for k, v in _payload().items() if k != "approval_password"})
         assert missing_proof.value.code == 403
         assert send(headers)["enabled"] is False
         assert send(headers, _payload(approval_password="test-pass"))["enabled"] is True
         assert send(headers)["enabled"] is True
+    finally:
+        daemon.stop()
+
+
+@pytest.mark.parametrize(
+    ("cloud_review", "local_cli", "reason", "repair_state"),
+    [
+        (False, True, "cloud_review_salvage_failed", "authentication_required"),
+        (False, False, "recovery_incomplete", "recovery_incomplete"),
+        (True, False, "cloud_review_restored", "not_required"),
+    ],
+)
+def test_reopened_dashboard_preserves_independent_recovery_without_consent(
+    tmp_path: Path,
+    cloud_review: bool,
+    local_cli: bool,
+    reason: str,
+    repair_state: str,
+) -> None:
+    store = GuardStore(tmp_path / ".hol-guard")
+    add_review_request(store, review_request("pending-after-recovery"))
+    before = store.get_approval_request("pending-after-recovery")
+    persist_cloud_review_recovery_health(
+        store,
+        cloud_review=cloud_review,
+        local_cli=local_cli,
+        now="2026-10-07T14:00:00Z",
+    )
+    reopened = GuardStore(store.guard_home)
+    daemon = GuardDaemonServer(reopened, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{daemon.port}/v1/cloud-review",
+            headers={"X-Guard-Token": daemon._server.auth_token},
+        )
+        with urllib.request.urlopen(request, timeout=10) as response:
+            status = json.load(response)
+        assert status["cloud_review_recovery"]["cloudReview"] is cloud_review
+        assert status["cloud_review_recovery"]["localCli"] is local_cli
+        assert status["cloud_review_recovery"]["reason"] == reason
+        assert status["cloud_review_recovery_repair"]["status"] == repair_state
+        assert status["enabled"] is False
+        assert reopened.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY) is None
+        assert reopened.get_approval_request("pending-after-recovery") == before
     finally:
         daemon.stop()

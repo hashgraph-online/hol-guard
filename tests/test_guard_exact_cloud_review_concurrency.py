@@ -99,7 +99,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     store = _connected_store(tmp_path)
     oauth_missing = _request("exact-oauth-missing")
     _add_request(store, oauth_missing)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     oauth = store.get_sync_payload("oauth_local_credentials")
     assert isinstance(oauth, dict)
     verified = exact_apply_module._verified_capability
@@ -120,7 +120,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     monkeypatch.setattr(exact_apply_module, "_verified_capability", verified)
     malformed = _request("exact-bad-revocation")
     _add_request(store, malformed)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     malformed_approval = _remote_approval(store, malformed.request_id, receipt_id="exact-bad-revocation")
     store.set_sync_payload(
         "guard_exact_cloud_review_revocation",
@@ -138,7 +138,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     original_resolve: Callable[..., dict[str, object]] = store.resolve_one_request_with_signed_remote_exact_result
     rotating = _request("exact-oauth-rotation")
     _add_request(store, rotating)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     rotation_oauth_state = store.get_sync_payload("oauth_local_credentials")
     assert isinstance(rotation_oauth_state, dict)
 
@@ -205,7 +205,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
         nonlocal raced_enable
         if event_name == "cloud_review.exact_capability_revoked" and not raced_enable:
             raced_enable = True
-            enable_exact_cloud_review(store)
+            enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
         return original_replace(
             capability=capability,
             revocation=revocation,
@@ -241,7 +241,7 @@ def test_exact_cloud_review_fails_closed_on_bad_revocation_and_concurrent_disabl
     race_row = store.get_approval_request(race.request_id)
     assert race_row is not None and race_row["status"] == "pending"
 
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     changed = _request("exact-request-cas")
     _add_request(store, changed)
 

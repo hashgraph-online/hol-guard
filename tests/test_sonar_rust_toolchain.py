@@ -17,6 +17,59 @@ PREPARE_SCRIPT = ROOT / "scripts/ci/prepare_sonar_analysis.sh"
 SETUP_SCRIPT = ROOT / "scripts/ci/setup_sonar_rust.sh"
 
 
+def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
+    """Verify sonar preparation precedes analysis and fails closed."""
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
+    job = workflow["jobs"]["sonar"]
+    steps = job["steps"]
+    download_index = next(i for i, step in enumerate(steps) if step.get("name") == "Download pytest coverage data")
+    wait_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Wait for successful pytest coverage producers"
+    )
+    setup_index = next(i for i, step in enumerate(steps) if step.get("name") == "Prepare Python coverage")
+    clippy_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Check Rust workspace with pinned Clippy"
+    )
+    scan_index = next(i for i, step in enumerate(steps) if step.get("name") == "Analyze with SonarQube Cloud")
+    setup = steps[setup_index]
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    install = 'rustup toolchain install "$toolchain" --profile minimal --component clippy'
+    default = 'rustup default "$toolchain"'
+    clippy = "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
+
+    producer_minutes = (
+        workflow["jobs"]["coverage-plan"]["timeout-minutes"] + workflow["jobs"]["coverage"]["timeout-minutes"]
+    )
+    assert job["timeout-minutes"] == producer_minutes + 15
+    assert "needs" not in job
+    assert steps[0]["id"] == "token-presence"
+    assert job["permissions"] == {"contents": "read", "actions": "read"}
+    assert wait_index < download_index < setup_index < scan_index
+    assert "select_pytest_coverage.py" in steps[wait_index]["run"]
+    assert "SONAR_TOKEN" not in steps[wait_index].get("env", {})
+    assert setup["run"] == "bash scripts/ci/prepare_sonar_analysis.sh"
+    assert '"rust/rust-toolchain.toml"' in script
+    assert script.index(install) < script.index(default)
+    assert steps[clippy_index]["run"] == clippy
+    assert steps[clippy_index]["shell"] == "bash"
+    assert not steps[clippy_index].get("continue-on-error", False)
+    assert steps[clippy_index]["if"] == "steps.token-presence.outputs.has-token == 'true'"
+    assert steps[clippy_index].get("env", {}) == {}
+    assert "SONAR_TOKEN" not in job.get("env", {})
+    assert "SONAR_TOKEN" not in workflow.get("env", {})
+    toolchain_index = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Initialize pinned Rust analysis toolchain"
+    )
+    cache_index = next(i for i, step in enumerate(steps) if step.get("name") == "Cache Rust analysis dependencies")
+    assert steps[toolchain_index]["run"] == "bash scripts/ci/setup_sonar_rust.sh"
+    assert toolchain_index < cache_index < clippy_index < wait_index
+    assert "set -euo pipefail" in script
+    assert setup["shell"] == "bash"
+    assert not job.get("continue-on-error", False)
+    assert not setup.get("continue-on-error", False)
+    assert "SONAR_TOKEN" not in setup.get("env", {})
+
+
 def _run_preparation(
     tmp_path: Path, shard_count: int, fail_command: str = "", script: Path = PREPARE_SCRIPT, invalid_inventory: str = ""
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:

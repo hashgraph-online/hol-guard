@@ -174,6 +174,49 @@ pub(crate) fn receipt_from_pre_tool(
     )
 }
 
+pub(crate) fn authorize_consumed_receipt(
+    receipt: &mut NativeHookDecisionReceiptV1,
+    consumed: &guard_contracts::ApprovalResultV4,
+) -> Result<(), String> {
+    let approval = &consumed.receipt;
+    if approval.phase != "consumed"
+        || approval.decision != "allow"
+        || approval.request_id != receipt.request_id
+        || approval.request_digest != receipt.request_digest
+        || approval.policy_generation != receipt.policy_generation
+        || Some(approval.policy_digest.as_str()) != receipt.policy_digest.as_deref()
+        || Some(approval.runtime_identity.as_str()) != receipt.runtime_identity.as_deref()
+        || receipt.observe_mode
+    {
+        return Err("native_cloud_review_v4_positive_binding_invalid".into());
+    }
+    receipt.decision = "allow".into();
+    receipt.policy_action = Some("allow".into());
+    receipt.reason_code = "native_approval_v4_consumed".into();
+    receipt.origin_authentication = None;
+    let mut identity = serde_json::to_value(&*receipt)
+        .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
+    let fields = identity
+        .as_object_mut()
+        .ok_or_else(|| "native_hook_decision_receipt_digest_failed".to_owned())?;
+    for key in [
+        "authority",
+        "decision_id",
+        "origin_authentication",
+        "execution_intent_digest",
+    ] {
+        fields.remove(key);
+    }
+    fields.insert(
+        "schema".into(),
+        Value::String("guard-native-hook-decision-identity.v1".into()),
+    );
+    let canonical = guard_policy_snapshot::canonical_json_bytes(&identity)
+        .map_err(|_| "native_hook_decision_receipt_digest_failed".to_owned())?;
+    receipt.decision_id = hex::encode(Sha256::digest(&canonical));
+    Ok(())
+}
+
 pub(crate) fn receipt_from_post_tool(
     envelope: &GuardHookEnvelopeV2,
     snapshot: Option<&PolicySnapshotV3>,

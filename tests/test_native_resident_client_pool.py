@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import os
 import struct
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -13,10 +14,8 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_client as client_module
-from codex_plugin_scanner.guard.native_resident_client import (
-    _PersistentNativeClient,
-    _PersistentNativeClientPool,
-)
+from codex_plugin_scanner.guard.native_resident_client import _PersistentNativeClient
+from codex_plugin_scanner.guard.native_resident_pool import _PersistentNativeClientPool
 
 
 def _pool(tmp_path: Path) -> _PersistentNativeClientPool:
@@ -573,3 +572,30 @@ def test_pool_reports_readiness_only_for_live_idle_clients(tmp_path: Path) -> No
     pool._idle[:] = [alive]
     pool._closed = True
     assert pool.has_idle_client() is False
+
+
+@pytest.mark.parametrize("delivered", [False, True])
+def test_failed_stream_distinguishes_unsent_request_from_lost_response(tmp_path: Path, delivered: bool) -> None:
+    runtime = tmp_path / "transport-fixture"
+    received = tmp_path / "received.bin"
+    if delivered:
+        runtime.write_text(
+            f"#!{sys.executable}\n"
+            "import struct, sys\n"
+            "from pathlib import Path\n"
+            "size = struct.unpack('>I', sys.stdin.buffer.read(4))[0]\n"
+            f"Path({str(received)!r}).write_bytes(sys.stdin.buffer.read(size))\n"
+            # Exit without returning a response after receiving the request.
+        )
+        runtime.chmod(0o700)
+    client = _PersistentNativeClient(executable=runtime, state_dir=tmp_path / "native-runtime", environment={})
+    try:
+        assert client.request(b'{"operation":"decision"}', deadline_monotonic=time.monotonic() + 5) is None
+        if delivered:
+            assert received.read_bytes() == b'{"operation":"decision"}'
+            assert client_module.native_resident_client_failure_context() == ("read", "unknown")
+        else:
+            assert not received.exists()
+            assert client_module.native_resident_client_failure_context() == ("connect", "pre_commit")
+    finally:
+        assert client.close(deadline_monotonic=time.monotonic() + 5)

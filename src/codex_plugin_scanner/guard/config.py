@@ -474,10 +474,20 @@ class GuardConfig:
 
 
 def resolve_guard_home(override: str | None = None) -> Path:
-    """Resolve the Guard home directory."""
+    """Resolve the Guard home directory.
+
+    An explicit override wins. Otherwise ``HOL_GUARD_HOME`` selects the same
+    directory Desktop uses, so the CLI and Desktop do not split state. With
+    neither set, the canonical home under the user directory is used.
+    """
 
     if override:
         return Path(override).expanduser().resolve()
+    import os
+
+    configured = os.environ.get("HOL_GUARD_HOME", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
     return resolve_guard_home_for_user_home(Path.home())
 
 

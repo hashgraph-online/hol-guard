@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import sys
 import threading
 import time
@@ -564,3 +565,181 @@ def test_apply_grok_pretool_wait_rewrites_hook_specific_output(
     blocked_hook = blocked["hookSpecificOutput"]
     assert isinstance(blocked_hook, dict)
     assert blocked_hook["permissionDecision"] == "deny"
+
+
+def test_grok_hook_response_is_one_json_line(capsys: pytest.CaptureFixture[str]) -> None:
+    from codex_plugin_scanner.guard.cli.commands_support_interaction import _emit_hook_response
+
+    _emit_hook_response(
+        argparse.Namespace(harness="grok"),
+        {"decision": "deny", "reason": "needs review", "policy_action": "block"},
+    )
+    lines = [line for line in capsys.readouterr().out.splitlines() if line.strip()]
+    assert len(lines) == 1
+    assert json.loads(lines[0])["decision"] == "deny"
+
+
+def test_grok_hook_response_redacts_cleartext_secrets(capsys: pytest.CaptureFixture[str]) -> None:
+    from codex_plugin_scanner.guard.adapters.grok_hooks import emit_grok_hook_response
+
+    marker = "sk-" + "testtoken12345678"
+    emit_grok_hook_response(
+        policy_action="block",
+        reason=f"blocked {marker}",
+        event_name="PreToolUse",
+        approval_payload={"primary_approval_url": "https://example.test/approve?token=" + marker},
+    )
+    stdout = capsys.readouterr().out
+    assert marker not in stdout
+    payload = json.loads(stdout)
+    assert payload["decision"] == "deny"
+    assert payload["approval_url"].endswith("sk-*****")
+
+
+def test_grok_hook_write_errors_do_not_replace_the_decision() -> None:
+    from codex_plugin_scanner.guard.adapters import grok_hooks
+
+    class _Broken(io.StringIO):
+        def write(self, text: str) -> int:
+            del text
+            raise BrokenPipeError("closed")
+
+        def flush(self) -> None:
+            raise BrokenPipeError("closed")
+
+    grok_hooks.emit_grok_hook_response(policy_action="block", reason="kept", output_stream=_Broken())
+    grok_hooks._grok_hook_stdout_line.set('{"decision":"deny"}\n')
+    previous = sys.stdout
+    sys.stdout = _Broken()
+    try:
+        grok_hooks.replay_grok_hook_stdout_line()
+    finally:
+        sys.stdout = previous
+        grok_hooks.clear_grok_hook_stdout_line()
+
+
+def test_non_grok_hook_json_stays_pretty(capsys: pytest.CaptureFixture[str]) -> None:
+    from codex_plugin_scanner.guard.cli.commands_support_interaction import _emit_hook_response
+
+    _emit_hook_response(
+        argparse.Namespace(harness="claude-code"),
+        {"decision": "deny", "reason": "needs review"},
+    )
+    captured = capsys.readouterr().out
+    lines = [line for line in captured.splitlines() if line.strip()]
+    assert lines[-1] == "}"
+    assert json.loads(captured)["decision"] == "deny"
+
+
+def test_grok_quiet_publisher_close_leaves_one_decision_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.adapters.grok_hooks import emit_grok_hook_response
+    from codex_plugin_scanner.guard.cli.commands_hook_native_authority import try_native_hook_authority
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+
+    class _Writer:
+        def __init__(self, *, store: GuardStore) -> None:
+            del store
+
+        def stop(self, *, timeout_seconds: float) -> bool:
+            del timeout_seconds
+            return True
+
+    class _Worker:
+        def __init__(self, *, store: GuardStore, activity_writer: object, **_kwargs: object) -> None:
+            del store, activity_writer, _kwargs
+
+        def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.RuntimeHookEvidenceWriter",
+        _Writer,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.HookWorker",
+        _Worker,
+    )
+
+    def pipeline(_worker: HookWorker) -> int:
+        emit_grok_hook_response(policy_action="allow", reason="", event_name="PreToolUse")
+        return 0
+
+    result = try_native_hook_authority(
+        payload={"hook_event_name": "PreToolUse"},
+        harness="grok",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        store=GuardStore(tmp_path / "guard-home"),
+        pipeline=pipeline,
+    )
+    assert result == 0
+    stdout = capfd.readouterr().out
+    lines = [line for line in stdout.splitlines() if line.strip()]
+    assert len(lines) == 1
+    assert json.loads(stdout)["decision"] == "allow"
+
+
+def test_grok_decision_line_survives_publisher_close_stdout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    from codex_plugin_scanner.guard.adapters.grok_hooks import emit_grok_hook_response
+    from codex_plugin_scanner.guard.cli.commands_hook_native_authority import try_native_hook_authority
+    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
+
+    class _Writer:
+        def __init__(self, *, store: GuardStore) -> None:
+            del store
+
+        def stop(self, *, timeout_seconds: float) -> bool:
+            del timeout_seconds
+            return True
+
+    class _Worker:
+        def __init__(self, *, store: GuardStore, activity_writer: object, **_kwargs: object) -> None:
+            del store, activity_writer, _kwargs
+
+        def close(self) -> None:
+            os.write(1, b"}\n")
+            sys.stdout.write("}\n")
+            raise RuntimeError("publisher close failed")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority._native_mode_requires_rust",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.RuntimeHookEvidenceWriter",
+        _Writer,
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.HookWorker",
+        _Worker,
+    )
+
+    def pipeline(_worker: HookWorker) -> int:
+        emit_grok_hook_response(policy_action="allow", reason="", event_name="PreToolUse")
+        return 0
+
+    result = try_native_hook_authority(
+        payload={"hook_event_name": "PreToolUse"},
+        harness="grok",
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=tmp_path / "workspace",
+        store=GuardStore(tmp_path / "guard-home"),
+        pipeline=pipeline,
+    )
+    assert result == 0
+    stdout_line = next(line for line in reversed(capfd.readouterr().out.splitlines()) if line.strip())
+    assert json.loads(stdout_line)["decision"] == "allow"

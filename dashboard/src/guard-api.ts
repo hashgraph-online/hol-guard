@@ -2281,8 +2281,21 @@ export type CloudReviewSettingsStatus = {
   isolated_events: number;
   last_synced_at: string | null;
   delivery_state: string;
+  native_observation_recovery: {
+    state: "not_observed" | "confirmed" | "recovery_required" | "unavailable";
+    retrying_count: number;
+    quarantined_count: number;
+  };
   approval_gate: import("./guard-types").GuardApprovalGatePublicConfig;
   activation_error?: string | null;
+  cloud_review_recovery: {
+    cloudReview: boolean;
+    localCli: boolean;
+    reason: string;
+    repair: string;
+    summary: string;
+  } | null;
+  cloud_review_recovery_repair: { status: string; reason: string | null };
 };
 
 export async function fetchCloudReviewSettings(): Promise<CloudReviewSettingsStatus> {

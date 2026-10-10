@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import io
+import os
+import sys
+import tempfile
 from collections.abc import Callable
-from contextlib import suppress
+from contextlib import redirect_stdout, suppress
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -21,9 +25,60 @@ from ..native_mode import (
 from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
 from ..store import GuardStore
 from .commands_hook_native_availability import _native_unavailable_exit_code
-from .commands_support_interaction import _emit
+from .commands_support_interaction import _emit_hook_response
 
 _NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS = 0.25
+
+
+def _close_hook_publishers_quietly(
+    worker: HookWorker | None,
+    evidence_writer: RuntimeHookEvidenceWriter | None,
+) -> None:
+    """Close publishers without a second line after the hook decision.
+
+    Grok reads one JSON document. Replaying the decision after a quiet close
+    makes that document invalid. File-descriptor writes during close are sunk
+    so they cannot become the last stdout line either.
+    """
+
+    def _close() -> None:
+        if worker is not None:
+            close = getattr(worker, "close", None)
+            if callable(close):
+                with suppress(Exception):
+                    close()
+        if evidence_writer is not None:
+            with suppress(Exception):
+                _ = evidence_writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
+
+    held = io.StringIO()
+    saved_fd: int | None = None
+    closed = False
+    with suppress(Exception):
+        sys.stdout.flush()
+    try:
+        saved_fd = os.dup(1)
+        with tempfile.TemporaryFile() as sink:
+            os.dup2(sink.fileno(), 1)
+            try:
+                with redirect_stdout(held):
+                    _close()
+                    closed = True
+            finally:
+                os.dup2(saved_fd, 1)
+    except OSError:
+        pass
+    finally:
+        if saved_fd is not None:
+            os.close(saved_fd)
+    if closed:
+        return
+    with redirect_stdout(held):
+        _close()
+    if held.getvalue():
+        from ..adapters.grok_hooks import replay_grok_hook_stdout_line
+
+        replay_grok_hook_stdout_line()
 
 
 def try_native_hook_authority(
@@ -44,6 +99,9 @@ def try_native_hook_authority(
     """
     if not _native_mode_requires_rust():
         return None
+    from ..adapters.grok_hooks import clear_grok_hook_stdout_line
+
+    clear_grok_hook_stdout_line()
     worker: HookWorker | None = None
     evidence_writer: RuntimeHookEvidenceWriter | None = None
     try:
@@ -79,15 +137,10 @@ def try_native_hook_authority(
             recording_only=recording_only_from_acked_snapshot(store, harness),
         )
     finally:
-        if worker is not None:
-            close = getattr(worker, "close", None)
-            if callable(close):
-                close()
-        if evidence_writer is not None:
-            # A one-shot hook must not hold the harness response open for
-            # control-plane persistence. Persistence is best effort; the
-            # security result is already returned and never depends on it.
-            _ = evidence_writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
+        # A one-shot hook must not hold the harness response open for
+        # control-plane persistence. Persistence is best effort; the security
+        # result is already returned and never depends on it.
+        _close_hook_publishers_quietly(worker, evidence_writer)
 
 
 def route_native_hook(
@@ -144,7 +197,7 @@ def route_native_hook(
             home_dir=context.home_dir,
             guard_home=context.guard_home,
         )
-        _emit("hook", response, True)
+        _emit_hook_response(args, response)
         return _native_unavailable_exit_code(args, response, runtime_hook_event_name(payload))
     from .commands_hook_native_pipeline import run_native_hook_pipeline
 
@@ -190,7 +243,7 @@ def route_native_hook(
             )
         # Availability responses are already harness wire documents. A hook
         # caller need not pass --json to receive a parseable deny response.
-        _emit("hook", native_result, True)
+        _emit_hook_response(args, native_result)
         # rc mirrors the emitted verdict through the harness's adapter contract
         # (per-harness deny code, recording-only allows keep 0).
         return _native_unavailable_exit_code(args, native_result, runtime_hook_event_name(payload))
@@ -206,5 +259,5 @@ def route_native_hook(
             guard_home=context.guard_home,
             recording_only=recording_only_from_acked_snapshot(store, args.harness),
         )
-        _emit("hook", response, True)
+        _emit_hook_response(args, response)
         return _native_unavailable_exit_code(args, response, runtime_hook_event_name(payload))

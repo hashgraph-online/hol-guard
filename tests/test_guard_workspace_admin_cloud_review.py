@@ -119,7 +119,7 @@ def test_workspace_admin_mfa_review_honors_local_cloud_review_revocation(tmp_pat
     request = _request("admin-mfa-revoked")
     _add_request(store, request)
     poll_env = {COMMAND_QUEUE_ENABLED_ENV: "1"}
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     assert command_queue_should_poll(store, poll_env) is True
     disable_exact_cloud_review(store)
     assert exact_cloud_review_operations(store) == ()

@@ -9,6 +9,8 @@ from urllib.error import HTTPError
 
 from ..contracts.guard_cloud_review import COMMAND_RESULT_CONTRACT_VERSION, validate_exact_command_result
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION, EXACT_CLOUD_REVIEW_PROTOCOL_VERSION
+from .native_cloud_review_delivery import native_cloud_review_delivery_candidate
+from .native_cloud_review_v4 import decode_native_authority_renewal
 from .native_workspace_review_queue import native_workspace_review_payload
 
 EXACT_CLOUD_REVIEW_COMMAND_API_BASE = "/api/guard/review/v2/commands"
@@ -37,6 +39,13 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
     correlation_id = _required_text(job.get("id"), "exact_result_correlation_missing")
     payload = _mapping(job.get("payload"))
     native_command = native_workspace_review_payload(payload)
+    native_cloud_command = native_cloud_review_delivery_candidate(payload)
+    native_context = _mapping(payload.get("nativeApprovalContext")) if native_cloud_command else {}
+    if native_cloud_command and (
+        set(native_context) != {"decision", "decisionReceiptId"}
+        or native_context.get("decision") not in {"allow_once", "block"}
+    ):
+        raise ValueError("exact_result_native_context_invalid")
     signed_decision = _mapping(payload.get("remoteApproval")) if native_command is None else {}
     bound_request_id = _required_text(
         _mapping(job.get("serverResolvedBinding")).get("localRequestId"),
@@ -45,11 +54,15 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
     decision_request_id = (
         native_command.local_request_id
         if native_command is not None
+        else bound_request_id
+        if native_cloud_command
         else _required_text(signed_decision.get("localRequestId"), "exact_result_local_request_missing")
     )
     receipt_id = (
         native_command.receipt_id
         if native_command is not None
+        else _required_text(native_context.get("decisionReceiptId"), "exact_result_receipt_missing")
+        if native_cloud_command
         else _required_text(signed_decision.get("receiptId"), "exact_result_receipt_missing")
     )
     if bound_request_id != decision_request_id:
@@ -80,6 +93,27 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
     data_receipt_id = _required_text(data.get("receiptId"), "exact_result_receipt_missing")
     if data_request_id != bound_request_id or data_receipt_id != receipt_id:
         raise ValueError("exact_result_execution_binding_mismatch")
+    renewal = None
+    if "nativeApprovalRenewal" in data:
+        renewal = decode_native_authority_renewal(data["nativeApprovalRenewal"])
+        if (
+            not native_cloud_command
+            or native_context.get("decision") != "allow_once"
+            or payload.get("nativeApprovalProof") is not None
+            or "nativeApprovalRenewal" in payload
+            or renewal is None
+            or renewal["request_id"] != bound_request_id
+            or renewal["decision_receipt_id"] != receipt_id
+            or renewal["source_claim_hash"] != _mapping(job.get("serverResolvedBinding")).get("claimDigest")
+            or application_status != "failed_retryable"
+            or application_reason != "native_approval_waiting_for_authorization"
+            or continuation_status != "not_applicable"
+        ):
+            raise ValueError("exact_result_native_renewal_binding_mismatch")
+    elif application_reason == "native_approval_waiting_for_authorization":
+        raise ValueError("exact_result_native_renewal_missing")
+    if native_cloud_command and native_context.get("decision") == "allow_once" and application_status == "applied":
+        raise ValueError("exact_result_native_consumed_evidence_required")
     return _result(
         correlation_id=correlation_id,
         local_request_id=bound_request_id,
@@ -90,6 +124,7 @@ def exact_result(job: dict[str, object], execution: dict[str, object]) -> dict[s
         continuation_reason=continuation_reason,
         application_updated_at=application_updated_at,
         continuation_updated_at=continuation_updated_at,
+        native_approval_renewal=renewal,
     )
 
 
@@ -183,6 +218,7 @@ def _result(
     application_updated_at: str | None = None,
     continuation_updated_at: str | None = None,
     updated_at: str | None = None,
+    native_approval_renewal: dict[str, object] | None = None,
 ) -> dict[str, object]:
     application_observed_at = application_updated_at or updated_at
     continuation_observed_at = continuation_updated_at or updated_at
@@ -201,6 +237,8 @@ def _result(
         "protocolVersion": EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
         "receiptId": receipt_id,
     }
+    if native_approval_renewal is not None:
+        result["nativeApprovalRenewal"] = native_approval_renewal
     validate_exact_command_result(result)
     return result
 

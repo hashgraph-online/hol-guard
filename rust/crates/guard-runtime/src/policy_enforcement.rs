@@ -59,9 +59,7 @@ pub(crate) fn ensure_business_review_permitted(
     Ok(())
 }
 
-use policy_enforcement_facts::{
-    classify_tool_name, collect_fact_maps, payload_facts, preferred_tool_name, PATH_KEYS,
-};
+use policy_enforcement_facts::{payload_facts, post_action_type, preferred_tool_name};
 use policy_enforcement_helpers::{
     action_rank, join_action, normalized_harness, policy_floor, FloorInput,
 };
@@ -270,7 +268,7 @@ pub(crate) fn apply_pre_tool_policy(
             }
         }
     }
-    let policy_floor = policy_floor(
+    let mut policy_floor = policy_floor(
         &snapshot.effective_policy,
         &snapshot.compiled,
         &harness,
@@ -282,6 +280,19 @@ pub(crate) fn apply_pre_tool_policy(
             benign_prompt,
         },
     )?;
+    if result.action.event == "PreToolUse"
+        && matches!(
+            result.action.action_type,
+            PreToolActionTypeV1::Command | PreToolActionTypeV1::ProcessService
+        )
+    {
+        // Rule/workspace binding was validated when this snapshot was compiled.
+        if let Some(action) = snapshot.compiled.exact_command_action(payload, &harness)? {
+            // Remembered allows never replace an intrinsic or governed floor,
+            // and never manufacture native approval/physical capability.
+            policy_floor = join_action(&policy_floor, action)?;
+        }
+    }
     let effective = join_action(&result.minimum_action, &policy_floor)?;
     let policy_raised = action_rank(&effective) > action_rank(&result.minimum_action);
     let mut output = result;
@@ -334,47 +345,6 @@ pub(crate) fn apply_pre_tool_policy(
     output.explicitly_benign = effective == "allow";
     validate_pre_tool_result_matrix(&output)?;
     Ok(output)
-}
-
-fn post_action_type(
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-) -> Result<PreToolActionTypeV1, String> {
-    if payload_kind == GuardHookPayloadKindV2::SourceFileRef {
-        return Ok(PreToolActionTypeV1::FileRead);
-    }
-    let mut maps = Vec::new();
-    let mut nodes = 0usize;
-    collect_fact_maps(&request.payload, 0, &mut nodes, &mut maps)?;
-    if let Some(tool) = preferred_tool_name(&maps)? {
-        return Ok(classify_tool_name(&tool));
-    }
-    for record in maps {
-        if record.keys().any(|key| {
-            matches!(
-                key.as_str(),
-                "command" | "cmd" | "shell_command" | "shellCommand"
-            )
-        }) {
-            return Ok(PreToolActionTypeV1::Command);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "package" | "package_name" | "packageName"))
-        {
-            return Ok(PreToolActionTypeV1::Package);
-        }
-        if record.keys().any(|key| PATH_KEYS.contains(&key.as_str())) {
-            return Ok(PreToolActionTypeV1::FileRead);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "url" | "uri" | "href" | "endpoint"))
-        {
-            return Ok(PreToolActionTypeV1::Network);
-        }
-    }
-    Ok(PreToolActionTypeV1::Unknown)
 }
 
 /// Apply the authenticated policy to a Rust-owned PostTool result. The

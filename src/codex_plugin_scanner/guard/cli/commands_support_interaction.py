@@ -301,6 +301,21 @@ def _emit(command: str, payload: dict[str, object], as_json: bool) -> None:
 
     emit_guard_payload(command, payload, as_json)
 
+
+def _emit_hook_response(args: argparse.Namespace, payload: dict[str, object]) -> None:
+    """Emit a hook result the harness can parse from its last stdout line.
+
+    Human CLI JSON stays pretty. Grok's hook contract is one compact document;
+    a pretty document ends on ``}`` and is not valid JSON by itself.
+    """
+
+    if _canonical_harness_name(getattr(args, "harness", "")) == "grok":
+        from .render import emit_compact_hook_json
+
+        emit_compact_hook_json(payload)
+        return
+    _emit("hook", payload, True)
+
 def _should_emit_copilot_hook_response(args: argparse.Namespace) -> bool:
     return args.harness == "copilot" and not getattr(args, "json", False)
 

@@ -93,7 +93,10 @@ def _emit_unavailable(
     def capture(command: str, payload: dict[str, object], as_json: bool) -> None:
         emitted.update(command=command, payload=payload, as_json=as_json)
 
-    monkeypatch.setattr(availability, "_emit", capture)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_interaction._emit",
+        capture,
+    )
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=tmp_path / "workspace",

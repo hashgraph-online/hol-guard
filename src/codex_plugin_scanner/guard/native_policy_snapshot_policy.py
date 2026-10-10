@@ -196,6 +196,35 @@ def effective_native_policy_v3(config: GuardConfig | Mapping[str, object]) -> di
     provider_actions = _provider_action_map(_config_value(config, "mcp_provider_actions"))
     if provider_actions:
         policy["mcp_provider_actions"] = provider_actions
+    exact_actions = _config_value(config, "exact_command_actions")
+    cloud_workspace = _config_value(config, "cloud_workspace_id")
+    if (
+        exact_actions is not None
+        or cloud_workspace is not None
+        or (isinstance(config, Mapping) and "exact_command_actions" in config)
+    ):
+        if (
+            not isinstance(exact_actions, list)
+            or not exact_actions
+            or len(exact_actions) > POLICY_SNAPSHOT_MAX_MAP_ENTRIES
+            or not _valid_selector_key_v3(cloud_workspace)
+        ):
+            raise NativePolicySnapshotError("native_policy_snapshot_exact_command_invalid")
+        for rule in exact_actions:
+            if (
+                not isinstance(rule, dict)
+                or set(rule) != {"harness", "command_sha256", "cloud_workspace_id", "action", "expires_at"}
+                or not _valid_selector_key_v3(rule.get("harness"))
+                or rule.get("cloud_workspace_id") != cloud_workspace
+                or rule.get("action") not in {"allow", "block", "review", "require-reapproval"}
+                or not isinstance(digest := rule.get("command_sha256"), str)
+                or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)
+                or not isinstance(rule.get("expires_at"), str)
+            ):
+                raise NativePolicySnapshotError("native_policy_snapshot_exact_command_invalid")
+        policy["cloud_workspace_id"] = cloud_workspace
+        policy["exact_command_actions"] = exact_actions
     provider_catalog_hash = _config_value(config, "mcp_provider_catalog_hash")
     if provider_catalog_hash is not None:
         if (

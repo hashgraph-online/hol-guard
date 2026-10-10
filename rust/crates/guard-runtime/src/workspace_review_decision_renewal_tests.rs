@@ -431,44 +431,5 @@ fn authority_rotation_preserves_semantic_tombstone_but_revocation_rejects() {
     fs::remove_dir_all(root).unwrap();
 }
 
-#[test]
-fn expired_renewal_and_clock_rollback_do_not_mutate_claim_state() {
-    let (root, authority, values, retry_scope) = setup();
-    let context = context(&values, &retry_scope);
-    let first = signed_envelope(
-        &authority,
-        &context,
-        6,
-        NOW_MS,
-        NOW_MS + 100,
-        "allow",
-        &REVIEW_SEED,
-    );
-    verify_and_claim_at(&root, &first, &context, NOW_MS).unwrap();
-    let renewed = signed_envelope(
-        &authority,
-        &context,
-        6,
-        NOW_MS + 200,
-        NOW_MS + 250,
-        "allow",
-        &REVIEW_SEED,
-    );
-    assert_eq!(
-        verify_and_claim_at(&root, &renewed, &context, NOW_MS + 300).unwrap_err(),
-        "native_workspace_review_decision_expired"
-    );
-    assert_eq!(
-        verify_and_claim_at(&root, &first, &context, NOW_MS - 1).unwrap_err(),
-        "native_workspace_review_clock_rollback"
-    );
-    let state = super::super::workspace_review_secure_state::load(&root)
-        .unwrap()
-        .unwrap();
-    assert!(state.consumed_claims.is_empty());
-    assert_eq!(state.claim_index.unwrap().claim_count, 1);
-    fs::remove_dir_all(root).unwrap();
-}
-
-#[path = "workspace_review_claim_capacity_tests.rs"]
-mod capacity_tests;
+#[path = "workspace_review_decision_renewal_authority_tests.rs"]
+mod authority_tests;

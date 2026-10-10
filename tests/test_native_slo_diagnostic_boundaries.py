@@ -118,3 +118,28 @@ def test_capacity_stderr_normalizes_actual_observation_routes(
     parsed = json.loads(diagnostic)
     assert parsed["observed_routes"] == parsed["reconciled_routes"] == {"unknown": 1}
     assert returned[0].route == private_route and errors == 1
+
+
+def test_intel_retry_covers_a_recovery_abort_and_a_latency_only_miss() -> None:
+    from scripts.native_slo_progress import intel_macos_slo_attempt_retryable
+
+    recovery = {
+        "evaluation": "incomplete",
+        "failure": {"category": "benchmark_contract", "stage": "recovery_stop"},
+        "gates": {"cold_latency": False, "installed_corpus": False},
+    }
+    assert intel_macos_slo_attempt_retryable(recovery) is True
+    latency = {
+        "evaluation": "complete",
+        "gates": {"cold_latency": False, "installed_corpus": True, "rss": True},
+        "errors_16": 0,
+        "errors_64": 0,
+        "concurrency": {"sixteen": {"errors": 0, "overloaded": 0}},
+    }
+    assert intel_macos_slo_attempt_retryable(latency) is True
+    mixed = {
+        "evaluation": "complete",
+        "failure": {"category": "benchmark_contract", "stage": "capacity_prewarm"},
+        "gates": {"cold_latency": False, "installed_corpus": False},
+    }
+    assert intel_macos_slo_attempt_retryable(mixed) is False

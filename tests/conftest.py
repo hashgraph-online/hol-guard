@@ -180,6 +180,24 @@ def _reset_guard_sync_resolver_override(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 @pytest.fixture(autouse=True)
+def _consent_authority_for_disabled_boundary(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fake the native consent boundary only when the test-mode native runtime
+    is unavailable (default unit mode).  Under ``HOL_GUARD_NATIVE_REGRESSION``
+    the real native binary is required and the real consent path must run."""
+    module = request.module.__name__ if request.module else ""
+    if "consent_authority" in module or module == "tests.test_native_cloud_review_consent_authority":
+        return
+    # Unit mode (HOL_GUARD_NATIVE unset → conftest pins "off") has no real
+    # binary; fake the consent boundary. REGRESSION ("force") must use the
+    # real path.
+    if os.environ.get("HOL_GUARD_NATIVE", "off") != "force":
+        from tests.guard_exact_cloud_review_support import synthetic_native_consent_authority
+        synthetic_native_consent_authority(monkeypatch)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_lifecycle_authority_home(
     request: pytest.FixtureRequest,
     monkeypatch: pytest.MonkeyPatch,

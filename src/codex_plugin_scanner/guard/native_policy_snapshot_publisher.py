@@ -2,20 +2,17 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from .native_policy_snapshot_constants import (
     _PUBLISH_RETRY_SECONDS,
     _PUBLISH_TIMEOUT_SECONDS,
-    _RENEWAL_JITTER_MAX_SECONDS,
-    _RENEWAL_LEAD_SECONDS,
     POLICY_SNAPSHOT_UNAVAILABLE_ERRORS,
     NativePolicySnapshotError,
 )
@@ -189,10 +186,20 @@ class NativePolicySnapshotPublisher(
             self._thread.start()
         self.request_publish()
 
-    def close(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+    def close(
+        self,
+        *,
+        timeout_seconds: float = _PUBLISH_TIMEOUT_SECONDS,
+        deadline_monotonic: float | None = None,
+    ) -> bool:
         return self.close_contained(timeout_seconds=timeout_seconds, deadline_monotonic=deadline_monotonic)
 
-    def close_contained(self, *, timeout_seconds: float = 1.0, deadline_monotonic: float | None = None) -> bool:
+    def close_contained(
+        self,
+        *,
+        timeout_seconds: float = _PUBLISH_TIMEOUT_SECONDS,
+        deadline_monotonic: float | None = None,
+    ) -> bool:
         """Retain publication ownership until the publisher thread exits."""
         deadline = self._monotonic_clock() + max(0.0, timeout_seconds)
         if deadline_monotonic is not None:
@@ -354,29 +361,10 @@ class NativePolicySnapshotPublisher(
         self._condition.notify_all()
         self._publish_event.set()
 
-    @staticmethod
-    def _renewal_jitter_seconds(snapshot: Mapping[str, object], remaining_seconds: float) -> float:
-        digest = snapshot.get("policy_digest")
-        generation = snapshot.get("generation")
-        if not isinstance(digest, str) or not isinstance(generation, int) or remaining_seconds <= 0:
-            return 0.0
-        seed = hashlib.sha256(f"{generation}:{digest}".encode("ascii")).digest()
-        fraction = int.from_bytes(seed[:4], "big") / float(1 << 32)
-        return min(_RENEWAL_JITTER_MAX_SECONDS, remaining_seconds * 0.05) * fraction
-
-    def _schedule_renewal_locked(self, snapshot: Mapping[str, object]) -> None:
-        expires_at_ms = snapshot.get("expires_at_ms")
-        if not isinstance(expires_at_ms, int):
-            self._renewal_due_monotonic = self._monotonic_clock()
-            return
-        remaining_seconds = expires_at_ms / 1_000 - self._wall_clock()
-        if remaining_seconds <= 0:
-            self._renewal_due_monotonic = self._monotonic_clock()
-            return
-        lead_seconds = min(_RENEWAL_LEAD_SECONDS, max(1.0, remaining_seconds * 0.1))
-        jitter_seconds = self._renewal_jitter_seconds(snapshot, remaining_seconds)
-        due_in = max(0.0, remaining_seconds - lead_seconds - jitter_seconds)
-        self._renewal_due_monotonic = self._monotonic_clock() + due_in
+    def has_served_snapshot(self) -> bool:
+        """Include a previously serving publisher while its next ACK is pending."""
+        with self._condition:
+            return self._snapshot is not None and not self._closed
 
     def is_ready(self) -> bool:
         with self._condition:

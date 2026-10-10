@@ -39,6 +39,7 @@ from .runtime_transition_admission import (
 )
 from .runtime_transition_hook_probe import PROBE_FIELD, PROBE_SCHEMA, transition_hook_observation
 from .runtime_transition_legacy_receipt import read_legacy_codex_probe_receipt
+from .sqlite_errors import sqlite_error_is_busy_locked
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -289,7 +290,12 @@ def _observe_configured_codex_hook(
                             deadline_monotonic=deadline_monotonic,
                         )
                     except sqlite3.Error as exc:
-                        raise TransitionError("legacy_probe_storage_unavailable") from exc
+                        # A 100 ms lock wait is one attempt. Busy and locked
+                        # results stay inside this loop until the admission
+                        # deadline. Corrupt or missing storage does not.
+                        if not sqlite_error_is_busy_locked(exc):
+                            raise TransitionError("legacy_probe_storage_unavailable") from exc
+                        receipt = None
                     if receipt is not None:
                         break
                     check_deadline()

@@ -393,7 +393,8 @@ args = ["workspace-skill.js", "--changed"]
         assert output["dashboard_url"] == "https://hol.org/guard"
         assert output["inbox_url"] == "https://hol.org/guard/inbox"
         assert output["fleet_url"] == "https://hol.org/guard/protect"
-        assert "retry automatically" in output["cloud_state_detail"]
+        assert output["cloud_state_detail"] == "Cloud Review delivery has not started on this device."
+        assert "retry automatically" not in output["cloud_state_detail"]
         assert "finish the pairing loop" not in output["cloud_state_detail"]
 
     def test_guard_status_json_surfaces_first_sync_repair_over_generic_pending_copy(self, tmp_path, capsys):

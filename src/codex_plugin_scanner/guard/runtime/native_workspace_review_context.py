@@ -11,12 +11,12 @@ from typing import cast
 
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import _isolated_environment, native_runtime_status
-from .native_workspace_review import (
+from .native_workspace_review_error import (
     NativeWorkspaceReviewError,
     NativeWorkspaceReviewStore,
     _canonical_json_bytes,
-    stage_workspace_review_request,
 )
+from .native_workspace_review_staging import stage_workspace_review_request
 
 _CONTEXT_SCHEMA = "guard-native-workspace-review-context.v1"
 _CONTEXT_VERSION = 1

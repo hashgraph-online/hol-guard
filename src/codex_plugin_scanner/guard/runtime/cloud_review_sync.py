@@ -6,7 +6,6 @@ import urllib.error
 from datetime import datetime, timezone
 from typing import Any
 
-from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..review_contracts import GuardReviewContractError, guard_review_oauth_metadata
 from ..store import GuardStore
 from .cloud_review_batching import (
@@ -16,7 +15,7 @@ from .cloud_review_batching import (
     persisted_review_batch_limits,
     select_review_event_batch,
 )
-from .cloud_review_event_delivery import CLOUD_REVIEW_EVENT_PROTOCOL_VERSION, post_review_events
+from .cloud_review_event_delivery import post_review_events
 from .cloud_review_event_projection import build_cloud_review_event, project_cloud_review_event
 from .cloud_review_retry_recovery import recover_rejected_review_events, retry_result_message
 from .cloud_review_sync_auth import resolve_cloud_review_sync_auth_context as _resolve_cloud_review_sync_auth_context
@@ -37,7 +36,9 @@ CLOUD_REVIEW_SYNC_STATE_KEY = "guard_cloud_review_sync_state"
 __all__ = [
     "CloudReviewSyncWorker",
     "build_cloud_review_event",
+    "classify_cloud_review_worker",
     "cloud_review_sync_status",
+    "record_cloud_review_worker_heartbeat",
     "start_cloud_sync_sync_worker",
     "stop_cloud_sync_sync_worker",
     "sync_cloud_review_events_once",
@@ -164,6 +165,10 @@ def _complete_sync_state(
     pending_error = errors[0] if errors else outbox_status.get("last_error")
     if accepted > 0 or outbox_status["depth"] == 0:
         state["last_success_at"] = completed_at
+    if accepted > 0:
+        from ..sqlite_cloud_review_recovery import note_authenticated_cloud_review_round_trip
+
+        note_authenticated_cloud_review_round_trip(store, now=completed_at)
     if delivered > 0:
         state.update({"last_delivery_at": completed_at, "last_delivery_binding": delivery_binding})
     state.update(
@@ -179,6 +184,65 @@ def _complete_sync_state(
     )
     _save_sync_state(store, state)
     return completed_at, outbox_status
+
+
+def _payload_event_type(event: dict[str, object]) -> str | None:
+    raw = event.get("eventPayloadJson")
+    if not isinstance(raw, str):
+        return None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    event_type = payload.get("eventType")
+    return event_type if isinstance(event_type, str) else None
+
+
+def _release_covered_snapshot_gaps(
+    store: GuardStore,
+    *,
+    events: list[dict[str, object]],
+    sequences: list[int],
+    per_event_results: list[dict[str, object]],
+    acknowledged_sequences: list[int],
+    acknowledged_through: object,
+    open_snapshot_gaps: dict[str, set[int]],
+    binding: dict[str, str],
+) -> None:
+    """Delete refused gap rows once Cloud accepts the replacement snapshot.
+
+    The server checkpoint is the snapshot sequence. A refused predecessor must
+    leave the ready prefix before that snapshot is acknowledged, or the local
+    cursor cannot advance. Accepted and quarantined rows stay.
+    """
+
+    if type(acknowledged_through) is not int:
+        return
+    acknowledged = set(acknowledged_sequences)
+    released: set[int] = set()
+    for index, item in enumerate(per_event_results):
+        if item.get("accepted") is not True:
+            continue
+        request_id = events[index].get("localRequestId")
+        snapshot_sequence = sequences[index]
+        if (
+            not isinstance(request_id, str)
+            or snapshot_sequence > acknowledged_through
+            or _payload_event_type(events[index]) != "review.request.snapshot_requeued"
+        ):
+            continue
+        for gap_sequence in open_snapshot_gaps.get(request_id, ()):
+            if gap_sequence < snapshot_sequence and gap_sequence not in acknowledged:
+                released.add(gap_sequence)
+    if not released:
+        return
+    store.release_unacked_snapshot_gaps(sorted(released), **binding)
+    for request_id in list(open_snapshot_gaps):
+        open_snapshot_gaps[request_id].difference_update(released)
+        if not open_snapshot_gaps[request_id]:
+            del open_snapshot_gaps[request_id]
 
 
 def _is_terminally_superseded_result(item: dict[str, object]) -> bool:
@@ -245,6 +309,7 @@ def sync_cloud_review_events_once(
 
     total_accepted = total_rejected = total_delivered = batches = 0
     all_errors: list[str] = []
+    open_snapshot_gaps: dict[str, set[int]] = {}
     native_context_probe_state = getattr(store, _PROBE_STATE_ATTRIBUTE, None)
     setattr(store, _PROBE_STATE_ATTRIBUTE, None)
     if not isinstance(native_context_probe_state, NativeWorkspaceReviewContextProbeState):
@@ -325,6 +390,7 @@ def sync_cloud_review_events_once(
                 retry_sequences: list[int] = []
                 retry_results: list[dict[str, object]] = []
                 snapshot_repairs: dict[str, int] = {}
+                batch_gaps: dict[str, set[int]] = {}
                 valid_results = True
                 for index, item in enumerate(per_event_results):
                     if (
@@ -346,6 +412,7 @@ def sync_cloud_review_events_once(
                                 snapshot_repairs[request_id] = max(
                                     snapshot_repairs.get(request_id, 0), request_sequence
                                 )
+                                batch_gaps.setdefault(request_id, set()).add(sequences[index])
                 if (
                     valid_results
                     and sum(bool(item["accepted"]) for item in per_event_results) == accepted
@@ -357,7 +424,25 @@ def sync_cloud_review_events_once(
                         all_errors.append(message)
                         _retry_review_events(store, sequences, error=message, binding=delivery_binding)
                         continue
+                    for request_id, gap_sequences in batch_gaps.items():
+                        open_snapshot_gaps.setdefault(request_id, set()).update(gap_sequences)
+                    _release_covered_snapshot_gaps(
+                        store,
+                        events=events,
+                        sequences=sequences,
+                        per_event_results=per_event_results,
+                        acknowledged_sequences=acknowledged_sequences,
+                        acknowledged_through=response.get("acknowledgedThrough"),
+                        open_snapshot_gaps=open_snapshot_gaps,
+                        binding=delivery_binding,
+                    )
                     store.acknowledge_review_events(acknowledged_sequences, **delivery_binding)
+                    collision_sequences = {
+                        sequences[index]
+                        for index, item in enumerate(per_event_results)
+                        if item.get("code") == "review_event_snapshot_sequence_collision"
+                    }
+                    retry_before = set(retry_sequences)
                     retry_sequences, retry_results = recover_rejected_review_events(
                         store,
                         sequences=retry_sequences,
@@ -366,6 +451,7 @@ def sync_cloud_review_events_once(
                         binding=delivery_binding,
                         acknowledged_through=response.get("acknowledgedThrough"),
                     )
+                    retained_collisions = (collision_sequences & retry_before) - set(retry_sequences)
                     if retry_sequences:
                         message = retry_result_message(retry_results)
                         all_errors.append(message)
@@ -379,6 +465,11 @@ def sync_cloud_review_events_once(
                         store.requeue_pending_review_events(
                             changed_at=_now(), require_binding=True, snapshot_repair_sequences=snapshot_repairs
                         )
+                    # A renumbered snapshot stays ready and unacked. The next
+                    # sync posts that sequence. Sending it in this same call
+                    # acknowledges it before the collision remains observable.
+                    if retained_collisions:
+                        break
                     continue
 
             accounted = accepted + rejected
@@ -447,42 +538,11 @@ def sync_cloud_review_events_once(
         raise
 
 
-def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
-    """Return Cloud Review outbox and delivery health."""
-    state = _load_sync_state(store)
-    profile = store.get_cloud_sync_profile()
-    workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    try:
-        binding = store.get_review_event_oauth_binding()
-        if binding is not None:
-            outbox = store.review_event_outbox_status(
-                now=_now(),
-                oauth_subject_hash=binding["oauth_subject_hash"],
-                workspace_id=binding["workspace_id"],
-                machine_id=binding["machine_id"],
-                machine_installation_id=binding["machine_installation_id"],
-            )
-        else:
-            outbox = store.review_event_outbox_status(
-                now=_now(),
-                workspace_id=workspace_id,
-            )
-    except NativeGuardStoreUnavailable as error:
-        outbox = unavailable_outbox_status(error)
-    return {
-        "state": state.get("state") or "not_configured",
-        "last_sync_at": state.get("last_sync_at"),
-        "last_success_at": state.get("last_success_at"),
-        "last_error": state.get("last_error"),
-        "synced_count": state.get("synced_count", 0),
-        "rejected_count": state.get("rejected_count", 0),
-        "outbox": outbox,
-        "oauth_source": store.guard_source,
-        "protocol_version": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
-        "protocolVersion": CLOUD_REVIEW_EVENT_PROTOCOL_VERSION,
-    }
-
-
+from .cloud_review_sync_health import (  # noqa: E402
+    classify_cloud_review_worker,
+    cloud_review_sync_status,
+    record_cloud_review_worker_heartbeat,
+)
 from .cloud_review_sync_worker import (  # noqa: E402
     CloudReviewSyncWorker,
     start_cloud_sync_sync_worker,

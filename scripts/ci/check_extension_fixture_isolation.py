@@ -95,6 +95,39 @@ def portable_fixture_paths(root: Path) -> list[Path]:
     return [paths[0], root / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json"]
 
 
+def projected_acceptance_envelope_length(root: Path) -> int:
+    """Return the build-request length after this script adds its synthetic source.
+
+    The production compiler joins raw contributor documents. Pretty-printing the
+    synthetic source exhausted the previous 4 MiB ceiling, so the acceptance
+    file stays compact and this length is what ``build.rs`` will measure.
+    """
+
+    source_text = json.dumps(acceptance_source(root), separators=(",", ":")) + "\n"
+    trust = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_text())
+    trust["classes"]["external"].append(EXTENSION_ID)
+    trust["classes"]["external"].sort()
+    trust_text = json.dumps(trust, indent=2) + "\n"
+    commands = [(path.name, path.read_text()) for path in command_source_paths(root)]
+    commands.append((f"{EXTENSION_ID}.json", source_text))
+    commands.sort()
+    mcp = sorted(
+        (path.name, path.read_text())
+        for path in (root / "contributions/mcp-servers").glob("*.json")
+        if path.name != "migration-manifest.json"
+    )
+    request = (
+        '{"schema":"guard.command-extension-build.v1","sources":['
+        + ",".join(text for _name, text in commands)
+        + '],"mcp_sources":['
+        + ",".join(text for _name, text in mcp)
+        + '],"trust":'
+        + trust_text
+        + "}"
+    )
+    return len(request.encode())
+
+
 def command_source_paths(root: Path) -> list[Path]:
     """Match the native producer's inventory, excluding its migration metadata."""
     return sorted(

@@ -178,7 +178,12 @@ fn command_from_value_at_depth(
                     Err(error) => return Err(error),
                 }
             }
-            Ok(vec![bounded_string(value)?])
+            if text.is_empty() || text.len() > MAX_COMMAND_BYTES || trimmed.is_empty() {
+                return Err(GenericExtractionError::Bounds);
+            }
+            // Classification may normalize syntax, but signed exact memory
+            // hashes the complete original UTF-8 command, including whitespace.
+            Ok(vec![text.to_owned()])
         }
         Value::Array(items) => {
             if items.len() != 1 {

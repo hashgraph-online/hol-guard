@@ -28,6 +28,7 @@ pub(crate) fn evaluate_resident_bytes(
                 | "workspace_review_local_summary"
                 | "workspace_review_local_queue"
                 | "workspace_review_decision"
+                | "workspace_review_decision_consumption"
         )
     ) {
         let canonical = canonical_json_bytes(&value)
@@ -45,7 +46,14 @@ pub(crate) fn evaluate_resident_bytes(
                     | "approval_consume"
                     | "approval_challenge_v4"
                     | "approval_validate_v4"
-                    | "approval_consume_v4",
+                    | "approval_consume_v4"
+                    | "approval_origin_v4"
+                    | "approval_renew_v4"
+                    | "approval_renewal_query_v4"
+                    | "approval_install_v4"
+                    | "approval_block_v4"
+                    | "approval_consumption_query_v4"
+                    | "approval_consumption_discover_v4",
             )
         )
     {
@@ -67,6 +75,8 @@ pub(crate) fn evaluate_resident_bytes(
     {
         crate::oneshot::validate_request_policy_snapshot(&value)?;
     }
+    let query_only = value.get("operation").and_then(Value::as_str)
+        == Some("workspace_review_decision_consumption");
     // The frame parsed as strict JSON but names no request shape this runtime
     // supports. A client of another runtime version is told apart from a
     // transient failure by this code alone.
@@ -129,6 +139,46 @@ pub(crate) fn evaluate_resident_bytes(
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
                 crate::approval::approval_v4::consume_approval(request, policy_store)
             }
+            ResidentOperationV1::CloudReviewConsentV1(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_consent::evaluate(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalOriginV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::origin(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalRenewV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::renew(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalRenewalQueryV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::query_renewal(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalInstallV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::install(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalBlockV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::block(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalConsumptionQueryV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::query(request, policy_store)
+            }
+            ResidentOperationV1::ApprovalConsumptionDiscoverV4(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                crate::policy_store::native_cloud_review_v4::discover(request, policy_store)
+            }
             ResidentOperationV1::WorkspaceReviewAuthorityEnroll(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -170,15 +220,34 @@ pub(crate) fn evaluate_resident_bytes(
                     crate::policy_store::workspace_review_local_summary::queue(policy_store)?;
                 encode_response(&queue)
             }
-            ResidentOperationV1::WorkspaceReviewDecision(request) => {
+            ResidentOperationV1::WorkspaceReviewDecision(request)
+            | ResidentOperationV1::WorkspaceReviewDecisionConsumption(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-                let verified =
+                let result = if query_only {
+                    crate::policy_store::workspace_review_decision::query_request_consumption(
+                        policy_store,
+                        &request.request_id,
+                        &request.decision,
+                    )
+                } else {
                     crate::policy_store::workspace_review_decision::verify_and_claim_request(
                         policy_store,
                         &request.request_id,
                         &request.decision,
-                    )?;
+                    )
+                };
+                let verified = match result {
+                    Err(reason)
+                        if query_only
+                            && reason == "native_workspace_review_consumption_unconfirmed" =>
+                    {
+                        return encode_response(
+                            &serde_json::json!({"status": "unknown", "reason": reason}),
+                        );
+                    }
+                    result => result?,
+                };
                 encode_response(&serde_json::json!({
                     "status": if verified.replayed { "replayed" } else { "verified" },
                     "replayed": verified.replayed,

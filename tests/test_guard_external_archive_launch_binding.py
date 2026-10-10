@@ -8,6 +8,7 @@ import json
 import shlex
 import subprocess
 import tarfile
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +20,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     _bound_external_archive_launch_command,
     build_package_protect_payload,
+    package_request_policy_hash,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.proxy.runtime_mcp import _bound_external_archive_mcp_request
@@ -28,6 +30,10 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
+from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+)
 from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _TARBALL_SCAN_TIMEOUT_SECONDS
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -197,6 +203,131 @@ def test_package_firewall_reuses_one_review_to_inspect_then_launch(
     assert len(launches) == 1
     assert launches[0][-3:] == [str(fake_npm), "install", f"demo@{archive_path}"]
     assert archive_path.exists() is False
+
+
+def _archive_gate_evaluation(
+    *,
+    policy_action: str,
+    reason_code: str,
+    reason_message: str,
+    source_identity: str | None = None,
+    policy_version: str = "local:none",
+    decision: str = "ask",
+) -> PackageRequestEvaluation:
+    reason: dict[str, object] = {
+        "code": reason_code,
+        "message": reason_message,
+        "severity": "medium",
+    }
+    if policy_action == "review":
+        reason["source"] = "guard-local"
+    package: dict[str, object] = {
+        "alias": None,
+        "decision": decision,
+        "dependencyPath": None,
+        "direct": True,
+        "ecosystem": "npm",
+        "name": "demo",
+        "packageManager": "npm",
+        "reasons": (dict(reason),),
+        "recommendedFixVersion": None,
+        "redactedCommand": "npm install demo@https://packages.example.com/demo.tgz",
+        "requestedVersion": None,
+        "resolvedVersion": None,
+        "riskScore": None,
+    }
+    if source_identity is not None:
+        package["sourceIdentity"] = source_identity
+        package["sourceRepository"] = None
+        package["sourceRevisionKind"] = "not_applicable"
+    return PackageRequestEvaluation(
+        decision=decision,
+        policy_action=policy_action,  # type: ignore[arg-type]
+        enforcement="free_local",
+        entitlement_state="free",
+        cache_status="miss",
+        package_intent_hash="intent",
+        policy_version=policy_version,
+        bundle_version=None,
+        workspace_fingerprint=None,
+        reasons=(reason,),
+        packages=(package,),
+        risk_summary=reason_message,
+        user_copy=SupplyChainUserCopy(
+            title="Review required",
+            summary=reason_message,
+            next_step=None,
+            dashboard_url=None,
+            harness_message=reason_message,
+        ),
+    )
+
+
+def test_external_archive_gate_encodings_share_one_approval_hash(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
+    del native_context_digest
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "package.json").write_text('{"name":"archive-firewall"}\n', encoding="utf-8")
+    artifact = _package_artifact(workspace, "npm install demo@https://packages.example.com/demo.tgz")
+    store = GuardStore(tmp_path / "guard-home")
+    native_gate = _archive_gate_evaluation(
+        policy_action="require-reapproval",
+        reason_code="external_archive_network_unauthorized",
+        reason_message="External archive download requires network authorization.",
+    )
+    inspected_gate = _archive_gate_evaluation(
+        policy_action="review",
+        reason_code="external_tarball_source",
+        reason_message="External tarball source requires review before any archive download.",
+        source_identity="url:4b1fac1239ff5d90d1fe67716fa22ce3c3de5585920eeaa93212a2f50296606d",
+    )
+    blocked = _archive_gate_evaluation(
+        policy_action="block",
+        reason_code="external_archive_source_integrity_invalid",
+        reason_message="External archive private source no longer matches its approved public identity.",
+        decision="block",
+    )
+    changed_feed = _archive_gate_evaluation(
+        policy_action="review",
+        reason_code="external_tarball_source",
+        reason_message="External tarball source requires review before any archive download.",
+        source_identity="url:4b1fac1239ff5d90d1fe67716fa22ce3c3de5585920eeaa93212a2f50296606d",
+        policy_version="bundle-changed",
+    )
+    inspected_for_advisory = _archive_gate_evaluation(
+        policy_action="review",
+        reason_code="external_tarball_source",
+        reason_message="External tarball source requires review before any archive download.",
+        source_identity="url:4b1fac1239ff5d90d1fe67716fa22ce3c3de5585920eeaa93212a2f50296606d",
+    )
+    advisory = replace(
+        inspected_for_advisory,
+        reasons=(
+            *inspected_for_advisory.reasons,
+            {
+                "code": "matched_advisory",
+                "message": "A current advisory applies to this package.",
+                "severity": "high",
+            },
+        ),
+    )
+
+    def approval_hash(evaluation: PackageRequestEvaluation) -> str:
+        return package_request_policy_hash(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace,
+            evaluation=evaluation,
+        )
+
+    native_hash = approval_hash(native_gate)
+    assert approval_hash(inspected_gate) == native_hash
+    assert approval_hash(blocked) != native_hash
+    assert approval_hash(changed_feed) != native_hash
+    assert approval_hash(advisory) != native_hash
 
 
 def test_package_firewall_rejects_archive_blob_changed_after_inspection(tmp_path: Path) -> None:

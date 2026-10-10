@@ -89,7 +89,7 @@ def test_oauth_device_fixture_refresh_and_rotation_are_bound_exactly(tmp_path: P
     )
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     runner_module._persist_rotated_oauth_refresh_token(
         store=store,
         credentials=credentials,
@@ -141,7 +141,7 @@ def test_oauth_device_fixture_refresh_and_rotation_are_bound_exactly(tmp_path: P
         refresh_token="refresh-initial",
         access_token=_access_token(missing_active_bound),
     )
-    enable_exact_cloud_review(missing_store)
+    enable_exact_cloud_review(missing_store, password="cloud-review-native-test-pass")
     missing_credentials = missing_store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(missing_credentials, dict)
     runner_module._persist_rotated_oauth_refresh_token(
@@ -178,14 +178,14 @@ def test_exact_review_rejects_device_claim_not_bound_to_local_dpop_key(tmp_path:
     )
 
     with pytest.raises(ExactCloudReviewError, match="cloud_review_oauth_device_binding_mismatch"):
-        enable_exact_cloud_review(store)
+        enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
 
 def test_exact_review_rejects_rotated_keypair_with_preserved_old_thumbprint(tmp_path: Path) -> None:
     store = connected_exact_review_store(tmp_path)
     request = _request("exact-stale-dpop-thumbprint")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     old_approval = _remote_approval(store, request.request_id, receipt_id="exact-stale-dpop-thumbprint")
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
@@ -213,7 +213,7 @@ def test_malformed_explicit_refresh_clears_stale_exact_authority(tmp_path: Path)
     store = connected_exact_review_store(tmp_path)
     credentials = store.get_oauth_local_credentials(allow_primary=False)
     assert isinstance(credentials, dict)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
     runner_module._persist_rotated_oauth_refresh_token(
         store=store,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -388,3 +390,212 @@ class TestSyncStatus:
         status = cloud_review_sync_status(store)
         assert isinstance(status, dict)
         assert status["protocolVersion"] == CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
+        assert status["worker"] == "dormant"
+
+
+def _configured_profile(store: object, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        store,
+        "get_cloud_sync_profile",
+        lambda: {
+            "auth_mode": "oauth",
+            "sync_url": "https://hol.test/api/guard/receipts/sync",
+            "workspace_id": "workspace-1",
+        },
+    )
+
+
+def _heartbeat_at(*, seconds_ago: float) -> str:
+    return (datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)).isoformat()
+
+
+class TestWorkerLiveness:
+    def test_status_classifies_persisted_heartbeats(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync import (
+            cloud_review_sync_status,
+            record_cloud_review_worker_heartbeat,
+        )
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync_worker import DEFAULT_SAFETY_POLL_SECONDS
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        store = GuardStore(tmp_path)
+        _configured_profile(store, monkeypatch)
+        assert cloud_review_sync_status(store)["worker"] == "missing"
+
+        record_cloud_review_worker_heartbeat(store, now="not-a-timestamp")
+        assert cloud_review_sync_status(store)["worker"] == "unknown"
+        record_cloud_review_worker_heartbeat(store, now="2026-10-04T05:00:00")
+        assert cloud_review_sync_status(store)["worker"] == "unknown"
+        record_cloud_review_worker_heartbeat(
+            store,
+            now=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+        )
+        assert cloud_review_sync_status(store)["worker"] == "unknown"
+
+        record_cloud_review_worker_heartbeat(
+            store,
+            now=_heartbeat_at(seconds_ago=DEFAULT_SAFETY_POLL_SECONDS * 3 + 2),
+        )
+        assert cloud_review_sync_status(store)["worker"] == "dead"
+
+        store.set_sync_payload(
+            "guard_cloud_review_sync_state",
+            {
+                "state": "error",
+                "last_error": "HTTP Error 503: unavailable",
+                "last_sync_at": "2026-10-04T05:00:00+00:00",
+                "synced_count": 7,
+            },
+            "2026-10-04T05:00:00+00:00",
+        )
+        record_cloud_review_worker_heartbeat(store)
+        failing = cloud_review_sync_status(store)
+        assert failing["worker"] == "failing"
+        assert failing["state"] == "error"
+        assert failing["synced_count"] == 7
+        payload = store.get_sync_payload("guard_cloud_review_sync_state")
+        assert isinstance(payload, dict)
+        assert payload["last_sync_at"] == "2026-10-04T05:00:00+00:00"
+        assert payload["synced_count"] == 7
+        assert isinstance(payload["last_worker_heartbeat_at"], str)
+
+        store.set_sync_payload(
+            "guard_cloud_review_sync_state",
+            {"state": "idle", "last_sync_at": "2026-10-04T05:00:00+00:00", "synced_count": 7},
+            "2026-10-04T05:00:00+00:00",
+        )
+        record_cloud_review_worker_heartbeat(store)
+        assert cloud_review_sync_status(store)["worker"] == "alive"
+
+    def test_liveness_follows_the_configured_poll_and_still_requires_a_heartbeat(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync import (
+            cloud_review_sync_status,
+            record_cloud_review_worker_heartbeat,
+        )
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        store = GuardStore(tmp_path)
+        _configured_profile(store, monkeypatch)
+        monkeypatch.setenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", "120")
+        assert cloud_review_sync_status(store)["worker"] == "missing"
+        record_cloud_review_worker_heartbeat(store, now=_heartbeat_at(seconds_ago=100))
+        assert cloud_review_sync_status(store)["worker"] == "alive"
+        record_cloud_review_worker_heartbeat(store, now=_heartbeat_at(seconds_ago=362))
+        assert cloud_review_sync_status(store)["worker"] == "dead"
+        monkeypatch.setenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", "10")
+        record_cloud_review_worker_heartbeat(store, now=_heartbeat_at(seconds_ago=40))
+        assert cloud_review_sync_status(store)["worker"] == "dead"
+
+    def test_dormant_worker_loop_writes_a_heartbeat_without_a_profile(self, tmp_path: Path) -> None:
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync import cloud_review_sync_status
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync_worker import (
+            start_cloud_sync_sync_worker,
+            stop_cloud_sync_sync_worker,
+        )
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        store = GuardStore(tmp_path)
+        assert store.get_cloud_sync_profile() is None
+        worker = start_cloud_sync_sync_worker(store, poll_interval=0.05)
+        try:
+            heartbeat: object = None
+            deadline = time.monotonic() + 3
+            while time.monotonic() < deadline:
+                payload = store.get_sync_payload("guard_cloud_review_sync_state")
+                if isinstance(payload, dict) and payload.get("last_worker_heartbeat_at"):
+                    heartbeat = payload["last_worker_heartbeat_at"]
+                    break
+                time.sleep(0.02)
+            assert isinstance(heartbeat, str)
+            seen = datetime.fromisoformat(heartbeat.replace("Z", "+00:00"))
+            assert seen.tzinfo is not None
+            assert abs((datetime.now(timezone.utc) - seen.astimezone(timezone.utc)).total_seconds()) < 10
+            assert cloud_review_sync_status(store)["worker"] == "dormant"
+        finally:
+            assert stop_cloud_sync_sync_worker(worker) is None
+
+    def test_cli_names_a_dead_worker_without_replacing_partial_recovery(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from codex_plugin_scanner.guard.cli.product_cloud import _build_cloud_context
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync import record_cloud_review_worker_heartbeat
+        from codex_plugin_scanner.guard.runtime.cloud_review_sync_worker import DEFAULT_SAFETY_POLL_SECONDS
+        from codex_plugin_scanner.guard.sqlite_cloud_review_recovery import (
+            PARTIAL_CLOUD_RECOVERY_DETAIL,
+            RECOVERY_HEALTH_STATE_KEY,
+            cloud_review_recovery_health,
+        )
+        from codex_plugin_scanner.guard.store import GuardStore
+
+        local = GuardStore(tmp_path / "local")
+        local_context = _build_cloud_context(local)
+        assert local_context["cloud_review_worker"] == "dormant"
+        assert "Guard Cloud is optional" in str(local_context["cloud_state_detail"])
+
+        store = GuardStore(tmp_path / "configured")
+        _configured_profile(store, monkeypatch)
+        monkeypatch.setattr(
+            store,
+            "get_oauth_local_credential_health",
+            lambda: {"configured": True, "state": "healthy"},
+        )
+        missing = _build_cloud_context(store)
+        assert missing["cloud_review_worker"] == "missing"
+        assert missing["cloud_state_detail"] == "Cloud Review delivery has not started on this device."
+
+        record_cloud_review_worker_heartbeat(store, now="2026-10-04T05:00:00")
+        unknown = _build_cloud_context(store)
+        assert unknown["cloud_review_worker"] == "unknown"
+        assert unknown["cloud_state_detail"] == "Cloud Review delivery status is not confirmed."
+
+        store.set_sync_payload(
+            "guard_cloud_review_sync_state",
+            {"state": "error", "last_error": "HTTP Error 503: unavailable"},
+            "2026-10-04T05:00:00+00:00",
+        )
+        record_cloud_review_worker_heartbeat(store)
+        failing = _build_cloud_context(store)
+        assert failing["cloud_review_worker"] == "failing"
+        assert failing["cloud_state_detail"] == "Decision saved. Guard is retrying delivery."
+
+        record_cloud_review_worker_heartbeat(store)
+        store.set_sync_payload(
+            "guard_cloud_review_sync_state",
+            {"state": "idle", "last_worker_heartbeat_at": _heartbeat_at(seconds_ago=1)},
+            "2026-10-04T05:00:00+00:00",
+        )
+        alive = _build_cloud_context(store)
+        assert alive["cloud_review_worker"] == "alive"
+        assert "has not finished the first shared sync" in str(alive["cloud_state_detail"])
+
+        record_cloud_review_worker_heartbeat(
+            store,
+            now=_heartbeat_at(seconds_ago=DEFAULT_SAFETY_POLL_SECONDS * 3 + 2),
+        )
+        dead = _build_cloud_context(store)
+        assert dead["cloud_review_worker"] == "dead"
+        assert dead["cloud_state_detail"] == "Cloud Review delivery is paused because the sync worker stopped."
+
+        store.set_sync_payload(
+            RECOVERY_HEALTH_STATE_KEY,
+            cloud_review_recovery_health(cloud_review=False, local_cli=True),
+            "2026-10-04T05:00:00+00:00",
+        )
+        recovered = _build_cloud_context(store)
+        assert recovered["cloud_review_worker"] == "dead"
+        assert recovered["cloud_state_detail"] == PARTIAL_CLOUD_RECOVERY_DETAIL
+
+
+def test_unusable_poll_intervals_stay_at_the_safety_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.runtime.cloud_review_sync_worker import (
+        DEFAULT_SAFETY_POLL_SECONDS,
+        configured_cloud_review_poll_seconds,
+    )
+
+    for raw in ("", "nan", "inf", "+inf", "-inf", "0", "-1", "nope"):
+        monkeypatch.setenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", raw)
+        assert configured_cloud_review_poll_seconds() == DEFAULT_SAFETY_POLL_SECONDS
+    monkeypatch.setenv("GUARD_CLOUD_REVIEW_POLL_INTERVAL", "15")
+    assert configured_cloud_review_poll_seconds() == 15.0

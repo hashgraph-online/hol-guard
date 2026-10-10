@@ -80,6 +80,11 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
             "status": "failed",
             "failureCode": failure_code,
             "failureMessage": str(execution.get("failureMessage") or failure_code),
+            **(
+                {key: execution[key] for key in ("callStage", "commitCertainty") if key in execution}
+                if uses_exact_transport(job)
+                else {}
+            ),
         }
     if uses_exact_transport(job):
         try:
@@ -92,6 +97,8 @@ def result_payload(job: dict[str, object], execution: dict[str, object]) -> dict
                 "status": "failed",
                 "failureCode": "exact_result_contract_invalid",
                 "failureMessage": "The exact Guard Review result did not satisfy the canonical contract.",
+                "callStage": "verify",
+                "commitCertainty": "unknown",
             }
     else:
         result = execution

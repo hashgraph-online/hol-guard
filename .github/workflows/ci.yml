@@ -257,6 +257,7 @@ jobs:
           HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
           HOL_GUARD_NATIVE_REGRESSION: "1"
+          HOL_GUARD_SECURE_STATE_DIR: ${{ runner.temp }}/hol-guard-secure-state
         run: |
           uv run --no-sync pytest -q --tb=short \
             ci/package_size \
@@ -343,9 +344,9 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    # Includes checkout/setup plus the instrumented shard. Five minutes can
-    # cancel a healthy shard before it produces the coverage artifact Sonar needs.
-    timeout-minutes: 10
+    # Includes checkout/setup plus the instrumented shard. Ten minutes
+    # cancelled a healthy shard after its tests passed, before upload finished.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -376,9 +377,9 @@ jobs:
           echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
-      - name: Run coverage shard ${{ matrix.shard-index }}
+          echo "HOL_GUARD_SECURE_STATE_DIR=$RUNNER_TEMP/hol-guard-secure-state" >> "$GITHUB_ENV"
         shell: bash
-        run: |
+      - run: |
           shard_file=$(printf 'pytest-shards/shard-%03d.txt' "${{ matrix.shard-index }}")
           test -s "$shard_file"
           # PRs need the same behavioral suite, not the coverage tracer tax. Main
@@ -486,7 +487,9 @@ jobs:
     # authoritative instrumented main run and stays off the contributor path.
     if: vars.SONAR_CI_ENABLED == 'true' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Clippy and the scan share this job with the coverage wait.
+    # The producers can run for twenty minutes before that scan starts.
+    timeout-minutes: 35
     permissions:
       contents: read
       actions: read

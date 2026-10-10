@@ -8,6 +8,7 @@ from hashlib import sha256
 from typing import cast
 
 from .review_event_integrity import review_event_payload_digest
+from .sqlite_errors import sqlite_error_is_busy_locked, sqlite_error_is_fatal, sqlite_error_is_io
 
 # pyright: reportAny=false, reportUnusedCallResult=false
 
@@ -23,11 +24,50 @@ def _oauth_binding_state_key(source: str) -> str:
     return "oauth_local_credentials" if source == "default" else f"oauth_local_credentials:{source}"
 
 
+# SQLite primary code. Named sqlite3 exports are not available on Python 3.10.
+_SQLITE_SCHEMA = 17
+
+
+def _review_binding_schema_unavailable(error: sqlite3.OperationalError) -> bool:
+    """A missing binding table is no Cloud identity, not a failed local pause."""
+
+    if sqlite_error_is_busy_locked(error) or sqlite_error_is_fatal(error) or sqlite_error_is_io(error):
+        return False
+    code = getattr(error, "sqlite_errorcode", None)
+    if isinstance(code, int) and not isinstance(code, bool) and (code & 0xFF) == _SQLITE_SCHEMA:
+        return False
+    message = str(error).lower()
+    return message.startswith("no such table:") or message.startswith("no such column:")
+
+
+def _query_review_binding_row(
+    connection: sqlite3.Connection,
+    sql: str,
+    params: tuple[str, ...],
+) -> sqlite3.Row | None:
+    try:
+        return connection.execute(sql, params).fetchone()
+    except sqlite3.OperationalError as error:
+        code = getattr(error, "sqlite_errorcode", None)
+        schema_changed = isinstance(code, int) and not isinstance(code, bool) and (code & 0xFF) == _SQLITE_SCHEMA
+        if not schema_changed and str(error).lower() != "database schema has changed":
+            raise
+        # Another connection can publish schema while this pause is being saved.
+        # SQLite requires the statement to be prepared again; one retry is enough.
+        return connection.execute(sql, params).fetchone()
+
+
 def load_review_oauth_binding(connection: sqlite3.Connection, source: str) -> dict[str, str] | None:
-    row = connection.execute(
-        "select payload_json from sync_state where state_key = ?",
-        (_oauth_binding_state_key(source),),
-    ).fetchone()
+    try:
+        row = _query_review_binding_row(
+            connection,
+            "select payload_json from sync_state where state_key = ?",
+            (_oauth_binding_state_key(source),),
+        )
+    except sqlite3.OperationalError as error:
+        if _review_binding_schema_unavailable(error):
+            return None
+        raise
     if row is None:
         return None
     try:
@@ -44,9 +84,16 @@ def load_review_oauth_binding(connection: sqlite3.Connection, source: str) -> di
     subject_hash = review_event_oauth_subject_hash(grant_id if isinstance(grant_id, str) else None)
     workspace_id = payload.get("workspace_id")
     machine_id = payload.get("machine_id")
-    device = connection.execute(
-        "select installation_id from guard_devices where device_key = 'local-device'"
-    ).fetchone()
+    try:
+        device = _query_review_binding_row(
+            connection,
+            "select installation_id from guard_devices where device_key = ?",
+            ("local-device",),
+        )
+    except sqlite3.OperationalError as error:
+        if _review_binding_schema_unavailable(error):
+            return None
+        raise
     installation_id = device["installation_id"] if device is not None else None
     values = (subject_hash, workspace_id, machine_id, installation_id)
     if not all(isinstance(value, str) and value.strip() for value in values):

@@ -6,6 +6,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from codex_plugin_scanner.guard.approval_gate import public_config, update_settings
 from codex_plugin_scanner.guard.cli.oauth_client import generate_dpop_key_pair
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_contracts import (
@@ -24,6 +25,9 @@ from tests.guard_review_signing_helpers import (
     review_verification_keys,
     sign_review_payload,
 )
+
+NATIVE_CLOUD_REVIEW_TEST_PASSWORD = "cloud-review-native-test-pass"
+
 
 
 def connected_exact_review_store(
@@ -62,6 +66,15 @@ def connected_exact_review_store(
         review_trusted_keyring_payload(workspace_id="workspace-1"),
         now,
     )
+    if not public_config(store.guard_home).configured:
+        update_settings(
+            store.guard_home,
+            {
+                "enabled": True,
+                "new_password": NATIVE_CLOUD_REVIEW_TEST_PASSWORD,
+                "confirm_password": NATIVE_CLOUD_REVIEW_TEST_PASSWORD,
+            },
+        )
     return store
 
 
@@ -220,3 +233,85 @@ __all__ = [
     "remote_approval",
     "review_request",
 ]
+
+
+def synthetic_native_consent_authority(
+    monkeypatch: object,
+    *,
+    password: str = NATIVE_CLOUD_REVIEW_TEST_PASSWORD,
+) -> dict[str, object]:
+    """Install a deterministic native-cloud-review consent authority for tests.
+
+    Replaces ``exact_cloud_review.native_cloud_review_consent`` so consent
+    exercises run on hosts without a platform secure store (Linux CI, unit
+    mode). The consent capability uses a fixed 2024 epoch so tests that pass
+    historical ``now`` values never trip the issued-in-future check.
+    """
+
+    from codex_plugin_scanner.guard.native_cloud_review_consent import (
+        NativeCloudReviewConsentError,
+    )
+    from codex_plugin_scanner.guard.runtime import exact_cloud_review as exact
+
+    # issued_at is pinned one day before the earliest historical test ``now``
+    # (2026-09-27), so capability timestamps satisfy ``issued_at <= now`` while
+    # ``expires_at`` (issued + 365d, the max permitted TTL) stays in the future.
+    issued = 1774306800000  # 2026-09-26T12:00:00Z
+    expires = issued + 365 * 24 * 60 * 60 * 1000
+    state: dict[str, object] = {
+        "schema": "guard-native-cloud-review-consent-result.v1",
+        "version": 1,
+        "status": "disabled",
+        "revision": 0,
+        "revocation_epoch": 0,
+        "issued_at_ms": 0,
+        "expires_at_ms": 0,
+        "native": True,
+    }
+
+    def authority(_home: Path, operation: str, **factors: object) -> dict[str, object]:
+        if operation == "read":
+            return dict(state)
+        if operation == "enable":
+            accepted = factors.get("password") in {password, "test-pass", "synthetic-native-factor"}
+            if not accepted:
+                raise NativeCloudReviewConsentError("approval_gate_invalid_password")
+            state.update(
+                status="enabled",
+                revision=int(state["revision"]) + 1,
+                issued_at_ms=issued,
+                expires_at_ms=expires,
+            )
+            return dict(state)
+        if operation == "disable":
+            state.update(
+                status="disabled",
+                revocation_epoch=int(state["revocation_epoch"]) + 1,
+            )
+            return dict(state)
+        raise NativeCloudReviewConsentError("native_cloud_review_consent_invalid")
+
+    monkeypatch.setattr(exact, "native_cloud_review_consent", authority)
+    # The dispatch module re-binds the same name for pre-read consent checks
+    # before connect-time enablement; keep both namespaces in sync.
+    from codex_plugin_scanner.guard.cli import commands_dispatch_cloud_review
+    monkeypatch.setattr(commands_dispatch_cloud_review, "native_cloud_review_consent", authority)
+    return state
+
+
+def connected_and_consented_exact_review_store(
+    tmp_path: Path,
+    *,
+    monkeypatch: object,
+    missing_device_id: bool = False,
+) -> GuardStore:
+    """Connected store with native consent enabled through a synthetic authority.
+
+    For tests that exercise downstream consent behaviour (authorize, queue,
+    recovery, transport) on hosts without a platform secure store.  Returns a
+    store whose native consent snapshot is ``enabled``."""
+    store = connected_exact_review_store(tmp_path, missing_device_id=missing_device_id)
+    synthetic_native_consent_authority(monkeypatch)
+    from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
+    enable_exact_cloud_review(store, password=NATIVE_CLOUD_REVIEW_TEST_PASSWORD)
+    return store

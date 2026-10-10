@@ -12,7 +12,7 @@ pub(super) fn contains_credential_post(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> bool {
-    if !read_paths::verified_path_context(context.home_dir, context.cwd) {
+    if !read_paths::screens::verified_path_context(context.home_dir, context.cwd) {
         return false;
     }
     model.segments.iter().enumerate().any(|(index, segment)| {

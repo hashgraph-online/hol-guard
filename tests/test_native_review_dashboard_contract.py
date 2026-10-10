@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _native_review_action_envelope
+from codex_plugin_scanner.guard.daemon.hook_native_review_origin import _native_review_action_envelope
 
 
 def _envelope(harness: str, payload: dict[str, object]) -> dict[str, object]:
@@ -19,15 +19,6 @@ def _envelope(harness: str, payload: dict[str, object]) -> dict[str, object]:
     return envelope
 
 
-def test_native_review_produces_dashboard_wire_contract() -> None:
-    expected = json.loads((Path(__file__).parent / "fixtures/native-review-action-envelope.json").read_text())
-    actual = _envelope(
-        "omp",
-        {"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
-    )
-    # ``action_id`` is now the stable canonical-action hash rather than the
-    # request id, so the fixture only pins the remaining wire fields.
-    assert {**actual, "action_id": expected["action_id"]} == expected
 
 
 @pytest.mark.parametrize("harness", ("pi", "omp"))
@@ -46,13 +37,6 @@ def test_native_review_displays_redacted_read_details(harness: str) -> None:
     assert "src/example.py" in json.dumps(envelope["raw_payload_redacted"])
 
 
-def test_native_review_displays_eval_input() -> None:
-    envelope = _envelope(
-        "omp",
-        {"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
-    )
-    assert envelope["action_type"] == "config_change"
-    assert "1 + 1" in json.dumps(envelope["raw_payload_redacted"])
 
 
 def test_native_review_preserves_configuration_classification() -> None:

@@ -17,13 +17,14 @@ from codex_plugin_scanner.guard.runtime.command_queue_authority import authorize
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     authorize_exact_cloud_review_job,
     disable_exact_cloud_review,
+    enable_exact_cloud_review,
 )
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_executor import execute_exact_cloud_review_operation
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import (
     exact_result,
     exact_transport_job,
 )
-from codex_plugin_scanner.guard.runtime.native_workspace_review import NativeWorkspaceReviewError
+from codex_plugin_scanner.guard.runtime.native_workspace_review_error import NativeWorkspaceReviewError
 from codex_plugin_scanner.guard.runtime.native_workspace_review_queue import (
     NativeWorkspaceReviewQueueError,
     is_native_workspace_review_job,
@@ -37,6 +38,8 @@ from tests.guard_exact_cloud_review_support import (
     connected_exact_review_store,
     exact_review_job,
     review_request,
+    connected_and_consented_exact_review_store,
+    synthetic_native_consent_authority,
 )
 
 
@@ -44,7 +47,7 @@ from tests.guard_exact_cloud_review_support import (
 def test_native_transport_hint_requires_installed_file_and_preserves_revocation(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, kind: str
 ) -> None:
-    store = connected_exact_review_store(tmp_path)
+    store = connected_and_consented_exact_review_store(tmp_path, monkeypatch=monkeypatch)
     monkeypatch.setattr(command_queue, "review_verification_keyring_ready", lambda _store: False)
     authority = store.guard_home / "native-runtime" / "workspace-review-authority.v1.json"
     authority.parent.mkdir(parents=True, exist_ok=True)
@@ -81,8 +84,12 @@ def _native_job(store, request_id: str = "native-request") -> dict[str, object]:
     return job
 
 
-def _native_store(tmp_path: Path, request_id: str = "native-request"):
-    store = connected_exact_review_store(tmp_path)
+def _native_store(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    request_id: str = "native-request",
+) -> GuardStore:
+    store = connected_and_consented_exact_review_store(tmp_path, monkeypatch=monkeypatch)
     add_review_request(store, review_request(request_id))
     return store
 
@@ -90,7 +97,7 @@ def _native_store(tmp_path: Path, request_id: str = "native-request"):
 def test_native_transport_hint_cannot_authorize_legacy_payload_without_keyring(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = connected_exact_review_store(tmp_path)
+    store = connected_and_consented_exact_review_store(tmp_path, monkeypatch=monkeypatch)
     authority = store.guard_home / "native-runtime" / "workspace-review-authority.v1.json"
     authority.parent.mkdir(parents=True, exist_ok=True)
     authority.write_text("{}", encoding="utf-8")
@@ -157,7 +164,7 @@ def test_native_consumption_bypass_requires_exact_operation() -> None:
 def test_nonnative_operation_with_native_fields_keeps_generic_consumption_mark(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _native_store(tmp_path)
+    store = _native_store(tmp_path, monkeypatch)
     job = _native_job(store)
     job["operation"] = "guard.packageShims.status"
     marked: list[str] = []
@@ -201,7 +208,7 @@ def test_nonnative_operation_with_native_fields_keeps_generic_consumption_mark(
 def test_native_authorization_uses_resident_readiness_and_skips_replay_cache(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _native_store(tmp_path)
+    store = _native_store(tmp_path, monkeypatch)
     job = _native_job(store)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.native_workspace_review_queue.require_native_workspace_review_authority",
@@ -217,7 +224,7 @@ def test_native_authorization_uses_resident_readiness_and_skips_replay_cache(
 def test_native_authorization_rejects_wrong_target_revocation_and_not_enrolled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _native_store(tmp_path)
+    store = _native_store(tmp_path, monkeypatch)
     job = _native_job(store)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.native_workspace_review_queue.require_native_workspace_review_authority",
@@ -228,10 +235,12 @@ def test_native_authorization_rejects_wrong_target_revocation_and_not_enrolled(
         authorize_exact_cloud_review_job(store, wrong_target, now="2026-09-27T12:00:00+00:00")
 
     disable_exact_cloud_review(store, now="2026-09-27T12:00:00+00:00")
-    with pytest.raises(CommandCapabilityError, match="cloud_review_capability_revoked"):
+    # Consent is read before the signed-capability revocation; a revoked consent
+    # fails closed as disabled rather than reporting the older capability code.
+    with pytest.raises(CommandCapabilityError, match="native_cloud_review_consent_disabled"):
         authorize_exact_cloud_review_job(store, job, now="2026-09-27T12:00:00+00:00")
 
-    store = _native_store(tmp_path / "not-enrolled")
+    store = _native_store(tmp_path / "not-enrolled", monkeypatch)
     job = _native_job(store)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.native_workspace_review_queue.require_native_workspace_review_authority",
@@ -244,7 +253,7 @@ def test_native_authorization_rejects_wrong_target_revocation_and_not_enrolled(
 def test_native_preflight_preserves_binding_failure_and_distinguishes_local_io(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _native_store(tmp_path)
+    store = _native_store(tmp_path, monkeypatch)
     command = native_workspace_review_payload(_native_job(store)["payload"])
     assert command is not None
 
@@ -272,7 +281,7 @@ def test_native_preflight_preserves_binding_failure_and_distinguishes_local_io(
 def test_native_transport_requires_exact_route_and_payload_shape(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _native_store(tmp_path)
+    store = _native_store(tmp_path, monkeypatch)
     job = _native_job(store)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.runtime.native_workspace_review_queue.require_native_workspace_review_authority",
@@ -358,7 +367,7 @@ def test_native_exact_result_binds_server_request_and_receipt() -> None:
 def test_native_lost_ack_redelivery_skips_generic_mark_and_external_resume(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    store = _native_store(tmp_path)
+    store = _native_store(tmp_path, monkeypatch)
     job = _native_job(store)
     now = "2026-09-27T12:00:00+00:00"
     calls: list[tuple[str, str]] = []

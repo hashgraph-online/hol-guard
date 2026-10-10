@@ -9,12 +9,9 @@ from typing import cast
 
 from ..store_native_workspace_review import NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX
 from .exact_cloud_review import EXACT_CLOUD_REVIEW_OPERATION
-from .native_workspace_review import (
-    NativeWorkspaceReviewError,
-    NativeWorkspaceReviewStore,
-    apply_native_workspace_review_decision,
-    matching_workspace_review_snapshot,
-)
+from .native_workspace_review import apply_native_workspace_review_decision
+from .native_workspace_review_error import NativeWorkspaceReviewError, NativeWorkspaceReviewStore
+from .native_workspace_review_staging import matching_workspace_review_snapshot
 
 _NATIVE_PAYLOAD_FIELDS = frozenset({"localRequestId", "receiptId", "envelope"})
 _MAX_IDENTIFIER_LENGTH = 128
@@ -147,16 +144,13 @@ def execute_native_workspace_review_command(
     guard_home = getattr(store, "guard_home", None)
     if not isinstance(guard_home, Path):
         raise ValueError("native_workspace_review_not_enrolled")
-    try:
-        applied = apply_native_workspace_review_decision(
-            store,
-            guard_home,
-            command.local_request_id,
-            command.envelope,
-            resolved_at=generated_at,
-        )
-    except NativeWorkspaceReviewError as error:
-        raise ValueError(error.code) from error
+    applied = apply_native_workspace_review_decision(
+        store,
+        guard_home,
+        command.local_request_id,
+        command.envelope,
+        resolved_at=generated_at,
+    )
     resolution_action = applied.get("resolution_action")
     if resolution_action not in {"allow", "block"}:
         raise ValueError("native_workspace_review_response_invalid")

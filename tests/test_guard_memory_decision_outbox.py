@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import copy
+import hashlib
+import json
+import urllib.request
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from codex_plugin_scanner.guard.memory_decision_event import MEMORY_DECISION_EVENT_CONTRACT_VERSION
 from codex_plugin_scanner.guard.memory_decision_outbox import enqueue_memory_decision_event
@@ -249,3 +256,137 @@ class TestMemoryDecisionOutboxEnqueue:
         assert isinstance(payload, dict)
         source_receipt_id = payload["payload"]["source_receipt_id"]
         assert store.get_receipt(source_receipt_id) is not None
+
+
+def test_backlog_send_removes_source_when_current_native_disclosure_authority_is_unavailable(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.runner import _receipt_disclosure_before_send
+
+    store = _store(tmp_path)
+    row = {
+        "receipt_id": "old-workspace-memory",
+        "approval_request_id": "old-native-request",
+        "approval_source": "memory_decision",
+        "source_scope": "workspace",
+        "raw_command_text": "private original command",
+    }
+    request = urllib.request.Request(
+        "http://127.0.0.1:4321/api/guard/receipts/sync",
+        data=json.dumps(
+            {
+                "receipts": [
+                    {
+                        "receiptId": row["receipt_id"],
+                        "envelopeRedacted": {"policyMemorySource": {"commandText": row["raw_command_text"]}},
+                        "envelope_redacted": {"policyMemorySource": {"commandText": row["raw_command_text"]}},
+                        "metadata": {"policyMemorySource": {"commandText": row["raw_command_text"]}},
+                        "policyMemorySource": {"commandText": row["raw_command_text"]},
+                    }
+                ],
+            }
+        ).encode(),
+        headers={"Authorization": "DPoP old-token"},
+    )
+    prepare = _receipt_disclosure_before_send(store, [row], "none")
+    prepare(request)
+    sent = json.loads(request.data)["receipts"][0]
+    assert "policyMemorySource" not in sent
+    for field in ("envelopeRedacted", "envelope_redacted", "metadata"):
+        assert "policyMemorySource" not in sent[field]
+    prepare(request)
+    assert json.loads(request.data)["receipts"][0] == sent
+
+
+def test_ordinary_allow_once_is_not_a_reusable_source_even_when_full_receipt_upload_is_enabled(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.memory_decision_outbox import policy_memory_source_for_receipt
+
+    source = policy_memory_source_for_receipt(
+        _store(tmp_path),
+        {
+            "approval_request_id": "ordinary",
+            "approval_source": "local_approval",
+            "source_scope": "once",
+            "raw_command_text": "private original command",
+        },
+        redaction_level="none",
+        access_token="current-token",
+    )
+    assert source is None
+
+
+@pytest.mark.parametrize("revocation", ["consent", "token", "origin", "snapshot", "command", "resolution"])
+def test_reusable_source_is_removed_on_retry_after_authority_changes(tmp_path, monkeypatch, revocation):
+    from codex_plugin_scanner.guard import memory_decision_outbox as outbox
+    from codex_plugin_scanner.guard.runtime import native_cloud_review_v4
+    from codex_plugin_scanner.guard.runtime.native_cloud_review_origin import (
+        NATIVE_CLOUD_REVIEW_ORIGIN_FIELD,
+        NATIVE_CLOUD_REVIEW_ORIGIN_QUEUE_PREFIX,
+    )
+    from codex_plugin_scanner.guard.runtime.runner import _receipt_disclosure_before_send
+    from tests.test_native_cloud_review_origin_projection import _source
+
+    origin, native_receipt, _ = _source()
+    command = "  printf 'private original action'  "
+    origin["command_sha256"] = hashlib.sha256(command.encode()).hexdigest()
+    binding = {"machine_id": "machine-1", "workspace_id": "workspace-1", "consent_revision": 3, "revocation_epoch": 1}
+    envelope = {
+        NATIVE_CLOUD_REVIEW_ORIGIN_FIELD: origin,
+        "nativeApprovalChallenge": origin["challenge"],
+        "native_origin_receipt": native_receipt,
+        outbox.NATIVE_MEMORY_SOURCE_BINDING_FIELD: copy.deepcopy(binding),
+    }
+    saved = {
+        "request_id": origin["request_id"],
+        "request_kind": "reviewable_pause",
+        "watch_only_observation": False,
+        "queue_group_id": NATIVE_CLOUD_REVIEW_ORIGIN_QUEUE_PREFIX + origin["request_id"],
+        "harness": native_receipt["harness"],
+        "artifact_id": "shell-command",
+        "raw_command_text": command,
+        "status": "resolved",
+        "resolution_action": "allow",
+        "resolution_scope": "workspace",
+        "action_envelope_json": json.dumps(envelope),
+    }
+    snapshot = copy.deepcopy(saved)
+    credentials = {"token_type": "DPoP", "access_token": "current-token"}
+    store = SimpleNamespace(
+        guard_home=tmp_path,
+        get_oauth_local_credentials=lambda **kwargs: credentials,
+        get_approval_request=lambda request_id: saved,
+        list_review_event_snapshots=lambda request_id: [snapshot],
+    )
+    monkeypatch.setattr(outbox, "native_memory_source_binding", lambda store: binding)
+    current_origin = copy.deepcopy(origin)
+    monkeypatch.setattr(native_cloud_review_v4, "get_native_approval_origin", lambda *args: current_origin)
+    receipt = {
+        "receipt_id": "source-receipt",
+        "approval_request_id": origin["request_id"],
+        "approval_source": "memory_decision",
+        "source_scope": "workspace",
+        "artifact_id": saved["artifact_id"],
+        "harness": saved["harness"],
+        "raw_command_text": command,
+    }
+    request = urllib.request.Request(
+        "http://127.0.0.1:4321/api/guard/receipts/sync",
+        data=json.dumps({"receipts": [{"receiptId": receipt["receipt_id"]}]}).encode(),
+        headers={"Authorization": "DPoP current-token"},
+    )
+    prepare = _receipt_disclosure_before_send(store, [receipt], "none")
+    prepare(request)
+    disclosed = json.loads(request.data)["receipts"][0]["envelopeRedacted"]["policyMemorySource"]
+    assert disclosed["commandText"] == command
+    if revocation == "consent":
+        binding["revocation_epoch"] = 2
+    elif revocation == "token":
+        credentials["access_token"] = "replacement-token"
+    elif revocation == "origin":
+        current_origin.pop("command_sha256")
+    elif revocation == "snapshot":
+        snapshot["action_envelope_json"] = json.dumps({**envelope, outbox.NATIVE_MEMORY_SOURCE_BINDING_FIELD: {}})
+    elif revocation == "command":
+        saved["raw_command_text"] = command.strip()
+    else:
+        saved["resolution_scope"] = "once"
+    prepare(request)
+    assert "policyMemorySource" not in json.loads(request.data)["receipts"][0]["envelopeRedacted"]

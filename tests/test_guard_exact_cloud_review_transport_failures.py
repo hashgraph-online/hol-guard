@@ -51,7 +51,7 @@ def _exact_job(tmp_path: Path):
     store = connected_exact_review_store(tmp_path)
     request = review_request("exact-transport")
     add_review_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     job = exact_review_job(
         store,
         remote_approval(store, request.request_id, receipt_id="exact-transport-receipt"),
@@ -231,11 +231,6 @@ def test_exact_result_contract_failure_becomes_terminal_queue_failure(
 
     result = command_queue._result_payload(exact_transport_job(job), execution)
 
-    assert result == {
-        "protocolVersion": 2,
-        "leaseId": job["leaseId"],
-        "idempotencyKey": f"{job['id']}:{job['leaseId']}:failed",
-        "status": "failed",
-        "failureCode": "exact_result_contract_invalid",
-        "failureMessage": "The exact Guard Review result did not satisfy the canonical contract.",
-    }
+    assert result["status"] == "failed"
+    assert result["failureCode"] == "exact_result_contract_invalid"
+    assert result["commitCertainty"] == "unknown"

@@ -8,9 +8,14 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import native_workspace_review as native
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY
+from codex_plugin_scanner.guard.runtime.native_workspace_review_error import NativeWorkspaceReviewError
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_native_workspace_review import NATIVE_WORKSPACE_REVIEW_RECEIPT_STATE_PREFIX
 from tests.guard_exact_cloud_review_support import add_review_request, review_request
+
+_WORKSPACE_A = "22222222-2222-4222-8222-222222222222"
+_WORKSPACE_B = "55555555-5555-4555-8555-555555555555"
+_INSTALLATION = "33333333-3333-4333-8333-333333333333"
 
 
 def _receipt() -> dict[str, object]:
@@ -192,10 +197,10 @@ def test_resolved_row_does_not_bypass_native_verification(tmp_path: Path, monkey
     assert _resolve(store, request, _receipt())["resolved"] is True
 
     def rejected(**_kwargs: object) -> dict[str, object]:
-        raise native.NativeWorkspaceReviewError("native_workspace_review_decision_signature_invalid")
+        raise NativeWorkspaceReviewError("native_workspace_review_decision_signature_invalid")
 
     monkeypatch.setattr(native, "_native_response", rejected)
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_decision_signature_invalid"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_decision_signature_invalid"):
         native.apply_native_workspace_review_decision(store, tmp_path / "guard-home", "request-1", {"forged": True})
 
 
@@ -206,5 +211,5 @@ def test_resolved_native_result_must_match_original_consumption(
     assert _resolve(store, request, _receipt())["resolved"] is True
     changed = {**_receipt(), "status": "replayed", "replayed": True, "action_binding": "0" * 64}
     monkeypatch.setattr(native, "_native_response", lambda **_kwargs: changed)
-    with pytest.raises(native.NativeWorkspaceReviewError, match="native_workspace_review_request_resolved"):
+    with pytest.raises(NativeWorkspaceReviewError, match="native_workspace_review_request_resolved"):
         native.apply_native_workspace_review_decision(store, tmp_path / "guard-home", "request-1", {})

@@ -193,7 +193,7 @@ fn build_action_identity(
         PreToolActionTypeV1::Config | PreToolActionTypeV1::Unknown
     ) || matches!(action.operation, PreToolOperationV1::Unknown)
         || !action.bounded
-        || action.event != "PreToolUse"
+        || !matches!(action.event.as_str(), "PreToolUse" | "UserPromptSubmit")
         || action_rank(intrinsic_action).is_none_or(|rank| rank >= 4)
         || action_rank(minimum_action).is_none_or(|rank| rank >= 4)
         || !is_approvable_floor(minimum_action);
@@ -367,6 +367,17 @@ pub(super) fn derive_context_with_snapshot(
 }
 
 pub(super) fn ensure_context_approvable(context: &ApprovalContext) -> Result<(), String> {
+    ensure_context_approvable_for_event(context, false)
+}
+
+pub(super) fn ensure_context_approvable_v4(context: &ApprovalContext) -> Result<(), String> {
+    ensure_context_approvable_for_event(context, true)
+}
+
+fn ensure_context_approvable_for_event(
+    context: &ApprovalContext,
+    allow_prompt: bool,
+) -> Result<(), String> {
     let Some(intrinsic_rank) = action_rank(&context.intrinsic_action) else {
         return Err("native_approval_intrinsic_action_invalid".to_owned());
     };
@@ -384,7 +395,8 @@ pub(super) fn ensure_context_approvable(context: &ApprovalContext) -> Result<(),
     {
         return Err("native_approval_floor_not_approvable".to_owned());
     }
-    if context.action_identity.event != "PreToolUse"
+    if !(context.action_identity.event == "PreToolUse"
+        || (allow_prompt && context.action_identity.event == "UserPromptSubmit"))
         || context.action_identity.schema != NATIVE_ACTION_IDENTITY_V3_SCHEMA
     {
         return Err("native_approval_action_identity_invalid".to_owned());

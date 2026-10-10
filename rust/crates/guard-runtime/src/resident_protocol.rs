@@ -48,6 +48,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::NATIVE_COMMAND_PROGRAM_CAPABILITY.into(),
         guard_contracts::NATIVE_COMMAND_CONTROL_FENCE_CAPABILITY.into(),
         "policy-snapshot-v3".into(),
+        "guard.exact-command.v1".into(),
         "policy-snapshot-push-v1".into(),
         "policy-snapshot-resident-generation-v1".into(),
         "native-approval-artifact-v3".into(),
@@ -65,6 +66,10 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-local-business-review-summary-v1".into(),
         "native-local-business-review-queue-v1".into(),
         "native-workspace-review-decision-v1".into(),
+        "native-workspace-review-consumption-query-v1".into(),
+        "native-cloud-review-consent-v1".into(),
+        "native-cloud-review-v4-hook-consumer".into(),
+        "native-cloud-review-v4-authority-renewal".into(),
         "native-policy-in-memory-v1".into(),
         "native-policy-snapshot-build-v1".into(),
         "native-policy-snapshot-inspect-v1".into(),
@@ -152,11 +157,20 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalChallengeV4(ApprovalChallengeRequestV4),
     ApprovalValidateV4(ApprovalValidateRequestV4),
     ApprovalConsumeV4(ApprovalConsumeRequestV4),
+    CloudReviewConsentV1(crate::policy_store::native_cloud_review_consent::ConsentRequest),
+    ApprovalOriginV4(crate::policy_store::native_cloud_review_v4::DeliveryRequest),
+    ApprovalRenewV4(crate::policy_store::native_cloud_review_v4::RenewalRequest),
+    ApprovalRenewalQueryV4(crate::policy_store::native_cloud_review_v4::RenewalRequest),
+    ApprovalInstallV4(crate::policy_store::native_cloud_review_v4::DeliveryRequest),
+    ApprovalBlockV4(crate::policy_store::native_cloud_review_v4::DeliveryRequest),
+    ApprovalConsumptionQueryV4(crate::policy_store::native_cloud_review_v4::DeliveryRequest),
+    ApprovalConsumptionDiscoverV4(crate::policy_store::native_cloud_review_v4::DiscoveryRequest),
     WorkspaceReviewAuthorityEnroll(WorkspaceReviewAuthorityEnrollRequestV1),
     WorkspaceReviewContext(WorkspaceReviewContextRequestV1),
     WorkspaceReviewLocalSummary(WorkspaceReviewContextRequestV1),
     WorkspaceReviewLocalQueue(WorkspaceReviewLocalQueueRequestV1),
     WorkspaceReviewDecision(WorkspaceReviewDecisionRequestV1),
+    WorkspaceReviewDecisionConsumption(WorkspaceReviewDecisionRequestV1),
     ContextDigest(ContextDigestRequestV1),
     CommandEffectDecide(CommandEffectRequestV1),
     CommandEffectDecideBatch(CommandEffectBatchRequestV1),
@@ -341,6 +355,16 @@ mod tests {
             serde_json::from_slice(&safe_error_response("native_approval_replay", false))
                 .expect("known approval error is JSON");
         assert_eq!(known["error"], "native_approval_replay");
+        let nonactionable: Value = serde_json::from_slice(&safe_error_response(
+            "native_cloud_review_v4_nonactionable_origin",
+            false,
+        ))
+        .expect("nonactionable origin error is JSON");
+        assert_eq!(
+            nonactionable["error"],
+            "native_cloud_review_v4_nonactionable_origin"
+        );
+        assert_eq!(nonactionable["retryable"], false);
 
         let unknown: Value = serde_json::from_slice(&safe_error_response(
             "native_approval_future_unregistered_code",

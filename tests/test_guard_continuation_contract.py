@@ -213,6 +213,32 @@ def test_bounded_adapter_cancels_a_hung_worker_and_records_timeout() -> None:
     assert all(child.name != "hol-guard-continuation" for child in multiprocessing.active_children())
 
 
+def test_hung_live_hook_child_stays_waiting_for_the_original_hook() -> None:
+    adapter = HangingAdapter()
+    attempts: list[ContinuationResult] = []
+    coordinator = ContinuationCoordinator(
+        record_attempt=lambda _offer, _action, result: attempts.append(result),
+        notify_manual_retry=lambda _offer, _result: None,
+        now=lambda: NOW,
+        isolated_plan=adapter,
+        isolated_runner=_run_test_adapter,
+    )
+    offer = ContinuationOffer(
+        correlation_id=CORRELATION_ID,
+        harness="codex",
+        capability="suspended-response",
+        original_hook_attached=True,
+        wait_deadline=NOW + timedelta(seconds=10),
+    )
+
+    result = coordinator.continue_after_application(offer, action="allow_once", timeout_seconds=0.02)
+
+    assert result.status == "waiting"
+    assert result.reason == "original_hook_waiting"
+    assert attempts == [result]
+    assert all(child.name != "hol-guard-continuation" for child in multiprocessing.active_children())
+
+
 def test_failed_attempt_persistence_never_populates_the_in_memory_cache() -> None:
     adapter = FakeAdapter()
     offer = ContinuationOffer(

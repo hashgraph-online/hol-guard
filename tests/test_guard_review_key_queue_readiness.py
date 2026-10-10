@@ -22,7 +22,7 @@ def no_generic_operations(_store: GuardStore) -> tuple[str, ...]:
 @pytest.fixture
 def exact_review_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GuardStore:
     store = connected_exact_review_store(tmp_path)
-    _ = enable_exact_cloud_review(store)
+    _ = enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     monkeypatch.setattr(command_queue, "command_capability_operations", no_generic_operations)
     return store
 

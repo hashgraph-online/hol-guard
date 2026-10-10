@@ -19,6 +19,7 @@ _WIRE_EVENT_TYPES = {
     "review.request.refreshed": "request_created",
     "review.request.resolved": "request_resolved",
     "review.request.snapshot_requeued": "request_created",
+    "review.native_application.applied": "native_application_applied",
     "review.continuation.resumed": "continuation_resumed",
     "review.continuation.already_resumed": "continuation_already_resumed",
     "review.continuation.manual_retry_required": "continuation_manual_retry_required",
@@ -83,6 +84,7 @@ class StoredReviewEvent:
     request_sequence: int
     snapshot: dict[str, object]
     stream_sequence: int
+    native_application_result: dict[str, object] | None = None
 
     @property
     def wire_event_type(self) -> str:
@@ -257,6 +259,19 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
         )
     snapshot = _decode_snapshot(payload)
     continuation_result = _decode_continuation_result(payload, event_type=event_type)
+    native_application_result = payload.get("nativeApplicationResult")
+    if event_type == "review.native_application.applied":
+        from .native_cloud_review_v4 import decode_native_application_result
+
+        native_application_result = decode_native_application_result(native_application_result)
+        if native_application_result is None:
+            raise StoredReviewEventError(
+                "payload_native_application_invalid", "Stored native consumed evidence is invalid."
+            )
+    elif native_application_result is not None:
+        raise StoredReviewEventError(
+            "payload_native_application_invalid", "Native consumed evidence has the wrong event type."
+        )
     if snapshot["request_id"] != local_request_id:
         raise StoredReviewEventError(
             "payload_snapshot_request_mismatch",
@@ -276,6 +291,7 @@ def decode_stored_review_event(row: dict[str, object]) -> StoredReviewEvent:
         continuation_result=continuation_result,
         event_id=event_id,
         event_type=event_type,
+        native_application_result=native_application_result,
         native_replay=native_replay if isinstance(native_replay, bool) else None,
         payload=payload,
         payload_hash=payload_hash,

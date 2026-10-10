@@ -155,12 +155,18 @@ def continue_request_after_application(
             now=now,
         ),
         now=lambda: observed_at,
-        isolated_plan=StoreContinuationPlan(
-            guard_home=str(store.guard_home),
-            request_id=request_id,
-            observed_at=now,
+        # The attached hook records the allow. A child that only echoes waiting
+        # can be killed during interpreter startup and stall this decision worker.
+        isolated_plan=(
+            None
+            if offer.capability == "suspended-response"
+            else StoreContinuationPlan(
+                guard_home=str(store.guard_home),
+                request_id=request_id,
+                observed_at=now,
+            )
         ),
-        isolated_runner=_run_store_continuation_plan,
+        isolated_runner=None if offer.capability == "suspended-response" else _run_store_continuation_plan,
     )
     result = coordinator.continue_after_application(
         offer,

@@ -110,9 +110,9 @@ def test_default_wait_covers_existing_producer_limits(monkeypatch: pytest.Monkey
 
 def test_default_wait_accepts_healthy_shards_after_full_planning_and_execution_limits() -> None:
     running = [_job(index, status="in_progress", conclusion=None) for index in range(barrier.SHARD_COUNT)]
-    # Advance only the injected clock: five minutes planning, ten minutes
+    # Advance only the injected clock: five minutes planning, fifteen minutes
     # execution, and one polling interval for the complete success to appear.
-    _, logs = _run([[]] * 60 + [running] * 121 + [_jobs()])
+    _, logs = _run([[]] * 60 + [running] * 181 + [_jobs()])
     assert logs[-1] == f"All {barrier.SHARD_COUNT} Python coverage shards succeeded in run {_RUN_ID}, attempt 2"
 
 
@@ -445,3 +445,54 @@ def test_api_redirect_is_rejected() -> None:
     request = urllib.request.Request("https://api.github.com/repos/a/b/actions/runs/1/attempts/2/jobs")
     with pytest.raises(barrier.ShardWaitError, match="redirect"):
         barrier._NoRedirect().redirect_request(request, BytesIO(), 302, "", HTTPMessage(), "https://other.example")
+
+
+def test_sonar_accepts_only_complete_coverage_from_verified_same_run_executions() -> None:
+    """Verify Sonar accepts complete coverage from verified same-run executions."""
+    root = Path(__file__).resolve().parents[1]
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
+    jobs = workflow["jobs"]
+    assert barrier.SHARD_COUNT == 128
+    assert jobs["coverage"]["name"] == "coverage (3.12, ${{ matrix.shard-index }})"
+    assert (
+        jobs["coverage"]["strategy"]["matrix"]["shard-index"]
+        == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+    )
+    producer = next(
+        step for step in jobs["coverage"]["steps"] if step.get("name") == "Upload pytest coverage data artifact"
+    )
+    sonar_steps = jobs["sonar"]["steps"]
+    consumer = next(step for step in sonar_steps if step.get("name") == "Download pytest coverage data")
+    waiter = next(step for step in sonar_steps if "select_pytest_coverage.py" in step.get("run", ""))
+
+    assert producer["with"]["name"] == "pytest-coverage-${{ github.run_attempt }}-${{ matrix.shard-index }}"
+    assert producer["with"]["if-no-files-found"] == "error"
+    assert consumer["with"]["artifact-ids"] == "${{ steps.coverage-selection.outputs.artifact-ids }}"
+    assert "run-id" not in consumer["with"]  # Download remains scoped to the current workflow run.
+    assert sonar_steps.index(waiter) < sonar_steps.index(consumer)
+    assert waiter["env"] == {"GITHUB_TOKEN": "${{ github.token }}"}
+    assert waiter["run"].endswith("--output coverage-selection.json")
+    assert waiter["id"] == "coverage-selection"
+    assert jobs["sonar"]["permissions"] == {"contents": "read", "actions": "read", "pull-requests": "read"}
+    assert 'test "${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in (
+        root / "scripts/ci/prepare_sonar_analysis.sh"
+    ).read_text()
+
+
+def test_sonar_installs_same_pinned_scanner_before_wait_without_analysis_credentials() -> None:
+    """Verify sonar installs same pinned scanner before wait without analysis credentials."""
+    root = Path(__file__).resolve().parents[1]
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))
+    steps = workflow["jobs"]["sonar"]["steps"]
+    installer = next(step for step in steps if step.get("name") == "Install pinned Sonar scanner CLI")
+    analysis = next(step for step in steps if step.get("name") == "Analyze with SonarQube Cloud")
+    waiter = next(step for step in steps if "select_pytest_coverage.py" in step.get("run", ""))
+    assert installer["uses"] == analysis["uses"]
+    assert installer["with"] == {"args": "--version"}
+    assert installer["env"] == {"SONAR_USER_HOME": analysis["env"]["SONAR_USER_HOME"]}
+    assert analysis["with"] == {
+        "args": "-Dproject.settings=sonar-scan.properties -Dsonar.python.analysis.threads=4",
+        "projectBaseDir": "",
+    }
+    assert analysis["env"]["SONAR_TOKEN"] == "${{ secrets.SONAR_TOKEN }}"
+    assert steps.index(installer) < steps.index(waiter) < steps.index(analysis)

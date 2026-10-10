@@ -184,7 +184,7 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
         """
 
         if self._isolated_plan is None or self._isolated_runner is None:
-            return self._result(offer, "failed", "continuation_adapter_isolation_unavailable")
+            return self._unconfirmed_live_hook(offer, "continuation_adapter_isolation_unavailable")
         context = multiprocessing.get_context("spawn")
         result_box: multiprocessing.Queue[ContinuationResult | str] = context.Queue(maxsize=1)
 
@@ -197,7 +197,7 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
             try:
                 worker.start()
             except (AttributeError, OSError, TypeError, ValueError):
-                return self._result(offer, "failed", "continuation_adapter_isolation_unavailable")
+                return self._unconfirmed_live_hook(offer, "continuation_adapter_isolation_unavailable")
             deadline = time.monotonic() + timeout_seconds
             while worker.is_alive() and not cancelled() and time.monotonic() < deadline:
                 worker.join(min(0.01, max(0.0, deadline - time.monotonic())))
@@ -207,21 +207,23 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
                 if worker.is_alive():
                     worker.kill()
                     worker.join(1.0)
-                return self._result(
-                    offer, "failed", "continuation_cancelled" if cancelled() else "continuation_adapter_timeout"
-                )
+                if cancelled():
+                    return self._result(offer, "failed", "continuation_cancelled")
+                return self._unconfirmed_live_hook(offer, "continuation_adapter_timeout")
             if cancelled():
                 return self._result(offer, "failed", "continuation_cancelled")
             try:
                 result = result_box.get(timeout=0.2)
             except queue.Empty:
-                return self._result(offer, "failed", "continuation_adapter_missing_result")
+                return self._unconfirmed_live_hook(offer, "continuation_adapter_missing_result")
             if isinstance(result, str):
-                return self._result(offer, "failed", "continuation_adapter_failed")
+                return self._unconfirmed_live_hook(offer, "continuation_adapter_failed")
             return result
         finally:
+            # A killed child can leave the queue feeder blocked. The result was
+            # already read, or the child will never deliver one.
+            result_box.cancel_join_thread()
             result_box.close()
-            result_box.join_thread()
 
     def _terminal_result(
         self, offer: ContinuationOffer, *, action: ContinuationAction, cancelled: Callable[[], bool]
@@ -237,6 +239,17 @@ class ContinuationCoordinator(Generic[ExecutionPlan]):
         if offer.wait_deadline is not None and offer.wait_deadline <= self._now():
             return self._result(offer, "manual_retry_required", "wait_window_expired")
         return None
+
+    def _unconfirmed_live_hook(self, offer: ContinuationOffer, reason: str) -> ContinuationResult:
+        """Keep an attached hook waiting when the child never confirms it.
+
+        A timed-out continuation child used to record ``failed``. The original
+        hook then found that terminal row and could not record its own allow.
+        """
+
+        if offer.capability == "suspended-response":
+            return self._result(offer, "waiting", "original_hook_waiting")
+        return self._result(offer, "failed", reason)
 
     def _result(self, offer: ContinuationOffer, status: ContinuationStatus, reason: str) -> ContinuationResult:
         return ContinuationResult(

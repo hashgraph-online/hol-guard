@@ -9,6 +9,7 @@ approve-then-continue flow without starting a second Codex run.
 from __future__ import annotations
 
 import http.client
+import json
 import re
 import sys
 import time
@@ -25,9 +26,20 @@ GUARD_APPROVAL_REQUEST_ID_KEY = "guardApprovalRequestId"
 GUARD_APPROVAL_URL_KEY = "guardApprovalUrl"
 _POLL_INTERVAL_SECONDS = 0.2
 _GET_TIMEOUT_CAP_SECONDS = 1.5
-_FINALIZE_TIMEOUT_CAP_SECONDS = 5.0
-_FINALIZE_MAX_ATTEMPTS = 3
+_FINALIZE_TIMEOUT_CAP_SECONDS = 12.0
+# These 409s can precede a committed allow when the grant, resident
+# revalidation, or continuation row is not visible yet. Other rejections stop.
+# Retry them until the hook deadline. Do not add codes or raise the timeout cap.
+_RETRYABLE_LIVE_DECISION_ERRORS = frozenset(
+    {
+        "continuation_not_recorded",
+        "exact_approval_authority_missing",
+        "fresh_policy_revalidation_failed",
+        "request_not_resolved",
+    }
+)
 _REQUEST_URL_RE = re.compile(r"(https?://[^\s]+/requests/([A-Za-z0-9_-]{8,128}))", re.IGNORECASE)
+_LIVE_DECISION_ERROR_CODE_RE = re.compile(r"[a-z0-9_]{1,80}")
 
 
 def apply_browser_approval_wait(
@@ -127,9 +139,12 @@ def _complete_resolution(
     if action not in {"allow", "block"}:
         return None
     path = f"/v1/requests/{quote(request_id, safe='')}/live-decision"
-    for attempt in range(_FINALIZE_MAX_ATTEMPTS):
+    pending_report: BaseException | None = None
+    while True:
         remaining = deadline - time.monotonic()
         if remaining < _POLL_INTERVAL_SECONDS:
+            if pending_report is not None:
+                _report_live_decision_rejection(pending_report)
             return None
         try:
             payload = _daemon_json_post(
@@ -138,19 +153,51 @@ def _complete_resolution(
                 payload={"hook_input": hook_input},
                 timeout_seconds=min(remaining, _FINALIZE_TIMEOUT_CAP_SECONDS),
             )
-        except (ValueError, urllib.error.HTTPError):
+        except (ValueError, urllib.error.HTTPError) as error:
+            if _retryable_live_decision_rejection(error):
+                pending_report = error
+                time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
+                continue
+            _report_live_decision_rejection(error)
             return None
         except (OSError, TimeoutError, http.client.HTTPException, urllib.error.URLError):
             # Completion may already be committed. Replaying this exact request
             # still requires daemon authentication and fresh policy validation.
-            if attempt + 1 < _FINALIZE_MAX_ATTEMPTS:
-                time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
+            pending_report = None
+            time.sleep(min(_POLL_INTERVAL_SECONDS, max(0.0, deadline - time.monotonic())))
             continue
         if not isinstance(payload, Mapping) or payload.get("completed") is not True:
             return None
         completed_action = payload.get("action")
         return action if completed_action == action else None
-    return None
+
+
+def _retryable_live_decision_rejection(error: BaseException) -> bool:
+    return _live_decision_error_code(error) in _RETRYABLE_LIVE_DECISION_ERRORS
+
+
+def _report_live_decision_rejection(error: BaseException) -> None:
+    code = _live_decision_error_code(error)
+    if code is None:
+        return
+    print(f"guard_live_decision_rejection {code}", file=sys.stderr, flush=True)
+
+
+def _live_decision_error_code(error: BaseException) -> str | None:
+    status = getattr(error, "status", None)
+    detail = getattr(error, "detail", None)
+    if status != 409 or not isinstance(detail, str) or not detail:
+        return None
+    try:
+        payload = json.loads(detail)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, dict):
+        return None
+    code = payload.get("error")
+    if not isinstance(code, str) or not _LIVE_DECISION_ERROR_CODE_RE.fullmatch(code):
+        return None
+    return code
 
 
 def _open_pending_approval(approval_url: str | None, *, state_path: str | Path) -> None:

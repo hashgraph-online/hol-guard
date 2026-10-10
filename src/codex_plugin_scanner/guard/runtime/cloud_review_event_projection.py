@@ -19,8 +19,15 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION
+from .cloud_review_request_purpose import WIRE_EVENT_SCHEMA_VERSION, canonical_request_kind
 from .local_request_snapshots import (
     _cloud_safe_local_request_payload,  # pyright: ignore[reportPrivateUsage]
+)
+from .native_cloud_review_origin import (
+    NATIVE_CLOUD_REVIEW_ORIGIN_UNAVAILABLE_FIELD,
+    frozen_native_approval_challenge,
+    frozen_native_origin_unavailable,
+    has_native_approval_origin_marker,
 )
 from .native_workspace_review_context import (
     NativeWorkspaceReviewContextProbeState,
@@ -162,8 +169,9 @@ def build_cloud_review_event(
     stored_status = str(item.get("status") or "pending")
     if stored_status not in _EVENT_TYPE_MAP:
         return None
+    native_challenge = frozen_native_approval_challenge(item)
     native_context: dict[str, object] | None = None
-    if oauth is not None and stored_status == "pending":
+    if oauth is not None and stored_status == "pending" and not has_native_approval_origin_marker(item):
         guard_home = getattr(store, "guard_home", None)
         if isinstance(guard_home, Path):
             native_context = _native_context_for_snapshot(
@@ -192,7 +200,8 @@ def build_cloud_review_event(
         "localEventSequence": event_sequence,
         "eventType": _EVENT_TYPE_MAP[stored_status],
         "harnessId": str(item.get("harness") or "guard-review"),
-        "requestKind": str(item.get("review_kind") or item.get("harness") or "guard-review"),
+        "requestKind": canonical_request_kind(item)
+        or str(item.get("review_kind") or item.get("harness") or "guard-review"),
         "displayProvenance": resolve_display_provenance(
             has_command_details=bool(request_payload.get("command_text")),
             redaction_level=redaction_level,
@@ -219,6 +228,11 @@ def build_cloud_review_event(
         "localEmittedAt": _now(),
         "sentAt": _now(),
     }
+    if native_challenge is not None:
+        request_payload["nativeApprovalChallenge"] = native_challenge
+    native_origin_unavailable = frozen_native_origin_unavailable(item)
+    if native_origin_unavailable is not None:
+        request_payload[NATIVE_CLOUD_REVIEW_ORIGIN_UNAVAILABLE_FIELD] = native_origin_unavailable
     if native_context is not None:
         request_payload["nativeWorkspaceReview"] = native_context
     return event
@@ -288,6 +302,11 @@ def project_cloud_review_event(
                 )
             native_replay = stored_event.native_replay is True or marker_status == "native"
         _require_native_replay_context(stored_event.event_type, event, native_replay=native_replay)
+        if oauth is not None and event.get("reviewClaim") is None and not native_replay:
+            raise StoredReviewEventError(
+                "review_event_claim_invalid",
+                "review_event_claim_invalid:claim_missing",
+            )
     except StoredReviewEventError as error:
         if error.reason == "native_replay_context_unavailable":
             store.retry_review_events(
@@ -315,6 +334,12 @@ def project_cloud_review_event(
             "payloadHash": stored_event.payload_hash,
         }
     )
+    if stored_event.native_application_result is not None:
+        event["nativeApplicationResult"] = stored_event.native_application_result
+    kind = canonical_request_kind(stored_event.snapshot)
+    if kind is not None:
+        event["requestKind"] = kind
+        event["eventSchemaVersion"] = WIRE_EVENT_SCHEMA_VERSION
     if terminal_projection is not None:
         terminal_result, terminal_capability, terminal_completed_at = terminal_projection
         event["continuationResult"] = terminal_result

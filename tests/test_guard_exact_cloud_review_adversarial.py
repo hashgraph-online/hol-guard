@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     ExactCloudReviewError,
     apply_exact_cloud_review,
     enable_exact_cloud_review,
+    exact_cloud_review_status,
 )
 from tests.guard_exact_cloud_review_support import (
     add_review_request as _add_request,
@@ -40,7 +41,7 @@ def test_exact_cloud_review_uses_local_time_not_forged_queue_admission(tmp_path:
     store = _connected_store(tmp_path)
     request = _request("exact-expired-receipt")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     issued_at = datetime.now(timezone.utc).replace(microsecond=0)
     approval = _remote_approval(
         store,
@@ -81,7 +82,7 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
     capability_expired = _request("exact-capability-expired")
     for request in (accepted, rejected, invalid_decision, transaction_expired, capability_expired):
         store.add_approval_request(request, current.isoformat())
-    enable_exact_cloud_review(store, now=current.isoformat(), ttl_seconds=600)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass", ttl_seconds=600)
     # Pending local requests do not expire. Isolate the remote receipt boundary.
     expires_at = current + timedelta(minutes=1)
 
@@ -135,13 +136,13 @@ def test_exact_cloud_review_receipt_expiry_boundary_and_strict_wire(
             ),
             now=(current + timedelta(seconds=1)).isoformat(),
         )
-    capability_expires_at = current + timedelta(minutes=5)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass", ttl_seconds=300)
+    capability_expires_at = datetime.fromisoformat(str(exact_cloud_review_status(store)["expires_at"]))
     monkeypatch.setattr(
         exact_store_module.StoreExactCloudReviewMixin,
         "_exact_transaction_now",
         staticmethod(lambda: capability_expires_at.isoformat()),
     )
-    enable_exact_cloud_review(store, now=current.isoformat(), ttl_seconds=300)
     with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_expired"):
         apply_exact_cloud_review(
             store,
@@ -160,7 +161,7 @@ def test_exact_cloud_review_keeps_old_pending_requests_actionable(tmp_path: Path
     store = _connected_store(tmp_path)
     stale = _request("exact-stale-request")
     store.add_approval_request(stale, "2020-01-01T00:00:00+00:00")
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     result = apply_exact_cloud_review(
         store,
         remote_approval=_remote_approval(store, stale.request_id, receipt_id="exact-stale-request"),
@@ -175,7 +176,7 @@ def test_exact_cloud_review_rejects_durable_binding_drift(tmp_path: Path) -> Non
 
     fresh = _request("exact-binding-drift")
     _add_request(store, fresh)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     capability = store.get_sync_payload("guard_exact_cloud_review_capability")
     assert isinstance(capability, dict)
     original_credentials = store.get_oauth_local_credentials(allow_primary=False)
@@ -218,7 +219,7 @@ def test_exact_cloud_review_rejects_durable_binding_drift(tmp_path: Path) -> Non
         now=datetime.now(timezone.utc).isoformat(),
     )
     store.set_sync_payload("guard_exact_cloud_review_capability", capability, datetime.now(timezone.utc).isoformat())
-    with pytest.raises(ExactCloudReviewError, match="cloud_review_capability_revoked"):
+    with pytest.raises(ExactCloudReviewError, match="native_cloud_review_consent_disabled"):
         apply_exact_cloud_review(
             store,
             remote_approval=restored_approval,
@@ -229,7 +230,7 @@ def test_exact_cloud_review_rejects_envelope_after_oauth_grant_rotation(tmp_path
     store = _connected_store(tmp_path)
     request = _request("exact-grant-rotation")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     old_envelope = _remote_approval(store, request.request_id, receipt_id="exact-grant-1")
     old_job = _job(store, old_envelope)
     credentials = store.get_oauth_local_credentials(allow_primary=False)
@@ -249,7 +250,7 @@ def test_exact_cloud_review_rejects_envelope_after_oauth_grant_rotation(tmp_path
         workspace_id=str(credentials["workspace_id"]),
         now=datetime.now(timezone.utc).isoformat(),
     )
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
 
     with pytest.raises(CommandCapabilityError, match="remote_exact_job_wrong_grant"):
         authorize_command_queue_job(
@@ -268,7 +269,7 @@ def test_exact_cloud_review_rechecks_active_dpop_keypair_inside_apply_transactio
     store = _connected_store(tmp_path)
     request = _request("exact-dpop-race")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     envelope = _remote_approval(store, request.request_id, receipt_id="exact-dpop-race")
     original_resolve = store.resolve_one_request_with_signed_remote_exact_result
 
@@ -300,7 +301,7 @@ def test_exact_cloud_review_reuses_durable_remote_receipt_ledger(tmp_path: Path)
     store = _connected_store(tmp_path)
     request = _request("exact-shared-receipt-ledger")
     _add_request(store, request)
-    enable_exact_cloud_review(store)
+    enable_exact_cloud_review(store, password="cloud-review-native-test-pass")
     apply_exact_cloud_review(
         store,
         remote_approval=_remote_approval(store, request.request_id, receipt_id="exact-shared-receipt"),

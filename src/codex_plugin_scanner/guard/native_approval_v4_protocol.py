@@ -168,11 +168,16 @@ _MAX_WEBAUTHN_SIGNATURE_BYTES = 256
 _MAX_WEBAUTHN_USER_HANDLE_BYTES = 256
 
 _RESULT_KEYS = _base._RESULT_KEYS
-_bounded_text = _base._bounded_text
 _lower_hex = _base._lower_hex
 _common_fields_valid = _base._common_fields_valid
 _receipt_fields_are_valid = _base._receipt_fields_are_valid
 _within_approval_bound = _base._within_approval_bound
+
+
+def _bounded_text(value: object, *, maximum: int, nonempty: bool = True) -> bool:
+    """Bound V4 transport strings through the shared protocol helper."""
+
+    return _base._bounded_text(value, maximum=maximum, nonempty=nonempty)
 
 
 def _base64url_transport(value: object, *, maximum: int) -> bool:
@@ -417,5 +422,19 @@ def decode_native_approval_v4_result(
         or not _receipt_v4_is_valid(cast(dict[str, object], receipt), phase=phase)
         or not _within_approval_bound(decoded)
     ):
+        return None
+    return dict(decoded)
+
+
+def decode_native_approval_v4_receipt(
+    payload: object,
+    *,
+    phase: NativeApprovalPhase,
+) -> dict[str, object] | None:
+    """Bound native-emitted receipt transport, not independently attest it."""
+    if phase not in {"validated", "consumed"} or type(payload) is not dict:
+        return None
+    decoded = cast(dict[str, object], payload)
+    if not _receipt_v4_is_valid(decoded, phase=phase) or not _within_approval_bound(decoded):
         return None
     return dict(decoded)

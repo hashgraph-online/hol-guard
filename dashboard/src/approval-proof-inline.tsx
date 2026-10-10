@@ -13,6 +13,7 @@ type ApprovalProofFieldInputsProps = {
   approvalTotpCode: string;
   passwordRef?: RefObject<HTMLInputElement | null>;
   requireFreshTotp?: boolean;
+  requirePassword?: boolean;
   requireGate?: boolean;
   onApprovalPasswordChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onApprovalTotpCodeChange: (event: ChangeEvent<HTMLInputElement>) => void;
@@ -119,7 +120,7 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
     if (!props.requireGate && props.approvalGate.enabled === false) return null;
     return <ApprovalGateSetupNotice />;
   }
-  if (!props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
+  if (!props.requirePassword && !props.requireFreshTotp && approvalProofRecentlySatisfied(props.approvalGate)) {
     return (
       <p className="text-sm leading-6 text-brand-dark/75">
         Recently confirmed with your authenticator. A new code is not needed yet.
@@ -129,7 +130,7 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
   const needsPassword = approvalProofRequiresPassword(props.approvalGate);
   return (
     <div className="space-y-3">
-      {needsPassword ? (
+      {<>{needsPassword || props.requirePassword ? (
         <label className="block" htmlFor={passwordFieldId}>
         <span className="text-sm font-semibold text-brand-dark">Approval password</span>
         <input
@@ -144,7 +145,7 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
           className="mt-1 min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/20"
         />
         </label>
-      ) : (
+      ) : null}{!needsPassword ? (
         <label className="block" htmlFor={totpFieldId}>
           <span className="text-sm font-semibold text-brand-dark">Authenticator code</span>
           <input
@@ -156,14 +157,14 @@ export function ApprovalProofFieldInputs(props: ApprovalProofFieldInputsProps) {
             autoComplete="one-time-code"
             name="one-time-code"
             enterKeyHint="done"
-            autoFocus
+            autoFocus={!needsPassword && !props.requirePassword}
             aria-required="true"
             value={props.approvalTotpCode}
             onChange={handleTotpChange}
             className="mt-2 min-h-12 w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-center text-lg font-semibold tracking-[0.35em] text-brand-dark focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
           />
         </label>
-      )}
+      ) : null}</>}
     </div>
   );
 }

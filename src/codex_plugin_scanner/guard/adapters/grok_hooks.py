@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import sys
 from collections.abc import Mapping
+from contextlib import suppress
 from typing import TextIO
 
+from ..redaction import redact_text
 from .grok_approval_resume import grok_resume_metadata_from_guard_payload
 from .hook_payloads import normalize_session_and_workspace_aliases
 
@@ -228,6 +231,42 @@ def _dedupe_grok_block_reason(reason: str) -> str:
 
 
 _last_grok_policy_action = ""
+_grok_hook_stdout_line: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "grok_hook_stdout_line",
+    default=None,
+)
+
+
+def clear_grok_hook_stdout_line() -> None:
+    """Drop a decision line from an earlier hook in this process."""
+
+    _grok_hook_stdout_line.set(None)
+
+
+def replay_grok_hook_stdout_line() -> None:
+    """Write the harness decision again so it stays the last stdout line.
+
+    Publisher teardown can run after the decision is already on stdout. Grok
+    parses that last line, so a later ``}`` or traceback must not replace it.
+    """
+
+    line = _grok_hook_stdout_line.get()
+    if not line:
+        return
+    with suppress(OSError):
+        # codeql[py/clear-text-logging-sensitive-data] The stored line is already redacted.
+        sys.stdout.write(line)
+        sys.stdout.flush()
+
+
+def _redact_grok_value(value: object) -> object:
+    if isinstance(value, str):
+        return redact_text(value).text
+    if isinstance(value, Mapping):
+        return {k: _redact_grok_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_redact_grok_value(v) for v in value]
+    return value
 
 
 def emit_grok_hook_response(
@@ -255,10 +294,14 @@ def emit_grok_hook_response(
         recording_only=recording_only,
     )
     _last_grok_policy_action = "allow" if payload.get("decision") not in {"deny", "block"} else live_action
+    line = json.dumps(_redact_grok_value(payload), separators=(",", ":")) + "\n"
+    if output_stream is None:
+        _grok_hook_stdout_line.set(line)
     stream = output_stream if output_stream is not None else sys.stdout
-    # stdout is the harness delivery channel; approval payloads must reach the operator.
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
-    stream.flush()
+    with suppress(OSError):
+        # stdout is the harness delivery channel. Values are redacted before serialization.
+        stream.write(line)  # codeql[py/clear-text-logging-sensitive-data]
+        stream.flush()
 
 
 def grok_hook_process_exit(policy_action: str) -> int:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import time
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -17,7 +16,6 @@ from codex_plugin_scanner.guard.continuation_runtime import (
     continue_request_after_application,
     record_live_hook_completion,
 )
-from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -54,28 +52,6 @@ def _successful_isolated_plan(
         reason="app_server_turn_started",
         completed_at=datetime.fromisoformat(NOW),
         evidence_id="evidence-app-server-0001",
-    )
-
-
-def _blocking_waiting_isolated_plan(
-    plan: StoreContinuationPlan,
-    offer: ContinuationOffer,
-    _action: str,
-    _timeout_seconds: float,
-) -> ContinuationResult:
-    guard_home = Path(plan.guard_home)
-    (guard_home / "continuation-child-started").write_text("started", encoding="utf-8")
-    release = guard_home / "continuation-child-release"
-    deadline = time.monotonic() + 5.0
-    while not release.exists() and time.monotonic() < deadline:
-        time.sleep(0.01)
-    return ContinuationResult(
-        correlation_id=offer.correlation_id,
-        capability=offer.capability,
-        status="waiting",
-        reason="original_hook_waiting",
-        completed_at=datetime.fromisoformat(NOW),
-        evidence_id="evidence-stale-waiting-owner",
     )
 
 
@@ -244,51 +220,47 @@ def test_dead_codex_hook_terminalizes_to_manual_retry_after_daemon_recovery(tmp_
     assert terminal_outbox_count == 1
 
 
-def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    guard_home = tmp_path / "live-completion-race"
-    store = GuardStore(guard_home)
+def test_live_hook_completion_does_not_spawn_a_continuation_child(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = GuardStore(tmp_path / "live-completion-no-spawn")
     request = _seed_request(
         store,
         harness="codex",
         request_id="request-live-completion-race",
         metadata=_live_codex_wait_metadata(),
     )
+
+    def fail_spawn(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("suspended-response continuation spawned a process")
+
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.continuation_runtime._run_store_continuation_plan",
-        _blocking_waiting_isolated_plan,
+        "codex_plugin_scanner.guard.continuation_contract.multiprocessing.get_context",
+        fail_spawn,
     )
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(
-            continue_request_after_application,
-            store,
-            request_row=request,
-            action="allow_once",
-            now=NOW,
-            timeout_seconds=4.0,
-        )
-        started = guard_home / "continuation-child-started"
-        deadline = time.monotonic() + 3.0
-        while not started.exists() and time.monotonic() < deadline:
-            time.sleep(0.01)
-        assert started.exists(), "spawned continuation did not reach the deterministic interleaving"
-        completed = record_live_hook_completion(
-            store,
-            request_id="request-live-completion-race",
-            action="allow",
-            now="2026-08-24T12:00:01+00:00",
-        )
-        (guard_home / "continuation-child-release").write_text("release", encoding="utf-8")
-        returned = future.result(timeout=5.0)
+    waiting = continue_request_after_application(
+        store,
+        request_row=request,
+        action="allow_once",
+        now=NOW,
+    )
+    completed = record_live_hook_completion(
+        store,
+        request_id="request-live-completion-race",
+        action="allow",
+        now="2026-08-24T12:00:01+00:00",
+    )
 
+    assert waiting["continuationStatus"] == "waiting"
+    assert waiting["continuationReason"] == "original_hook_waiting"
     assert completed is not None
-    assert returned["continuationStatus"] == "resumed"
-    assert returned["continuationEvidenceId"] == completed["continuationEvidenceId"]
+    assert completed["continuationStatus"] == "resumed"
     resume = store.get_request_resume("request-live-completion-race")
     assert resume is not None
     assert resume["continuation_status"] == "resumed"
     assert resume["status"] == "sent"
-    assert len(store.list_events(event_name="review.continuation.attempt")) == 1
+    assert len(store.list_events(event_name="review.continuation.attempt")) == 2
     assert len(store.list_events(event_name="review.continuation.terminal")) == 1
 
 

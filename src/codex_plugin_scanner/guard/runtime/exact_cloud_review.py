@@ -1,8 +1,7 @@
-"""Opt-in, signed authority for exact Cloud Review decisions.
+"""Native-owned Cloud Review consent and signed transport/device bindings.
 
-This module deliberately does not know how policy bundles or decision memory
-work.  A valid capability can only resolve the one pending request named by a
-signed Cloud review receipt.
+The SDK capability binds delivery identity to the native consent revision and
+revocation epoch. It cannot grant action authority or substitute for native opt-in.
 """
 
 from __future__ import annotations
@@ -14,8 +13,15 @@ from collections.abc import Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
+from ..native_cloud_review_consent import (
+    NativeCloudReviewConsentError,
+    NativeCloudReviewConsentState,
+    native_cloud_review_consent,
+)
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from ..review_contracts import (
     GuardReviewContractError,
     GuardReviewOAuthMetadata,
@@ -165,26 +171,58 @@ def _request_is_current(request: dict[str, object], *, now: datetime) -> bool:
     return str(request.get("status") or "pending") == "pending"
 
 
+def _native_consent(
+    store: GuardStore,
+    operation: Literal["read", "enable", "disable"] = "read",
+    *,
+    password: str | None = None,
+    totp_code: str | None = None,
+    ttl_seconds: int | None = None,
+) -> NativeCloudReviewConsentState:
+    try:
+        provision_native_verifier_key_for_store(store)
+        return native_cloud_review_consent(
+            store.guard_home,
+            operation,
+            password=password,
+            totp_code=totp_code,
+            ttl_seconds=ttl_seconds,
+        )
+    except (NativeCloudReviewConsentError, NativePolicySnapshotError) as error:
+        raise ExactCloudReviewError(str(error)) from error
+
+
 def enable_exact_cloud_review(
     store: GuardStore,
     *,
     issuer: str = "local-cli",
     ttl_seconds: int = EXACT_CLOUD_REVIEW_DEFAULT_TTL_SECONDS,
-    now: str | None = None,
+    password: str | None = None,
+    totp_code: str | None = None,
 ) -> dict[str, object]:
-    """Record explicit local consent for signed one-request Cloud reviews."""
+    """Authenticate native opt-in, then bind SDK delivery to its revision."""
 
-    issued_at = _now(now)
     if not _text(issuer):
         raise ExactCloudReviewError("cloud_review_capability_issuer_required")
     if type(ttl_seconds) is not int or not 0 < ttl_seconds <= EXACT_CLOUD_REVIEW_MAX_TTL_SECONDS:
         raise ExactCloudReviewError("cloud_review_capability_ttl_invalid")
     binding = _oauth_binding(store)
+    consent = _native_consent(
+        store,
+        "enable",
+        password=password,
+        totp_code=totp_code,
+        ttl_seconds=ttl_seconds,
+    )
+    issued_at = datetime.fromtimestamp(consent["issued_at_ms"] / 1000, timezone.utc)
+    expires_at = datetime.fromtimestamp(consent["expires_at_ms"] / 1000, timezone.utc)
     capability = _sign(
         store,
         {
-            "expiresAt": (issued_at + timedelta(seconds=ttl_seconds)).isoformat(),
+            "expiresAt": expires_at.isoformat(),
             "issuedAt": issued_at.isoformat(),
+            "nativeConsentRevision": consent["revision"],
+            "nativeConsentRevocationEpoch": consent["revocation_epoch"],
             "issuer": issuer,
             "nonce": secrets.token_urlsafe(24),
             "operation": EXACT_CLOUD_REVIEW_OPERATION,
@@ -213,6 +251,7 @@ def disable_exact_cloud_review(
     revoked_at = _now(now)
     if not _text(issuer):
         raise ExactCloudReviewError("cloud_review_capability_issuer_required")
+    _native_consent(store, "disable")
     raw = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
     try:
         capability = _verify(store, raw)
@@ -249,11 +288,20 @@ def _verified_capability(
     now: str | None = None,
     revoke_binding_drift: bool = True,
 ) -> dict[str, object]:
+    consent = _native_consent(store)
+    if consent["status"] != "enabled":
+        raise ExactCloudReviewError(f"native_cloud_review_consent_{consent['status']}")
     capability = _verify(store, store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY))
     if capability.get("operation") != EXACT_CLOUD_REVIEW_OPERATION:
         raise ExactCloudReviewError("cloud_review_capability_operation_invalid")
     if _text(capability.get("issuer")) is None or _text(capability.get("nonce")) is None:
         raise ExactCloudReviewError("cloud_review_capability_invalid")
+    for key, native_key in (
+        ("nativeConsentRevision", "revision"),
+        ("nativeConsentRevocationEpoch", "revocation_epoch"),
+    ):
+        if type(capability.get(key)) is not int or capability[key] != consent[native_key]:
+            raise ExactCloudReviewError("cloud_review_capability_native_binding_mismatch")
     issued_at = parse_utc_timestamp(capability.get("issuedAt"))
     expires_at = parse_utc_timestamp(capability.get("expiresAt"))
     current = _now(now)
@@ -288,6 +336,7 @@ def _revoke_binding_drift(store: GuardStore, capability: dict[str, object], *, n
     raw_capability = store.get_sync_payload(EXACT_CLOUD_REVIEW_CAPABILITY_STATE_KEY)
     if not isinstance(raw_capability, dict):
         return
+    _native_consent(store, "disable")
     revocation = _sign(
         store,
         {
@@ -316,6 +365,9 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
         return (EXACT_CLOUD_REVIEW_OPERATION,)
     except (AttributeError, ExactCloudReviewError):
         pass
+    # Workspace-admin MFA approvals do not require a local consent capability;
+    # the operation stays reachable when OAuth metadata exists so the queue can
+    # deliver those jobs even with no consent bound.
     if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
         return ()
     try:
@@ -370,6 +422,10 @@ def authorize_exact_cloud_review_job(
         CommandCapabilityError,
         _command_job_seen,
     )
+    from .native_cloud_review_delivery import (
+        authorize_native_cloud_review_delivery,
+        native_cloud_review_delivery_candidate,
+    )
     from .native_workspace_review_queue import (
         NativeWorkspaceReviewQueueError,
         native_workspace_review_payload,
@@ -384,8 +440,17 @@ def authorize_exact_cloud_review_job(
         if expires_at > _now(now) + timedelta(hours=24):
             raise ExactCloudReviewError("remote_exact_job_expiry_too_distant")
         payload = job.get("payload")
+        native_v4 = native_cloud_review_delivery_candidate(payload)
         native_command = native_workspace_review_payload(payload)
-        if native_command is not None:
+        if native_v4:
+            identity["nativeDeliveryBinding"] = authorize_native_cloud_review_delivery(
+                store,
+                job,
+                identity,
+                now=now,
+            )
+        elif native_command is not None:
+            _verified_capability(store, now=now)
             if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
                 raise ExactCloudReviewError("cloud_review_capability_revoked")
             oauth = _oauth_metadata(store)
@@ -398,6 +463,7 @@ def authorize_exact_cloud_review_job(
             except NativeWorkspaceReviewQueueError as error:
                 raise ExactCloudReviewError(error.code) from error
         else:
+            capability: dict[str, object] | None = None
             remote_approval = payload.get("remoteApproval") if isinstance(payload, Mapping) else None
             if not isinstance(remote_approval, Mapping):
                 raise ExactCloudReviewError("remote_exact_job_invalid")
@@ -422,7 +488,7 @@ def authorize_exact_cloud_review_job(
                     raise ExactCloudReviewError("remote_exact_job_wrong_grant")
                 if approval.get("capabilityId") != _capability_digest(capability):
                     raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
-        if native_command is None and _command_job_seen(store, identity, now=now):
+        if not native_v4 and native_command is None and _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
     except (ExactCloudReviewError, NativeWorkspaceReviewQueueError, KeyError) as error:
         code = error.code if isinstance(error, ExactCloudReviewError) else "remote_exact_job_invalid"
