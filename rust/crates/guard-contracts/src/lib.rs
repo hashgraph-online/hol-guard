@@ -13,6 +13,8 @@ mod github_cli_classify;
 pub use github_cli_classify::*;
 mod git_execution_safety;
 pub use git_execution_safety::*;
+mod compound_git_inspection;
+pub use compound_git_inspection::*;
 mod claim_approval_reuse;
 pub use claim_approval_reuse::*;
 mod policy_decision_lookup;
