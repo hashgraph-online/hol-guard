@@ -4,52 +4,32 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
-from .action_lattice import most_restrictive_guard_action, normalize_guard_action
+from .action_lattice import normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
-from .local_cli_trust import apply_local_mcp_extension_decision
 from .mcp_tool_call_evidence import receipt_evidence_for_mcp_tool_call
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .native_approval_proof import (
     ApprovalReuseClaimDisposition,
-    claimed_approval_authorizes_postclaim_review,
-    fresh_local_tool_approval_matches,
-    fresh_lookup_preserves_claim,
 )
 from .native_context import (
     context_mcp_tool_approval_hash,
-    context_mcp_tool_policy,
     context_opaque_digest,
 )
 from .native_mcp_runtime_evidence import argument_entries, native_command_text
 from .native_mcp_tool_evidence import native_tool_risk_evidence
 from .receipts import build_receipt
 from .runtime.approval_context import (
-    approval_context_tokens_validation_reason,
     current_extension_control_binding_digest,
 )
-from .runtime.approval_context import (
-    saved_allow_context_validation_reason as _tool_call_saved_allow_validation_reason,  # noqa: F401 - evaluation compatibility
-)
 from .runtime.approval_reuse import (
-    APPROVAL_REUSE_ACCEPTED,
-    APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-    APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN,
     APPROVAL_REUSE_NO_SAVED_DECISION,
-    APPROVAL_REUSE_SAVED_ACTION_UNKNOWN,
-    ApprovalReuseDecision,
     ApprovalReuseStatus,
-    ApprovalReuseValidationFailure,
-    approval_reuse_authority_unavailable,
-    evaluate_approval_reuse,
 )
-from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
@@ -58,8 +38,7 @@ from .runtime.mcp_protection import (
     mcp_tool_identity_metadata,
 )
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
-from .store import GuardStore, browser_mcp_exact_match_context
-from .temporary_mcp_approvals import runtime_grant_selectors
+from .store import GuardStore
 
 _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "review": ("runtime_tool_call_review_required", "runtime tool call awaiting review"),
@@ -265,23 +244,6 @@ def _normalized_tool_call_workspace(workspace: Path | str) -> str:
         return str(candidate.absolute())
 
 
-def _browser_runtime_exact_match_context(artifact: GuardArtifact, arguments: object) -> str | None:
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    if browser_intent is None:
-        return None
-    return browser_mcp_exact_match_context(
-        intent=browser_intent.intent,
-        operation=browser_intent.operation,
-        target_origin=browser_intent.target_origin,
-        target_path_prefix=browser_intent.target_path_prefix,
-        profile_mode=browser_intent.profile_mode,
-        mcp_server_identity_hash=browser_intent.mcp_server_identity_hash,
-        mcp_tool_identity_hash=browser_intent.mcp_tool_identity_hash,
-        mcp_schema_hash=browser_intent.mcp_schema_hash,
-        sensitive_surface_flags=browser_intent.sensitive_surface_flags,
-    )
-
-
 def evaluate_tool_call(
     *,
     store: GuardStore,
@@ -302,338 +264,6 @@ def evaluate_tool_call(
         arguments=arguments,
         claim_saved_approval=claim_saved_approval,
         fresh_authority_provider=fresh_authority_provider,
-    )
-
-
-def _apply_temporary_mcp_grant(
-    *,
-    store: GuardStore,
-    artifact: GuardArtifact,
-    artifact_hash: str,
-    arguments: object,
-    current: ToolCallDecision,
-) -> ToolCallDecision:
-    original_action = current.action
-    from .runtime.mcp_provider_permissions import composio_provider_action_floor
-
-    provider_floor = (
-        composio_provider_action_floor(
-            store.read_mcp_provider_choices(),
-            harness=artifact.harness,
-            tool_name=artifact.command or "",
-            arguments=arguments,
-        )
-        if composio_requires_action_review(artifact.command or "")
-        else None
-    )
-    if provider_floor is not None and provider_floor.action == "block":
-        return replace(
-            current,
-            action="block",
-            source="composio-action-deny",
-            summary="A denied app action blocks this execution. No batch member may run.",
-        )
-    # A decisive extension choice fixes the action. Temporary grants only add
-    # Allow, so probing them cannot change that choice.
-    granted = apply_local_mcp_extension_decision(store, artifact, original_action)
-    if granted is not None and (granted[0] in {"block", "review"} or current.action != "allow"):
-        return replace(current, action=granted[0], source=granted[1], summary=granted[2])
-    if original_action == "review":
-        selectors = runtime_grant_selectors(
-            normalize_browser_mcp_intent(artifact, arguments),
-            current.risk_categories,
-            artifact_id=artifact.artifact_id,
-            artifact_hash=artifact_hash,
-        )
-        for selector in selectors:
-            lookup = store.resolve_policy_decision_lookup(
-                artifact.harness,
-                selector,
-                consume_one_shot=False,
-            )
-            decision = lookup["decision"]
-            if decision is not None and decision.get("action") == "allow" and decision.get("source") == "approval-gate":
-                current = replace(
-                    current,
-                    action="allow",
-                    source="temporary-mcp-grant",
-                    summary="A time-bounded approval covers this routine MCP capability.",
-                )
-                break
-    if composio_requires_action_review(artifact.command or ""):
-        return replace(
-            current,
-            action=most_restrictive_guard_action(current.action, "review"),
-            source="composio-action-review",
-            summary="Review the underlying actions and account. A wrapper grant does not authorize execution.",
-        )
-    return current
-
-
-def _revalidate_claimed_tool_call_approval(
-    *,
-    store: GuardStore,
-    initial_artifact: GuardArtifact,
-    initial_artifact_hash: str,
-    initial_arguments: object,
-    initial_config: GuardConfig,
-    claimed_decision: Mapping[str, object],
-    claim_disposition: ApprovalReuseClaimDisposition | None,
-    fresh_authority_provider: (Callable[[], tuple[GuardConfig, GuardArtifact, str, object] | None] | None),
-) -> ToolCallDecision:
-    """Rebuild MCP authority after claiming an exact saved allow.
-
-    The claim closes the one-shot race, but it does not freeze configuration,
-    tool identity, arguments, or a concurrently inserted saved block.  Re-read
-    all of those inputs before returning an executable allow.
-    """
-
-    from .native_context import bind_context_digest_home
-
-    bind_context_digest_home(getattr(store, "guard_home", None))
-    refresh_failed = False
-    if fresh_authority_provider is None:
-        fresh_config = initial_config
-        fresh_artifact = initial_artifact
-        fresh_arguments = initial_arguments
-        fresh_artifact_hash = build_tool_call_hash(
-            fresh_artifact,
-            fresh_arguments,
-            workspace=fresh_config.workspace or Path.cwd(),
-            config=fresh_config,
-        )
-    else:
-        try:
-            provided = fresh_authority_provider()
-        except Exception:
-            provided = None
-        if provided is None:
-            refresh_failed = True
-            fresh_config = initial_config
-            fresh_artifact = initial_artifact
-            fresh_arguments = initial_arguments
-            fresh_artifact_hash = initial_artifact_hash
-        else:
-            fresh_config, fresh_artifact, fresh_artifact_hash, fresh_arguments = provided
-
-    fresh_current = _evaluate_current_tool_call(
-        config=fresh_config,
-        artifact=fresh_artifact,
-        arguments=fresh_arguments,
-    )
-    fresh_decision = evaluate_tool_call(
-        store=store,
-        config=fresh_config,
-        artifact=fresh_artifact,
-        artifact_hash=fresh_artifact_hash,
-        arguments=fresh_arguments,
-        claim_saved_approval=False,
-    )
-    validation_reason: ApprovalReuseValidationFailure | None
-    if refresh_failed or fresh_artifact.artifact_id != initial_artifact.artifact_id:
-        validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-    else:
-        context_changed = approval_context_tokens_validation_reason(
-            initial_artifact_hash,
-            fresh_artifact_hash,
-        )
-        validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM if context_changed is not None else None
-    if fresh_decision.approval_reuse_reason_code == "approval_reuse_integrity_failure":
-        validation_reason = "approval_reuse_integrity_failure"
-    elif fresh_decision.approval_reuse_status == "rejected" and not fresh_lookup_preserves_claim(
-        fresh_decision.approval_reuse_reason_code,
-        guard_home=store.guard_home,
-    ):
-        validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-
-    # A fresh unclaimed allow is not launch authority. Reuse the freshly
-    # computed current action, while preserving a newly observed saved block or
-    # another terminal result from the second lookup.
-    post_claim_current_action = fresh_decision.action
-    if fresh_decision.saved_action == "allow" and fresh_decision.approval_reuse_reason_code == APPROVAL_REUSE_ACCEPTED:
-        post_claim_current_action = fresh_current.action
-    if post_claim_current_action == "review" and not claimed_approval_authorizes_postclaim_review(
-        claim_disposition=claim_disposition,
-        claimed_decision=claimed_decision,
-        current_decision=fresh_decision.pending_approval_reuse_decision,
-        guard_home=store.guard_home,
-    ):
-        validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-    if validation_reason is not None:
-        post_claim_current_action = most_restrictive_guard_action(
-            post_claim_current_action,
-            "require-reapproval",
-        )
-    post_claim_current = replace(
-        fresh_current,
-        action=post_claim_current_action,
-        summary=(
-            "Current tool-call authority changed after the saved approval was claimed."
-            if validation_reason is not None
-            else fresh_current.summary
-        ),
-    )
-    reuse = evaluate_approval_reuse(
-        post_claim_current.action,
-        "allow",
-        saved_decision_present=True,
-        validation_reason=validation_reason,
-        fresh_local_approval=(
-            claim_disposition == "consumed"
-            and fresh_local_tool_approval_matches(
-                claimed_decision,
-                artifact=fresh_artifact,
-                artifact_hash=fresh_artifact_hash,
-                guard_home=store.guard_home,
-            )
-        ),
-    )
-    if reuse is None:
-        # Resident unreachable after the claim was consumed: keep the claimed
-        # approval decision the user granted rather than dropping it.
-        reuse = approval_reuse_authority_unavailable(post_claim_current.action)
-    return replace(
-        _tool_call_decision_with_reuse(post_claim_current, reuse),
-        approval_reuse_claim_disposition=claim_disposition,
-        post_claim_revalidated=True,
-        post_claim_authority=ToolCallAuthority(
-            config=fresh_config,
-            artifact=fresh_artifact,
-            artifact_hash=fresh_artifact_hash,
-            arguments=fresh_arguments,
-        ),
-    )
-
-
-def claim_deferred_tool_call_approval(
-    *,
-    store: GuardStore,
-    decision: ToolCallDecision,
-) -> ToolCallDecision:
-    """Atomically claim a provisionally accepted approval at the launch gate."""
-
-    pending = decision.pending_approval_reuse_decision
-    if pending is None:
-        return decision
-    if store.claim_approval_reuse_decision(pending):
-        # This helper has no fresh artifact/config provider. A successful claim
-        # is atomic evidence, but it is not sufficient launch authority until
-        # retained-row presence and every current input are revalidated.
-        failed_action = most_restrictive_guard_action(
-            decision.current_action or "block",
-            "require-reapproval",
-        )
-        current = ToolCallDecision(
-            action=failed_action,
-            source="risk-policy",
-            signals=decision.signals,
-            summary="Current tool call requires reapproval because post-claim authority was unavailable.",
-            risk_categories=decision.risk_categories,
-        )
-        reuse = evaluate_approval_reuse(
-            current.action,
-            decision.saved_action,
-            saved_decision_present=True,
-            validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
-        )
-        if reuse is None:
-            reuse = approval_reuse_authority_unavailable(current.action)
-        return replace(
-            _tool_call_decision_with_reuse(current, reuse),
-            approval_reuse_claim_disposition=decision.approval_reuse_claim_disposition,
-            post_claim_revalidated=True,
-        )
-    current = ToolCallDecision(
-        action=decision.current_action or "block",
-        source="risk-policy",
-        signals=decision.signals,
-        summary="Current tool call still requires review because its saved approval could not be claimed.",
-        risk_categories=decision.risk_categories,
-    )
-    reuse = evaluate_approval_reuse(
-        current.action,
-        decision.saved_action,
-        saved_decision_present=True,
-        validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-    )
-    if reuse is None:
-        reuse = approval_reuse_authority_unavailable(current.action)
-    return _tool_call_decision_with_reuse(current, reuse)
-
-
-def _evaluate_current_tool_call(
-    *,
-    config: GuardConfig,
-    artifact: GuardArtifact,
-    arguments: object,
-) -> ToolCallDecision:
-    """Present the native recommendation; saved approval authority is separate."""
-    policy = context_mcp_tool_policy(
-        {
-            "artifact": {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)},
-            "arguments": arguments,
-            "harness": artifact.harness,
-            "artifact_id": artifact.artifact_id,
-            "publisher": artifact.publisher,
-            "config": _tool_call_configuration(config),
-        }
-    )
-    categories, signals, summary = native_tool_risk_evidence(
-        artifact,
-        arguments,
-        risk_categories=tuple(policy["risk_categories"]),
-        summary_code=policy["summary_code"],
-    )
-    return ToolCallDecision(
-        action=cast(GuardAction, policy["action"]),
-        source=policy["source"],
-        signals=signals,
-        summary=summary,
-        risk_categories=categories,
-    )
-
-
-def _tool_call_decision_with_reuse(
-    current: ToolCallDecision,
-    reuse: ApprovalReuseDecision,
-    *,
-    pending_decision: Mapping[str, object] | None = None,
-    claim_disposition: ApprovalReuseClaimDisposition | None = None,
-) -> ToolCallDecision:
-    normalization_reason_code = reuse.saved_normalization_reason_code or reuse.current_normalization_reason_code
-    original_action = reuse.original_saved_action or reuse.original_current_action
-    if reuse.reason_code == APPROVAL_REUSE_SAVED_ACTION_UNKNOWN:
-        source = "policy-invalid"
-        summary = "Local Guard found an unknown policy action in saved state and requires reapproval."
-    elif reuse.reason_code == APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN:
-        source = "policy-invalid"
-        summary = "Local Guard found an unknown current policy action and blocked the tool call."
-    elif reuse.reason_code == APPROVAL_REUSE_ACCEPTED:
-        source = "policy"
-        summary = "Local Guard reused an exact saved approval for the current reviewable tool call."
-    elif reuse.reason_code == APPROVAL_REUSE_NO_SAVED_DECISION:
-        source = current.source
-        summary = current.summary
-    elif reuse.saved_action == "block":
-        source = "policy"
-        summary = "Local Guard kept this tool call blocked by saved policy."
-    else:
-        source = current.source
-        summary = f"{current.summary} Saved approval was not reused ({reuse.reason_code})."
-    return ToolCallDecision(
-        action=reuse.action,
-        source=source,
-        signals=current.signals,
-        summary=summary,
-        risk_categories=current.risk_categories,
-        normalization_reason_code=normalization_reason_code,
-        original_action=original_action,
-        approval_reuse_status=reuse.status,
-        approval_reuse_reason_code=reuse.reason_code,
-        current_action=reuse.current_action,
-        saved_action=reuse.saved_action,
-        pending_approval_reuse_decision=pending_decision,
-        approval_reuse_claim_disposition=claim_disposition,
     )
 
 

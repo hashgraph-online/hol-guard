@@ -11,11 +11,12 @@ use guard_contracts::{
     GuardHookEnvelopeV2, LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1,
     McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
     McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
-    NativeHookRequestV1, PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
-    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
-    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
-    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    McpToolPolicyDecideRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
+    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
+    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
+    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
+    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -90,6 +91,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
         guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
         guard_contracts::APPROVAL_PROOF_FEATURE.into(),
+        guard_contracts::MCP_TOOL_POLICY_DECIDE_FEATURE.into(),
     ];
     if cfg!(windows) {
         features.push("authenticated-loopback-resident-v1".into());
@@ -174,6 +176,7 @@ pub(crate) enum ResidentOperationV1 {
     McpToolEvidence(McpToolEvidenceRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     ApprovalProofDecide(ApprovalProofRequestV1),
+    McpToolPolicyDecide(McpToolPolicyDecideRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     Health(Value),

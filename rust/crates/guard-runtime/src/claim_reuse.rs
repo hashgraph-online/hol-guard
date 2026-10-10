@@ -18,13 +18,7 @@ use guard_policy_snapshot::policy_integrity::{
     is_remote_policy_source, PolicyIntegrityVerification,
 };
 
-use crate::local_once_store::{
-    claim_local_once_approval_by_id_locked, local_once_approval_is_reusable,
-};
-
-/// `_APPROVAL_GATE_POLICY_SOURCE` (`store_base.py:235`) — the only policy
-/// source atomically deleted on a successful claim.
-const APPROVAL_GATE_POLICY_SOURCE: &str = "approval-gate";
+use crate::local_once_store::claim_local_once_approval_by_id_locked;
 
 /// Policy sources that must never be consumed by a reuse claim
 /// (`_claim_approval_reuse_decision_locked` rejects them outright).
