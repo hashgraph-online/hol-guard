@@ -49,6 +49,7 @@ if TYPE_CHECKING:
     from ..runtime_transition import TransitionFile
 
 _FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+_TRAILING_MANAGED_MARKERS = frozenset({"HOL_GUARD_MANAGED_ZCODE"})
 _FROZEN_BRIDGE_COMMAND = "__guard-bounded-hook"
 _FROZEN_OPTIONAL_PATH_FLAGS = frozenset({"--home", "--workspace"})
 _BOUNDED_HOOK_SCRIPT_DIR = ("managed", "bounded-hooks")
@@ -467,11 +468,17 @@ def run_bounded_cli_hook(
     return result.returncode
 
 
+def _is_config_argv(argv: Sequence[str]) -> bool:
+    # ZCode hook commands end with "# <marker>". POSIX shells drop that comment,
+    # but cmd.exe has no comment syntax and passes both words as arguments.
+    return len(argv) == 1 or (len(argv) == 3 and argv[1] == "#" and argv[2] in _TRAILING_MANAGED_MARKERS)
+
+
 def main_from_argv(argv: Sequence[str]) -> int:
     """Parse the authenticated install-time hook config and run it."""
 
     started_monotonic = time.monotonic()
-    config = _json_object(argv[0]) if len(argv) == 1 else None
+    config = _json_object(argv[0]) if _is_config_argv(argv) else None
     configured_harness = config.get("harness") if config is not None else None
     harness = configured_harness if isinstance(configured_harness, str) else "unknown"
     timeout = config.get("timeout_seconds") if config is not None else None
