@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .daemon_pid_liveness import DAEMON_PID_LIVENESS_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -156,22 +157,6 @@ def _daemon_hook_env_overlay(guard_env: Mapping[str, str]) -> dict[str, str]:
         if isinstance(value, str) and value:
             overlay[key] = value
     return overlay
-
-
-def _daemon_pid_is_alive(pid: int) -> bool:
-    if os.name == "nt":
-        # Signal 0 is CTRL_C_EVENT on Windows; os.kill would send a console
-        # interrupt, and fails outright when the daemon has another console.
-        try:
-            from codex_plugin_scanner.guard.windows_paths import windows_process_liveness
-        except Exception:
-            return True
-        return windows_process_liveness(pid) is not False
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
 
 
 def _daemon_hook_result(
@@ -596,5 +581,5 @@ def _cursor_read_file_permission(permission: str) -> str:
     return "allow"
 
 '''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
-    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE
+    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE + "\n" + DAEMON_PID_LIVENESS_TEMPLATE
 )
