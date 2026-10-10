@@ -15,6 +15,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "contracts/extensions/native-command-program.v1.json"
+CATALOG_ARTIFACT = ROOT / "contracts/extensions/command-catalog.v1.json"
+DELIVERY_LIMITS = ROOT / "contracts/catalog-delivery/limits.json"
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -129,6 +131,16 @@ def implementation_digest() -> str:
     return digest.hexdigest()
 
 
+def check_delivery_budgets(*, program: bytes, catalog: bytes) -> None:
+    """Refuse to publish artifacts that the packaged loader would reject."""
+
+    limits = read_object(DELIVERY_LIMITS)
+    if len(program) > limits["max_native_command_program_bytes"]:
+        raise ValueError("native command program exceeds its delivery budget")
+    if len(catalog) > limits["max_generated_catalog_artifact_bytes"]:
+        raise ValueError("generated catalog artifact exceeds its delivery budget")
+
+
 def main() -> int:
     """Build or strictly check projections bound to current native implementation and authored sources."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -197,8 +209,9 @@ def main() -> int:
     outputs = {
         trust_path: canonical_bytes(packaged_trust_map(request_value)),
         ARTIFACT: canonical_bytes(program),
-        ROOT / "contracts/extensions/command-catalog.v1.json": canonical_bytes(catalog),
+        CATALOG_ARTIFACT: canonical_bytes(catalog),
     }
+    check_delivery_budgets(program=outputs[ARTIFACT], catalog=outputs[CATALOG_ARTIFACT])
     package_directory = ROOT / "src/codex_plugin_scanner/guard/contracts/data/extensions"
     if any(parent.is_symlink() for parent in (package_directory, *package_directory.parents) if parent != ROOT):
         raise ValueError("package resource directory cannot traverse a symlink")

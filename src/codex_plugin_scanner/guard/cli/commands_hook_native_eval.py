@@ -46,13 +46,9 @@ from ..action_lattice import (
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
-    _package_policy_override_evaluation,
+    package_external_archive_override,
 )
 from ..models import GuardAction
-from ..native_package_authority import (
-    apply_stored_package_policy_native,
-    evaluation_from_native_payload,
-)
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
@@ -261,41 +257,6 @@ def _runtime_cisco_scanner_evidence(
     return tuple(evidence)
 
 
-def _apply_stored_package_policy_via_resident(
-    package_evaluation,
-    *,
-    store,
-    guard_home: Path,
-    artifact,
-    artifact_hash: str,
-    workspace_dir: Path,
-    now: str,
-    current_action: object | None,
-    claim_saved_approval: bool,
-):
-    """Route the saved-package-policy claim through the resident.
-
-    The resident is the sole authority for the stored-approval claim. When it
-    is unreachable (``None`` — transport/identity failure) the evaluation is
-    returned unchanged: no saved approval is applied, matching the resident's
-    own no-saved-approval result rather than re-running a Python path.
-    """
-    payload = apply_stored_package_policy_native(
-        package_evaluation.to_dict(),
-        artifact.to_dict(),
-        store_path=store.path,
-        guard_home=guard_home,
-        artifact_hash=artifact_hash,
-        workspace_dir=workspace_dir,
-        now=now,
-        current_action=current_action,
-        claim_saved_approval=claim_saved_approval,
-    )
-    if payload is None:
-        return package_evaluation
-    return evaluation_from_native_payload(payload)
-
-
 def evaluate_native_artifact_hook(
     args: argparse.Namespace,
     *,
@@ -403,41 +364,18 @@ def evaluate_native_artifact_hook(
                 runtime_workspace=runtime_workspace,
             )
             if not has_binding_sink:
-                package_evaluation = _package_policy_override_evaluation(
+                package_evaluation = package_external_archive_override(
                     package_evaluation,
-                    decision="block",
-                    policy_action="block",
-                    title="External archive binding unavailable",
-                    summary="Guard cannot prove this command will execute through its digest-binding package shim.",
-                    harness_message=(
-                        "HOL Guard blocked the external archive because the verified package shim is not the "
-                        "resolved executable. Repair or activate package shims and retry."
-                    ),
-                    reason_code="external_archive_binding_unavailable",
-                    reason_message=(
-                        "External archives may run only through a verified Guard package shim that installs the "
-                        "already inspected blob."
-                    ),
+                    variant="binding_unavailable",
                 )
             else:
                 # The verified shim is the sole approval owner: it performs
                 # the post-approval restricted download, digest binding, and
                 # launch.  Asking under the hook artifact as well would create
                 # a second, unrelated approval that cannot authorize the shim.
-                package_evaluation = _package_policy_override_evaluation(
+                package_evaluation = package_external_archive_override(
                     package_evaluation,
-                    decision="allow",
-                    policy_action="allow",
-                    title="External archive delegated to Guard shim",
-                    summary="The verified package shim will own approval and digest-bound execution.",
-                    harness_message=(
-                        "HOL Guard delegated this package request to its verified digest-binding package shim."
-                    ),
-                    reason_code="external_archive_delegated_to_binding_shim",
-                    reason_message=(
-                        "The runtime hook permits only the exact verified shim; that shim requires approval before "
-                        "restricted download and executes only the inspected digest-bound blob."
-                    ),
+                    variant="shim_delegated",
                 )
         effective_package_workspace = runtime_workspace or Path.cwd()
         package_execution_context = build_package_execution_context(

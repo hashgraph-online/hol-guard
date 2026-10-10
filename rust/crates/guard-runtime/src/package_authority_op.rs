@@ -2527,7 +2527,7 @@ impl ResidentEvalDeps {
 // Op evaluators
 // ---------------------------------------------------------------------------
 
-fn request_digest<T: serde::Serialize>(request: &T) -> Result<String, String> {
+pub(crate) fn request_digest<T: serde::Serialize>(request: &T) -> Result<String, String> {
     let material =
         serde_json::to_value(request).map_err(|_| "native_package_authority_invalid".to_owned())?;
     let mut bytes = Vec::new();
@@ -2683,7 +2683,7 @@ impl PackageIntentParserApi for ResidentIntentParser {
 }
 
 /// Unused-in-override eval seam; the override never re-evaluates the package.
-struct ResidentPackageEval;
+pub(crate) struct ResidentPackageEval;
 
 impl PackageEvalApi for ResidentPackageEval {
     fn evaluate_package_request_artifact(

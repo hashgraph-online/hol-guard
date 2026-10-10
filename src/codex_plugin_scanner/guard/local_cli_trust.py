@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -20,15 +19,6 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_c
 from .runtime.package_json_scripts import identify_package_json_scripts
 
 LocalCliGrantState = Literal["allowed", "blocked"]
-
-
-@dataclass(frozen=True, slots=True)
-class LocalCliGrant:
-    cli_id: str
-    identity_hash: str
-    state: LocalCliGrantState
-    revision: int
-    updated_at: str
 
 
 def matching_local_cli_grant(

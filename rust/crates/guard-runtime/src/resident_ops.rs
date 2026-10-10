@@ -224,8 +224,14 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PackageAuthorityDecide(request) => {
                 crate::package_authority_op::evaluate_package_authority_decide(&request)
             }
+            ResidentOperationV1::PackageEvaluationCompose(request) => {
+                crate::package_evaluation_compose_op::evaluate_package_evaluation_compose(&request)
+            }
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
+            }
+            ResidentOperationV1::GitExecutionSafety(request) => {
+                crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
@@ -327,6 +333,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedNodeExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedTypescriptExecute(request) => Some(&request.guard_home),
