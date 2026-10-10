@@ -25,12 +25,64 @@ fn authentication_requirement_pattern() -> &'static Regex {
     })
 }
 
+const CREDENTIAL_WORDS: [&str; 7] = [
+    "aws_secret_access_key",
+    "private_key",
+    "api key",
+    "api_key",
+    "api-key",
+    "password",
+    "secret",
+];
+
+fn referential_access_pattern() -> &'static Regex {
+    static REFERENTIAL_ACCESS: OnceLock<Regex> = OnceLock::new();
+    REFERENTIAL_ACCESS.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|give|hand|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this|me|us)\b|\bhand\s+over\s+(?:it|them|those|these|that|this|me|us)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
+            .expect("bounded credential referential follow-up")
+    })
+}
+
+/// Credential locations and environment dumps are sensitive on mention. A
+/// credential word only names a secret, so it counts when its clause asks to
+/// obtain, reveal or move a value; documentation and search patterns do not.
+fn prompt_requests_secret(value: &str) -> bool {
+    static VALUE_REQUEST: OnceLock<Regex> = OnceLock::new();
+    static CLAUSE_BREAK: OnceLock<Regex> = OnceLock::new();
+    let lowered = value.to_ascii_lowercase().replace('\\', "/");
+    let mut locations = lowered.clone();
+    for word in CREDENTIAL_WORDS {
+        locations = locations.replace(word, " ");
+    }
+    if sensitive_command(&locations) {
+        return true;
+    }
+    if !CREDENTIAL_WORDS.iter().any(|word| lowered.contains(word)) {
+        return false;
+    }
+    if referential_access_pattern().is_match(value) {
+        return true;
+    }
+    let request = VALUE_REQUEST.get_or_init(|| {
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|paste|post|email|forward|share|give|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|steal|leak|exfiltrate|upload|send|transfer|grab|find|get|look\s+up|lookup|list|export|decode|decrypt|crack|guess|recover|what(?:'s|\s+is|\s+are)|value|contents?)\b")
+            .expect("bounded credential value request")
+    });
+    // Sentence ends and quoted command strings separate clauses; a period
+    // inside a file name such as config.ts does not.
+    let clause_break = CLAUSE_BREAK.get_or_init(|| {
+        Regex::new(r#"[.!?;](?:\s|$)|[\n"]"#).expect("bounded prompt clause break")
+    });
+    clause_break
+        .split(&lowered)
+        .filter(|clause| CREDENTIAL_WORDS.iter().any(|word| clause.contains(word)))
+        .any(|clause| request.is_match(clause))
+}
+
 pub(super) fn prompt_sensitive_text(value: &str) -> bool {
     static AUTH_CONTEXT: OnceLock<Regex> = OnceLock::new();
-    static REFERENTIAL_ACCESS: OnceLock<Regex> = OnceLock::new();
     let requirement = authentication_requirement_pattern();
     if !requirement.is_match(value) {
-        return sensitive_command(value);
+        return prompt_requests_secret(value);
     }
     let context = AUTH_CONTEXT.get_or_init(|| {
         Regex::new(r"(?i)\b(?:authentication|authenticate|login|log\s+in|sign\s+in|recovery|recover-authority|terminal)\b")
@@ -52,14 +104,10 @@ pub(super) fn prompt_sensitive_text(value: &str) -> bool {
     }
     // Authentication requirements are not requests to obtain the credential.
     // Keep explicit targets and referential follow-up reads on the guarded path.
-    let followup = REFERENTIAL_ACCESS.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|write|type|paste|post|email|forward|share|give|hand|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|store|save|log|include|grab|access|upload|send|transfer)\s+(?:(?:the\s+)?(?:full\s+)?(?:contents?|value|text|data)\s+(?:of|from)\s+)?(?:it|them|those|these|that|this|me|us)\b|\bhand\s+over\s+(?:it|them|those|these|that|this|me|us)\b|\b(?:do|perform|execute|run|use)\s+(?:it|that|this|them)\s+(?:anyway|regardless)\b")
-            .expect("bounded credential referential follow-up")
-    });
-    if followup.is_match(value) {
+    if referential_access_pattern().is_match(value) {
         return true;
     }
-    sensitive_command(&requirement.replace_all(value, "human authentication"))
+    prompt_requests_secret(&requirement.replace_all(value, "human authentication"))
 }
 
 pub(super) fn guard_bypass_prompt(values: &[String]) -> bool {
