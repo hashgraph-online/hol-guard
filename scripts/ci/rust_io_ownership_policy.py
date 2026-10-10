@@ -210,6 +210,7 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/config.py",
         "src/codex_plugin_scanner/guard/config_file_io.py",
         "src/codex_plugin_scanner/guard/directory_path_authority.py",
+        "src/codex_plugin_scanner/guard/path_resolution_cache.py",
         "src/codex_plugin_scanner/guard/runtime/command_activity_correlation.py",
     }
 )
