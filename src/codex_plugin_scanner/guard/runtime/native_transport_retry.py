@@ -16,5 +16,3 @@ _SECURITY_TOKENS = ("signature", "tenant", "revoked", "tamper", "replay", "bindi
 
 def native_transport_security_rejection(code: str) -> bool:
     return code in _SECURITY_NATIVE_CODES or any(token in code for token in _SECURITY_TOKENS)
-
-

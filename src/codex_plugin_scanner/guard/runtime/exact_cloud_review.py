@@ -182,7 +182,11 @@ def _native_consent(
     try:
         provision_native_verifier_key_for_store(store)
         return native_cloud_review_consent(
-            store.guard_home, operation, password=password, totp_code=totp_code, ttl_seconds=ttl_seconds,
+            store.guard_home,
+            operation,
+            password=password,
+            totp_code=totp_code,
+            ttl_seconds=ttl_seconds,
         )
     except (NativeCloudReviewConsentError, NativePolicySnapshotError) as error:
         raise ExactCloudReviewError(str(error)) from error
@@ -204,7 +208,11 @@ def enable_exact_cloud_review(
         raise ExactCloudReviewError("cloud_review_capability_ttl_invalid")
     binding = _oauth_binding(store)
     consent = _native_consent(
-        store, "enable", password=password, totp_code=totp_code, ttl_seconds=ttl_seconds,
+        store,
+        "enable",
+        password=password,
+        totp_code=totp_code,
+        ttl_seconds=ttl_seconds,
     )
     issued_at = datetime.fromtimestamp(consent["issued_at_ms"] / 1000, timezone.utc)
     expires_at = datetime.fromtimestamp(consent["expires_at_ms"] / 1000, timezone.utc)
@@ -369,7 +377,6 @@ def exact_cloud_review_operations(store: GuardStore, *, now: str | None = None) 
     return (EXACT_CLOUD_REVIEW_OPERATION,)
 
 
-
 def exact_cloud_review_status(store: GuardStore, *, now: str | None = None) -> dict[str, object]:
     try:
         capability = _verified_capability(store, now=now)
@@ -437,7 +444,10 @@ def authorize_exact_cloud_review_job(
         native_command = native_workspace_review_payload(payload)
         if native_v4:
             identity["nativeDeliveryBinding"] = authorize_native_cloud_review_delivery(
-                store, job, identity, now=now,
+                store,
+                job,
+                identity,
+                now=now,
             )
         elif native_command is not None:
             _verified_capability(store, now=now)

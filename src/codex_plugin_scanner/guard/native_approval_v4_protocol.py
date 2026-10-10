@@ -179,6 +179,7 @@ def _bounded_text(value: object, *, maximum: int, nonempty: bool = True) -> bool
 
     return _base._bounded_text(value, maximum=maximum, nonempty=nonempty)
 
+
 def _base64url_transport(value: object, *, maximum: int) -> bool:
     """Bound a browser base64url member without interpreting its meaning."""
 
@@ -426,7 +427,9 @@ def decode_native_approval_v4_result(
 
 
 def decode_native_approval_v4_receipt(
-    payload: object, *, phase: NativeApprovalPhase,
+    payload: object,
+    *,
+    phase: NativeApprovalPhase,
 ) -> dict[str, object] | None:
     """Bound native-emitted receipt transport, not independently attest it."""
     if phase not in {"validated", "consumed"} or type(payload) is not dict:

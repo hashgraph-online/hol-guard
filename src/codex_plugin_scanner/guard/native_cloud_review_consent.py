@@ -86,9 +86,16 @@ def native_cloud_review_consent(
         raise NativeCloudReviewConsentError(code)
     if (
         not isinstance(result, dict)
-        or set(result) != {
-            "schema", "version", "status", "revision", "revocation_epoch",
-            "issued_at_ms", "expires_at_ms", "native",
+        or set(result)
+        != {
+            "schema",
+            "version",
+            "status",
+            "revision",
+            "revocation_epoch",
+            "issued_at_ms",
+            "expires_at_ms",
+            "native",
         }
         or result["schema"] != "guard-native-cloud-review-consent-result.v1"
         or type(result["version"]) is not int
@@ -96,12 +103,15 @@ def native_cloud_review_consent(
         or result["native"] is not True
         or not isinstance(result["status"], str)
         or result["status"] not in {"enabled", "disabled", "expired"}
-        or any(type(result[field]) is not int or not 0 <= result[field] <= 2**53 - 1
-               for field in ("revision", "revocation_epoch", "issued_at_ms", "expires_at_ms"))
+        or any(
+            type(result[field]) is not int or not 0 <= result[field] <= 2**53 - 1
+            for field in ("revision", "revocation_epoch", "issued_at_ms", "expires_at_ms")
+        )
         or any(result[field] > 253402300799999 for field in ("issued_at_ms", "expires_at_ms"))
-        or (result["status"] in {"enabled", "expired"} and (
-            result["revision"] == 0 or result["expires_at_ms"] <= result["issued_at_ms"]
-        ))
+        or (
+            result["status"] in {"enabled", "expired"}
+            and (result["revision"] == 0 or result["expires_at_ms"] <= result["issued_at_ms"])
+        )
         or (operation == "enable" and result["status"] != "enabled")
         or (operation == "disable" and result["status"] != "disabled")
     ):
