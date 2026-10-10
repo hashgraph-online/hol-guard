@@ -104,7 +104,7 @@ jobs:
             base=$(python scripts/ci/pr_merge_base.py --head "$PR_HEAD_SHA" --merge "$PR_MERGE_SHA")
             echo "sha=$base" >> "$GITHUB_OUTPUT"
           fi
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
         with:
           version: "0.9.26"
           enable-cache: true
