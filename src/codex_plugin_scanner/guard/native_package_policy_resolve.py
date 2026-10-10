@@ -23,6 +23,8 @@ from .native_package_evaluation_compose import NativePackageEvaluationComposeErr
 _RESOLVE_FEATURE = "package-policy-resolve-v1"
 _CLAIM_KINDS = frozenset({"daemon", "legacy_local", "store"})
 _DISPOSITIONS = frozenset({"consumed", "retained"})
+_SAVED_ACTIONS = frozenset({"allow", "block"})
+_VERDICT_KEYS = ("decision", "risk_summary", "user_copy", "record_monitor_evidence")
 
 
 class NativePackagePolicyResolveError(NativePackageEvaluationComposeError):
@@ -149,7 +151,58 @@ def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: An
     raise NativePackagePolicyResolveError("Native package policy claim invalid")
 
 
-def _call(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
+def _invalid() -> NativePackagePolicyResolveError:
+    return NativePackagePolicyResolveError("Native package policy resolution invalid")
+
+
+def _saved_action(request: Mapping[str, object]) -> str | None:
+    decision = request.get("decision")
+    if not isinstance(decision, Mapping):
+        return None
+    action = decision.get("action")
+    return action if isinstance(action, str) and action in _SAVED_ACTIONS else None
+
+
+def _stale_policy_bundle_family(request: Mapping[str, object]) -> bool:
+    """A family row the resident leaves unchanged because the bundle dropped it.
+
+    Mirrors ``is_stale_policy_bundle_family``. An empty patch is legitimate only
+    for that row; every other saved allow or block must carry a verdict rewrite.
+    """
+
+    decision = request.get("decision")
+    if not isinstance(decision, Mapping):
+        return False
+    if (
+        _text(decision.get("source")) != "policy-bundle"
+        or _text(decision.get("artifact_id")) != "family:package-request"
+        or decision.get("artifact_hash") is not None
+        or _text(decision.get("scope")) not in {"harness", "global"}
+        or _text(decision.get("owner")) is None
+    ):
+        return False
+    rules = request.get("bundle_rules")
+    if not isinstance(rules, list):
+        return False
+    owner = _text(decision.get("owner"))
+    matching = [rule for rule in rules if isinstance(rule, Mapping) and _text(rule.get("ruleId")) == owner]
+    if not matching:
+        return True
+    from .policy_bundle_decisions import policy_bundle_rule_saved_decision_families
+
+    try:
+        return all("package-request" not in policy_bundle_rule_saved_decision_families(dict(rule)) for rule in matching)
+    except Exception:
+        return False
+
+
+def _call(
+    request: dict[str, object],
+    guard_home: Path,
+    *,
+    evaluation: Any,
+    claim_saved_approval: bool,
+) -> dict[str, Any]:
     payload = _transport(
         dict(request),
         guard_home,
@@ -160,14 +213,41 @@ def _call(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
     patch = payload.get("patch")
     claim = payload.get("claim")
     disposition = payload.get("claim_disposition")
+    reused = payload.get("reused")
     if (
         set(payload) != {"patch", "claim", "claim_disposition", "reused"}
-        or not isinstance(payload["reused"], bool)
+        or not isinstance(reused, bool)
         or not isinstance(patch, dict)
         or (claim is not None and claim not in _CLAIM_KINDS)
         or (disposition is not None and disposition not in _DISPOSITIONS)
     ):
-        raise NativePackagePolicyResolveError("Native package policy resolution invalid")
+        raise _invalid()
+    if claim is not None and not claim_saved_approval:
+        raise _invalid()
+    if request.get("claim_succeeded") is False and reused:
+        raise _invalid()
+    effective = patch.get("policy_action", getattr(evaluation, "policy_action", None))
+    if reused:
+        if effective != "allow" or any(key not in patch for key in _VERDICT_KEYS):
+            raise _invalid()
+    elif patch.get("policy_action") == "allow":
+        raise _invalid()
+    saved = _saved_action(request)
+    stale = saved is not None and _stale_policy_bundle_family(request)
+    verdict_missing = any(key not in patch for key in _VERDICT_KEYS)
+    # A saved block is always rewritten, except a stale bundle family row.
+    # A saved allow may only change its reason when the action stays put;
+    # an action change is a verdict rewrite and must carry the copy fields.
+    # A rejected reuse whose action already matches the evaluation patches
+    # reasons only, so those replies stay valid.
+    if saved == "block" and not stale and (effective != "block" or verdict_missing):
+        raise _invalid()
+    if saved == "allow" and not stale:
+        action_changed = "policy_action" in patch and patch.get("policy_action") != getattr(
+            evaluation, "policy_action", None
+        )
+        if not patch or (action_changed and verdict_missing):
+            raise _invalid()
     return payload
 
 
@@ -209,14 +289,19 @@ def native_resolve_stored_package_policy(
     if current_action is not None:
         request["current_action"] = current_action
     guard_home = _resolve_digest_home(Path(store.guard_home) if getattr(store, "guard_home", None) else None)
-    payload = _call(request, guard_home)
+    payload = _call(request, guard_home, evaluation=evaluation, claim_saved_approval=claim_saved_approval)
     claim = payload["claim"]
     if claim is not None:
         if not isinstance(decision, dict):
             raise NativePackagePolicyResolveError("Native package policy claim invalid")
         if not _run_claim(claim, store, decision, authority, now):
             request["claim_succeeded"] = False
-            payload = _call(request, guard_home)
+            payload = _call(
+                request,
+                guard_home,
+                evaluation=evaluation,
+                claim_saved_approval=claim_saved_approval,
+            )
     resolved = apply_package_evaluation_patch(evaluation, payload["patch"])
     if payload["reused"] and not isinstance(decision, dict):
         raise NativePackagePolicyResolveError("Native package policy resolution invalid")

@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path, PurePath
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,9 +16,14 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.protect_approvals import _protect_approval_item, _protect_request_artifact
-from codex_plugin_scanner.guard.local_supply_chain import _is_fresh_artifact_approval, build_package_protect_payload
+from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, HarnessDetection
+from codex_plugin_scanner.guard.native_package_policy_resolve import native_resolve_stored_package_policy
 from codex_plugin_scanner.guard.protect import build_protect_payload
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.harness_attribution_env import strip_harness_env_markers
 from tests.test_guard_local_supply_chain_phase15 import _package, _seed_supply_chain_bundle
@@ -25,6 +31,57 @@ from tests.test_guard_local_supply_chain_phase15 import _package, _seed_supply_c
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _resident_consumes_saved_approval(decision: dict[str, object], guard_home: Path, artifact_hash: str) -> bool:
+    """The resident, not Python, decides whether this saved row is fresh."""
+
+    artifact_id = decision.get("artifact_id")
+    store = SimpleNamespace(
+        guard_home=guard_home,
+        resolve_policy_decision_lookup=lambda *_args, **_kwargs: {
+            "decision": decision,
+            "ignored_local_integrity": None,
+        },
+        approval_reuse_diagnostic=lambda *_args, **_kwargs: (None, None),
+    )
+    evaluation = PackageRequestEvaluation(
+        decision="ask",
+        policy_action="review",
+        enforcement="enforce",
+        entitlement_state="inactive",
+        cache_status="miss",
+        package_intent_hash="intent",
+        policy_version="v",
+        bundle_version=None,
+        workspace_fingerprint=None,
+        reasons=(),
+        packages=(),
+        risk_summary="Current package evaluation.",
+        user_copy=SupplyChainUserCopy(
+            title="Review",
+            summary="Current package evaluation.",
+            next_step=None,
+            dashboard_url=None,
+            harness_message="Current package evaluation.",
+        ),
+    )
+    _resolved, disposition, _reused = native_resolve_stored_package_policy(
+        evaluation,
+        store=store,
+        artifact=SimpleNamespace(
+            harness="guard-cli",
+            artifact_id=artifact_id if isinstance(artifact_id, str) else "guard-cli:project:package-request:reviewpkg",
+            publisher=None,
+        ),
+        artifact_hash=artifact_hash,
+        workspace_dir=guard_home,
+        now="2026-09-10T00:10:00+00:00",
+        policy_workspaces=("ws",),
+        current_action=None,
+        claim_saved_approval=False,
+    )
+    return disposition == "consumed"
 
 
 def _seed_review_advisory(store: GuardStore) -> None:
@@ -726,7 +783,12 @@ def test_noncanonical_package_artifact_keeps_invoking_policy_harness(
 
 
 @pytest.mark.parametrize("artifact_hash", [None, "plain-package-hash", "guard-approval-context:v1:invalid"])
-def test_fresh_package_approval_requires_valid_context_token(tmp_path: Path, artifact_hash: object) -> None:
+def test_fresh_package_approval_requires_valid_context_token(
+    tmp_path: Path,
+    artifact_hash: object,
+    install_fake_system_keyring,
+) -> None:
+    install_fake_system_keyring()
     decision = {
         "decision_id": 1,
         "harness": "guard-cli",
@@ -738,7 +800,14 @@ def test_fresh_package_approval_requires_valid_context_token(tmp_path: Path, art
         "expires_at": "2026-09-10T00:15:00+00:00",
     }
 
-    assert _is_fresh_artifact_approval(decision, store=GuardStore(tmp_path / "guard-home")) is False
+    assert (
+        _resident_consumes_saved_approval(
+            decision,
+            GuardStore(tmp_path / "guard-home").guard_home,
+            artifact_hash if isinstance(artifact_hash, str) else "not-a-context-token",
+        )
+        is False
+    )
 
 
 def test_package_once_lookup_filters_expiry_before_fresh_proof(
@@ -790,7 +859,7 @@ def test_package_once_lookup_filters_expiry_before_fresh_proof(
         consume_one_shot=False,
     )
     assert before_expiry["decision"] is not None
-    assert _is_fresh_artifact_approval(before_expiry["decision"], store=store) is True
+    assert _resident_consumes_saved_approval(before_expiry["decision"], store.guard_home, artifact_hash) is True
     decision_id = before_expiry["decision"]["decision_id"]
     with sqlite3.connect(store.path) as connection:
         connection.execute(
