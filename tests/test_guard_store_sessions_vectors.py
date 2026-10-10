@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -113,6 +114,22 @@ def test_wrappers_reject_an_unparsable_instant_before_calling_the_resident(
     with pytest.raises(ValueError, match="Invalid isoformat string: 'later'"):
         store.renew_guard_client_attachment(client_id="c", lease_id="l", lease_seconds=5, now="later")
     assert calls == []
+
+
+def test_wrappers_hand_the_resident_an_aware_instant(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
+    sent: list[str] = []
+
+    def capture(**kwargs: Any) -> tuple[object, None]:
+        sent.append(kwargs["args"]["now"])
+        return None, None
+
+    monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", capture)
+    store.renew_guard_client_attachment(client_id="c", lease_id="l", lease_seconds=5, now="2026-01-01T00:00:00Z")
+    store.renew_guard_client_attachment(client_id="c", lease_id="l", lease_seconds=5, now="2026-01-01T00:00:00")
+    assert sent[0] == "2026-01-01T00:00:00Z"
+    assert datetime.fromisoformat(sent[1]).tzinfo is not None
+    assert datetime.fromisoformat(sent[1]) == datetime.fromisoformat("2026-01-01T00:00:00").astimezone()
 
 
 def _schema_sql(path: Path) -> list[str]:

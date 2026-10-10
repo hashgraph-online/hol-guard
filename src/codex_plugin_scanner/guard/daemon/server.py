@@ -6353,7 +6353,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     home_dir=home_dir,
                     guard_home=guard_home,
                     workspace=workspace,
-                    payload_hydrated=True,
                     deadline=hook_deadline.expires_at,
                 )
         finally:
@@ -6495,7 +6494,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         home_dir: str | None,
         guard_home: str | None,
         workspace: str | None,
-        payload_hydrated: bool = False,
         deadline: float | None = None,
     ) -> None:
         from contextlib import nullcontext

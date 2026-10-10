@@ -36,6 +36,7 @@ if not hasattr(store_sessions, "preserve_retry_lineage"):
     sys.exit("refusing to record: the original Python sessions implementation is gone")
 
 from guard_sessions_scenarios import NOW, SCENARIOS, wire_json
+from vector_support import dump
 
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -193,10 +194,6 @@ def native_payload(path: Path, method: str, args: tuple, kwargs: dict, result: o
     raise AssertionError(method)
 
 
-def dump(path: Path) -> dict[str, list[dict[str, object]]]:
-    return {table: rows(path, f"select * from {table} order by {key}") for table, key in TABLES.items()}
-
-
 def schema_sql(path: Path) -> list[str]:
     connection = sqlite3.connect(path)
     try:
@@ -218,7 +215,7 @@ def run_scenario(scenario: dict) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="guard-sessions-vectors-") as root:
         store = GuardStore(Path(root) / "guard-home", prime_policy_integrity=False)
         path = Path(store.path)
-        previous = dump(path)
+        previous = dump(path, TABLES)
         seed = previous
         steps: list[dict[str, object]] = []
         for step in scenario["steps"]:
@@ -247,7 +244,7 @@ def run_scenario(scenario: dict) -> dict[str, object]:
                         native_payload=None,
                         error={"type": kind, "message": str(error), "message_exact": type(error).__name__ == kind},
                     )
-            current = dump(path)
+            current = dump(path, TABLES)
             record["post_changed"] = {t: rows_ for t, rows_ in current.items() if rows_ != previous[t]}
             previous = current
             steps.append(record)

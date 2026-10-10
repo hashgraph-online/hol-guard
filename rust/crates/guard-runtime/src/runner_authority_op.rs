@@ -16,8 +16,12 @@ use guard_policy_snapshot::digest_bytes;
 use serde_json::Value;
 
 use super::context_digest_json::write_canonical_json_with_limit;
+use super::oci_bundle_op as oci;
 use super::runner_authority_signature as signature;
-use super::{cloud_request_snapshot as snapshot, cloud_sync_privacy as privacy};
+use super::{
+    cloud_receipt_payload as receipt, cloud_request_snapshot as snapshot,
+    cloud_sync_privacy as privacy,
+};
 use super::{runner_authority_detector as detector, runner_authority_evaluation as evaluation};
 use super::{
     runner_sync_policy as policy, runner_sync_signals as signals, runner_sync_url as sync_url,
@@ -73,12 +77,15 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
         "downgrade_reference" => policy::downgrade_reference(args),
         "policy_simulation" => policy::policy_simulation(args),
         "cloud_scrub_texts" => privacy::cloud_scrub_texts(args),
-        "cloud_sync_texts" => privacy::cloud_sync_texts(args),
-        "cloud_sync_scrub_envelope" => privacy::cloud_sync_scrub_envelope(args),
         "cloud_review_event_display" => privacy::cloud_review_event_display(args),
+        "cloud_sync_receipt_payloads" => receipt::cloud_sync_receipt_payloads(args),
         "cloud_request_payload" => snapshot::cloud_request_payload(args),
         "local_request_snapshot" => snapshot::local_request_snapshot(args),
         "local_request_snapshot_items" => snapshot::local_request_snapshot_items(args),
+        "oci_bundle_evidence" => oci::oci_bundle_evidence(args),
+        "oci_evidence_verdict" => oci::oci_evidence_verdict(args),
+        "oci_bundle_digest" => oci::oci_bundle_digest(args),
+        "oci_bundle_plan" => oci::oci_bundle_plan(args),
         _ => Err(ERR_KIND),
     }
 }

@@ -38,11 +38,6 @@ def _chunks(policy_bundle: Mapping[str, object], keys: tuple[str, ...] | None = 
     return policy_bundle_chunks(document)
 
 
-def policy_bundle_has_extension_semantics(policy_bundle: Mapping[str, object]) -> bool:
-    result = policy_bundle_verdict("has_extension_semantics", {"bundle_chunks": _chunks(policy_bundle)})
-    return result.get("value") is True
-
-
 def validate_policy_bundle_delivery(
     value: object,
     *,

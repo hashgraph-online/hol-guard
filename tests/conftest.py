@@ -5,6 +5,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable, Iterator
+from contextlib import suppress
 from hashlib import sha256
 from pathlib import Path
 
@@ -90,6 +91,28 @@ def _default_off_daemon_route_policy(
         return
     if _default_unit_test_native_mode and binary and os.path.isfile(binary):
         request.getfixturevalue("native_route_policy_with_hooks_off")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_native_resident_launch(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the native resident's process launch independent of test doubles.
+
+    Daemon tests replace ``subprocess.Popen`` on the shared module to fake the
+    process they spawn, while lifecycle decisions ask the native resident, which
+    is itself launched through ``subprocess``. Give the resident client a
+    private snapshot taken before any double is installed so only the code
+    under test sees the fake. Native transport tests own that surface and
+    patch it deliberately.
+    """
+
+    if request.module.__name__.rsplit(".", 1)[-1].startswith("test_native"):
+        return
+    import subprocess
+    import types
+
+    from codex_plugin_scanner.guard import native_resident_stream
+
+    monkeypatch.setattr(native_resident_stream, "subprocess", types.SimpleNamespace(**vars(subprocess)))
 
 
 class _GuardCommandsProxy:
@@ -194,9 +217,28 @@ def pytest_runtest_teardown(item: pytest.Item, nextitem: pytest.Item | None) -> 
         return
 
     from codex_plugin_scanner.guard.daemon.manager import retire_all_guard_daemons_for_home
+    from codex_plugin_scanner.guard.native_daemon_lifecycle import NativeDaemonLifecycleError
 
-    for guard_home in sorted(_test_guard_homes_with_daemon_state(test_tmp_path)):
-        retire_all_guard_daemons_for_home(guard_home)
+    # The per-test native mode is already undone here; the lifecycle decisions
+    # that identify the daemons to retire need the same compiled authority.
+    guard_homes = sorted(_test_guard_homes_with_daemon_state(test_tmp_path))
+    if guard_homes and "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
+        os.environ["HOL_GUARD_NATIVE"] = "force"
+        os.environ["HOL_GUARD_TEST_MODE"] = "1"
+        try:
+            _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+        finally:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
+            os.environ.pop("HOL_GUARD_TEST_MODE", None)
+        return
+    _retire_homes(guard_homes, retire_all_guard_daemons_for_home, NativeDaemonLifecycleError)
+
+
+def _retire_homes(guard_homes: list[Path], retire: Callable[[Path], object], unavailable: type[Exception]) -> None:
+    for guard_home in guard_homes:
+        # Best-effort cleanup: an unavailable native authority must not mask the test result.
+        with suppress(unavailable):
+            retire(guard_home)
 
 
 @pytest.fixture(autouse=True)

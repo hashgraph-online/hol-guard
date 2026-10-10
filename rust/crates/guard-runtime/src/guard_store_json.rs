@@ -36,11 +36,12 @@ pub(crate) fn py_prefix(text: &str, limit: usize) -> String {
 pub(crate) fn add_seconds_isoformat(text: &str, delta_micros: i64) -> Option<String> {
     let normalized = text.replace('Z', "+00:00");
     let parsed = parse_iso(&normalized)?;
-    Some(format_iso(parsed, delta_micros))
+    format_iso(parsed, delta_micros)
 }
 
 /// `datetime.fromisoformat(text).timestamp()` in whole microseconds. Instants
-/// without an offset are read as UTC; the store only persists aware instants.
+/// without an offset are read as UTC: the transport hands the resident aware
+/// instants only, converting naive input at the boundary.
 pub(crate) fn epoch_micros(text: &str) -> Option<i128> {
     let parsed = parse_iso(&text.replace('Z', "+00:00"))?;
     Some(parsed.micros_since_epoch - i128::from(parsed.offset_seconds.unwrap_or(0)) * 1_000_000)
@@ -153,10 +154,12 @@ fn parse_iso(text: &str) -> Option<Parsed> {
                 end += 1;
             }
             let fraction = &text[at + 1..end];
-            if fraction.is_empty() || fraction.len() > 6 {
+            if fraction.is_empty() {
                 return None;
             }
-            micro = format!("{fraction:0<6}").parse().ok()?;
+            // CPython 3.11+ accepts any number of digits and truncates past six.
+            let kept: String = fraction.chars().take(6).collect();
+            micro = format!("{kept:0<6}").parse().ok()?;
             at = end;
         }
         if at < text.len() {
@@ -166,17 +169,21 @@ fn parse_iso(text: &str) -> Option<Parsed> {
                 _ => return None,
             };
             let (zone_hour, next) = digits(text, at + 1, 2)?;
-            let mut zone_minute = 0;
+            let (mut zone_minute, mut zone_second) = (0, 0);
             let mut next = next;
-            if text.as_bytes().get(next) == Some(&b':') {
-                let (value, after) = digits(text, next + 1, 2)?;
-                zone_minute = value;
-                next = after;
+            for slot in [&mut zone_minute, &mut zone_second] {
+                if text.as_bytes().get(next) == Some(&b':') {
+                    let (value, after) = digits(text, next + 1, 2)?;
+                    *slot = value;
+                    next = after;
+                } else {
+                    break;
+                }
             }
-            if next != text.len() || zone_hour > 23 || zone_minute > 59 {
+            if next != text.len() || zone_hour > 23 || zone_minute > 59 || zone_second > 59 {
                 return None;
             }
-            offset = Some(sign * (zone_hour * 3600 + zone_minute * 60));
+            offset = Some(sign * (zone_hour * 3600 + zone_minute * 60 + zone_second));
         }
     }
     if !(1..=12).contains(&month) || hour > 23 || minute > 59 || second > 59 || year < 1 {
@@ -230,12 +237,17 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
     (year, month, day)
 }
 
-fn format_iso(parsed: Parsed, delta_micros: i64) -> String {
+/// `None` when the shifted instant leaves `datetime`'s year 1..=9999 range
+/// (CPython raises `OverflowError` there); such text could never be re-read.
+fn format_iso(parsed: Parsed, delta_micros: i64) -> Option<String> {
     let total = parsed.micros_since_epoch + i128::from(delta_micros);
     let micros = total.rem_euclid(1_000_000) as i64;
-    let seconds = total.div_euclid(1_000_000) as i64;
+    let seconds = i64::try_from(total.div_euclid(1_000_000)).ok()?;
     let day_seconds = seconds.rem_euclid(86_400);
     let (year, month, day) = civil_from_days(seconds.div_euclid(86_400));
+    if !(1..=9999).contains(&year) {
+        return None;
+    }
     let mut text = format!(
         "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
         day_seconds / 3600,
@@ -253,8 +265,11 @@ fn format_iso(parsed: Parsed, delta_micros: i64) -> String {
             magnitude / 3600,
             magnitude % 3600 / 60
         ));
+        if magnitude % 60 != 0 {
+            text.push_str(&format!(":{:02}", magnitude % 60));
+        }
     }
-    text
+    Some(text)
 }
 
 #[cfg(test)]
@@ -296,5 +311,28 @@ mod tests {
             "2026-08-24T12:00:01"
         );
         assert!(add_seconds_isoformat("garbage", 1).is_none());
+    }
+
+    #[test]
+    fn isoformat_matches_python_311_extensions() {
+        assert_eq!(
+            add_seconds_isoformat("2026-08-24T12:00:00.1234567+00:00", 0).unwrap(),
+            "2026-08-24T12:00:00.123456+00:00"
+        );
+        assert_eq!(
+            add_seconds_isoformat("2026-08-24T12:00:00+01:00:30", 1_000_000).unwrap(),
+            "2026-08-24T12:00:01+01:00:30"
+        );
+        assert_eq!(
+            epoch_micros("2026-08-24T12:00:00+01:00:30").unwrap(),
+            epoch_micros("2026-08-24T10:59:30+00:00").unwrap()
+        );
+    }
+
+    #[test]
+    fn isoformat_rejects_shifts_outside_the_datetime_range() {
+        assert!(add_seconds_isoformat("9999-12-31T23:59:59+00:00", 1_000_000).is_none());
+        assert!(add_seconds_isoformat("2026-08-24T12:00:00+00:00", i64::MAX).is_none());
+        assert!(add_seconds_isoformat("0001-01-01T00:00:00+00:00", -1_000_000).is_none());
     }
 }

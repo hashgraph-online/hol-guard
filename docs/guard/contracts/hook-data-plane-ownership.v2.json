@@ -309,7 +309,6 @@
    "paths": [
     "src/codex_plugin_scanner/guard/daemon/server.py",
     "src/codex_plugin_scanner/guard/daemon/hook_request_auth.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_process_runner_lifecycle.py",
     "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
@@ -356,6 +355,7 @@
     "src/codex_plugin_scanner/guard/native_cursor_observer_proof.py",
     "src/codex_plugin_scanner/guard/native_store_policy.py",
     "src/codex_plugin_scanner/guard/native_approval_resolution.py",
+    "src/codex_plugin_scanner/guard/native_approval_queue_identity.py",
     "src/codex_plugin_scanner/guard/native_hook_decision.py",
     "src/codex_plugin_scanner/guard/native_daemon_route.py",
     "src/codex_plugin_scanner/guard/native_daemon_handler.py",
@@ -370,6 +370,7 @@
     "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
     "src/codex_plugin_scanner/guard/native_policy_bundle.py",
     "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+    "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
     "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",

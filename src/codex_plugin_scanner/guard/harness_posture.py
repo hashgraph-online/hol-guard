@@ -20,7 +20,6 @@ from .action_lattice import most_restrictive_guard_action
 from .adapters.contracts import HARNESS_CONTRACTS, contract_for
 from .models import GuardAction
 from .protection_posture import (
-    POSTURE_RISK_ACTIONS,
     VALID_PROTECTION_POSTURES,
     coerce_protection_posture,
     dual_write_from_posture,
@@ -282,13 +281,6 @@ def harness_watch_auto_revert_due(
         if current - entered >= timedelta(hours=config.watch_auto_revert_hours):
             due.append(harness)
     return tuple(sorted(due))
-
-
-def harness_extra_careful_actions(harnesses: Iterable[str]) -> dict[str, dict[str, GuardAction]]:
-    """Strengthening overlay used for harnesses overridden to Extra careful."""
-
-    actions = dict(POSTURE_RISK_ACTIONS["extra_careful"])
-    return {harness: dict(actions) for harness in harnesses}
 
 
 def stricter_risk_action(base: GuardAction | None, floor: GuardAction | None) -> GuardAction | None:

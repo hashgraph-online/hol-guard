@@ -436,48 +436,6 @@ class MatcherIndexHints:
     complete: bool = True
 
 
-def matcher_index_hints(matcher: CommandMatcher) -> MatcherIndexHints:
-    """Return conservative executable and keyword hints for a trusted matcher."""
-
-    if isinstance(matcher, ExecutableMatcher):
-        return MatcherIndexHints(
-            executables=matcher.executables,
-            keywords=frozenset(
-                (*matcher.subcommands, *matcher.required_flags, *(name for name, _ in matcher.required_option_values))
-            ),
-        )
-    if isinstance(matcher, ArgumentMatcher):
-        return MatcherIndexHints(
-            executables=matcher.executables,
-            keywords=matcher.required_arguments,
-        )
-    from .command_database_matchers import database_matcher_index_hints
-    from .command_structured_matchers import structured_matcher_index_hints
-
-    database_hints = database_matcher_index_hints(matcher)
-    if database_hints is not None:
-        executables, keywords = database_hints
-        return MatcherIndexHints(executables=executables, keywords=keywords)
-    structured_hints = structured_matcher_index_hints(matcher)
-    if structured_hints is not None:
-        executables, keywords = structured_hints
-        return MatcherIndexHints(executables=executables, keywords=keywords)
-    if isinstance(matcher, PipelineMatcher):
-        return _merge_matcher_hints((matcher.producer, matcher.consumer))
-    if isinstance(matcher, (AnyMatcher, AllMatcher)):
-        return _merge_matcher_hints(matcher.matchers)
-    return MatcherIndexHints(complete=False)
-
-
-def _merge_matcher_hints(matchers: tuple[CommandMatcher, ...]) -> MatcherIndexHints:
-    child_hints = tuple(matcher_index_hints(matcher) for matcher in matchers)
-    return MatcherIndexHints(
-        executables=frozenset(value for hints in child_hints for value in hints.executables),
-        keywords=frozenset(value for hints in child_hints for value in hints.keywords),
-        complete=all(hints.complete for hints in child_hints),
-    )
-
-
 def _segment_matches_executable(segment: CommandSegment, executables: frozenset[str]) -> bool:
     if segment.executable is None:
         return False

@@ -67,22 +67,10 @@ def git_status_has_execution_free_config(cwd: Path, *, git_binary: Path | None =
     return _ask("status_config", cwd=cwd, git_binary=git_binary)[0]
 
 
-def git_object_query_has_no_lazy_fetch(cwd: Path, *, git_binary: Path | None = None) -> bool:
-    """Verify an object query cannot lazily fetch or run helpers."""
-
-    return _ask("object_query", cwd=cwd, git_binary=git_binary)[0]
-
-
 def git_fetch_origin_has_execution_free_config(cwd: Path, *, git_binary: Path | None = None) -> bool:
     """Verify a configured-origin fetch cannot redirect execution."""
 
     return _ask("fetch_origin", cwd=cwd, git_binary=git_binary)[0]
-
-
-def git_push_origin_has_execution_free_config(cwd: Path, *, branch: str, git_binary: Path | None = None) -> bool:
-    """Verify a configured-origin push cannot redirect execution or change branches."""
-
-    return _ask("push_origin", cwd=cwd, git_binary=git_binary, branch=branch)[0]
 
 
 def git_worktree_add_has_execution_free_config(cwd: Path, *, git_binary: Path | None = None, ref: str = "HEAD") -> bool:
@@ -95,8 +83,6 @@ __all__ = (
     "git_binary_path_is_trusted",
     "git_config_routing_environment_is_clean",
     "git_fetch_origin_has_execution_free_config",
-    "git_object_query_has_no_lazy_fetch",
-    "git_push_origin_has_execution_free_config",
     "git_status_args_are_read_only",
     "git_status_has_execution_free_config",
     "git_worktree_add_has_execution_free_config",

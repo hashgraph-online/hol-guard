@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 
 const logPath = process.env.GUARD_GAUNTLET_OBSERVER_LOG;
 const guardPort = process.env.GUARD_GAUNTLET_DAEMON_PORT;
+const hostLogPath = process.env.GUARD_GAUNTLET_HOST_OBSERVER_LOG;
 const actualFetch = globalThis.fetch.bind(globalThis);
 
 type JsonRecord = Record<string, unknown>;
@@ -125,4 +126,18 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
   return response;
 }) as typeof fetch;
 
-export default function (): void {}
+export default function (api: {
+  on(event: string, handler: (event: JsonRecord) => void): void;
+}): void {
+  const observe = (event: JsonRecord): void => {
+    if (!hostLogPath) throw new Error("Gauntlet host observer log is not configured");
+    appendFileSync(hostLogPath, JSON.stringify(event) + "\n", { mode: 0o600 });
+  };
+  // SDK extension events include delegated sessions; print mode's stdout only
+  // carries the primary session. Observe actual events without rewriting them.
+  api.on("message_end", event => {
+    if ((event.message as JsonRecord | undefined)?.role === "assistant") observe(event);
+  });
+  api.on("tool_execution_start", observe);
+  api.on("tool_execution_end", observe);
+}
