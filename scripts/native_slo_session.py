@@ -325,9 +325,7 @@ class AdapterSession:
         self.workspace.mkdir(mode=0o700)
         self.store = GuardStore(self.guard_home)
         self.daemon = GuardDaemonServer(self.store, host="127.0.0.1", port=0)
-        self._route_tracker = RequestRouteTracker(
-            self.daemon._server.hook_process_runner, self.daemon._server.hook_worker
-        )
+        self._route_tracker = RequestRouteTracker(self.daemon._server.hook_worker)
         self.runtime = runtime
         self.readiness_ms = 0.0
         self._connection: HTTPConnection | None = None
@@ -341,10 +339,10 @@ class AdapterSession:
         except BaseException:
             # Capture only aggregate capacity before close() withdraws it.
             with suppress(Exception):
-                stats = self.daemon._server.hook_process_runner.stats()
+                stats = self.daemon._server.runtime_hook_scheduler.stats()
                 counters = {
                     name: value
-                    for name in ("configured", "workers", "ready", "busy", "target", "timeouts", "failures", "restarts")
+                    for name in ("active", "active_limit", "queued", "queued_limit", "expired", "cancelled")
                     if type(value := stats.get(name)) is int and 0 <= value <= 2**31 - 1
                 }
                 print(
@@ -484,22 +482,7 @@ class AdapterSession:
                 "contained" if result else "failed",
                 error=None if result else "native_resident_stop_process_failed",
             )
-        if not result:
-            return False
-        if preserve_clients:
-            return True
-        close_clients = getattr(self.daemon._server.hook_process_runner, "close_native_resident_clients", None)
-        if callable(close_clients) and close_clients() is False:
-            diagnostic = dict(result.diagnostic)
-            diagnostic["status"] = "contained_client_cleanup_failed"
-            diagnostic["client_cleanup"] = "failed"
-            self.last_stop_diagnostic = diagnostic
-            _write_stop_diagnostic(diagnostic)
-            # The Rust command has already verified resident containment. A
-            # worker-side stale-stream cleanup failure must remain diagnostic
-            # only and cannot change that containment decision.
-            return True
-        return True
+        return bool(result)
 
 
 __all__ = ["AdapterSession", "NativeStopResult", "stop_native_resident"]

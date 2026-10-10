@@ -432,7 +432,6 @@ def test_stop_invalidates_owned_service_begin_before_workers_start(
         assert len(start_errors) == 1
         assert str(start_errors[0]) == "Guard daemon stopped during startup"
         assert daemon._owner_lock is None
-        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_begin.set()
         daemon.stop()
