@@ -20,7 +20,7 @@ from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.extension_control_authority import ExtensionControlAuthorityView
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
-from .hook_native_saved_approval import _launch_cwd
+from .hook_native_launch_identity import launch_cwd as _launch_cwd
 from .hook_request_parsing import pre_tool_command, pre_tool_input
 
 _LOGGER = logging.getLogger(__name__)

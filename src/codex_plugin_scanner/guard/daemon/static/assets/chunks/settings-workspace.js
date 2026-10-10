@@ -1,7 +1,140 @@
-import { ai as PROTECTION_POSTURE_COPY, aj as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ak as harnessPostureRows, al as selectHarnessPosture, am as restartHarnessWatch, an as harnessPostureSummary, ao as harnessWatchPrompt, ap as harnessPostureOptions, aq as canRestartHarnessWatch, ar as getDefaultExportFromCjs, as as React, P as useFocusTrap, at as HiMiniKey, S as SectionLabel, A as ActionButton, y as HiMiniShieldCheck, au as HiMiniLockClosed, av as HiMiniBellAlert, aw as HiMiniAdjustmentsHorizontal, ax as HiMiniCircleStack, ay as TabBar, c as HiMiniChevronRight, az as fetchCloudReviewSettings, M as HiMiniCloud, aA as HiMiniArrowPath, I as HiMiniXMark, aB as ApprovalProofFieldInputs, aC as isApprovalProofSubmitDisabled, aD as buildApprovalProofCredentials, aE as changeCloudReviewSettings, aF as resolveProtectionLevelCopy, aG as fetchSettings, aH as fetchRuntimeSnapshot, aI as clearHarnessWatchOverrides, aJ as withHarnessPosturePatch, e as updateSettings, aK as clearPolicy, aL as clearReviewQueue, aM as revokeApprovalGateCooldown, aN as disableApprovalGateTotp, aO as importSettings, aP as resetSettings, aQ as enrollApprovalGateTotp, aR as verifyApprovalGateTotp, aS as clearEvidence, aT as exportDiagnostics, aU as repairApprovalCenter, aV as exportSettings, aW as setupDesktopNotifications, n as EmptyState, aX as settingsWatchBannerModel, aY as WorkspacePageHeader, W as WatchProtectionBanner, aZ as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, a_ as humanizeList, a$ as isProtectionPosture, b0 as deriveProtectionPosture, b1 as Tag, b2 as normalizeHarnessPostures, b3 as approvalGateCooldownLabel } from "../guard-dashboard.js";
-import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
+import { r as reactExports, ai as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, aj as ApprovalProofModal, ak as Tag, al as PROTECTION_POSTURE_COPY, am as POSTURE_OUTCOME_COLUMNS, an as harnessPostureRows, ao as selectHarnessPosture, ap as restartHarnessWatch, aq as harnessPostureSummary, ar as harnessWatchPrompt, as as harnessPostureOptions, at as canRestartHarnessWatch, au as getDefaultExportFromCjs, av as React, P as useFocusTrap, aw as HiMiniKey, S as SectionLabel, y as HiMiniShieldCheck, ax as HiMiniLockClosed, ay as HiMiniBellAlert, az as HiMiniAdjustmentsHorizontal, aA as HiMiniCircleStack, aB as TabBar, c as HiMiniChevronRight, aC as fetchCloudReviewSettings, M as HiMiniCloud, aD as HiMiniArrowPath, I as HiMiniXMark, aE as ApprovalProofFieldInputs, aF as isApprovalProofSubmitDisabled, aG as buildApprovalProofCredentials, aH as changeCloudReviewSettings, aI as resolveProtectionLevelCopy, aJ as fetchSettings, aK as fetchRuntimeSnapshot, aL as clearHarnessWatchOverrides, aM as withHarnessPosturePatch, e as updateSettings, aN as clearPolicy, aO as clearReviewQueue, aP as revokeApprovalGateCooldown, aQ as disableApprovalGateTotp, aR as importSettings, aS as resetSettings, aT as enrollApprovalGateTotp, aU as verifyApprovalGateTotp, aV as clearEvidence, aW as exportDiagnostics, aX as repairApprovalCenter, aY as exportSettings, aZ as setupDesktopNotifications, n as EmptyState, a_ as settingsWatchBannerModel, a$ as WorkspacePageHeader, W as WatchProtectionBanner, b0 as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, b1 as humanizeList, b2 as isProtectionPosture, b3 as deriveProtectionPosture, b4 as normalizeHarnessPostures, b5 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { p as planGuardHookRemoval, r as removeAllGuardHooks, a as GuardRepairRequestError, f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES, G as GuardRepairControl } from "./guard-repair-control.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
+function describeAffectedHarness(item) {
+  const count = item.hook_count ?? item.swept_hook_count;
+  if (typeof count === "number" && count > 0) {
+    return `${item.harness} (${count} hook${count === 1 ? "" : "s"})`;
+  }
+  return item.harness;
+}
+function removalOutcomeMessage(report) {
+  if (report.status === "nothing_to_remove") return "No Guard hooks were found. Nothing was removed.";
+  if (report.status === "partial") {
+    return "Some Guard hooks could not be removed. Review the apps below, then try again or run `hol-guard hooks remove --all` in a terminal.";
+  }
+  return "Guard hooks were removed. Your coding apps now run without Guard protection.";
+}
+function AffectedList({ items, label }) {
+  if (items.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-1.5", "aria-label": label, children: items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: describeAffectedHarness(item) }) }, item.harness)) });
+}
+function remainingHooksMessage(report) {
+  const remaining = report.post_state?.remaining_harnesses ?? [];
+  if (remaining.length === 0) return "Check: no Guard hooks remain in any app.";
+  return `Still has Guard hooks: ${remaining.map((item) => item.harness).join(", ")}.`;
+}
+function RemovalResult({ report }) {
+  const outcome = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: removalOutcomeMessage(report) });
+  if (report.status === "nothing_to_remove") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-2", children: outcome });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
+    outcome,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(AffectedList, { items: report.harnesses, label: "Apps changed" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: remainingHooksMessage(report) }),
+    report.backup_dir ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-xs text-slate-500", children: [
+      "Backups: ",
+      report.backup_dir
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
+      "Reinstall with ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono", children: report.reinstall_command }),
+      "."
+    ] })
+  ] });
+}
+function GuardHookRemovalPanel() {
+  const [phase, setPhase] = reactExports.useState({ kind: "idle" });
+  const handleReview = reactExports.useCallback(async () => {
+    setPhase({ kind: "loading" });
+    try {
+      const [plan, gate] = await Promise.all([planGuardHookRemoval(), fetchResolvedApprovalGate()]);
+      setPhase(
+        plan.status === "nothing_to_remove" ? { kind: "done", report: plan } : { kind: "review", plan, gate }
+      );
+    } catch (error) {
+      setPhase({ kind: "error", message: error instanceof Error ? error.message : "Guard could not list its hooks." });
+    }
+  }, []);
+  const handleReviewClick = reactExports.useCallback(() => {
+    void handleReview();
+  }, [handleReview]);
+  const handleContinue = reactExports.useCallback(() => {
+    setPhase(
+      (current) => current.kind === "review" ? { kind: "proof", plan: current.plan, gate: current.gate, error: null } : current
+    );
+  }, []);
+  const handleCancel = reactExports.useCallback(() => setPhase({ kind: "idle" }), []);
+  const handleConfirm = reactExports.useCallback(
+    async (credentials) => {
+      if (phase.kind !== "proof") return;
+      const { plan, gate } = phase;
+      setPhase({ kind: "removing", plan, gate });
+      try {
+        setPhase({ kind: "done", report: await removeAllGuardHooks(credentials) });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Guard could not remove its hooks.";
+        const retryable = error instanceof GuardRepairRequestError && error.status >= 400 && error.status < 500;
+        setPhase(retryable ? { kind: "proof", plan, gate, error: message } : { kind: "error", message });
+      }
+    },
+    [phase]
+  );
+  const handleConfirmClick = reactExports.useCallback(
+    (credentials) => {
+      void handleConfirm(credentials);
+    },
+    [handleConfirm]
+  );
+  const gateMissing = (phase.kind === "review" || phase.kind === "proof" || phase.kind === "removing") && !phase.gate?.enabled;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Remove Guard from all apps" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Removes every Guard hook from every connected app, including ones Guard no longer tracks. Other hooks are left alone and each changed file is backed up. Needs your approval password or authenticator code." })
+    ] }),
+    phase.kind === "idle" || phase.kind === "loading" || phase.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleReviewClick, disabled: phase.kind === "loading", variant: "outline", children: phase.kind === "loading" ? "Checking apps…" : "Review and remove" }) }) : null,
+    phase.kind === "review" || phase.kind === "proof" || phase.kind === "removing" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2 rounded-xl border border-brand-attention/20 bg-brand-attention/[0.04] p-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-dark", children: [
+        "Guard hooks will be removed from ",
+        phase.plan.harnesses.length,
+        " app",
+        phase.plan.harnesses.length === 1 ? "" : "s",
+        ". They stop being protected until you reinstall."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AffectedList, { items: phase.plan.harnesses, label: "Apps affected" }),
+      gateMissing ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-600", children: [
+        "Removal from the dashboard needs the local approval gate. Enable it in Settings, Approval gate, or run",
+        " ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "font-mono", children: "hol-guard hooks remove --all" }),
+        " in a terminal."
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "danger", onClick: handleContinue, disabled: phase.kind !== "review", children: "Remove Guard from all apps" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleCancel, disabled: phase.kind === "removing", children: "Cancel" })
+      ] }),
+      gateMissing ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleCancel, children: "Close" }) : null
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "aria-live": "polite", children: [
+      phase.kind === "done" ? /* @__PURE__ */ jsxRuntimeExports.jsx(RemovalResult, { report: phase.report }) : null,
+      phase.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-sm text-brand-attention", children: phase.message }) : null
+    ] }),
+    phase.kind === "proof" || phase.kind === "removing" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofModal,
+      {
+        title: "Remove Guard from all apps",
+        detail: `Enter local approval proof. Guard hooks will be removed from: ${phase.plan.harnesses.map((item) => item.harness).join(", ")}.`,
+        confirmLabel: "Remove Guard",
+        busy: phase.kind === "removing",
+        busyLabel: "Removing…",
+        approvalGate: phase.gate,
+        error: phase.kind === "proof" ? phase.error : null,
+        onCancel: handleCancel,
+        onConfirm: handleConfirmClick
+      }
+    ) : null
+  ] });
+}
 const POSTURE_ORDER = ["protected", "extra_careful", "watch"];
 function ProtectionPosturePanel(props) {
   const copy = PROTECTION_POSTURE_COPY[props.posture];
@@ -4735,7 +4868,12 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                   /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair approval center" }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Use when the approval link fails after Guard restarts." }),
                   /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { onClick: handleRepairApprovalCenter, disabled: repairing, variant: "secondary", children: repairing ? "Repairing…" : "Repair" }) })
-                ] })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "guard-repair", children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Repair Guard" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx(GuardRepairControl, { description: "Fixes the background service, app hooks, and stale local state when hooks time out or an app stays blocked." })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "guard-hook-removal", children: /* @__PURE__ */ jsxRuntimeExports.jsx(GuardHookRemovalPanel, {}) })
               ] })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsActionMessage, { message: actionMessage, kind: actionMessageKind })

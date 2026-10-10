@@ -1018,6 +1018,8 @@ if Path('/candidate-wheel').is_dir():
 
             relatives += ['codex_plugin_scanner/guard/native_runtime.py',
 
+                          'codex_plugin_scanner/guard/native_runtime_request_scope.py',
+
                           'codex_plugin_scanner/guard/native_runtime_values.py']
 
         for relative in relatives:

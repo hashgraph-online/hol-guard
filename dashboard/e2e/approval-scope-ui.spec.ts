@@ -130,7 +130,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
   await expect(page.getByRole("radio", { name: /This app/ })).toBeVisible();
   await page.getByText("Advanced: save everywhere on this machine", { exact: true }).click();
   await expect(page.getByRole("radio", { name: /Everywhere/ })).toBeVisible();
-  await expect(page.getByText(/Task access is not available/)).toBeVisible();
+  await expect(page.getByText(/Always allow is not available for this action/)).toBeVisible();
 
   await page.getByText("Block matching actions", { exact: true }).first().click();
   await page.getByRole("radio", { name: /Block everywhere/ }).click();
