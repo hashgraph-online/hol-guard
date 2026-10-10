@@ -176,6 +176,12 @@ mod native_runtime_admission;
 mod native_runtime_resilience;
 mod oauth_refresh;
 mod oauth_secret_authority;
+mod oci_bundle_evidence;
+mod oci_bundle_mounts;
+mod oci_bundle_op;
+#[cfg(test)]
+mod oci_bundle_vectors_tests;
+mod oci_path;
 mod omp_yield_input_scan;
 mod oneshot;
 mod package_authority_config;
