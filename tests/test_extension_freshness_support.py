@@ -109,6 +109,8 @@ def test_pull_request_diff_fetches_captured_base_when_checkout_is_shallow(
     responses = iter(
         (
             subprocess.CompletedProcess([], 128, "", "missing base"),
+            # Locked re-check still misses the base before the fetch runs.
+            subprocess.CompletedProcess([], 128, "", "missing base"),
             subprocess.CompletedProcess([], 0, "", ""),
             subprocess.CompletedProcess([], 0, "tests/guard_command_decision_diff.py\n", ""),
         )
@@ -122,6 +124,7 @@ def test_pull_request_diff_fetches_captured_base_when_checkout_is_shallow(
 
     assert extension_freshness._pr_diff_paths() == ["tests/guard_command_decision_diff.py"]
     assert calls == [
+        ("diff", "--name-only", base_sha, "HEAD"),
         ("diff", "--name-only", base_sha, "HEAD"),
         ("fetch", "--depth=1", "origin", base_sha),
         ("diff", "--name-only", base_sha, "HEAD"),

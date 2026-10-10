@@ -214,6 +214,7 @@ def _isolated_environment() -> dict[str, str]:
     allowed = {
         "COMSPEC",
         "HOME",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
         "LANG",
         "PATHEXT",
         "SYSTEMROOT",
@@ -415,11 +416,6 @@ def _capture_native_deadline(request: HookReviewRequest) -> tuple[float, int]:
     deadline = requested if requested is not None and math.isfinite(requested) else now + 0.75
     budget_ms = max(1, min(9_000, int((deadline - now) * 1_000)))
     return deadline, budget_ms
-
-
-def _deadline_budget_ms(request: HookReviewRequest) -> int:
-    """Return a bounded budget for compatibility with existing callers."""
-    return _capture_native_deadline(request)[1]
 
 
 def native_runtime_health(guard_home: Path) -> NativeRuntimeHealthSnapshot:

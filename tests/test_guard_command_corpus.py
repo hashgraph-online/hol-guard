@@ -362,14 +362,19 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
         expected[key] = (count, digest)
 
     runner_path = Path(__file__).with_name("guard_command_corpus_runner.py")
-    completed = subprocess.run(
-        [sys.executable, str(runner_path)],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=90,
-        cwd=Path.cwd(),
-    )
+    try:
+        completed = subprocess.run(
+            [sys.executable, str(runner_path)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=90,
+            cwd=Path.cwd(),
+        )
+    except subprocess.CalledProcessError as error:
+        raise AssertionError(
+            f"corpus runner exited {error.returncode}: {error.stderr[-4000:] if error.stderr else 'no stderr'}"
+        ) from error
     report_value = cast(object, json.loads(completed.stdout))
     assert isinstance(report_value, dict)
     report = cast(dict[str, object], report_value)

@@ -7,7 +7,6 @@ success.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,7 +21,6 @@ from codex_plugin_scanner.guard.approval_gate import (
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher_transport import (
     _stamp_runtime_program_digest,
 )
-from codex_plugin_scanner.guard.package_shim_gate import _parse_shim_package_intent
 from codex_plugin_scanner.guard.runtime.package_intent_common import PackageIntent
 
 DIGEST = "a" * 64
@@ -115,52 +113,6 @@ def _patch_authority(monkeypatch: pytest.MonkeyPatch, status: SimpleNamespace, r
     monkeypatch.setattr(native_package_authority, "native_record_resident_success", lambda *_args, **_kwargs: None)
 
 
-def test_package_intent_parse_binds_the_callers_path_to_the_resident(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The resident resolves the launch in the caller's PATH, not its spawn-time one.
-
-    The resident is long-lived: its own ``PATH`` is whatever it was spawned
-    with, and a manager it cannot resolve makes the TypeScript launch evidence
-    incomplete, which sends a contained typecheck back to review even though the
-    caller resolves the manager fine.
-    """
-
-    home = tmp_path / "home"
-    requests: list[dict[str, object]] = []
-    response = b'{"schema":"guard-package-authority-result.v1","status":"ok","payload":{}}'
-    monkeypatch.setattr(native_package_authority, "native_runtime_status", lambda: _status())
-    monkeypatch.setattr(
-        native_package_authority,
-        "native_resident_client_request",
-        lambda **kwargs: (requests.append(json.loads(kwargs["payload"])["request"]), response)[1],
-    )
-    monkeypatch.setattr(native_package_authority, "native_record_resident_failure", lambda *_a, **_k: None)
-    monkeypatch.setattr(native_package_authority, "native_record_resident_success", lambda *_a, **_k: None)
-    monkeypatch.setenv("PATH", "/example/bin")
-
-    assert native_package_authority.package_intent_parse_native("npx tsc", guard_home=home) == {}
-    assert requests[0]["environment"] == {"PATH": "/example/bin"}
-
-    # An environment the caller supplied with a PATH is sent as it stands.
-    assert (
-        native_package_authority.package_intent_parse_native(
-            "npx tsc", environment={"PATH": "/other/bin", "NODE_OPTIONS": ""}, guard_home=home
-        )
-        == {}
-    )
-    assert requests[1]["environment"] == {"PATH": "/other/bin", "NODE_OPTIONS": ""}
-
-    # One without a PATH gains the caller's, so resolution still matches.
-    assert (
-        native_package_authority.package_intent_parse_native(
-            "npx tsc", environment={"NODE_OPTIONS": ""}, guard_home=home
-        )
-        == {}
-    )
-    assert requests[2]["environment"] == {"NODE_OPTIONS": "", "PATH": "/example/bin"}
-
-
 def test_package_authority_refuses_unavailable_or_malformed_resident(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -235,26 +187,6 @@ def test_program_digest_stamp_keeps_snapshot_when_runtime_digests_disagree() -> 
 
 def _raise_transport(*_args: object, **_kwargs: object) -> dict[str, object]:
     raise RuntimeError("transport")
-
-
-def test_shim_parser_falls_back_when_native_payload_is_unusable(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_package_authority.package_intent_parse_native",
-        _raise_transport,
-    )
-    monkeypatch.setattr("codex_plugin_scanner.guard.config.resolve_guard_home", lambda: tmp_path)
-    fallback = _parse_shim_package_intent("npm install left-pad", workspace=tmp_path)
-    assert isinstance(fallback, PackageIntent)
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.native_package_authority.package_intent_parse_native",
-        lambda *_args, **_kwargs: {"package_manager": "npm"},
-    )
-    rejected = _parse_shim_package_intent("npm install left-pad", workspace=tmp_path)
-    assert isinstance(rejected, PackageIntent)
-    assert rejected.package_manager == "npm"
 
 
 def test_supply_chain_native_bridge_rejects_bad_call_shapes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

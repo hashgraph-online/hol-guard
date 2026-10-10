@@ -20,6 +20,7 @@ def revalidate_codex_live_allow(
     payload: Mapping[str, object],
     *,
     home_dir: Path,
+    guard_home: Path | None = None,
     reviewer: FreshHookReviewer,
     claimed_saved_allow_hash: str | None = None,
     claimed_approval_request_id: str | None = None,
@@ -55,6 +56,7 @@ def revalidate_codex_live_allow(
         payload=hook_payload,
         home_dir=home_dir,
         workspace=workspace,
+        guard_home=guard_home,
     )
     if envelope is None:
         return False

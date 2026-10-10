@@ -18,12 +18,18 @@ from typing import TYPE_CHECKING
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..runtime.actions import normalize_harness_payload
+from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
     native_review_policy_binding,
 )
-from .hook_request_parsing import pre_tool_command
+from .hook_native_saved_approval import (
+    EXACT_ACTION_CONTEXT_TOKEN_KEY,
+    native_exact_action_token,
+    native_saved_review_response,
+)
+from .hook_request_parsing import pre_tool_command, pre_tool_input
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
@@ -98,6 +104,7 @@ def pause_native_pre_tool_for_approval(
     workspace: Path | None,
     guard_home: Path,
     home_dir: Path | None = None,
+    deadline: float | None = None,
     claim_saved_approval: bool = True,
     claimed_saved_allow_hash: str | None = None,
     claimed_approval_request_id: str | None = None,
@@ -123,6 +130,32 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
+    # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
+    custom = native_local_cli_grant_response(
+        store,
+        harness=harness,
+        payload=payload,
+        native_result=native_result,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if custom is not None and custom[0]:
+        return custom[1]
+    saved = native_saved_review_response(
+        store,
+        harness=harness,
+        tool_name=tool_name,
+        artifact_id=_native_review_artifact_id(harness, tool_name),
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if saved is not None:
+        return saved
+    if custom is not None:
+        return custom[1]
     if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,
@@ -174,6 +207,7 @@ def pause_native_pre_tool_for_approval(
             workspace=workspace,
             guard_home=guard_home,
             home_dir=home_dir,
+            deadline=deadline,
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
@@ -200,6 +234,7 @@ def pause_native_pre_tool_for_approval(
         workspace=workspace,
         guard_home=guard_home,
         home_dir=home_dir,
+        deadline=deadline,
     )
     if queued is None:
         failed = dict(native_result)
@@ -259,6 +294,7 @@ def queue_native_pre_tool_review(
     workspace: Path | None,
     guard_home: Path,
     home_dir: Path | None = None,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     try:
         native_review_policy_binding(harness=harness, native_result=native_result, verified_receipt=native_receipt)
@@ -282,7 +318,9 @@ def queue_native_pre_tool_review(
             payload=payload,
             native_receipt=native_receipt,
             workspace=workspace,
+            guard_home=guard_home,
             home_dir=home_dir,
+            deadline=deadline,
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
@@ -292,6 +330,18 @@ def queue_native_pre_tool_review(
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
         return None
+    # Offer an exact-action Always only when the action binds to a stable token.
+    exact_token = native_exact_action_token(
+        harness=harness,
+        tool_name=tool_name,
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if exact_token is not None:
+        action_envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = exact_token
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
@@ -310,6 +360,7 @@ def queue_native_pre_tool_review(
         launch_target=launch_target,
         risk_summary=reason,
         action_envelope_json=action_envelope,
+        raw_command_text=pre_tool_command(payload),
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
@@ -491,13 +542,23 @@ def _native_review_action_envelope(
     payload: Mapping[str, object],
     native_receipt: Mapping[str, object] | None = None,
     workspace: Path | None,
+    guard_home: Path | None = None,
     home_dir: Path | None,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
     """Store the canonical redacted envelope used by live revalidation."""
 
     try:
         envelope = (
-            normalize_harness_payload(harness, "PreToolUse", dict(payload), workspace=workspace, home_dir=home_dir)
+            normalize_harness_payload(
+                harness,
+                "PreToolUse",
+                dict(payload),
+                workspace=workspace,
+                home_dir=home_dir,
+                guard_home=guard_home,
+                deadline=deadline,
+            )
             .with_pre_execution_result("review")
             .to_dict()
         )
@@ -542,8 +603,8 @@ def _native_review_launch_target(payload: Mapping[str, object]) -> str:
     command = pre_tool_command(payload)
     if command is not None:
         return command
-    tool_input = payload.get("tool_input")
-    if isinstance(tool_input, Mapping):
+    tool_input = pre_tool_input(payload)
+    if tool_input is not None:
         for key in ("url", "path", "file_path", "target"):
             value = tool_input.get(key)
             if isinstance(value, str) and value.strip():

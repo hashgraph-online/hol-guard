@@ -8,6 +8,7 @@
 //! --stdin`.
 
 use crate::{BrowserMcpArtifactV1, BrowserMcpRequestV1, BrowserMcpResultV1};
+use crate::{LocalCliIdentitySourceV1, LocalCliIdentityV1};
 use crate::{McpToolPolicyRequestV1, McpToolPolicyResultV1};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -258,6 +259,10 @@ pub enum ContextDigestKindV1 {
     PackageExecutionContextFromScannerEvidence {
         material: Value,
     },
+    /// Derive the grant identity of an unlisted local CLI.
+    LocalCliIdentity {
+        source: LocalCliIdentitySourceV1,
+    },
     McpServerIdentity {
         request: McpServerIdentityRequestV1,
     },
@@ -475,4 +480,8 @@ pub struct ContextDigestResultV1 {
     /// duplicate name). Explicit `null` mirrors `_normalized_tools_catalog_page`.
     #[serde(default)]
     pub tool_catalog: Option<Map<String, Value>>,
+    /// `local_cli_identity` output; absent when the material does not name
+    /// an identifiable CLI.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_cli_identity: Option<LocalCliIdentityV1>,
 }

@@ -8,6 +8,7 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from .extension_adapters import extension_adapter
 from .fixtures import digest_file
 
 CATALOG = Path(__file__).with_name("scenarios.json")
@@ -113,6 +114,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             and len(scenario.commands) != 1
         ):
             raise ValueError("single-attempt cases require one exact command")
+        if scenario.oracle == "blocked-extension":
+            extension_adapter(scenario.commands[0])
         if scenario.oracle == "commands" and not scenario.commands:
             raise ValueError("command cases cannot be empty")
         if scenario.oracle == "watch-command" and (

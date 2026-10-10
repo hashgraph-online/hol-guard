@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
+from .contained_wrapper import bounded_output, peel_contained_wrapper
 from .restricted_inline_eval import is_inline_eval, prepare_restricted_inline_eval, run_restricted_inline_eval
 from .restricted_package_test import (
     PACKAGE_TEST_PROFILE,
@@ -112,18 +113,50 @@ def run_authorized_contained_test(
     workspace: Path,
     authorize: Callable[[dict[str, object]], object],
     timeout_seconds: int,
+    cwd: Path | None = None,
 ) -> int:
-    """Recheck native authority for the original input before protected execution."""
+    """Recheck native authority for the original input before protected execution.
+
+    `workspace` stays the approved root for dependency and profile resolution;
+    `cwd` is only the directory a peeled `cd` selected to run in.
+    """
     tool_input = payload.get("tool_input")
     if not isinstance(tool_input, dict) or not isinstance(tool_input.get("command"), str):
         raise _reject()
+    if cwd is None:
+        cwd = workspace
+    try:
+        peeled = peel_contained_wrapper(tool_input["command"], workspace=workspace)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise _reject() from error
+    if peeled is not None:
+        # The wrapped original must carry the receipt; the core is then
+        # re-authorized in its resolved directory by the recursive call.
+        receipt = authorize(payload)
+        if (
+            not isinstance(receipt, Mapping)
+            or receipt.get("decision") != "deny"
+            or receipt.get("policy_action") != "sandbox-required"
+            or not isinstance(receipt.get("required_execution_profile"), str)
+            or receipt.get("observe_mode") is True
+        ):
+            raise _reject()
+        core, directory, output = peeled
+        with bounded_output(output):
+            return run_authorized_contained_test(
+                {**payload, "cwd": str(directory), "tool_input": {**tool_input, "command": core}},
+                workspace=workspace,
+                authorize=authorize,
+                timeout_seconds=timeout_seconds,
+                cwd=directory,
+            )
     try:
         command = shlex.split(tool_input["command"], posix=True)
     except ValueError as error:
         raise _reject() from error
     package_test = is_package_test(command)
     if package_test:
-        command = list(resolve_package_test(command, workspace=workspace))
+        command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
     inline_eval = is_inline_eval(command)
     # Fail before the authority request if the backend cannot enforce the profile.
     node_runtime_args = (
@@ -174,17 +207,17 @@ def run_authorized_contained_test(
     )
     inline_plan = node_tool_plan = git_plan = vitest_plan = node_test_plan = None
     if inline_eval:
-        inline_plan = prepare_restricted_inline_eval(command, workspace=workspace)
+        inline_plan = prepare_restricted_inline_eval(command, workspace=workspace, cwd=cwd)
     elif node_tool:
-        node_tool_plan = restricted_node_tool.prepare_restricted_node_tool(command, workspace=workspace, cwd=workspace)
+        node_tool_plan = restricted_node_tool.prepare_restricted_node_tool(command, workspace=workspace, cwd=cwd)
     elif git:
-        git_plan = restricted_git.prepare_restricted_git(command, workspace=workspace, cwd=workspace)
+        git_plan = restricted_git.prepare_restricted_git(command, workspace=workspace, cwd=cwd)
     elif vitest:
-        vitest_plan = restricted_vitest.prepare_restricted_vitest(command, workspace=workspace, cwd=workspace)
+        vitest_plan = restricted_vitest.prepare_restricted_vitest(command, workspace=workspace, cwd=cwd)
     elif node_test:
-        node_test_plan = restricted_node_test.prepare_restricted_node_test(command, workspace=workspace, cwd=workspace)
+        node_test_plan = restricted_node_test.prepare_restricted_node_test(command, workspace=workspace, cwd=cwd)
     else:
-        prepare_restricted_pytest(command, workspace=workspace, cwd=workspace, read_only_workspace=True)
+        prepare_restricted_pytest(command, workspace=workspace, cwd=cwd, read_only_workspace=True)
     if inline_plan is not None:
         profile = inline_plan.profile_version
         if profile == "node-eval-readonly-v1":
@@ -229,10 +262,9 @@ def run_authorized_contained_test(
 
     def authorize_capability(argv: tuple[str, ...]) -> None:
         capability = {**payload, "tool_input": {**tool_input, "command": shlex.join(argv)}}
-        contexts = [workspace]
-        if vitest_plan is not None and vitest_plan.cwd != workspace:
-            contexts.append(vitest_plan.cwd)
-        for directory in contexts:
+        # The approved workspace root stays in scope so a subdirectory cannot shed its denies.
+        contexts = (workspace, cwd, *((vitest_plan.cwd,) if vitest_plan is not None else ()))
+        for directory in dict.fromkeys(contexts):
             response = authorize({**capability, "cwd": str(directory)})
             if (
                 not isinstance(response, Mapping)
@@ -266,13 +298,13 @@ def run_authorized_contained_test(
         # override an extension deny for the underlying executable.
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(vitest_plan.command)}}
         # Selecting another directory cannot shed the original project's denies.
-        for directory in dict.fromkeys((workspace, vitest_plan.cwd)):
+        for directory in dict.fromkeys((workspace, cwd, vitest_plan.cwd)):
             if not required(authorize({**underlying, "cwd": str(directory)})):
                 raise _reject()
         return restricted_vitest.run_restricted_vitest(
             command,
             workspace=workspace,
-            cwd=workspace,
+            cwd=cwd,
             timeout_seconds=timeout_seconds,
             prepared_plan=vitest_plan,
             authorize_capability=authorize_capability,
@@ -284,7 +316,7 @@ def run_authorized_contained_test(
         return restricted_node_test.run_restricted_node_test(
             command,
             workspace=workspace,
-            cwd=workspace,
+            cwd=cwd,
             timeout_seconds=timeout_seconds,
             prepared_plan=node_test_plan,
             authorize_capability=authorize_capability,
@@ -292,7 +324,7 @@ def run_authorized_contained_test(
     return run_restricted_pytest(
         command,
         workspace=workspace,
-        cwd=workspace,
+        cwd=cwd,
         timeout_seconds=timeout_seconds,
         read_only_workspace=True,
     )

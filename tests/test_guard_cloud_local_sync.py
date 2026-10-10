@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import urllib.error
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -149,7 +150,10 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(
     assert any(entity["entityType"] == "mcp_server" for entity in payload["payload"]["entities"])
 
 
-def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_instruction_access_graph_edges(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     instruction_path = tmp_path / "workspace" / "AGENTS.md"
@@ -182,10 +186,12 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_cloud_workspace
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store)
-    workspace_script = tmp_path / "workspace" / "workspace.js"
-    workspace_script.parent.mkdir(parents=True, exist_ok=True)
-    workspace_script.write_text("console.log('ok');\n", encoding="utf-8")
-    artifact = _artifact(tmp_path)
+    # Graph queueing does not depend on the host Node installation or repo cwd.
+    # Keep real native launch identity, using the owned launcher pattern below.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)
@@ -211,7 +217,12 @@ class _FailingAccessGraphEventStore(GuardStore):
 def test_access_graph_queue_failure_does_not_block_local_approval_decision(tmp_path: Path) -> None:
     store = _FailingAccessGraphEventStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
-    artifact = _artifact(tmp_path)
+    # Exercise real native launch identity without depending on a host Node
+    # installation; this test isolates event-queue failure, not launcher speed.
+    launcher = tmp_path / "mcp-launcher"
+    launcher.write_text("#!/bin/sh\nexit 0\n")
+    launcher.chmod(0o700)
+    artifact = replace(_artifact(tmp_path), command=str(launcher), args=())
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
 
     evaluation = evaluate_detection(_detection(artifact), store, config, default_action="allow", persist=True)

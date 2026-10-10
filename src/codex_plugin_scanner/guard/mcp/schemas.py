@@ -12,8 +12,6 @@ DEFAULT_SEARCH_LIMIT = 10
 MAX_SEARCH_LIMIT = 20
 MAX_FETCH_TEXT_BYTES = 32768  # 32 KiB
 
-ID_NAMESPACES = ("receipt:", "artifact:", "inventory:", "device:")
-
 
 class ResultKind(str, Enum):
     RECEIPT = "receipt"
@@ -50,12 +48,6 @@ VALID_DECISIONS = frozenset(d.value for d in DecisionCategory)
 VALID_KINDS = frozenset(k.value for k in ResultKind)
 
 _ID_PATTERN = re.compile(r"^(receipt|artifact|inventory|device):[a-zA-Z0-9_-]+$")
-
-
-def is_valid_id(raw: str) -> bool:
-    if not raw or len(raw) > 256:
-        return False
-    return bool(_ID_PATTERN.match(raw))
 
 
 def make_opaque_id(kind: str, internal_id: str) -> str:

@@ -22,6 +22,8 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def _clean_npx() -> str | None:
     path_value = os.environ.get("PATH", "")

@@ -9,7 +9,7 @@ pub(super) fn grant() -> GoogleDirectoryCredential {
     GoogleDirectoryCredential {
         credential: crate::oauth::directory_test_credential(),
         customer_id: "C012345".into(),
-        namespace_key: Zeroizing::new([7; 32]),
+        identity_key: Zeroizing::new([7; 32]),
     }
 }
 pub(super) fn input() -> InspectedGoogleWorkerInput {

@@ -96,7 +96,7 @@ def test_zcode_authority_block_stderr_carries_remediation() -> None:
     )
 
     assert code == 2
-    assert "hol-guard command controls acknowledge-degraded" in stderr
+    assert "hol-guard command controls recover-authority" in stderr
 
 
 def test_zcode_prompt_blocks_keep_blocking_exit() -> None:

@@ -39,6 +39,7 @@ def _source_contribution_ids() -> frozenset[str]:
             ids.add(extension_id)
     return frozenset(ids)
 
+
 def test_in_tree_contributions_match_reviewed_trust_classes() -> None:
     payloads = load_contribution_payloads()
     ids = {str(item["id"]) for item in payloads}
@@ -103,9 +104,10 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
         repo / "contracts" / "extensions" / "contribution.v2.schema.json",
         dest / "contribution.v2.schema.json",
     )
-    shutil.copyfile(
-        repo / "contracts" / "extensions" / "trust-class-map.v1.json",
-        dest / "trust-class-map.v1.json",
+    from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
+
+    (dest / "trust-class-map.v1.json").write_text(
+        json.dumps(trust_map_from_bindings(repo / "contracts/extensions/trust"))
     )
     monkeypatch.setattr(sys, "frozen", True, raising=False)
     monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)

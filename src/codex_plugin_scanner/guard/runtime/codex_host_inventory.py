@@ -1,6 +1,6 @@
 """Read display metadata from an existing, same-user Codex host.
 
-Only Guard-managed control sockets are eligible. No host or MCP process is started,
+Only private, same-user Codex control sockets are eligible. No host or MCP process is started,
 and public tool summaries never become schemas, account evidence, or permissions.
 """
 
@@ -57,14 +57,18 @@ class CodexHostInventoryCache:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._snapshot: tuple[float, Path, tuple[Path, tuple[int, int, int, int]], int, dict[str, object]] | None = None
+        self._snapshot: (
+            tuple[float, Path, tuple[Path, tuple[int, int, int, int]], int, int | None, dict[str, object]] | None
+        ) = None
 
     def refresh(self, *, codex_home: Path, cancel: threading.Event) -> None:
         socket_path = codex_home / "app-server-control" / "app-server-control.sock"
         try:
             snapshot = read_codex_host_inventory(codex_home=codex_home, cancel=cancel)
             source = _socket_target(socket_path)
-            pid = _managed_pid(socket_path)
+            pid = snapshot.host_pid
+            if not _host_identity_matches(socket_path, pid, snapshot.managed_pid):
+                raise ValueError("codex_host_changed")
             if snapshot.connection_id != _source_id(codex_home, os.geteuid(), pid, source[1]):
                 raise ValueError("codex_host_changed")
         except (OSError, ValueError) as error:
@@ -87,19 +91,19 @@ class CodexHostInventoryCache:
             if not cancel.is_set():
                 payload = snapshot.as_payload()
                 payload["expires_at_ms"] = int((time.time() + _SNAPSHOT_TTL) * 1000)
-                self._snapshot = (time.monotonic(), socket_path, source, pid, payload)
+                self._snapshot = (time.monotonic(), socket_path, source, pid, snapshot.managed_pid, payload)
 
     def read(self) -> dict[str, object] | None:
         with self._lock:
             snapshot = self._snapshot
         if snapshot is None:
             return None
-        seen, socket_path, source, pid, payload = snapshot
+        seen, socket_path, source, pid, managed_pid, payload = snapshot
         try:
             if (
                 time.monotonic() - seen > _SNAPSHOT_TTL
                 or _socket_target(socket_path) != source
-                or _managed_pid(socket_path) != pid
+                or not _host_identity_matches(socket_path, pid, managed_pid)
             ):
                 return None
         except (OSError, ValueError):
@@ -112,6 +116,8 @@ class CodexHostInventory:
     connection_id: str
     apps: tuple[dict[str, object], ...]
     metadata_complete: bool
+    host_pid: int
+    managed_pid: int | None
 
     def as_payload(self) -> dict[str, object]:
         return {
@@ -145,6 +151,22 @@ def _managed_pid(socket_path: Path) -> int:
     if not value.isascii() or not value.isdecimal() or not 1 < int(value) <= 2**31 - 1:
         raise ValueError("codex_host_untrusted")
     return int(value)
+
+
+def _optional_managed_pid(socket_path: Path) -> int | None:
+    try:
+        (socket_path.parent / "hol-guard-app-server.pid").lstat()
+    except FileNotFoundError:
+        # Codex's own daemon does not create Guard's process marker.
+        return None
+    return _managed_pid(socket_path)
+
+
+def _host_identity_matches(socket_path: Path, pid: int, expected: int | None) -> bool:
+    tracked = _optional_managed_pid(socket_path)
+    # Process identity is authenticated on the connected peer during refresh.
+    # Cache reads only pin the private socket and marker, without spawning ps.
+    return tracked == expected and (tracked == pid if tracked is not None else pid > 1)
 
 
 def _peer_identity(client: socket.socket) -> tuple[int, int]:
@@ -258,6 +280,14 @@ def _identifier(value: object) -> str:
     return text
 
 
+def _summary_text(value: object, *, maximum: int) -> str | None:
+    # Host descriptions have no protocol length cap. Bound display text without
+    # rejecting an otherwise valid inventory; identifiers remain strict.
+    if isinstance(value, str) and "\x00" not in value:
+        value = value[:maximum]
+    return _text(value, maximum=maximum)
+
+
 def _reject_constant(_value: str) -> None:
     raise ValueError("codex_host_invalid")
 
@@ -334,13 +364,13 @@ def read_codex_host_inventory(
         if cancel.is_set():
             raise ValueError("codex_host_cancelled")
         target, socket_identity = _socket_target(socket_path)
-        expected_pid = _managed_pid(socket_path)
+        expected_pid = _optional_managed_pid(socket_path)
         deadline = time.monotonic() + min(max(timeout, 0.1), 10.0)
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
             client.settimeout(max(0.1, deadline - time.monotonic()))
             client.connect(str(target))
             uid, pid = _peer_identity(client)
-            if uid != os.geteuid() or pid != expected_pid or not _is_codex_process(pid):
+            if uid != os.geteuid() or (expected_pid is not None and pid != expected_pid) or not _is_codex_process(pid):
                 raise ValueError("codex_host_untrusted")
             if _socket_target(socket_path) != (target, socket_identity):
                 raise ValueError("codex_host_changed")
@@ -376,11 +406,13 @@ def read_codex_host_inventory(
                 complete = _merge_metadata(page, result) and complete
                 if sum(len(cast(list[object], app.get("tools", []))) for app in apps) > _MAX_TOOLS:
                     raise ValueError("codex_host_limit")
-            if cancel.is_set() or _managed_pid(socket_path) != expected_pid:
+            if cancel.is_set() or not _host_identity_matches(socket_path, pid, expected_pid):
                 raise ValueError("codex_host_changed")
             if _socket_target(socket_path) != (target, socket_identity):
                 raise ValueError("codex_host_changed")
-        return CodexHostInventory(_source_id(codex_home, uid, pid, socket_identity), tuple(apps), complete)
+        return CodexHostInventory(
+            _source_id(codex_home, uid, pid, socket_identity), tuple(apps), complete, pid, expected_pid
+        )
     except (OSError, UnicodeError, json.JSONDecodeError, subprocess.SubprocessError) as error:
         raise ValueError("codex_host_unavailable") from error
     except ValueError as error:
@@ -414,6 +446,7 @@ def _installed_apps(result: dict[str, object]) -> list[dict[str, object]]:
 def _merge_metadata(apps: list[dict[str, object]], result: dict[str, object]) -> bool:
     requested = {cast(str, app["app_id"]): app for app in apps}
     covered: set[str] = set()
+    complete = True
     for value in _array(result.get("apps"), maximum=100):
         row = _object(value)
         app_id = _identifier(row.get("id"))
@@ -424,7 +457,8 @@ def _merge_metadata(apps: list[dict[str, object]], result: dict[str, object]) ->
         app["name"] = _text(row.get("name"), maximum=256, required=True)
         tools: list[dict[str, object]] = []
         names: set[str] = set()
-        for entry in _array(row.get("tools", []), maximum=_MAX_TOOLS):
+        summaries = row.get("toolSummaries", row.get("tools"))
+        for entry in _array([] if summaries is None else summaries, maximum=_MAX_TOOLS):
             tool = _object(entry)
             name = _identifier(tool.get("name"))
             if name in names:
@@ -433,12 +467,13 @@ def _merge_metadata(apps: list[dict[str, object]], result: dict[str, object]) ->
             tools.append(
                 {
                     "name": name,
-                    "title": _text(tool.get("title"), maximum=512),
-                    "description": _text(tool.get("description"), maximum=4000),
+                    "title": _summary_text(tool.get("title"), maximum=512),
+                    "description": _summary_text(tool.get("description"), maximum=4000),
                 }
             )
         app["tools"] = tools
-        app["metadata_available"] = True
+        app["metadata_available"] = summaries is not None
+        complete = summaries is not None and complete
     missing = _array(result.get("missingAppIds"), maximum=100)
     for value in missing:
         app_id = _identifier(value)
@@ -447,4 +482,4 @@ def _merge_metadata(apps: list[dict[str, object]], result: dict[str, object]) ->
         covered.add(app_id)
     if covered != set(requested):
         raise ValueError("codex_host_invalid")
-    return not missing
+    return not missing and complete

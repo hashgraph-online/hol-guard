@@ -21,9 +21,21 @@ from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
 if __package__:
+    from .release_artifact_sets import (
+        ARTIFACT_SETS,
+        ArtifactSetError,
+        remote_for_artifact_set,
+        select_upload_artifacts,
+    )
     from .release_registry_types import Registry, RegistryVerificationError, ReleaseInspection
     from .verify_release_registry import compute_local_distribution_hashes, inspect_release
 else:
+    from release_artifact_sets import (  # pyright: ignore[reportImplicitRelativeImport]
+        ARTIFACT_SETS,
+        ArtifactSetError,
+        remote_for_artifact_set,
+        select_upload_artifacts,
+    )
     from release_registry_types import (  # pyright: ignore[reportImplicitRelativeImport]
         Registry,
         RegistryVerificationError,
@@ -330,20 +342,6 @@ def _copy_exclusive(source: Path, target: Path) -> None:
         raise NativeReleaseError(f"Native upload artifact could not be copied: {target.name}") from exc
 
 
-def select_upload_artifacts(local: Mapping[str, str], *, version: str, artifact_set: str) -> dict[str, str]:
-    """Return the registry subset that this publication is allowed to upload."""
-
-    if artifact_set == "full":
-        return dict(local)
-    if artifact_set != "pure":
-        raise NativeReleaseError("Unsupported Guard registry artifact set")
-    wheel = f"hol_guard-{_canonical_version(version).replace('-', '_')}-py3-none-any.whl"
-    digest = local.get(wheel)
-    if digest is None:
-        raise NativeReleaseError("Guard pure wheel is missing from the local release set")
-    return {wheel: digest}
-
-
 def plan_upload(
     registry: Registry,
     *,
@@ -353,17 +351,19 @@ def plan_upload(
     output_dir: Path,
     artifact_set: str = "full",
 ) -> tuple[str, ...]:
-    local = select_upload_artifacts(
-        local_guard_hashes(
-            dist_dir,
-            version=version,
-            source_sha=source_sha,
-        ),
+    complete = local_guard_hashes(
+        dist_dir,
+        version=version,
+        source_sha=source_sha,
+    )
+    local = select_upload_artifacts(complete, version=version, artifact_set=artifact_set)
+    inspection = _inspection(registry, version)
+    remote = remote_for_artifact_set(
+        inspection.digests if inspection.exists else {},
+        complete,
         version=version,
         artifact_set=artifact_set,
     )
-    inspection = _inspection(registry, version)
-    remote = inspection.digests if inspection.exists else {}
     unexpected = sorted(set(remote) - set(local))
     if unexpected:
         raise NativeReleaseError(f"Registry release contains unexpected artifacts: {unexpected}")
@@ -391,19 +391,16 @@ def assert_published_exact(
     dist_dir: Path,
     artifact_set: str = "full",
 ) -> None:
-    local = select_upload_artifacts(
-        local_guard_hashes(
-            dist_dir,
-            version=version,
-            source_sha=source_sha,
-        ),
+    complete = local_guard_hashes(
+        dist_dir,
         version=version,
-        artifact_set=artifact_set,
+        source_sha=source_sha,
     )
+    local = select_upload_artifacts(complete, version=version, artifact_set=artifact_set)
     inspection = _inspection(registry, version)
     if not inspection.exists:
         raise NativeReleaseError("Registry release is absent")
-    remote = inspection.digests
+    remote = remote_for_artifact_set(inspection.digests, complete, version=version, artifact_set=artifact_set)
     if remote != local:
         missing = sorted(set(local) - set(remote))
         extra = sorted(set(remote) - set(local))
@@ -445,7 +442,7 @@ def _parser() -> argparse.ArgumentParser:
         elif name in {"plan-upload", "verify-published"}:
             sub.add_argument(
                 "--artifact-set",
-                choices=("full", "pure"),
+                choices=ARTIFACT_SETS,
                 default="full",
             )
     return parser
@@ -489,7 +486,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = {"status": "exact", "version": args.version}
         else:
             raise NativeReleaseError("Unsupported command")
-    except NativeReleaseError as exc:
+    except (NativeReleaseError, ArtifactSetError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))

@@ -13,7 +13,6 @@ from pathlib import Path
 from ..native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
 
 NATIVE_REVIEW_BINDING_FIELD = "native_review_policy_binding"
-NATIVE_REVIEW_REQUEST_DIGEST_FIELD = "native_review_request_digest"
 _SCHEMA = "guard.native-review-policy-binding.v1"
 
 

@@ -5,11 +5,32 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.package_firewall_entitlement import (
     build_oauth_package_firewall_entitlement,
+    package_firewall_action_states,
+    package_firewall_operation_allowed,
     reconcile_connect_state_with_oauth_entitlement,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.mark.parametrize(
+    "allowed,installed,can_repair",
+    [(True, False, True), (True, True, True), (False, False, False), (False, True, True)],
+)
+def test_repair_access_supports_paid_first_activation_and_existing_local_recovery(
+    allowed: bool,
+    installed: bool,
+    can_repair: bool,
+) -> None:
+    entitlement = {"allowed": allowed, "reason": "paid_entitlement_active" if allowed else "paid_guard_cloud_required"}
+    assert package_firewall_operation_allowed(entitlement, "repair", has_installed_managers=installed) is can_repair
+    states = package_firewall_action_states(entitlement, has_installed_managers=installed)
+    assert (states["repair"] == "available") is can_repair
+    assert package_firewall_operation_allowed(entitlement, "install", has_installed_managers=installed) is allowed
+    assert package_firewall_operation_allowed(entitlement, "remove", has_installed_managers=installed) is installed
 
 
 def test_build_oauth_package_firewall_entitlement_preserves_team_tier() -> None:

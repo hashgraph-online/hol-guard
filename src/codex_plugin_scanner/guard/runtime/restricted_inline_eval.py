@@ -50,7 +50,9 @@ def is_inline_eval(command: Sequence[str]) -> bool:
     return len(command) == eval_index + 2 and command[eval_index] in {"-e", "--eval"}
 
 
-def prepare_restricted_inline_eval(command: Sequence[str], *, workspace: Path) -> RestrictedPytestPlan:
+def prepare_restricted_inline_eval(
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
     if not is_inline_eval(argv):
         raise RestrictedPytestError("inline_eval_invalid_command", "Protected evaluation requires direct inline argv.")
@@ -60,10 +62,10 @@ def prepare_restricted_inline_eval(command: Sequence[str], *, workspace: Path) -
     # Reuse runtime/backend validation only; neither preparation executes tests
     # or requires pytest installed. Launch the resolved native image, not PATH.
     base = (
-        prepare_restricted_node_test([argv[0], "--test"], workspace=workspace, cwd=workspace)
+        prepare_restricted_node_test([argv[0], "--test"], workspace=workspace, cwd=cwd or workspace)
         if node
         else prepare_restricted_pytest(
-            [argv[0], "-m", "pytest"], workspace=workspace, cwd=workspace, read_only_workspace=True
+            [argv[0], "-m", "pytest"], workspace=workspace, cwd=cwd or workspace, read_only_workspace=True
         )
     )
     return replace(

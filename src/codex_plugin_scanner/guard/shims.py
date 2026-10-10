@@ -1164,10 +1164,11 @@ def _is_transient_path(path: Path) -> bool:
 def _profile_already_references_path(content: str, shim_dir: Path) -> bool:
     shim_text = str(shim_dir)
     expected_lines = {_posix_path_export(shim_dir), _fish_path_prepend(shim_dir)}
+    active_lines = (line for line in content.splitlines() if not line.lstrip().startswith("#"))
     return any(
         line.strip() in expected_lines
         or ((shim_text in line and "PATH" in line) or (shim_text in line and "fish_add_path" in line))
-        for line in content.splitlines()
+        for line in active_lines
     )
 
 
@@ -1267,10 +1268,13 @@ def _build_package_manager_python_shim(context: HarnessContext, command: str) ->
             "    )",
             "    workspace = Path(guard_workspace) if guard_workspace is not None else Path.cwd()",
             "    arguments = tuple(sys.argv[1:])",
+            "    selected_guard_home = Path(guard_home)",
             "    return (",
-            "        package_shim_command_requires_guard(command_name, arguments, workspace=workspace),",
+            "        package_shim_command_requires_guard(",
+            "            command_name, arguments, workspace=workspace, guard_home=selected_guard_home",
+            "        ),",
             "        package_shim_command_requires_external_archive_binding(",
-            "            command_name, arguments, workspace=workspace",
+            "            command_name, arguments, workspace=workspace, guard_home=selected_guard_home",
             "        ),",
             "    )",
             "try:",
@@ -1544,11 +1548,17 @@ def probe_package_shim_intercepts(
     managers: tuple[str, ...] | None = None,
     workspace_dir: Path | None = None,
     allow_inactive_path: bool = False,
+    project_shell_profile: bool = False,
     timeout_seconds: int = _PACKAGE_SHIM_PROBE_TIMEOUT_SECONDS,
 ) -> dict[str, object]:
-    """Execute installed package-manager shims to prove intercept wiring is live."""
+    """Execute installed package-manager shims to prove intercept wiring is live.
 
-    status = package_shim_status(context)
+    ``project_shell_profile`` judges PATH activation with the same projection the
+    dashboard cards use, for callers such as the resident daemon whose own PATH
+    never includes the shell-profile block.
+    """
+
+    status = package_shim_dashboard_status(context) if project_shell_profile else package_shim_status(context)
     installed = set(_string_items(status.get("installed_managers")))
     protected = set(_string_items(status.get("protected_managers")))
     tested_managers = list(managers or tuple(sorted(installed)))

@@ -50,72 +50,6 @@ def _inventory_payload_from_row(row: sqlite3.Row) -> dict[str, object]:
 
 
 class StoreInventoryMixin:
-    def save_scanner_cache(
-        self,
-        *,
-        scanner_name: str,
-        target_id: str,
-        input_content_hash: str,
-        scanner_version: str,
-        payload: dict[str, object],
-        now: str,
-    ) -> None:
-        cache_key = scanner_cache_key(
-            scanner_name=scanner_name,
-            input_content_hash=input_content_hash,
-            scanner_version=scanner_version,
-        )
-        with self._connect() as connection:
-            connection.execute(
-                """
-                insert into scanner_cache (
-                  scanner_name, target_id, cache_key, input_content_hash, scanner_version, payload_json, updated_at
-                )
-                values (?, ?, ?, ?, ?, ?, ?)
-                on conflict(scanner_name, target_id) do update set
-                  cache_key = excluded.cache_key,
-                  input_content_hash = excluded.input_content_hash,
-                  scanner_version = excluded.scanner_version,
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (
-                    scanner_name,
-                    target_id,
-                    cache_key,
-                    input_content_hash,
-                    scanner_version,
-                    json.dumps(payload, sort_keys=True),
-                    now,
-                ),
-            )
-
-    def get_scanner_cache(
-        self,
-        *,
-        scanner_name: str,
-        target_id: str,
-        input_content_hash: str,
-        scanner_version: str,
-    ) -> dict[str, object] | None:
-        cache_key = scanner_cache_key(
-            scanner_name=scanner_name,
-            input_content_hash=input_content_hash,
-            scanner_version=scanner_version,
-        )
-        with self._connect() as connection:
-            row = connection.execute(
-                """
-                select payload_json from scanner_cache
-                where scanner_name = ? and target_id = ? and cache_key = ?
-                """,
-                (scanner_name, target_id, cache_key),
-            ).fetchone()
-        if row is None:
-            return None
-        payload = json.loads(str(row["payload_json"]))
-        return payload if isinstance(payload, dict) else None
-
     def save_snapshot(
         self,
         harness: str,
@@ -374,17 +308,6 @@ class StoreInventoryMixin:
                 """,
                 (artifact_hash, json.dumps(payload), now),
             )
-
-    def get_provenance_cache(self, artifact_hash: str) -> dict[str, object] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select payload_json from provenance_cache where artifact_hash = ?",
-                (artifact_hash,),
-            ).fetchone()
-        if row is None:
-            return None
-        payload = json.loads(str(row["payload_json"]))
-        return payload if isinstance(payload, dict) else None
 
     def get_or_create_installation_id(self) -> str:
         with self._connect() as connection:

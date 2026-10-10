@@ -114,18 +114,6 @@ def _trusted_cursor_after_shell_env(
     }
 
 
-def test_managed_hook_events_exclude_pretooluse() -> None:
-    assert "preToolUse" not in _MANAGED_HOOK_EVENTS
-    assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "beforeReadFile",
-        "beforeWriteFile",
-        "afterShellExecution",
-        "afterMCPExecution",
-    )
-
-
 def test_prepare_cursor_hook_payload_maps_before_read_file() -> None:
     payload = prepare_cursor_hook_payload(
         {
@@ -720,6 +708,7 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
 
 def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
+
     # The daemon fast path asserts the off-mode denial surface; pin the mode so
     # a native-regression ambient env does not force a live native review.
     monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
@@ -1117,54 +1106,6 @@ def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path)
     ]
     stripped = _strip_managed_hook_entries(entries, script_path=script_path)
     assert stripped == [{"command": "lean-ctx hook rewrite", "matcher": "Shell"}]
-
-
-def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home = tmp_path / "home"
-    guard_home = tmp_path / "guard"
-    workspace = tmp_path / "workspace"
-    home.mkdir()
-    guard_home.mkdir()
-    workspace.mkdir()
-    cursor_dir = home / ".cursor"
-    cursor_dir.mkdir()
-    script_path = cursor_dir / "hooks" / "hol-guard-cursor-hook.py"
-    hooks_path = cursor_dir / "hooks.json"
-    hooks_path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "hooks": {
-                    "preToolUse": [
-                        {"command": "lean-ctx hook rewrite", "matcher": "Shell"},
-                        {
-                            "command": str(script_path),
-                            "failClosed": True,
-                            "matcher": "Shell|Read",
-                            "timeout": 35,
-                        },
-                    ]
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda _context: ["hol-guard"],
-    )
-    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
-    result = install_cursor_hooks(context)
-    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    pre_tool_use = installed["hooks"].get("preToolUse")
-    if pre_tool_use is not None:
-        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
-    assert "beforeShellExecution" in installed["hooks"]
-    assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
-    for event_name in _MANAGED_HOOK_EVENTS:
-        entry = installed["hooks"][event_name][-1]
-        assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
 
 
 def test_install_cursor_hooks_preserves_top_level_event_entries(

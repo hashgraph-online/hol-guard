@@ -1,3 +1,4 @@
+import { recordBusinessQueueReadResult } from "./business-review-queue-status";
 import {
   GUARD_ACTION_TYPES,
   GUARD_DECISION_V2_ACTIONS,
@@ -94,6 +95,7 @@ import {
   demoPresentationSettings,
   isGuardDemoMode
 } from "./guard-demo";
+import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -126,7 +128,9 @@ type RawGuardApprovalRequest = Omit<
   | "recommended_scope_by_action"
   | "scope_restrictions"
   | "task_capability_eligibility"
+  | "extension_recommendation"
 > & {
+  extension_recommendation?: unknown;
   action_envelope_json?: unknown;
   decision_v2_json?: unknown;
   policy_action?: unknown;
@@ -151,6 +155,8 @@ type RawGuardInventoryItem = Omit<GuardInventoryItem, "last_policy_action"> & {
 };
 
 type ApprovalRequestListPayload = {
+  native_business_queue_error?: unknown;
+  native_business_queue_checked?: unknown;
   items?: RawGuardApprovalRequest[] | null;
   next_cursor?: unknown;
   total_pending_count?: unknown;
@@ -1046,7 +1052,7 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
-    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
+    /^\/v1\/local-clis(?:\/(?:preview|apply|recognize|discover|forget|provider-actions|provider-workflows|registry-search|registry-setup|refresh-job|skills|mcp-skills))?$/.test(input);
   if (!approvedPath) {
     throw new Error("Invalid local CLI API path");
   }
@@ -1446,7 +1452,12 @@ function parseOptionalString(value: unknown): string | null {
 }
 
 export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardApprovalRequest {
-  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const {
+    decision_contract_error: rawContractError,
+    extension_recommendation: rawExtensionRecommendation,
+    ...baseItem
+  } = item;
+  const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -1544,6 +1555,9 @@ export function normalizeApprovalRequest(item: RawGuardApprovalRequest): GuardAp
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : undefined,
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...(extensionRecommendation !== null && !hasDecisionContractError
+      ? { extension_recommendation: extensionRecommendation }
+      : {}),
     ...(hasDecisionContractError
       ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT }
       : {}),
@@ -1565,6 +1579,7 @@ function normalizeApprovalPage(
   payload: ApprovalRequestListPayload,
   statusFallback: GuardApprovalPageStatus = "pending"
 ): GuardApprovalPage {
+  recordBusinessQueueReadResult(payload);
   return {
     items: normalizeApprovalRequests(payload.items),
     next_cursor: isStringOrNull(payload.next_cursor) ? payload.next_cursor : null,
@@ -2339,6 +2354,24 @@ export async function resetSettings(proof?: ApprovalGateWriteProof): Promise<Gua
       ...(proof?.approval_totp_code ? { approval_totp_code: proof.approval_totp_code } : {}),
     })
   });
+}
+
+export async function fetchBusinessReviewSummary(
+  requestId: string, signal?: AbortSignal,
+): Promise<import("./business-review-summary").BusinessReviewSummary | null> {
+  if (isGuardDemoMode()) return null;
+  const response = await fetchWithGuardAuth(
+    `/v1/requests/${encodeURIComponent(requestId)}/business-summary`,
+    { signal, cache: "no-store" },
+  );
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) throw new Error("Saved business details are unavailable.");
+  const { parseBusinessReviewSummary } = await import("./business-review-summary");
+  const summary = parseBusinessReviewSummary(await response.json(), requestId);
+  if (!summary) throw new Error("Saved business details are unavailable.");
+  return summary;
 }
 
 export async function fetchRequest(requestId: string): Promise<GuardApprovalRequest> {

@@ -1,3 +1,7 @@
+#[path = "read_path_allowances.rs"]
+mod allowances;
+use allowances::{agent_skill_document, execution_output_log, guard_safety_doc};
+
 pub(super) fn safe_read_target(argument: &str) -> bool {
     let Some(normalized) = lexical_read_path(argument) else {
         return false;
@@ -344,51 +348,6 @@ pub(super) fn verified_path_context(home_dir: Option<&str>, cwd: Option<&str>) -
         && context_root_is_absolute(cwd, Some(home_dir))
 }
 
-pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<String> {
-    if context.home_dir.is_none() || context.cwd.is_none() || !super::safe_directory_target(value) {
-        return None;
-    }
-    let supplied = std::path::Path::new(value);
-    if !supplied.is_absolute() {
-        return None;
-    }
-    let canonical = std::fs::canonicalize(supplied).ok()?;
-    // Absolute, non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
-    if !absolute_path_spelling_matches(supplied, &canonical)
-        || !canonical.is_dir()
-        || !resolved_path_allowed(&canonical, context.home_dir, context.cwd)
-    {
-        return None;
-    }
-    canonical.to_str().map(str::to_owned)
-}
-
-fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
-    if canonical == supplied {
-        return true;
-    }
-    // macOS exposes the root temporary directory through this fixed system
-    // alias. Permit only the exact canonical suffix; deeper symlink aliases
-    // remain rejected by the physical-cwd proof.
-    #[cfg(target_os = "macos")]
-    {
-        let alias = std::path::Path::new("/tmp");
-        let Ok(relative) = supplied.strip_prefix(alias) else {
-            return false;
-        };
-        let Ok(alias_canonical) = std::fs::canonicalize(alias) else {
-            return false;
-        };
-        alias_canonical == std::path::Path::new("/private/tmp")
-            && canonical == alias_canonical.join(relative)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = (supplied, canonical);
-        false
-    }
-}
-
 pub(super) fn context_root_is_absolute(root: &str, home_dir: Option<&str>) -> bool {
     if root.is_empty() || root.trim() != root {
         return false;
@@ -456,131 +415,6 @@ fn resolved_path_allowed_for_operation(
         return false;
     }
     true
-}
-
-/// Hosts persist oversized tool output separately from their credentials and
-/// configuration. Allow only a regular output leaf in the verified user's
-/// execution tree, not arbitrary files in hidden application state.
-fn execution_output_log(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
-    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
-        return false;
-    };
-    let Ok(relative) = canonical.strip_prefix(home) else {
-        return false;
-    };
-    let Some(parts) = relative
-        .components()
-        .map(|component| match component {
-            std::path::Component::Normal(part) => part.to_str(),
-            _ => None,
-        })
-        .collect::<Option<Vec<_>>>()
-    else {
-        return false;
-    };
-    let [state, "cli", "exec", session, output] = parts.as_slice() else {
-        return false;
-    };
-    let Some(state_name) = state.strip_prefix('.') else {
-        return false;
-    };
-    if state_name.is_empty()
-        || !state_name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-        || guard_secure_fs::EXTERNAL_SENSITIVE_PARTS
-            .iter()
-            .any(|part| state.eq_ignore_ascii_case(part) || state_name.eq_ignore_ascii_case(part))
-    {
-        return false;
-    }
-    let Some(session) = session.strip_prefix("sess_") else {
-        return false;
-    };
-    if session.len() != 36
-        || !session.bytes().enumerate().all(|(index, byte)| {
-            if matches!(index, 8 | 13 | 18 | 23) {
-                byte == b'-'
-            } else {
-                byte.is_ascii_hexdigit()
-            }
-        })
-    {
-        return false;
-    }
-    let Some(call) = output.strip_prefix("call_").and_then(|value| {
-        value
-            .strip_suffix("-stdout.log")
-            .or_else(|| value.strip_suffix("-stderr.log"))
-    }) else {
-        return false;
-    };
-    call.len() == 24
-        && call.bytes().all(|byte| byte.is_ascii_hexdigit())
-        && std::fs::metadata(canonical)
-            .is_ok_and(|metadata| metadata.is_file() && metadata.len() <= 64 * 1024 * 1024)
-}
-
-pub(super) fn agent_skill_document(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
-    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
-        return false;
-    };
-    if canonical
-        .extension()
-        .is_none_or(|extension| extension != "md")
-    {
-        return false;
-    }
-    for root in [
-        ".agents/skills",
-        ".claude/skills",
-        ".codex/skills",
-        ".codex/superpowers/skills",
-        ".zcode/cli/plugins/cache",
-    ] {
-        let Ok(skills) = std::fs::canonicalize(home.join(root)) else {
-            continue;
-        };
-        // Retain the existing managed .agents root-link support. New roots
-        // must not turn a broader hidden application directory into skills.
-        if root != ".agents/skills" && skills != home.join(root) {
-            continue;
-        }
-        let Ok(relative) = canonical.strip_prefix(skills) else {
-            continue;
-        };
-        let Some(parts) = relative
-            .components()
-            .map(|component| match component {
-                std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.') => {
-                    Some(part)
-                }
-                _ => None,
-            })
-            .collect::<Option<Vec<_>>>()
-        else {
-            continue;
-        };
-        // Cache entries are marketplace/plugin/version/skills/skill/document.
-        let scoped = if root == ".zcode/cli/plugins/cache" {
-            parts.len() >= 6 && parts[3] == "skills"
-        } else {
-            parts.len() >= 2
-        };
-        if scoped {
-            return true;
-        }
-    }
-    false
-}
-
-/// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents
-/// are instructed to read before acting; it gets the same explicit allowance
-/// the Python source-path classifier grants.
-pub(super) fn guard_safety_doc(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
-    home_dir
-        .and_then(|root| std::fs::canonicalize(root).ok())
-        .is_some_and(|home| canonical == home.join(".hol-support/SAFETY.md"))
 }
 
 pub(super) fn foreign_user_home(

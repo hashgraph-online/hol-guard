@@ -305,3 +305,34 @@ def test_bridge_compatibility_wrappers_delegate(monkeypatch: pytest.MonkeyPatch,
     assert captured["_endpoint_loader"] is bridge._daemon_hook_endpoint
     assert captured["_token_loader"] is bridge._read_daemon_auth_token
     assert captured["_opener_builder"] is bridge._build_loopback_opener
+
+
+@pytest.mark.parametrize(
+    ("harness", "event_name", "minimum", "maximum"),
+    [
+        ("zcode", "UserPromptSubmit", 9.0, 10.0),
+        ("hermes", "UserPromptSubmit", 9.0, 10.0),
+        ("zcode", "PreToolUse", 0.0, daemon._DAEMON_TIMEOUT_BUDGET_SECONDS),
+    ],
+)
+def test_prompt_transport_waits_for_cold_workspace_publication(
+    harness: str, event_name: str, minimum: float, maximum: float
+) -> None:
+    timeouts: list[float] = []
+
+    class _RecordingOpener:
+        def open(self, _request: object, *, timeout: float) -> _Response:
+            timeouts.append(timeout)
+            return _Response(body=b'{"policy_action":"allow"}')
+
+    daemon.try_daemon_hook(
+        guard_home=Path("/private/unused"),
+        harness=harness,
+        input_text=json.dumps({"hook_event_name": event_name, "cwd": "/private/unused"}),
+        timeout_seconds=25,
+        _endpoint_loader=lambda *_args: f"http://127.0.0.1:4781/v1/hooks/{harness}",
+        _token_loader=lambda _path: "token",
+        _opener_builder=lambda: cast(urllib.request.OpenerDirector, _RecordingOpener()),
+    )
+    assert len(timeouts) == 1
+    assert minimum < timeouts[0] <= maximum

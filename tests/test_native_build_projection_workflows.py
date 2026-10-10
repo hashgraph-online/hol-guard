@@ -78,13 +78,18 @@ def test_dependency_setup_does_not_compile_projections_in_each_coverage_shard() 
     assert all("build_native_command_program.py" not in step.get("run", "") for step in action["runs"]["steps"])
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     steps = workflow["jobs"]["coverage"]["steps"]
-    download = next(
+    restore = next(
         index
         for index, step in enumerate(steps)
-        if step.get("with", {}).get("name") == "pytest-native-command-projections"
+        if step.get("uses") == "./.github/actions/restore-command-projections"
+    )
+    restoration = yaml.safe_load((ROOT / ".github/actions/restore-command-projections/action.yml").read_text())
+    assert any(
+        step.get("with", {}).get("name") == "pytest-native-command-projections"
+        for step in restoration["runs"]["steps"]
     )
     tests = next(index for index, step in enumerate(steps) if "run_projection_shard.py" in step.get("run", ""))
-    assert download < tests
+    assert restore < tests
 
 
 @pytest.mark.parametrize("name", ["mdm-local-lab.yml", "mdm-artifacts.yml"])

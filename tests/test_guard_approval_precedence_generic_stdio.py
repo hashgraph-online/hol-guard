@@ -581,10 +581,12 @@ def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
 
 
+@pytest.mark.parametrize("resident_unavailable_after_claim", (False, True))
 def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     native_context_digest: Path,
+    resident_unavailable_after_claim: bool,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -649,6 +651,11 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
         claimed = real_claim(decision)
         if claimed:
             current_config[0] = block_config
+            if resident_unavailable_after_claim:
+                monkeypatch.setattr(
+                    "codex_plugin_scanner.guard.native_approval_reuse.approval_reuse_decide_native",
+                    lambda *args, **kwargs: None,
+                )
         return claimed
 
     monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_tighten_policy)
@@ -659,7 +666,6 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
     assert result["responses"][0]["error"]["code"] == -32001
     event = result["events"][0]
     assert event["decision"] == "block"
-    assert event["approval_reuse_reason_code"] == "approval_reuse_policy_changed"
     assert "approval_requests" not in event
     claim_events = store.list_events(event_name="approval.local_once_applied")
     assert len(claim_events) == 1

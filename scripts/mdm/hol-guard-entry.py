@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import ast
+import base64
+import binascii
 import hashlib
 import hmac
 import http.client
@@ -285,6 +287,10 @@ _CODEX_CHALLENGE_TTL_MS = 5_000
 _CODEX_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _CODEX_WAIT_PROCESS_KEY = "guard_codex_browser_wait_process"
 _CODEX_WAIT_TIMEOUT_KEY = "guard_codex_browser_wait_timeout_seconds"
+_CODEX_EXECUTION_ENVIRONMENT_KEY = "guard_execution_environment"
+_CODEX_GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+# Same rule as hook_execution_environment: `less` with argument-free flags only.
+_CODEX_DEFAULT_EQUIVALENT_PAGER = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?")
 _CODEX_TRUSTED_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _CODEX_DISCOVERY_PROTOCOL_VERSION = 1
 _CODEX_DAEMON_RPC_TIMEOUT_SECONDS = 4.0
@@ -301,13 +307,26 @@ class _CodexHookRequestSentError(Exception):
     """The daemon hook request was sent but no usable response was received."""
 
 
+def _codex_bridge_config_text(argument: str) -> str:
+    """Return the bridge config JSON; Windows installs pass it as unpadded base64url."""
+
+    if argument.startswith("{"):
+        return argument
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", argument):
+        raise ValueError("bridge config argument is neither JSON nor base64url")
+    try:
+        return base64.urlsafe_b64decode(argument + "=" * (-len(argument) % 4)).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        raise ValueError("bridge config argument is not valid base64url") from exc
+
+
 def _codex_bridge_request_config() -> dict[str, object] | None:
     """Parse the managed bridge argv contract without importing Guard."""
 
     if len(sys.argv) != 3 or sys.argv[1] != _CODEX_BRIDGE_ARG:
         return None
     try:
-        payload = json.loads(sys.argv[2])
+        payload = json.loads(_codex_bridge_config_text(sys.argv[2]))
     except (ValueError, json.JSONDecodeError):
         return None
     if not isinstance(payload, dict):
@@ -380,8 +399,36 @@ def _codex_process_start_token(pid: int) -> str | None:
     return None
 
 
+def _codex_pager_default_equivalent(value: str | None) -> bool:
+    return value is not None and _CODEX_DEFAULT_EQUIVALENT_PAGER.fullmatch(value) is not None
+
+
+def _codex_execution_environment() -> dict[str, object]:
+    """Mirror hook_execution_environment.collect_hook_execution_environment without importing Guard.
+
+    Native Git-helper and path checks need the environment Codex will run the
+    command in. Without it the Rust edge treats every Git read and `cd` as
+    unverifiable and asks for review.
+    """
+
+    active = {key: value for key, value in os.environ.items() if value}
+    no_system = os.environ.get("GIT_CONFIG_NOSYSTEM")
+    return {
+        "path": os.environ.get("PATH", ""),
+        "home": os.environ.get("HOME"),
+        "git_pager_disabled": _codex_pager_default_equivalent(os.environ.get("GIT_PAGER")),
+        "pager_disabled": _codex_pager_default_equivalent(os.environ.get("PAGER")),
+        "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
+        "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
+        "git_config_no_system": no_system is not None and no_system.casefold() in _CODEX_GIT_TRUE_VALUES,
+        "environment_digest": hashlib.sha256(
+            json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    }
+
+
 def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_deadline: float) -> str:
-    """Attach the wait-process identity and remaining budget the daemon expects."""
+    """Attach the execution context, wait-process identity and remaining budget the daemon expects."""
 
     try:
         payload = json.loads(data)
@@ -389,6 +436,7 @@ def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_de
         return data
     if not isinstance(payload, dict):
         return data
+    payload[_CODEX_EXECUTION_ENVIRONMENT_KEY] = _codex_execution_environment()
     payload["guard_remaining_ms"] = min(60_000, max(1, int((rpc_deadline - time.monotonic()) * 1000)))
     if event_name == "PreToolUse":
         start_token = _codex_process_start_token(os.getpid())
@@ -401,7 +449,13 @@ def _codex_hint_hook_data(data: str, *, event_name: str, deadline: float, rpc_de
                 _CODEX_MAX_APPROVAL_WAIT_TIMEOUT_SECONDS,
                 max(1, int(deadline - time.monotonic())),
             )
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    hinted = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    if len(hinted) <= _CODEX_HOOK_MAX_INPUT_BYTES:
+        return hinted
+    # Keep a near-limit request forwardable; the edge then treats context as unavailable.
+    payload.pop(_CODEX_EXECUTION_ENVIRONMENT_KEY)
+    fallback = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return fallback if len(fallback) <= _CODEX_HOOK_MAX_INPUT_BYTES else data
 
 
 def _codex_daemon_identity(state_path: str) -> tuple[dict[str, object], str, str] | None:

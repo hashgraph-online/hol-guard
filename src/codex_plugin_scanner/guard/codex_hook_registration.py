@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
-import re
-import shlex
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
 
+from .codex_hook_command_line import (
+    hook_command_launchable,
+    hook_command_tokens,
+    hook_commands_use_windows_syntax,
+    hook_token_name,
+    plain_json_hook_argv,
+)
 from .codex_hook_file_integrity import split_hook_command
+from .codex_hook_foreign_groups import is_foreign_guard_codex_hook_group, prune_foreign_guard_codex_hook_groups
 from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_hook_command
 from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
-
-_STATE_PATH_RE = re.compile(r'"state_path"\s*:\s*"([^"]+)"')
-_GUARD_HOME_QUERY_RE = re.compile(r"guard-home=([^&\"'\s]+)")
 
 
 def remove_manifest_bound_hook_events(
@@ -78,8 +81,14 @@ def exact_legacy_hook_bindings(
     current_argv: Sequence[str],
     legacy_argv: Sequence[str],
     legacy_status_messages: set[str],
+    windows: bool | None = None,
 ) -> list[dict[str, object]]:
     """Select exact current-package entries for explicit pre-manifest adoption."""
+
+    accepted_argvs = [list(current_argv), list(legacy_argv)]
+    if hook_commands_use_windows_syntax(windows):
+        # Earlier Windows installs passed the config as plain JSON.
+        accepted_argvs.extend(plain_json_hook_argv(argv) for argv in tuple(accepted_argvs))
 
     expected_by_event = {
         event: binding for binding in expected_bindings if isinstance((event := binding.get("event")), str)
@@ -102,7 +111,7 @@ def exact_legacy_hook_bindings(
                     item
                     for item in handlers
                     if isinstance(item, dict)
-                    and split_hook_command(item.get("command")) in (list(current_argv), list(legacy_argv))
+                    and split_hook_command(item.get("command"), windows=windows) in accepted_argvs
                     and item.get("statusMessage") in legacy_status_messages
                 ),
                 None,
@@ -113,42 +122,8 @@ def exact_legacy_hook_bindings(
     return bindings
 
 
-def _hook_group_command_blob(group: object) -> str:
-    if not isinstance(group, Mapping):
-        return ""
-    parts: list[str] = []
-    command = group.get("command")
-    if isinstance(command, str):
-        parts.append(command)
-    hooks = group.get("hooks")
-    if isinstance(hooks, list):
-        for hook in hooks:
-            if isinstance(hook, Mapping):
-                hook_command = hook.get("command")
-                if isinstance(hook_command, str):
-                    parts.append(hook_command)
-    return "\n".join(parts)
-
-
-def _has_codex_harness(blob: str) -> bool:
-    return has_codex_harness_tokens(_command_tokens(blob))
-
-
-def _looks_like_guard_codex_hook(blob: str) -> bool:
-    if "codex_daemon_hook_bridge.py" in blob:
-        return True
-    if not _has_codex_harness(blob):
-        return False
-    if "hol-guard hook" in blob:
-        return True
-    return "codex_plugin_scanner.cli" in blob and "guard hook" in blob
-
-
-def _command_tokens(command: str) -> list[str]:
-    try:
-        return shlex.split(command)
-    except ValueError:
-        return command.split()
+def _has_codex_harness(blob: str, *, windows: bool | None = None) -> bool:
+    return has_codex_harness_tokens(hook_command_tokens(blob, windows=windows))
 
 
 def _skip_leading_flags(tokens: Sequence[str]) -> list[str]:
@@ -178,15 +153,15 @@ _LIVE_OWNED_FALLBACK_REASONS = frozenset(
 )
 
 
-def _is_live_guard_codex_hook_command(command: str) -> bool:
-    tokens = _command_tokens(command)
+def _is_live_guard_codex_hook_command(command: str, *, windows: bool | None = None) -> bool:
+    tokens = hook_command_tokens(command, windows=windows)
     if not tokens:
         return False
-    first_path = Path(tokens[0])
-    first = first_path.name.lower()
+    first_name = hook_token_name(tokens[0], windows=windows)
+    first = first_name.lower()
     rest = tokens[1:]
     payload = _skip_leading_flags(rest)
-    if first_path.name == "codex_daemon_hook_bridge.py":
+    if first_name == "codex_daemon_hook_bridge.py":
         return True
     if "hol-guard-codex-hook" in first:
         return True
@@ -196,24 +171,28 @@ def _is_live_guard_codex_hook_command(command: str) -> bool:
         if payload[0] == "-c":
             script = " ".join(payload[1:])
             return "codex_plugin_scanner.cli" in script and "guard" in script.split() and "hook" in script.split()
-        return Path(payload[0]).name == "codex_daemon_hook_bridge.py"
+        return hook_token_name(payload[0], windows=windows) == "codex_daemon_hook_bridge.py"
     if first in _FROZEN_GUARD_CLI_NAMES:
-        if payload and Path(payload[0]).name == "codex_daemon_hook_bridge.py":
+        if payload and hook_token_name(payload[0], windows=windows) == "codex_daemon_hook_bridge.py":
             return True
         if frozen_codex_bridge_tokens_are_live(rest):
             return True
-        return "hook" in rest and _has_codex_harness(" ".join(rest))
+        return "hook" in rest and _has_codex_harness(" ".join(rest), windows=windows)
     return False
 
 
-def require_codex_hook_owner(command: str, *, ownership: str) -> None:
+def require_codex_hook_owner(command: str, *, ownership: str, windows: bool | None = None) -> None:
     """Reject competing Guard handlers without silently adopting or deleting them.
 
     Launcher syntax is conflict evidence, never proof of a live managed bridge.
     """
-    tokens = _command_tokens(command)
-    python_launcher = bool(tokens and Path(tokens[0]).name.lower().startswith("python"))
-    guard_hook = python_codex_hook_command(tokens) if python_launcher else _is_live_guard_codex_hook_command(command)
+    tokens = hook_command_tokens(command, windows=windows)
+    python_launcher = bool(tokens and hook_token_name(tokens[0], windows=windows).lower().startswith("python"))
+    guard_hook = (
+        python_codex_hook_command(tokens, windows=windows)
+        if python_launcher
+        else _is_live_guard_codex_hook_command(command, windows=windows)
+    )
     if ownership == "unmanaged" and guard_hook:
         raise RuntimeError(
             "codex_hook_owner_conflict: An existing Codex Guard handler has no verified ownership binding. "
@@ -237,27 +216,40 @@ def _matcher_covers_shell(matcher: object) -> bool:
     return text in {"", "*"} or "Bash" in text
 
 
-def _group_has_active_guard_handler(group: Mapping[str, object]) -> bool:
+def _group_has_active_guard_handler(
+    group: Mapping[str, object],
+    *,
+    windows: bool | None = None,
+    require_launchable: bool = False,
+) -> bool:
     if not _hook_entry_is_active(group):
         return False
+
+    def _routes_guard(command: object) -> bool:
+        return (
+            isinstance(command, str)
+            and _is_live_guard_codex_hook_command(command, windows=windows)
+            and (not require_launchable or hook_command_launchable(command, windows=windows))
+        )
+
     handlers = group.get("hooks")
     if isinstance(handlers, list):
         return any(
-            isinstance(handler, dict)
-            and _hook_entry_is_active(handler)
-            and isinstance(handler.get("command"), str)
-            and _is_live_guard_codex_hook_command(str(handler.get("command")))
+            isinstance(handler, dict) and _hook_entry_is_active(handler) and _routes_guard(handler.get("command"))
             for handler in handlers
         )
-    command = group.get("command")
-    return isinstance(command, str) and _is_live_guard_codex_hook_command(command)
+    return _routes_guard(group.get("command"))
 
 
-def _group_has_active_guard_shell_handler(group: Mapping[str, object]) -> bool:
-    return _group_has_active_guard_handler(group) and _matcher_covers_shell(group.get("matcher"))
+def _group_has_active_guard_shell_handler(group: Mapping[str, object], *, windows: bool | None = None) -> bool:
+    # Health needs a handler Codex can actually start. A Windows entry that
+    # still uses POSIX quoting never launches, and Codex then fails open.
+    return _group_has_active_guard_handler(group, windows=windows, require_launchable=True) and _matcher_covers_shell(
+        group.get("matcher")
+    )
 
 
-def live_owned_codex_event_matches(hooks: object) -> dict[str, bool]:
+def live_owned_codex_event_matches(hooks: object, *, windows: bool | None = None) -> dict[str, bool]:
     """Return which managed Codex events still route a live Guard handler.
 
     Authenticated interpreter identity stays a repair contract. Doctor and
@@ -272,12 +264,12 @@ def live_owned_codex_event_matches(hooks: object) -> dict[str, bool]:
         if not isinstance(groups, list):
             continue
         matches[event_name] = any(
-            isinstance(group, dict) and _group_has_active_guard_handler(group) for group in groups
+            isinstance(group, dict) and _group_has_active_guard_handler(group, windows=windows) for group in groups
         )
     return matches
 
 
-def live_guard_codex_hooks_intercept(hooks: object) -> bool:
+def live_guard_codex_hooks_intercept(hooks: object, *, windows: bool | None = None) -> bool:
     """Return whether live Codex config still routes Guard intercept hooks.
 
     Authenticated manifest mismatches stay repair work. They must not fail
@@ -290,91 +282,11 @@ def live_guard_codex_hooks_intercept(hooks: object) -> bool:
     for event_name in _HEALTH_INTERCEPT_EVENTS:
         groups = hooks.get(event_name)
         if not isinstance(groups, list) or not any(
-            isinstance(group, dict) and _group_has_active_guard_shell_handler(group) for group in groups
+            isinstance(group, dict) and _group_has_active_guard_shell_handler(group, windows=windows)
+            for group in groups
         ):
             return False
     return True
-
-
-def _normalize_guard_home_path(value: str) -> Path | None:
-    stripped = value.strip().strip("'\"")
-    if not stripped:
-        return None
-    return Path(stripped).expanduser()
-
-
-def _extract_guard_home_flags(command: str) -> list[Path]:
-    homes: list[Path] = []
-    try:
-        tokens = shlex.split(command, posix=True, comments=False)
-    except ValueError:
-        tokens = command.split()
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token == "--guard-home" and index + 1 < len(tokens):
-            parsed = _normalize_guard_home_path(tokens[index + 1])
-            if parsed is not None:
-                homes.append(parsed)
-            index += 2
-            continue
-        if token.startswith("--guard-home="):
-            parsed = _normalize_guard_home_path(token.split("=", 1)[1])
-            if parsed is not None:
-                homes.append(parsed)
-        index += 1
-    return homes
-
-
-def _extract_guard_homes_from_hook_blob(blob: str) -> tuple[Path, ...]:
-    decoded = blob.replace('\\"', '"')
-    homes: list[Path] = []
-    for command in decoded.split("\n"):
-        homes.extend(_extract_guard_home_flags(command))
-    for match in _STATE_PATH_RE.finditer(decoded):
-        state_path = Path(match.group(1))
-        if state_path.name == "daemon-state.json":
-            homes.append(state_path.parent)
-    for match in _GUARD_HOME_QUERY_RE.finditer(decoded):
-        token = match.group(1)
-        if token.startswith("/") or token.startswith("~"):
-            parsed = _normalize_guard_home_path(token)
-            if parsed is not None:
-                homes.append(parsed)
-    return tuple(homes)
-
-
-def _resolved_guard_home(path: Path) -> Path:
-    try:
-        return path.resolve()
-    except OSError:
-        return path
-
-
-def is_foreign_guard_codex_hook_group(group: object, *, current_guard_home: Path) -> bool:
-    """Return True when a Guard Codex hook is bound to a different Guard home."""
-
-    blob = _hook_group_command_blob(group)
-    if not _looks_like_guard_codex_hook(blob):
-        return False
-    extracted = _extract_guard_homes_from_hook_blob(blob)
-    if not extracted:
-        return False
-    current = _resolved_guard_home(current_guard_home.expanduser())
-    return all(_resolved_guard_home(home) != current for home in extracted)
-
-
-def prune_foreign_guard_codex_hook_groups(
-    groups: Sequence[object],
-    *,
-    current_guard_home: Path,
-) -> list[object]:
-    """Preserve unproven handlers; a different state-home path is not ownership.
-
-    Kept for caller compatibility. Authenticated replacement uses
-    ``remove_manifest_bound_hook_events`` instead of path-based pruning.
-    """
-    return deepcopy(list(groups))
 
 
 def install_managed_codex_hook_groups(

@@ -2527,11 +2527,19 @@ impl ResidentEvalDeps {
 // Op evaluators
 // ---------------------------------------------------------------------------
 
-fn request_digest<T: serde::Serialize>(request: &T) -> Result<String, String> {
+pub(crate) fn request_digest<T: serde::Serialize>(request: &T) -> Result<String, String> {
+    request_digest_with_limit(request, usize::MAX)
+}
+
+/// Canonical request digest that refuses to serialize more than `limit` bytes.
+pub(crate) fn request_digest_with_limit<T: serde::Serialize>(
+    request: &T,
+    limit: usize,
+) -> Result<String, String> {
     let material =
         serde_json::to_value(request).map_err(|_| "native_package_authority_invalid".to_owned())?;
     let mut bytes = Vec::new();
-    crate::context_digest_json::write_canonical_json_with_limit(&material, &mut bytes, usize::MAX)
+    crate::context_digest_json::write_canonical_json_with_limit(&material, &mut bytes, limit)
         .map_err(|_| "native_package_authority_invalid".to_owned())?;
     Ok(format!(
         "sha256:{}",
@@ -2576,7 +2584,24 @@ pub(crate) fn evaluate_package_intent_parse(
         None,
         environment.as_ref(),
     );
-    let payload = intent.map(|i| i.to_dict()).unwrap_or(Value::Null);
+    let (payload, runtime_private_metadata) = match intent {
+        Some(intent) => {
+            let mut private_metadata = Map::new();
+            private_metadata.insert("command_tokens".to_owned(), json!(intent.command_tokens));
+            private_metadata.insert(
+                "package_targets".to_owned(),
+                Value::Array(
+                    intent
+                        .targets
+                        .iter()
+                        .map(|target| target.to_execution_dict())
+                        .collect(),
+                ),
+            );
+            (intent.to_dict(), Some(Value::Object(private_metadata)))
+        }
+        None => (Value::Null, None),
+    };
     let result = PackageIntentParseResultV1 {
         schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
@@ -2584,6 +2609,7 @@ pub(crate) fn evaluate_package_intent_parse(
         status: "ok".to_owned(),
         code: "ok".to_owned(),
         payload: Some(payload),
+        runtime_private_metadata,
     };
     crate::encode_response(&result)
 }
@@ -2665,7 +2691,7 @@ impl PackageIntentParserApi for ResidentIntentParser {
 }
 
 /// Unused-in-override eval seam; the override never re-evaluates the package.
-struct ResidentPackageEval;
+pub(crate) struct ResidentPackageEval;
 
 impl PackageEvalApi for ResidentPackageEval {
     fn evaluate_package_request_artifact(

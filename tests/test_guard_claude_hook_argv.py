@@ -206,24 +206,6 @@ def test_shell_command_round_trips_hostile_windows_arguments_with_crt_reference(
     assert _windows_crt_split(_shell_command(argv, windows=True)) == argv
 
 
-def test_legacy_session_start_command_uses_posix_round_trip(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace_dir = tmp_path / "workspace with 'quote $dollar `backtick` & semicolon; 雪 "
-    workspace_dir.mkdir(parents=True)
-    context = HarnessContext(
-        home_dir=tmp_path / "home with 'quote",
-        workspace_dir=workspace_dir,
-        guard_home=tmp_path / "guard home $value",
-    )
-    monkeypatch.setattr("codex_plugin_scanner.guard.adapters.base.os.name", "posix")
-
-    rendered = ClaudeCodeHarnessAdapter._session_start_command(context)
-
-    assert shlex.split(rendered) == list(ClaudeCodeHarnessAdapter._session_start_command_parts(context))
-
-
 def test_install_uses_exec_argv_for_every_managed_hook_with_hostile_paths(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace with 'single' \"double\" $dollar `backtick` & semi; (paren) 雪 "
     workspace_dir.mkdir(parents=True)

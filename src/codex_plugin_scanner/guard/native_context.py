@@ -68,6 +68,7 @@ _RESULT_OPTIONAL_KEYS = {
     "runtime_resolved_executable",
     "runtime_resolved_argv",
     "tool_catalog",
+    "local_cli_identity",
 }
 _RESULT_CODES = {
     "ok",
@@ -631,6 +632,9 @@ def _decode_result(
         return None
     policy = payload.get("mcp_tool_policy")
     if policy is not None and (kind != "mcp_tool_policy" or not _valid_mcp_tool_policy(policy)):
+        return None
+    # Shape is checked by ``native_local_cli_identity``; absent means not applicable.
+    if "local_cli_identity" in payload and kind != "local_cli_identity":
         return None
     if payload.get("status") == "ok":
         required_output = _OK_OUTPUT_FIELD.get(kind)

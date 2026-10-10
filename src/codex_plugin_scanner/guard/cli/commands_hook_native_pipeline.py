@@ -111,7 +111,7 @@ def run_native_hook_pipeline(
         workspace_from_hook_payload=_workspace_from_hook_payload,
         handle_native_cursor_post_tool=handle_native_cursor_post_tool,
         resolve_copilot_workspace_root=_resolve_copilot_workspace_root,
-        action_envelope_for=_hook_action_envelope,
+        action_envelope_for=lambda **kwargs: _hook_action_envelope(guard_home=context.guard_home, **kwargs),
         copilot_hook_stage_for=_copilot_hook_stage,
         copilot_runtime_tool_call_for=_copilot_runtime_tool_call,
         config=config,
@@ -209,7 +209,9 @@ def run_native_hook_pipeline(
     )
     if result is not None:
         return result
-    data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+    data_flow_signals = _runtime_action_data_flow_signals(
+        action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
@@ -276,7 +278,7 @@ def run_native_hook_pipeline(
             _claim_saved_approval=_claim_saved_approval,
         )
 
-    def revalidate_generic_after_claim(claimed_artifact_hash: str) -> int:
+    def revalidate_generic_after_claim(claimed_artifact_hash: str, claimed_approval: Mapping[str, object]) -> int:
         fresh_config = overlay_synced_guard_policy(
             load_guard_config(context.guard_home, workspace=runtime_workspace),
             _synced_policy_payload(store),
@@ -286,6 +288,7 @@ def run_native_hook_pipeline(
             payload=payload,
             home_dir=context.home_dir,
             workspace=runtime_workspace,
+            guard_home=context.guard_home,
         )
         return run_native_generic_payload(
             args,
@@ -300,6 +303,7 @@ def run_native_hook_pipeline(
             native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
             native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
             _claimed_saved_allow_hash=claimed_artifact_hash,
+            _claimed_saved_approval=claimed_approval,
             _claim_saved_approval=False,
         )
 
@@ -348,8 +352,11 @@ def _fresh_native_artifact_evaluation(
         payload=payload,
         home_dir=context.home_dir,
         workspace=runtime_workspace,
+        guard_home=context.guard_home,
     )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
+    fresh_data_flow_signals = _runtime_action_data_flow_signals(
+        fresh_action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )

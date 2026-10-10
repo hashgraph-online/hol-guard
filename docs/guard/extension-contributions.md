@@ -30,7 +30,7 @@ Azure, Git, Kubernetes, Docker, and other mapped tools) stay on.
 The trust class is reviewed separately as a per-extension binding file
 `contracts/extensions/trust/<extension-id>.v1.json`; a source file cannot select
 its own class or activation state. The reviewed bindings are the authored source
-of truth; `contracts/extensions/trust-class-map.v1.json` is a generated
+of truth; `contracts/extensions/build-trust-class-map.v1.json` is a generated
 projection of `contracts/extensions/trust/`. It is generated for packages, ignored by Git,
 and never edited by hand. Clean Rust builds read the bindings directly.
 Turning off a first-party or trusted-library extension blocks that capability.
@@ -51,12 +51,17 @@ For a command extension, contributors submit these files together in the same ch
    expected effective segments. Cases are data; they never invoke the target
    executable.
 
-Extension builder CI adds a per-extension `contracts/extensions/trust/`
-binding for any missing ID as external/opt-in before installing dependencies
-and compiling Rust, then regenerates the shared `trust-class-map.v1.json`
-projection. Because each extension's trust binding is its own file, parallel
+3. `contracts/extensions/trust/command.<name>.v1.json`, the reviewed trust
+   binding. Run `python scripts/refresh_extension_artifacts.py --trust-only`
+   to create missing bindings as external/opt-in and include the new binding
+   in the same PR. The Extension Builder integration plan also creates it.
+
+Required CI checks that every canonical command and MCP source has an authored
+binding before preparation can generate defaults. Preparation then regenerates
+the ignored `contracts/extensions/build-trust-class-map.v1.json` projection.
+Because each extension's trust binding is its own file, parallel
 contributions do not collide on a shared map. Contributors do not need to edit
-trust state or pull unrelated main changes to refresh generated catalogs.
+the shared trust map or pull unrelated main changes to refresh generated catalogs.
 Existing reviewed trust classifications are never promoted or changed by this
 preparation step.
 
@@ -68,12 +73,14 @@ them as independent inputs:
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
 
-After source review, a maintainer stages missing external defaults, then runs
-the preparation command to validate the exact source/fixture binding and
-synchronize the derived files. CI does this on the PR merge checkout:
+Before submitting, create the external binding and verify the authored inventory.
+After source review, preparation validates the exact source/fixture binding and
+synchronizes the derived files. CI verifies ownership before preparing the PR
+merge checkout:
 
 ```sh
 python scripts/refresh_extension_artifacts.py --trust-only
+python scripts/refresh_extension_artifacts.py --check-trust
 uv run --no-sync python scripts/prepare_extension_contribution.py \
   --source contributions/command-sources/command.<name>.json \
   --fixture tests/fixtures/command-source-<slug>.v1.json
@@ -125,7 +132,7 @@ COMPILER=$(uv run --no-sync python -c \
 
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
-  --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+  --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
 
@@ -177,10 +184,10 @@ uv run --no-sync python scripts/export_extension_directory.py --check
 uv run --no-sync python scripts/render_command_extension_directory.py --check
 ```
 
-Maintainers commit the canonical sources, reviewed trust changes, generated
-descriptors, program/catalog artifacts, and changed public directory files
-together after preparation. Contributors need only submit the source and fixture;
-shared trust-map defaults and generated projections are maintainer-owned.
+Contributors submit the canonical source, portable fixture, and reviewed
+per-extension trust binding together. Maintainer regeneration publishes derived
+descriptors and public directory files after merge; program/catalog and aggregate
+trust projections are ignored package outputs. Do not commit those projections.
 Release packaging supplies the native compiler and its identity manifest from
 the platform build; an installed compiler does not fall back to a checkout.
 
@@ -269,10 +276,10 @@ restoring a Python fallback.
 
 ## Review bar
 
-- The canonical source, fixture, trust-map entry, and generated projections agree on IDs and digests.
+- The canonical source, fixture, per-extension trust binding, and generated projections agree on IDs and digests.
 - The source compiler accepts the build envelope and the portable fixture passes through native evaluation.
 - The [focused native, contribution, and directory checks](extensions/contributing.md#local-validation) pass against the regenerated program.
-- New catalog IDs are added to the trust-class map in the same change. CI fails if a built-in ID is missing.
+- Every new command or MCP catalog ID has its authored trust binding in the same change. Required CI fails before preparation if a canonical contribution lacks one.
 - Community command contributions are explicitly mapped as `external` and require local-admin enable; author metadata cannot promote them to a trusted class.
 - Generated metadata is inspected for publisher, homepage, references, risk classes, and safer guidance.
 - A signed-cloud enable cannot turn an external contribution on. Local-admin enable is required.

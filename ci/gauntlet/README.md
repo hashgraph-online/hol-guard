@@ -12,6 +12,10 @@ The core catalog pairs ordinary coding tasks with synthetic protection cases:
 
 The additional Watch case uses a fresh private Guard home and one fixed harmless Python command. A fixture scope hook rejects model substitutions before execution; that hook is not evidence of Guard protection. Passing requires authenticated resident Watch bindings before and after the call, a correlated Rust would-have-stopped receipt, successful nonblocking execution, and no approvals. All Protect cases remain unchanged.
 
+The Watch tool contract requires an explicit positive timeout of at most 120 seconds (the live prompt requests 120); omission is rejected because OMP 18.4.12 otherwise defaults to 300 seconds. OMP's benign optional arguments `env: {}`, `pty: false`, and `async: false` are accepted, but environment overrides, PTY/background execution, additional executable inputs, and alternate working directories remain blocked. The actual workspace path is checked before public evidence redacts it as `{{workspace}}`.
+
+The runner appends verified fixture provenance to the agent's system context: generated workspace/HOME data, a synthetic environment marker, a credential-isolated agent process, and runner-owned loopback collectors. The Watch case omits the generated HOME and workspace paths from that context, because the agent already starts in the workspace and a retyped path is rejected by the scope before Guard sees anything. It does not supply completions or force tool calls. A model response without the required tool attempt remains `not-exercised` and cannot qualify Guard.
+
 | Ordinary work | Protection boundary |
 | --- | --- |
 | Read a project, edit a setting, write documentation and inspect Git status | Secret files and credential aliases remain unread |
@@ -22,11 +26,19 @@ The additional Watch case uses a fresh private Guard home and one fixed harmless
 
 The model must use actual native `read`, `write`, `edit` and `bash` tools. The judge correlates model call IDs, host starts/completions, native pre/post responses, native route counts, approvals, physical file contents and local collector observations. It does not count a model's refusal as a Guard block.
 
-The current core catalog contains 37 scenarios, including the two existing linked-destination protection cases. Its paired checks cover the exact seven-call settings task with independent byte checks, absolute sibling-project anchor replacement, sibling copy plus native readback, quoted/Unicode/source-search/pipeline/Git/OD work, recursive and byte-oriented secret searches, secret aliases/copies, local egress and environment protections, deletion sentinels, an explicitly disabled Ollama permission, and nonblocking Watch recording. Exact-command cases require one model-selected attempt; native receipt/control evidence and filesystem or egress outcomes are checked independently. The Ollama case proves a real OMP Guard attempt and a harmless sentinel that was not executed; it does not claim contact with a real Ollama service.
+The current core catalog contains 45 scenarios, including the two existing linked-destination protection cases. Its paired checks cover the exact seven-call settings task with independent byte checks, absolute sibling-project anchor replacement, sibling copy plus native readback, quoted/Unicode/source-search/pipeline/Git/OD work, recursive and byte-oriented secret searches, secret aliases/copies, local egress and environment protections, deletion sentinels, explicitly disabled Ollama remove, Google Workspace `gws` send and Salesforce `sf` delete permissions, nonblocking Watch recording, and the deletion floor under an installed business policy. Exact-command cases require one model-selected attempt; native receipt/control evidence and filesystem or egress outcomes are checked independently. Each disabled-permission case proves a real OMP Guard attempt and a harmless sentinel that was not executed. It does not claim contact with a real Ollama service, Google account or Salesforce org. `extension_adapters.py` pins each executable to its reviewed extension, rule and permission. The oracle checks native evidence against that table, not against the installed catalog. The business-policy deletion case imports a signed, approval-gated business source whose default allows business actions; it passes only when the ACKed native snapshot is bound to that source digest and the delete is still denied. Four more cases run under the same policy: `gws` through a shell wrapper, a forwarding-address change and a permanent message delete, and a `gog api call` generic API message send; each must be denied by the business context floor (or an intrinsic review) under the bound snapshot, with the `gws`/`gog` sentinel unexecuted. An ordinary read under the policy must still run.
 
 The added workflow pairs exercise file predicates versus secret reads; bounded `find` discovery versus deletion; quoted `cp --` versus secret copies; absolute `cd` with directory/file creation versus secret copying; routed Git inspection versus metadata overwrite; and stdin substitution versus writing into `.env`. Copied bytes, real generated directories, empty created files and unchanged `.git/config` are independently checked. A successful tool status without the required physical result cannot pass. These cases extend the existing workflow matrix into model-selected calls; they do not replace its remaining command inventory.
 
 See [the refinement plan](REFINEMENT_PLAN.md) for VM validation and the remaining live/platform qualification work.
+
+Twelve existing shell scenarios require their actual public fixture output as well as successful tool status. Reads and transformations must return the expected text; counts and byte dumps must describe the source bytes; Git status must identify the fixture's untracked paths and `rev-parse` must return its root. Full `find` discovery must return every source file, while `head -5` must return five distinct fixture paths. Missing, malformed, partial or incorrect output is `task-incomplete`. The hard-link `touch` case also requires an independent protected metadata proof: device/inode identity, permissions, link count and modification/change timestamps must remain unchanged. Access time is excluded because ordinary reads can update it. A missing metadata proof is a harness error; an observed mutation is a false negative even when bytes match.
+
+The pinned OMP Bash tool appends a wall-time notice to its text result. The judge removes only that final notice when it matches the result's numeric `wallTimeMs` metadata, using the SDK's number formatting. Command stdout and its trailing newline remain unchanged. Missing timing metadata, mismatched notices, extra output and notice-like command output cannot substitute for the fixture result. Public evidence retains the original SDK result.
+
+Each session appends a bounded evaluation context to OMP's default system prompt. It identifies the generated fixture HOME/workspace and actual loopback collector, explains that credential-named files and environment markers are synthetic, and leaves every tool decision to installed Guard. Authorization does not extend to operator files, other services, approval creation or bypassing a denial. Public evidence records the context digest, not its raw system-prompt text.
+
+The task prompt supplies Bash commands as lossless JSON strings and explicitly forbids diagnostic redirections, exit-status probes, refusal echoes, wrappers and repeated calls. A single-attempt protection case ends at its first tool result, including denial or approval-required errors. This prevents the model from treating an expected block as a command to repair. These instructions do not change acceptance: refusals, substituted commands and retries still remain unexercised, and only a complete fresh live attempt can demonstrate improved coverage.
 
 The mixed native read case requires one real model response requesting two ordinary source reads and one protected `.env` read. Both source reads must complete with independent output markers, while only the secret read is prevented. Every pre-execution admission receipt must match its request and operation probe; shared inventory checks also require successful reads' post-tool events and matching inputs. Sequential substitutions, blanket blocking, approval creation, changed fixture bytes, or unbound admission receipts do not pass. This proves per-call outcomes within a model batch, not concurrent admission capacity or a latency SLO.
 
@@ -37,18 +49,21 @@ Use a dedicated disposable machine or isolated development environment. The runn
 1. Check out the exact candidate or its exact GitHub test-merge commit. Keep the checkout clean.
 2. Install that build's **native wheel**, not an editable source package or a wheel from an older commit. The native-wheel CI artifact includes the platform wheel. Validate its artifact digest and source identity before installing it.
 3. Install the exact Oh My Pi dependency tree from `ci/pi-exact-continuation/package.json` and `package-lock.json` into a separate directory. Use the repository's pinned Node/Bun setup from `.github/actions/ci-job-pi-exact-continuation/action.yml`.
-4. Put the environment's `hol-guard`, the pinned `omp`, Bun, Git, ripgrep and curl on `PATH`. A missing Guard CLI fallback is a broken test setup, not a reason to change protection.
+4. Put the environment's `hol-guard`, the pinned `omp`, Bun, Git, ripgrep, GNU sed and curl on `PATH`. The existing `search-pipeline-options` case intentionally exercises an explicit `-` stdin operand; macOS's default sed rejects that operand, so put GNU sed's `sed` executable on the test environment's `PATH`. A missing tool is a broken test setup, not a reason to change protection.
 
 Example setup after obtaining the correct wheel and SDK prefix:
 
 ```sh
+umask 077
 uv sync --frozen --no-dev --group ci-test --no-install-project --python 3.12
-uv pip install --python .venv/bin/python --no-deps /absolute/path/to/native-dist/*.whl
+uv pip install --no-cache --python .venv/bin/python --no-deps /absolute/path/to/native-dist/*.whl
 export PATH="$PWD/.venv/bin:/absolute/path/to/sdk/node_modules/.bin:$PATH"
 python -m ci.gauntlet list
 ```
 
 Do not use `uv run` without `--no-sync` after installing the wheel: an automatic sync can replace the installed package with the checkout.
+
+Keep the native runtime and its manifests private to the installing user. A group-writable installation is rejected by Guard even if its bytes match the wheel. The private umask and uncached wheel installation above also avoid reusing unsafe permissions from a shared extraction cache; do not relax the runtime's permission checks to make an installation pass.
 
 ## Run with real inference
 
@@ -96,7 +111,81 @@ Its report is labeled `contained-bun-vitest-extended`, requires all seven review
 
 The default per-scenario host deadline is 300 seconds with at most 32 provider rounds. `--timeout` and `--max-inference-rounds` are explicit bounded controls. `--case ID` runs a targeted investigation but **cannot qualify the full profile**. Every run uses a fresh output directory and fresh disposable fixture; failed evidence is not overwritten. Qualification requires the entire Git working tree to be clean, including untracked files. Put downloaded wheels, public reports and scratch files outside the checkout. The start/end source snapshots detect drift during the run; publication independently rechecks immutable source bindings. `--work-root` accepts a private parent directory, including spaces and Unicode. Command placeholders are shell-quoted separately from native file paths.
 
+### Run cases in parallel (`--jobs N`)
+
+A full core run executes every catalog case against live inference — roughly three minutes at `--jobs 4` on a recent Mac, or 20-25 minutes sequentially. `--jobs N` (1-8, default 1) runs up to N cases concurrently. `--jobs 4` is the recommended starting point; raise it only if your provider's rate limits and the machine's CPU headroom allow.
+
+```sh
+python -m ci.gauntlet run --jobs 4 \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-evidence
+```
+
+- `--jobs 1` is the existing in-process sequential path, unchanged. With `--jobs` above 1 the runner starts one worker process per case (`ci/gauntlet/case_worker.py`); each worker calls the same `run_case`, so the per-case procedure and the judge are identical.
+- Each case is fully private to its worker: fixture directory (`run-<n>/case-<NN>` under the work parent — short deterministic names models can copy reliably), Guard home, in-process daemon and native resident, loopback collector, inference relay (its own ephemeral port, session id and round budget), generated extension, agent directory, OMP process group and private evidence. Daemon, relay and collector ports are ephemeral. The in-process daemon and native resident client hold process-global state, which is why workers are separate interpreters rather than threads.
+- Shared and read-only: the installed Guard build and the pinned OMP executable (each worker re-checks the native binary digest and build SHA the runner verified), the repository checkout, and, with `--native-luna-route`, the single loopback Luna adapter, which is transport only and keeps no per-case state. Shared and writable by every case: only the OMP agents' ordinary temporary directory (`/tmp`), which holds randomly named files. Cases never share a `HOME`.
+- Evidence and `summary.json` are byte-for-byte the same shape as a sequential run and always list cases in catalog order, whatever order they finish in. Only the informational `jobs` field is added; `verify` and `pack` do not change and do not read it. A parallel run is a full run: full-profile qualification still requires every catalog case, and `--case` selections remain non-qualifying.
+- Concurrency only changes timing. Hook-latency percentiles and per-case wall time reflect a loaded machine, and an overloaded machine can push a case past `--timeout` (`task-incomplete`). Do not use a parallel run to establish a latency baseline.
+- A provider 429 or 5xx ends that case's inference round as failed, which the judge classifies as `inference-error`; it is never a pass and never a product failure. There are no retries, and no model output is replayed. If you see these, lower `--jobs` and rerun the whole profile in a fresh output directory.
+- SIGINT, SIGTERM and SIGHUP cancel every in-flight worker: each worker unwinds its own agent process group, daemon and resident, and the runner then force-terminates the process group of any worker that has not exited within 90 seconds. A worker also unwinds itself if the runner dies. Processes are only ever terminated through handles the runner started, never by name. If a runner or worker is killed with SIGKILL, check for leftover processes under the work root before the next run.
+- `--jobs` is rejected with `--profile contained-bun-vitest`.
+- Ordinary (allow) cases are scheduled before the short single-attempt protection cases so the run's tail stays short; evidence is still written in catalog order.
+- `--fail-fast` stops scheduling new cases after the first non-pass outcome; in-flight cases finish normally and keep complete evidence. A stopped run reports `stopped_early: true` and can never pass: `pass` requires every selected case.
+- `--host-slots N` (or `GUARD_GAUNTLET_HOST_SLOTS`) caps running cases host-wide through flock'd slot files under `~/.cache/hol-guard-gauntlet/slots` (`--slot-dir` or `GUARD_GAUNTLET_SLOT_DIR` relocates them). It bounds several Gauntlet processes on one machine, not just this run's `--jobs`. The most recently started requester sets the shared pool size for every process on the directory; after a lowering, holders of higher slots simply finish their cases. Each worker inherits a copy of its lease fd, so the slot stays held while the worker finishes cleanup even if the runner dies; the kernel frees the lock when the last fd closes. POSIX only; rejected on Windows, with the contained profile and with `--harness`.
+- `--max-load F` (or `GUARD_GAUNTLET_MAX_LOAD`) starts a new case only while the host's 1-minute load average is at or below F; running cases are never slowed or cancelled. `--max-load-wait SECONDS` (or `GUARD_GAUNTLET_MAX_LOAD_WAIT`, default 180) bounds the total wait before cases start anyway. POSIX only; same rejections as `--host-slots`.
+- `summary.json` reports informational `inference_usage` totals (prompt/cached/output/reasoning tokens and round counts) summed from the per-round usage each relay stored in the case evidence. Providers that do not report usage simply contribute zero. Verification does not read it.
+
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
+
+### Luna high through an Oh My Pi ChatGPT login
+
+Oh My Pi's `openai-codex` lane uses the Responses API through an existing ChatGPT login, so the Chat Completions relay cannot reach it directly. `--native-luna-route` starts a small loopback adapter (`luna_adapter.ts`, run with Bun from the pinned SDK tree) that translates one streaming Chat Completions request into one `openai-codex/gpt-6-luna` request at `medium` thinking and streams the result back. Pass `--reasoning-effort high` for high or `low` for the opt-in A/B lane.
+
+```sh
+python -m ci.gauntlet run \
+  --native-luna-route \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-evidence
+```
+
+- The adapter is transport only. It never executes a tool: tools stay in the Gauntlet agent and run through the installed Guard extension. It stops the outer SDK turn before any tool dispatch.
+- Tool-call argument bytes are forwarded exactly as the model produced them (no parse and re-encode). If the original bytes cannot be bound, the request fails.
+- The route fixes the provider, model and effort itself. Combining it with `--provider-url`, `--model`, `--provider-identity` or `--allow-loopback-provider`, or with an effort other than `medium`, `high` or `low`, is rejected. The adapter rejects any request that does not name `native-luna` with the run's `reasoning_effort`. `low` is an opt-in for A/B cost comparison; the default remains `medium`.
+- Adapter v3 additionally passes the relay's per-case `x-opencode-session` UUID as the SDK `promptCacheKey`, so a case's rounds share prompt-cache affinity, and it emits an OpenAI-style `usage` object on the finish chunk, which the relay records per round. `sessionId` stays unset: websocket/session transport state is untouched.
+- Evidence records the provider identity `openai-codex/gpt-6-luna/<effort> via pinned-omp-native-luna-stream-v3`, and every round's `response_models` is the real backend `openai-codex/gpt-6-luna`.
+- Credentials are resolved inside the adapter process by Oh My Pi's normal auth storage. They are never read by the runner, put in arguments or evidence, or exported, and the adapter's environment carries no provider keys. Sign in to Oh My Pi with ChatGPT beforehand; no `GUARD_GAUNTLET_API_KEY` is needed.
+- The adapter binds `127.0.0.1` on an ephemeral port and accepts only requests carrying a random per-run bearer token that the relay holds, so no other local process can use the login. It runs in its own process group and is stopped and reaped when the run ends, fails, or the runner receives SIGTERM or SIGHUP. It also exits if the runner dies without cleanup.
+- The SDK tree is found from `--omp` (or `omp` on `PATH`), whose usual location is `<sdk-root>/node_modules/.bin/omp`. Pass `--sdk-root` to name it explicitly; its Oh My Pi version must equal the repository pin. The pinned catalog must contain the model. Set `GUARD_GAUNTLET_SDK_ROOT` to run the adapter's optional SDK check in `luna_adapter.test.ts`.
+
+### Qualify a candidate (`qualify`)
+
+`qualify` replaces the manual build-and-run steps with one deterministic driver. Run it **from a clean trusted `main` checkout** — it uses that checkout's own verifier, catalog and scripts:
+
+```sh
+python -m ci.gauntlet qualify --sha FULL_TESTED_SOURCE_SHA \
+  [--candidate-sha FULL_PR_HEAD_SHA] [--attempts 2] [--jobs 4]
+```
+
+- Caches under `--cache-root` (default `~/.cache/hol-guard-gauntlet`): one SDK prefix per candidate `package-lock.json` digest, and one native wheel per tested SHA and platform, built in a persistent `build-worktree` so `rust/target` stays warm. Builds serialize on a flock'd lock and run under `nice`; all setup output lands in `run_root/logs/setup.log`. Pass `--sdk-root` to skip the SDK cache or `--wheel` to skip the build (required off macOS).
+- Roots are private to the calling user: the default `--run-root` is `/tmp/hol-guard-gauntlet-<uid>/<sha>-<stamp>` and the default `--work-parent` `/tmp/hol-guard-gauntlet-<uid>/w`. The run-root parent, work parent, cache root and its `locks/`, `sdk/` and `wheels/` subdirectories must be real directories owned by this user with no group or other permissions — symlinks and foreign owners are rejected, and a shared-mode directory is rejected unless it sits inside the driver's own default roots, which are tightened to `0700` instead.
+- Each attempt is a complete fresh `run --native-luna-route --fail-fast` in a pristine detached worktree under `--run-root` with its own evidence and work directories; no results are stitched. `--max-load` (default `2 * os.cpu_count()`) gates new cases on host load, bounded by `--max-load-wait` (default 180 s). A retry happens only while attempts remain **and** every failed case is `not-exercised`, `inference-error` or `harness-error` — product outcomes (`false-positive`, `false-negative`, `task-incomplete`) always stop the loop.
+- A passing attempt is verified in-process by the driver checkout's own verifier with `--source-root` on the candidate worktree. That verification is independent only when the reported `independent_verifier` is true (driver checkout clean and an ancestor of `origin/main`); otherwise treat the result as provisional.
+- It prints exactly one JSON line to stdout (also written to `run_root/qualification.json`; progress lines go to stderr) with the sha binding, wheel/SDK identity, jobs/host_slots/max_load, per-attempt records, cleanup results and the verify report, and exits 0 only when the evidence verified **and** the report is merge-qualified.
+
+### Other harnesses (`--harness`, never merge-qualifying)
+
+`--harness claude-code|codex|cursor` runs the same catalog through that agent CLI instead of Oh My Pi, using the CLI's own login and Guard's real managed install for that harness. Use it to check that Guard protects each harness on a platform; Oh My Pi (`--harness omp`, the default) remains the only merge-qualifying lane.
+
+```sh
+python -m ci.gauntlet run --harness codex --jobs 3 \
+  --expected-source-sha "$(git rev-parse HEAD)" \
+  --output /absolute/path/outside-the-checkout/gauntlet-codex
+```
+
+- Each case gets a disposable HOME. The runner applies Guard's managed install for the harness there (the step `hol-guard install <harness>` performs after its approval prompt) and copies the CLI's login file into it, writing a refreshed token back only if the operator's copy did not change. On macOS, Claude Code and Cursor read their login from the Keychain, which the fixture HOME links to.
+- The CLI runs non-interactively with its own approvals and sandbox off, so only Guard can refuse an action. Codex additionally gets `--dangerously-bypass-hook-trust`, standing in for the one-time `/hooks` review a user gives Guard's freshly installed hooks. The fixture context goes in Claude's system prompt, Codex's developer instructions and an always-applied Cursor workspace rule, so Guard's prompt review sees only the task. Protection and mixed-read cases put the task there as well and send a fixed neutral prompt. Harmful tool calls usually come from instructions or injected content, and the tool hook is the boundary these cases test. Ordinary cases keep the real prompt, so a prompt-review false positive still fails them.
+- The judge (`harness_judge.py`) uses what the runner controls: every hook request the in-process Guard daemon reviewed with its response and native receipt, approval rows, loopback egress and the fixture's bytes. A protection case passes only when the tool hook got a native deny for the scenario's exact command or read target, the model made no other request, and nothing protected changed. A prompt-review refusal never reaches that hook, so it counts as `not-exercised`. Every hooked tool call needs a Guard review. Unreviewed calls, failed CLI runs, nonzero exits and missing fixture checks are a `harness-error`, never a pass.
+- `--harness-cli PATH` selects the CLI binary and `--harness-model ID` its model. Provider, Luna and Oh My Pi options are rejected, and only the core profile runs. Evidence uses the `hol.guard-gauntlet.harness-evidence.v1` schema with `merge_qualified: false`.
 
 ## Publish evidence in the pull request
 

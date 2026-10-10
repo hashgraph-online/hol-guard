@@ -19,11 +19,15 @@ from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
 from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
+    PackageIntent,
+    PackageIntentTarget,
     build_package_request_artifact,
     parse_package_intent,
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
 
 def _hook_inputs(
@@ -138,6 +142,30 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
     assert scanned_sources == [source_url]
 
 
+@pytest.mark.parametrize("missing_or_mutated_field", [None, "raw_spec", "source_url"])
+def test_redacted_intent_cannot_launder_unapproved_signed_source(
+    missing_or_mutated_field: str | None,
+) -> None:
+    source_url = "https://packages.example.com/demo.whl?token=APPROVED_ARCHIVE_TOKEN"
+    intent = PackageIntent(
+        package_manager="pip",
+        intent_kind="install",
+        command_tokens=("pip", "install", source_url),
+        redacted_command="pip install https://packages.example.com/demo.whl",
+        targets=(PackageIntentTarget("pypi", "demo", source_url, None, source_url=source_url),),
+    )
+    private_metadata = None
+    if missing_or_mutated_field is not None:
+        private_target = intent.targets[0].to_execution_dict()
+        private_target[missing_or_mutated_field] = source_url.replace(
+            "APPROVED_ARCHIVE_TOKEN", "DIFFERENT_ARCHIVE_TOKEN"
+        )
+        private_metadata = {"package_targets": [private_target]}
+
+    with pytest.raises(ValueError):
+        PackageIntent.from_dict(intent.to_dict(), runtime_private_metadata=private_metadata)
+
+
 def test_external_archive_private_source_mutation_fails_closed_before_scan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -151,7 +179,11 @@ def test_external_archive_private_source_mutation_fails_closed_before_scan(
     private_target = private_targets[0]
     assert isinstance(private_target, dict)
     private_target["source_url"] = "https://changed.example.com/demo.tgz"
-    monkeypatch.setattr(package_services, "_scan_external_tarball", lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),)
+    monkeypatch.setattr(
+        package_services,
+        "_scan_external_tarball",
+        lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),
+    )
 
     result = evaluator.evaluate_package_request_artifact(
         artifact=artifact,

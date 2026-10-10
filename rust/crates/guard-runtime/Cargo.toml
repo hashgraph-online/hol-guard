@@ -17,6 +17,7 @@ guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+caseless.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 fs2.workspace = true
@@ -26,6 +27,7 @@ rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true
 serde_json.workspace = true
+unicode-normalization = "0.1.25"
 zeroize = "1.9.0"
 aes.workspace = true
 base64ct.workspace = true
