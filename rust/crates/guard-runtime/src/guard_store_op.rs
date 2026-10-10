@@ -20,6 +20,9 @@ use serde_json::{json, Value};
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_args::Args;
+use crate::guard_store_cmd_activity as activity;
+use crate::guard_store_cmd_lifecycle as lifecycle;
+use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_outbox_binding::{
     count_recoverable_unbound, load_binding, normalized_binding, reassign_quarantined,
@@ -203,7 +206,10 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_review_event_snapshots"
         | "get_review_event_oauth_binding"
         | "count_recoverable_unbound_review_events"
-        | "list_pending_review_request_ids" => Kind::Read,
+        | "list_pending_review_request_ids"
+        | "command_activity_by_request_correlation"
+        | "is_exact_command_activity_pre_replay"
+        | "command_activity_rollups_are_reconciled" => Kind::Read,
         "refresh_review_event_outbox_binding_for_identity"
         | "refresh_review_event_outbox_binding"
         | "reassign_quarantined_review_events"
@@ -213,7 +219,14 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "requeue_pending_review_events"
         | "requeue_pending_review_events_with_marker"
         | "repair_rejected_review_correlation"
-        | "recover_review_snapshot_sequences" => Kind::Write,
+        | "recover_review_snapshot_sequences"
+        | "record_command_activity"
+        | "probe_command_activity_persistence"
+        | "transition_command_activity"
+        | "record_command_activity_persistence_failure"
+        | "record_command_activity_observation_conflict"
+        | "maintain_command_activity"
+        | "rebuild_command_activity_rollups" => Kind::Write,
         _ => return None,
     })
 }
@@ -281,6 +294,24 @@ fn dispatch(
             repair_rejected_correlation(connection, source, args)
         }
         "recover_review_snapshot_sequences" => recover_sequences(connection, source, args),
+        "record_command_activity" => activity::record_command_activity(connection, args),
+        "probe_command_activity_persistence" => activity::probe_persistence(connection, args),
+        "transition_command_activity" => lifecycle::transition(connection, args),
+        "record_command_activity_persistence_failure" => {
+            lifecycle::persistence_failure(connection, args)
+        }
+        "record_command_activity_observation_conflict" => {
+            lifecycle::observation_conflict(connection, args)
+        }
+        "command_activity_by_request_correlation" => {
+            lifecycle::activity_by_correlation(connection, args)
+        }
+        "is_exact_command_activity_pre_replay" => lifecycle::is_exact_pre_replay(connection, args),
+        "maintain_command_activity" => maintenance::maintain(connection, args),
+        "rebuild_command_activity_rollups" => maintenance::rebuild_rollups(connection, args),
+        "command_activity_rollups_are_reconciled" => {
+            maintenance::rollups_are_reconciled(connection)
+        }
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

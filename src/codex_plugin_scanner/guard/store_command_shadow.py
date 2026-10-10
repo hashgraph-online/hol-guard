@@ -1,4 +1,4 @@
-"""Atomic persistence and bounded reads for command shadow evidence."""
+"""Bounded reads for command shadow evidence; shadow writes run in the native resident."""
 
 # pyright: reportAny=false, reportPrivateUsage=false, reportUnusedCallResult=false
 
@@ -51,64 +51,6 @@ class StoreCommandShadowMixin:
             return tuple(_observation_from_row(connection, row) for row in rows)
 
 
-def record_command_shadow_observation(
-    connection: sqlite3.Connection,
-    observation: CommandShadowObservation,
-) -> bool:
-    if not isinstance(cast(object, observation), CommandShadowObservation):
-        raise ValueError("observation must be a CommandShadowObservation")
-    existing = cast(
-        sqlite3.Row | None,
-        connection.execute(
-            "select * from command_activity_shadow_evaluations where activity_id = ?",
-            (observation.activity_id,),
-        ).fetchone(),
-    )
-    values = _observation_values(observation)
-    if existing is not None:
-        if _row_values(existing) != values or _cohort_values(connection, observation.activity_id) != tuple(
-            (observation.activity_id, ordinal, cohort.value) for ordinal, cohort in enumerate(observation.cohorts)
-        ):
-            raise ValueError("command shadow replay conflicts with persisted evidence")
-        return False
-    connection.execute(
-        """
-        insert into command_activity_shadow_evaluations (
-          activity_id, occurred_at, authoritative_action, current_action, current_disposition,
-          proposed_action, proposed_disposition, comparison, proposal_version,
-          evaluator_schema_version, control_generation, sample_basis_points, schema_version
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        values,
-    )
-    connection.executemany(
-        """
-        insert into command_activity_shadow_cohorts (activity_id, ordinal, cohort)
-        values (?, ?, ?)
-        """,
-        tuple((observation.activity_id, ordinal, cohort.value) for ordinal, cohort in enumerate(observation.cohorts)),
-    )
-    return True
-
-
-def _observation_values(observation: CommandShadowObservation) -> tuple[object, ...]:
-    return (
-        observation.activity_id,
-        observation.occurred_at.isoformat(),
-        observation.authoritative_action,
-        observation.current_action,
-        observation.current_disposition.value,
-        observation.proposed_action,
-        observation.proposed_disposition.value,
-        observation.comparison.value,
-        observation.proposal_version,
-        observation.evaluator_schema_version,
-        observation.control_generation,
-        observation.sample_basis_points,
-        observation.schema_version,
-    )
-
-
 def _row_values(row: sqlite3.Row) -> tuple[object, ...]:
     return tuple(cast(Sequence[object], row))
 
@@ -144,7 +86,4 @@ def _observation_from_row(connection: sqlite3.Connection, row: sqlite3.Row) -> C
     )
 
 
-__all__: Sequence[str] = (
-    "StoreCommandShadowMixin",
-    "record_command_shadow_observation",
-)
+__all__: Sequence[str] = ("StoreCommandShadowMixin",)

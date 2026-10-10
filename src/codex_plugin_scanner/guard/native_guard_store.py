@@ -77,6 +77,8 @@ def _raise_for_code(code: object, payload: object) -> None:
     text = message if isinstance(message, str) else "Guard store operation failed."
     if code == "native_guard_store_value_error":
         raise ValueError(text)
+    if code == "native_guard_store_runtime_error":
+        raise RuntimeError(text)
     if code == "native_guard_store_integrity_error":
         raise sqlite3.IntegrityError(text)
     if code == "native_guard_store_busy":
@@ -102,6 +104,7 @@ def native_guard_store_call(
     method: str,
     args: Mapping[str, object],
     deadline_monotonic: float,
+    busy_timeout_seconds: float | None = None,
 ) -> tuple[Any, int | None]:
     """Run one store method in the resident; return ``(payload, outbox_generation)``.
 
@@ -123,7 +126,13 @@ def native_guard_store_call(
         "guard_home": str(guard_home),
         "method": method,
         "source": source,
-        "busy_timeout_ms": max(1, int(remaining_seconds * 1000)),
+        "busy_timeout_ms": max(
+            1,
+            int(
+                (remaining_seconds if busy_timeout_seconds is None else min(remaining_seconds, busy_timeout_seconds))
+                * 1000
+            ),
+        ),
         "args": dict(args),
     }
     try:
