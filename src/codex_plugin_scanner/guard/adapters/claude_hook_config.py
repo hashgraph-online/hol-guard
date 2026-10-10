@@ -156,15 +156,33 @@ CLAUDE_GUARD_REQUIRED_HOOK_EVENTS = ("PreToolUse", "PermissionRequest")
 
 
 def missing_guard_hook_events(payload: dict[str, object]) -> list[str]:
-    """Required hook events with no Guard-managed handler in a settings payload."""
+    """Required hook events whose Guard handler does not cover the protected tools."""
 
     hooks = payload.get("hooks")
     missing: list[str] = []
     for event in CLAUDE_GUARD_REQUIRED_HOOK_EVENTS:
         entries = hooks.get(event) if isinstance(hooks, dict) else None
-        if not isinstance(entries, list) or not any(_entry_has_guard_handler(entry) for entry in entries):
+        if not isinstance(entries, list) or not any(_entry_covers_guard_tools(entry) for entry in entries):
             missing.append(event)
     return missing
+
+
+def _matcher_covers_guard_tools(matcher: object) -> bool:
+    """An omitted matcher matches every tool. A set matcher must still name each protected tool."""
+
+    if matcher is None:
+        return True
+    if not isinstance(matcher, str):
+        return False
+    installed = {part.strip() for part in matcher.split("|") if part.strip()}
+    required = {part.strip() for part in CLAUDE_GUARD_TOOL_MATCHER.split("|") if part.strip()}
+    return required <= installed
+
+
+def _entry_covers_guard_tools(entry: object) -> bool:
+    if not _entry_has_guard_handler(entry) or not isinstance(entry, dict):
+        return False
+    return _matcher_covers_guard_tools(entry.get("matcher"))
 
 
 def _entry_has_guard_handler(entry: object) -> bool:

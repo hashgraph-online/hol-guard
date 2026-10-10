@@ -54,6 +54,20 @@ def test_only_pretooluse_removed_is_broken_and_user_hooks_do_not_count(tmp_path:
     assert "PermissionRequest" not in str(diagnostics["warnings"])
 
 
+def test_narrowed_matcher_keeps_the_handler_but_reports_broken(tmp_path: Path) -> None:
+    adapter, context, settings_path = _installed(tmp_path)
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    for entry in settings["hooks"]["PreToolUse"]:
+        if isinstance(entry, dict) and entry.get("matcher"):
+            entry["matcher"] = "Read"
+    settings_path.write_text(json.dumps(settings), encoding="utf-8")
+
+    diagnostics = adapter.diagnostics(context)
+
+    assert diagnostics["setup_status"] == "broken"
+    assert "PreToolUse" in str(diagnostics["warnings"])
+
+
 def test_reinstall_restores_active_status(tmp_path: Path) -> None:
     adapter, context, settings_path = _installed(tmp_path)
     settings_path.write_text("{}", encoding="utf-8")

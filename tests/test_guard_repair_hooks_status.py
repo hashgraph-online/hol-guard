@@ -44,7 +44,7 @@ def test_hooks_that_stay_broken_after_reinstall_are_skipped_not_repaired(
     assert step["status"] == "skipped"
     assert step["repaired"] == []
     assert step["needs_attention"] == ["codex", "claude-code"]
-    assert report["status"] == "healthy"
+    assert report["status"] == "partial"
     assert "still need attention" in str(report["summary"])
     assert "Guard was repaired" not in str(report["summary"])
 
@@ -58,6 +58,9 @@ def test_mixed_outcome_reports_changed_and_names_remaining_app(tmp_path: Path, m
     assert step["repaired"] == ["claude-code"]
     assert step["needs_attention"] == ["codex"]
     assert "Still needs attention: codex" in str(step["summary"])
+    report = repair_engine.build_report([step], dry_run=False)
+    assert report["status"] == "partial"
+    assert "Guard was repaired" not in str(report["summary"])
 
 
 def test_fully_repaired_hooks_still_report_changed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

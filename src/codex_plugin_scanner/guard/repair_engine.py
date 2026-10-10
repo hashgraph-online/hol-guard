@@ -345,9 +345,14 @@ def run_repair(
     return build_report(steps, dry_run=dry_run)
 
 
+def _step_needs_attention(step: dict[str, object]) -> bool:
+    attention = step.get("needs_attention")
+    return isinstance(attention, list) and bool(attention)
+
+
 def build_report(steps: list[dict[str, object]], *, dry_run: bool) -> dict[str, object]:
     statuses = [str(item["status"]) for item in steps]
-    if "error" in statuses:
+    if "error" in statuses or any(_step_needs_attention(item) for item in steps):
         status = "partial"
     elif "planned" in statuses:
         status = "needs_repair"
@@ -378,10 +383,10 @@ def format_repair_summary(steps: list[dict[str, object]], *, status: str, dry_ru
         lines.append("Run `hol-guard repair` to apply these fixes.")
     elif status == "repaired":
         lines.append("Guard was repaired. Restart any open coding-agent sessions that were blocked.")
-    elif any(item.get("needs_attention") for item in steps):
-        lines.append("Some apps still need attention. See the hooks step above.")
     else:
         lines.append("Nothing needed repair.")
+    if any(_step_needs_attention(item) for item in steps):
+        lines.append("Some apps still need attention. See the hooks step above.")
     return "\n".join(lines)
 
 
