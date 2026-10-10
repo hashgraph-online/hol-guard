@@ -1,0 +1,47 @@
+name: Cache cleanup
+
+# The repository cache is capped at 10 GB with LRU eviction. Every main push
+# saves a new CodeQL overlay database, and lockfile changes leave the previous
+# Rust target caches behind. Prune entries a newer one in the same family has
+# replaced so they stop evicting the caches the next run restores.
+on:
+  workflow_run:
+    workflows: [CodeQL Analysis]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: cache-cleanup
+  cancel-in-progress: true
+
+jobs:
+  prune:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: main
+      - name: Delete superseded main-branch caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh cache list --ref refs/heads/main --limit 1000 --json id,key,ref,createdAt > "$RUNNER_TEMP/caches.json"
+          python3 scripts/ci/prune_superseded_caches.py "$RUNNER_TEMP/caches.json" > "$RUNNER_TEMP/prune.txt"
+          count=0
+          while read -r id; do
+            [ -n "$id" ] || continue
+            gh cache delete "$id" || echo "::warning::could not delete cache $id"
+            count=$((count + 1))
+          done < "$RUNNER_TEMP/prune.txt"
+          echo "Deleted $count superseded cache entries" >> "$GITHUB_STEP_SUMMARY"
