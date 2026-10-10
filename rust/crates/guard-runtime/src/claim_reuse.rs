@@ -280,14 +280,23 @@ fn claim_policy_member(
     Ok(true)
 }
 
+/// One validated member of the batch and its claim disposition.
+pub type Member<'a> = (&'a Value, &'static str);
+
 fn claim_members(
     connection: &Connection,
-    members: &[(&Value, &'static str)],
+    members: &[Member<'_>],
     expected_revision: i64,
     now: &str,
     evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
 ) -> rusqlite::Result<bool> {
     if approval_authority_revision(connection)? != expected_revision {
+        return Ok(false);
+    }
+    // The caller gathered `evidence` before this lock was taken: refuse the
+    // batch unless the sources it came from are unchanged under the lock.
+    if !bound(connection, members)? {
         return Ok(false);
     }
     for (decision, disposition) in members {
@@ -320,13 +329,15 @@ fn claim_members(
 }
 
 /// Claim a batch of saved allows atomically. `Ok(false)` means the decision
-/// expired, changed, was consumed elsewhere, or was not a claimable allow; a
+/// expired, changed, was consumed elsewhere, was not a claimable allow, or its
+/// evidence no longer matched the store (`bound`, run under the write lock); a
 /// store failure is an `Err` and never a claim.
 pub fn claim_approval_reuse_decisions(
     connection: &Connection,
     decisions: &[Value],
     now: &str,
     evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
 ) -> rusqlite::Result<bool> {
     let Ok((unique, expected_revision)) = unique_members(decisions) else {
         return Ok(false);
@@ -334,7 +345,7 @@ pub fn claim_approval_reuse_decisions(
     if unique.is_empty() {
         return Ok(true);
     }
-    let mut members: Vec<(&Value, &'static str)> = Vec::with_capacity(unique.len());
+    let mut members: Vec<Member<'_>> = Vec::with_capacity(unique.len());
     for decision in unique {
         let Some(disposition) = approval_reuse_claim_disposition(decision) else {
             return Ok(false);
@@ -342,7 +353,14 @@ pub fn claim_approval_reuse_decisions(
         members.push((decision, disposition));
     }
     connection.execute_batch("BEGIN IMMEDIATE")?;
-    match claim_members(connection, &members, expected_revision, now, evidence) {
+    match claim_members(
+        connection,
+        &members,
+        expected_revision,
+        now,
+        evidence,
+        bound,
+    ) {
         Ok(true) => {
             connection.execute_batch("COMMIT")?;
             Ok(true)

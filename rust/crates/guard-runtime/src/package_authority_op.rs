@@ -1148,6 +1148,10 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             std::slice::from_ref(decision),
             now,
             &evidence,
+            // The resident resolves this evidence itself, in-process, and ships no
+            // policy-bundle identities, so there is no caller-gathered evidence
+            // whose sources could move before the claim's write lock.
+            &|_, _| Ok(true),
         )
         .unwrap_or(false)
     }

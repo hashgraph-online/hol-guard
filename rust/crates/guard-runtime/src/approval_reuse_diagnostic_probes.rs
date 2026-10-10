@@ -84,7 +84,7 @@ fn run_groups(
             parameters.push(Sql::Integer(DIAGNOSTIC_LIMIT));
             let mut statement = connection.prepare(&sql)?;
             let found = statement
-                .query_map(rusqlite::params_from_iter(parameters), |row| to_json(row))?
+                .query_map(rusqlite::params_from_iter(parameters), to_json)?
                 .collect::<rusqlite::Result<Vec<Value>>>()?;
             group_rows.extend(found);
         }

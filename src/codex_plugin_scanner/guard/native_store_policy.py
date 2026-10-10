@@ -10,6 +10,8 @@ the diagnostic raises ``ValueError``.
 from __future__ import annotations
 
 import base64
+import hashlib
+import sqlite3
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from uuid import uuid4
@@ -26,13 +28,71 @@ _DIAGNOSTIC_RESULT_SCHEMA = "guard-approval-reuse-diagnostic-result.v1"
 _CLAIM_MAX_BYTES = 512 * 1024
 _TIMEOUT_SECONDS = 10.0
 DIAGNOSTIC_UNAVAILABLE = "native_approval_reuse_diagnostic_unavailable"
+# Store-resident sources a signed policy bundle's validity depends on. The
+# resident re-reads every one of them under the claim's write lock and refuses
+# the claim when any differs from what the evidence was gathered against.
+BUNDLE_STATE_KEYS = (
+    "policy_bundle",
+    "policy_bundle_keyring",
+    "supply_chain_bundle_keyring",
+    "managed_policy_bundle_keyring_provenance",
+    "policy_bundle_acceptance_checkpoint",
+)
+_LOCAL_DEVICE_KEY = "local-device"
 
 IntegrityEvidence = Mapping[str, object]
 EvidenceProvider = Callable[[bool, bool], IntegrityEvidence]
 
 
+class ApprovalReuseDiagnosticUnavailableError(ValueError):
+    """The resident could not diagnose a saved-allow miss; nothing was recomputed.
+
+    Still a ``ValueError`` whose text is :data:`DIAGNOSTIC_UNAVAILABLE`.
+    Callers fail closed on it and never treat the absence of a diagnosis as
+    evidence that a saved allow is usable.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(DIAGNOSTIC_UNAVAILABLE)
+
+
 def encode_key(key: bytes | None) -> str | None:
     return base64.urlsafe_b64encode(key).rstrip(b"=").decode("ascii") if key is not None else None
+
+
+def _state_digest(connection: sqlite3.Connection, state_key: str) -> str | None:
+    row = connection.execute("select payload_json from sync_state where state_key = ?", (state_key,)).fetchone()
+    if row is None or row[0] is None:
+        return None
+    return hashlib.sha256(str(row[0]).encode("utf-8")).hexdigest()
+
+
+def claim_evidence_binding(
+    connection: sqlite3.Connection,
+    *,
+    bundle: bool,
+    cloud_workspace_id: str | None = None,
+) -> dict[str, object]:
+    """Name the store-resident sources the claim evidence is gathered against.
+
+    Read this *before* deriving the evidence it binds: a source that moves
+    afterwards then differs from the binding when the resident re-reads it
+    under the claim's write lock, and the claim is refused.
+    """
+
+    binding: dict[str, object] = {"sync_state_sha256": {}}
+    if not bundle:
+        return binding
+    binding["sync_state_sha256"] = {key: _state_digest(connection, key) for key in BUNDLE_STATE_KEYS}
+    binding["cloud_workspace_id"] = cloud_workspace_id
+    device = connection.execute(
+        "select installation_id, device_label from guard_devices where device_key = ?",
+        (_LOCAL_DEVICE_KEY,),
+    ).fetchone()
+    binding["device"] = (
+        {"installation_id": str(device[0]), "device_label": str(device[1])} if device is not None else None
+    )
+    return binding
 
 
 def _payload(response: dict[str, object] | None, request: dict[str, object]) -> dict[str, object] | None:
@@ -148,4 +208,4 @@ def native_approval_reuse_diagnostic(
         ):
             return reason, stored_hash  # type: ignore[return-value]
         break
-    raise ValueError(DIAGNOSTIC_UNAVAILABLE)
+    raise ApprovalReuseDiagnosticUnavailableError

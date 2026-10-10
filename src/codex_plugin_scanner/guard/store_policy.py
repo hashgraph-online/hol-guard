@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal, cast
 
@@ -54,11 +55,19 @@ from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, N
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from .native_policy_snapshot_windows_support import _runtime_state_directory
 from .native_store_policy import (
+    ApprovalReuseDiagnosticUnavailableError,
+    claim_evidence_binding,
     encode_key,
     native_approval_reuse_diagnostic,
     native_claim_approval_reuse_decisions,
 )
 from .store_base import *
+
+_LOGGER = logging.getLogger(__name__)
+# Reported when the resident cannot diagnose a saved-allow miss. Every caller
+# already treats a reason as "the saved allow was rejected", so this fails closed
+# into re-approval instead of letting a missing diagnosis read as authority.
+APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON = "approval_reuse_integrity_failure"
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
 
@@ -1232,6 +1241,7 @@ class StorePolicyMixin:
         """Procure the integrity evidence the resident needs to claim ``decisions``."""
 
         evidence: dict[str, object] = {}
+        needs_bundle = any(decision.get("source") == "policy-bundle" for decision in decisions)
         if any(isinstance(decision.get("approval_id"), str) and decision.get("approval_id") for decision in decisions):
             local_key, local_key_id = self._policy_integrity_secret_material(create=False)
             evidence["local_once_integrity_key_b64"] = encode_key(local_key)
@@ -1249,7 +1259,17 @@ class StorePolicyMixin:
             key, key_id = self._policy_integrity_secret_material(create=True)
             evidence["integrity_key_b64"] = encode_key(key)
             evidence["integrity_key_id"] = key_id
-        if any(decision.get("source") == "policy-bundle" for decision in decisions):
+        # The evidence above is derived outside the claim's write lock. Name the
+        # store-resident sources it depends on *before* deriving the bundle
+        # identities, so anything that moves afterwards makes the resident refuse
+        # the claim when it re-reads them under the lock.
+        with self._connect() as connection:
+            evidence["evidence_binding"] = claim_evidence_binding(
+                connection,
+                bundle=needs_bundle,
+                cloud_workspace_id=self._cloud_workspace_id_from_connection(connection) if needs_bundle else None,
+            )
+        if needs_bundle:
             identities = self._cached_policy_bundle_decision_identities(
                 now=_parse_utc_timestamp(current_time).timestamp(),
             )
@@ -1301,7 +1321,11 @@ class StorePolicyMixin:
         The resident runs the bounded probes and picks the reason. This wrapper
         only procures integrity evidence when the resident asks for it. A store
         with no saved rows at all has nothing to diagnose and never needs the
-        resident; any other unanswered request raises ``ValueError``.
+        resident. When saved rows exist and the resident gives no authoritative
+        answer (unprovisioned home, resident down, malformed reply) the miss
+        fails closed: the saved allow is reported as rejected for an integrity
+        failure and a typed warning is logged. Nothing is recomputed in Python
+        and no exception reaches the caller.
         """
 
         if artifact_id is None:
@@ -1336,17 +1360,26 @@ class StorePolicyMixin:
                     evidence["local_once_integrity_key_id"] = key_id
             return evidence
 
-        return native_approval_reuse_diagnostic(
-            store_path=self.path,
-            guard_home=Path(self.guard_home),
-            harness=harness,
-            artifact_id=artifact_id,
-            artifact_hash=artifact_hash,
-            workspace=workspace,
-            publisher=publisher,
-            now=current_time,
-            evidence_provider=evidence_provider,
-        )
+        try:
+            return native_approval_reuse_diagnostic(
+                store_path=self.path,
+                guard_home=Path(self.guard_home),
+                harness=harness,
+                artifact_id=artifact_id,
+                artifact_hash=artifact_hash,
+                workspace=workspace,
+                publisher=publisher,
+                now=current_time,
+                evidence_provider=evidence_provider,
+            )
+        except ApprovalReuseDiagnosticUnavailableError as error:
+            _LOGGER.warning(
+                "%s: saved approvals exist but the native resident gave no authoritative diagnosis; "
+                "treating the saved allow as rejected (%s)",
+                error,
+                APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON,
+            )
+            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None
 
     def _provision_resident_verifier(self) -> None:
         """Establish the verifier key the resident requires before it serves.

@@ -43,7 +43,10 @@ fn claim_matches_every_recorded_vector() {
         let now = guard_contracts::canonical_utc_timestamp(request["now"].as_str().unwrap())
             .expect("recorded now must canonicalize");
         let decisions = request["decisions"].as_array().unwrap();
-        let claimed = claim_approval_reuse_decisions(&connection, decisions, &now, &evidence)
+        let claimed =
+            claim_approval_reuse_decisions(&connection, decisions, &now, &evidence, &|_, _| {
+                Ok(true)
+            })
             .unwrap_or_else(|error| panic!("vector {} errored: {error}", vector["id"]));
         assert_eq!(
             Value::Bool(claimed),

@@ -4,7 +4,9 @@
 //!
 //! IO op (unlike `ApprovalReuseDecide`): opens `store_path` and calls
 //! `claim_reuse::claim_approval_reuse_decisions`. The integrity evidence
-//! (refreshed state, key material, bundle identities) is shipped by the caller.
+//! (refreshed state, key material, bundle identities) is shipped by the caller
+//! before the write lock is taken, so the op re-verifies its binding to the
+//! store under that lock (`claim_reuse_binding`) and refuses on any change.
 
 use guard_contracts::{
     ClaimApprovalReuseDecisionsRequestV1, ClaimApprovalReuseDecisionsResultV1,
@@ -78,6 +80,14 @@ fn evaluate(request: &ClaimApprovalReuseDecisionsRequestV1) -> Result<Value, Str
         &request.decisions,
         &now,
         &evidence,
+        &|connection, members| {
+            crate::claim_reuse_binding::evidence_is_bound(
+                connection,
+                members,
+                &evidence,
+                request.evidence_binding.as_ref(),
+            )
+        },
     )
     .map_err(|_| "native_claim_approval_reuse_store_error".to_owned())?;
     Ok(serde_json::json!({ "claimed": claimed }))
