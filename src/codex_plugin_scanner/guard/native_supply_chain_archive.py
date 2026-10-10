@@ -45,11 +45,16 @@ class ArchiveFulfilment:
     def fulfil(self, need: Mapping[str, Any]) -> dict[str, object]:
         started = time.monotonic()
         try:
-            return self._fulfil(need)
+            return self._fulfil(need, started)
         finally:
             self._elapsed += time.monotonic() - started
 
-    def _fulfil(self, need: Mapping[str, Any]) -> dict[str, object]:
+    def _spent(self, started: float) -> float:
+        """Time already charged plus the in-flight call, including its download."""
+
+        return self._elapsed + (time.monotonic() - started)
+
+    def _fulfil(self, need: Mapping[str, Any], started: float) -> dict[str, object]:
         url = str(need["url"])
         try:
             policy, _managed = resolved_network_policy(None)
@@ -60,7 +65,7 @@ class ArchiveFulfilment:
         aggregate = _required_timeout(spec.get("aggregate_timeout_seconds")) if isinstance(spec, Mapping) else None
         download_timeout = float(need["timeout_seconds"])
         if aggregate is not None:
-            remaining = aggregate - self._elapsed
+            remaining = aggregate - self._spent(started)
             if remaining <= 0:
                 return {"kind": "archive_failure", "code": _TIMEOUT_CODE, "message": _TIMEOUT_MESSAGE}
             download_timeout = min(download_timeout, remaining)
@@ -85,7 +90,7 @@ class ArchiveFulfilment:
                     "final_url": result.final_url,
                 }
                 if isinstance(spec, Mapping):
-                    verdict = self._inspect(result, need, spec, aggregate)
+                    verdict = self._inspect(result, need, spec, aggregate, started)
                     if verdict is None:
                         return {"kind": "archive_failure", "code": _TIMEOUT_CODE, "message": _TIMEOUT_MESSAGE}
                     outcome["inspection"] = verdict
@@ -105,10 +110,11 @@ class ArchiveFulfilment:
         need: Mapping[str, Any],
         spec: Mapping[str, Any],
         aggregate: float | None,
+        started: float,
     ) -> dict[str, str] | None:
         timeout = float(spec["timeout_seconds"])
         if aggregate is not None:
-            remaining = aggregate - self._elapsed - _INSPECTION_GRACE_SECONDS
+            remaining = aggregate - self._spent(started) - _INSPECTION_GRACE_SECONDS
             if remaining <= 0:
                 return None
             timeout = min(timeout, remaining)

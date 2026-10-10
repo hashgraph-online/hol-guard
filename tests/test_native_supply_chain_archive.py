@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -42,6 +43,38 @@ def test_non_numeric_aggregate_timeout_does_not_download(tmp_path: Path, monkeyp
 
     with pytest.raises(TypeError, match="archive timeout must be a number"):
         fulfilment.fulfil(need)
+
+
+def test_current_download_reduces_the_inspection_budget(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = {"now": 1_000.0}
+    monkeypatch.setattr(native_supply_chain_archive.time, "monotonic", lambda: clock["now"])
+    install_download(monkeypatch, tmp_path)
+    download = native_supply_chain_archive.download_restricted_archive
+
+    def slow_download(*args: object, **kwargs: object) -> object:
+        clock["now"] += 1.0
+        return download(*args, **kwargs)
+
+    monkeypatch.setattr(native_supply_chain_archive, "download_restricted_archive", slow_download)
+    timeouts: list[float] = []
+
+    def inspect(_path: Path, **kwargs: object) -> SimpleNamespace:
+        timeouts.append(float(kwargs["timeout_seconds"]))
+        return SimpleNamespace(
+            status="clean",
+            code="archive_clean",
+            message="Archive inspection found no blocking behavior.",
+            severity="info",
+        )
+
+    monkeypatch.setattr(native_supply_chain_archive, "inspect_archive_native", inspect)
+    fulfilment = ArchiveFulfilment(guard_home=tmp_path, scratch_dir=tmp_path, retain=False)
+    fulfilment._elapsed = 5.5
+
+    outcome = fulfilment.fulfil(_need(aggregate=8.0))
+
+    assert outcome["kind"] == "archive"
+    assert timeouts == [1.0]
 
 
 def test_exhausted_aggregate_budget_fails_before_the_next_download(
