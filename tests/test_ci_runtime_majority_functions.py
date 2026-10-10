@@ -153,6 +153,16 @@ def test_removed_and_retained_statements_sharing_a_line_are_rejected(tmp_path: P
         build_report(repo, scope)
 
 
+def test_retained_import_sharing_a_line_with_a_pruned_import_is_rejected(tmp_path: Path) -> None:
+    render = RENDER.replace("import textwrap\n", "import textwrap; import os\n").replace(
+        '\n\n_TABLE["x"] = _human\n', "\n"
+    )
+    render += "\nKEEP = os.sep\n"
+    repo, scope = _repo(tmp_path, entries=[_entry()], render=render)
+    with pytest.raises(ScopeError, match="share source lines"):
+        build_report(repo, scope)
+
+
 def test_function_entry_ids_must_be_unique(tmp_path: Path) -> None:
     repo, scope = _repo(tmp_path, entries=[_entry(), _entry(symbols=["_TABLE"])])
     with pytest.raises(ScopeError, match="is not unique"):

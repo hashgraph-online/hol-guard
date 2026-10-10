@@ -161,14 +161,14 @@ def plan_module(path: str, source: str, entries: list[dict[str, Any]], *, root_p
             raise ScopeError(
                 f"{path}: retained {owners[0]} references excluded {sorted(refs)} but is not a listed entry_point"
             )
-    _prune_imports(plan, retained, excluded_nodes)
+    pruned_ids = _prune_imports(plan, retained, excluded_nodes)
     counted = counted_lines(source)
     ranges = [*plan.symbol_lines.values(), *plan.import_ranges]
     removed = {line for start, end in ranges for line in range(start, end + 1)}
     for node in retained:
-        start, end = _node_range(node)
-        if (start, end) in plan.import_ranges:
+        if id(node) in pruned_ids:
             continue
+        start, end = _node_range(node)
         if removed & set(range(start, end + 1)):
             raise ScopeError(f"{path}: a removed and a retained top-level statement share source lines {start}-{end}")
     plan.removed_lines = removed & counted
@@ -179,7 +179,8 @@ def plan_module(path: str, source: str, entries: list[dict[str, Any]], *, root_p
     return plan
 
 
-def _prune_imports(plan: ModulePlan, retained: list[ast.stmt], excluded_nodes: list[ast.stmt]) -> None:
+def _prune_imports(plan: ModulePlan, retained: list[ast.stmt], excluded_nodes: list[ast.stmt]) -> set[int]:
+    pruned: set[int] = set()
     others = [node for node in retained if not isinstance(node, ast.Import | ast.ImportFrom)]
     used_kept, strings_kept = _name_uses(others)
     used_cut, _ = _name_uses(list(excluded_nodes))
@@ -197,6 +198,8 @@ def _prune_imports(plan: ModulePlan, retained: list[ast.stmt], excluded_nodes: l
             continue
         plan.import_ranges.append((node.lineno, node.end_lineno or node.lineno))
         plan.skip_linenos.add(node.lineno)
+        pruned.add(id(node))
+    return pruned
 
 
 def _resolve_from(module_name: str, is_package: bool, node: ast.ImportFrom) -> str:
