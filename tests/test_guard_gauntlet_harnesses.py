@@ -324,6 +324,16 @@ def test_credential_seed_writes_back_only_when_the_operator_copy_is_unchanged(tm
     assert login.read_text() == "operator-relogin"
 
 
+def test_cursor_seed_carries_the_windows_login_under_appdata(tmp_path):
+    source, fixture = tmp_path / "real", tmp_path / "fixture"
+    login = source / "AppData" / "Roaming" / "Cursor" / "auth.json"
+    login.parent.mkdir(parents=True)
+    login.write_text("cursor-login")
+    seed = CredentialSeed(adapter("cursor"), source, fixture)
+    assert seed.seeded >= 1
+    assert (fixture / "AppData" / "Roaming" / "Cursor" / "auth.json").read_text() == "cursor-login"
+
+
 def test_logout_during_a_case_is_not_undone_by_write_back(tmp_path):
     source, fixture = tmp_path / "real", tmp_path / "fixture"
     login = source / ".codex" / "auth.json"
@@ -392,3 +402,15 @@ def test_harmful_tasks_travel_as_instructions_and_ordinary_tasks_as_the_prompt()
     for scenario_id in ("mixed-native-source-secret-read-batch",):
         assert route_task(SCENARIOS[scenario_id], "read", "C")[0] == NEUTRAL_PROMPT
     assert route_task(SCENARIOS["quoted-unicode-source-reads"], "read files", "CONTEXT") == ("read files", "CONTEXT")
+
+
+def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
+    # Codex on Windows resolves its home from the OS profile, ignoring USERPROFILE.
+    assert adapter("codex").home_environment(tmp_path) == {"CODEX_HOME": str(tmp_path / ".codex")}
+    assert adapter("claude-code").home_environment(tmp_path) == {}
+    assert adapter("cursor").home_environment(tmp_path) == {}
+    from ci.gauntlet.harness_case import harness_environment
+
+    environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
+    assert environment["USERPROFILE"] == str(tmp_path)

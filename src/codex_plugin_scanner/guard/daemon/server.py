@@ -301,7 +301,7 @@ from .manager import (
     clear_guard_daemon_state_if_current,
     current_guard_daemon_runtime_fingerprint,
     current_guard_daemon_source_root,
-    load_guard_daemon_auth_token,
+    ensure_guard_daemon_auth_token,
     release_guard_daemon_owner_lock,
     repair_approval_center_locator,
     write_guard_daemon_state,
@@ -1315,6 +1315,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
             self.store.guard_home,
             self.daemon_port(),
             self.auth_token,
+            write_auth_token=False,
             host=self.daemon_host(),
             state_id=self.runtime_session_id,
             started_at=self.runtime_started_at,
@@ -3004,7 +3005,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     status=404,
                 )
                 return
-            self._write_json(approval)
+            self._write_json(self._approval_with_extension_recommendation(approval))
             return
         if parsed.path == "/v1/receipts":
             query = parse_qs(parsed.query)
@@ -8008,6 +8009,19 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return True
         return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
 
+    def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
+        from .approval_extension_recommendation import with_approval_extension_recommendation
+
+        include = not self._is_hosted_dashboard_origin()
+        api = getattr(self._daemon_server(), "extension_control_api", None)
+        if not include or api is None:
+            return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
+        registry, snapshot = api.recommendation_inputs()
+        hint = self._daemon_server().store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
+        return with_approval_extension_recommendation(
+            {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
+        )
+
     def _is_hosted_dashboard_origin(self) -> bool:
         origin = self._normalize_origin(self.headers.get("Origin"))
         return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
@@ -8466,15 +8480,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
 
     @staticmethod
-    def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
-        candidate_path = os.fspath(candidate)
-        root_path = os.fspath(root)
-        try:
-            return os.path.commonpath([candidate_path, root_path]) == root_path
-        except ValueError:
-            return False
-
-    @staticmethod
     def _scope_target_is_valid(
         scope: str,
         *,
@@ -8817,7 +8822,7 @@ class GuardDaemonServer:
                 (host, port),
                 _GuardDaemonHandler,
                 store=store,
-                auth_token=load_guard_daemon_auth_token(store.guard_home) or uuid.uuid4().hex,
+                auth_token=ensure_guard_daemon_auth_token(store.guard_home),
                 runtime_host=host,
                 runtime_session_id=uuid.uuid4().hex,
                 runtime_started_at=_now(),
@@ -9832,19 +9837,6 @@ def _decode_dashboard_session_payload(payload: str) -> dict[str, object]:
 def _parse_iso_timestamp(value: str) -> float:
     normalized = value.replace("Z", "+00:00")
     return datetime.fromisoformat(normalized).timestamp()
-
-
-def _normalized_iso_timestamp_string(value: object) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _now() -> str:

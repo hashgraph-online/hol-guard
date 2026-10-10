@@ -115,7 +115,6 @@ jobs:
         run: >-
           uv run --no-sync python -m ruff format --check
           src/codex_plugin_scanner/guard/adapters/cline.py
-          src/codex_plugin_scanner/guard/adapters/cline_bridge.py
           src/codex_plugin_scanner/guard/adapters/cline_contract.py
           src/codex_plugin_scanner/guard/adapters/cline_detection.py
           src/codex_plugin_scanner/guard/adapters/cline_hook_payload.py
@@ -139,7 +138,6 @@ jobs:
         run: >-
           uv run --no-sync python -m ruff check
           src/codex_plugin_scanner/guard/adapters/cline.py
-          src/codex_plugin_scanner/guard/adapters/cline_bridge.py
           src/codex_plugin_scanner/guard/adapters/cline_contract.py
           src/codex_plugin_scanner/guard/adapters/cline_detection.py
           src/codex_plugin_scanner/guard/adapters/cline_hook_payload.py

@@ -1,3 +1,5 @@
+import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
+
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
 export type ApprovalResolutionAction = "allow" | "block";
 
@@ -292,6 +294,8 @@ export type GuardApprovalRequest = {
   scanner_evidence?: GuardScannerEvidence[];
   temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
   local_tool_approval?: GuardLocalToolApproval | null;
+  /** Live daemon advice: a built-in extension permission that would let this command run automatically. */
+  extension_recommendation?: GuardApprovalExtensionRecommendation;
 };
 
 export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";

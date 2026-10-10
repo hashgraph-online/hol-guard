@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from .daemon.live_identity import DaemonArtifactBinding
     from .daemon.manager import GuardDaemonHookFailureKind
 
+from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
@@ -115,7 +116,7 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
         if len(source_argv) != 4:
             raise RuntimeError("Guard's source Codex bridge contract is not canonical")
         config_json = source_argv[3]
-        payload = _decode_private_payload(config_json, label="Codex bridge")
+        payload = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
         if not payload:
             raise RuntimeError("Guard's Codex bridge config is empty")
         return (python_executable, _FROZEN_BRIDGE_ARG, config_json)
@@ -423,7 +424,7 @@ def _verify_frozen_bridge_contract(
     invocation_path = interpreter.get("invocation_path")
     if not isinstance(invocation_path, str):
         raise ValueError("managed frozen Codex hook interpreter path is invalid")
-    config = _decode_private_payload(config_json, label="Codex bridge")
+    config = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
     if (
         config.get("state_path") != str(state)
         or config.get("manifest_path") != str(configured_manifest)

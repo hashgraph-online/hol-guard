@@ -221,11 +221,6 @@ def maximum_action_floor(floors: Iterable[GuardAction]) -> GuardAction:
     return most_restrictive_guard_action(*tuple(floors))
 
 
-def apply_uncertainty_floor(current: GuardAction, uncertainties: Iterable[UncertaintyKind]) -> GuardAction:
-    typed_uncertainties = _require_uncertainties(uncertainties)
-    return maximum_action_floor((current, *(UNCERTAINTY_FLOOR[item] for item in typed_uncertainties)))
-
-
 class TruthfulState(str, Enum):
     PROTECTED = "protected"
     PARTIAL = "partial"
@@ -407,34 +402,6 @@ class BoundaryVersionClassification:
             raise ValueError("invalid boundary version classification")
 
 
-def decode_boundary_version(
-    value: object,
-    *,
-    current_version: str = EFFECT_CONTRACT_SCHEMA_VERSION,
-) -> BoundaryVersionClassification:
-    current = _parse_boundary_version(current_version)
-    if current is None:
-        raise ValueError("current_version must be a canonical semantic boundary version")
-    received = _parse_boundary_version(value)
-    if received is None:
-        return _boundary_version_failure(BoundaryVersionStatus.MALFORMED, None, current_version)
-    received_version = value if isinstance(value, str) else None
-    if received == current:
-        return BoundaryVersionClassification(
-            BoundaryVersionStatus.CURRENT, received_version, current_version, None, None
-        )
-    if received < current:
-        return _boundary_version_failure(BoundaryVersionStatus.ROLLBACK, received_version, current_version)
-    return _boundary_version_failure(BoundaryVersionStatus.UNKNOWN, received_version, current_version)
-
-
-def _boundary_version_failure(
-    status: BoundaryVersionStatus, version: str | None, expected_version: str
-) -> BoundaryVersionClassification:
-    uncertainty = UncertaintyKind(f"{status.value}-boundary-version")
-    return BoundaryVersionClassification(status, version, expected_version, uncertainty, UNCERTAINTY_FLOOR[uncertainty])
-
-
 def _parse_boundary_version(value: object) -> tuple[int, int, int] | None:
     if not isinstance(value, str) or len(value) > 32:
         return None
@@ -462,13 +429,6 @@ def _require_instance(value: object, expected_type: type[_T], label: str) -> _T:
     if not isinstance(value, expected_type):
         raise ValueError(f"{label} must be a {expected_type.__name__}")
     return value
-
-
-def _require_uncertainties(values: Iterable[object]) -> tuple[UncertaintyKind, ...]:
-    items = tuple(values)
-    if any(not isinstance(item, UncertaintyKind) for item in items):
-        raise ValueError("uncertainties must contain exact UncertaintyKind values")
-    return cast(tuple[UncertaintyKind, ...], items)
 
 
 def _require_enum_frozenset(value: object, enum_type: type[Enum], label: str) -> None:

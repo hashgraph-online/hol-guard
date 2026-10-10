@@ -30,6 +30,25 @@ def shell_interpreter_command_payload(
             continue
         if token in {"-", "--"}:
             return None
+        if token == "--command":
+            script_index = index + 1
+            if script_index >= len(parts):
+                return None
+            script_text = parts[script_index].strip()
+            if not script_text:
+                return None
+            return InterpreterFlagPayload(
+                script_text=script_text,
+                tokens_consumed=script_index - command_index,
+            )
+        if token.startswith("--command="):
+            script_text = token.split("=", 1)[1].strip()
+            if not script_text:
+                return None
+            return InterpreterFlagPayload(
+                script_text=script_text,
+                tokens_consumed=index - command_index,
+            )
         if token.startswith("--"):
             option_name, separator, _ = token.partition("=")
             if option_name in _LONG_OPTIONS_WITH_VALUES and not separator:

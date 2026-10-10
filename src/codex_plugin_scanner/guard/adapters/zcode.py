@@ -674,10 +674,6 @@ class ZCodeHarnessAdapter(HarnessAdapter):
         return _shared_prune_managed_hook_entries(entries, is_managed=is_guard_managed_hook_command)
 
 
-def _is_managed_handler(handler: object) -> bool:
-    return _shared_is_managed_handler(handler, is_guard_managed_hook_command)
-
-
 def _merge_hook_entry(entries: list[object], matcher: str | None, handler: dict[str, object]) -> list[object]:
     """Add or refresh the Guard handler for a given matcher, preserving user hooks."""
 

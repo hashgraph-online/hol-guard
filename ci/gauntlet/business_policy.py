@@ -18,6 +18,7 @@ BUSINESS_CLI_CASES = frozenset(
         "business-cli-shell-wrapper",
         "business-cli-mail-forwarding",
         "business-cli-permanent-delete",
+        "business-cli-generic-api-send",
     }
 )
 BUSINESS_ORDINARY_READ = "business-policy-ordinary-read"

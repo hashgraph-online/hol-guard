@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import hook_native_local_cli, hook_native_review_approval
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant
+from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant, utc_now
 from codex_plugin_scanner.guard.runtime.custom_extension_suggestion import is_suggestable_custom_tool
 from codex_plugin_scanner.guard.runtime.local_cli_commands import command_tokens_for_invocation
 from codex_plugin_scanner.guard.runtime.local_cli_identity import (
@@ -14,6 +14,9 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import (
     identify_unlisted_cli,
     is_local_cli_id,
 )
+from codex_plugin_scanner.guard.store import GuardStore
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
 
 @pytest.fixture(autouse=True)
@@ -46,15 +49,13 @@ def _write_wrangler_workspace(workspace: Path, *, version: str = "4.12.0") -> Pa
     return target
 
 
-class _GrantStore:
-    def __init__(self, grants: Mapping[str, Mapping[str, object]]) -> None:
-        self._grants = dict(grants)
+def _grant_store(tmp_path: Path, identity, state: str) -> GuardStore:
+    """A real store: the resident reads grants from ``guard.db`` itself."""
 
-    def read_local_cli_grant(self, cli_id: str) -> Mapping[str, object] | None:
-        return self._grants.get(cli_id)
-
-    def has_local_cli_block_rules(self) -> bool:
-        return any(grant.get("state") == "blocked" for grant in self._grants.values())
+    store = GuardStore(tmp_path / "guard-home")
+    store.record_local_cli_observation(identity, seen_at=utc_now())
+    store.upsert_local_cli_grant(identity=identity, state=state, expected_revision=0, updated_at=utc_now())
+    return store
 
 
 def test_npx_local_bin_binds_to_project_wrangler(tmp_path: Path) -> None:
@@ -126,7 +127,7 @@ def test_registry_identity_honors_blocks_only(tmp_path: Path, state: str) -> Non
     command = "npx -y wrangler@3 deploy"
     identity = identify_unlisted_cli(command, cwd=workspace, home_dir=home_dir)
     assert identity is not None
-    store = _GrantStore({identity.cli_id: {"state": state, "identity_hash": identity.identity_hash}})
+    store = _grant_store(tmp_path, identity, state)
 
     match = matching_local_cli_grant(
         store=store, command=command, cwd=workspace, home_dir=home_dir, current_action="review"
@@ -141,7 +142,7 @@ def test_local_identity_honors_allow_grant(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     identity = identify_unlisted_cli("npx wrangler whoami", cwd=workspace, home_dir=home_dir)
     assert identity is not None
-    store = _GrantStore({identity.cli_id: {"state": "allowed", "identity_hash": identity.identity_hash}})
+    store = _grant_store(tmp_path, identity, "allowed")
 
     match = matching_local_cli_grant(
         store=store, command="npx wrangler whoami", cwd=workspace, home_dir=home_dir, current_action="review"
@@ -183,7 +184,7 @@ def test_native_review_applies_custom_extension_grants(
     home_dir = tmp_path / "home"
     identity = identify_unlisted_cli("npx wrangler whoami", cwd=workspace, home_dir=home_dir)
     assert identity is not None
-    store = _GrantStore({identity.cli_id: {"state": state, "identity_hash": identity.identity_hash}})
+    store = _grant_store(tmp_path, identity, state)
     rendered: list[Mapping[str, object]] = []
     monkeypatch.setattr(
         hook_native_local_cli,
@@ -223,7 +224,7 @@ def test_native_allow_still_honors_custom_extension_block(
     home_dir = tmp_path / "home"
     identity = identify_unlisted_cli("npx wrangler whoami", cwd=workspace, home_dir=home_dir)
     assert identity is not None
-    store = _GrantStore({identity.cli_id: {"state": state, "identity_hash": identity.identity_hash}})
+    store = _grant_store(tmp_path, identity, state)
     monkeypatch.setattr(hook_native_local_cli, "_block_rules_cache", {})
     monkeypatch.setattr(
         hook_native_local_cli,
