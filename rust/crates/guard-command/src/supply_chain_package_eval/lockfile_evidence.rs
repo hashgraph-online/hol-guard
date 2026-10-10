@@ -150,9 +150,15 @@ pub(super) fn incomplete_lockfile_package_result(
         .clone()
         .filter(|reason| !reason.is_empty())
         .unwrap_or_else(|| "parse_error".to_owned());
+    // The wording follows the decision: only an approvable `ask` is a pause.
+    let outcome = if decision == "ask" {
+        "paused"
+    } else {
+        "blocked"
+    };
     let message = format!(
         "Guard could not completely parse the existing {} lockfile ({error_reason}), \
-         so this package request is paused. Repair the lockfile, then retry.",
+         so this package request is {outcome}. Repair the lockfile, then retry.",
         parse_result.format
     );
     let mut package = heuristic_package_result(

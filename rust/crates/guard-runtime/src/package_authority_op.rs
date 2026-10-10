@@ -14,12 +14,14 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::package_authority_config::ResidentConfigLoader;
+
 use guard_command::local_supply_chain::{
     apply_stored_package_policy_override, resolve_package_firewall_entitlement,
     resolve_package_firewall_entitlement_with_refresh, ApprovalContextApi, CommandExecution,
-    GuardConfig, LocalSupplyChainError, PackageEvalApi, PackageFirewallEntitlementApi,
-    PackageIntentParserApi, PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup,
-    RuntimeRunnerApi, SupplyChainStore,
+    LocalSupplyChainError, PackageEvalApi, PackageFirewallEntitlementApi, PackageIntentParserApi,
+    PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup, RuntimeRunnerApi,
+    SupplyChainStore,
 };
 use guard_command::package_intent_common::{
     build_package_request_artifact, resolve_path_within_workspace, GuardArtifact, PackageIntent,
@@ -29,9 +31,9 @@ use guard_command::pep440::{SpecifierSet, Version};
 use guard_command::supply_chain_bundle;
 use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
-    ConfigLoaderApi, EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest,
-    GuardSyncRunnerApi, JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi,
-    NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi,
+    EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
+    JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
+    PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
     SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
@@ -2355,23 +2357,6 @@ impl EntitlementRefreshApi for ResidentEntitlementRefresh {
             .as_object()
             .cloned()
             .ok_or_else(|| EvalError::Internal("entitlement resolution failed".into()))
-    }
-}
-
-/// Config seam — `load_guard_config` is not ported; error → callers substitute
-/// `GuardConfig::default()`, matching Python's missing-config path.
-struct ResidentConfigLoader;
-
-impl ConfigLoaderApi for ResidentConfigLoader {
-    fn load_guard_config(
-        &self,
-        _guard_home: &Path,
-        _workspace: Option<&Path>,
-        _require_canonical_workspace: bool,
-    ) -> EvalResult<GuardConfig> {
-        Err(EvalError::Internal(
-            "guard config loader unavailable in resident".into(),
-        ))
     }
 }
 

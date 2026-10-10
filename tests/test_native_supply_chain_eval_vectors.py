@@ -58,7 +58,11 @@ def test_resident_evaluation_matches_vector(case: dict, tmp_path: Path) -> None:
     workspace.mkdir()
     for name, spec in case["files"].items():
         (workspace / name).write_bytes(_file_bytes(spec))
-    store = GuardStore(tmp_path / "home")
+    home = tmp_path / "home"
+    home.mkdir()
+    for name, spec in case.get("home_files", {}).items():
+        (home / name).write_bytes(_file_bytes(spec))
+    store = GuardStore(home)
     evaluation = evaluate_package_request_artifact(
         artifact=_artifact(case["targets"], case["lockfile_paths"]),
         store=store,

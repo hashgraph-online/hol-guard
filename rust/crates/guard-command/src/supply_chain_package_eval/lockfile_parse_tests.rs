@@ -108,3 +108,31 @@ fn lockfile_ecosystem_maps_parser_format_labels_and_file_names() {
         assert_eq!(lockfile_ecosystem(input), want, "{input}");
     }
 }
+
+#[test]
+fn incomplete_lockfile_message_follows_the_decision() {
+    let parse_result = parse_lockfile_with_budget("package-lock.json", b"{", 30.0);
+    assert!(!parse_result.complete);
+    let target: Map<String, Value> = serde_json::from_value(serde_json::json!({
+        "ecosystem": "npm",
+        "package_name": "react",
+        "requested_specifier": "18.0.0",
+    }))
+    .unwrap();
+    for (decision, outcome, other) in [("ask", "paused", "blocked"), ("block", "blocked", "paused")]
+    {
+        let package = super::lockfile_evidence::incomplete_lockfile_package_result(
+            &target,
+            &parse_result,
+            decision,
+        );
+        assert_eq!(package["decision"], decision);
+        let message = package["reasons"][0]["message"].as_str().unwrap();
+        assert!(
+            message.contains(&format!("so this package request is {outcome}.")),
+            "{message}"
+        );
+        assert!(!message.contains(other), "{message}");
+        assert!(message.ends_with("Repair the lockfile, then retry."));
+    }
+}
