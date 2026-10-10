@@ -14,6 +14,11 @@ _REQUEST_SCHEMA = "guard-data-flow-analyze-request.v1"
 _RESULT_SCHEMA = "guard-data-flow-analyze-result.v1"
 _RESULT_KEYS = frozenset({"schema", "request_id", "request_sha256", "status", "code", "signals"})
 _MAX_SIGNALS = 64
+# The resident accepts commands up to 256 KiB of UTF-8. ``json.dumps`` escapes
+# every control character to six bytes, so the wire envelope can be six times
+# larger than the command; leave that room plus the envelope itself.
+_MAX_COMMAND_BYTES = 256 * 1024
+_MAX_WIRE_BYTES = 6 * _MAX_COMMAND_BYTES + 4096
 
 
 class NativeDataFlowError(RuntimeError):
@@ -56,6 +61,7 @@ def detect_data_flow_exfiltration(
             timeout_seconds=timeout_seconds,
             required_feature=_FEATURE,
             response_schema=_RESULT_SCHEMA,
+            max_request_bytes=_MAX_WIRE_BYTES,
         )
     except (OSError, TypeError, ValueError) as error:
         raise NativeDataFlowError("native_data_flow_unavailable") from error

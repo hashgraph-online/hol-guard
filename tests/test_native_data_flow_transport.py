@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -56,7 +57,7 @@ def _action(
 def _install(monkeypatch: pytest.MonkeyPatch, mutate) -> list[dict[str, Any]]:
     seen: list[dict[str, Any]] = []
 
-    def fake(*, operation, request, guard_home, timeout_seconds, required_feature, response_schema):
+    def fake(*, operation, request, guard_home, timeout_seconds, required_feature, response_schema, max_request_bytes):
         seen.append(request)
         assert operation == "data_flow_analyze"
         assert required_feature == "data-flow-analyze-v1"
@@ -174,3 +175,29 @@ def test_missing_guard_home_uses_the_bound_digest_home(monkeypatch, tmp_path) ->
     with pytest.raises(native_data_flow.NativeDataFlowError):
         native_data_flow.detect_data_flow_exfiltration(_action(), workspace=None)
     assert homes == [tmp_path]
+
+
+def test_escaped_command_larger_than_the_default_transport_limit_reaches_the_resident(monkeypatch, tmp_path) -> None:
+    # ~88 KiB of four-byte characters escape to well over 256 KiB of JSON.
+    command = "cat <<'EOF'\n" + "\U0001f600" * 22_000 + "\nEOF"
+    sent: list[bytes] = []
+    identity = SimpleNamespace(path=tmp_path / "runtime", sha256="0" * 64)
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=identity,
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "data-flow-analyze-v1")),
+    )
+    monkeypatch.setattr(native_execution, "native_runtime_status", lambda: status)
+
+    def client(**kwargs):
+        sent.append(kwargs["payload"])
+
+    monkeypatch.setattr(native_execution, "native_resident_client_request", client)
+    monkeypatch.setattr(native_execution, "native_record_resident_failure", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(native_data_flow.NativeDataFlowError):
+        native_data_flow.detect_data_flow_exfiltration(_action(command), workspace=None, guard_home=tmp_path)
+
+    assert len(sent) == 1
+    assert len(sent[0]) > 256 * 1024
