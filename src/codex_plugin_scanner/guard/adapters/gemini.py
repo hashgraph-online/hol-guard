@@ -8,7 +8,6 @@ from ..aibom_detection import extend_detection_with_workspace_aibom
 from ..models import GuardArtifact, HarnessDetection
 from ..skill_directory_identity import (
     discover_skill_documents,
-    incomplete_skill_directory_identity,
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
@@ -234,7 +233,7 @@ class GeminiHarnessAdapter(HarnessAdapter):
         for issue in discovery.issues:
             self._append_found_path(found_paths, issue.path)
             relative_id = f"skills/.guard-discovery/{issue.issue_id}"
-            identity = incomplete_skill_directory_identity(issue.failure_reason)
+            identity = issue.identity
             metadata = skill_directory_identity_metadata(identity, version_label=relative_id)
             warnings.append(f"Gemini {scope} skill discovery is incomplete; approval reuse is disabled.")
             artifacts.append(

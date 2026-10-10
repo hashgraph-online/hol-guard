@@ -6,7 +6,70 @@ use guard_command::native_command_program::source::{
     source_schema, MAX_SOURCE_INPUT_BYTES,
 };
 use serde_json::{json, Value};
-use std::io::{Read, Write};
+use std::io::{BufRead, Read, Write};
+
+/// Offline GitHub CLI classification for test harnesses that evaluate commands
+/// without a resident. Reads `{"args": [...]}` and returns the assessment.
+fn github_classify() -> Result<Value, &'static str> {
+    let mut bytes = Vec::new();
+    std::io::stdin()
+        .take(MAX_SOURCE_INPUT_BYTES as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "github_classify_input_read_failed")?;
+    if bytes.len() > MAX_SOURCE_INPUT_BYTES {
+        return Err("github_classify_input_too_large");
+    }
+    let request: Value =
+        serde_json::from_slice(&bytes).map_err(|_| "github_classify_input_invalid")?;
+    classify_request(&request)
+}
+
+fn classify_request(request: &Value) -> Result<Value, &'static str> {
+    let args = request
+        .get("args")
+        .and_then(Value::as_array)
+        .and_then(|items| {
+            items
+                .iter()
+                .map(|item| item.as_str().map(str::to_owned))
+                .collect::<Option<Vec<_>>>()
+        })
+        .ok_or("github_classify_input_invalid")?;
+    let assessment = guard_command::github_command_capabilities::classify_github_cli(&args);
+    let operand =
+        guard_command::github_command_capabilities::static_markdown_pr_body_file_operand(&args);
+    Ok(json!({
+        "capability": assessment.capability.as_str(),
+        "reason_code": assessment.reason_code,
+        "detail": assessment.detail,
+        "capabilities": assessment.capabilities.iter().map(|item| item.as_str()).collect::<Vec<_>>(),
+        "pr_body_file_operand": operand,
+    }))
+}
+
+/// Line-delimited variant of `github-classify` so a harness classifies many
+/// commands through one long-lived process instead of one spawn per command.
+fn github_classify_serve() -> i32 {
+    let stdin = std::io::stdin();
+    let mut stdout = std::io::stdout().lock();
+    for line in stdin.lock().lines() {
+        let Ok(line) = line else { return 2 };
+        if line.len() > MAX_SOURCE_INPUT_BYTES {
+            return 2;
+        }
+        let value = serde_json::from_str::<Value>(&line)
+            .map_err(|_| "github_classify_input_invalid")
+            .and_then(|request| classify_request(&request))
+            .unwrap_or_else(|code| json!({"ok":false,"code":code}));
+        if serde_json::to_writer(&mut stdout, &value).is_err()
+            || stdout.write_all(b"\n").is_err()
+            || stdout.flush().is_err()
+        {
+            return 2;
+        }
+    }
+    0
+}
 
 fn run(arguments: &[String]) -> Result<Value, &'static str> {
     if arguments == ["export-trust"] {
@@ -31,6 +94,9 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
     }
     if arguments == ["descriptor-schema"] {
         return Ok(descriptor_schema());
+    }
+    if arguments == ["github-classify"] {
+        return github_classify();
     }
     let Some(operation) = arguments.first().map(String::as_str) else {
         return Err("command_source_usage_expected_schema_validate_compile_check_or_test");
@@ -87,6 +153,9 @@ fn run(arguments: &[String]) -> Result<Value, &'static str> {
 
 fn main() {
     let arguments: Vec<_> = std::env::args().skip(1).collect();
+    if arguments == ["github-classify-serve"] {
+        std::process::exit(github_classify_serve());
+    }
     let (value, code) = match run(&arguments) {
         Ok(value) => {
             let code = if value.get("ok") == Some(&Value::Bool(false)) {

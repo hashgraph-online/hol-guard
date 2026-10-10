@@ -1727,6 +1727,23 @@ jobs:
         run: |
           uv run --with packaging==25.0 python scripts/verify_native_runtime_release.py \
             validate-local --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full
+      - name: Stage wheels-only PyPI upload
+        id: pypi_stage
+        # The sdist stays on the GitHub release; pip never installs it because the pure wheel matches every platform,
+        # and leaving it off PyPI keeps each release well inside the project storage quota.
+        run: |
+          set -euo pipefail
+          mkdir pypi-hol-guard
+          if [[ -f scripts/release_artifact_sets.py ]] && grep -q -- '--wheels-only' scripts/verify_release_registry.py; then
+            cp dist-hol-guard/*.whl pypi-hol-guard/
+            echo "wheels_only_flag=--wheels-only" >> "$GITHUB_OUTPUT"
+            echo "artifact_set=wheels" >> "$GITHUB_OUTPUT"
+          else
+            # Repair runs check out the release source; sources that predate wheels-only verification keep the sdist.
+            cp dist-hol-guard/*.whl dist-hol-guard/*.tar.gz pypi-hol-guard/
+            echo "wheels_only_flag=" >> "$GITHUB_OUTPUT"
+            echo "artifact_set=full" >> "$GITHUB_OUTPUT"
+          fi
       - name: Revalidate main publication
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
@@ -1772,9 +1789,11 @@ jobs:
         id: pypi
         env:
           VERSION: ${{ needs.build.outputs.version }}
+          WHEELS_ONLY_FLAG: ${{ steps.pypi_stage.outputs.wheels_only_flag }}
         run: |
           guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
-            verify-release --registry pypi --project hol-guard --version "$VERSION" --dist-dir dist-hol-guard)
+            verify-release --registry pypi --project hol-guard --version "$VERSION" --dist-dir dist-hol-guard \
+            ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"})
           scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
             verify-release --registry pypi --project plugin-scanner --version "$VERSION" --dist-dir dist-plugin-scanner)
           guard_status=$(jq -r '.status' <<< "$guard_result")
@@ -1794,7 +1813,7 @@ jobs:
           quota_output=""
           quota_exit=0
           quota_output=$(uv run --with packaging==25.0 python scripts/pypi_project_storage.py \
-            --fail-if-over-limit --pending-dir dist-hol-guard) || quota_exit=$?
+            --fail-if-over-limit --pending-dir pypi-hol-guard) || quota_exit=$?
           printf '%s\n' "$quota_output"
           if [[ "$quota_exit" == "0" ]]; then
             echo "blocked=false" >> "$GITHUB_OUTPUT"
@@ -1814,25 +1833,28 @@ jobs:
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.hol_guard_upload == 'true' && steps.pypi_quota.outputs.blocked != 'true'
         with:
-          packages-dir: dist-hol-guard/
+          packages-dir: pypi-hol-guard/
       - name: Publish plugin-scanner to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         if: steps.pypi.outputs.plugin_scanner_upload == 'true'
         with:
           packages-dir: dist-plugin-scanner/
       - name: Remove generated upload attestations
-        run: rm -f dist-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
+        run: rm -f pypi-hol-guard/*.publish.attestation dist-plugin-scanner/*.publish.attestation
       - name: Download and verify exact PyPI artifacts
         if: steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'
         env:
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           VERSION: ${{ needs.build.outputs.version }}
           GUARD_QUOTA_BLOCKED: ${{ steps.pypi_quota.outputs.blocked }}
+          WHEELS_ONLY_FLAG: ${{ steps.pypi_stage.outputs.wheels_only_flag }}
+          ARTIFACT_SET: ${{ steps.pypi_stage.outputs.artifact_set }}
         run: |
           for attempt in {1..60}; do
             if ! guard_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
               verify-release --registry pypi --project hol-guard --version "$VERSION" \
-              --dist-dir dist-hol-guard --download-dir verified-pypi-hol-guard); then
+              --dist-dir dist-hol-guard ${WHEELS_ONLY_FLAG:+"$WHEELS_ONLY_FLAG"} \
+              --download-dir verified-pypi-hol-guard); then
               exit 1
             fi
             if ! scanner_result=$(uv run --with packaging==25.0 python scripts/verify_release_registry.py \
@@ -1850,7 +1872,7 @@ jobs:
             fi
             if [[ "$guard_ready" == "true" && "$scanner_status" == "exact" ]]; then
               if [[ "$GUARD_QUOTA_BLOCKED" != "true" ]]; then
-                uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set full || exit 1
+                uv run --with packaging==25.0 python scripts/retry_verify_published.py --registry pypi --version "$VERSION" --source-sha "$SOURCE_SHA" --dist-dir dist-hol-guard --artifact-set "$ARTIFACT_SET" || exit 1
               fi
               break
             fi

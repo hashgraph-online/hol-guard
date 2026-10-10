@@ -240,7 +240,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, jobs: int, name: str) 
         return _fake_result(scenario.id, public)
 
     class Handle:
-        def __init__(self, scenario_id: str, spec: dict[str, Any], _workdir: Path):
+        def __init__(self, scenario_id: str, spec: dict[str, Any], _workdir: Path, **_kw: Any):
             self.scenario_id = scenario_id
             self.result = _fake_result(scenario_id, Path(spec["public"]))
             self.ticks = len(scenario_id) % 4

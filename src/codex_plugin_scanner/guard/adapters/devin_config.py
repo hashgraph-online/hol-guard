@@ -26,7 +26,6 @@ from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact
 from ..skill_directory_discovery import discover_skill_documents
 from ..skill_directory_identity import (
-    incomplete_skill_directory_identity,
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
@@ -403,16 +402,20 @@ def append_devin_skill_artifacts(
                 metadata=metadata,
             )
         )
+    try:
+        root_label = skill_root.relative_to(identity_scope_root).as_posix()
+    except ValueError:
+        root_label = skill_root.as_posix()
     for issue in discovery.issues:
         append_found_path(found_paths, issue.path)
-        identity = incomplete_skill_directory_identity(issue.failure_reason)
+        identity = issue.identity
         metadata = skill_directory_identity_metadata(
             identity, version_label=f"skills/.guard-discovery/{issue.issue_id}"
         )
         warnings.append(f"Devin {scope} skill discovery is incomplete; approval reuse is disabled.")
         artifacts.append(
             GuardArtifact(
-                artifact_id=f"devin:{scope}:skill-discovery:{issue.issue_id}",
+                artifact_id=f"devin:{scope}:skill-discovery:{root_label}:{issue.issue_id}",
                 name="Incomplete Devin skill discovery",
                 harness="devin",
                 artifact_type="skill",
