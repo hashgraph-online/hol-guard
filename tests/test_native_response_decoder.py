@@ -139,3 +139,49 @@ def test_native_error_preserves_registered_business_rejection_without_private_de
 
 def test_native_error_rejects_unregistered_business_codes() -> None:
     assert native_error({"error": "native_business_source_future_unregistered_code", "retryable": False}) is None
+
+
+def _validated_result(receipt: dict[str, object] | None = None) -> dict[str, object]:
+    return {
+        "schema": "guard-native-approval-result.v3",
+        "version": 3,
+        "authority": "rust",
+        "receipt": _receipt() if receipt is None else receipt,
+    }
+
+
+def test_approval_decoders_reject_floor_lowering_and_tampering() -> None:
+    assert decode_native_approval_challenge(_challenge()) == _challenge()
+    assert decode_native_approval_result(_validated_result(), phase="validated") == _validated_result()
+
+    lowered_floor = _challenge()
+    lowered_floor["minimum_action"] = "allow"
+    assert decode_native_approval_challenge(lowered_floor) is None
+
+    lowered_class = _challenge()
+    lowered_class["floor_class"] = "allow"
+    assert decode_native_approval_challenge(lowered_class) is None
+
+    ineligible = _challenge()
+    ineligible["approval_eligible"] = False
+    assert decode_native_approval_challenge(ineligible) is None
+
+    unknown_field = _challenge()
+    unknown_field["untrusted"] = True
+    assert decode_native_approval_challenge(unknown_field) is None
+
+    lowered_receipt = _receipt()
+    lowered_receipt["approved_action"] = "review"
+    assert decode_native_approval_result(_validated_result(lowered_receipt), phase="validated") is None
+
+    denied = _receipt()
+    denied["decision"] = "deny"
+    assert decode_native_approval_result(_validated_result(denied), phase="validated") is None
+
+    tampered_receipt = _receipt()
+    tampered_receipt["injected"] = "tamper"
+    assert decode_native_approval_result(_validated_result(tampered_receipt), phase="validated") is None
+
+    tampered_result = _validated_result()
+    tampered_result["injected"] = "tamper"
+    assert decode_native_approval_result(tampered_result, phase="validated") is None
