@@ -15,6 +15,58 @@ use regex::Regex;
 use crate::command_launcher_floors::shlex_split;
 use crate::home_path_text::expand_home;
 
+/// Python `str.isspace`: Unicode White_Space plus the ASCII separators
+/// U+001C..U+001F that Rust's `char::is_whitespace` omits.
+fn is_py_space(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
+/// Python `str.strip()`.
+fn py_strip(text: &str) -> &str {
+    text.trim_matches(is_py_space)
+}
+
+/// Python `str.split()` with no arguments.
+fn py_split(text: &str) -> impl Iterator<Item = &str> {
+    text.split(is_py_space).filter(|part| !part.is_empty())
+}
+
+/// Python `str.splitlines()`.
+fn py_splitlines(text: &str) -> Vec<&str> {
+    let mut lines = Vec::new();
+    let mut start = 0;
+    let mut chars = text.char_indices().peekable();
+    while let Some((index, c)) = chars.next() {
+        let is_break = matches!(
+            c,
+            '\n' | '\r'
+                | '\u{b}'
+                | '\u{c}'
+                | '\u{1c}'
+                | '\u{1d}'
+                | '\u{1e}'
+                | '\u{85}'
+                | '\u{2028}'
+                | '\u{2029}'
+        );
+        if !is_break {
+            continue;
+        }
+        lines.push(&text[start..index]);
+        start = index + c.len_utf8();
+        if c == '\r' {
+            if let Some(&(next, '\n')) = chars.peek() {
+                chars.next();
+                start = next + 1;
+            }
+        }
+    }
+    if start < text.len() {
+        lines.push(&text[start..]);
+    }
+    lines
+}
+
 const SOURCE_SEARCH_TOOLS: &[&str] = &[
     "rg", "ripgrep", "grep", "egrep", "fgrep", "fd", "find", "ls",
 ];
@@ -83,8 +135,8 @@ const FD_OPTION_VALUE_FLAGS: &[&str] = &[
 ];
 
 #[allow(clippy::invalid_regex)]
-static SECRET_FILE_NAMES: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+static SECRET_FILE_NAMES: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
         r"(?i)(?<![A-Za-z0-9_.-])(?:\.env(?:\.[A-Za-z0-9_-]+)?|\.npmrc|\.pypirc|\.netrc|\.git-credentials|id_rsa|id_ed25519|id_ecdsa|credentials|wallet\.key|private[_-]?key\.pem|terraform\.tfvars)(?![A-Za-z0-9_.-])",
     )
     .expect("SECRET_FILE_NAMES")
@@ -135,8 +187,8 @@ static CURL_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 #[allow(clippy::invalid_regex)]
-static WGET_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+static WGET_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
         r"(?i)(?:^|[\s;&|])(?P<tool>wget)\b(?=[^\r\n;&|]*(?<!\S)--spider\b)[^\r\n;&|]*https?://",
     )
     .expect("WGET_READ_ONLY_HTTP_FETCH_PATTERN")
@@ -154,13 +206,23 @@ static PYTHON_READ_ONLY_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     .expect("PYTHON_READ_ONLY_HTTP_FETCH_PATTERN")
 });
 
-fn read_only_http_fetch_patterns() -> [&'static Regex; 4] {
-    [
-        &CURL_READ_ONLY_HTTP_FETCH_PATTERN,
-        &WGET_READ_ONLY_HTTP_FETCH_PATTERN,
-        &NODE_READ_ONLY_HTTP_FETCH_PATTERN,
-        &PYTHON_READ_ONLY_HTTP_FETCH_PATTERN,
-    ]
+/// Tool name of the first read-only HTTP fetch pattern that matches, in the
+/// Python pattern order (curl, wget, node, python).
+fn read_only_http_fetch_tool(command: &str) -> Option<String> {
+    let tool_of = |captures: Option<regex::Captures<'_>>| {
+        captures.and_then(|m| m.name("tool").map(|g| g.as_str().to_lowercase()))
+    };
+    if let Some(tool) = tool_of(CURL_READ_ONLY_HTTP_FETCH_PATTERN.captures(command)) {
+        return Some(tool);
+    }
+    // A backtracking-limit error is "no match": it can only withhold a signal.
+    if let Ok(Some(m)) = WGET_READ_ONLY_HTTP_FETCH_PATTERN.captures(command) {
+        if let Some(g) = m.name("tool") {
+            return Some(g.as_str().to_lowercase());
+        }
+    }
+    tool_of(NODE_READ_ONLY_HTTP_FETCH_PATTERN.captures(command))
+        .or_else(|| tool_of(PYTHON_READ_ONLY_HTTP_FETCH_PATTERN.captures(command)))
 }
 
 static MUTATING_HTTP_FETCH_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -285,16 +347,16 @@ static DOCS_EXAMPLE_CONTEXT: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 #[allow(clippy::invalid_regex)]
-static VERSION_FILE_NAMES: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+static VERSION_FILE_NAMES: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
         r"(?i)(?<![A-Za-z0-9_.-])(?:\.nvmrc|\.node-version|\.python-version|\.ruby-version|\.tool-versions|\.java-version)(?![A-Za-z0-9_.-])",
     )
     .expect("VERSION_FILE_NAMES")
 });
 
 #[allow(clippy::invalid_regex)]
-static PACKAGE_METADATA_FILES: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+static PACKAGE_METADATA_FILES: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
         r"(?i)(?<![A-Za-z0-9_.-])(?:package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|setup\.py|setup\.cfg|pyproject\.toml|Pipfile(?:\.lock)?|go\.(?:mod|sum)|Cargo\.(?:toml|lock)|composer\.json|Gemfile(?:\.lock)?)(?![A-Za-z0-9_.-])",
     )
     .expect("PACKAGE_METADATA_FILES")
@@ -350,7 +412,7 @@ pub fn target_is_known_skill_doc_path(target: &str, home_dir: Option<&Path>) -> 
     }
     if let Some(rest) = target.strip_prefix("skill://") {
         let skill_name_raw = rest
-            .trim()
+            .trim_matches(is_py_space)
             .trim_matches(|c| c == '\'' || c == '"')
             .to_owned();
         if !skill_name_raw.is_empty() {
@@ -620,7 +682,7 @@ pub fn fd_search_targets(args: &[String]) -> Option<Vec<String>> {
 
 /// `classify_source_search_command` (:497-565).
 pub fn classify_source_search_command(command: &str) -> SourceSearchClassification {
-    let stripped = command.trim();
+    let stripped = py_strip(command);
     if stripped.is_empty() {
         return SourceSearchClassification {
             is_source_search: false,
@@ -628,7 +690,7 @@ pub fn classify_source_search_command(command: &str) -> SourceSearchClassificati
             tool: None,
         };
     }
-    let parts: Vec<String> = stripped.split_whitespace().map(str::to_owned).collect();
+    let parts: Vec<String> = py_split(stripped).map(str::to_owned).collect();
     if parts.is_empty() {
         return SourceSearchClassification {
             is_source_search: false,
@@ -667,7 +729,7 @@ pub fn classify_source_search_command(command: &str) -> SourceSearchClassificati
             tool: Some(tool.clone()),
         };
     }
-    if SECRET_FILE_NAMES.is_match(command) {
+    if SECRET_FILE_NAMES.is_match(command).unwrap_or(true) {
         return SourceSearchClassification {
             is_source_search: false,
             reason: Some("targets secret file"),
@@ -709,16 +771,7 @@ pub fn classify_health_endpoint_fetch(command: &str) -> bool {
 
 /// `classify_read_only_http_fetch` (:576-618).
 pub fn classify_read_only_http_fetch(command: &str) -> Option<&'static str> {
-    let mut tool: Option<String> = None;
-    for pattern in read_only_http_fetch_patterns() {
-        if let Some(m) = pattern.captures(command) {
-            if let Some(g) = m.name("tool") {
-                tool = Some(g.as_str().to_lowercase());
-                break;
-            }
-        }
-    }
-    let tool = tool?;
+    let tool = read_only_http_fetch_tool(command)?;
     if MUTATING_HTTP_FETCH_PATTERN.is_match(command) {
         return None;
     }
@@ -746,7 +799,7 @@ pub fn classify_read_only_http_fetch(command: &str) -> Option<&'static str> {
     {
         return None;
     }
-    if SECRET_FILE_NAMES.is_match(command) {
+    if SECRET_FILE_NAMES.is_match(command).unwrap_or(true) {
         return None;
     }
     if LOCAL_FILE_READ_IN_HTTP_SCRIPT_PATTERN.is_match(command) {
@@ -776,8 +829,8 @@ pub fn classify_read_only_http_fetch(command: &str) -> Option<&'static str> {
 
 /// `_curl_http_fetch_uses_auth` (:619-645).
 fn curl_http_fetch_uses_auth(command: &str) -> bool {
-    let tokens = shlex_split(command)
-        .unwrap_or_else(|_| command.split_whitespace().map(str::to_owned).collect());
+    let tokens =
+        shlex_split(command).unwrap_or_else(|_| py_split(command).map(str::to_owned).collect());
     let mut saw_curl = false;
     for token in &tokens {
         let base = strip_path_prefix(token).to_lowercase();
@@ -820,7 +873,9 @@ pub fn classify_version_file_access(paths: &[String]) -> bool {
     if paths.is_empty() {
         return false;
     }
-    paths.iter().all(|p| VERSION_FILE_NAMES.is_match(p))
+    paths
+        .iter()
+        .all(|p| VERSION_FILE_NAMES.is_match(p).unwrap_or(false))
 }
 
 /// `classify_package_metadata_access` (:658-664).
@@ -828,7 +883,9 @@ pub fn classify_package_metadata_access(paths: &[String]) -> bool {
     if paths.is_empty() {
         return false;
     }
-    paths.iter().all(|p| PACKAGE_METADATA_FILES.is_match(p))
+    paths
+        .iter()
+        .all(|p| PACKAGE_METADATA_FILES.is_match(p).unwrap_or(false))
 }
 
 /// `_leading_tool` (:665-676).
@@ -860,12 +917,13 @@ fn strip_path_prefix(token: &str) -> &str {
 /// `_pipes_to_execution` (:681-694).
 fn pipes_to_execution(command: &str) -> bool {
     for m in PIPE_SEGMENT_PATTERN.captures_iter(command) {
-        let segment = m.get(1).map(|g| g.as_str()).unwrap_or("").trim().to_owned();
+        let segment = m.get(1).map(|g| g.as_str()).unwrap_or("");
+        let segment = py_strip(segment).to_owned();
         if segment.is_empty() {
             continue;
         }
         let tokens = shlex_split(&segment)
-            .unwrap_or_else(|_| segment.split_whitespace().map(str::to_owned).collect());
+            .unwrap_or_else(|_| py_split(&segment).map(str::to_owned).collect());
         if tokens_start_execution(&tokens) {
             return true;
         }
@@ -936,7 +994,8 @@ fn has_shell_chaining(command: &str) -> bool {
 
 /// `_has_heredoc_follow_on_command` (:738-752).
 fn has_heredoc_follow_on_command(command: &str) -> bool {
-    let first_line = command.lines().next().unwrap_or("");
+    let all_lines = py_splitlines(command);
+    let first_line = all_lines.first().copied().unwrap_or("");
     if SHELL_CHAINING_PATTERN.is_match(first_line).unwrap_or(false) {
         return true;
     }
@@ -944,12 +1003,12 @@ fn has_heredoc_follow_on_command(command: &str) -> bool {
         Some(c) => c.get(1).map(|g| g.as_str()).unwrap_or("").to_owned(),
         None => return true,
     };
-    let lines: Vec<&str> = command.lines().skip(1).collect();
+    let lines: Vec<&str> = all_lines.iter().skip(1).copied().collect();
     for (index, line) in lines.iter().enumerate() {
-        if line.trim() == delimiter {
+        if py_strip(line) == delimiter {
             return lines[index + 1..]
                 .iter()
-                .any(|rest| !rest.trim().is_empty());
+                .any(|rest| !py_strip(rest).is_empty());
         }
     }
     true
@@ -970,3 +1029,7 @@ fn has_no_write_flags(parts: &[String]) -> bool {
     }
     true
 }
+
+#[cfg(test)]
+#[path = "false_positive_rules_tests.rs"]
+mod tests;

@@ -24,6 +24,7 @@ mod context_digest_local_cli;
 mod daemon_policy_authority;
 mod edge;
 mod encrypted_secret_store;
+mod false_positive_rules_op;
 mod github_workflow_runtime_authorization;
 mod hardening;
 mod hook_process_spawn;

@@ -6,14 +6,15 @@ use guard_contracts::{
     ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1, ContainedExecuteRequestV1,
     ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
     ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, GuardHookEnvelopeV2,
-    LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1,
-    McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
-    McpStdioSessionSendRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
-    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
-    RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
-    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1, FalsePositiveRulesRequestV1,
+    GuardHookEnvelopeV2, LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1,
+    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
+    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1,
+    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
+    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -83,6 +84,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
         guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
+        guard_contracts::FALSE_POSITIVE_RULES_FEATURE.into(),
         guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
     ];
     if cfg!(windows) {
@@ -161,6 +163,7 @@ pub(crate) enum ResidentOperationV1 {
     PackageEvaluationCompose(PackageEvaluationComposeRequestV1),
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
+    FalsePositiveRules(FalsePositiveRulesRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
