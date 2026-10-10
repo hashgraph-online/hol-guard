@@ -12,7 +12,6 @@ from ..shims import ensure_guard_shim_path_in_shell_profile, install_guard_shim,
 from .base import HarnessAdapter, HarnessContext
 from .cline_contract import register_cline_contract
 from .cline_detection import ClineHostDetection, detect_cline_hosts
-from .cline_hook_payload import register_cline_action_normalizer
 from .cline_hooks import cline_native_hook_state, install_cline_hooks, uninstall_cline_hooks
 from .cline_mcp import (
     cline_mcp_proxy_state,
@@ -23,7 +22,6 @@ from .cline_mcp import (
 from .cline_plugin import cline_plugin_state, cline_plugin_syntax_probe, install_cline_plugin, uninstall_cline_plugin
 
 register_cline_contract()
-register_cline_action_normalizer()
 
 _CLINE_SURFACES = frozenset({"auto", "hooks", "plugin", "cli", "all"})
 _STATE_SCHEMA = 1

@@ -151,6 +151,7 @@ def _resident_request(
             "contributed_mcp_decide",
             "approval_proof_decide",
             "hook_decide",
+            "hook_adapter",
             "request_context_build",
         }:
             accepted = frozenset({"ok", "error"})
