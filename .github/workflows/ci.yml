@@ -159,10 +159,33 @@ jobs:
           echo "CARGO_PROFILE_TEST_OPT_LEVEL=1" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS=true" >> "$GITHUB_ENV"
           echo "CARGO_PROFILE_TEST_OVERFLOW_CHECKS=true" >> "$GITHUB_ENV"
+          # Line tables keep panic backtraces readable while cutting link time
+          # across the ~85 test binaries; full debuginfo is never inspected in CI.
+          echo "CARGO_PROFILE_TEST_DEBUG=line-tables-only" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
           components: clippy
+      - name: Install content-addressed compiler cache
+        if: matrix.check == 'test'
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
+      - name: Route workspace crates through the compiler cache
+        if: matrix.check == 'test'
+        # rust-cache restores third-party crates only; fresh checkout mtimes make
+        # every workspace crate stale. sccache keys on content, so crates a PR did
+        # not touch are restored instead of recompiled.
+        run: |
+          {
+            echo "RUSTC_WORKSPACE_WRAPPER=sccache"
+            echo "SCCACHE_GHA_ENABLED=on"
+            echo "SCCACHE_GHA_VERSION=ci-workspace-test"
+            echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
+            echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+          } >> "$GITHUB_ENV"
+        env:
+          SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
@@ -187,6 +210,9 @@ jobs:
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
+      - name: Report compiler cache statistics
+        if: always() && matrix.check == 'test'
+        run: '"$SCCACHE_PATH" --show-stats || true'
       - name: Bind successful strict Clippy report
         if: matrix.check == 'clippy'
         run: python3 -m scripts.ci.clippy_report bind
