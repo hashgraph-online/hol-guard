@@ -66,17 +66,25 @@ def _round_trip(query: Mapping[str, object], guard_home: Path) -> tuple[dict[str
         max_request_bytes=_MAX_REQUEST_BYTES,
         record_success=False,
     )
+    if response is None:
+        # ``_resident_request`` already recorded the transport, malformed or
+        # schema failure; recording it again would double-count one outage.
+        raise _fail("native_mcp_proxy_decision_unavailable")
     if (
-        response is None
-        or response.get("schema") != _RESULT_SCHEMA
+        response.get("schema") != _RESULT_SCHEMA
         or response.get("request_id") != request["request_id"]
         or response.get("request_sha256") != digest
     ):
+        _record_failure(guard_home, "native_mcp_proxy_decision_binding_mismatch")
         raise _fail("native_mcp_proxy_decision_unavailable")
     if response.get("status") != "ok" or response.get("code") != "ok":
+        # A bound refusal is the resident's answer for this exact request, not
+        # an outage: it must not count toward the shared availability circuit.
+        _record_success(guard_home)
         raise _fail("native_mcp_proxy_decision_refused")
     payload = response.get("payload")
     if not isinstance(payload, dict):
+        _record_failure(guard_home, "native_mcp_proxy_decision_payload_invalid")
         raise _fail("native_mcp_proxy_decision_payload_invalid")
     return payload, digest, str(request["request_id"])
 
@@ -91,21 +99,16 @@ def native_mcp_proxy_decide(
 
     current = dict(query)
     for _ in range(_MAX_NEED_ROUNDS):
-        try:
-            payload, _digest, _request_id = _round_trip(current, guard_home)
-        except NativeMcpProxyDecisionError as error:
-            _record_failure(guard_home, str(error))
-            raise
+        payload, _digest, _request_id = _round_trip(current, guard_home)
         need = payload.get("need")
         if need is None:
             _record_success(guard_home)
             return payload
         supplier = (supply or {}).get(need) if isinstance(need, str) else None
         if supplier is None:
-            _record_failure(guard_home, "native_mcp_proxy_decision_need_unsupplied")
+            # A caller-side gap, not a resident failure: it never trips the circuit.
             raise _fail("native_mcp_proxy_decision_need_unsupplied")
         current = {**current, **supplier(payload)}
-    _record_failure(guard_home, "native_mcp_proxy_decision_need_loop")
     raise _fail("native_mcp_proxy_decision_need_loop")
 
 

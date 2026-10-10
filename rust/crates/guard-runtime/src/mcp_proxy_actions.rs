@@ -2,8 +2,10 @@
 //!
 //! Every helper mirrors one lattice rule the Python proxy used to apply: the
 //! enforced action of a tool decision, the postclaim action, the evidence the
-//! execution boundary appends, and the Composio remember rule.
+//! execution boundary appends.
 
+use guard_command::action_lattice::normalize_guard_action_result;
+use guard_command::effect_decision::GuardAction as CommandAction;
 use guard_contracts::{most_restrictive_of, GuardAction, McpToolFactsV1, McpToolPostclaimQueryV1};
 use serde_json::{json, Value};
 
@@ -16,13 +18,16 @@ pub(crate) const CONTEXT_CHANGED_AFTER_CLAIM: &str = "approval_reuse_context_cha
 pub(crate) const CONFIG_REFRESH_FAILED: &str = "approval_reuse_current_config_refresh_failed";
 pub(crate) const REQUIRE_REAPPROVAL: &str = "require-reapproval";
 
-/// `normalize_guard_action` over a string: known actions pass, `ask` aliases
-/// to review, anything else takes the caller's fallback.
+/// `normalize_guard_action` over a string, through the one shared lattice
+/// normalizer: recognized actions map to themselves and anything else takes
+/// the caller's fallback.
 pub(crate) fn norm(value: &str, unknown: GuardAction) -> GuardAction {
-    if value == "ask" {
-        return GuardAction::Review;
+    let normalized =
+        normalize_guard_action_result(&Value::String(value.to_owned()), CommandAction::Review);
+    match normalized.reason_code {
+        None => GuardAction::from_canonical(normalized.action.as_str()).unwrap_or(unknown),
+        Some(_) => unknown,
     }
-    GuardAction::from_canonical(value).unwrap_or(unknown)
 }
 
 pub(crate) fn norm_opt(value: Option<&str>, unknown: GuardAction) -> GuardAction {
@@ -146,24 +151,6 @@ pub(crate) fn observe_mode_item(observed: GuardAction, executed: GuardAction) ->
     })
 }
 
-/// `composio_requires_action_review`: meta-tools that route or execute other
-/// tools never inherit a remembered approval.
-pub(crate) fn composio_requires_action_review(tool_name: &str) -> bool {
-    // Python's `str.casefold()` is full Unicode case folding (`ſ` -> `s`,
-    // `ß` -> `ss`); `to_lowercase()` leaves those unchanged and would let a
-    // fold-equivalent spelling of a meta-tool inherit a remembered approval.
-    let suffix =
-        caseless::default_case_fold_str(tool_name.rsplit("__").next().unwrap_or(tool_name));
-    match suffix.as_str() {
-        "composio_search_tools" | "composio_get_tool_schemas" => false,
-        "composio_multi_execute_tool"
-        | "composio_remote_workbench"
-        | "composio_remote_bash_tool"
-        | "composio_manage_connections" => true,
-        other => other.starts_with("composio_"),
-    }
-}
-
 /// `_decision_source`.
 pub(crate) fn decision_source(action: &str, source: &str) -> String {
     if source == "policy" {
@@ -176,23 +163,4 @@ pub(crate) fn decision_source(action: &str, source: &str) -> String {
 pub(crate) fn same_context(query: &McpToolPostclaimQueryV1) -> bool {
     query.artifact_id == query.expected_artifact_id
         && query.artifact_hash == query.expected_artifact_hash
-}
-
-#[cfg(test)]
-mod composio_fold_tests {
-    use super::composio_requires_action_review;
-
-    #[test]
-    fn fold_equivalent_meta_tool_names_still_require_review() {
-        assert!(composio_requires_action_review(
-            "srv__compo\u{17f}io_multi_execute_tool"
-        ));
-        assert!(composio_requires_action_review(
-            "srv__COMPOSIO_MULTI_EXECUTE_TOOL"
-        ));
-        assert!(!composio_requires_action_review(
-            "srv__composio_search_tools"
-        ));
-        assert!(!composio_requires_action_review("srv__other_tool"));
-    }
 }

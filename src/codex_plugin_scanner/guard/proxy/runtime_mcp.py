@@ -1304,8 +1304,9 @@ class RuntimeMcpGuardProxy:
                 server_output=server_output,
                 approval_callback=approval_callback,
             )
-        except NativeMcpProxyDecisionError:
-            # No authoritative native answer: nothing executes.
+        except (NativeMcpProxyDecisionError, KeyError, TypeError):
+            # No authoritative native answer, or one whose shape the proxy cannot
+            # read: nothing executes.
             return _blocked_tool_response(
                 message.get("id"),
                 str(params.get("name") or "unknown"),
@@ -2080,8 +2081,8 @@ class RuntimeMcpGuardProxy:
     ) -> tuple[dict[str, Any], dict[str, Any]] | _PostclaimForward:
         """Revalidate a package request after its saved approvals were claimed.
 
-        Returns a rendered response tuple, or the forwarding state (a longer
-        tuple) when the resident found the claimed authority still covers it.
+        Returns a rendered response tuple, or a ``_PostclaimForward`` when the
+        resident found the claimed authority still covers the request.
         """
 
         claimed_tool_decision = fresh_tool_decision.pending_approval_reuse_decision

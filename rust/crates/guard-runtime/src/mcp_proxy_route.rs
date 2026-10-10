@@ -11,9 +11,9 @@ use guard_contracts::{
 };
 use serde_json::{json, Value};
 
+use crate::local_mcp_grant_identity::composio_requires_action_review;
 use crate::mcp_proxy_actions::{
-    composio_requires_action_review, decision_source, enforcement, observe_mode_item, permitted,
-    terminal, truthy_or,
+    decision_source, enforcement, observe_mode_item, permitted, terminal, truthy_or,
 };
 
 fn need(name: &str) -> Value {
