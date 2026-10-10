@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from codex_plugin_scanner.guard.policy_bundle_parser import (
-    _policy_bundle_rule_is_valid,
+    POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
     computed_policy_bundle_hash,
     validated_policy_bundle_payload,
 )
@@ -29,6 +29,39 @@ def _valid_base_rule() -> dict[str, object]:
             "locations": ["us-east-1"],
         },
     }
+
+
+def _policy_bundle_rule_is_valid(rule: dict[str, object]) -> bool:
+    """Whether a signed bundle carrying only this rule passes full native validation."""
+
+    bundle = {
+        "contractVersion": "guard-policy-bundle.v1",
+        "bundleVersion": "1.0",
+        "issuedAt": "2026-01-01T00:00:00Z",
+        "expiresAt": "2027-01-01T00:00:00Z",
+        "verifier": {"algorithm": "rsa-pss-sha256", "keyId": "key-1", "signature": "sig"},
+        "rolloutState": "enforced",
+        "policyDefaults": {
+            "mode": "enforce",
+            "defaultAction": "block",
+            "unknownPublisherAction": "review",
+            "changedHashAction": "require-reapproval",
+            "newNetworkDomainAction": "block",
+            "subprocessAction": "block",
+            "telemetryEnabled": False,
+            "syncEnabled": False,
+        },
+        "rules": [rule],
+        "acknowledgements": [],
+    }
+    signing_key = policy_bundle_test_verification_key()
+    payload, _ = validated_policy_bundle_payload(
+        sign_policy_bundle(bundle, key=signing_key),
+        trusted_verification_keys=(signing_key,),
+        anchored_verification_keys=(signing_key,),
+        expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
+    )
+    return payload is not None
 
 
 class TestBrowserScopeValidation:
@@ -113,11 +146,7 @@ class TestBrowserScopeValidation:
 
     def test_mcp_tool_matcher_family_accepted(self) -> None:
         """HGBM053: mcp-tool is in rule matcher families."""
-        from codex_plugin_scanner.guard.policy_bundle_parser import (
-            _POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
-        )
-
-        assert "mcp-tool" in _POLICY_BUNDLE_RULE_MATCHER_FAMILIES
+        assert "mcp-tool" in POLICY_BUNDLE_RULE_MATCHER_FAMILIES
 
     def test_validated_payload_accepts_browser_scope(self) -> None:
         """HGBM072: Full bundle validation accepts browser scope."""
@@ -427,19 +456,6 @@ class TestBrowserScopeDecisionNarrowing:
         assert len(decisions) > 0
         for decision in decisions:
             assert decision.owner == "plain-rule"
-
-    def test_browser_scope_constant_exported(self) -> None:
-        """POLICY_BUNDLE_BROWSER_SCOPE_KEYS is exported and contains the expected keys."""
-        from codex_plugin_scanner.guard.policy_bundle_parser import (
-            POLICY_BUNDLE_BROWSER_SCOPE_KEYS,
-        )
-
-        assert "browserIntent" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "browserOperation" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "browserProfile" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "origin" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "pathPrefix" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
-        assert "sensitiveSurface" in POLICY_BUNDLE_BROWSER_SCOPE_KEYS
 
     def test_empty_browser_scope_list_does_not_skip_rule(self) -> None:
         """Empty browser scope lists are no-ops, not constraints."""

@@ -1,37 +1,21 @@
-"""Strict correlation of managed policy deliveries to signed bundle authority."""
+"""Managed policy-bundle delivery binding and acknowledgements.
+
+Rust owns delivery validation against signed and local authority, extension
+semantics detection and acknowledgement construction. Python keeps the
+extension-control projection digest, which reads the live runtime snapshot, and
+the transport calls that return the validated records.
+"""
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
-from datetime import datetime, timezone
 from typing import Literal
 
-from .contract_validation import canonical_uuid, positive_integer
-from .policy_bundle_v2 import POLICY_BUNDLE_V2_CONTRACT, validated_policy_bundle_v2_acknowledgement
+from .native_policy_bundle import PolicyBundleNativeError, policy_bundle_chunks, policy_bundle_verdict
 from .runtime.extension_control_authority import ExtensionControlAuthorityView
 from .runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
-_DELIVERY_KEYS = frozenset(
-    {
-        "bundleId",
-        "bundleHash",
-        "bundleVersion",
-        "workspaceId",
-        "deviceId",
-        "runtimeSessionId",
-        "deliveryId",
-        "policyRevision",
-        "extensionAuthorityRevision",
-        "catalogDigest",
-        "effectiveProjectionDigest",
-        "payloadHash",
-        "extensionProjectionDigest",
-        "lastKnownGoodBundleHash",
-    }
-)
-_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
-_CATALOG_DIGEST = re.compile(r"^[0-9a-f]{64}$")
+_ACK_BUNDLE_KEYS = ("contractVersion", "bundleHash", "bundleVersion")
 
 
 def effective_projection_digest(view: ExtensionControlAuthorityView) -> str:
@@ -41,64 +25,16 @@ def effective_projection_digest(view: ExtensionControlAuthorityView) -> str:
     return f"sha256:{snapshot.effective_digest}"
 
 
+def _chunks(policy_bundle: Mapping[str, object], keys: tuple[str, ...] | None = None) -> list[str]:
+    document = (
+        dict(policy_bundle) if keys is None else {key: policy_bundle[key] for key in keys if key in policy_bundle}
+    )
+    return policy_bundle_chunks(document)
+
+
 def policy_bundle_has_extension_semantics(policy_bundle: Mapping[str, object]) -> bool:
-    payload = policy_bundle.get("payload")
-    if not isinstance(payload, dict):
-        return False
-    if "x-hol-extension-controls" in payload:
-        return True
-    spec = payload.get("spec")
-    if not isinstance(spec, dict):
-        return False
-    rules = spec.get("rules")
-    return isinstance(rules, list) and any(
-        isinstance(rule, dict) and "x-hol-extension-targets" in rule for rule in rules
-    )
-
-
-def _bounded_string(value: object, *, maximum: int = 128) -> str | None:
-    if not isinstance(value, str) or not value or value != value.strip():
-        return None
-    return value if len(value.encode("utf-8")) <= maximum else None
-
-
-def _non_negative_integer(value: object) -> int | None:
-    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-        return None
-    return value
-
-
-def _delivery_scalars_are_valid(value: dict[str, object]) -> bool:
-    string_fields = ("bundleId", "workspaceId", "deviceId", "runtimeSessionId")
-    digest_fields = ("effectiveProjectionDigest", "payloadHash", "extensionProjectionDigest")
-    return (
-        all(_bounded_string(value.get(field)) is not None for field in string_fields)
-        and canonical_uuid(value.get("deliveryId")) is not None
-        and _SHA256.fullmatch(str(value.get("bundleHash"))) is not None
-        and all(_SHA256.fullmatch(str(value.get(field))) is not None for field in digest_fields)
-        and _CATALOG_DIGEST.fullmatch(str(value.get("catalogDigest"))) is not None
-        and all(positive_integer(value.get(field)) is not None for field in ("bundleVersion", "policyRevision"))
-        and _non_negative_integer(value.get("extensionAuthorityRevision")) is not None
-    )
-
-
-def _last_good_hash_is_valid(value: object) -> bool:
-    return value is None or (isinstance(value, str) and _SHA256.fullmatch(value) is not None)
-
-
-def _delivery_runtime_matches(
-    value: dict[str, object],
-    *,
-    runtime_summary: dict[str, object],
-    device_id: str,
-) -> bool:
-    return (
-        value.get("runtimeSessionId") == runtime_summary.get("runtime_session_id")
-        and runtime_summary.get("runtime_device_id") in {None, device_id}
-        and runtime_summary.get("extensionCatalogDigest") == value.get("catalogDigest")
-        and runtime_summary.get("extensionAuthorityRevision") == value.get("extensionAuthorityRevision")
-        and runtime_summary.get("effectiveProjectionDigest") == value.get("effectiveProjectionDigest")
-    )
+    result = policy_bundle_verdict("has_extension_semantics", {"bundle_chunks": _chunks(policy_bundle)})
+    return result.get("value") is True
 
 
 def validate_policy_bundle_delivery(
@@ -111,40 +47,20 @@ def validate_policy_bundle_delivery(
 ) -> tuple[dict[str, object] | None, str | None]:
     """Validate an exact delivery object and bind it to signed/local authority."""
 
-    if not isinstance(value, dict):
-        return None, "missing_policy_bundle_delivery"
-    if set(value) != _DELIVERY_KEYS:
-        return None, "invalid_policy_bundle_delivery_fields"
-
-    if not _delivery_scalars_are_valid(value):
-        return None, "invalid_policy_bundle_delivery"
-    last_good_hash = value.get("lastKnownGoodBundleHash")
-    if not _last_good_hash_is_valid(last_good_hash):
-        return None, "invalid_policy_bundle_delivery"
-
-    payload = policy_bundle.get("payload")
-    metadata = payload.get("metadata") if isinstance(payload, dict) else None
-    policy_revision = metadata.get("revision") if isinstance(metadata, dict) else None
-    rollback = policy_bundle.get("rollback")
-    signed_last_good_hash = rollback.get("lastGoodBundleHash") if isinstance(rollback, dict) else None
-    expected = {
-        "bundleHash": policy_bundle.get("bundleHash"),
-        "bundleVersion": policy_bundle.get("bundleVersion"),
-        "workspaceId": policy_bundle.get("workspaceId"),
-        "deviceId": device_id,
-        "policyRevision": policy_revision,
-        "payloadHash": policy_bundle.get("payloadHash"),
-        "lastKnownGoodBundleHash": signed_last_good_hash,
-    }
-    if workspace_id is None or expected["workspaceId"] != workspace_id:
-        return None, "policy_bundle_delivery_mismatch"
-    if any(value.get(field) != expected_value for field, expected_value in expected.items()):
-        return None, "policy_bundle_delivery_mismatch"
-    if not isinstance(runtime_summary, dict):
-        return None, "policy_bundle_delivery_runtime_unavailable"
-    if not _delivery_runtime_matches(value, runtime_summary=runtime_summary, device_id=device_id):
-        return None, "policy_bundle_delivery_mismatch"
-    return dict(value), None
+    try:
+        policy_bundle_verdict(
+            "delivery_validate",
+            {
+                "delivery": value,
+                "bundle_chunks": _chunks(policy_bundle),
+                "workspace_id": workspace_id,
+                "device_id": device_id,
+                "runtime_summary": runtime_summary,
+            },
+        )
+    except PolicyBundleNativeError as error:
+        return None, error.code
+    return (dict(value) if isinstance(value, dict) else {}), None
 
 
 def validated_managed_policy_delivery(
@@ -159,27 +75,31 @@ def validated_managed_policy_delivery(
 ) -> tuple[dict[str, object] | None, str | None]:
     """Validate delivery metadata only when a V2 bundle carries Extension semantics."""
 
-    if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
-        return None, None
-    if not policy_bundle_has_extension_semantics(policy_bundle):
-        return None, None
-    if not delivery_field_provided:
-        return None, "missing_policy_bundle_delivery"
-    delivery, error = validate_policy_bundle_delivery(
-        delivery_payload,
-        policy_bundle=policy_bundle,
-        workspace_id=workspace_id,
-        device_id=device_id,
-        runtime_summary=runtime_summary,
-    )
-    if error is not None or delivery is None:
-        return None, error
-    if (
-        expected_extension_projection_digest is None
-        or delivery.get("extensionProjectionDigest") != expected_extension_projection_digest
-    ):
-        return None, "policy_bundle_delivery_mismatch"
-    return delivery, None
+    try:
+        result = policy_bundle_verdict(
+            "managed_delivery",
+            {
+                "bundle_chunks": _chunks(policy_bundle),
+                "provided": delivery_field_provided,
+                "delivery": delivery_payload,
+                "workspace_id": workspace_id,
+                "device_id": device_id,
+                "runtime_summary": runtime_summary,
+                "expected_projection": expected_extension_projection_digest,
+            },
+        )
+    except PolicyBundleNativeError as error:
+        return None, error.code
+    if result.get("applicable") is True and isinstance(delivery_payload, dict):
+        return dict(delivery_payload), None
+    return None, None
+
+
+def _acknowledgement(result: dict[str, object]) -> dict[str, object]:
+    ack = result.get("ack")
+    if not isinstance(ack, dict):
+        raise ValueError("native_policy_bundle_authority_schema_mismatch")
+    return ack
 
 
 def policy_bundle_acknowledgement_payload(
@@ -196,56 +116,22 @@ def policy_bundle_acknowledgement_payload(
 ) -> dict[str, object]:
     """Build a legacy acknowledgement or an exact delivery-bound V2 acknowledgement."""
 
-    if policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
-        return {
-            "appliedAt": synced_at,
-            "bundleHash": policy_bundle["bundleHash"],
-            "bundleVersion": policy_bundle["bundleVersion"],
-            "deviceId": device_id,
-            "deviceName": device_name,
-            "status": "synced",
-        }
-    if delivery is None:
-        return {}
-    if applied_extension_authority_revision is None or applied_effective_projection_digest is None:
-        return {}
-    identity_fields = tuple(_DELIVERY_KEYS)
-    candidate_identity = {field: delivery[field] for field in identity_fields}
-    candidate_identity["appliedExtensionAuthorityRevision"] = applied_extension_authority_revision
-    candidate_identity["appliedEffectiveProjectionDigest"] = applied_effective_projection_digest
-    matching_previous = (
-        previous
-        if previous is not None and all(previous.get(field) == candidate_identity[field] for field in identity_fields)
-        else None
+    return _acknowledgement(
+        policy_bundle_verdict(
+            "ack_payload",
+            {
+                "device_id": device_id,
+                "device_name": device_name,
+                "bundle_chunks": _chunks(policy_bundle, _ACK_BUNDLE_KEYS),
+                "synced_at": synced_at,
+                "status": status,
+                "previous": previous,
+                "delivery": delivery,
+                "applied_revision": applied_extension_authority_revision,
+                "applied_digest": applied_effective_projection_digest,
+            },
+        )
     )
-    previous_sequence = matching_previous.get("sequence") if matching_previous is not None else None
-    resolved_status = (
-        "applied"
-        if status == "applied" or (matching_previous is not None and matching_previous.get("status") == "applied")
-        else "validated"
-    )
-    acknowledgement = {
-        "contractVersion": POLICY_BUNDLE_V2_CONTRACT,
-        **candidate_identity,
-        "sequence": previous_sequence + 1 if isinstance(previous_sequence, int) else 1,
-        "status": resolved_status,
-        "observedAt": _normalized_observed_at(synced_at),
-        "errorCode": None,
-    }
-    validated, error = validated_policy_bundle_v2_acknowledgement(acknowledgement, previous=matching_previous)
-    if validated is None:
-        raise ValueError(error or "invalid_policy_bundle_acknowledgement")
-    return validated
-
-
-def _normalized_observed_at(value: str) -> str:
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return value
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def effective_policy_bundle_acknowledgement(
@@ -260,29 +146,20 @@ def effective_policy_bundle_acknowledgement(
 ) -> dict[str, object]:
     """Select the exact acknowledgement for a newly activated or retained bundle."""
 
-    if effective_policy_bundle.get("contractVersion") != POLICY_BUNDLE_V2_CONTRACT:
-        return policy_bundle_acknowledgement_payload(
-            device_id=device_id,
-            device_name=device_name,
-            policy_bundle=effective_policy_bundle,
-            synced_at=synced_at,
+    validated = None
+    if validated_policy_bundle is not None:
+        validated = {key: validated_policy_bundle[key] for key in ("bundleHash",) if key in validated_policy_bundle}
+    return _acknowledgement(
+        policy_bundle_verdict(
+            "effective_ack",
+            {
+                "device_id": device_id,
+                "device_name": device_name,
+                "effective_chunks": _chunks(effective_policy_bundle, _ACK_BUNDLE_KEYS),
+                "validated": validated,
+                "delivery": validated_delivery,
+                "stored": stored_acknowledgement if isinstance(stored_acknowledgement, dict) else None,
+                "synced_at": synced_at,
+            },
         )
-    activating_new_bundle = validated_policy_bundle is not None and effective_policy_bundle.get(
-        "bundleHash"
-    ) == validated_policy_bundle.get("bundleHash")
-    previous = stored_acknowledgement if isinstance(stored_acknowledgement, dict) else None
-    if not activating_new_bundle:
-        return dict(previous) if previous is not None else {}
-    acknowledgement_device_id = device_id
-    if validated_delivery is not None:
-        delivered_device_id = validated_delivery.get("deviceId")
-        if isinstance(delivered_device_id, str) and delivered_device_id:
-            acknowledgement_device_id = delivered_device_id
-    return policy_bundle_acknowledgement_payload(
-        device_id=acknowledgement_device_id,
-        device_name=device_name,
-        policy_bundle=effective_policy_bundle,
-        synced_at=synced_at,
-        previous=previous,
-        delivery=validated_delivery,
     )

@@ -241,6 +241,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::PolicyBundleAuthority(request) => {
+                crate::policy_bundle_op::evaluate_policy_bundle_authority_request(&request)
+            }
             ResidentOperationV1::GitExecutionSafety(request) => {
                 crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }
