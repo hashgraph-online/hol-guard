@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .native_context import _resolve_digest_home
 from .native_package_approval_hash import _evaluation_view, _transport
@@ -220,4 +220,5 @@ def native_resolve_stored_package_policy(
     resolved = apply_package_evaluation_patch(evaluation, payload["patch"])
     if payload["reused"] and not isinstance(decision, dict):
         raise NativePackagePolicyResolveError("Native package policy resolution invalid")
-    return resolved, payload["claim_disposition"], decision if payload["reused"] else None
+    reused_decision = cast(dict[str, object], decision) if payload["reused"] else None
+    return resolved, cast("str | None", payload["claim_disposition"]), reused_decision
