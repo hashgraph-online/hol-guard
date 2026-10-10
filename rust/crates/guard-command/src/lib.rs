@@ -479,6 +479,7 @@ pub mod decisions;
 pub mod detectors;
 #[cfg(unix)]
 pub mod direct_vitest;
+mod egress_archive;
 pub mod egress_broker;
 mod egress_spool;
 pub mod false_positive_rules;

@@ -76,12 +76,16 @@ pub(super) fn python_setup_script_looks_suspicious(content: &str) -> bool {
 // supply_chain_package_eval.py:3460-3461
 #[allow(dead_code)]
 pub(super) fn local_python_path_text(raw_spec: &str) -> String {
-    let trimmed = raw_spec.trim();
-    // Strip a `file:` prefix if present.
-    if let Some(rest) = trimmed.strip_prefix("file:") {
-        return rest.trim().to_string();
+    let path_text = match raw_spec.strip_prefix("file:") {
+        Some(rest) => rest,
+        None => raw_spec,
+    };
+    let (normalized, _extras) = split_python_extras(path_text);
+    if normalized.is_empty() {
+        path_text.to_owned()
+    } else {
+        normalized
     }
-    trimmed.to_string()
 }
 
 /// `_looks_like_explicit_local_python_path` (:3424-3434).

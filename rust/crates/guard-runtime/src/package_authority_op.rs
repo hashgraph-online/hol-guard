@@ -1900,8 +1900,8 @@ impl PackageIdentityApi for ResidentPackageIdentity {
 
 /// Restricted-archive seam. The download is performed by the caller under its
 /// managed network policy (`egress_broker`); this process never dials out for
-/// it. The resident cannot inspect an archive, so a success carries no blob:
-/// only the caller's refusal (`Failure`) changes the verdict.
+/// it. A success carries no blob (the caller holds it): the digest and the
+/// caller's inspection verdict are what the evaluation decides on.
 struct ResidentRestrictedArchive;
 
 impl RestrictedArchiveApi for ResidentRestrictedArchive {
@@ -1947,8 +1947,10 @@ impl RestrictedArchiveApi for ResidentRestrictedArchive {
     }
 }
 
-/// Native-archive inspection seam — delegated scanner not yet resident;
-/// report unavailable so eval marks the archive uninspected.
+/// Native-archive inspection seam. The caller downloads the blob and runs the
+/// sandboxed offline inspector on it; this seam only hands the evaluation the
+/// verdict the caller reported for the digest it downloaded. No verdict means
+/// the archive stays uninspected.
 struct ResidentNativeArchive;
 
 impl NativeArchiveApi for ResidentNativeArchive {
@@ -1956,7 +1958,7 @@ impl NativeArchiveApi for ResidentNativeArchive {
     fn inspect_archive_native(
         &self,
         _path: &Path,
-        _expected_sha256: &str,
+        expected_sha256: &str,
         _state_dir: &Path,
         _timeout_seconds: f64,
         _max_archive_bytes: u64,
@@ -1969,9 +1971,9 @@ impl NativeArchiveApi for ResidentNativeArchive {
         _max_nested_archives: u64,
         _max_path_depth: u64,
     ) -> EvalResult<Map<String, Value>> {
-        Err(EvalError::Internal(
-            "native archive inspection unavailable in resident".into(),
-        ))
+        crate::archive_verdict_seam::reported_archive_verdict(expected_sha256).ok_or_else(|| {
+            EvalError::Internal("native archive inspection unavailable in resident".into())
+        })
     }
 }
 

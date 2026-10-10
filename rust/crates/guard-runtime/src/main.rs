@@ -16,6 +16,7 @@ mod approval_reuse_diagnostic_probes;
 mod approval_reuse_diagnostic_vectors_tests;
 mod archive_inspect;
 mod archive_inspect_containment;
+mod archive_verdict_seam;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;

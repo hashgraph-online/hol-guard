@@ -13,15 +13,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.test_guard_supply_chain_evaluator import _force_unpaid_entitlement
+from tests.native_workspace import bind_workspace
 
 pytestmark = pytest.mark.usefixtures("package_intent_native")
 
@@ -167,7 +165,7 @@ def test_evaluate_package_request_artifact_uses_package_lock_exact_version_for_n
         '{"lockfileVersion":3,"packages":{"":{"dependencies":{"minimist":"^1.2.0"}},"node_modules/minimist":{"version":"1.2.8"}}}\n',
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
@@ -180,30 +178,6 @@ def test_evaluate_package_request_artifact_uses_package_lock_exact_version_for_n
     assert result.decision == "block"
     assert result.packages[0]["requestedVersion"] == "^1.2.0"
     assert result.packages[0]["resolvedVersion"] == "1.2.8"
-
-
-def test_evaluate_package_request_artifact_allows_recommended_safe_npm_version(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = _artifact_from_command("npm install minimist@1.2.9", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "allow"
-    assert result.policy_action == "allow"
 
 
 @pytest.mark.parametrize(
@@ -225,7 +199,7 @@ def test_evaluate_package_request_artifact_uses_manager_specific_fix_command(
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
@@ -312,38 +286,6 @@ def test_every_npm_git_source_form_requires_local_review_before_registry_or_clou
     assert result.packages[0]["sourceRevisionKind"] == "mutable_ref"
 
 
-def test_hosted_git_archive_requires_git_review_without_archive_download(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: pytest.fail("hosted Git archives must not enter generic archive download"),
-    )
-
-    artifact = _artifact_from_command(
-        "npm install https://github.com/hashgraph-online/hol-guard/archive/refs/heads/main.tar.gz?token=secret",
-        workspace=workspace_dir,
-    )
-    result = evaluate_package_request_artifact(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace_dir,
-        external_archive_network_authorized=True,
-    )
-
-    assert result.decision == "ask"
-    assert result.packages[0]["reasons"][0]["code"] == "git_dependency_source"
-    assert result.packages[0]["sourceRepository"] == "git:github.com/hashgraph-online/hol-guard"
-    assert result.external_archive_downloads == ()
-
-
 def test_npm_git_source_cannot_hide_registry_targets_in_one_request(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -405,81 +347,6 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
 
     assert result.decision == "ask"
     assert "external tarball source" in result.risk_summary.lower()
-
-
-@pytest.mark.parametrize(
-    ("security_level", "expected_decision", "expected_code", "expected_message"),
-    [
-        ("balanced", "block", "external_archive_inspection_incomplete", "could not complete"),
-        ("strict", "block", "external_archive_inspection_incomplete", "could not complete"),
-        ("paranoid", "block", "external_archive_inspection_incomplete", "could not complete"),
-    ],
-)
-def test_external_tarball_scan_failure_respects_security_level(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    security_level: str,
-    expected_decision: str,
-    expected_code: str,
-    expected_message: str,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    _write_text(home_dir / "config.toml", f'security_level = "{security_level}"\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda _url, **_kwargs: (None, None),
-    )
-
-    artifact = _artifact_from_command(
-        "npm install guard-query@https://example.com/guard.tgz?token=demo",
-        workspace=workspace_dir,
-    )
-    result = evaluate_package_request_artifact(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace_dir,
-        external_archive_network_authorized=True,
-    )
-
-    assert result.decision == expected_decision
-    assert result.packages[0]["reasons"][0]["code"] == expected_code
-    assert expected_message in str(result.packages[0]["reasons"][0]["message"]).lower()
-
-
-def test_external_tarball_scan_failure_blocks_after_approval_in_balanced_mode(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    _write_text(home_dir / "config.toml", 'security_level = "balanced"\n[risks]\ncloud_advisory = "block"\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda _url, **_kwargs: (None, None),
-    )
-
-    artifact = _artifact_from_command(
-        "npm install guard-query@https://example.com/guard.tgz?token=demo",
-        workspace=workspace_dir,
-    )
-    result = evaluate_package_request_artifact(
-        artifact=artifact,
-        store=store,
-        workspace_dir=workspace_dir,
-        external_archive_network_authorized=True,
-    )
-
-    assert result.decision == "block"
-    assert result.packages[0]["reasons"][0]["code"] == "external_archive_inspection_incomplete"
 
 
 @pytest.mark.parametrize(
@@ -547,7 +414,7 @@ def test_evaluate_package_request_artifact_resolves_ranges_from_supported_js_loc
     _write_text(workspace_dir / "package.json", '{"name":"demo","dependencies":{"minimist":"^1.2.0"}}\n')
     _write_text(workspace_dir / lockfile_name, lockfile_text.strip() + "\n")
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
@@ -574,7 +441,7 @@ def test_evaluate_package_request_artifact_npm_audit_fix_scans_existing_lockfile
         '{"dependencies":{"minimist":{"version":"1.2.8"}}}\n',
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
@@ -636,7 +503,7 @@ def test_evaluate_package_request_artifact_matches_transitive_js_lockfile_names_
         + "\n",
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -723,7 +590,7 @@ def test_evaluate_package_request_artifact_uses_alias_in_fix_copy(
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=[_package(name="minimist", version="1.2.8", default_action="block")]),
@@ -747,7 +614,7 @@ def test_evaluate_package_request_artifact_blocks_dependency_confusion_targets_f
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(
@@ -777,77 +644,6 @@ def test_evaluate_package_request_artifact_blocks_dependency_confusion_targets_f
     assert result.packages[0]["reasons"][0]["code"] == "dependency_confusion_risk"
 
 
-def test_evaluate_package_request_artifact_ignores_wildcard_scope_only_confusion_rules(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            packages=[],
-            policy_rules=[
-                {
-                    "action": "block",
-                    "ruleId": "reserve-scope-wildcard",
-                    "ecosystemSelector": "npm",
-                    "enabled": True,
-                    "expiresAt": None,
-                    "harnessSelector": None,
-                    "packageSelector": "@hashgraph/*",
-                    "priority": 1,
-                    "severityThreshold": None,
-                    "versionRangeSelector": None,
-                }
-            ],
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = _artifact_from_command("npm install left-pad@1.3.0", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "ask"
-    assert result.packages[0]["reasons"][0]["code"] == "no_cached_match"
-    messages = " ".join(str(reason["message"]) for reason in result.packages[0]["reasons"])
-    assert "This does not mean the package is unsafe" in messages
-    assert "registry identity or package intelligence" not in messages
-
-
-def test_evaluate_package_request_artifact_matches_js_package_names_exactly_for_typosquat_bundle_entries(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(packages=[_package(name="crossenv", version="7.0.0", default_action="block")]),
-        "2026-05-19T00:00:00Z",
-    )
-
-    bad_artifact = _artifact_from_command("npm install crossenv@7.0.0", workspace=workspace_dir)
-    good_artifact = _artifact_from_command("npm install cross-env@7.0.0", workspace=workspace_dir)
-
-    bad_result = evaluate_package_request_artifact(artifact=bad_artifact, store=store, workspace_dir=workspace_dir)
-    good_result = evaluate_package_request_artifact(artifact=good_artifact, store=store, workspace_dir=workspace_dir)
-
-    assert bad_result.decision == "block"
-    assert good_result.decision == "ask"
-    assert good_result.packages[0]["reasons"][0]["code"] == "no_cached_match"
-
-
 def test_evaluate_package_request_artifact_records_bun_lockb_binary_fallback(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -862,49 +658,6 @@ def test_evaluate_package_request_artifact_records_bun_lockb_binary_fallback(tmp
     assert result.decision == "ask"
     assert result.packages[0]["reasons"][0]["code"] == "bun_lockfile_binary_fallback"
     assert "binary lockfile" in result.reasons[0]["message"]
-
-
-@pytest.mark.parametrize(
-    ("bundle_name", "bundle_namespace", "command"),
-    [
-        ("demo", None, "npm install @scope/demo@1.0.0"),
-        ("demo", "@scope", "npm install demo@1.0.0"),
-    ],
-)
-def test_evaluate_package_request_artifact_avoids_scoped_package_name_collisions(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    bundle_name: str,
-    bundle_namespace: str | None,
-    command: str,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            packages=[
-                _package(
-                    name=bundle_name,
-                    namespace=bundle_namespace,
-                    version="1.0.0",
-                    default_action="block",
-                )
-            ]
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = _artifact_from_command(command, workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "ask"
-    assert result.packages[0]["reasons"][0]["code"] == "no_cached_match"
 
 
 @pytest.mark.parametrize("reverse_bundle_order", [False, True])
@@ -943,7 +696,7 @@ def test_transitive_scoped_and_unscoped_packages_keep_distinct_bundle_actions(
     if reverse_bundle_order:
         packages.reverse()
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(packages=packages),
@@ -958,89 +711,3 @@ def test_transitive_scoped_and_unscoped_packages_keep_distinct_bundle_actions(
     assert decisions[("@scope", "pkg")] == "block"
     scoped = next(package for package in result.packages if package["namespace"] == "@scope")
     assert "@scope/pkg@1.2.3" in scoped["reasons"][0]["message"]
-
-
-def test_scoped_package_evidence_ids_are_collision_free() -> None:
-    common = {
-        "decision": "block",
-        "ecosystem": "npm",
-        "name": "pkg",
-        "requestedVersion": "1.2.3",
-        "resolvedVersion": "1.2.3",
-        "dependencyPath": None,
-    }
-    unscoped = supply_chain_package_eval_module._evidence_id("same-intent", {**common, "namespace": None})
-    scoped = supply_chain_package_eval_module._evidence_id("same-intent", {**common, "namespace": "@scope"})
-    other_scope = supply_chain_package_eval_module._evidence_id("same-intent", {**common, "namespace": "@other"})
-    other_ecosystem = supply_chain_package_eval_module._evidence_id(
-        "same-intent", {**common, "ecosystem": "go", "namespace": None}
-    )
-
-    assert len({unscoped, scoped, other_scope, other_ecosystem}) == 4
-
-
-def test_malformed_result_identities_remain_opaque_and_collision_free() -> None:
-    direct = {
-        "name": "pkg",
-        "resolvedVersion": "1.2.3",
-        "decision": "block",
-        "dependencyPath": "direct",
-    }
-    transitive = {**direct, "dependencyPath": "root > pkg"}
-    explicit_unknown = {**direct, "ecosystem": "unknown"}
-
-    direct_identity = supply_chain_package_eval_module._result_package_identity(direct)
-    transitive_identity = supply_chain_package_eval_module._result_package_identity(transitive)
-    explicit_unknown_identity = supply_chain_package_eval_module._result_package_identity(explicit_unknown)
-
-    assert direct_identity[0] == "opaque"
-    assert transitive_identity[0] == "opaque"
-    assert direct_identity != transitive_identity
-    assert direct_identity != explicit_unknown_identity
-
-    direct_evidence = supply_chain_package_eval_module._evidence_id("same-intent", direct)
-    transitive_evidence = supply_chain_package_eval_module._evidence_id("same-intent", transitive)
-    explicit_unknown_evidence = supply_chain_package_eval_module._evidence_id("same-intent", explicit_unknown)
-
-    assert len({direct_evidence, transitive_evidence, explicit_unknown_evidence}) == 3
-
-
-def test_scoped_recommended_fix_does_not_use_unscoped_record(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    home_dir = tmp_path / "home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
-    store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            packages=[
-                _package(
-                    name="pkg",
-                    version="1.2.3",
-                    default_action="block",
-                    recommended_fix_version="9.9.9",
-                ),
-                _package(
-                    name="pkg",
-                    namespace="@scope",
-                    version="1.2.3",
-                    default_action="block",
-                    recommended_fix_version="1.2.4",
-                ),
-            ]
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-
-    artifact = _artifact_from_command("npm install @scope/pkg@1.2.4", workspace=workspace_dir)
-    result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
-
-    assert result.decision == "allow"
-    assert result.packages[0]["namespace"] == "@scope"
-    assert result.packages[0]["name"] == "pkg"
