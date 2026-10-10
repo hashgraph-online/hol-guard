@@ -34,6 +34,14 @@ _ERROR_ACTIVE_COLUMN: Final = {
     "maintenance_failed": "maintenance_error_active",
     "shadow_evaluation_failed": "shadow_error_active",
 }
+# These fail before `_resident_request`. Any other unavailable reason may mean
+# the resident already counted the event, so a local increment would double it.
+_PRE_SEND_REASONS: Final = frozenset(
+    {
+        "native_guard_store_prerequisite_unavailable",
+        "native_guard_store_request_invalid",
+    }
+)
 
 
 def _count_failure_locally(owner: _ConnectionOwner, error_code: str, occurred_at: datetime) -> None:
@@ -133,8 +141,9 @@ class StoreCommandActivityLifecycleMixin:
                 "record_command_activity_persistence_failure",
                 {"error_code": error_code, "occurred_at": occurred_at.isoformat()},
             )
-        except NativeGuardStoreUnavailable:
-            # Health counters must still land when the resident is down.
+        except NativeGuardStoreUnavailable as error:
+            if error.reason not in _PRE_SEND_REASONS:
+                raise
             _count_failure_locally(self, error_code, occurred_at)
 
     def record_command_activity_observation_conflict(
@@ -150,7 +159,9 @@ class StoreCommandActivityLifecycleMixin:
                 "record_command_activity_observation_conflict",
                 {"occurred_at": occurred_at.isoformat()},
             )
-        except NativeGuardStoreUnavailable:
+        except NativeGuardStoreUnavailable as error:
+            if error.reason not in _PRE_SEND_REASONS:
+                raise
             _count_conflict_locally(self, occurred_at)
 
     def get_command_activity_persistence_health(
