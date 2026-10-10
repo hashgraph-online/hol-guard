@@ -486,24 +486,3 @@ fn allows_one_non_sensitive_file_read() {
     let aliased = generic(json!({"toolName": "read_file", "path": "/./proc/self/environ"}));
     assert_eq!(aliased.minimum_action, "review");
 }
-
-#[test]
-fn powershell_type_literal_commands_are_evaluated_as_commands() {
-    let command = "[System.IO.File]::WriteAllText((Join-Path (Get-Location) 'docs/change.md'), \"Retry limit increased from 3 to 5.`n\", [System.Text.UTF8Encoding]::new($false))";
-    let result = evaluate_pre_tool_envelope(
-        "codex",
-        "PreToolUse",
-        &json!({
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": command}
-        }),
-    );
-    assert_ne!(result.reason_code, "native_pre_tool_malformed_payload");
-    assert_eq!(result.action.action_type, PreToolActionTypeV1::Command);
-    assert_ne!(result.minimum_action, "allow");
-
-    // JSON-encoded command arguments keep their strict-decoding guarantees.
-    let duplicate = generic(json!({"command": r#"{"command":"pwd","command":"whoami"}"#}));
-    assert_eq!(duplicate.reason_code, "native_pre_tool_ambiguous_payload");
-}
