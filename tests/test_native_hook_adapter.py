@@ -368,7 +368,13 @@ def test_hook_scope_binds_the_hook_guard_home_for_ambient_calls(
         return _good(request, payload={"text": "echo hi"})
 
     monkeypatch.setattr(adapter, "_resident_request", fake)
-    with adapter.hook_adapter_memo(tmp_path):
-        assert adapter.native_command_text("Bash", {"command": "echo hi"}) == "echo hi"
-    assert seen_homes == [tmp_path]
-    assert native_context._BOUND_GUARD_HOME.get() is None
+    # Other enforcement paths bind the ambient home without resetting it, so an
+    # earlier test on this worker may have left one; start from a known state.
+    baseline = native_context._BOUND_GUARD_HOME.set(None)
+    try:
+        with adapter.hook_adapter_memo(tmp_path):
+            assert adapter.native_command_text("Bash", {"command": "echo hi"}) == "echo hi"
+        assert seen_homes == [tmp_path]
+        assert native_context._BOUND_GUARD_HOME.get() is None
+    finally:
+        native_context._BOUND_GUARD_HOME.reset(baseline)
