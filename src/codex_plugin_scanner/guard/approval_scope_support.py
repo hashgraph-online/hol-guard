@@ -310,6 +310,7 @@ def exact_action_once_only_reason(request: Mapping[str, object]) -> str | None:
     """Return the stable code for why an allow cannot be saved as one exact action."""
 
     from .daemon.hook_native_exact_identity import (
+        GUARD_CONTROL_ACTION_TYPES,
         NO_COMMAND_IDENTITY,
         NON_OVERRIDABLE,
         ONCE_ONLY_REASONS,
@@ -321,7 +322,7 @@ def exact_action_once_only_reason(request: Mapping[str, object]) -> str | None:
     if _allow_is_non_overridable(request):
         envelope = request.get("action_envelope_json")
         action_type = envelope.get("action_type") if isinstance(envelope, Mapping) else None
-        return "guard_control" if action_type in _GUARD_CONTROL_TYPES else NON_OVERRIDABLE
+        return "guard_control" if action_type in GUARD_CONTROL_ACTION_TYPES else NON_OVERRIDABLE
     artifact_type = _string_or_none(request.get("artifact_type"))
     if artifact_type == "package_request":
         return "package_action"
@@ -678,11 +679,6 @@ def _json_boundary_value(value: object) -> object:
     if isinstance(value, (list, tuple)):
         return [_json_boundary_value(item) for item in cast(Sequence[object], value)]
     return {"invalid_type": type(value).__name__}
-
-
-_GUARD_CONTROL_TYPES = frozenset(
-    {"guard_control", "guard-control", "guard_control_operation", "guard-control-operation"}
-)
 
 
 def _allow_is_non_overridable(request: Mapping[str, object]) -> bool:

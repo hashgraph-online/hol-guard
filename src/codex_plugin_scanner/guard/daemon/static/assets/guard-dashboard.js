@@ -13305,6 +13305,7 @@ const ONCE_ONLY_REASON_COPY = {
   unproven_launch: "Always allow is unavailable: Guard could not verify exactly what this command launches. You can allow it once.",
   sensitive_path: "Always allow is unavailable for files that may hold secrets. You can allow it once.",
   broad_scope: "Always allow is unavailable: this search covers too much. Narrow it to a project folder to remember it.",
+  git_helper_config: "Always allow is unavailable: this repository or environment configures git helpers Guard cannot verify. You can allow it once.",
   destructive_command: "Always allow is unavailable for commands that delete, move or send data. You can allow it once.",
   provider_unverified: "Always allow is unavailable until the provider account is verified. You can allow it once."
 };

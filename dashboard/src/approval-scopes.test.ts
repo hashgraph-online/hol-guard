@@ -294,6 +294,7 @@ for (const [reason, fragment] of [
   ["unproven_launch", "could not verify exactly what this command launches"],
   ["sensitive_path", "may hold secrets"],
   ["broad_scope", "covers too much"],
+  ["git_helper_config", "configures git helpers"],
   ["destructive_command", "delete, move or send data"],
   ["provider_unverified", "provider account is verified"],
 ] as const) {

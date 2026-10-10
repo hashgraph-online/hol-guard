@@ -125,10 +125,12 @@ def test_git_token_is_invalidated_by_anything_that_changes_git_helpers(
 
     seen = {original}
     mutations = {
-        "repo config": (workspace / ".git" / "config", "[core]\n\tfsmonitor = ./hook\n"),
+        "repo config": (workspace / ".git" / "config", "[user]\n\tname = repo\n"),
         "root gitattributes": (workspace / ".gitattributes", "*.md diff=custom\n"),
         "info attributes": (workspace / ".git" / "info" / "attributes", "*.txt diff=custom\n"),
-        "global config": (workspace.parent / "home" / ".gitconfig", "[core]\n\tpager = ./pager\n"),
+        "global config": (workspace.parent / "home" / ".gitconfig", "[user]\n\temail = a@example.com\n"),
+        "nested gitattributes": (workspace / "sub" / ".gitattributes", "*.md diff=custom\n"),
+        "hook script": (workspace / ".git" / "hooks" / "post-index-change", "#!/bin/sh\necho 1\n"),
     }
     for label, (path, body) in mutations.items():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -141,17 +143,97 @@ def test_git_token_is_invalidated_by_anything_that_changes_git_helpers(
         assert native_saved_decision_response(store, token=changed, native_result=result, **kwargs) is None, label
 
 
-def test_git_token_follows_global_config_includes(
+def test_git_token_follows_nested_includes_in_any_file_name(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     workspace = _repo(tmp_path, monkeypatch)
-    included = workspace.parent / "home" / "extra.cfg"
-    included.write_text("[user]\n\tname = a\n")
-    (workspace.parent / "home" / ".gitconfig").write_text("[include]\n\tpath = extra.cfg\n")
+    home = workspace.parent / "home"
+    leaf = home / "leaf.inc"
+    leaf.write_text("[user]\n\tname = a\n")
+    (home / "middle.inc").write_text('[includeIf "gitdir:/nowhere/"]\n\tpath = leaf.inc\n')
+    (home / ".gitconfig").write_text("[include]\n\tpath = middle.inc\n")
     before = _token("git status", workspace)
     assert before is not None
-    included.write_text("[core]\n\tfsmonitor = ./hook\n")
+    leaf.write_text("[user]\n\tname = b\n")
     assert _token("git status", workspace) not in {None, before}
+    leaf.write_text("[core]\n\tfsmonitor = ./hook\n")
+    assert native_exact_action_decision_reason("git status", workspace) == "git_helper_config"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        "[core]\n\tfsmonitor = ./hook\n",
+        "[core]\n\thooksPath = .githooks\n",
+        "[core]\n\tpager = less\n",
+        "[pager]\n\tdiff = ./p\n",
+        '[diff "x"]\n\ttextconv = ./t\n',
+        '[diff "x"]\n\tcommand = ./t\n',
+        '[filter "lfs"]\n\tclean = ./c\n',
+        "[interactive]\n\tdiffFilter = ./f\n",
+        "[core] fsmonitor = ./hook\n",
+    ],
+)
+def test_helper_selecting_git_config_stays_once_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, config: str
+) -> None:
+    workspace = _repo(tmp_path, monkeypatch)
+    (workspace / ".git" / "config").write_text(config)
+    assert native_exact_action_decision_reason("git status", workspace) == "git_helper_config"
+
+
+@pytest.mark.parametrize("name", ["GIT_CONFIG_GLOBAL", "GIT_CONFIG_COUNT", "GIT_EXTERNAL_DIFF", "GIT_PAGER"])
+def test_git_config_environment_stays_once_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, name: str
+) -> None:
+    workspace = _repo(tmp_path, monkeypatch)
+    monkeypatch.setenv(name, "1")
+    assert native_exact_action_decision_reason("git status", workspace) == "git_helper_config"
+
+
+def test_git_lfs_filter_and_global_hooks_path_keep_always(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _repo(tmp_path, monkeypatch)
+    home = workspace.parent / "home"
+    hooks = home / ".git-hooks"
+    hooks.mkdir()
+    (hooks / "pre-commit").write_text("#!/bin/sh\nexit 0\n")
+    (home / ".gitconfig").write_text(
+        '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n'
+        "\tprocess = git-lfs filter-process\n\trequired = true\n"
+        "[core]\n\thooksPath = ~/.git-hooks\n"
+    )
+    before = _token("git status", workspace)
+    assert before is not None
+    (hooks / "pre-commit").write_text("#!/bin/sh\ncurl example.invalid\n")
+    assert _token("git status", workspace) not in {None, before}
+    (home / ".gitconfig").write_text('[filter "lfs"]\n\tprocess = git-lfs filter-process --verbose\n')
+    assert native_exact_action_decision_reason("git status", workspace) == "git_helper_config"
+
+
+def test_absent_file_operand_is_bound_to_the_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    absent = _token("cat later.txt", workspace)
+    assert absent is not None
+    (workspace / "later.txt").write_text("x\n")
+    assert _token("cat later.txt", workspace) not in {None, absent}
+
+
+def test_read_outside_the_workspace_and_grep_regex_scope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    outside = tmp_path / "elsewhere.txt"
+    outside.write_text("x\n")
+    for tool in ("read", "read_file", "view"):
+        assert _tool_decision(tool, {"path": str(outside)}, workspace) == (None, "broad_scope")
+    assert _tool_decision("read", {"path": str(workspace / "a.txt")}, workspace)[0] is not None
+    # A content regex that looks like an absolute path is not a path scope.
+    assert _tool_decision("grep", {"pattern": "/api/v1", "path": "src"}, workspace)[0] is not None
+    assert _tool_decision("glob", {"pattern": "/etc/**"}, workspace) == (None, "broad_scope")
 
 
 def test_compound_commands_need_every_segment_proven(

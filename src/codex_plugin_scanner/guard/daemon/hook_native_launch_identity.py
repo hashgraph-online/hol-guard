@@ -257,7 +257,7 @@ def _runner_local_bin(
 
 
 def _file_operand_hashes(arguments: list[str], *, cwd: Path) -> list[dict[str, str]] | None:
-    """Hash existing regular-file operands, or ``None`` when they cannot be bound."""
+    """Hash file operands (marking absent and non-file ones), or ``None`` when they cannot be bound."""
 
     bound: list[dict[str, str]] = []
     for argument in arguments:
@@ -267,6 +267,8 @@ def _file_operand_hashes(arguments: list[str], *, cwd: Path) -> list[dict[str, s
         candidate = Path(value) if os.path.isabs(value) else cwd / value
         try:
             if not candidate.is_file():
+                # An absent operand is bound too, so creating the file re-prompts.
+                bound.append({"argument": argument, "sha256": "absent" if not candidate.exists() else "non-file"})
                 continue
             if candidate.stat().st_size > _MAX_BOUND_OPERAND_BYTES or len(bound) >= _MAX_BOUND_OPERANDS:
                 return None

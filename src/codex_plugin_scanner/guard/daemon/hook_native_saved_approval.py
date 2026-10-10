@@ -17,6 +17,7 @@ from ..runtime.approval_context import build_approval_context_token, parse_appro
 from ..store_policy_decision import policy_decision_hash_exists
 from .hook_native_exact_identity import (
     GUARD_CONTROL,
+    GUARD_CONTROL_ACTION_TYPES,
     NO_COMMAND_IDENTITY,
     NON_OVERRIDABLE,
     PACKAGE_ACTION,
@@ -35,7 +36,6 @@ EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
 EXACT_ACTION_IDENTITY_KIND_KEY = "exact_identity_kind"
 ONCE_ONLY_REASON_KEY = "once_only_reason"
 _NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
-_GUARD_CONTROL_ACTION_TYPES = frozenset({"guard_control", "guard-control", "guard_control_operation"})
 
 
 class TokenUnset:
@@ -164,7 +164,7 @@ def _exact_action_token(
 def _non_overridable_reason(native_result: Mapping[str, object]) -> str:
     action = native_result.get("action")
     action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    if action_type in _GUARD_CONTROL_ACTION_TYPES:
+    if action_type in GUARD_CONTROL_ACTION_TYPES:
         return GUARD_CONTROL
     if action_type == "package":
         return PACKAGE_ACTION
@@ -308,7 +308,7 @@ def _native_review_is_overridable(native_result: Mapping[str, object]) -> bool:
         return False
     action = native_result.get("action")
     action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    return action_type not in {*_GUARD_CONTROL_ACTION_TYPES, "package"}
+    return action_type not in {*GUARD_CONTROL_ACTION_TYPES, "package"}
 
 
 __all__ = [

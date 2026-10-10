@@ -380,15 +380,15 @@ def test_native_review_derives_the_exact_action_token_once(
     result, receipt = _verdict()
     worker, store = _hook_worker(tmp_path, monkeypatch, result, receipt)
     calls: list[str | None] = []
-    real = hook_native_saved_approval.native_exact_action_token
+    real = hook_native_saved_approval.native_exact_action_decision
 
-    def counting(**kwargs: Any) -> str | None:
-        token = real(**kwargs)
-        calls.append(token)
-        return token
+    def counting(**kwargs: Any) -> tuple[str | None, str | None]:
+        decision = real(**kwargs)
+        calls.append(decision[0])
+        return decision
 
-    monkeypatch.setattr(hook_native_review_approval, "native_exact_action_token", counting)
-    monkeypatch.setattr(hook_native_saved_approval, "native_exact_action_token", counting)
+    monkeypatch.setattr(hook_native_review_approval, "native_exact_action_decision", counting)
+    monkeypatch.setattr(hook_native_saved_approval, "native_exact_action_decision", counting)
     payload = {
         "hook_event_name": "PreToolUse",
         "session_id": "once",

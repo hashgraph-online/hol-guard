@@ -229,6 +229,8 @@ const ONCE_ONLY_REASON_COPY: Record<string, string> = {
     "Always allow is unavailable for files that may hold secrets. You can allow it once.",
   broad_scope:
     "Always allow is unavailable: this search covers too much. Narrow it to a project folder to remember it.",
+  git_helper_config:
+    "Always allow is unavailable: this repository or environment configures git helpers Guard cannot verify. You can allow it once.",
   destructive_command:
     "Always allow is unavailable for commands that delete, move or send data. You can allow it once.",
   provider_unverified:

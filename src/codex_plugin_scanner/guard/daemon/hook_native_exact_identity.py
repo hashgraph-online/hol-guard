@@ -35,6 +35,12 @@ UNPROVEN_LAUNCH = "unproven_launch"
 SENSITIVE_PATH = "sensitive_path"
 BROAD_SCOPE = "broad_scope"
 DESTRUCTIVE_COMMAND = "destructive_command"
+GIT_HELPER_CONFIG = "git_helper_config"
+
+# Native action types for changes to Guard itself; shared with the scope-support copy.
+GUARD_CONTROL_ACTION_TYPES = frozenset(
+    {"guard_control", "guard-control", "guard_control_operation", "guard-control-operation"}
+)
 
 ONCE_ONLY_REASONS = frozenset(
     {
@@ -48,12 +54,17 @@ ONCE_ONLY_REASONS = frozenset(
         SENSITIVE_PATH,
         BROAD_SCOPE,
         DESTRUCTIVE_COMMAND,
+        GIT_HELPER_CONFIG,
     }
 )
 
 _MAX_CONFIG_BYTES = 1_048_576
 _MAX_CONFIG_FILES = 24
 _MAX_INCLUDE_DEPTH = 3
+_MAX_HOOK_FILES = 32
+_MAX_ATTRIBUTE_DIRECTORIES = 20_000
+# Environment that injects config or helper programs into git.
+_GIT_HELPER_ENVIRONMENT = frozenset({"GIT_EXTERNAL_DIFF", "GIT_PAGER", "GIT_ATTR_SOURCE"})
 _GLOBAL_OPTIONS = frozenset({"--no-pager", "--no-optional-locks"})
 _READ_SUBCOMMANDS = frozenset({"status", "log", "diff", "show", "rev-parse", "ls-files"})
 # Options that write files, name helper programs, or redirect git's own lookup.
@@ -77,8 +88,28 @@ _BRANCH_FLAGS = frozenset(
     {"-a", "-r", "-v", "-vv", "--all", "--remotes", "--verbose", "--list", "--show-current", "--no-color", "--color"}
 )
 _WORKTREE_LIST_FLAGS = frozenset({"--porcelain", "-v", "--verbose"})
-_INCLUDE_SECTION = re.compile(r"^\s*\[\s*include(?:if)?\b", re.IGNORECASE)
 _ANY_SECTION = re.compile(r"^\s*\[")
+_SECTION_HEADER = re.compile(r'^\s*\[\s*([A-Za-z0-9-]+)(?:\s+"((?:[^"\\]|\\.)*)"|\.([^\s\]]*))?\s*\](.*)$')
+_CONFIG_KEY = re.compile(r"^\s*([A-Za-z][A-Za-z0-9-]*)\s*(?:=\s*(.*?)\s*)?$")
+# The filter driver `git lfs install` writes. Its program is fixed, so a digest
+# of the config binds it; any other filter driver keeps the action once-only.
+_LFS_FILTER = frozenset(
+    {
+        ("clean", "git-lfs clean -- %f"),
+        ("smudge", "git-lfs smudge -- %f"),
+        ("process", "git-lfs filter-process"),
+        ("required", "true"),
+    }
+)
+# (section, keys) pairs that select a program or file git would run or read;
+# ``None`` means any key of that section.
+_HELPER_KEYS: dict[str, frozenset[str] | None] = {
+    "core": frozenset({"fsmonitor", "pager", "attributesfile"}),
+    "pager": None,
+    "filter": None,
+    "diff": frozenset({"command", "textconv", "external"}),
+    "interactive": frozenset({"difffilter"}),
+}
 _INCLUDE_PATH = re.compile(r"^\s*path\s*=\s*(.+?)\s*$", re.IGNORECASE)
 
 _FILE_READ_TOOLS = frozenset({"read", "read_file", "view"})
@@ -181,8 +212,14 @@ def _repository(start: Path) -> tuple[Path, Path, Path]:
 
 
 def _git_config_digest(root: Path, git_dir: Path, common_dir: Path, home_dir: Path | None) -> str:
-    """Digest every file whose edit changes which helpers a read-only git runs."""
+    """Digest every file whose edit changes which helpers a read-only git runs.
 
+    Fails closed (``GIT_HELPER_CONFIG``) when the environment or any config file
+    selects a helper program, since a digest cannot bind what that helper does.
+    """
+
+    if any(_injects_git_helper(name, value) for name, value in os.environ.items()):
+        raise OnceOnlyError(GIT_HELPER_CONFIG)
     candidates: list[Path] = [
         common_dir / "config",
         git_dir / "config",
@@ -197,7 +234,11 @@ def _git_config_digest(root: Path, git_dir: Path, common_dir: Path, home_dir: Pa
         candidates.extend((base / "git" / "config", base / "git" / "attributes"))
     if home_dir is not None:
         candidates.append(home_dir / ".gitconfig")
+    configs = {
+        str(path) for path in candidates if path.name in {"config", "config.worktree", ".gitconfig", "gitconfig"}
+    }
     seen: dict[str, str] = {}
+    hook_dirs: list[Path] = []
     queue = [(path, 0) for path in dict.fromkeys(candidates)]
     while queue:
         path, depth = queue.pop(0)
@@ -216,27 +257,108 @@ def _git_config_digest(root: Path, git_dir: Path, common_dir: Path, home_dir: Pa
         except OSError as error:
             raise OnceOnlyError(UNPROVEN_LAUNCH) from error
         seen[key] = hashlib.sha256(data).hexdigest()
-        if path.name.startswith(("config", ".gitconfig")) or path.name == "gitconfig":
-            for included in _included_paths(data.decode("utf-8", errors="replace"), path, home_dir):
-                if depth + 1 > _MAX_INCLUDE_DEPTH:
-                    raise OnceOnlyError(UNPROVEN_LAUNCH)
-                queue.append((included, depth + 1))
+        # Included files are config whatever they are named; the rest are attributes.
+        if key in configs or depth > 0:
+            included = _scan_config(data.decode("utf-8", errors="replace"), path, home_dir, hook_dirs)
+            if included and depth + 1 > _MAX_INCLUDE_DEPTH:
+                raise OnceOnlyError(UNPROVEN_LAUNCH)
+            queue.extend((target, depth + 1) for target in included)
+    for hooks_dir in dict.fromkeys([common_dir / "hooks", *hook_dirs]):
+        seen.update(_hook_digests(hooks_dir))
+    seen.update(_nested_attribute_digests(root))
     return hashlib.sha256(json.dumps(sorted(seen.items()), separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def _included_paths(text: str, config_path: Path, home_dir: Path | None) -> list[Path]:
+def _injects_git_helper(name: str, value: str) -> bool:
+    # GIT_CONFIG_NOSYSTEM only drops a config file, and `cat` is the no-op pager.
+    if name == "GIT_CONFIG_NOSYSTEM" or (name == "GIT_PAGER" and value == "cat"):
+        return False
+    return name.startswith("GIT_CONFIG") or name in _GIT_HELPER_ENVIRONMENT
+
+
+def _hook_digests(hooks_dir: Path) -> dict[str, str]:
+    """Hash every installed hook script; git can run one for read-only commands."""
+
+    digests: dict[str, str] = {}
+    try:
+        entries = sorted(hooks_dir.iterdir()) if hooks_dir.is_dir() else []
+        for entry in entries:
+            if entry.name.endswith(".sample") or not entry.is_file():
+                continue
+            if len(digests) >= _MAX_HOOK_FILES or entry.stat().st_size > _MAX_CONFIG_BYTES:
+                raise OnceOnlyError(UNPROVEN_LAUNCH)
+            digests[f"hook:{entry}"] = hashlib.sha256(entry.read_bytes()).hexdigest()
+    except OSError as error:
+        raise OnceOnlyError(UNPROVEN_LAUNCH) from error
+    return digests
+
+
+def _nested_attribute_digests(root: Path) -> dict[str, str]:
+    """Hash every nested ``.gitattributes`` under the worktree (the root one is a candidate)."""
+
+    digests: dict[str, str] = {}
+    visited = 0
+    for current, directories, files in os.walk(root):
+        # Ignored dependency trees are not read by git status/diff; keep the walk bounded.
+        directories[:] = [name for name in directories if name not in {".git", "node_modules"}]
+        visited += 1
+        if visited > _MAX_ATTRIBUTE_DIRECTORIES:
+            raise OnceOnlyError(UNPROVEN_LAUNCH)
+        if current == str(root) or ".gitattributes" not in files:
+            continue
+        path = Path(current) / ".gitattributes"
+        try:
+            if path.stat().st_size > _MAX_CONFIG_BYTES or len(digests) >= _MAX_CONFIG_FILES:
+                raise OnceOnlyError(UNPROVEN_LAUNCH)
+            digests[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+        except OSError as error:
+            raise OnceOnlyError(UNPROVEN_LAUNCH) from error
+    return digests
+
+
+def _config_path(value: str, config_path: Path, home_dir: Path | None) -> Path:
+    candidate = home_dir / value[2:] if value.startswith("~/") and home_dir is not None else Path(value)
+    return candidate if candidate.is_absolute() else config_path.parent / candidate
+
+
+def _scan_config(text: str, config_path: Path, home_dir: Path | None, hook_dirs: list[Path]) -> list[Path]:
+    """Return include targets and collect hook directories; raise when a key selects a helper program."""
+
     included: list[Path] = []
-    in_include = False
-    for line in text.splitlines():
-        if _ANY_SECTION.match(line):
-            in_include = bool(_INCLUDE_SECTION.match(line))
+    section = ""
+    subsection = ""
+    for raw_line in text.splitlines():
+        line = raw_line
+        header = _SECTION_HEADER.match(line)
+        if header is not None:
+            section = header.group(1).lower()
+            subsection = header.group(2) if header.group(2) is not None else (header.group(3) or "").lower()
+            line = header.group(4)
+        elif _ANY_SECTION.match(line):
+            # A header this parser cannot read could hide a helper: fail closed.
+            raise OnceOnlyError(GIT_HELPER_CONFIG)
+        key = _CONFIG_KEY.match(line)
+        if key is None:
             continue
-        match = _INCLUDE_PATH.match(line) if in_include else None
-        if match is None:
+        name = key.group(1).lower()
+        value = (key.group(2) or "").strip('"')
+        if section == "filter" and subsection == "lfs" and (name, value) in _LFS_FILTER:
             continue
-        value = match.group(1).strip().strip('"')
-        candidate = home_dir / value[2:] if value.startswith("~/") and home_dir is not None else Path(value)
-        included.append(candidate if candidate.is_absolute() else config_path.parent / candidate)
+        if section == "core" and name == "hookspath":
+            # Hashing the directory binds the hooks git would run from it.
+            if not value or not (value.startswith("~/") or os.path.isabs(value)):
+                raise OnceOnlyError(GIT_HELPER_CONFIG)
+            hook_dirs.append(_config_path(value, config_path, home_dir))
+            continue
+        if section in _HELPER_KEYS:
+            keys = _HELPER_KEYS[section]
+            if keys is None or name in keys:
+                raise OnceOnlyError(GIT_HELPER_CONFIG)
+        if section in {"include", "includeif"} and name == "path":
+            match = _INCLUDE_PATH.match(line)
+            if match is None:
+                raise OnceOnlyError(GIT_HELPER_CONFIG)
+            included.append(_config_path(match.group(1).strip().strip('"'), config_path, home_dir))
     return included
 
 
@@ -262,17 +384,21 @@ def tool_target_identity(
         raise OnceOnlyError(NO_COMMAND_IDENTITY)
     paths: list[str] = []
     patterns: list[str] = []
+    regexes: list[str] = []
     for key, value in tool_input.items():
         if key in _PATH_KEYS and isinstance(value, str) and value.strip():
             paths.append(value)
         elif key == "paths" and isinstance(value, list) and all(isinstance(item, str) for item in value):
             paths.extend(str(item) for item in value)
+        elif key == "pattern" and name == "grep" and isinstance(value, str) and value.strip():
+            # grep's pattern is a content regex, not a path: it never names a scope.
+            regexes.append(value)
         elif key in _PATTERN_KEYS and isinstance(value, str) and value.strip():
             patterns.append(value)
         elif key not in _OPTION_KEYS or not isinstance(value, (str, int, float, bool)):
             # Unknown fields could carry commands, preprocessors or destinations.
             raise OnceOnlyError(NO_COMMAND_IDENTITY)
-    if is_read and (not paths or patterns):
+    if is_read and (not paths or patterns or regexes):
         raise OnceOnlyError(NO_COMMAND_IDENTITY)
     if not is_read and not paths:
         paths.append(str(cwd))
@@ -286,7 +412,7 @@ def tool_target_identity(
             raise OnceOnlyError(UNPROVEN_LAUNCH) from error
         if _sensitive(raw, cwd, home_dir) or _sensitive(str(resolved), cwd, home_dir):
             raise OnceOnlyError(SENSITIVE_PATH)
-        if not is_read and not (resolved == root or root in resolved.parents):
+        if not (resolved == root or root in resolved.parents):
             raise OnceOnlyError(BROAD_SCOPE)
         targets.append(str(resolved))
     for pattern in patterns:
@@ -296,7 +422,11 @@ def tool_target_identity(
             raise OnceOnlyError(BROAD_SCOPE)
     identity: dict[str, object] = {"kind": "tool-target", "tool": name, "targets": sorted(targets)}
     options = {key: value for key, value in tool_input.items() if key in _OPTION_KEYS}
-    content = {"patterns": sorted(patterns), "options": json.loads(json.dumps(options, sort_keys=True, default=str))}
+    content: dict[str, object] = {
+        "patterns": sorted(patterns),
+        "regexes": sorted(regexes),
+        "options": json.loads(json.dumps(options, sort_keys=True, default=str)),
+    }
     return identity, content
 
 
@@ -312,7 +442,9 @@ __all__ = [
     "BROAD_SCOPE",
     "COMPOUND_COMMAND",
     "DESTRUCTIVE_COMMAND",
+    "GIT_HELPER_CONFIG",
     "GUARD_CONTROL",
+    "GUARD_CONTROL_ACTION_TYPES",
     "MUTABLE_LAUNCHER",
     "NON_OVERRIDABLE",
     "NO_COMMAND_IDENTITY",
