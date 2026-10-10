@@ -17,11 +17,14 @@ closed.
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import hashlib
 import json
+import math
 import os
 import threading
+import time
 from collections import OrderedDict
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -52,11 +55,16 @@ FactResolver = Callable[[str], object]
 # and never hold failures. Time-bearing checks carry ``now`` in the query and
 # therefore never repeat; they are not cached at all.
 _UNCACHED_CHECKS = frozenset({"wake_claim", "recovery_claim", "start_progress_live", "ephemeral_inactive"})
+_FLOAT_QUERY_FIELDS = frozenset({"now", "worker_ready_floor", "fallback_age_seconds"})
 _CACHE_ENTRIES = 512
 _CACHE_QUERY_BYTES = 64 * 1024
 _cache_lock = threading.Lock()
 _NEED_KEYS: OrderedDict[str, tuple[str, ...]] = OrderedDict()
 _VERDICTS: OrderedDict[str, dict[str, Any]] = OrderedDict()
+_DAEMON_LIFECYCLE_DEADLINE: contextvars.ContextVar[float | None] = contextvars.ContextVar(
+    "hol_guard_daemon_lifecycle_deadline",
+    default=None,
+)
 
 
 def _digest(material: object) -> str | None:
@@ -85,8 +93,13 @@ def _recall(cache: OrderedDict[str, Any], key: str) -> Any:
         return value
 
 
-class NativeDaemonLifecycleError(ValueError):
-    """No authoritative native answer; callers must fail closed."""
+class NativeDaemonLifecycleError(RuntimeError):
+    """No authoritative native answer; callers must fail closed.
+
+    This is not a ``ValueError``. Health probes catch ``ValueError`` to mean
+    the payload is stale or unreadable, and a resident outage must not take
+    that path.
+    """
 
 
 def _fail(code: str) -> NativeDaemonLifecycleError:
@@ -105,7 +118,70 @@ def _record_success(home: Path) -> None:
         native_record_resident_success(status.identity.sha256, home)
 
 
-def _round_trip(query: Mapping[str, object], facts: Mapping[str, object], home: Path, platform: str) -> dict[str, Any]:
+def bind_daemon_lifecycle_deadline(deadline: float | None) -> contextvars.Token[float | None]:
+    """Narrow the active lifecycle deadline to ``deadline`` when it is sooner."""
+
+    current = _DAEMON_LIFECYCLE_DEADLINE.get()
+    if deadline is None:
+        chosen = current
+    elif isinstance(deadline, bool) or not isinstance(deadline, (int, float)) or not math.isfinite(deadline):
+        raise _fail("native_daemon_lifecycle_deadline")
+    elif current is None:
+        chosen = float(deadline)
+    else:
+        chosen = min(current, float(deadline))
+    return _DAEMON_LIFECYCLE_DEADLINE.set(chosen)
+
+
+def reset_daemon_lifecycle_deadline(token: contextvars.Token[float | None]) -> None:
+    _DAEMON_LIFECYCLE_DEADLINE.reset(token)
+
+
+def daemon_lifecycle_deadline() -> float | None:
+    return _DAEMON_LIFECYCLE_DEADLINE.get()
+
+
+def _active_deadline(explicit: float | None) -> float | None:
+    bound = _DAEMON_LIFECYCLE_DEADLINE.get()
+    if explicit is None:
+        return bound
+    if isinstance(explicit, bool) or not isinstance(explicit, (int, float)) or not math.isfinite(explicit):
+        raise _fail("native_daemon_lifecycle_deadline")
+    if bound is None:
+        return float(explicit)
+    return min(bound, float(explicit))
+
+
+def _timeout_seconds(deadline: float | None) -> float:
+    if deadline is None:
+        return _TIMEOUT_SECONDS
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("Guard daemon operation deadline exceeded.")
+    return min(_TIMEOUT_SECONDS, remaining)
+
+
+def _normalize_query_numbers(query: Mapping[str, object]) -> dict[str, object]:
+    """Match the resident's ``f64`` JSON spelling before the request is hashed."""
+
+    normalized: dict[str, object] = {}
+    for key, value in query.items():
+        if key not in _FLOAT_QUERY_FIELDS or value is None:
+            normalized[key] = value
+            continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise _fail("native_daemon_lifecycle_request_invalid")
+        normalized[key] = float(value)
+    return normalized
+
+
+def _round_trip(
+    query: Mapping[str, object],
+    facts: Mapping[str, object],
+    home: Path,
+    platform: str,
+    timeout_seconds: float,
+) -> dict[str, Any]:
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"daemon-lifecycle-{uuid4().hex}",
@@ -123,7 +199,7 @@ def _round_trip(query: Mapping[str, object], facts: Mapping[str, object], home: 
         operation=_OPERATION,
         request=request,
         guard_home=home,
-        timeout_seconds=_TIMEOUT_SECONDS,
+        timeout_seconds=timeout_seconds,
         required_feature=DAEMON_LIFECYCLE_FEATURE,
         response_schema=_RESULT_SCHEMA,
         max_request_bytes=_MAX_REQUEST_BYTES,
@@ -158,10 +234,11 @@ def native_daemon_lifecycle(
     resolve_fact: FactResolver | None = None,
     guard_home: Path | None = None,
     platform: str | None = None,
+    deadline_monotonic: float | None = None,
 ) -> dict[str, Any]:
     """Return the resident's verdict for one ``check``, resolving fact requests."""
 
-    return _decide(check, query, resolve_fact, guard_home, platform)
+    return _decide(check, query, resolve_fact, guard_home, platform, deadline_monotonic)
 
 
 def _decide(
@@ -170,20 +247,25 @@ def _decide(
     resolve_fact: FactResolver | None,
     guard_home: Path | None,
     platform: str | None,
+    deadline_monotonic: float | None,
 ) -> dict[str, Any]:
     # Verdicts are pure, so a home that does not exist yet must not be created
     # (or get its own resident) just to be asked a question; use the context home.
     home = _resolve_existing_digest_home(guard_home)
     platform = platform or ("nt" if os.name == "nt" else "posix")
+    deadline = _active_deadline(deadline_monotonic)
     # The resident digests its typed decoding of the request, which omits unset
-    # optional fields; omit them here too so both sides hash identical bytes.
-    full_query = {"check": check, **{key: value for key, value in query.items() if value is not None}}
+    # optional fields and renders f64 fields with a fractional part. Match that
+    # spelling before hashing so an integer ``10`` is not a different request
+    # from the resident's ``10.0``.
+    numbers = _normalize_query_numbers(query)
+    full_query = {"check": check, **{key: value for key, value in numbers.items() if value is not None}}
     status = native_runtime_status()
     identity = status.identity.sha256 if status.identity is not None else ""
     query_key = None
     if check not in _UNCACHED_CHECKS and identity:
         query_digest = _digest({"platform": platform, "query": full_query})
-        query_key = None if query_digest is None else f"{identity}:{query_digest}"
+        query_key = None if query_digest is None else f"{identity}:{home}:{query_digest}"
     facts: dict[str, object] = {}
     if query_key is not None and resolve_fact is not None:
         for key in _recall(_NEED_KEYS, query_key) or ():
@@ -192,9 +274,11 @@ def _decide(
         if facts_digest is not None:
             cached = _recall(_VERDICTS, f"{query_key}:{facts_digest}")
             if cached is not None:
+                if not ensure_resident_prerequisite(home):
+                    raise _fail("native_daemon_lifecycle_prerequisite_unavailable")
                 return copy.deepcopy(cached)
     for _ in range(_MAX_NEED_ROUNDS):
-        payload = _round_trip(full_query, facts, home, platform)
+        payload = _round_trip(full_query, facts, home, platform, _timeout_seconds(deadline))
         if payload.get("need") != "facts":
             _record_success(home)
             if query_key is not None:

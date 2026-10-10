@@ -82,6 +82,15 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    /// The Windows argv fact has not been supplied yet.
+    ///
+    /// A present null is a failed probe, not a pending one. `split_command`
+    /// records the missing key before this returns, so the caller can skip the
+    /// entry and let `finish` request every argv in the same round.
+    pub(crate) fn argv_pending(&self, command: &str) -> bool {
+        self.nt && !self.facts.contains_key(&format!("argv:{command}"))
+    }
+
     /// `_split_process_command`: `None` when the command line cannot be parsed.
     pub(crate) fn split_command(&self, command: &str) -> Option<Vec<String>> {
         if !self.nt {

@@ -48,6 +48,12 @@ pub(crate) fn process_inventory(ctx: &Ctx, query: &DaemonProcessInventoryQueryV1
     let mut processes: Vec<(i64, i64)> = Vec::new();
     for (pid, command_line) in &entries {
         let Some(parts) = ctx.split_command(command_line) else {
+            // A missing argv is requested with the rest of this round. Treating
+            // it as a parse failure stops the walk at the first daemon and
+            // makes each later daemon cost another round.
+            if ctx.argv_pending(command_line) {
+                continue;
+            }
             let lowered = command_line.to_lowercase();
             let mentions_guard =
                 lowered.contains("codex_plugin_scanner") || lowered.contains("guard");

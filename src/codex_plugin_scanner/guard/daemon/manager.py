@@ -36,7 +36,12 @@ from ..frozen_runtime_commands import (
 )
 from ..live_process_identity import process_start_token
 from ..mdm.file_lock import release_file_lock
-from ..native_daemon_lifecycle import NativeDaemonLifecycleError, native_daemon_lifecycle
+from ..native_daemon_lifecycle import (
+    NativeDaemonLifecycleError,
+    bind_daemon_lifecycle_deadline,
+    native_daemon_lifecycle,
+    reset_daemon_lifecycle_deadline,
+)
 from ..private_file_io import read_private_regular_text
 from ..windows_paths import (
     windows_command_line_to_argv,
@@ -519,14 +524,45 @@ def ensure_guard_daemon(
 ) -> str:
     if desktop_preflight_requested():
         raise RuntimeError("Guard daemon start is disabled during Desktop preflight.")
-    timeout = _default_guard_daemon_start_timeout() if start_timeout is None else start_timeout
-    start_deadline = time.monotonic() + max(0.0, timeout)
-    if deadline_monotonic is not None:
-        if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
-            raise ValueError("Guard daemon operation deadline is invalid.")
-        start_deadline = min(start_deadline, deadline_monotonic)
-        if time.monotonic() >= start_deadline:
-            raise TimeoutError("Guard daemon operation deadline exceeded.")
+    if deadline_monotonic is not None and (
+        isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic)
+    ):
+        raise ValueError("Guard daemon operation deadline is invalid.")
+    caller_deadline = bind_daemon_lifecycle_deadline(deadline_monotonic)
+    try:
+        timeout = _default_guard_daemon_start_timeout() if start_timeout is None else start_timeout
+        start_deadline = time.monotonic() + max(0.0, timeout)
+        if deadline_monotonic is not None:
+            start_deadline = min(start_deadline, deadline_monotonic)
+            if time.monotonic() >= start_deadline:
+                raise TimeoutError("Guard daemon operation deadline exceeded.")
+        operation_deadline = bind_daemon_lifecycle_deadline(start_deadline)
+        try:
+            return _ensure_guard_daemon_body(
+                guard_home,
+                home_dir=home_dir,
+                preferred_port=preferred_port,
+                allow_windows_job_breakaway=allow_windows_job_breakaway,
+                executable=executable,
+                start_deadline=start_deadline,
+                background_maintenance=background_maintenance,
+            )
+        finally:
+            reset_daemon_lifecycle_deadline(operation_deadline)
+    finally:
+        reset_daemon_lifecycle_deadline(caller_deadline)
+
+
+def _ensure_guard_daemon_body(
+    guard_home: Path,
+    *,
+    home_dir: Path | None,
+    preferred_port: int | None,
+    allow_windows_job_breakaway: bool,
+    executable: Path | None,
+    start_deadline: float,
+    background_maintenance: bool,
+) -> str:
     launch_cwd = _trusted_daemon_home(home_dir)
     if background_maintenance:
         _schedule_stale_ephemeral_guard_daemon_reap(exclude_guard_home=guard_home)
@@ -850,6 +886,20 @@ def retire_all_guard_daemons_for_home(
     deadline: float | None = None,
 ) -> list[int]:
     """Stop Guard daemon processes for one guard home, optionally keeping one port alive."""
+
+    token = bind_daemon_lifecycle_deadline(deadline)
+    try:
+        return _retire_guard_daemons_for_home(guard_home, keep_port=keep_port, deadline=deadline)
+    finally:
+        reset_daemon_lifecycle_deadline(token)
+
+
+def _retire_guard_daemons_for_home(
+    guard_home: Path,
+    *,
+    keep_port: int | None,
+    deadline: float | None,
+) -> list[int]:
     retire_pid = (
         _retire_guard_daemon_pid if deadline is None else partial(_retire_guard_daemon_pid, deadline_monotonic=deadline)
     )
