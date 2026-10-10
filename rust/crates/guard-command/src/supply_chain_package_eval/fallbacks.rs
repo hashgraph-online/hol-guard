@@ -146,23 +146,40 @@ pub(super) fn bundle_package_result(
 pub(super) fn incomplete_lockfile_fallback_target(
     parse_result: &LockfileParseResult,
 ) -> Map<String, Value> {
+    let ecosystem = match parse_result.format.as_str() {
+        "bundler-lock" => "rubygems",
+        "cargo-lock" => "cargo",
+        "composer-lock" => "packagist",
+        "pipenv-lock" | "poetry-lock" | "uv-lock" => "pypi",
+        _ => "npm",
+    };
+    let package_manager = match parse_result.format.as_str() {
+        "bun-lock" => "bun",
+        "bundler-lock" => "bundler",
+        "cargo-lock" => "cargo",
+        "composer-lock" => "composer",
+        "pipenv-lock" => "pipenv",
+        "pnpm-lock" => "pnpm",
+        "poetry-lock" => "poetry",
+        "uv-lock" => "uv",
+        "yarn-lock" => "yarn",
+        _ => "npm",
+    };
     let mut target = Map::new();
-    target.insert(
-        "ecosystem".to_string(),
-        Value::String(lockfile_ecosystem(&parse_result.format)),
-    );
+    target.insert("ecosystem".to_string(), Value::String(ecosystem.into()));
     target.insert(
         "name".to_string(),
         Value::String("unresolved-lockfile".into()),
     );
     target.insert("namespace".to_string(), Value::Null);
-    target.insert("version".to_string(), Value::Null);
-    target.insert("range".to_string(), Value::Null);
-    target.insert("package_manager".to_string(), Value::String("npm".into()));
     target.insert(
-        "package_name".to_string(),
-        Value::String("unresolved-lockfile".into()),
+        "package_manager".to_string(),
+        Value::String(package_manager.into()),
     );
+    target.insert("range".to_string(), Value::Null);
+    target.insert("version".to_string(), Value::Null);
+    target.insert("redacted_command".to_string(), Value::Null);
+    target.insert("alias".to_string(), Value::Null);
     target
 }
 

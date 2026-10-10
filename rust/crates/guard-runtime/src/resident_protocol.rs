@@ -78,6 +78,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::APPROVAL_GATE_FEATURE.into(),
         guard_contracts::PACKAGE_AUTHORITY_FEATURE.into(),
         guard_contracts::PACKAGE_EVALUATION_COMPOSE_FEATURE.into(),
+        guard_contracts::SUPPLY_CHAIN_EVAL_FEATURE.into(),
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),

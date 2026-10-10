@@ -95,6 +95,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         # Bounded response decoding for resident package-verdict composition patches.
         "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
+        # Strict resident transport and DTO hydration for package supply-chain evaluation.
+        "src/codex_plugin_scanner/guard/native_supply_chain_eval.py",
         # Decodes the bounded resident approval-reuse response envelope.
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.

@@ -31,7 +31,7 @@ pub(super) fn finalize_evaluation(
         "monitor" => format!("{prefix} `{package_ref}` for continued monitoring."),
         _ => format!("{prefix} `{package_ref}` as trusted by policy."),
     };
-    let reason_message = draft
+    let mut reason_message = draft
         .reasons
         .first()
         .and_then(|r| optional_string(r.get("message")));
@@ -46,6 +46,7 @@ pub(super) fn finalize_evaluation(
                 .map(|c| c != "installed_release_reinstall")
                 .unwrap_or(false)
         }) {
+            reason_message = optional_string(restrictive_reason.get("message"));
             reason_code = optional_string(restrictive_reason.get("code"));
         }
     }
@@ -57,12 +58,16 @@ pub(super) fn finalize_evaluation(
         };
     let source_risk_summaries: HashMap<&str, &str> = HashMap::from([
         (
-            "dependency_confusion",
-            "matches a known dependency-confusion risk",
+            "insecure_source_url",
+            "from insecure HTTP source before install",
         ),
         (
-            "malicious_package",
-            "matches a known malicious-package risk",
+            "external_tarball_source",
+            "from external tarball source before install",
+        ),
+        (
+            "git_dependency_source",
+            "from git dependency source before install",
         ),
     ]);
     if let Some(code) = &reason_code {
