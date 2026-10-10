@@ -11,10 +11,11 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _copilot_runtime_server_identity,
     _CopilotMcpRuntimeServer,
 )
+from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
-    ToolCallDecision,
-    _apply_temporary_mcp_grant,
     build_tool_call_artifact,
+    build_tool_call_hash,
+    evaluate_tool_call,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -44,6 +45,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_grants import (
     apply_contributed_mcp_decision,
     matching_mcp_contribution,
 )
+from codex_plugin_scanner.guard.store import GuardStore
 
 
 def _layer(extension_id: str) -> ExtensionControlLayer:
@@ -136,19 +138,20 @@ def test_remote_instapods_review_default_strengthens_allow() -> None:
     assert decision[1] == "catalog-mcp-extension"
 
 
-def test_remote_instapods_review_default_strengthens_allow_in_runtime_path() -> None:
-    current = ToolCallDecision(
-        action="allow",
-        source="base-policy",
-        signals=(),
-        summary="Allowed by base policy.",
-    )
-    decision = _apply_temporary_mcp_grant(
-        store=_AuthorityStore(),
-        artifact=_remote_artifact("change_plan"),
-        artifact_hash="test-hash",
+def test_remote_instapods_review_default_strengthens_allow_in_runtime_path(tmp_path: Path) -> None:
+    class _RuntimeStore(GuardStore):
+        def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+            return _AuthorityStore().read_extension_control_authority_for_registry(registry)
+
+    guard_home = tmp_path / "guard-home"
+    config = GuardConfig(guard_home=guard_home, workspace=tmp_path, mode="prompt", default_action="allow")
+    artifact = _remote_artifact("change_plan")
+    decision = evaluate_tool_call(
+        store=_RuntimeStore(guard_home),
+        config=config,
+        artifact=artifact,
+        artifact_hash=build_tool_call_hash(artifact, {}, workspace=tmp_path, config=config),
         arguments={},
-        current=current,
     )
     assert decision.action == "review"
     assert decision.source == "catalog-mcp-extension"
