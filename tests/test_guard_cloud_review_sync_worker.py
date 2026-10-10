@@ -272,6 +272,37 @@ class TestIndependentWorker:
         assert state["state"] == "error"
         assert state["last_error_code"] == "cloud_auth_expired"
 
+    def test_transient_refresh_failure_keeps_recorded_auth_failure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        store = Store(tmp_path)
+        store.set_sync_payload(
+            "guard_cloud_review_sync_state",
+            {"state": "error", "last_error_code": "cloud_auth_expired"},
+            "2026-01-01T00:00:00+00:00",
+        )
+        stopped = threading.Event()
+
+        class StopOnWait:
+            def generation(self) -> int:
+                return 0
+
+            def wait(self, generation: int, timeout: float) -> int:
+                del generation, timeout
+                stopped.set()
+                return 0
+
+        def fail(_store: Store) -> dict[str, object]:
+            raise TimeoutError("token refresh timed out")
+
+        monkeypatch.setattr(cloud_review_sync_module, "_resolve_cloud_review_sync_auth_context", fail)
+        cloud_review_sync_worker._cloud_sync_sync_loop(store, stopped, StopOnWait(), poll_interval=1, error_backoff=1)
+
+        state = store.get_sync_payload("guard_cloud_review_sync_state")
+        assert isinstance(state, dict)
+        assert state["state"] == "error"
+        assert state["last_error_code"] == "cloud_auth_expired"
+
     def test_connected_daemon_starts_cloud_review_worker(
         self,
         tmp_path: Path,

@@ -48,6 +48,19 @@ export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
 }
 
+export function cloudReviewConnectionLabel(status: CloudReviewSettingsStatus): string {
+  if (status.reconnect_required) return "Reconnect needed";
+  return status.connected ? "Connected" : "Not connected";
+}
+
+export function cloudReviewDecisionLabel(status: CloudReviewSettingsStatus): string {
+  if (status.reconnect_required) return "Paused until sign-in";
+  return status.enabled ? "Enabled" : "Confirmation needed";
+}
+
+// Priority: sign-in repair comes first because nothing else can succeed without
+// valid credentials; authorization applies once connected but not yet enabled;
+// restore applies only when enabled but delivery needs attention.
 export function cloudReviewRecoveryAction(status: CloudReviewSettingsStatus): "connect" | "authorize" | "restore" | "none" {
   if (!status.connected || status.reconnect_required) return "connect";
   if (!status.enabled) return "authorize";
@@ -180,11 +193,11 @@ export function CloudReviewSettings() {
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud connection</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.reconnect_required ? "Reconnect needed" : status.connected ? "Connected" : "Not connected"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{cloudReviewConnectionLabel(status)}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud decisions</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.reconnect_required ? "Paused until sign-in" : status.enabled ? "Enabled" : "Confirmation needed"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{cloudReviewDecisionLabel(status)}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Last activity delivered</dt>
@@ -200,7 +213,8 @@ export function CloudReviewSettings() {
         <div className="mt-3 flex flex-wrap items-start gap-2">
           {recoveryAction === "connect" ? (
             <ConnectGuardCloudButton label={status.reconnect_required ? "Reconnect Guard Cloud" : "Connect Guard Cloud"}
-              variant={status.reconnect_required ? "primary" : "secondary"} />
+              variant={status.reconnect_required ? "primary" : "secondary"}
+              onConnected={() => { void refresh(false); }} />
           ) : null}
           {recoveryAction === "authorize" || recoveryAction === "restore" ? (
             <button type="button" disabled={loading || pending} onClick={() => openConfirmation("enable")}

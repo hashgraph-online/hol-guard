@@ -201,15 +201,22 @@ def _cloud_sync_sync_loop(
             error_streak += 1
             _LOGGER.exception("Unexpected error in Cloud Review sync loop")
             state = sync._load_sync_state(store)
+            # A sync attempt clears the stored code when it starts, so a surviving
+            # auth code means authentication has not succeeded since it was recorded.
+            # Keep it when a transient failure (for example a token refresh timeout)
+            # would otherwise hide that sign-in is still required.
+            previous_code = state.get("last_error_code")
+            if isinstance(error, urllib.error.HTTPError) and error.code == 401:
+                error_code = "cloud_auth_expired"
+            elif previous_code in {"cloud_auth_expired", "cloud_connect_required"}:
+                error_code = previous_code
+            else:
+                error_code = "cloud_delivery_error"
             state.update(
                 {
                     "state": "error",
                     "last_error": sync._redacted_error(error),
-                    "last_error_code": (
-                        "cloud_auth_expired"
-                        if isinstance(error, urllib.error.HTTPError) and error.code == 401
-                        else "cloud_delivery_error"
-                    ),
+                    "last_error_code": error_code,
                     "last_error_at": sync._now(),
                 }
             )

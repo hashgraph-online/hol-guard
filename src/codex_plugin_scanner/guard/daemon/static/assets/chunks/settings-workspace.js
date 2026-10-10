@@ -2545,6 +2545,14 @@ function cloudReviewStatusCopy(status) {
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
 }
+function cloudReviewConnectionLabel(status) {
+  if (status.reconnect_required) return "Reconnect needed";
+  return status.connected ? "Connected" : "Not connected";
+}
+function cloudReviewDecisionLabel(status) {
+  if (status.reconnect_required) return "Paused until sign-in";
+  return status.enabled ? "Enabled" : "Confirmation needed";
+}
 function cloudReviewRecoveryAction(status) {
   if (!status.connected || status.reconnect_required) return "connect";
   if (!status.enabled) return "authorize";
@@ -2681,11 +2689,11 @@ function CloudReviewSettings() {
     status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.reconnect_required ? "Reconnect needed" : status.connected ? "Connected" : "Not connected" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: cloudReviewConnectionLabel(status) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.reconnect_required ? "Paused until sign-in" : status.enabled ? "Enabled" : "Confirmation needed" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: cloudReviewDecisionLabel(status) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Last activity delivered" }),
@@ -2702,7 +2710,10 @@ function CloudReviewSettings() {
         ConnectGuardCloudButton,
         {
           label: status.reconnect_required ? "Reconnect Guard Cloud" : "Connect Guard Cloud",
-          variant: status.reconnect_required ? "primary" : "secondary"
+          variant: status.reconnect_required ? "primary" : "secondary",
+          onConnected: () => {
+            void refresh(false);
+          }
         }
       ) : null,
       recoveryAction === "authorize" || recoveryAction === "restore" ? /* @__PURE__ */ jsxRuntimeExports.jsx(

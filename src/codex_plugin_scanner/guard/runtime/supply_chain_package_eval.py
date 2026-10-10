@@ -1592,6 +1592,16 @@ def _cloud_http_fail_closed_evaluation(
     )
 
 
+_CLOUD_REVIEW_MESSAGE_SUFFIX = ", so this package request needs review."
+_CLOUD_AUTH_BLOCKED_CLAUSE = "the install stays blocked until Guard Cloud sign-in is restored."
+
+
+def _blocked_cloud_auth_message(message: str) -> str:
+    if message.endswith(_CLOUD_REVIEW_MESSAGE_SUFFIX):
+        return f"{message.removesuffix(_CLOUD_REVIEW_MESSAGE_SUFFIX)}, so {_CLOUD_AUTH_BLOCKED_CLAUSE}"
+    return f"{message.rstrip('.')}; {_CLOUD_AUTH_BLOCKED_CLAUSE}"
+
+
 def _cloud_fail_closed_evaluation(
     *,
     code: str,
@@ -1604,10 +1614,7 @@ def _cloud_fail_closed_evaluation(
     fail_closed_decision: str,
 ) -> PackageRequestEvaluation:
     if code == "cloud_auth_error" and fail_closed_decision == "block":
-        message = message.replace(
-            "this package request needs review.",
-            "the install stays blocked until Guard Cloud sign-in is restored.",
-        )
+        message = _blocked_cloud_auth_message(message)
     reason = _cloud_fallback_reason(code=code, message=message)
     decision = "block" if fail_closed_decision == "block" else "ask"
     severity = "critical" if decision == "block" else "high"
