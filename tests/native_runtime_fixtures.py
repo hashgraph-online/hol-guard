@@ -472,6 +472,9 @@ def native_route_policy_with_hooks_off(monkeypatch: pytest.MonkeyPatch) -> Path:
         return "force" if getattr(pinned, "active", False) else real_mode()
 
     def pinned_request(**kwargs):
+        # The caller resolved its status before the pin applied; resolve it again
+        # inside the pin so the request sees the pinned runtime.
+        kwargs.pop("status", None)
         pinned.active = True
         try:
             return real_request(**kwargs)
