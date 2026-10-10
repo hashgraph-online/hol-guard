@@ -338,7 +338,3 @@ class NativePolicySnapshotPublicationMixin:
             return identity, capabilities, material[0], config, command_extensions, client
         finally:
             material = None
-
-    @staticmethod
-    def _decode_ack(output: bytes | None) -> dict[str, object] | None:
-        return _publisher_api()._decode_ack_v3(output)

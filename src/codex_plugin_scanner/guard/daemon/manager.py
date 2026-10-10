@@ -38,7 +38,7 @@ from ..frozen_runtime_commands import (
 )
 from ..live_process_identity import process_start_token
 from ..mdm.file_lock import release_file_lock
-from ..private_file_io import private_regular_file_is_valid, read_private_regular_text
+from ..private_file_io import read_private_regular_text
 from ..windows_paths import (
     windows_command_line_to_argv,
     windows_process_creation_time,
@@ -75,7 +75,6 @@ GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 15.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
-GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 30.0
 # Head-room the client adds on top of the worker-ready budget so the daemon can
 # finish binding its socket and writing its state file after the worker reports
 # ready, without the startup poll timing out first.
@@ -745,22 +744,6 @@ def _authenticated_live_current_daemon_url(
     from .recovery_lifecycle import authenticated_live_current_daemon_url
 
     return authenticated_live_current_daemon_url(guard_home, state)
-
-
-def _daemon_generation_is_recent(state: dict[str, object] | None) -> bool:
-    if not isinstance(state, dict):
-        return False
-    started_at = state.get("started_at")
-    if not isinstance(started_at, str):
-        return False
-    try:
-        started = datetime.fromisoformat(started_at)
-    except ValueError:
-        return False
-    if started.tzinfo is None:
-        return False
-    age_seconds = (datetime.now(timezone.utc) - started.astimezone(timezone.utc)).total_seconds()
-    return 0 <= age_seconds <= GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS
 
 
 def retire_all_guard_daemons_for_home(
@@ -2237,10 +2220,6 @@ def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
 
 def _auth_token_path(guard_home: Path) -> Path:
     return guard_home / "daemon-auth-token"
-
-
-def _private_daemon_file_is_valid(path: Path) -> bool:
-    return private_regular_file_is_valid(path, require_private_parent=True)
 
 
 def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:

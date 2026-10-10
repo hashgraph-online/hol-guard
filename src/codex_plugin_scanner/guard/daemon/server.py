@@ -8451,15 +8451,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
 
     @staticmethod
-    def _path_is_within_root(candidate: Path | str, root: Path | str) -> bool:
-        candidate_path = os.fspath(candidate)
-        root_path = os.fspath(root)
-        try:
-            return os.path.commonpath([candidate_path, root_path]) == root_path
-        except ValueError:
-            return False
-
-    @staticmethod
     def _scope_target_is_valid(
         scope: str,
         *,
@@ -9794,19 +9785,6 @@ def _decode_dashboard_session_payload(payload: str) -> dict[str, object]:
 def _parse_iso_timestamp(value: str) -> float:
     normalized = value.replace("Z", "+00:00")
     return datetime.fromisoformat(normalized).timestamp()
-
-
-def _normalized_iso_timestamp_string(value: object) -> str | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc).isoformat()
 
 
 def _now() -> str:

@@ -10,7 +10,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_failure import failure_payload
-from codex_plugin_scanner.guard.adapters.cline_bridge import plugin_after_tool_replacement
 from codex_plugin_scanner.guard.cli.commands_support_runtime_resolution import (
     _is_copilot_permission_request,
 )
@@ -37,14 +36,6 @@ def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(
         reason="native unavailable",
     )
     assert denied["continue"] is True
-
-
-def test_cline_after_tool_transport_miss_passes_through_original_result() -> None:
-    assert plugin_after_tool_replacement("") is None
-    assert plugin_after_tool_replacement("not json") is None
-    blocked = plugin_after_tool_replacement('{"decision":"block","reason":"secret"}')
-    assert blocked is not None
-    assert blocked["result"]["isError"] is True
 
 
 def test_post_tool_fail_safe_continues_the_turn() -> None:

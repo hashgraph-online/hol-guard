@@ -28,8 +28,6 @@ if TYPE_CHECKING:
     from .contained_package_script_execution import ContainedPackageScriptResult
     from .contained_typescript_execution import ContainedTypeScriptResult
     from .contained_workspace_write_execution import ContainedWorkspaceWriteResult
-    from .runtime.containment_contract import ContainmentAttestation
-    from .runtime.containment_outputs import ContainmentCapturedOutput
     from .runtime.effect_decision import DecisionReason, EffectDecision, PositiveProof
 
 _MAX_REQUEST_BYTES = 256 * 1024
@@ -569,33 +567,6 @@ def _effect_decision(payload: dict[str, Any]) -> EffectDecision:
         controlling_reasons=tuple(_decision_reason(r) for r in raw_controlling),
         reasons=tuple(_decision_reason(r) for r in raw_reasons),
         proof_routes=frozenset(ProofRoute(r) for r in raw_routes),
-    )
-
-
-def _containment_attestation(payload: dict[str, Any]) -> ContainmentAttestation:
-    from .runtime.containment_contract import ContainmentAttestation, ContainmentBackend, ContainmentFailure
-
-    backend = _require_str(payload, "backend")
-    failure_raw = payload.get("failure")
-    return ContainmentAttestation(
-        backend=ContainmentBackend(backend),
-        backend_digest=_require_str(payload, "backend_digest"),
-        request_digest=_require_str(payload, "request_digest"),
-        policy_digest=_require_str(payload, "policy_digest"),
-        launch_digest=_require_str(payload, "launch_digest"),
-        executable_digest=_require_str(payload, "executable_digest"),
-        enforced=bool(payload.get("enforced", False)),
-        failure=ContainmentFailure(failure_raw) if isinstance(failure_raw, str) else None,
-    )
-
-
-def _captured_output(item: dict[str, Any]) -> ContainmentCapturedOutput:
-    from .runtime.containment_outputs import ContainmentCapturedOutput
-
-    return ContainmentCapturedOutput(
-        snapshot_path=_require_str(item, "snapshot_path"),
-        content=bytes.fromhex(_require_str(item, "content_hex")) if "content_hex" in item else b"",
-        content_digest=_require_str(item, "content_digest"),
     )
 
 

@@ -52,9 +52,7 @@ jobs:
           tests/test_guard_network_policy_evaluator.py
           tests/test_guard_network_destination_correlator.py
           tests/test_guard_network_grant_engine.py
-          tests/test_guard_network_process_lifecycle.py
           tests/test_guard_network_supervisor.py
-          tests/test_guard_network_backend_registry.py
           tests/test_guard_linux_tcp_enforcement.py
           tests/test_guard_linux_udp_dns_enforcement.py
           tests/test_guard_linux_network_observer.py

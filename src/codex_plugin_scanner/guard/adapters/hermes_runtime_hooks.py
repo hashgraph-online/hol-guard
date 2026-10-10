@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import json
 import shlex
-import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any
 
 from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
 
@@ -272,18 +271,6 @@ def hermes_bridge_response(
     payload = hermes_native_decision(policy_action=policy_action, reason=reason)
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     return stdout, "", 2 if hermes_should_exit_block(policy_action) else 0
-
-
-def emit_hermes_hook_response(
-    *,
-    policy_action: str,
-    reason: str,
-    output_stream: TextIO | None = None,
-) -> None:
-    stream = output_stream if output_stream is not None else sys.stdout
-    payload = hermes_native_decision(policy_action=policy_action, reason=reason)
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
-    stream.flush()
 
 
 def apply_hermes_doctor_protection_label(payload: dict[str, object]) -> None:

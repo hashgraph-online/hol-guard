@@ -135,10 +135,6 @@ def session_start_command_parts(context: HarnessContext) -> tuple[str, ...]:
     return (sys.executable, "-c", code, *path_argv)
 
 
-def hook_http_url(context: HarnessContext, *, daemon_url: str) -> str:
-    return f"{daemon_url}/v1/hooks/claude-code?{urlencode(_hook_query(context, cursor_hook_query_extras()))}"
-
-
 def _hook_query(context: HarnessContext, extras: Mapping[str, str]) -> dict[str, str]:
     query = {"guard-home": str(context.guard_home)}
     if context.home_dir.resolve() != Path.home().resolve():

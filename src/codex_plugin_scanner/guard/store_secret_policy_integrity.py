@@ -653,24 +653,6 @@ class StoreSecretPolicyIntegrityMixin:
         ).fetchone()
         return int(row["total"]) if row is not None else 0
 
-    @staticmethod
-    def _count_local_policy_rows(
-        connection: sqlite3.Connection,
-        *,
-        harness: str | None = None,
-    ) -> int:
-        query = f"""
-            select count(*) as total
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
-        """
-        params: tuple[object, ...] = _REMOTE_POLICY_SOURCE_PARAMS
-        if harness is not None:
-            query += " and harness = ?"
-            params = (*params, harness)
-        row = connection.execute(query, params).fetchone()
-        return int(row["total"]) if row is not None else 0
-
     def _advance_policy_integrity_generation(
         self,
         connection: sqlite3.Connection,

@@ -261,20 +261,6 @@ class GuardSurfaceDaemonClient:
             },
         )
 
-    def add_operation_item(
-        self,
-        *,
-        operation_id: str,
-        item_type: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        response = self._post(
-            f"/v1/operations/{operation_id}/items",
-            {"item_type": item_type, "payload": payload},
-        )
-        item = response.get("item")
-        return dict(item) if _is_string_object_dict(item) else response
-
     def update_operation_status(
         self,
         *,
