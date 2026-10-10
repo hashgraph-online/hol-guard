@@ -96,12 +96,14 @@ def test_recorded_python_outputs_match_the_resident(tmp_path: Path) -> None:
 
 
 def test_resident_ignores_fields_that_do_not_belong_to_the_action_type(tmp_path: Path) -> None:
-    assert _signals(action_type="file_read", command="rg foo src/", target_paths=()) == []
-    assert _signals(action_type="shell_command", command=None, target_paths=(".nvmrc",)) == []
-    assert [s["signal_id"] for s in _signals(command="rg foo src/")] == ["fp:source-search:rg"]
-    assert [s["signal_id"] for s in _signals(action_type="file_read", command=None, target_paths=(".nvmrc",))] == [
-        "fp:version-file-access"
-    ]
+    home = tmp_path / "guard-home"
+    assert _signals(action_type="file_read", command="rg foo src/", target_paths=(), guard_home=home) == []
+    assert _signals(action_type="shell_command", command=None, target_paths=(".nvmrc",), guard_home=home) == []
+    assert [s["signal_id"] for s in _signals(command="rg foo src/", guard_home=home)] == ["fp:source-search:rg"]
+    assert [
+        s["signal_id"]
+        for s in _signals(action_type="file_read", command=None, target_paths=(".nvmrc",), guard_home=home)
+    ] == ["fp:version-file-access"]
 
 
 def test_detector_gates_before_asking_the_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
