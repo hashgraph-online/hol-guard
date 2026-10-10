@@ -71,21 +71,68 @@ fn linked_directory_failure(path: &Path) -> Failure {
     }
 }
 
+/// Wire budget for one discovery reply, well inside the resident's response
+/// ceiling so the framed envelope can never push a valid answer over it.
+const REPLY_BUDGET_BYTES: usize = 1_536 * 1_024;
+
+fn issue_record(relative: &[u8], reason: Failure) -> SkillDiscoveryIssueV1 {
+    SkillDiscoveryIssueV1 {
+        relative_path_hex: hex::encode(relative),
+        failure_reason: reason,
+        issue_id: issue_id(relative, reason),
+        identity: incomplete_identity(reason, None, 0, 0),
+    }
+}
+
+fn wire_len(issue: &SkillDiscoveryIssueV1) -> usize {
+    serde_json::to_vec(issue).map_or(usize::MAX, |encoded| encoded.len() + 1)
+}
+
+/// Builds the reply inside [`REPLY_BUDGET_BYTES`]. Anything that does not fit
+/// is dropped, never the whole answer: a single `max_entries_exceeded` issue
+/// for the root records that the listing is incomplete, so the omitted scope
+/// stays visible and non-reusable instead of vanishing.
 fn into_payload(documents: BTreeSet<Vec<u8>>, issues: Issues) -> SkillDiscoveryV1 {
-    // Sorted by (relative path, reason) so the output is deterministic.
-    let issues = issues
-        .found
-        .into_iter()
-        .map(|((relative, _), reason)| SkillDiscoveryIssueV1 {
-            relative_path_hex: hex::encode(&relative),
-            failure_reason: reason,
-            issue_id: issue_id(&relative, reason),
-            identity: incomplete_identity(reason, None, 0, 0),
+    let truncation = issue_record(b".", Failure::MaxEntriesExceeded);
+    let mut remaining = REPLY_BUDGET_BYTES.saturating_sub(wire_len(&truncation));
+    let mut truncated = false;
+    let mut documents_hex = Vec::new();
+    for document in &documents {
+        let cost = document.len() * 2 + 3;
+        if cost > remaining {
+            truncated = true;
+            break;
+        }
+        remaining -= cost;
+        documents_hex.push(hex::encode(document));
+    }
+    let mut kept: Vec<SkillDiscoveryIssueV1> = Vec::new();
+    for ((relative, _), reason) in issues.found {
+        let issue = issue_record(&relative, reason);
+        let cost = wire_len(&issue);
+        if cost > remaining {
+            truncated = true;
+            break;
+        }
+        remaining -= cost;
+        kept.push(issue);
+    }
+    if truncated
+        && !kept.iter().any(|issue| {
+            issue.relative_path_hex == truncation.relative_path_hex
+                && issue.failure_reason == truncation.failure_reason
         })
-        .collect();
+    {
+        kept.push(truncation);
+    }
+    // Hex preserves byte order, so this matches the (path, reason) ordering.
+    kept.sort_by(|left, right| {
+        (&left.relative_path_hex, left.failure_reason.as_str())
+            .cmp(&(&right.relative_path_hex, right.failure_reason.as_str()))
+    });
     SkillDiscoveryV1 {
-        documents_hex: documents.iter().map(hex::encode).collect(),
-        issues,
+        documents_hex,
+        issues: kept,
     }
 }
 
@@ -173,5 +220,87 @@ fn walk(
             }
             pending.push((path, child_relative, depth + 1));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn oversized(count: usize) -> BTreeSet<Vec<u8>> {
+        (0..count)
+            .map(|index| {
+                let mut name = format!("{index:05}-").into_bytes();
+                name.resize(220, b'x');
+                name.extend_from_slice(b"/SKILL.md");
+                name
+            })
+            .collect()
+    }
+
+    #[test]
+    fn oversized_document_list_is_truncated_with_an_explicit_issue() {
+        let payload = into_payload(
+            oversized(4_000),
+            Issues {
+                found: BTreeMap::new(),
+            },
+        );
+        let encoded = crate::resident_protocol::encode_response(&payload).unwrap();
+        assert!(encoded.len() <= crate::MAX_NATIVE_RESPONSE_BYTES);
+        assert!(!payload.documents_hex.is_empty());
+        assert!(payload.documents_hex.len() < 4_000);
+        assert_eq!(payload.issues.len(), 1);
+        assert_eq!(payload.issues[0].relative_path_hex, hex::encode(b"."));
+        assert_eq!(
+            payload.issues[0].failure_reason,
+            Failure::MaxEntriesExceeded
+        );
+    }
+
+    #[test]
+    fn oversized_issue_list_keeps_a_single_truncation_issue() {
+        let mut issues = Issues {
+            found: BTreeMap::new(),
+        };
+        for index in 0..4_000 {
+            let mut name = format!("{index:05}-").into_bytes();
+            name.resize(220, b'x');
+            issues.record(&name, Failure::SymlinkBroken);
+        }
+        let payload = into_payload(BTreeSet::new(), issues);
+        let encoded = crate::resident_protocol::encode_response(&payload).unwrap();
+        assert!(encoded.len() <= crate::MAX_NATIVE_RESPONSE_BYTES);
+        let truncations = payload
+            .issues
+            .iter()
+            .filter(|issue| issue.failure_reason == Failure::MaxEntriesExceeded)
+            .count();
+        assert_eq!(truncations, 1);
+        let keys: Vec<_> = payload
+            .issues
+            .iter()
+            .map(|issue| {
+                (
+                    issue.relative_path_hex.clone(),
+                    issue.failure_reason.as_str(),
+                )
+            })
+            .collect();
+        let mut sorted = keys.clone();
+        sorted.sort();
+        assert_eq!(keys, sorted);
+    }
+
+    #[test]
+    fn small_reply_is_untouched() {
+        let payload = into_payload(
+            oversized(3),
+            Issues {
+                found: BTreeMap::new(),
+            },
+        );
+        assert_eq!(payload.documents_hex.len(), 3);
+        assert!(payload.issues.is_empty());
     }
 }

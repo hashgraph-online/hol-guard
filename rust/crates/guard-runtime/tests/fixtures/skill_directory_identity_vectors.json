@@ -604,6 +604,9 @@
     "status": "complete",
     "total_bytes": 8
    },
+   "expected_linux": {
+    "directory_hash": "sha256:96e5ca8e3b7b1b0ac866a73c1817b96e55c287ac2bbc4bbe1e4fdd446b653b3a"
+   },
    "name": "symlink_to_file_same_dir"
   },
   {
@@ -630,6 +633,9 @@
     "status": "complete",
     "total_bytes": 8
    },
+   "expected_linux": {
+    "directory_hash": "sha256:8dccf00590482bf9e3e9b6a45152c439d02a95d06fed5b89447c4d05207c0b6c"
+   },
    "name": "symlink_dot_slash"
   },
   {
@@ -655,6 +661,9 @@
     "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
     "status": "complete",
     "total_bytes": 8
+   },
+   "expected_linux": {
+    "directory_hash": "sha256:eb7b5585ff537c6294c69888a795e0d21510f6449d0abcf3d9bfa6eaba56925e"
    },
    "name": "symlink_from_subdir"
   },
@@ -687,6 +696,9 @@
     "primary_content_hash": "sha256:fd99dedae7c3f7532f8a65d60f811a05dc9dc3e1c5936b0c554c98aafdad8c10",
     "status": "complete",
     "total_bytes": 14
+   },
+   "expected_linux": {
+    "directory_hash": "sha256:602d0e024a621b01f33e7204615f7ad48146e8908170adafb81fbed0462f849d"
    },
    "name": "symlink_to_other_file"
   },

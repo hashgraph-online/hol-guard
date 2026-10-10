@@ -154,7 +154,16 @@ fn inspect_matches_legacy_python_vectors() {
             ("failure_reason", "failure_reason"),
             ("incomplete_state_hash", "incomplete_state_hash"),
         ] {
-            assert_eq!(payload[wire], expected[legacy], "{name}: {wire}");
+            let mut want = &expected[legacy];
+            // A symlink's own lstat mode is part of the hashed record and is
+            // platform dependent (0755 on macOS, 0777 on Linux), so the
+            // fixture carries Linux-specific hashes where they differ.
+            if cfg!(target_os = "linux") {
+                if let Some(over) = spec["expected_linux"].get(legacy) {
+                    want = over;
+                }
+            }
+            assert_eq!(&payload[wire], want, "{name}: {wire}");
         }
         assert_eq!(
             payload["schema_version"],
@@ -360,4 +369,23 @@ fn running_as_root() -> bool {
         .output()
         .map(|output| output.stdout.starts_with(b"0"))
         .unwrap_or(false)
+}
+
+#[test]
+fn caller_limits_are_clamped_to_server_ceilings() {
+    let huge = SkillDirectoryLimitsV1 {
+        max_depth: u64::MAX,
+        max_entries: u64::MAX,
+        max_file_bytes: u64::MAX,
+        max_total_bytes: u64::MAX,
+    };
+    let clamped = super::clamp_limits(&huge);
+    assert_eq!(clamped, super::MAX_LIMITS);
+    let lower = SkillDirectoryLimitsV1 {
+        max_depth: 3,
+        max_entries: 7,
+        max_file_bytes: 11,
+        max_total_bytes: 13,
+    };
+    assert_eq!(super::clamp_limits(&lower), lower);
 }

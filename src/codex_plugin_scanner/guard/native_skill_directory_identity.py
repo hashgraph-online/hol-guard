@@ -5,6 +5,11 @@ documents. Python sends absolute paths and resource ceilings and presents the
 answer. Every digest, incomplete-state hash, and discovery issue id arrives
 from the runtime bound to the exact request; nothing here recomputes one.
 
+Two cases never reach the runtime: Windows, where the resident has no skill
+op and the portable Python implementation keeps its locked-descriptor and
+reparse-point handling, and paths that JSON cannot carry byte-for-byte
+(non-UTF-8 POSIX names), which the Rust request parser would reject.
+
 When no bound answer is available the result is an explicit, non-reusable
 ``native_unavailable`` identity. Its state hash and the discovery issue id are
 fixed constants pinned against the runtime's own hashing material by a
@@ -17,7 +22,7 @@ import os
 import re
 from collections.abc import Mapping
 from pathlib import Path
-from typing import get_args
+from typing import TypeGuard, get_args
 from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
@@ -57,6 +62,23 @@ _DISCOVERY_KEYS = frozenset({"documents_hex", "issues"})
 # Pinned by ``transport_unavailable_constants_are_pinned`` in the runtime.
 _UNAVAILABLE_STATE_HASH = "sha256:996f4946b4e5880a4f6760d4ea1ad25d81dfe288ed8a51394ce8cb30c980a49c"
 _UNAVAILABLE_ISSUE_ID = "a032a4986b3448cf"
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def portable_python_required(*paths: Path) -> bool:
+    """True where the native op cannot serve the request: Windows or non-UTF-8 paths."""
+
+    if _is_windows():
+        return True
+    for path in paths:
+        try:
+            _ = os.fsencode(path).decode("utf-8")
+        except UnicodeError:
+            return True
+    return False
 
 
 def unavailable_skill_directory_identity() -> SkillDirectoryIdentity:
@@ -106,6 +128,14 @@ def native_discover_skill_documents(
     discovery = _decode_discovery(payload, root)
     if discovery is not None:
         return discovery
+    try:
+        _ = os.lstat(root)
+    except FileNotFoundError:
+        # Nothing exists to enumerate, matching the runtime's own NotFound
+        # answer; an absent harness must not look installed or incomplete.
+        return SkillDocumentDiscovery(documents=(), issues=())
+    except OSError:
+        pass
     return SkillDocumentDiscovery(
         documents=(),
         issues=(
@@ -170,15 +200,15 @@ def _exchange(command: dict[str, object], *, timeout_seconds: float) -> object |
     return response.get("payload")
 
 
-def _is_count(value: object) -> bool:
+def _is_count(value: object) -> TypeGuard[int]:
     return isinstance(value, int) and not isinstance(value, bool) and value >= 0
 
 
-def _is_failure(value: object) -> bool:
+def _is_failure(value: object) -> TypeGuard[SkillDirectoryIdentityFailure]:
     return isinstance(value, str) and value in _FAILURES
 
 
-def _is_sha256(value: object) -> bool:
+def _is_sha256(value: object) -> TypeGuard[str]:
     return isinstance(value, str) and _SHA256.fullmatch(value) is not None
 
 
@@ -190,9 +220,11 @@ def _decode_identity(payload: object) -> SkillDirectoryIdentity | None:
     primary_hash = payload["primary_content_hash"]
     reason = payload["failure_reason"]
     state_hash = payload["incomplete_state_hash"]
+    entry_count = payload["entry_count"]
+    total_bytes = payload["total_bytes"]
     if payload["schema_version"] != SKILL_DIRECTORY_IDENTITY_SCHEMA:
         return None
-    if not _is_count(payload["entry_count"]) or not _is_count(payload["total_bytes"]):
+    if not _is_count(entry_count) or not _is_count(total_bytes):
         return None
     if primary_hash is not None and not _is_sha256(primary_hash):
         return None
@@ -201,21 +233,30 @@ def _decode_identity(payload: object) -> SkillDirectoryIdentity | None:
             return None
         if reason is not None or state_hash is not None:
             return None
-    elif status == "incomplete":
+        return SkillDirectoryIdentity(
+            schema_version=SKILL_DIRECTORY_IDENTITY_SCHEMA,
+            status="complete",
+            directory_hash=directory_hash,
+            primary_content_hash=primary_hash,
+            entry_count=entry_count,
+            total_bytes=total_bytes,
+            failure_reason=None,
+            incomplete_state_hash=None,
+        )
+    if status == "incomplete":
         if directory_hash is not None or not _is_failure(reason) or not _is_sha256(state_hash):
             return None
-    else:
-        return None
-    return SkillDirectoryIdentity(
-        schema_version=SKILL_DIRECTORY_IDENTITY_SCHEMA,
-        status=status,
-        directory_hash=directory_hash,
-        primary_content_hash=primary_hash,
-        entry_count=payload["entry_count"],
-        total_bytes=payload["total_bytes"],
-        failure_reason=reason,
-        incomplete_state_hash=state_hash,
-    )
+        return SkillDirectoryIdentity(
+            schema_version=SKILL_DIRECTORY_IDENTITY_SCHEMA,
+            status="incomplete",
+            directory_hash=None,
+            primary_content_hash=primary_hash,
+            entry_count=entry_count,
+            total_bytes=total_bytes,
+            failure_reason=reason,
+            incomplete_state_hash=state_hash,
+        )
+    return None
 
 
 def _relative(value: object) -> str | None:
@@ -281,5 +322,6 @@ __all__ = [
     "SKILL_DIRECTORY_IDENTITY_FEATURE",
     "native_discover_skill_documents",
     "native_inspect_skill_directory",
+    "portable_python_required",
     "unavailable_skill_directory_identity",
 ]

@@ -19,10 +19,57 @@ use crate::skill_identity_canon::{
 };
 use crate::skill_identity_walk::{
     collect_entries, is_directory, lexical_normalize, resolve_existing, safe_lstat, security_mode,
-    stat_key, EntryType, TreeEntry,
+    stat_key, EntryType, Structure, TreeEntry,
 };
 
 const HASH_CHUNK_BYTES: usize = 64 * 1024;
+
+/// Fault-injection points so tests can mutate the tree at the exact moments
+/// the inspector claims to detect concurrent change.
+#[cfg(test)]
+pub(crate) mod test_hooks {
+    use std::cell::RefCell;
+    use std::path::Path;
+
+    type CollectHook = Box<dyn FnMut(usize, bool)>;
+    type HashHook = Box<dyn FnMut(&Path)>;
+
+    thread_local! {
+        pub(crate) static COLLECT: RefCell<Option<CollectHook>> = const { RefCell::new(None) };
+        pub(crate) static HASHED: RefCell<Option<HashHook>> = const { RefCell::new(None) };
+    }
+
+    pub(crate) fn collect(pass: usize, after: bool) {
+        COLLECT.with(|hook| {
+            if let Some(hook) = hook.borrow_mut().as_mut() {
+                hook(pass, after);
+            }
+        });
+    }
+
+    pub(crate) fn hashed(path: &Path) {
+        HASHED.with(|hook| {
+            if let Some(hook) = hook.borrow_mut().as_mut() {
+                hook(path);
+            }
+        });
+    }
+}
+
+fn collect_pass(
+    root: &Path,
+    limits: &SkillDirectoryLimitsV1,
+    pass: usize,
+) -> Result<(Vec<TreeEntry>, Structure), Failure> {
+    #[cfg(test)]
+    test_hooks::collect(pass, false);
+    let collected = collect_entries(root, limits);
+    #[cfg(test)]
+    test_hooks::collect(pass, true);
+    #[cfg(not(test))]
+    let _ = pass;
+    collected
+}
 
 #[derive(Default)]
 struct State {
@@ -98,7 +145,7 @@ fn run(
         Some(Component::Normal(name)) => canonical_component(name)?,
         _ => return Err(Failure::InvalidRelativePath),
     };
-    let (entries, initial_structure) = collect_entries(&resolved_root, limits)?;
+    let (entries, initial_structure) = collect_pass(&resolved_root, limits, 1)?;
     state.entry_count = entries.len() as u64;
     let primary_index = entries
         .iter()
@@ -124,7 +171,7 @@ fn run(
     if stat_key(&safe_lstat(logical_root)?) != root_key {
         return Err(Failure::TreeChangedDuringHash);
     }
-    let (_, final_structure) = collect_entries(&resolved_root, limits)?;
+    let (_, final_structure) = collect_pass(&resolved_root, limits, 2)?;
     if final_structure != initial_structure {
         return Err(Failure::TreeChangedDuringHash);
     }
@@ -262,6 +309,8 @@ fn symlink_record(
     }
     let (target_digest, target_size) =
         hash_regular_file(&resolved_target, &target_lstat, limits, state)?;
+    #[cfg(test)]
+    test_hooks::hashed(&resolved_target);
     let current_link = safe_lstat(&entry.path)?;
     let current_raw = fs::read_link(&entry.path).map_err(|_| Failure::TreeChangedDuringHash)?;
     if stat_key(&current_link) != entry.key || current_raw.to_str() != Some(raw_target) {
@@ -352,6 +401,10 @@ fn hash_regular_file(
     state.total_bytes += total;
     Ok((sha256_label(digest), total))
 }
+
+#[cfg(test)]
+#[path = "skill_identity_race_tests.rs"]
+mod race_tests;
 
 #[cfg(test)]
 mod tests {

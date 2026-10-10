@@ -9,7 +9,8 @@ use std::path::Path;
 
 use guard_contracts::{
     SkillDirectoryCommandV1, SkillDirectoryIdentityRequestV1, SkillDirectoryIdentityResultV1,
-    SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA, SKILL_DIRECTORY_IDENTITY_RESULT_SCHEMA,
+    SkillDirectoryLimitsV1, SKILL_DIRECTORY_IDENTITY_REQUEST_SCHEMA,
+    SKILL_DIRECTORY_IDENTITY_RESULT_SCHEMA,
 };
 use serde_json::Value;
 
@@ -57,6 +58,25 @@ fn require_absolute(value: &str) -> Result<&Path, &'static str> {
     Ok(path)
 }
 
+/// Server-side ceilings, equal to the defaults every caller already stays
+/// within. A caller may lower a limit but can never raise it, so one request
+/// cannot occupy a shared evaluation worker with an unbounded walk.
+const MAX_LIMITS: SkillDirectoryLimitsV1 = SkillDirectoryLimitsV1 {
+    max_depth: 32,
+    max_entries: 4_096,
+    max_file_bytes: 128 * 1024 * 1024,
+    max_total_bytes: 256 * 1024 * 1024,
+};
+
+fn clamp_limits(limits: &SkillDirectoryLimitsV1) -> SkillDirectoryLimitsV1 {
+    SkillDirectoryLimitsV1 {
+        max_depth: limits.max_depth.min(MAX_LIMITS.max_depth),
+        max_entries: limits.max_entries.min(MAX_LIMITS.max_entries),
+        max_file_bytes: limits.max_file_bytes.min(MAX_LIMITS.max_file_bytes),
+        max_total_bytes: limits.max_total_bytes.min(MAX_LIMITS.max_total_bytes),
+    }
+}
+
 fn decide(request: &SkillDirectoryIdentityRequestV1) -> Result<Value, &'static str> {
     require_absolute(&request.guard_home)?;
     match &request.command {
@@ -68,14 +88,14 @@ fn decide(request: &SkillDirectoryIdentityRequestV1) -> Result<Value, &'static s
             let identity = crate::skill_identity_inspect::inspect_skill_directory(
                 require_absolute(skill_document)?,
                 require_absolute(scope_root)?,
-                limits,
+                &clamp_limits(limits),
             );
             serde_json::to_value(identity).map_err(|_| PAYLOAD_INVALID)
         }
         SkillDirectoryCommandV1::Discover { skill_root, limits } => {
             let discovery = crate::skill_identity_discovery::discover_skill_documents(
                 require_absolute(skill_root)?,
-                limits,
+                &clamp_limits(limits),
             );
             serde_json::to_value(discovery).map_err(|_| PAYLOAD_INVALID)
         }

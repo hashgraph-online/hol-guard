@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from codex_plugin_scanner.guard.native_skill_directory_identity import native_discover_skill_documents
+from codex_plugin_scanner.guard.native_skill_directory_identity import (
+    native_discover_skill_documents,
+    portable_python_required,
+)
+from codex_plugin_scanner.guard.portable_skill_directory_discovery import (
+    discover_skill_documents as portable_discover_skill_documents,
+)
 from codex_plugin_scanner.guard.skill_directory_identity_contract import (
     DEFAULT_SKILL_DIRECTORY_LIMITS,
     SkillDirectoryIdentityLimits,
@@ -28,4 +34,7 @@ def discover_skill_documents(
     """
 
     _validate_limits(limits)
-    return native_discover_skill_documents(Path(skill_root), limits=limits)
+    root = Path(skill_root)
+    if portable_python_required(root):
+        return portable_discover_skill_documents(root, limits=limits)
+    return native_discover_skill_documents(root, limits=limits)

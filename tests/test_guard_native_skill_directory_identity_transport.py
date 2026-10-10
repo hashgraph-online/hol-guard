@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -203,3 +204,59 @@ def test_discovery_malformed_payload_yields_single_native_unavailable_issue(
     assert issue.failure_reason == "native_unavailable"
     assert issue.issue_id == transport._UNAVAILABLE_ISSUE_ID
     assert issue.path == tmp_path
+
+
+def test_missing_root_without_a_runtime_is_an_empty_discovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: False)
+
+    discovery = transport.native_discover_skill_documents(tmp_path / "absent", limits=_LIMITS)
+
+    assert discovery.documents == ()
+    assert discovery.issues == ()
+
+
+def test_existing_root_without_a_runtime_is_one_unavailable_issue(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: False)
+
+    discovery = transport.native_discover_skill_documents(tmp_path, limits=_LIMITS)
+
+    assert discovery.documents == ()
+    assert [issue.failure_reason for issue in discovery.issues] == ["native_unavailable"]
+
+
+def test_portable_python_is_required_on_windows_and_for_non_utf8_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert not transport.portable_python_required(tmp_path / "SKILL.md", tmp_path)
+    assert transport.portable_python_required(tmp_path / os.fsdecode(b"bad-\xff-name") / "SKILL.md")
+    monkeypatch.setattr(transport, "_is_windows", lambda: True)
+    assert transport.portable_python_required(tmp_path)
+
+
+def test_wrappers_route_to_portable_python_where_native_cannot_serve(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import skill_directory_discovery as discovery_module
+    from codex_plugin_scanner.guard import skill_directory_identity as identity_module
+
+    calls: list[str] = []
+    for module, native_name, portable_name in (
+        (identity_module, "native_inspect_skill_directory", "portable_inspect_skill_directory"),
+        (discovery_module, "native_discover_skill_documents", "portable_discover_skill_documents"),
+    ):
+        monkeypatch.setattr(module, native_name, lambda *a, **k: calls.append("native"))
+        monkeypatch.setattr(module, portable_name, lambda *a, **k: calls.append("portable"))
+    monkeypatch.setattr(identity_module, "portable_python_required", lambda *paths: True)
+    monkeypatch.setattr(discovery_module, "portable_python_required", lambda *paths: True)
+
+    identity_module.inspect_skill_directory(tmp_path / "SKILL.md", scope_root=tmp_path)
+    discovery_module.discover_skill_documents(tmp_path)
+    assert calls == ["portable", "portable"]
+
+    monkeypatch.setattr(identity_module, "portable_python_required", lambda *paths: False)
+    monkeypatch.setattr(discovery_module, "portable_python_required", lambda *paths: False)
+    identity_module.inspect_skill_directory(tmp_path / "SKILL.md", scope_root=tmp_path)
+    discovery_module.discover_skill_documents(tmp_path)
+    assert calls == ["portable", "portable", "native", "native"]
