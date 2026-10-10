@@ -133,6 +133,19 @@ def test_installation_survives_slow_native_process_start(tmp_path: Path, native_
     assert owner.read_installed_business_source(store, _key(store)) == installed.source
 
 
+def test_installation_deadline_never_outlives_its_approval(tmp_path: Path):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.approval_gate_state import iso_from_epoch
+
+    grant = SimpleNamespace(expires_at=iso_from_epoch(time.time() + 10))
+    deadline = owner._mutation_deadline(None, grant)
+    assert deadline <= time.monotonic() + 10
+    expired = SimpleNamespace(expires_at=iso_from_epoch(time.time() - 1))
+    assert owner._mutation_deadline(None, expired) > time.monotonic() + 10
+
+
 def test_sql_rollback_leaves_closed_marker_and_no_source_admission(tmp_path: Path, native_mcp_probe):
     store = GuardStore(tmp_path / "rollback-home")
     native_mcp_probe(store.guard_home)
