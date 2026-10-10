@@ -49,8 +49,6 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import (
 )
 from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecision,
-    EffectDecisionRequest,
-    evaluate_effect_decision,
 )
 from codex_plugin_scanner.guard.runtime.native_command_evaluation import NativeCommandEvaluation
 from tests.guard_command_corpus import CommandCorpusCase, iter_adversarial_corpus, iter_benign_corpus
@@ -194,12 +192,8 @@ def _canonical_native_floor(action: CommandDecisionFloor) -> GuardAction:
 
 
 def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> EffectDecision:
-    return evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=evaluation.baseline_factors,
-            uncertainties=evaluation.baseline_uncertainties,
-        )
-    )
+    """The resident's decision over the baseline factors alone."""
+    return evaluation.baseline_decision
 
 
 def _reconciliation_category(native_floor: GuardAction, current: GuardAction, oracle: GuardAction) -> str:

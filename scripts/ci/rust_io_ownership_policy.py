@@ -97,6 +97,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_execution.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
+        # Decodes the bounded resident command-effect result envelope and binds
+        # it to the request; the decision itself is computed in Rust.
+        "src/codex_plugin_scanner/guard/native_command_effect.py",
         # Bounded response decoding for resident package-verdict composition patches.
         "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
         # Decodes the bounded resident approval-reuse response envelope.

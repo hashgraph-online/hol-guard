@@ -13,23 +13,17 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime import secret_file_requests
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import NativeCommandExtensionEvidenceError
-from tests.test_guard_command_decision_routing import _synthetic_native_fixture
+from tests.native_command_test_support import native_test_guard_home, real_native_command_evaluation
 
 
 def test_matcher_failure_central_block_reaches_final_runtime_policy(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    registry, snapshot, command, payload = _synthetic_native_fixture(mode="disabled", uncertainty=True)
-    evaluation = evaluate_command(
-        command.normalized_text,
-        canonical_command=command,
-        registry=registry,
-        extension_control_snapshot=snapshot,
-        native_extension_evidence=payload,
-    )
-    assert evaluation.extension_observations[0].to_dict()["uncertainty_reasons"] == ["unsupported-input"]
-    monkeypatch.setattr(secret_file_requests, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
+    reviewed = real_native_command_evaluation("aws apigateway delete-rest-api --rest-api-id abc")
+    snapshot, payload, evaluation = reviewed.snapshot, reviewed.payload, reviewed.evaluation
+    command = evaluation.command
+    assert evaluation.minimum_action == "review"
     request = secret_file_requests.extract_sensitive_tool_action_request(
         "Shell",
         {"command": command.normalized_text},
@@ -80,8 +74,8 @@ def test_matcher_failure_central_block_reaches_final_runtime_policy(
         evaluate_command(
             command.normalized_text,
             canonical_command=command,
-            registry=registry,
             extension_control_snapshot=snapshot,
+            guard_home=native_test_guard_home(),
             native_extension_evidence=payload,
         )
     assert "private matcher detail" not in str(error.value)

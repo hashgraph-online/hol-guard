@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use fancy_regex::Regex as FancyRegex;
 use regex::Regex;
 
 use crate::command_model::CanonicalCommand;
@@ -43,21 +44,19 @@ fn python_executable_re() -> &'static Regex {
         Regex::new(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
     })
 }
-#[allow(clippy::invalid_regex)]
-fn literal_read_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
+fn literal_read_re() -> &'static FancyRegex {
+    static RE: OnceLock<FancyRegex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
+        FancyRegex::new(
             r#"(?:\bopen|\breadFile(?:Sync)?|\bcreateReadStream|\bBun\.file|\bload_dotenv)\s*\(\s*(['"])([^'"\n\x00]{1,4096})\1"#,
         )
         .expect("literal read")
     })
 }
-#[allow(clippy::invalid_regex)]
-fn path_read_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
+fn path_read_re() -> &'static FancyRegex {
+    static RE: OnceLock<FancyRegex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
+        FancyRegex::new(
             r#"\bPath\s*\(\s*(['"])([^'"\n\x00]{1,4096})\1\s*\)\s*\.\s*(?:read_text|read_bytes|open)\s*\("#,
         )
         .expect("path read")
@@ -72,15 +71,44 @@ const SHORT_CIRCUITING_CD_FAILURES: &[&str] = &[
 pub(crate) const FLOW_OPERATORS: &[&str] = &["&&", "||", "|", ";", "&"];
 
 /// `_literal_read_paths` (:68-71).
+///
+/// The patterns are `fancy_regex` (backreference on the quote), whose matcher
+/// can fail at run time (backtrack limit). A scan error must never read as "no
+/// literal read here": that would silently drop a secret read. It is treated
+/// as a match instead, by emitting [`FAIL_CLOSED_SENSITIVE_READ`], which the
+/// callers classify as a sensitive path like any other literal.
 pub(crate) fn literal_read_paths(source: &str) -> Vec<String> {
     let mut out = Vec::new();
     for re in [literal_read_re(), path_read_re()] {
-        for m in re.captures_iter(source) {
-            out.push(m[2].to_owned());
-        }
+        collect_literal_reads(
+            re.captures_iter(source)
+                .map(|captures| captures.map(|c| c.get(2).map(|path| path.as_str().to_owned()))),
+            &mut out,
+        );
     }
     out
 }
+
+fn collect_literal_reads(
+    matches: impl Iterator<Item = Result<Option<String>, fancy_regex::Error>>,
+    out: &mut Vec<String>,
+) {
+    for found in matches {
+        match found {
+            Ok(Some(path)) => out.push(path),
+            Ok(None) => {}
+            Err(_) => {
+                out.push(FAIL_CLOSED_SENSITIVE_READ.to_owned());
+                return;
+            }
+        }
+    }
+}
+
+/// Stand-in literal reported when a read-scan regex errors. `.env` is always
+/// classified as a sensitive local file, so the failure surfaces as a
+/// secret-read finding rather than a silent allow.
+pub(crate) const FAIL_CLOSED_SENSITIVE_READ: &str = ".env";
 
 /// `_python_executable` (:74-75). `re.IGNORECASE` is folded by lowercasing
 /// the candidate name; the Python pattern is unanchored `re.match`-style
@@ -1864,10 +1892,10 @@ pub(crate) fn path_qualified(executable: &str) -> bool {
 /// `_script_like_operand` (:436-443).
 #[allow(dead_code)]
 fn script_like_operand(operand: &str) -> bool {
-    if operand.is_empty() || operand.starts_with('-') {
+    if operand.is_empty() || operand == "-" {
         return false;
     }
-    if path_qualified(operand) {
+    if operand.to_lowercase().ends_with_any(SCRIPT_SUFFIXES) {
         return true;
     }
     unresolved_local_script_launch(operand)
@@ -1875,10 +1903,20 @@ fn script_like_operand(operand: &str) -> bool {
 
 /// `_unresolved_local_script_launch` (:446-458).
 pub(crate) fn unresolved_local_script_launch(executable: &str) -> bool {
-    if executable.is_empty() || executable.starts_with('-') {
+    if executable.is_empty() {
         return false;
     }
-    if path_qualified(executable) {
+    if executable.starts_with("./")
+        || executable.starts_with("../")
+        || executable.starts_with(".\\")
+        || executable.starts_with("..\\")
+    {
+        return true;
+    }
+    if !(executable.contains('/') || executable.contains('\\')) {
+        return false;
+    }
+    if !executable.starts_with('/') {
         return true;
     }
     executable.to_lowercase().ends_with_any(SCRIPT_SUFFIXES)
@@ -1922,4 +1960,54 @@ pub(crate) fn local_executable_operand(
 /// `_SHORT_CIRCUITING_CD_FAILURES` (:54-60).
 pub(crate) fn short_circuiting_cd_failures() -> &'static [&'static str] {
     SHORT_CIRCUITING_CD_FAILURES
+}
+
+#[cfg(test)]
+mod launch_parity_tests {
+    use super::*;
+
+    #[test]
+    fn unresolved_local_script_launch_matches_python_oracle() {
+        for (executable, expected) in [
+            ("", false),
+            ("./run", true),
+            ("../run", true),
+            (".\\run", true),
+            ("bin/run", true),
+            ("/usr/bin/stripe.exe", false),
+            ("/opt/tool/run.sh", true),
+            ("/opt/tool/RUN.PY", true),
+            ("git", false),
+            ("deploy.sh", false),
+        ] {
+            assert_eq!(
+                unresolved_local_script_launch(executable),
+                expected,
+                "{executable}"
+            );
+        }
+    }
+
+    #[test]
+    fn literal_read_paths_capture_quoted_reads() {
+        let source = "print(open(\".env\").read()); Path('a/b').read_text()";
+        assert_eq!(literal_read_paths(source), vec![".env", "a/b"]);
+    }
+
+    #[test]
+    fn literal_read_scan_error_fails_closed() {
+        use fancy_regex::{Error, RuntimeError};
+        let mut out = Vec::new();
+        collect_literal_reads(
+            vec![
+                Ok(Some("a/b".to_owned())),
+                Err(Error::RuntimeError(RuntimeError::BacktrackLimitExceeded)),
+                Ok(Some("c".to_owned())),
+            ]
+            .into_iter(),
+            &mut out,
+        );
+        assert_eq!(out, vec!["a/b", FAIL_CLOSED_SENSITIVE_READ]);
+        assert!(classify_secret_path(FAIL_CLOSED_SENSITIVE_READ, None, None).is_some());
+    }
 }

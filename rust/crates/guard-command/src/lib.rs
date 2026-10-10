@@ -7,6 +7,7 @@ pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
 pub mod canonical_command;
+pub mod command_action_risk_classes;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
@@ -18,10 +19,15 @@ mod command_critical_floors_tests;
 mod command_database_matchers;
 pub mod command_decision_adapter;
 pub mod command_evaluation;
+pub mod command_evaluation_compose;
+pub mod command_evaluation_controls;
+#[cfg(test)]
+mod command_evaluation_lattice_tests;
 #[cfg(test)]
 mod command_evaluation_tests;
 mod command_launcher_floors;
 pub mod command_model;
+pub mod command_native_factors;
 mod command_operand_matchers;
 pub mod command_option_parsing;
 mod command_segment_parsing;
@@ -107,7 +113,8 @@ pub mod typescript_launch_evidence;
 
 pub mod package_context_environment;
 
-pub use command_evaluation::{evaluate_command, CompositeCommandEvaluation};
+pub use command_evaluation::CompositeCommandEvaluation;
+pub use command_evaluation_compose::{evaluate_command, CommandEvaluationInput};
 pub use command_model::parse_shell_command;
 
 use serde::{Deserialize, Serialize};

@@ -203,6 +203,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::CommandEffectDecide(request) => {
                 crate::command_effect::evaluate_command_effect_request(&request)
             }
+            ResidentOperationV1::CommandEffectDecideBatch(request) => {
+                crate::command_effect::evaluate_command_effect_batch_request(&request)
+            }
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
             }
