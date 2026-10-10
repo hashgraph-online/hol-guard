@@ -3,23 +3,31 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
+import logging
 import re
 import sqlite3
+from contextlib import suppress
+from pathlib import Path
 
 from .approval_resolution import approval_resolution_block_reason
 from .approval_scope_support import apply_scope_surfaces, request_scope_contract_payloads
 from .decision_boundaries import canonical_approval_surfaces
 from .models import GuardApprovalRequest
-from .runtime.action_identity import normalize_command_identity
+from .native_approval_queue_identity import (
+    ApprovalQueueIdentityUnavailableError,
+    connection_guard_home,
+    native_approval_queue_identities,
+    queue_identity_item,
+)
 from .runtime.browser_mcp_intent import classify_browser_operation
+
+logger = logging.getLogger(__name__)
 
 MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_PREVIEW_MAX_LENGTH = 512
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _APPROVAL_RESOLUTION_BATCH_SIZE = 500
-_QUEUE_IDENTITY_VERSION = "v1"
 _LEGACY_BROWSER_MULTI_ELEMENT_OPERATIONS = frozenset({"drag", "drag_drop_file", "fill_form"})
 _LEGACY_BROWSER_ELEMENT_OPERATIONS = frozenset(
     {
@@ -32,30 +40,10 @@ _LEGACY_BROWSER_ELEMENT_OPERATIONS = frozenset(
         "upload_file",
     }
 )
-_VOLATILE_PAYLOAD_KEY_TOKENS = frozenset(
-    {
-        "callid",
-        "conversationid",
-        "messageid",
-        "model",
-        "requestid",
-        "sessionid",
-        "threadid",
-        "toolcallid",
-        "tooluseid",
-        "traceid",
-        "transcriptpath",
-        "turnid",
-    }
-)
 
 
 class InvalidApprovalCursorError(ValueError):
     pass
-
-
-def _normalized_identity_key(launch_target: str | None) -> str:
-    return normalize_command_identity(launch_target or "")
 
 
 def _browser_launch_target_for_display(value: object) -> tuple[object, str | None]:
@@ -124,109 +112,6 @@ def _begin_immediate(connection: sqlite3.Connection) -> None:
     connection.execute("begin immediate")
 
 
-def approval_queue_identity_for_request(request: GuardApprovalRequest) -> tuple[str, str]:
-    action_identity = request.action_identity or _build_action_identity(
-        launch_target=request.launch_target,
-        action_envelope=request.action_envelope_json,
-    )
-    queue_group_id = request.queue_group_id or _build_queue_group_id(
-        harness=request.harness,
-        workspace=request.workspace,
-        artifact_id=request.artifact_id,
-        action_identity=action_identity,
-        browser_intent=request.browser_intent,
-    )
-    return action_identity, queue_group_id
-
-
-def _build_action_identity(
-    *,
-    launch_target: str | None,
-    action_envelope: dict[str, object] | None,
-) -> str:
-    envelope = action_envelope or {}
-    command = _optional_text(envelope.get("command")) or launch_target or ""
-    payload = {
-        "version": _QUEUE_IDENTITY_VERSION,
-        "action_type": _optional_text(envelope.get("action_type")),
-        "tool_name": _optional_text(envelope.get("tool_name")),
-        "command": normalize_command_identity(command),
-        "prompt_excerpt": _optional_text(envelope.get("prompt_excerpt")),
-        "target_paths": _string_sequence(envelope.get("target_paths")),
-        "network_hosts": _string_sequence(envelope.get("network_hosts")),
-        "mcp_server": _optional_text(envelope.get("mcp_server")),
-        "mcp_tool": _optional_text(envelope.get("mcp_tool")),
-        "package_manager": None,
-        "package_name": None,
-        "script_name": _optional_text(envelope.get("script_name")),
-        "raw_payload_redacted": _stable_identity_payload(envelope.get("raw_payload_redacted")),
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _build_queue_group_id(
-    *,
-    harness: str,
-    workspace: str | None,
-    artifact_id: str,
-    action_identity: str,
-    browser_intent: dict[str, object] | None = None,
-) -> str:
-    # Include browser intent identity in dedupe key when present
-    browser_identity_hash = None
-    if browser_intent is not None:
-        from .runtime.action_identity import normalize_browser_mcp_identity
-
-        browser_identity_hash = normalize_browser_mcp_identity(browser_intent)
-    payload = json.dumps(
-        {
-            "version": _QUEUE_IDENTITY_VERSION,
-            "harness": harness,
-            "workspace": workspace,
-            "artifact_id": artifact_id,
-            "action_identity": action_identity,
-            "browser_identity_hash": browser_identity_hash,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    return f"approval-group:{_QUEUE_IDENTITY_VERSION}:{digest}"
-
-
-def _optional_text(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _string_sequence(value: object) -> list[str]:
-    if not isinstance(value, list | tuple):
-        return []
-    return sorted(str(item) for item in value if isinstance(item, str) and item.strip())
-
-
-def _stable_identity_payload(value: object) -> object:
-    if isinstance(value, dict):
-        normalized: dict[str, object] = {}
-        for key, item in sorted(value.items()):
-            if not isinstance(key, str):
-                continue
-            if _identity_payload_key_token(key) in _VOLATILE_PAYLOAD_KEY_TOKENS:
-                continue
-            normalized[key] = _stable_identity_payload(item)
-        return normalized
-    if isinstance(value, list | tuple):
-        return [_stable_identity_payload(item) for item in value]
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
-    return str(value)
-
-
-def _identity_payload_key_token(key: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", key.lower())
-
-
 def approval_schema_statement() -> str:
     return """
         create table if not exists approval_requests (
@@ -290,11 +175,12 @@ def add_approval_request(
     now: str,
     *,
     oauth_source: str = "default",
+    guard_home: Path | None = None,
 ) -> str:
     """Compatibility facade for the focused approval write service."""
     from .store_approval_writes import add_approval_request as persist_approval_request
 
-    return persist_approval_request(connection, request, now, oauth_source=oauth_source)
+    return persist_approval_request(connection, request, now, oauth_source=oauth_source, guard_home=guard_home)
 
 
 def list_approval_requests(
@@ -1012,53 +898,206 @@ def resolve_request_with_queue_result(
     }
 
 
-def backfill_approval_queue_columns(connection: sqlite3.Connection) -> None:
-    while True:
-        rows = connection.execute(
-            """
+def _backfill_queue_counters(connection: sqlite3.Connection) -> None:
+    """Fill the counters that need no identity when the resident cannot serve one."""
+
+    connection.execute(
+        """
+        update approval_requests
+        set dedupe_count = case when dedupe_count is null or dedupe_count < 1 then 1 else dedupe_count end,
+            last_seen_at = coalesce(last_seen_at, created_at)
+        where last_seen_at is null
+           or dedupe_count is null
+           or dedupe_count < 1
+        """
+    )
+
+
+_QUEUE_BACKFILLED_HOMES: set[str] = set()
+
+
+def backfill_queue_identities_once(connection: sqlite3.Connection, guard_home: Path) -> None:
+    """Backfill legacy rows the schema migration could not identify without a resident.
+
+    The migration runs inside store initialization, before the home has a
+    verifier key. The first write that reaches the resident finishes the job,
+    once per home and process, and never inside a caller-owned transaction.
+    The home is remembered when the scan finishes without an unavailable
+    resident, including when a row was rejected and left unidentified. An
+    unavailable resident or a sqlite failure leaves the home retryable.
+    """
+
+    key = str(guard_home)
+    if key in _QUEUE_BACKFILLED_HOMES or connection.in_transaction or connection.row_factory is not sqlite3.Row:
+        return
+    try:
+        complete = backfill_approval_queue_columns(connection, guard_home=guard_home, commit_batches=True)
+    except sqlite3.Error:
+        logger.warning("approval queue identity backfill rolled back", exc_info=True)
+        with suppress(sqlite3.Error):
+            connection.rollback()
+        return
+    if complete:
+        _QUEUE_BACKFILLED_HOMES.add(key)
+
+
+def _legacy_queue_rows(connection: sqlite3.Connection, *, after: tuple[str, str] | None) -> list[sqlite3.Row]:
+    predicate = ""
+    parameters: list[object] = []
+    if after is not None:
+        predicate = "and (created_at > ? or (created_at = ? and request_id > ?))"
+        parameters.extend((after[0], after[0], after[1]))
+    parameters.append(APPROVAL_QUEUE_BACKFILL_BATCH_SIZE)
+    return list(
+        connection.execute(
+            f"""
             select request_id, harness, artifact_id, workspace, launch_target, action_envelope_json,
                    action_identity, queue_group_id, dedupe_count, last_seen_at, created_at
             from approval_requests
-            where action_identity is null
-               or queue_group_id is null
-               or last_seen_at is null
-               or dedupe_count is null
-               or dedupe_count < 1
+            where (
+                action_identity is null
+                or queue_group_id is null
+                or last_seen_at is null
+                or dedupe_count is null
+                or dedupe_count < 1
+            )
+            {predicate}
             order by created_at asc, request_id asc
             limit ?
             """,
-            (APPROVAL_QUEUE_BACKFILL_BATCH_SIZE,),
+            parameters,
         ).fetchall()
+    )
+
+
+def _identity_items(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
+    return [
+        queue_identity_item(
+            launch_target=row["launch_target"],
+            harness=str(row["harness"]),
+            workspace=row["workspace"],
+            artifact_id=str(row["artifact_id"]),
+            envelope=_optional_json_object(row["action_envelope_json"]),
+            browser_intent=None,
+            action_identity=row["action_identity"],
+            queue_group_id=row["queue_group_id"],
+        )
+        for row in rows
+    ]
+
+
+def _queue_identities_for_rows(rows: list[sqlite3.Row], guard_home: Path) -> tuple[dict[str, tuple[str, str]], bool]:
+    """Identify ``rows``. The bool is true when the resident never answered.
+
+    A rejected batch is halved and then tried one row at a time. A row that is
+    still rejected is omitted. An unavailable resident stops the split so a
+    down runtime is not retried once per legacy row.
+    """
+
+    if not rows:
+        return {}, False
+    try:
+        derived = native_approval_queue_identities(
+            _identity_items(rows),
+            guard_home=guard_home,
+            provision=False,
+        )
+    except ApprovalQueueIdentityUnavailableError as error:
+        if error.reason != "rejected":
+            return {}, True
+        if len(rows) == 1:
+            return {}, False
+        midpoint = len(rows) // 2
+        left, left_unavailable = _queue_identities_for_rows(rows[:midpoint], guard_home)
+        if left_unavailable:
+            return left, True
+        right, right_unavailable = _queue_identities_for_rows(rows[midpoint:], guard_home)
+        left.update(right)
+        return left, right_unavailable
+    return {
+        str(row["request_id"]): (identity.action_identity, identity.queue_group_id)
+        for row, identity in zip(rows, derived, strict=True)
+    }, False
+
+
+def _apply_backfill_updates(
+    connection: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+    identities: dict[str, tuple[str, str]],
+) -> None:
+    for row in rows:
+        action_identity, queue_group_id = identities.get(
+            str(row["request_id"]), (row["action_identity"], row["queue_group_id"])
+        )
+        connection.execute(
+            """
+            update approval_requests
+            set action_identity = ?,
+                queue_group_id = ?,
+                dedupe_count = ?,
+                last_seen_at = ?
+            where request_id = ?
+            """,
+            (
+                action_identity,
+                queue_group_id,
+                max(1, int(row["dedupe_count"] or 1)),
+                row["last_seen_at"] or row["created_at"],
+                row["request_id"],
+            ),
+        )
+
+
+def _commit_backfill_batch(connection: sqlite3.Connection, *, commit_batches: bool) -> None:
+    if commit_batches:
+        connection.commit()
+
+
+def backfill_approval_queue_columns(
+    connection: sqlite3.Connection,
+    *,
+    guard_home: Path | None = None,
+    commit_batches: bool = False,
+) -> bool:
+    """Fill legacy queue identities.
+
+    Returns True when this scan should not be repeated: every selected row was
+    identified, or the only rows left unidentified were rejected. Returns False
+    when the resident was unavailable or no home could be resolved, so a later
+    write retries. ``commit_batches`` commits each batch before the next
+    resident call so the write lock is not held across the lookup. Schema
+    migration leaves it false and keeps its own transaction. A rejected row
+    stays unidentified and is skipped for this call; later rows still run.
+    """
+
+    complete = True
+    after: tuple[str, str] | None = None
+    while True:
+        rows = _legacy_queue_rows(connection, after=after)
         if not rows:
-            return
-        for row in rows:
-            action_identity = row["action_identity"] or _build_action_identity(
-                launch_target=row["launch_target"],
-                action_envelope=_optional_json_object(row["action_envelope_json"]),
-            )
-            queue_group_id = row["queue_group_id"] or _build_queue_group_id(
-                harness=str(row["harness"]),
-                workspace=row["workspace"],
-                artifact_id=str(row["artifact_id"]),
-                action_identity=str(action_identity),
-            )
-            connection.execute(
-                """
-                update approval_requests
-                set action_identity = ?,
-                    queue_group_id = ?,
-                    dedupe_count = ?,
-                    last_seen_at = ?
-                where request_id = ?
-                """,
-                (
-                    action_identity,
-                    queue_group_id,
-                    max(1, int(row["dedupe_count"] or 1)),
-                    row["last_seen_at"] or row["created_at"],
-                    row["request_id"],
-                ),
-            )
+            return complete
+        missing = [row for row in rows if not row["action_identity"] or not row["queue_group_id"]]
+        identities: dict[str, tuple[str, str]] = {}
+        if missing:
+            # The identity is derived natively. Without a resident the rows keep
+            # their legacy shape, which the duplicate lookup already handles.
+            resolved_home = guard_home if guard_home is not None else connection_guard_home(connection)
+            if resolved_home is None:
+                _backfill_queue_counters(connection)
+                _commit_backfill_batch(connection, commit_batches=commit_batches)
+                return False
+            found, unavailable = _queue_identities_for_rows(missing, resolved_home)
+            identities = found
+            _apply_backfill_updates(connection, rows, identities)
+            _commit_backfill_batch(connection, commit_batches=commit_batches)
+            if unavailable:
+                _backfill_queue_counters(connection)
+                _commit_backfill_batch(connection, commit_batches=commit_batches)
+                return False
+        else:
+            _apply_backfill_updates(connection, rows, identities)
+            _commit_backfill_batch(connection, commit_batches=commit_batches)
+        after = (str(rows[-1]["created_at"]), str(rows[-1]["request_id"]))
 
 
 def resolve_matching_duplicate_requests(

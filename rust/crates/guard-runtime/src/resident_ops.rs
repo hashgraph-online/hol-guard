@@ -220,6 +220,11 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::ApprovalQueueIdentity(request) => {
+                crate::approval_queue_identity_op::evaluate_approval_queue_identity_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ApprovalScope(request) => {
                 crate::approval_scope_op::evaluate_approval_scope_request(&request)
             }

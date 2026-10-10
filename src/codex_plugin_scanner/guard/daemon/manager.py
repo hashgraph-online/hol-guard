@@ -60,7 +60,6 @@ from .discovery import (
 )
 from .file_locking import lock_daemon_file as _lock_daemon_start_file
 from .file_locking import try_lock_daemon_file as _try_lock_daemon_file
-from .hook_process_runner_lifecycle import hook_worker_ready_timeout
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .pipx_import_paths import pipx_shared_import_paths
 from .start_classification import (
@@ -72,17 +71,14 @@ from .start_classification import (
 )
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 
-DEFAULT_GUARD_DAEMON_PORT = 4781
-GUARD_DAEMON_PORT_RANGE = 1000
-REQUIRED_DAEMON_TABLES = frozenset({"guard_connect_states"})
 GUARD_DAEMON_COMPATIBILITY_VERSION = 2
-GUARD_DAEMON_START_TIMEOUT_SECONDS = 15.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
-# Head-room the client adds on top of the worker-ready budget so the daemon can
-# finish binding its socket and writing its state file after the worker reports
-# ready, without the startup poll timing out first.
-GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS = 5.0
+# Slowest observed cold start on a loaded host.  The resident adds its own
+# margin on top of this floor (the contract field is still named
+# ``worker_ready_floor``), so the client outlasts a daemon that is still
+# binding its socket and writing its state file.
+_START_TIMEOUT_FLOOR_SECONDS = 14.0
 _EPHEMERAL_GUARD_DAEMON_REAP_INTERVAL_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS = 30.0
 _EPHEMERAL_GUARD_DAEMON_MAX_STATES = 512
@@ -99,9 +95,7 @@ _GUARD_DAEMON_STATE_MAX_BYTES = 64 * 1024
 _GUARD_DAEMON_PENDING_LAUNCH_MAX_BYTES = 4096
 _GUARD_DAEMON_START_PROGRESS_MAX_BYTES = 4096
 _GUARD_DAEMON_WAKE_RESERVATION_MAX_BYTES = 4096
-_GUARD_DAEMON_WAKE_RESERVATION_SECONDS = 30.0
 _GUARD_DAEMON_RECOVERY_RESERVATION_MAX_BYTES = 4096
-_GUARD_DAEMON_RECOVERY_RESERVATION_SECONDS = 30.0
 _GUARD_DAEMON_RECOVERY_WORKER_TIMEOUT_SECONDS = 30.0
 _GUARD_DAEMON_PROCESS_QUERY_TIMEOUT_SECONDS = 5.0
 _GUARD_DAEMON_PROCESS_QUERY_OUTPUT_LIMIT_BYTES = 1024 * 1024
@@ -136,8 +130,6 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
         "HOL_GUARD_DESKTOP",
         "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
         "HOL_GUARD_DESKTOP_VERSION",
-        "HOL_GUARD_HOOK_EVALUATOR_READY_TIMEOUT_SECONDS",
-        "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS",
         "LANG",
         "LC_ALL",
         "LC_CTYPE",
@@ -494,7 +486,7 @@ def _lifecycle(
 def _start_timeouts() -> dict[str, Any]:
     query = {
         "desktop": os.environ.get("HOL_GUARD_DESKTOP", "").strip() == "1",
-        "worker_ready_floor": hook_worker_ready_timeout(0.0),
+        "worker_ready_floor": _START_TIMEOUT_FLOOR_SECONDS,
     }
     return _lifecycle("start_timeouts", query)
 
@@ -2185,7 +2177,7 @@ def _guard_daemon_start_progress_is_live(guard_home: Path, record: GuardDaemonSt
     query = {
         "record": _native_fields(record, ("pid", "process_start_token", "recorded_at_ns")),
         "now_ns": time.time_ns(),
-        "worker_ready_floor": hook_worker_ready_timeout(0.0),
+        "worker_ready_floor": _START_TIMEOUT_FLOOR_SECONDS,
     }
     return bool(_lifecycle("start_progress_live", query, home=guard_home, facts_home=guard_home)["live"])
 
