@@ -161,6 +161,7 @@ def _resident_request(
             "request_context_build",
             "claim_approval_reuse_decisions",
             "approval_reuse_diagnostic",
+            "approval_resolution_plan",
             "daemon_route",
         }:
             accepted = frozenset({"ok", "error"})

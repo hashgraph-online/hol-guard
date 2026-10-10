@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _codex_p
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
@@ -33,6 +34,15 @@ from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_f
 
 def _store(tmp_path: Path) -> GuardStore:
     return GuardStore(tmp_path / "guard-home")
+
+
+def _store_without_integrity_backend(tmp_path: Path) -> GuardStore:
+    """A store whose integrity backend is gone after the resident key was provisioned."""
+
+    store = _store(tmp_path)
+    provision_native_verifier_key_for_store(store)
+    store._policy_integrity_secret_store = None
+    return store
 
 
 def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1108,8 +1118,7 @@ def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
 
 
 def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    store._policy_integrity_secret_store = None
+    store = _store_without_integrity_backend(tmp_path)
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
 
@@ -1135,8 +1144,7 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
 
 
 def test_path_degraded_warn_mode_ignores_local_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = _store(tmp_path)
-    store._policy_integrity_secret_store = None
+    store = _store_without_integrity_backend(tmp_path)
     monkeypatch.setattr(store, "_policy_integrity_path_warnings", lambda: ["guard_home_symlink"])
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
