@@ -313,6 +313,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
             }
+            ResidentOperationV1::PackageApprovalHash(request) => {
+                crate::package_approval_hash_op::evaluate_package_approval_hash(&request)
+            }
             #[cfg(unix)]
             ResidentOperationV1::ContainedNodeExecute(request) => {
                 crate::contained_op::evaluate_contained_node_execute(&request)
@@ -425,6 +428,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageApprovalHash(request) => Some(&request.guard_home),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedNodeExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedTypescriptExecute(request) => Some(&request.guard_home),
@@ -458,6 +462,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.store_path),
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
+        ResidentOperationV1::PackageApprovalHash(request) => request.store_path.as_deref(),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),

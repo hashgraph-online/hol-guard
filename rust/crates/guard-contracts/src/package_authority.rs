@@ -19,6 +19,7 @@ pub const PACKAGE_AUTHORITY_RESULT_SCHEMA: &str = "guard-package-authority-resul
 pub const PACKAGE_AUTHORITY_FEATURE: &str = "package-authority-v1";
 /// Capability advertised when the package-evaluation composition op exists.
 pub const PACKAGE_EVALUATION_COMPOSE_FEATURE: &str = "package-evaluation-compose-v1";
+pub const PACKAGE_APPROVAL_HASH_FEATURE: &str = "package-approval-hash-v1";
 /// Capability advertised when `supply_chain_eval` is the sole package-verdict
 /// authority: the resident owns Cloud, bundle, lockfile and heuristic
 /// decisions, and callers have no Python evaluation to fall back to.
@@ -322,4 +323,54 @@ pub struct PackageEvaluationComposeRequestV1 {
     /// `saved_block` only: the saved-policy clear command shown to the user.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clear_command: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// PackageApprovalHash — resident op owning the package approval identity,
+// the composed current policy action, and the approval-context artifact hash
+// that `local_supply_chain.py` used to compute in Python.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageApprovalHashRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub guard_home: String,
+    /// `current_action` (composed action only) or `artifact_hash` (composed
+    /// action plus the approval-context token).
+    pub kind: String,
+    /// `GuardArtifact.to_dict()`.
+    pub artifact: Value,
+    /// Evaluation fields the policy composition reads: `policy_action`,
+    /// `bundle_version`, `decision`, `enforcement`, `entitlement_state`,
+    /// `exception_id`, `matched_rule_id`, `packages`, `policy_version`,
+    /// `reasons`.
+    pub evaluation: Value,
+    /// Hydrated `GuardConfig` policy view (`{"available": false}` when no
+    /// config is bound).
+    pub config_policy: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_current_action: Option<Value>,
+    /// `artifact_hash` only: the signed-store path the cached advisory feed is
+    /// read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub store_path: Option<String>,
+    /// `artifact_hash` only: the workspace the manifest and lockfile paths are
+    /// confined to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_dir: Option<String>,
+    /// `artifact_hash` only: `{digest, version, components: [{name, digest}]}`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_context: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch_identity: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additional_policy_context: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed_snapshot_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sandbox_analysis: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extension_control_digest: Option<String>,
 }

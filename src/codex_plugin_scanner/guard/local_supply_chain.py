@@ -34,11 +34,11 @@ from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig, resolve_risk_action
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
+from .native_package_approval_hash import native_package_approval_hash, native_package_current_action
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
 from .redaction import redact_local_path, redact_text
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
-    build_approval_context_token,
     build_runtime_launch_identity,
     parse_approval_context_token,
     resolved_runtime_launch_argv,
@@ -55,7 +55,6 @@ from .runtime.approval_reuse import (
     evaluate_approval_reuse,
     with_saved_artifact_hash_provenance,
 )
-from .runtime.lockfile_parse_result import LOCKFILE_PARSER_VERSION
 from .runtime.package_execution_policy import is_execution_permitted
 from .runtime.package_intent_common import (
     PackageIntent,
@@ -1500,12 +1499,6 @@ def _build_package_protect_authority(
         retain_external_archive_blob=external_archive_network_authorized,
     )
     try:
-        current_action = compose_current_package_policy_action(
-            artifact=artifact,
-            evaluation=evaluation,
-            config=config,
-            additional_current_action=additional_current_action,
-        )
         executable = sanitized_intent.command_tokens[0] if sanitized_intent.command_tokens else None
         executable_args = sanitized_intent.command_tokens[1:] if executable is not None else ()
         if sanitized_intent.command_tokens and ";" in sanitized_intent.command_tokens:
@@ -1532,7 +1525,7 @@ def _build_package_protect_authority(
                 "reuse_nonce": uuid4().hex,
                 "status": "unproven",
             }
-        artifact_hash = _package_request_artifact_hash(
+        current_action, artifact_hash = package_current_action_and_hash(
             artifact,
             workspace_dir=launch_cwd,
             store=store,
@@ -2684,91 +2677,6 @@ def recompute_package_protect_artifact_hash(
     return authority.artifact_hash if authority is not None else None
 
 
-def _package_matched_cached_advisory_ids(store: Any, artifact: GuardArtifact) -> tuple[str, ...]:
-    from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
-
-    provision_native_verifier_key_for_store(store)
-    return _native_package_authority_module().package_advisory_ids_native(
-        artifact=artifact.to_dict(),
-        store_path=store.path,
-        guard_home=store.guard_home,
-    )
-
-
-def _package_feed_snapshot_hash(store: Any) -> str | None:
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        return None
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-    if not isinstance(cached_bundle, dict):
-        return None
-    bundle = cached_bundle.get("bundle")
-    if not isinstance(bundle, dict):
-        return None
-    value = bundle.get("feedSnapshotHash")
-    return value if isinstance(value, str) and value else None
-
-
-def _package_policy_gate_context(
-    store: Any,
-    artifact: GuardArtifact,
-    evaluation: Any,
-) -> dict[str, object]:
-    return {
-        "bundle_version": evaluation.bundle_version,
-        "decision": evaluation.decision,
-        "enforcement": evaluation.enforcement,
-        "entitlement_state": evaluation.entitlement_state,
-        "exception_id": evaluation.exception_id,
-        "feed_snapshot_hash": _package_feed_snapshot_hash(store),
-        "matched_advisory_ids": list(_package_matched_cached_advisory_ids(store, artifact)),
-        "matched_rule_id": evaluation.matched_rule_id,
-        "packages": list(evaluation.packages),
-        "policy_action": evaluation.policy_action,
-        "policy_version": evaluation.policy_version,
-        "reasons": list(evaluation.reasons),
-    }
-
-
-def _package_config_policy_context(
-    *,
-    artifact: GuardArtifact,
-    config: GuardConfig | None,
-) -> dict[str, object]:
-    if config is None:
-        return {"available": False}
-    harness_package_script_action = (config.harness_risk_actions or {}).get(artifact.harness, {}).get("package_script")
-    artifact_override = (config.artifact_actions or {}).get(artifact.artifact_id)
-    publisher_override = (
-        (config.publisher_actions or {}).get(artifact.publisher) if artifact.publisher is not None else None
-    )
-    harness_override = (config.harness_actions or {}).get(artifact.harness)
-    return {
-        "artifact_override": artifact_override,
-        "available": True,
-        "effective_package_script_action": resolve_risk_action(
-            config,
-            "package_script",
-            harness=artifact.harness,
-        ),
-        "global_package_script_action": resolve_risk_action(config, "package_script", harness=None),
-        "harness": artifact.harness,
-        "harness_override": harness_override,
-        "harness_package_script_action": harness_package_script_action,
-        "managed_locked_settings": list(config.managed_locked_settings),
-        "managed_policy_hash": config.managed_policy_hash,
-        "managed_policy_status": config.managed_policy_status,
-        "mode": config.mode,
-        "publisher_override": publisher_override,
-        "resolved_override": config.resolve_action_override(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact.publisher,
-        ),
-        "security_level": config.security_level,
-    }
-
-
 def compose_current_package_policy_action(
     *,
     artifact: GuardArtifact,
@@ -2776,45 +2684,17 @@ def compose_current_package_policy_action(
     config: GuardConfig | None,
     additional_current_action: object | None = None,
 ) -> GuardAction:
-    """Compose feed and effective Guard configuration before approval reuse."""
+    """Return the resident-composed feed and configuration policy action."""
 
-    actions: list[object] = [evaluation.policy_action]
-    if additional_current_action is not None:
-        actions.append(additional_current_action)
-    if config is not None:
-        config_policy = _package_config_policy_context(artifact=artifact, config=config)
-        for key in ("effective_package_script_action", "resolved_override"):
-            action = config_policy.get(key)
-            if action is not None:
-                actions.append(action)
-    return most_restrictive_guard_action(*actions, unknown_action="block")
+    return native_package_current_action(
+        artifact=artifact,
+        evaluation=evaluation,
+        config=config,
+        additional_current_action=additional_current_action,
+    )
 
 
-def _package_current_policy_context(
-    *,
-    artifact: GuardArtifact,
-    store: Any,
-    evaluation: Any,
-    config: GuardConfig | None,
-    additional_current_action: object | None = None,
-    additional_policy_context: dict[str, object] | None = None,
-) -> dict[str, object]:
-    return {
-        "configuration": _package_config_policy_context(artifact=artifact, config=config),
-        "current_action": compose_current_package_policy_action(
-            artifact=artifact,
-            evaluation=evaluation,
-            config=config,
-            additional_current_action=additional_current_action,
-        ),
-        "additional": additional_policy_context if additional_policy_context is not None else {"available": False},
-        "feed": _package_policy_gate_context(store, artifact, evaluation),
-        "version": 1,
-    }
-
-
-@binds_store_guard_home
-def _package_request_artifact_hash(
+def package_current_action_and_hash(
     artifact: GuardArtifact,
     *,
     workspace_dir: Path,
@@ -2825,146 +2705,22 @@ def _package_request_artifact_hash(
     config: GuardConfig | None = None,
     additional_current_action: object | None = None,
     additional_policy_context: dict[str, object] | None = None,
-) -> str:
-    policy_context = _package_current_policy_context(
-        artifact=artifact,
-        store=store,
-        evaluation=evaluation,
-        config=config,
-        additional_current_action=additional_current_action,
-        additional_policy_context=additional_policy_context,
-    )
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
+) -> tuple[GuardAction, str]:
     resolved_execution_context = execution_context or build_package_execution_context(
         workspace_dir=workspace_dir,
         artifact=artifact,
     )
-    approval_identity = _package_approval_identity(
+    return native_package_approval_hash(
         artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
         evaluation=evaluation,
         execution_context=resolved_execution_context,
+        launch_identity=launch_identity,
+        config=config,
+        additional_current_action=additional_current_action,
+        additional_policy_context=additional_policy_context,
     )
-    manifest_paths = _string_items(metadata.get("manifest_paths"))
-    lockfile_paths = _string_items(metadata.get("lockfile_paths"))
-    content_material: dict[str, object] = {}
-    if manifest_paths or lockfile_paths:
-        content_material.update(
-            {
-                "manifest_paths": list(manifest_paths),
-                "lockfile_paths": list(lockfile_paths),
-                "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
-                "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
-            }
-        )
-    component_digests = {component.name: component.digest for component in resolved_execution_context.components}
-    return build_approval_context_token(
-        identity={
-            "approval_identity": approval_identity,
-            "artifact_id": artifact.artifact_id,
-            "config_path": artifact.config_path,
-            "exact_workspace": component_digests.get("exact_workspace"),
-            "package_manager_executable": component_digests.get("package_manager_executable"),
-            "package_launch_identity": _package_launch_approval_identity(launch_identity),
-            "publisher": artifact.publisher,
-            "repository_identity": component_digests.get("repository_identity"),
-            "source_scope": artifact.source_scope,
-            "workspace_identity": component_digests.get("workspace_identity"),
-        },
-        content={
-            **content_material,
-            "lockfile_parser_version": LOCKFILE_PARSER_VERSION,
-            "manifests_and_lockfiles": component_digests.get("manifests_and_lockfiles"),
-            "workspace_configuration": component_digests.get("workspace_configuration"),
-        },
-        capabilities={
-            "environment_policy": component_digests.get("environment_policy"),
-            "lifecycle_hooks_overrides_and_patches": component_digests.get("lifecycle_hooks_overrides_and_patches"),
-            "registry_and_proxy_configuration": component_digests.get("registry_and_proxy_configuration"),
-        },
-        policy=policy_context,
-        sandbox={
-            "analysis": config.sandbox_analysis if config is not None else "unknown",
-            "required": policy_context["current_action"] == "sandbox-required",
-        },
-    )
-
-
-def _package_launch_approval_identity(launch_identity: Mapping[str, object] | None) -> dict[str, object]:
-    """Bind the raw launch vector without duplicating non-portable paths.
-
-    The package execution context already contains the normalized manager,
-    shebang interpreter, code-loading, and cwd identity. This additional
-    material binds the exact argv shape and forces wrapper launches to remain
-    one-attempt-only without breaking linked-worktree portability.
-    """
-
-    if launch_identity is None:
-        return {"available": False}
-    wrapper_resolution = launch_identity.get("wrapper_resolution")
-    return {
-        "argv_sha256": launch_identity.get("argv_sha256"),
-        "wrapper_resolution": (wrapper_resolution if isinstance(wrapper_resolution, Mapping) else {"status": "direct"}),
-    }
-
-
-def _package_approval_identity(
-    *,
-    artifact: GuardArtifact,
-    evaluation: Any,
-    execution_context: PackageExecutionContext,
-) -> dict[str, object]:
-    """Return the complete, secret-free preimage for a package approval."""
-
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    raw_targets = metadata.get("targets")
-    targets = (
-        [
-            {
-                "alias": _string_value(target.get("alias")),
-                "ecosystem": _string_value(target.get("ecosystem")),
-                "package_name": _string_value(target.get("package_name")),
-                "raw_spec": _string_value(target.get("raw_spec")),
-                "raw_spec_hash": _string_value(target.get("raw_spec_hash")),
-                "requested_specifier": _string_value(target.get("requested_specifier")),
-                "source_url_hash": _string_value(target.get("source_url_hash"))
-                or (
-                    stable_digest_hex(source_url.encode("utf-8"))
-                    if (source_url := _string_value(target.get("source_url"))) is not None
-                    else None
-                ),
-            }
-            for target in raw_targets
-            if isinstance(target, dict)
-        ]
-        if isinstance(raw_targets, list)
-        else []
-    )
-    raw_packages = getattr(evaluation, "packages", ())
-    packages = (
-        [
-            {
-                "dependency_path": _string_value(package.get("dependencyPath")),
-                "ecosystem": _string_value(package.get("ecosystem")),
-                "name": _string_value(package.get("name")),
-                "namespace": _string_value(package.get("namespace")),
-                "package_manager": _string_value(package.get("packageManager")),
-                "requested_version": _string_value(package.get("requestedVersion")),
-                "resolved_version": _string_value(package.get("resolvedVersion")),
-            }
-            for package in raw_packages
-            if isinstance(package, dict)
-        ]
-        if isinstance(raw_packages, (tuple, list))
-        else []
-    )
-    return {
-        "context_digest": execution_context.digest,
-        "context_version": execution_context.version,
-        "manager": _string_value(metadata.get("package_manager")),
-        "packages": packages,
-        "targets": targets,
-        "version": 1,
-    }
 
 
 def package_request_policy_hash(
@@ -2978,14 +2734,14 @@ def package_request_policy_hash(
 ) -> str:
     """Hash a package request using manifest and lockfile contents."""
 
-    return _package_request_artifact_hash(
+    return package_current_action_and_hash(
         artifact,
         workspace_dir=workspace_dir,
         store=store,
         evaluation=evaluation,
         execution_context=execution_context,
         config=config,
-    )
+    )[1]
 
 
 def _evaluation_uses_saved_package_approval(evaluation: Any) -> bool:

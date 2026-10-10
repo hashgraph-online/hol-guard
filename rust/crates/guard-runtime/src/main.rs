@@ -139,6 +139,7 @@ mod native_runtime_resilience;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oneshot;
+mod package_approval_hash_op;
 mod package_authority_config;
 mod package_authority_op;
 mod package_evaluation_compose_op;
