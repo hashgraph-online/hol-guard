@@ -218,7 +218,7 @@ def _contract_failures(root: Path) -> list[str]:
             ("native_pre_tool_unknown_review", "PreToolResultV1"),
         ),
         (
-            root / "rust/crates/guard-runtime/src/main.rs",
+            root / "rust/crates/guard-runtime/src/runtime_cli.rs",
             ('command == "pre-tool"',),
         ),
         (
