@@ -99,6 +99,10 @@ pub struct CatalogExtension {
     /// `dependencies` — resolver extension-closure input.
     #[serde(default)]
     pub dependencies: Vec<String>,
+    /// `GeneratedCommandExtension.action_classes` — action classes the
+    /// extension owns (`for_action_class`).
+    #[serde(default)]
+    pub action_classes: Vec<String>,
     pub rules: Vec<CatalogRule>,
     pub permissions: Vec<CatalogPermission>,
 }
@@ -243,6 +247,17 @@ impl CommandCatalog {
             .permission_by_rule_id
             .get(&rule_id.trim().to_lowercase())?;
         self.permissions_flat().get(index).copied()
+    }
+
+    /// `for_action_class`: whether any extension owns the action class.
+    pub fn has_action_class_owner(&self, action_class: &str) -> bool {
+        let normalized = action_class.trim().to_lowercase();
+        self.extensions.iter().any(|extension| {
+            extension
+                .action_classes
+                .iter()
+                .any(|action| action.trim().to_lowercase() == normalized)
+        })
     }
 
     /// First non-fallback rule for an action_class (rule_for_action_class).

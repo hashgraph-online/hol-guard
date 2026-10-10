@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import mcp_server_grants as grants
 from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
@@ -18,7 +17,9 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     mcp_tool_state,
     validate_mcp_contribution,
 )
+from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical
@@ -102,22 +103,18 @@ def test_canonical_native_compilation_contains_gmail_mcp_coverage(compiled: dict
 
 
 @pytest.mark.parametrize("tool", (*MUTATIONS, "send_message", "future_tool"))
-def test_locally_enabled_mailbox_changes_and_unknown_tools_require_review(
-    gmail_payload: dict, monkeypatch, tool: str
-) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
+def test_locally_enabled_mailbox_changes_and_unknown_tools_require_review(gmail_payload: dict, tool: str) -> None:
     assert mcp_tool_state(gmail_payload, tool) == "review"
-    decision = grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
+    decision = apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
     assert decision is not None
     assert decision[0:2] == ("review", "catalog-mcp-extension")
 
 
 @pytest.mark.parametrize("tool", OBSERVATIONS)
-def test_read_tools_inherit_without_allow_grants(gmail_payload: dict, monkeypatch, tool: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
+def test_read_tools_inherit_without_allow_grants(gmail_payload: dict, tool: str) -> None:
     assert mcp_tool_state(gmail_payload, tool) == "inherit"
     for current in ("allow", "review", "block"):
-        assert grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
+        assert apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
 
 
 @pytest.mark.parametrize(
@@ -128,23 +125,33 @@ def test_read_tools_inherit_without_allow_grants(gmail_payload: dict, monkeypatc
         ((ControlLayerKind.LOCAL_ADMIN, ControlState.DISABLED),),
     ],
 )
-def test_contribution_stays_inert_without_effective_local_enable(gmail_payload: dict, monkeypatch, layers) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
+def test_contribution_stays_inert_without_effective_local_enable(gmail_payload: dict, layers) -> None:
     store = _AuthorityStore(tuple(_layer(kind, CATALOG_ID, state) for kind, state in layers))
     for tool in MUTATIONS:
-        assert grants.apply_contributed_mcp_decision(store, artifact(tool), "allow") is None
+        assert apply_contributed_mcp_decision(store, artifact(tool), "allow") is None
 
 
 @pytest.mark.parametrize("current", ["block", "require-reapproval", "review", "sandbox-required"])
-def test_review_default_preserves_stronger_floors(gmail_payload: dict, monkeypatch, current: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
-    assert grants.apply_contributed_mcp_decision(enabled_store(), artifact("create_draft"), current) is None
+def test_review_default_preserves_stronger_floors(gmail_payload: dict, current: str) -> None:
+    assert apply_contributed_mcp_decision(enabled_store(), artifact("create_draft"), current) is None
+
+
+def matched(candidate: GuardArtifact) -> bool:
+    """Whether the resident matched the bundled Gmail contribution for this artifact.
+
+    ``create_draft`` carries the review default, so a match strengthens an allow
+    to review while a non-match decides nothing.
+    """
+    decision = apply_contributed_mcp_decision(enabled_store(), candidate, "allow")
+    if decision is None:
+        return False
+    assert decision[0:2] == ("review", "catalog-mcp-extension")
+    return True
 
 
 @pytest.mark.parametrize("server_name", ["gmail", "production-mail"])
-def test_exact_endpoint_matches_under_any_server_name(gmail_payload: dict, monkeypatch, server_name: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
-    assert grants.matching_mcp_contribution(artifact("create_draft", server_name=server_name)) == gmail_payload
+def test_exact_endpoint_matches_under_any_server_name(server_name: str) -> None:
+    assert matched(artifact("create_draft", server_name=server_name))
 
 
 @pytest.mark.parametrize(
@@ -156,9 +163,8 @@ def test_exact_endpoint_matches_under_any_server_name(gmail_payload: dict, monke
         "https://example.test/gmail/mcp/v1",
     ],
 )
-def test_other_endpoints_do_not_match_even_with_listed_server_name(gmail_payload: dict, monkeypatch, url: str) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
-    assert grants.matching_mcp_contribution(artifact("create_draft", url=url, server_name="gmail")) is None
+def test_other_endpoints_do_not_match_even_with_listed_server_name(url: str) -> None:
+    assert not matched(artifact("create_draft", url=url, server_name="gmail"))
 
 
 def name_only_artifact(tool: str, server_name: str) -> GuardArtifact:
@@ -171,21 +177,15 @@ def name_only_artifact(tool: str, server_name: str) -> GuardArtifact:
         config_path=".mcp.json",
         command=tool,
         transport="http",
-        metadata={"server_name": server_name},
+        metadata={"server_name": server_name, "mcp_tool_identity": {"tool_name": tool}},
     )
 
 
 @pytest.mark.parametrize("server_name", ["gmail", "gmail-mcp", "google-gmail"])
-def test_listed_server_names_match_without_endpoint_evidence(
-    gmail_payload: dict, monkeypatch, server_name: str
-) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
-    assert grants.matching_mcp_contribution(name_only_artifact("create_draft", server_name)) == gmail_payload
+def test_listed_server_names_match_without_endpoint_evidence(server_name: str) -> None:
+    assert matched(name_only_artifact("create_draft", server_name))
 
 
 @pytest.mark.parametrize("server_name", ["work-mail", "gmail-backup", "google"])
-def test_unlisted_server_names_do_not_match_without_endpoint_evidence(
-    gmail_payload: dict, monkeypatch, server_name: str
-) -> None:
-    monkeypatch.setattr(grants, "load_mcp_contribution_payloads", lambda: (gmail_payload,))
-    assert grants.matching_mcp_contribution(name_only_artifact("create_draft", server_name)) is None
+def test_unlisted_server_names_do_not_match_without_endpoint_evidence(server_name: str) -> None:
+    assert not matched(name_only_artifact("create_draft", server_name))

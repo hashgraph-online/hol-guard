@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.native_local_cli_identity import LocalCliIdentit
 from codex_plugin_scanner.guard.native_local_mcp_grant import NativeLocalMcpGrant, NativeLocalMcpGrantFailure
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .test_guard_local_mcp_grants import _artifact, _enroll, _identity
 
 

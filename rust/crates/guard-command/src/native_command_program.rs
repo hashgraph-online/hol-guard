@@ -53,6 +53,7 @@ pub fn packaged_command_program_bytes() -> &'static [u8] {
 
 #[path = "native_command_program_admission.rs"]
 mod admission;
+pub(crate) use admission::{public_ipv4, public_ipv6};
 #[path = "native_command_program_compile.rs"]
 mod compile;
 #[path = "native_command_program_evaluation.rs"]

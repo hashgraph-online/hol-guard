@@ -74,7 +74,13 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Same correlation-only digest for the generic-hook decision resident op.
+        "src/codex_plugin_scanner/guard/native_hook_decision.py",
+        # Same correlation-only digest for the hook artifact composition op.
+        "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Same correlation-only digest for the MCP tool-policy resident op.
+        "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
@@ -100,6 +106,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_execution.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
+        # Decodes the bounded resident command-effect result envelope and binds
+        # it to the request; the decision itself is computed in Rust.
+        "src/codex_plugin_scanner/guard/native_command_effect.py",
         # Bounded response decoding for resident package-verdict composition patches.
         "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
         # Strict resident transport and DTO hydration for package supply-chain evaluation.
@@ -109,8 +118,17 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident approval-proof response; the answer is
         # strictly validated and never reinterpreted into a decision.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Decodes the bounded resident generic-hook decision response; the
+        # answer is strictly validated and never reinterpreted into a decision.
+        "src/codex_plugin_scanner/guard/native_hook_decision.py",
+        # Decodes the bounded resident hook artifact composition response; the
+        # answer is strictly bound and validated, never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Decodes the bounded resident MCP tool-policy envelope; the decision
+        # DTO is strictly validated and never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.

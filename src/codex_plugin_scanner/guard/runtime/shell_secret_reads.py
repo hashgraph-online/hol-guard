@@ -49,7 +49,7 @@ from ._shell_secret_read_support import (
 from .command_model import parse_shell_command
 from .data_flow import extract_heredocs
 from .home_path_text import expand_home, normalize_path
-from .shell_execution_context import model_shell_execution_context
+from .shell_execution_context import SHELL_CWD_NATIVE_UNAVAILABLE, model_shell_execution_context
 from .shell_read_literal_wrapper import literal_shell_read_payload
 
 
@@ -117,6 +117,11 @@ def assess_shell_reads(
             home_dir=home_dir,
         )
         if not context.segments:
+            if context.reason_code == SHELL_CWD_NATIVE_UNAVAILABLE:
+                # No model is not "no reads": the resident could not say what
+                # this text touches, so the read floors must stay in force.
+                incomplete = True
+                continue
             if any(marker in text for marker in (".env", "credentials", ".npmrc", ".pypirc", ".netrc")):
                 incomplete = True
             continue

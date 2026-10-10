@@ -94,3 +94,30 @@ fn a_capture_for_a_stale_generation_leaves_a_poisoned_catalog_alone() {
     assert_eq!(reply["payload"]["state"]["state"], "error");
     assert_eq!(reply["payload"]["catalog_names"], json!([]));
 }
+
+#[test]
+fn sandbox_required_is_never_downgraded_and_unknown_actions_floor_at_review() {
+    use crate::mcp_proxy_actions::{most_restrictive, norm};
+    use guard_contracts::GuardAction;
+
+    for weaker in ["allow", "warn", "review", "require-reapproval"] {
+        let weaker = norm(weaker, GuardAction::Review);
+        assert_eq!(
+            most_restrictive(GuardAction::SandboxRequired, weaker),
+            GuardAction::SandboxRequired
+        );
+        assert_eq!(
+            most_restrictive(weaker, GuardAction::SandboxRequired),
+            GuardAction::SandboxRequired
+        );
+    }
+    let unknown = norm("future-action", GuardAction::Review);
+    assert_eq!(
+        most_restrictive(GuardAction::Allow, unknown),
+        GuardAction::Review
+    );
+    assert_eq!(
+        most_restrictive(unknown, GuardAction::Warn),
+        GuardAction::Review
+    );
+}
