@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import re
 import sqlite3
+from contextlib import suppress
 from pathlib import Path
 
 from .approval_resolution import approval_resolution_block_reason
@@ -19,6 +21,8 @@ from .native_approval_queue_identity import (
     queue_identity_item,
 )
 from .runtime.browser_mcp_intent import classify_browser_operation
+
+logger = logging.getLogger(__name__)
 
 MAX_APPROVAL_PAGE_LIMIT = 200
 APPROVAL_QUEUE_PREVIEW_MAX_LENGTH = 512
@@ -903,90 +907,180 @@ def backfill_queue_identities_once(connection: sqlite3.Connection, guard_home: P
     The migration runs inside store initialization, before the home has a
     verifier key. The first write that reaches the resident finishes the job,
     once per home and process, and never inside a caller-owned transaction.
+    The home is remembered only after every selected identity is stored and
+    committed. A sqlite failure rolls back and leaves the home retryable.
     """
 
     key = str(guard_home)
     if key in _QUEUE_BACKFILLED_HOMES or connection.in_transaction or connection.row_factory is not sqlite3.Row:
         return
-    _QUEUE_BACKFILLED_HOMES.add(key)
-    backfill_approval_queue_columns(connection)
-    connection.commit()
+    try:
+        complete = backfill_approval_queue_columns(connection, guard_home=guard_home, commit_batches=True)
+    except sqlite3.Error:
+        logger.warning("approval queue identity backfill rolled back", exc_info=True)
+        with suppress(sqlite3.Error):
+            connection.rollback()
+        return
+    if complete:
+        _QUEUE_BACKFILLED_HOMES.add(key)
 
 
-def backfill_approval_queue_columns(connection: sqlite3.Connection) -> None:
-    while True:
-        rows = connection.execute(
-            """
+def _legacy_queue_rows(connection: sqlite3.Connection, *, after: tuple[str, str] | None) -> list[sqlite3.Row]:
+    predicate = ""
+    parameters: list[object] = []
+    if after is not None:
+        predicate = "and (created_at > ? or (created_at = ? and request_id > ?))"
+        parameters.extend((after[0], after[0], after[1]))
+    parameters.append(APPROVAL_QUEUE_BACKFILL_BATCH_SIZE)
+    return list(
+        connection.execute(
+            f"""
             select request_id, harness, artifact_id, workspace, launch_target, action_envelope_json,
                    action_identity, queue_group_id, dedupe_count, last_seen_at, created_at
             from approval_requests
-            where action_identity is null
-               or queue_group_id is null
-               or last_seen_at is null
-               or dedupe_count is null
-               or dedupe_count < 1
+            where (
+                action_identity is null
+                or queue_group_id is null
+                or last_seen_at is null
+                or dedupe_count is null
+                or dedupe_count < 1
+            )
+            {predicate}
             order by created_at asc, request_id asc
             limit ?
             """,
-            (APPROVAL_QUEUE_BACKFILL_BATCH_SIZE,),
+            parameters,
         ).fetchall()
+    )
+
+
+def _identity_items(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
+    return [
+        queue_identity_item(
+            launch_target=row["launch_target"],
+            harness=str(row["harness"]),
+            workspace=row["workspace"],
+            artifact_id=str(row["artifact_id"]),
+            envelope=_optional_json_object(row["action_envelope_json"]),
+            browser_intent=None,
+            action_identity=row["action_identity"],
+            queue_group_id=row["queue_group_id"],
+        )
+        for row in rows
+    ]
+
+
+def _queue_identities_for_rows(rows: list[sqlite3.Row], guard_home: Path) -> tuple[dict[str, tuple[str, str]], bool]:
+    """Identify ``rows``. The bool is true when the resident never answered.
+
+    A rejected batch is halved and then tried one row at a time. A row that is
+    still rejected is omitted. An unavailable resident stops the split so a
+    down runtime is not retried once per legacy row.
+    """
+
+    if not rows:
+        return {}, False
+    try:
+        derived = native_approval_queue_identities(
+            _identity_items(rows),
+            guard_home=guard_home,
+            provision=False,
+        )
+    except ApprovalQueueIdentityUnavailableError as error:
+        if error.reason != "rejected":
+            return {}, True
+        if len(rows) == 1:
+            return {}, False
+        midpoint = len(rows) // 2
+        left, left_unavailable = _queue_identities_for_rows(rows[:midpoint], guard_home)
+        if left_unavailable:
+            return left, True
+        right, right_unavailable = _queue_identities_for_rows(rows[midpoint:], guard_home)
+        left.update(right)
+        return left, right_unavailable
+    return {
+        str(row["request_id"]): (identity.action_identity, identity.queue_group_id)
+        for row, identity in zip(rows, derived, strict=True)
+    }, False
+
+
+def _apply_backfill_updates(
+    connection: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+    identities: dict[str, tuple[str, str]],
+) -> None:
+    for row in rows:
+        action_identity, queue_group_id = identities.get(
+            str(row["request_id"]), (row["action_identity"], row["queue_group_id"])
+        )
+        connection.execute(
+            """
+            update approval_requests
+            set action_identity = ?,
+                queue_group_id = ?,
+                dedupe_count = ?,
+                last_seen_at = ?
+            where request_id = ?
+            """,
+            (
+                action_identity,
+                queue_group_id,
+                max(1, int(row["dedupe_count"] or 1)),
+                row["last_seen_at"] or row["created_at"],
+                row["request_id"],
+            ),
+        )
+
+
+def _commit_backfill_batch(connection: sqlite3.Connection, *, commit_batches: bool) -> None:
+    if commit_batches:
+        connection.commit()
+
+
+def backfill_approval_queue_columns(
+    connection: sqlite3.Connection,
+    *,
+    guard_home: Path | None = None,
+    commit_batches: bool = False,
+) -> bool:
+    """Fill legacy queue identities. True only when every selected row was identified.
+
+    ``commit_batches`` commits each batch before the next resident call so the
+    write lock is not held across the lookup. Schema migration leaves it false
+    and keeps its own transaction. A row the resident rejects stays unidentified
+    and is skipped for this call; later rows in the same scan still run.
+    """
+
+    complete = True
+    after: tuple[str, str] | None = None
+    while True:
+        rows = _legacy_queue_rows(connection, after=after)
         if not rows:
-            return
+            return complete
         missing = [row for row in rows if not row["action_identity"] or not row["queue_group_id"]]
         identities: dict[str, tuple[str, str]] = {}
         if missing:
             # The identity is derived natively. Without a resident the rows keep
             # their legacy shape, which the duplicate lookup already handles.
-            guard_home = connection_guard_home(connection)
-            if guard_home is None:
+            resolved_home = guard_home if guard_home is not None else connection_guard_home(connection)
+            if resolved_home is None:
                 _backfill_queue_counters(connection)
-                return
-            try:
-                derived = native_approval_queue_identities(
-                    [
-                        queue_identity_item(
-                            launch_target=row["launch_target"],
-                            harness=str(row["harness"]),
-                            workspace=row["workspace"],
-                            artifact_id=str(row["artifact_id"]),
-                            envelope=_optional_json_object(row["action_envelope_json"]),
-                            browser_intent=None,
-                            action_identity=row["action_identity"],
-                            queue_group_id=row["queue_group_id"],
-                        )
-                        for row in missing
-                    ],
-                    guard_home=guard_home,
-                    provision=False,
-                )
-            except ApprovalQueueIdentityUnavailableError:
+                _commit_backfill_batch(connection, commit_batches=commit_batches)
+                return False
+            found, unavailable = _queue_identities_for_rows(missing, resolved_home)
+            identities = found
+            if unavailable or len(found) != len(missing):
+                complete = False
+            _apply_backfill_updates(connection, rows, identities)
+            _commit_backfill_batch(connection, commit_batches=commit_batches)
+            if unavailable:
                 _backfill_queue_counters(connection)
-                return
-            identities = {
-                str(row["request_id"]): (identity.action_identity, identity.queue_group_id)
-                for row, identity in zip(missing, derived, strict=True)
-            }
-        for row in rows:
-            action_identity, queue_group_id = identities.get(
-                str(row["request_id"]), (row["action_identity"], row["queue_group_id"])
-            )
-            connection.execute(
-                """
-                update approval_requests
-                set action_identity = ?,
-                    queue_group_id = ?,
-                    dedupe_count = ?,
-                    last_seen_at = ?
-                where request_id = ?
-                """,
-                (
-                    action_identity,
-                    queue_group_id,
-                    max(1, int(row["dedupe_count"] or 1)),
-                    row["last_seen_at"] or row["created_at"],
-                    row["request_id"],
-                ),
-            )
+                _commit_backfill_batch(connection, commit_batches=commit_batches)
+                return False
+        else:
+            _apply_backfill_updates(connection, rows, identities)
+            _commit_backfill_batch(connection, commit_batches=commit_batches)
+        after = (str(rows[-1]["created_at"]), str(rows[-1]["request_id"]))
 
 
 def resolve_matching_duplicate_requests(

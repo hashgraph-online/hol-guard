@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import tempfile
 import urllib.parse
 import urllib.request
 from dataclasses import replace
@@ -14,6 +15,7 @@ import pytest
 from codex_plugin_scanner.guard import store as store_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
@@ -31,6 +33,7 @@ from codex_plugin_scanner.guard.store_approvals import (
 def _connection() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
+    bind_connection_guard_home(connection, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
     connection.execute(approval_schema_statement())
     for statement in approval_index_statements():
         connection.execute(statement)

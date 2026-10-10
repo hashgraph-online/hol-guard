@@ -70,33 +70,6 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
 
 
 @pytest.fixture(autouse=True)
-def _in_memory_approval_queue_identity_home(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path_factory: pytest.TempPathFactory,
-) -> None:
-    """Give in-memory approval connections a Guard home for the native queue identity.
-
-    A file-backed store derives its home from the connection. Tests that open a
-    bare ``:memory:`` connection have none, so the resident is addressed through
-    a scratch home instead.
-    """
-
-    from codex_plugin_scanner.guard import store_approval_writes
-
-    resolve = store_approval_writes.connection_guard_home
-
-    def with_scratch_home(connection: object) -> Path | None:
-        home = resolve(connection)  # type: ignore[arg-type]
-        if home is not None:
-            return home
-        scratch = tmp_path_factory.getbasetemp() / "in-memory-approval-home"
-        scratch.mkdir(exist_ok=True)
-        return scratch
-
-    monkeypatch.setattr(store_approval_writes, "connection_guard_home", with_scratch_home)
-
-
-@pytest.fixture(autouse=True)
 def _default_off_daemon_route_policy(
     request: pytest.FixtureRequest,
     _default_unit_test_native_mode: bool,

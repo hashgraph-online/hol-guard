@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import repair_approval_center_locator
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
     add_approval_request,
@@ -21,6 +24,7 @@ from codex_plugin_scanner.guard.store_approvals import (
 def _make_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
+    bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
     conn.execute("pragma journal_mode=wal")
     conn.execute(approval_schema_statement())
     for stmt in approval_index_statements():
