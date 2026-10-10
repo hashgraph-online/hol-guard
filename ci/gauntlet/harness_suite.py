@@ -49,7 +49,8 @@ def run_harness_suite(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    catalog = load_catalog()
+    # native-tools cases drive omp-only tools (glob, grep, eval, task, wait); other lanes cannot exercise them.
+    catalog = tuple(s for s in load_catalog() if s.oracle != "native-tools")
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)

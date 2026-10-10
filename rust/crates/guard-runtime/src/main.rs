@@ -63,6 +63,12 @@ mod daemon_lifecycle_text;
 mod daemon_lifecycle_unit_tests;
 #[cfg(test)]
 mod daemon_lifecycle_vectors_tests;
+mod daemon_handler_digits;
+mod daemon_handler_fields;
+mod daemon_handler_headless;
+mod daemon_handler_op;
+mod daemon_handler_policy;
+mod daemon_handler_requests;
 mod daemon_policy_authority;
 mod daemon_route_op;
 mod daemon_route_paths;
@@ -127,6 +133,9 @@ mod mcp_proxy_package;
 mod mcp_proxy_postclaim;
 mod mcp_proxy_route;
 mod mcp_runtime_evidence_op;
+mod mcp_sensitive_read;
+#[cfg(test)]
+mod mcp_sensitive_read_vectors_tests;
 mod mcp_stdio_session_op;
 mod mcp_tool_evidence_op;
 mod mcp_tool_policy_composio;
@@ -196,6 +205,9 @@ mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
 mod runner_authority_signature;
+mod runner_sync_policy;
+mod runner_sync_signals;
+mod runner_sync_url;
 mod runtime_cli;
 mod shim_op;
 #[cfg(unix)]

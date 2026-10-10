@@ -187,6 +187,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("getfacl workspace/service", "review"),
     ("systemctl status service", "review"),
     ("hol-guard uninstall --help --installation-id fixture", "review"),
+    ("hol-guard hooks remove --help", "review"),
     ("hol-guard help uninstall", "review"),
     (
         "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"

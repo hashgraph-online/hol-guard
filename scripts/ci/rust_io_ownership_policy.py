@@ -84,6 +84,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Same correlation-only digest for the daemon route/auth policy op.
         "src/codex_plugin_scanner/guard/native_daemon_route.py",
+        "src/codex_plugin_scanner/guard/native_daemon_handler.py",
         # Shared request lifecycle for the hook and route resident ops; digest
         # correlation only.
         "src/codex_plugin_scanner/guard/native_resident_decision.py",
@@ -102,6 +103,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
         # Decodes the bounded resident daemon-lifecycle verdict; decisions stay Rust.
         "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
+        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
+        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
         # reattachment integrity but never authorize or evaluate an action.
         "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -144,6 +147,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident daemon route policy response; strictly
         # bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_daemon_route.py",
+        "src/codex_plugin_scanner/guard/native_daemon_handler.py",
         # Shared strict reply validation for the hook and route resident ops;
         # the answer is bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_resident_decision.py",
@@ -167,6 +171,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
         # Decodes the bounded resident daemon-lifecycle verdict; decisions stay Rust.
         "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
+        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
+        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.

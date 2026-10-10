@@ -21,7 +21,9 @@ def test_scenario_tool_inventory_matches_actual_task():
 
     for scenario in load_catalog():
         tools = set(_scenario_tools(scenario).split(","))
-        if scenario.oracle == "home-copy-task":
+        if scenario.oracle == "native-tools":
+            assert tools == set(scenario.required_tools) | ({"bash"} if scenario.commands else set())
+        elif scenario.oracle == "home-copy-task":
             assert tools == {"bash", "read"}
         elif scenario.commands:
             assert tools == {"bash"}
