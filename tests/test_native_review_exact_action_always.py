@@ -467,7 +467,7 @@ def _local_bin(workspace: Path, package: str, name: str) -> None:
         "awk -f program.awk input.txt",
         "awk '{ print }' input.txt",
         "git -c alias.x=!./payload x",
-        "git status",
+        "git push origin main",
         "find . -name '*.txt' -exec ./payload {} ;",
         "xargs ./payload",
     ],

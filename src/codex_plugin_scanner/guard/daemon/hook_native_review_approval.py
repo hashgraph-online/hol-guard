@@ -26,9 +26,11 @@ from .hook_native_review_binding import (
 )
 from .hook_native_saved_approval import (
     EXACT_ACTION_CONTEXT_TOKEN_KEY,
+    EXACT_ACTION_IDENTITY_KIND_KEY,
+    ONCE_ONLY_REASON_KEY,
     TOKEN_UNSET,
     TokenUnset,
-    native_exact_action_token,
+    native_exact_action_decision,
     native_saved_review_response,
 )
 from .hook_request_parsing import pre_tool_command, pre_tool_input
@@ -146,7 +148,7 @@ def pause_native_pre_tool_for_approval(
     # Derive the exact-action token once: the saved-decision lookup and the queued
     # request must bind the identical value, and each derivation re-reads operands
     # and repeats resident launch-identity round trips.
-    exact_token = native_exact_action_token(
+    exact_token, once_only_reason = native_exact_action_decision(
         harness=harness,
         tool_name=tool_name,
         payload=payload,
@@ -225,6 +227,7 @@ def pause_native_pre_tool_for_approval(
             home_dir=home_dir,
             deadline=deadline,
             exact_token=exact_token,
+            once_only_reason=once_only_reason,
             approval_center_url=approval_center_url,
         )
         if queued is None:
@@ -254,6 +257,7 @@ def pause_native_pre_tool_for_approval(
         home_dir=home_dir,
         deadline=deadline,
         exact_token=exact_token,
+        once_only_reason=once_only_reason,
         approval_center_url=approval_center_url,
     )
     if queued is None:
@@ -316,6 +320,7 @@ def queue_native_pre_tool_review(
     home_dir: Path | None = None,
     deadline: float | None = None,
     exact_token: str | None | TokenUnset = TOKEN_UNSET,
+    once_only_reason: str | None = None,
     approval_center_url: str | None = None,
 ) -> dict[str, object] | None:
     try:
@@ -355,7 +360,7 @@ def queue_native_pre_tool_review(
         return None
     # Offer an exact-action Always only when the action binds to a stable token.
     if isinstance(exact_token, TokenUnset):
-        exact_token = native_exact_action_token(
+        exact_token, once_only_reason = native_exact_action_decision(
             harness=harness,
             tool_name=tool_name,
             payload=payload,
@@ -366,6 +371,10 @@ def queue_native_pre_tool_review(
         )
     if exact_token is not None:
         action_envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = exact_token
+        if pre_tool_command(payload) is None:
+            action_envelope[EXACT_ACTION_IDENTITY_KIND_KEY] = "tool-target"
+    elif once_only_reason is not None:
+        action_envelope[ONCE_ONLY_REASON_KEY] = once_only_reason
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
