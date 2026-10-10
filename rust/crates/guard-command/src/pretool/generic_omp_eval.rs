@@ -79,7 +79,10 @@ fn tokenize(code: &str) -> Option<Vec<Token>> {
                     break;
                 }
             }
-            if chars.peek().is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_') {
+            if chars
+                .peek()
+                .is_some_and(|c| c.is_ascii_alphanumeric() || *c == '_')
+            {
                 return None;
             }
             tokens.push(Token::Num);
@@ -117,11 +120,54 @@ struct Parser {
 }
 
 const RESERVED: &[&str] = &[
-    "tool", "display", "log", "console", "Promise", "JSON", "await", "async", "const", "let", "var",
-    "function", "class", "new", "this", "import", "require", "process", "eval", "Function",
-    "globalThis", "window", "global", "fetch", "return", "if", "else", "for", "while", "do",
-    "try", "catch", "throw", "delete", "typeof", "void", "yield", "with", "in", "of", "true",
-    "false", "null", "undefined", "text", "constructor", "prototype", "__proto__",
+    "tool",
+    "display",
+    "log",
+    "console",
+    "Promise",
+    "JSON",
+    "await",
+    "async",
+    "const",
+    "let",
+    "var",
+    "function",
+    "class",
+    "new",
+    "this",
+    "import",
+    "require",
+    "process",
+    "eval",
+    "Function",
+    "globalThis",
+    "window",
+    "global",
+    "fetch",
+    "return",
+    "if",
+    "else",
+    "for",
+    "while",
+    "do",
+    "try",
+    "catch",
+    "throw",
+    "delete",
+    "typeof",
+    "void",
+    "yield",
+    "with",
+    "in",
+    "of",
+    "true",
+    "false",
+    "null",
+    "undefined",
+    "text",
+    "constructor",
+    "prototype",
+    "__proto__",
 ];
 
 impl Parser {

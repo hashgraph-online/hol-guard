@@ -245,9 +245,11 @@ fn artifact_reference(value: &str) -> bool {
         && id.bytes().all(|byte| byte.is_ascii_digit())
         && range.is_none_or(|range| {
             range.split_once('-').is_some_and(|(start, end)| {
-                [start, end]
-                    .iter()
-                    .all(|part| !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit()))
+                [start, end].iter().all(|part| {
+                    !part.is_empty()
+                        && part.len() <= 9
+                        && part.bytes().all(|byte| byte.is_ascii_digit())
+                })
             })
         })
 }

@@ -111,9 +111,21 @@ fn task_wait_and_todo_are_allowed_only_for_omp() {
     assert!(!allowed(&run(&f, "codex", "wait", json!({}))));
     assert!(!allowed(&omp(&f, "Task", task.clone())));
     // Path or URL carrying inputs are not delegation envelopes.
-    assert!(!allowed(&omp(&f, "task", json!({"path": ".env", "task": "x"}))));
-    assert!(!allowed(&omp(&f, "task", json!({"url": "https://example.com", "task": "x"}))));
-    assert!(!allowed(&omp(&f, "task", json!({"command": "curl https://example.com"}))));
+    assert!(!allowed(&omp(
+        &f,
+        "task",
+        json!({"path": ".env", "task": "x"})
+    )));
+    assert!(!allowed(&omp(
+        &f,
+        "task",
+        json!({"url": "https://example.com", "task": "x"})
+    )));
+    assert!(!allowed(&omp(
+        &f,
+        "task",
+        json!({"command": "curl https://example.com"})
+    )));
 }
 
 #[test]
@@ -124,7 +136,10 @@ fn artifact_references_are_allowed_only_in_exact_form() {
         assert!(allowed(&result), "{path}");
         assert_eq!(result.reason_code, "native_omp_artifact_read");
     }
-    for path in ["skill://example-skill", "skill://example_skill/references/guide.md"] {
+    for path in [
+        "skill://example-skill",
+        "skill://example_skill/references/guide.md",
+    ] {
         let result = omp(&f, "read", json!({"path": path}));
         assert!(allowed(&result), "{path}");
         assert_eq!(result.reason_code, "native_omp_skill_read");
@@ -203,9 +218,17 @@ fn skill_and_note_documents_are_readable_in_bounds() {
     // A link inside the plans tree may not reach credentials.
     let link = f.home.join(".codex/plans/plan-a/link.md");
     std::os::unix::fs::symlink(f.home.join(".ssh/id_rsa"), &link).unwrap();
-    assert!(!allowed(&omp(&f, "read", json!({"path": link.to_str().unwrap()}))));
+    assert!(!allowed(&omp(
+        &f,
+        "read",
+        json!({"path": link.to_str().unwrap()})
+    )));
     // The skills marker must sit below a visible chain, not a foreign home.
-    assert!(!allowed(&omp(&f, "read", json!({"path": "/home/someone/.agents/skills/a/SKILL.md"}))));
+    assert!(!allowed(&omp(
+        &f,
+        "read",
+        json!({"path": "/home/someone/.agents/skills/a/SKILL.md"})
+    )));
 }
 
 #[test]
@@ -237,17 +260,34 @@ fn listings_allow_verified_directories_only() {
             assert!(!allowed(&omp(&f, tool, input.clone())), "{tool} {input}");
         }
     }
-    assert!(!allowed(&run(&f, "codex", "glob", json!({"path": "~/clean"}))));
+    assert!(!allowed(&run(
+        &f,
+        "codex",
+        "glob",
+        json!({"path": "~/clean"})
+    )));
 }
 
 #[test]
 fn grep_allows_only_directories_without_reachable_secrets() {
     let f = fixture();
-    let result = omp(&f, "grep", json!({"pattern": "fixture|x", "path": "~/clean", "glob": "*.txt"}));
+    let result = omp(
+        &f,
+        "grep",
+        json!({"pattern": "fixture|x", "path": "~/clean", "glob": "*.txt"}),
+    );
     assert!(allowed(&result), "{}", result.reason_code);
-    assert!(allowed(&omp(&f, "grep", json!({"pattern": "fn main", "path": "src"}))));
+    assert!(allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "fn main", "path": "src"})
+    )));
     // Single files keep the ordinary bounded file proof.
-    assert!(allowed(&omp(&f, "grep", json!({"pattern": "x", "path": "calc.py"}))));
+    assert!(allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "calc.py"})
+    )));
     for input in [
         json!({"pattern": "x", "path": "~/secret-dir"}),
         json!({"pattern": "x", "path": "~/secret-dir", "glob": "*.txt"}),
@@ -267,7 +307,11 @@ fn grep_allows_only_directories_without_reachable_secrets() {
     // A link to a secret inside an otherwise clean tree stays reviewed.
     let link = f.home.join("clean/link");
     std::os::unix::fs::symlink(f.home.join(".ssh/id_rsa"), &link).unwrap();
-    assert!(!allowed(&omp(&f, "grep", json!({"pattern": "x", "path": "~/clean"}))));
+    assert!(!allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "~/clean"})
+    )));
 }
 
 #[test]
@@ -363,7 +407,11 @@ fn eval_reviews_everything_outside_the_literal_grammar() {
     }
     let too_many = "await tool.read({path:'calc.py'});".repeat(40);
     assert!(!allowed(&eval_code(&f, &too_many)));
-    let deep = format!("display({}await tool.read({{path:'calc.py'}}){})", "(".repeat(40), ")".repeat(40));
+    let deep = format!(
+        "display({}await tool.read({{path:'calc.py'}}){})",
+        "(".repeat(40),
+        ")".repeat(40)
+    );
     assert!(!allowed(&eval_code(&f, &deep)));
 }
 

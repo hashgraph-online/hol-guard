@@ -2,12 +2,12 @@
 mod evaluate;
 use evaluate::evaluate_signals;
 
-#[path = "generic_omp.rs"]
-mod omp;
 #[path = "generic_command_rewrite.rs"]
 mod command_rewrite;
 #[path = "generic_extract.rs"]
 mod extract;
+#[path = "generic_omp.rs"]
+mod omp;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
