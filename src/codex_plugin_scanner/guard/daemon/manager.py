@@ -132,6 +132,7 @@ _GUARD_DAEMON_ENV_KEYS = frozenset(
     {
         "APPDATA",
         "COMSPEC",
+        "GUARD_DAEMON_IDLE_TIMEOUT_SECONDS",
         "HOME",
         "HOL_GUARD_DESKTOP",
         "HOL_GUARD_DESKTOP_RUNTIME_OWNER",
