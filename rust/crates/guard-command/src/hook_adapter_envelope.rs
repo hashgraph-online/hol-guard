@@ -20,7 +20,7 @@ use crate::hook_adapter_pytext::{
     dedupe_preserving_order, py_collapse_whitespace, py_lower, py_prefix_chars, py_strip,
 };
 use crate::hook_adapter_redact::{command_detail, redacted_payload};
-use crate::hook_adapter_value::{OMap, OValue};
+use crate::hook_adapter_value::{string_list, OMap, OValue};
 use crate::redacted_command_tokens::redact_text;
 use crate::shell_command_wrappers::normalize_transparent_shell_command;
 
@@ -81,15 +81,6 @@ pub fn canonical_harness(harness: &str) -> Option<&'static str> {
 
 fn opt(value: Option<&str>) -> OValue {
     value.map_or(OValue::Null, OValue::str)
-}
-
-fn string_list(items: &[String]) -> OValue {
-    OValue::List(
-        items
-            .iter()
-            .map(|item| OValue::str(item.as_str()))
-            .collect(),
-    )
 }
 
 /// The envelope fields the identity hash covers.
@@ -256,13 +247,13 @@ fn normalize_action_payload(
         &tool_input,
         normalized_command.as_deref(),
         prompt.as_deref(),
-    ) {
+    )? {
         if let Some(redacted) = redacted_target_path(&path, home_dir.as_deref(), env)? {
             target_paths.push(redacted);
         }
     }
     let target_paths = dedupe_preserving_order(target_paths);
-    let hosts = network_hosts(raw_command.as_deref(), prompt.as_deref());
+    let hosts = network_hosts(raw_command.as_deref(), prompt.as_deref())?;
     let workspace_label = match workspace.as_deref() {
         Some(text) => Some(label_for(text, home_dir.as_deref(), env)?),
         None => None,
@@ -330,19 +321,20 @@ fn normalize_action_payload(
     Ok(envelope)
 }
 
-fn adjust_cursor(envelope: &mut Envelope, prepared: &OMap) {
+fn adjust_cursor(envelope: &mut Envelope, prepared: &OMap) -> Result<(), AdapterError> {
     if envelope.event_name != "PreToolUse" {
-        return;
+        return Ok(());
     }
     let tool = py_lower(py_strip(envelope.tool_name.as_deref().unwrap_or("")));
     if !CURSOR_NETWORK_TOOL_NAMES.contains(&tool.as_str()) {
-        return;
+        return Ok(());
     }
     let urls = cursor_tool_input_urls(prepared.get("tool_input"));
     let texts: Vec<&str> = urls.iter().map(String::as_str).collect();
-    envelope.network_hosts = hosts_in(&texts);
+    envelope.network_hosts = hosts_in(&texts)?;
     "network_request".clone_into(&mut envelope.action_type);
     envelope.action_id = envelope.compute_action_id();
+    Ok(())
 }
 
 fn adjust_grok(envelope: &mut Envelope) {
@@ -386,7 +378,7 @@ pub fn normalize_harness_envelope(
     let prepared = prepare_payload(canonical, &payload, request.devin_project_dir)?;
     let mut envelope = normalize_action_payload(request, canonical, &prepared, provider)?;
     match canonical {
-        "cursor" => adjust_cursor(&mut envelope, &prepared),
+        "cursor" => adjust_cursor(&mut envelope, &prepared)?,
         "grok" => adjust_grok(&mut envelope),
         "cline" => adjust_cline(&mut envelope, &prepared),
         _ => {}

@@ -36,12 +36,8 @@ pub fn is_shell_tool(tool_name: Option<&str>) -> bool {
     tool_name.is_some_and(|name| SHELL_TOOL_NAMES.contains(&py_lower(py_strip(name)).as_str()))
 }
 
-/// `_string_value`: stripped non-blank string.
-pub fn string_value(value: Option<&OValue>) -> Option<String> {
-    value
-        .and_then(OValue::non_blank_str)
-        .map(|text| py_strip(text).to_owned())
-}
+/// `_string_value`: shared with the payload preparers.
+pub use crate::hook_adapter_prepare::string_value;
 
 fn string_from_keys(payload: &OMap, keys: &[&str]) -> Option<String> {
     keys.iter().find_map(|key| string_value(payload.get(key)))
@@ -377,7 +373,7 @@ pub fn raw_target_paths(
     tool_input: &OMap,
     command: Option<&str>,
     prompt_text: Option<&str>,
-) -> Vec<String> {
+) -> Result<Vec<String>, AdapterError> {
     let mut paths = Vec::new();
     for key in PATH_KEYS {
         input_strings(tool_input, key, &mut paths);
@@ -386,9 +382,9 @@ pub fn raw_target_paths(
         paths.extend(apply_patch_target_paths(tool_input));
     }
     for text in [command, prompt_text].into_iter().flatten() {
-        paths.extend(fancy_find_group_all(&PROMPT_PATH, text, "path"));
+        paths.extend(fancy_find_group_all(&PROMPT_PATH, text, "path")?);
     }
-    paths
+    Ok(paths)
 }
 
 pub fn apply_patch_target_paths(tool_input: &OMap) -> Vec<String> {
@@ -419,16 +415,19 @@ pub fn cursor_tool_input_urls(tool_input: Option<&OValue>) -> Vec<String> {
 }
 
 /// Hosts found in `texts`, de-duplicated in first-seen order.
-pub fn hosts_in(texts: &[&str]) -> Vec<String> {
+pub fn hosts_in(texts: &[&str]) -> Result<Vec<String>, AdapterError> {
     let mut hosts = Vec::new();
     for text in texts {
-        hosts.extend(fancy_find_group_all(&NETWORK_HOST, text, "host"));
+        hosts.extend(fancy_find_group_all(&NETWORK_HOST, text, "host")?);
     }
-    dedupe_preserving_order(hosts)
+    Ok(dedupe_preserving_order(hosts))
 }
 
 /// `_network_hosts(command, prompt)`.
-pub fn network_hosts(command: Option<&str>, prompt_text: Option<&str>) -> Vec<String> {
+pub fn network_hosts(
+    command: Option<&str>,
+    prompt_text: Option<&str>,
+) -> Result<Vec<String>, AdapterError> {
     let text = [command, prompt_text]
         .into_iter()
         .flatten()
@@ -436,7 +435,7 @@ pub fn network_hosts(command: Option<&str>, prompt_text: Option<&str>) -> Vec<St
         .collect::<Vec<_>>()
         .join("\n");
     if text.is_empty() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     hosts_in(&[text.as_str()])
 }

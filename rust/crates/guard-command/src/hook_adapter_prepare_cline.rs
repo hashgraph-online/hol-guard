@@ -4,7 +4,7 @@
 use crate::hook_adapter_cline_tables::*;
 use crate::hook_adapter_prepare::{first_truthy, string_value, AdapterError};
 use crate::hook_adapter_pytext::{dedupe_preserving_order, py_lower, py_repr_str, py_strip};
-use crate::hook_adapter_value::{parse_python_json, OMap, OValue, PyJsonError};
+use crate::hook_adapter_value::{parse_python_json, string_list, OMap, OValue, PyJsonError};
 
 /// Lowercased tool name when the host sent a string (`_NETWORK_TOOLS` gate).
 pub fn is_cline_network_tool(name: &str) -> bool {
@@ -305,15 +305,6 @@ pub fn cline_mcp_parts(name: Option<&str>, tool_input: &OMap) -> (Option<String>
         }
     }
     (server, tool)
-}
-
-fn string_list(items: &[String]) -> OValue {
-    OValue::List(
-        items
-            .iter()
-            .map(|item| OValue::str(item.as_str()))
-            .collect(),
-    )
 }
 
 fn set_paths(input: &mut OMap) {

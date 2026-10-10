@@ -20,6 +20,13 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _bound_native_runtime(native_approval_reuse_runtime):
+    """Command text views are answered by the compiled resident; bind it, never emulate it."""
+
+    return native_approval_reuse_runtime
+
+
 def test_command_from_payload_recognizes_pattern():
     assert command_text_from_tool_payload("", {"pattern": "TODO|FIXME", "path": "src/"}) == "TODO|FIXME"
 

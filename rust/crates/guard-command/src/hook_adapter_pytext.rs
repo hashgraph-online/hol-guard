@@ -3,6 +3,11 @@
 use fancy_regex::Regex as FancyRegex;
 use regex::Regex;
 
+use crate::hook_adapter_prepare::AdapterError;
+
+/// Typed code when the backtracking matcher gives up on an input.
+const PATTERN_FAILURE: &str = "native_hook_adapter_pattern_failure";
+
 /// `str.isspace` for one code point (`Py_UNICODE_ISSPACE`): Unicode
 /// `White_Space` plus the ASCII separators `\x1c`-`\x1f`.
 pub fn is_py_space(ch: char) -> bool {
@@ -122,7 +127,14 @@ pub fn compile_fancy(pattern: &str) -> FancyRegex {
 }
 
 /// `pattern.sub(callback, text)` over non-overlapping matches.
-pub fn fancy_replace_all<F>(pattern: &FancyRegex, text: &str, mut replace: F) -> String
+///
+/// A matcher failure (backtrack limit, stack overflow) is an error, never a
+/// silent "no more matches": a truncated redaction would leak the remainder.
+pub fn fancy_replace_all<F>(
+    pattern: &FancyRegex,
+    text: &str,
+    mut replace: F,
+) -> Result<String, AdapterError>
 where
     F: FnMut(&fancy_regex::Captures<'_, str>) -> String,
 {
@@ -130,7 +142,10 @@ where
     let mut last = 0usize;
     let mut cursor = 0usize;
     while cursor <= text.len() {
-        let Ok(Some(captures)) = pattern.captures_from_pos(text, cursor) else {
+        let Some(captures) = pattern
+            .captures_from_pos(text, cursor)
+            .map_err(|_| AdapterError::Unsupported(PATTERN_FAILURE))?
+        else {
             break;
         };
         let Some(whole) = captures.get(0) else { break };
@@ -144,15 +159,22 @@ where
         };
     }
     out.push_str(&text[last.min(text.len())..]);
-    out
+    Ok(out)
 }
 
 /// Every non-overlapping `finditer` capture of group `name`.
-pub fn fancy_find_group_all(pattern: &FancyRegex, text: &str, name: &str) -> Vec<String> {
+pub fn fancy_find_group_all(
+    pattern: &FancyRegex,
+    text: &str,
+    name: &str,
+) -> Result<Vec<String>, AdapterError> {
     let mut found = Vec::new();
     let mut cursor = 0usize;
     while cursor <= text.len() {
-        let Ok(Some(captures)) = pattern.captures_from_pos(text, cursor) else {
+        let Some(captures) = pattern
+            .captures_from_pos(text, cursor)
+            .map_err(|_| AdapterError::Unsupported(PATTERN_FAILURE))?
+        else {
             break;
         };
         let Some(whole) = captures.get(0) else { break };
@@ -165,7 +187,7 @@ pub fn fancy_find_group_all(pattern: &FancyRegex, text: &str, name: &str) -> Vec
             whole.end()
         };
     }
-    found
+    Ok(found)
 }
 
 /// `shlex.join(args)`.
@@ -174,4 +196,45 @@ pub fn shlex_join(args: &[String]) -> String {
         .map(|arg| crate::command_launcher_floors::shlex_quote(arg))
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod fancy_failure_tests {
+    use super::*;
+
+    fn catastrophic() -> (FancyRegex, String) {
+        let pattern = fancy_regex::RegexBuilder::new(r"(?=a)(?P<g>(?:a+)+)b")
+            .backtrack_limit(50)
+            .build()
+            .unwrap();
+        (pattern, "a".repeat(64))
+    }
+
+    #[test]
+    fn matcher_failure_is_an_error_not_a_silent_miss() {
+        let (pattern, text) = catastrophic();
+        let replaced = fancy_replace_all(&pattern, &text, |_| "X".to_owned());
+        assert!(matches!(
+            replaced,
+            Err(AdapterError::Unsupported(PATTERN_FAILURE))
+        ));
+        let found = fancy_find_group_all(&pattern, &text, "g");
+        assert!(matches!(
+            found,
+            Err(AdapterError::Unsupported(PATTERN_FAILURE))
+        ));
+    }
+
+    #[test]
+    fn ordinary_input_still_matches() {
+        let pattern = FancyRegex::new(r"(?=a)(?P<g>a+)").unwrap();
+        assert_eq!(
+            fancy_replace_all(&pattern, "xaay", |_| "X".to_owned()).unwrap(),
+            "xXy"
+        );
+        assert_eq!(
+            fancy_find_group_all(&pattern, "xaay a", "g").unwrap(),
+            ["aa", "a"]
+        );
+    }
 }

@@ -38,6 +38,7 @@ from ..cli.commands_support_command_activity import (
 from ..codex_binding_capture_writer import CodexBindingCaptureWriter
 from ..config import load_guard_config
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
@@ -266,19 +267,20 @@ class HookWorker(HookWorkerNativeMixin):
             # method turns into a deterministic deny/fail-safe response.
             # The concrete worker supplies the mixin host protocol, so bind
             # these methods through the worker rather than the mixin class.
-            return self._review_native_edge(
-                payload=payload,
-                harness=harness,
-                event_name=event_name,
-                default_harness=default_harness,
-                guard_home=guard_home,
-                home_dir=home_dir,
-                workspace=workspace,
-                deadline=deadline,
-                claim_saved_approval=claim_saved_approval,
-                claimed_saved_allow_hash=claimed_saved_allow_hash,
-                claimed_approval_request_id=claimed_approval_request_id,
-            )
+            with hook_adapter_memo(guard_home):
+                return self._review_native_edge(
+                    payload=payload,
+                    harness=harness,
+                    event_name=event_name,
+                    default_harness=default_harness,
+                    guard_home=guard_home,
+                    home_dir=home_dir,
+                    workspace=workspace,
+                    deadline=deadline,
+                    claim_saved_approval=claim_saved_approval,
+                    claimed_saved_allow_hash=claimed_saved_allow_hash,
+                    claimed_approval_request_id=claimed_approval_request_id,
+                )
         mode_response = self._mode_surface_response(
             harness,
             event_name,

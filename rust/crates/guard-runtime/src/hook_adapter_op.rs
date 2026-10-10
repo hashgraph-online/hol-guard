@@ -7,7 +7,7 @@
 //! intent runs in-process on the resident's own parser, so the envelope costs
 //! one round trip. Every failure is typed and fail closed.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
 
 use guard_command::hook_adapter_envelope::{
@@ -108,6 +108,16 @@ fn ordered_map(value: &Value) -> Result<OMap, Failure> {
     }
 }
 
+/// Digests of the oversize strings in `payload`; only byte-exact echoes of
+/// these may be returned as references.
+fn ref_digests(payload: &OMap) -> HashSet<String> {
+    let mut digests = HashSet::new();
+    for (_, value) in payload.iter() {
+        value.collect_ref_digests(&mut digests);
+    }
+    digests
+}
+
 fn path_env(host: &HookAdapterHostV1) -> PathEnv {
     PathEnv {
         tilde_home: host.tilde_home.clone(),
@@ -123,12 +133,10 @@ fn answer(query: &HookAdapterQueryV1) -> Result<Value, Failure> {
             payload,
             devin_project_dir,
         } => {
-            let prepared = prepare_payload(
-                harness,
-                &ordered_map(payload)?,
-                devin_project_dir.as_deref(),
-            )?;
-            Ok(OValue::Map(prepared).to_wire())
+            let input = ordered_map(payload)?;
+            let known = ref_digests(&input);
+            let prepared = prepare_payload(harness, &input, devin_project_dir.as_deref())?;
+            Ok(OValue::Map(prepared).to_wire_with_refs(&known))
         }
         HookAdapterQueryV1::ActionEnvelope(query) => action_envelope(query),
         HookAdapterQueryV1::CommandDetail {
@@ -147,8 +155,10 @@ fn answer(query: &HookAdapterQueryV1) -> Result<Value, Failure> {
                 OValue::Map(map) => Some(map),
                 _ => None,
             };
+            let known = input.as_ref().map(ref_digests).unwrap_or_default();
             let text = input.and_then(|input| command_text(tool_name.as_str(), &input));
-            Ok(json!({ "text": text }))
+            let wire = text.map(|text| OValue::Str(text).to_wire_with_refs(&known));
+            Ok(json!({ "text": wire }))
         }
         HookAdapterQueryV1::WorkspaceLabel {
             workspace,
@@ -197,7 +207,7 @@ fn action_envelope(query: &ActionEnvelopeQueryV1) -> Result<Value, Failure> {
         env: path_env(&query.host),
     };
     let envelope = normalize_harness_envelope(&request, &mut provider)?;
-    Ok(OValue::Map(envelope).to_wire())
+    Ok(OValue::Map(envelope).to_wire_with_refs(&ref_digests(&payload)))
 }
 
 #[cfg(test)]

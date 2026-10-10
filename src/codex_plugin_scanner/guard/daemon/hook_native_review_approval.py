@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
+from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.actions import normalize_harness_payload
 from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
@@ -324,8 +325,10 @@ def queue_native_pre_tool_review(
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
-        # Exception messages can contain private tool input; log only the error class.
-        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
+        # Exception messages can contain private tool input; log only the error class and, for
+        # native adapter outages, its fixed reason code (unavailable, deadline, size).
+        reason = error.code if isinstance(error, NativeHookAdapterError) else type(error).__name__
+        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, reason)
         return None
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)

@@ -19,6 +19,7 @@ from ..action_lattice import is_guard_action
 from ..cli.commands_support_command_activity import persist_deferred_post_hook_command_activity
 from ..models import GuardAction
 from ..native_decision_receipt import validate_native_decision_receipt
+from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.command_activity_contract import ActivityApprovalReuseStatus, CorrelationHandle
 from ..runtime.command_activity_correlation import (
     derive_proven_request_correlation,
@@ -71,6 +72,14 @@ class RuntimeHookEvidenceWriterStats(TypedDict):
     receipt_dropped: int
     receipt_failures: int
     receipt_durable_pending: int
+
+
+def _safe_invocation_preview(snapshot: Mapping[str, object]) -> str | None:
+    """Preview is display-only; an unavailable native adapter must not drop the evidence row."""
+    try:
+        return build_invocation_preview_from_payload(snapshot)
+    except NativeHookAdapterError:
+        return None
 
 
 @final
@@ -153,7 +162,7 @@ class RuntimeHookEvidenceWriter:
             snapshot = deepcopy(dict(payload))
             encoded = json.dumps(snapshot, separators=(",", ":"), sort_keys=True).encode("utf-8")
             correlation = self._derive_correlation(harness=harness, event=event, payload=snapshot)
-            invocation_preview = build_invocation_preview_from_payload(snapshot)
+            invocation_preview = _safe_invocation_preview(snapshot)
         except Exception:
             with self._condition:
                 self._dropped += 1

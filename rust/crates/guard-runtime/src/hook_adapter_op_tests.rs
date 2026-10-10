@@ -120,3 +120,93 @@ fn oversized_answers_become_a_typed_error() {
     // The wire parser caps strings at 1 MiB, so either layer must refuse.
     assert!(reply.is_err() || reply.unwrap()["status"] == "error");
 }
+
+#[test]
+fn byte_exact_oversize_echoes_travel_as_digest_references() {
+    let big = "q".repeat(70_000);
+    let reply = resident(envelope(
+        HOOK_ADAPTER_REQUEST_SCHEMA,
+        json!({
+            "kind": "prepare_payload",
+            "harness": "codex",
+            "payload": ["d", "blob", big, "small", "kept"],
+            "devin_project_dir": null,
+        }),
+    ))
+    .unwrap();
+    assert_eq!(reply["status"], "ok");
+    let body = reply["payload"].as_array().unwrap();
+    let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(big.as_bytes()));
+    assert_eq!(body[2], json!(["r", digest]));
+    assert_eq!(body[4], "kept");
+}
+
+#[test]
+fn many_small_strings_over_the_response_cap_fail_closed() {
+    let mut payload = vec![json!("d")];
+    for index in 0..40 {
+        payload.push(json!(format!("k{index}")));
+        payload.push(json!(format!("{index:02}{}", "z".repeat(60_000))));
+    }
+    let reply = resident(envelope(
+        HOOK_ADAPTER_REQUEST_SCHEMA,
+        json!({
+            "kind": "prepare_payload",
+            "harness": "codex",
+            "payload": payload,
+            "devin_project_dir": null,
+        }),
+    ))
+    .unwrap();
+    assert_eq!(reply["status"], "error");
+    assert_eq!(reply["code"], "native_hook_adapter_response_too_large");
+}
+
+#[test]
+fn chunked_strings_are_rejoined_and_malformed_chunks_fail_closed() {
+    let prepare = |payload: Value| {
+        resident(envelope(
+            HOOK_ADAPTER_REQUEST_SCHEMA,
+            json!({"kind": "prepare_payload", "harness": "codex", "payload": payload, "devin_project_dir": null}),
+        ))
+        .unwrap()
+    };
+    let joined = prepare(json!(["d", "blob", ["c", "ab", "", "cd"]]));
+    assert_eq!(joined["status"], "ok");
+    assert_eq!(joined["payload"], json!(["d", "blob", "abcd"]));
+    let part = "p".repeat(300_000);
+    let long = prepare(json!(["d", "blob", ["c", part, part, part, part]]));
+    assert_eq!(long["status"], "ok");
+    let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(
+        part.repeat(4).as_bytes(),
+    ));
+    assert_eq!(long["payload"], json!(["d", "blob", ["r", digest]]));
+    for bad in [json!(["c", 1]), json!(["c", ["l"]])] {
+        let reply = prepare(json!(["d", "blob", bad]));
+        assert_eq!(reply["status"], "error");
+        assert_eq!(reply["code"], "native_hook_adapter_wire_invalid");
+    }
+}
+
+#[test]
+fn command_text_echoes_of_oversize_commands_travel_as_references() {
+    let command = format!("echo {}", "a".repeat(200_000));
+    let reply = resident(envelope(
+        HOOK_ADAPTER_REQUEST_SCHEMA,
+        json!({
+            "kind": "command_text",
+            "tool_name": "Bash",
+            "tool_input": ["d", "command", command],
+        }),
+    ))
+    .unwrap();
+    assert_eq!(reply["status"], "ok");
+    let digest = hex::encode(<sha2::Sha256 as sha2::Digest>::digest(command.as_bytes()));
+    assert_eq!(reply["payload"]["text"], json!(["r", digest]));
+    let short = resident(envelope(
+        HOOK_ADAPTER_REQUEST_SCHEMA,
+        json!({"kind": "command_text", "tool_name": "Bash", "tool_input": ["d", "command", "echo hi"]}),
+    ))
+    .unwrap();
+    assert_eq!(short["payload"]["text"], "echo hi");
+}

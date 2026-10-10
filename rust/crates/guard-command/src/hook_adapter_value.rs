@@ -8,10 +8,20 @@
 //! CPython-compatible helpers the port needs.
 //!
 //! Wire form (order preserving over the sorted-object frame parser): a dict is
-//! `["d", key1, value1, ...]`, a list is `["l", item, ...]`, scalars are raw.
+//! `["d", key1, value1, ...]`, a list is `["l", item, ...]`, a string longer
+//! than one resident string slot is `["c", part, ...]`, scalars are raw.
+
+use std::collections::HashSet;
 
 use guard_contracts::{python_float_repr, write_json_string};
 use serde_json::{Number, Value};
+use sha2::{Digest, Sha256};
+
+/// Strings at least this many UTF-8 bytes long may travel back as a digest
+/// reference when they are a byte-exact echo of a string the request carried.
+/// Python resolves the reference against the request it sent, so the 2 MiB
+/// response cap never forces a cap raise or a lossy elision.
+pub const REF_STRING_BYTES: usize = 64 * 1024;
 
 /// Insertion-ordered string-keyed map with Python dict assignment semantics.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -194,6 +204,14 @@ impl OValue {
                         .map(Self::from_wire)
                         .collect::<Result<Vec<_>, _>>()
                         .map(Self::List),
+                    // A string too long for one resident string slot: parts in order.
+                    Some("c") => {
+                        let mut text = String::new();
+                        for part in rest {
+                            text.push_str(part.as_str().ok_or("native_hook_adapter_wire_invalid")?);
+                        }
+                        Ok(Self::Str(text))
+                    }
                     Some("d") => {
                         if rest.len() % 2 != 0 {
                             return Err("native_hook_adapter_wire_invalid");
@@ -237,6 +255,51 @@ impl OValue {
                 }
                 Value::Array(wire)
             }
+        }
+    }
+
+    /// Collect the SHA-256 of every oversize string value in `self`.
+    pub fn collect_ref_digests(&self, out: &mut HashSet<String>) {
+        match self {
+            Self::Str(text) if text.len() >= REF_STRING_BYTES => {
+                out.insert(hex::encode(Sha256::digest(text.as_bytes())));
+            }
+            Self::List(items) => items.iter().for_each(|item| item.collect_ref_digests(out)),
+            Self::Map(map) => map
+                .iter()
+                .for_each(|(_, item)| item.collect_ref_digests(out)),
+            _ => {}
+        }
+    }
+
+    /// `to_wire`, except an oversize string that byte-exactly matches one of
+    /// `known` (digests of the request's own strings) is sent as `["r", digest]`.
+    pub fn to_wire_with_refs(&self, known: &HashSet<String>) -> Value {
+        match self {
+            Self::Str(text) if text.len() >= REF_STRING_BYTES => {
+                let digest = hex::encode(Sha256::digest(text.as_bytes()));
+                if known.contains(&digest) {
+                    Value::Array(vec![Value::String("r".to_owned()), Value::String(digest)])
+                } else {
+                    Value::String(text.clone())
+                }
+            }
+            Self::List(items) => {
+                let mut wire = Vec::with_capacity(items.len() + 1);
+                wire.push(Value::String("l".to_owned()));
+                wire.extend(items.iter().map(|item| item.to_wire_with_refs(known)));
+                Value::Array(wire)
+            }
+            Self::Map(map) => {
+                let mut wire = Vec::with_capacity(map.len() * 2 + 1);
+                wire.push(Value::String("d".to_owned()));
+                for (key, item) in map.iter() {
+                    wire.push(Value::String(key.to_owned()));
+                    wire.push(item.to_wire_with_refs(known));
+                }
+                Value::Array(wire)
+            }
+            other => other.to_wire(),
         }
     }
 
@@ -293,3 +356,13 @@ impl OValue {
 }
 
 pub use crate::hook_adapter_pyjson::{parse_python_json, PyJsonError};
+
+/// An ordered list of string values.
+pub fn string_list(items: &[String]) -> OValue {
+    OValue::List(
+        items
+            .iter()
+            .map(|item| OValue::str(item.as_str()))
+            .collect(),
+    )
+}

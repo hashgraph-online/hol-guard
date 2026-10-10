@@ -73,7 +73,7 @@ fn substitute(
                 path.to_owned()
             }
         }
-    });
+    })?;
     failure.map_or(Ok(replaced), Err)
 }
 

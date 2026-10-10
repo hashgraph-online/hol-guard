@@ -445,8 +445,6 @@ pub mod restricted_archive_transport;
 #[cfg(unix)]
 pub mod restricted_pytest;
 pub mod resume_template;
-pub mod review_event_outbox;
-pub mod review_event_outbox_schema;
 #[cfg(unix)]
 pub mod sandbox;
 pub mod shims;
