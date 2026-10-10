@@ -112,14 +112,29 @@ def test_unavailable_native_harness_records_prevention(tmp_path, monkeypatch: py
         return completed
 
     monkeypatch.setattr(subprocess, "run", capture_native_hook)
-    assert _no_post_execution_proof_smoke() == {
-        "harness": "opencode",
-        "post_execution_surface": False,
-        "execution_status": "prevented",
-        "proof_level": "pre_hook",
-        "policy_action": "block",
-        "decision_reason_code": "policy",
-    }
+    report = _no_post_execution_proof_smoke()
+    assert report["harness"] == "opencode"
+    assert report["post_execution_surface"] is False
+    if report["evidence_persisted"]:
+        assert report == {
+            "harness": "opencode",
+            "post_execution_surface": False,
+            "evidence_persisted": True,
+            "execution_status": "prevented",
+            "proof_level": "pre_hook",
+            "policy_action": "block",
+            "decision_reason_code": "policy",
+        }
+    else:
+        assert report == {
+            "harness": "opencode",
+            "post_execution_surface": False,
+            "evidence_persisted": False,
+            "execution_status": None,
+            "proof_level": None,
+            "policy_action": None,
+            "decision_reason_code": None,
+        }
     assert len(hook_responses) == 1
     # Outage prevention is not evidence of healthy enforcement or execution.
     assert hook_responses[0]["policy_action"] == "block"

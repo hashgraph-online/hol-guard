@@ -6543,7 +6543,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         workspace: str | None,
         deadline: float | None,
     ) -> dict[str, object] | None:
-        """Try the resident hook worker; only explicit rollback may fall back."""
+        """Review through the resident hook worker; failures deny and never reach Python semantics."""
         from contextlib import nullcontext
 
         from ..sqlite_tuning import sqlite_operation_deadline
@@ -6566,8 +6566,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     deadline=deadline,
                 )
             except Exception as error:
-                # Fail safe: deny/block. Do not fall back to compatibility CLI for
-                # requests that omitted full output and supplied only guard_source_ref.
+                # Fail safe: deny/block; there is no Python semantic fallback.
                 self._daemon_server().hook_worker.metrics.record_failure(
                     stage="server",
                     exception_type=type(error).__name__,

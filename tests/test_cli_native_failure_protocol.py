@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-@pytest.mark.parametrize("failure", ("worker_none", "worker_response", "worker_raise", "disabled"))
+@pytest.mark.parametrize("failure", ("worker_none", "worker_response", "worker_raise"))
 @pytest.mark.parametrize("json_requested", (False, True))
 @pytest.mark.parametrize("event", ("PreToolUse", "PermissionRequest"))
 def test_native_failure_preserves_codex_wire_response(
@@ -31,7 +31,6 @@ def test_native_failure_preserves_codex_wire_response(
     context = HarnessContext(home_dir=tmp_path / "home", workspace_dir=None, guard_home=guard_home)
     store = GuardStore(guard_home)
     payload = {"hook_event_name": event, "tool_name": "Bash", "tool_input": {"command": "printf test > output.txt"}}
-    monkeypatch.setattr(cli, "_native_mode_requires_rust", lambda: failure != "disabled")
 
     def unavailable(**_kwargs):
         if failure == "worker_raise":
