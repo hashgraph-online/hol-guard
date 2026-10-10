@@ -37,6 +37,7 @@ pub(super) enum Lit {
 pub(super) struct Call {
     pub(super) tool: String,
     pub(super) args: Vec<(String, Lit)>,
+    sdk_read_helper: bool,
 }
 
 struct Parser {
@@ -290,7 +291,8 @@ impl Parser {
         // expand ~, parse line selectors, or normalize Windows separators.
         // Reject spellings the standalone tool would interpret differently.
         if path.starts_with('~')
-            || path.contains([':', '\\', '$'])
+            || path.contains("://")
+            || path.contains(['\\', '$'])
             || path.trim() != path
             || path.chars().any(char::is_control)
             || self.calls.len() >= MAX_CALLS
@@ -301,6 +303,7 @@ impl Parser {
         self.calls.push(Call {
             tool: "read".to_owned(),
             args: vec![("path".to_owned(), Lit::Str(path))],
+            sdk_read_helper: true,
         });
         Some(())
     }
@@ -350,7 +353,11 @@ impl Parser {
         if self.calls.len() >= MAX_CALLS {
             return None;
         }
-        self.calls.push(Call { tool, args });
+        self.calls.push(Call {
+            tool,
+            args,
+            sdk_read_helper: false,
+        });
         Some(())
     }
 }
@@ -379,7 +386,7 @@ fn literal_read_helper_is_parsed_as_one_read() {
 }
 
 /// Map one literal call onto the equivalent standalone tool payload.
-fn standalone_payload(call: &Call) -> Option<Value> {
+fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
     let mut input = Map::new();
     for (key, lit) in &call.args {
         let allowed_string = match call.tool.as_str() {
@@ -391,6 +398,19 @@ fn standalone_payload(call: &Call) -> Option<Value> {
         };
         match lit {
             Lit::Str(text) if allowed_string.contains(&key.as_str()) => {
+                if call.sdk_read_helper && text.contains(':') {
+                    let path = std::path::Path::new(text);
+                    let candidate = if path.is_absolute() {
+                        path.to_path_buf()
+                    } else {
+                        std::path::Path::new(context.path.cwd?).join(path)
+                    };
+                    // A colon can be a literal filename, but the SDK never
+                    // strips read selectors. Prove that the exact file exists.
+                    if !candidate.is_file() {
+                        return None;
+                    }
+                }
                 if call.tool == "bash" && key == "cwd" {
                     if text != "." {
                         return None;
@@ -442,7 +462,7 @@ pub(super) fn evaluate(
     let calls = parse_program(input.get("code")?.as_str()?)?;
     let mut ran_shell = false;
     for call in &calls {
-        let inner = standalone_payload(call)?;
+        let inner = standalone_payload(call, context)?;
         ran_shell |= call.tool == "bash";
         let result = crate::pretool::generic::evaluate_envelope(
             context.harness,

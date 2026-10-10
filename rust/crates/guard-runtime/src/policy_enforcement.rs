@@ -336,46 +336,11 @@ pub(crate) fn apply_pre_tool_policy(
     Ok(output)
 }
 
-fn post_action_type(
-    request: &NativeHookRequestV1,
-    payload_kind: GuardHookPayloadKindV2,
-) -> Result<PreToolActionTypeV1, String> {
-    if payload_kind == GuardHookPayloadKindV2::SourceFileRef {
-        return Ok(PreToolActionTypeV1::FileRead);
-    }
-    let mut maps = Vec::new();
-    let mut nodes = 0usize;
-    collect_fact_maps(&request.payload, 0, &mut nodes, &mut maps)?;
-    if let Some(tool) = preferred_tool_name(&maps)? {
-        return Ok(classify_tool_name(&tool));
-    }
-    for record in maps {
-        if record.keys().any(|key| {
-            matches!(
-                key.as_str(),
-                "command" | "cmd" | "shell_command" | "shellCommand"
-            )
-        }) {
-            return Ok(PreToolActionTypeV1::Command);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "package" | "package_name" | "packageName"))
-        {
-            return Ok(PreToolActionTypeV1::Package);
-        }
-        if record.keys().any(|key| PATH_KEYS.contains(&key.as_str())) {
-            return Ok(PreToolActionTypeV1::FileRead);
-        }
-        if record
-            .keys()
-            .any(|key| matches!(key.as_str(), "url" | "uri" | "href" | "endpoint"))
-        {
-            return Ok(PreToolActionTypeV1::Network);
-        }
-    }
-    Ok(PreToolActionTypeV1::Unknown)
-}
+#[path = "policy_enforcement_post_action.rs"]
+mod post_action;
+use post_action::post_action_type;
+#[path = "policy_enforcement_omp_eval.rs"]
+mod eval_output;
 
 /// Apply the authenticated policy to a Rust-owned PostTool result. The
 /// source/content decision is intrinsic and therefore remains strongest even
@@ -391,9 +356,15 @@ pub(crate) fn apply_post_tool_policy(
     }
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
+    let eval_read =
+        payload_kind == GuardHookPayloadKindV2::Inline && eval_output::bounded_read_output(request);
     let classified_action = post_action_type(request, payload_kind)?;
     let action_type = if task_metadata {
         PreToolActionTypeV1::Harness
+    } else if eval_read {
+        // The complete input was re-proved as allowed file reads. The output
+        // scan result and every applicable installed policy floor still join below.
+        PreToolActionTypeV1::FileRead
     } else {
         classified_action
     };

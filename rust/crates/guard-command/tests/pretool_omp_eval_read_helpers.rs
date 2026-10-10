@@ -16,6 +16,7 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         ".agent/skills/x/SKILL.md",
         ".ssh/id_rsa",
         "project/README.md",
+        "project/notes:1",
     ] {
         let file = home.join(path);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
@@ -52,6 +53,7 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         skill_read.as_str(),
         "const r = await read('README.md'); display(r)",
         "display(await read(`README.md`))",
+        "display(await read('notes:1'))",
     ] {
         let result = evaluate(code);
         assert_eq!(
