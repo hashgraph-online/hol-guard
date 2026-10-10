@@ -2092,6 +2092,7 @@ jobs:
             if grep -q "release not found" "$RUNNER_TEMP/release-view.err"; then
               break
             fi
+            cat "$RUNNER_TEMP/release-view.err" >&2
             if [[ "$attempt" == "5" ]]; then
               echo "Could not inspect the GitHub release for ${VERSION}" >&2
               exit 1
