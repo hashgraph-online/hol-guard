@@ -65,19 +65,29 @@ def _recovery_reason(error: Exception) -> str:
     return reason if reason in _RECORD_FAILURE_REASONS else "native_application_observation_recovery_unavailable"
 
 
-def _quarantine_entries(store: GuardStore) -> dict[str, dict[str, object]]:
+def _quarantine_entries(store: GuardStore) -> dict[str, dict[str, object]] | None:
+    """Return retained quarantine, or None when it cannot be read safely.
+
+    A missing payload is an empty quarantine. A read error or a payload that is
+    not the expected map is unreadable: callers must skip quarantine writes so
+    a later pass cannot replace retained evidence with a fresh empty map.
+    """
+
     try:
         saved = store.get_sync_payload(_QUARANTINE_KEY)
     except (OSError, RuntimeError, sqlite3.Error, ValueError):
+        return None
+    if saved is None:
         return {}
     entries = saved.get("entries") if isinstance(saved, dict) else None
     if not isinstance(entries, dict):
-        return {}
-    return {
-        request_id: entry
-        for request_id, entry in entries.items()
-        if isinstance(request_id, str) and isinstance(entry, dict)
-    }
+        return None
+    parsed: dict[str, dict[str, object]] = {}
+    for request_id, entry in entries.items():
+        if not isinstance(request_id, str) or not isinstance(entry, dict):
+            return None
+        parsed[request_id] = entry
+    return parsed
 
 
 def _quarantine_candidate(
@@ -115,12 +125,17 @@ def native_observation_recovery_status(store: GuardStore) -> dict[str, object]:
     """Project bounded health metadata, never native receipts or request IDs."""
     saved = store.get_sync_payload(_STATE_KEY)
     saved = saved if isinstance(saved, dict) else {}
-    quarantined = len(_quarantine_entries(store))
+    entries = _quarantine_entries(store)
     state = saved.get("state")
     if not isinstance(state, str) or state not in {"confirmed", "recovery_required", "unavailable"}:
         state = "not_observed"
-    if quarantined:
-        state = "recovery_required"
+    if entries is None:
+        state = "unavailable"
+        quarantined = 0
+    else:
+        quarantined = len(entries)
+        if quarantined:
+            state = "recovery_required"
     failures = saved.get("failureCount", 0)
     retrying = min(max(failures, 0), _PAGE_LIMIT) if type(failures) is int else 0
     return {"state": state, "retrying_count": retrying, "quarantined_count": quarantined}
@@ -144,6 +159,9 @@ def record_native_observation_recovery_failure(
 
 
 def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
+    quarantine = _quarantine_entries(store)
+    if quarantine is None:
+        return record_native_observation_recovery_failure(store)
     saved = store.get_sync_payload(_STATE_KEY)
     cursor = saved.get("afterRequestId") if isinstance(saved, dict) else None
     if not isinstance(cursor, str):
@@ -157,7 +175,6 @@ def recover_native_applications_once(store: GuardStore) -> dict[str, object]:
     except (OSError, RuntimeError, ValueError) as error:
         return record_native_observation_recovery_failure(store, _recovery_reason(error))
     now = datetime.now(timezone.utc).isoformat()
-    quarantine = _quarantine_entries(store)
     confirmed = 0
     quarantined = 0
     quarantine_reasons: set[str] = set()

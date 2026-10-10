@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from copy import deepcopy
 
 import pytest
@@ -229,6 +230,79 @@ def test_terminal_quarantine_survives_page_cursor_when_transient_failure_retaine
     assert second["state"] == "recovery_required"
     assert second["afterRequestId"] == "next-page"
     assert candidates[0]["request_id"] not in queries
+
+
+def test_unreadable_quarantine_aborts_without_replacing_it(tmp_path, monkeypatch):
+    """A locked or malformed quarantine stays untouched and blocks the pass."""
+    store = GuardStore(tmp_path)
+    kept = {
+        "schema": recovery._QUARANTINE_SCHEMA,
+        "entries": {
+            "sha256:" + "a" * 64: {
+                "state": "quarantined",
+                "reason": "native_application_pending_request_missing",
+                "observation": {"request_id": "kept"},
+            }
+        },
+        "updatedAt": "2026-10-08T00:00:00Z",
+    }
+    store.set_sync_payload(recovery._QUARANTINE_KEY, kept, "2026-10-08T00:00:00Z")
+    store.set_sync_payload(recovery._STATE_KEY, {"afterRequestId": "saved-cursor"}, "2026-10-08T00:00:00Z")
+    calls = _paged_discovery(monkeypatch, {None: ([_observation("b")], "next-page")})
+    real_get = store.get_sync_payload
+    real_set = store.set_sync_payload
+    writes: list[str] = []
+
+    def failing_get(key):
+        if key == recovery._QUARANTINE_KEY:
+            raise sqlite3.OperationalError("database is locked")
+        return real_get(key)
+
+    def tracking_set(key, payload, now):
+        writes.append(key)
+        return real_set(key, payload, now)
+
+    monkeypatch.setattr(store, "get_sync_payload", failing_get)
+    monkeypatch.setattr(store, "set_sync_payload", tracking_set)
+
+    result = recovery.recover_native_applications_once(store)
+
+    assert result["state"] == "unavailable"
+    assert result["afterRequestId"] == "saved-cursor"
+    assert calls == []
+    assert recovery._QUARANTINE_KEY not in writes
+    assert real_get(recovery._QUARANTINE_KEY) == kept
+    assert recovery.native_observation_recovery_status(store)["state"] == "unavailable"
+
+
+def test_malformed_quarantine_is_not_replaced_with_an_empty_map(tmp_path, monkeypatch):
+    store = GuardStore(tmp_path)
+    store.set_sync_payload(
+        recovery._QUARANTINE_KEY,
+        {"entries": ["not-a-map"]},
+        "2026-10-08T00:00:00Z",
+    )
+    calls = _paged_discovery(monkeypatch, {None: ([_observation("c")], "next-page")})
+    real_get = store.get_sync_payload
+    real_set = store.set_sync_payload
+    writes: list[str] = []
+
+    def tracking_set(key, payload, now):
+        writes.append(key)
+        return real_set(key, payload, now)
+
+    monkeypatch.setattr(store, "set_sync_payload", tracking_set)
+    result = recovery.recover_native_applications_once(store)
+
+    assert result["state"] == "unavailable"
+    assert calls == []
+    assert recovery._QUARANTINE_KEY not in writes
+    assert real_get(recovery._QUARANTINE_KEY)["entries"] == ["not-a-map"]
+    assert recovery.native_observation_recovery_status(store) == {
+        "state": "unavailable",
+        "retrying_count": 1,
+        "quarantined_count": 0,
+    }
 
 
 def test_quarantine_is_bounded_and_overflow_stays_retryable(tmp_path, monkeypatch):
