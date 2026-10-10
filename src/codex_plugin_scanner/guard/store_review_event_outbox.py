@@ -1,46 +1,95 @@
-"""Store API for append-only Guard Cloud Review event delivery."""
+"""Store API for append-only Guard Cloud Review event delivery.
+
+Every method runs in the native resident (``guard_store`` op). This mixin keeps
+only the process-local concerns: the storage-access gate, fatal-store recovery,
+outbox wake notification, wall-clock timestamps, and DTO shaping.
+"""
 
 from __future__ import annotations
 
 # pyright: reportAny=false, reportAttributeAccessIssue=false, reportUnknownArgumentType=false
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnusedCallResult=false
 import json
+import sqlite3
 from collections.abc import Mapping, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from .store_review_event_acknowledgment import acknowledge_review_events
-from .store_review_event_outbox_binding import (
-    explicitly_reassign_quarantined_events,
-    load_review_oauth_binding,
-    normalized_delivery_binding,
-    refresh_same_subject_binding,
-)
-from .store_review_event_outbox_writes import requeue_pending_request_events
-from .store_review_pending_requests import list_pending_review_request_ids
-from .store_review_retry_identity import repair_rejected_review_correlation
+from . import store_review_event_outbox_schema
+from .native_guard_store import native_guard_store_call
+from .store_base import sqlite_connect_timeout_seconds
+
+_SENTINEL = "\u0000requeued\u0000"
 
 
-def _retry_at(now: str, attempt_count: int) -> str:
-    try:
-        base = datetime.fromisoformat(now.replace("Z", "+00:00"))
-    except ValueError:
-        base = datetime.now(timezone.utc)
-    delay_seconds = min(300.0, 0.5 * (2 ** min(attempt_count, 10)))
-    return (base + timedelta(seconds=delay_seconds)).isoformat()
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _positive_sequences(sequences: Sequence[int]) -> list[int]:
+    return sorted({int(sequence) for sequence in sequences if int(sequence) > 0})
+
+
+def _identity(
+    oauth_subject_hash: object, workspace_id: object, machine_id: object, machine_installation_id: object
+) -> dict[str, object]:
+    return {
+        "oauth_subject_hash": oauth_subject_hash,
+        "workspace_id": workspace_id,
+        "machine_id": machine_id,
+        "machine_installation_id": machine_installation_id,
+    }
+
+
+def _marker_parts(marker_payload: Mapping[str, object]) -> list[str]:
+    rendered = json.dumps({**marker_payload, "requeued": _SENTINEL})
+    token = json.dumps(_SENTINEL)
+    before, separator, after = rendered.partition(token)
+    if not separator or token in after:
+        raise ValueError("Review requeue marker payload is not representable.")
+    return [before, after]
 
 
 class StoreReviewEventOutboxMixin:
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> object:
+        timeout_seconds = sqlite_connect_timeout_seconds()
+        if timeout_seconds <= 0:
+            raise TimeoutError("Guard storage operation deadline expired.")
+        failure: sqlite3.DatabaseError | None = None
+        generation: int | None = None
+        payload: object = None
+        with self._hold_storage_gate(exclusive=False):
+            try:
+                payload, generation = native_guard_store_call(
+                    store_path=self.path,
+                    guard_home=self.guard_home,
+                    source=self._guard_source,
+                    method=method,
+                    args=args,
+                    busy_timeout_seconds=timeout_seconds,
+                )
+            except sqlite3.DatabaseError as error:
+                failure = error
+        self._repair_store_permissions()
+        if failure is not None:
+            # The operation already ran against the failed store: recover it for
+            # the next call, then surface this failure.
+            try:
+                self._recover_fatal_sqlite_store(failure)
+            except Exception as recovery_error:
+                raise recovery_error from failure
+            raise failure
+        store_review_event_outbox_schema.notify_review_event_wake(self.path, generation)
+        return payload
+
     def repair_rejected_review_correlation(
         self, *, event_sequence: int, binding: Mapping[str, str], changed_at: str
     ) -> int:
-        with self._connect() as connection:
-            return repair_rejected_review_correlation(
-                connection,
-                source=self._guard_source,
-                event_sequence=event_sequence,
-                binding=binding,
-                changed_at=changed_at,
+        return int(
+            self._native_store_call(
+                "repair_rejected_review_correlation",
+                {"event_sequence": event_sequence, "binding": dict(binding), "changed_at": changed_at},
             )
+        )
 
     def requeue_pending_review_events(
         self,
@@ -51,16 +100,18 @@ class StoreReviewEventOutboxMixin:
         request_ids: set[str] | None = None,
         request_snapshots: Mapping[str, Mapping[str, object]] | None = None,
     ) -> int:
-        with self._connect() as connection:
-            return requeue_pending_request_events(
-                connection,
-                source=self._guard_source,
-                changed_at=changed_at,
-                require_binding=require_binding,
-                snapshot_repair_sequences=snapshot_repair_sequences,
-                request_ids=request_ids,
-                request_snapshots=request_snapshots,
+        return int(
+            self._native_store_call(
+                "requeue_pending_review_events",
+                {
+                    "changed_at": changed_at,
+                    "require_binding": require_binding,
+                    "snapshot_repair_sequences": snapshot_repair_sequences,
+                    "request_ids": None if request_ids is None else sorted(request_ids),
+                    "request_snapshots": None if request_snapshots is None else dict(request_snapshots),
+                },
             )
+        )
 
     def requeue_pending_review_events_with_marker(
         self,
@@ -73,29 +124,22 @@ class StoreReviewEventOutboxMixin:
         request_ids: set[str] | None = None,
         request_snapshots: Mapping[str, Mapping[str, object]] | None = None,
     ) -> int:
-        with self._connect() as connection:
-            count = requeue_pending_request_events(
-                connection,
-                source=self._guard_source,
-                changed_at=changed_at,
-                require_binding=require_binding,
-                only_retry_identity_drift=only_retry_identity_drift,
-                request_ids=request_ids,
-                request_snapshots=request_snapshots,
-                native_replay=marker_payload.get("native_replay") is True
-                or marker_payload.get("schema") == "guard-cloud-review-native-workspace-review-request.v1",
+        return int(
+            self._native_store_call(
+                "requeue_pending_review_events_with_marker",
+                {
+                    "changed_at": changed_at,
+                    "marker_key": marker_key,
+                    "marker_json_parts": _marker_parts(marker_payload),
+                    "require_binding": require_binding,
+                    "only_retry_identity_drift": only_retry_identity_drift,
+                    "request_ids": None if request_ids is None else sorted(request_ids),
+                    "request_snapshots": None if request_snapshots is None else dict(request_snapshots),
+                    "native_replay": marker_payload.get("native_replay") is True
+                    or marker_payload.get("schema") == "guard-cloud-review-native-workspace-review-request.v1",
+                },
             )
-            connection.execute(
-                """
-                insert into sync_state (state_key, payload_json, updated_at)
-                values (?, ?, ?)
-                on conflict(state_key) do update set
-                  payload_json = excluded.payload_json,
-                  updated_at = excluded.updated_at
-                """,
-                (marker_key, json.dumps({**marker_payload, "requeued": count}), changed_at),
-            )
-            return count
+        )
 
     def list_pending_review_request_ids(
         self,
@@ -106,45 +150,24 @@ class StoreReviewEventOutboxMixin:
         through_request_id: str | None = None,
         descending: bool = False,
     ) -> list[str]:
-        with self._connect() as connection:
-            return list_pending_review_request_ids(
-                connection,
-                source=self._guard_source,
-                binding=binding,
-                limit=limit,
-                after_request_id=after_request_id,
-                through_request_id=through_request_id,
-                descending=descending,
-            )
+        ids = self._native_store_call(
+            "list_pending_review_request_ids",
+            {
+                "binding": dict(binding),
+                "limit": limit,
+                "after_request_id": after_request_id,
+                "through_request_id": through_request_id,
+                "descending": descending,
+            },
+        )
+        return [str(request_id) for request_id in ids]
 
     def list_review_event_snapshots(self, request_id: str) -> list[dict[str, object]]:
-        from .runtime.review_event_delivery import StoredReviewEventError, decode_stored_review_event
-
-        with self._connect() as connection:
-            rows = connection.execute(
-                """
-                select stream_sequence, event_id, local_request_id, request_sequence,
-                       event_type, event_schema_version, payload_json, payload_hash,
-                       occurred_at, oauth_source, oauth_subject_hash, workspace_id,
-                       machine_id, machine_installation_id
-                from guard_review_outbox_events
-                where local_request_id = ? and oauth_source = ? and binding_status = 'ready'
-                order by request_sequence desc, stream_sequence desc
-                """,
-                (request_id, self._guard_source),
-            ).fetchall()
-        snapshots: list[dict[str, object]] = []
-        for row in rows:
-            try:
-                stored_event = decode_stored_review_event(dict(row))
-            except (StoredReviewEventError, TypeError, ValueError):
-                continue
-            snapshots.append(stored_event.snapshot)
-        return snapshots
+        snapshots = self._native_store_call("list_review_event_snapshots", {"request_id": request_id})
+        return [dict(snapshot) for snapshot in snapshots]
 
     def get_review_event_oauth_binding(self) -> dict[str, str] | None:
-        with self._connect() as connection:
-            binding = load_review_oauth_binding(connection, self._guard_source)
+        binding = self._native_store_call("get_review_event_oauth_binding", {})
         return dict(binding) if binding is not None else None
 
     def refresh_review_event_outbox_binding_for_identity(
@@ -155,29 +178,15 @@ class StoreReviewEventOutboxMixin:
         machine_id: str,
         machine_installation_id: str,
     ) -> int:
-        supplied = normalized_delivery_binding(
-            oauth_subject_hash=oauth_subject_hash,
-            workspace_id=workspace_id,
-            machine_id=machine_id,
-            machine_installation_id=machine_installation_id,
-        )
-        with self._connect() as connection:
-            current = load_review_oauth_binding(connection, self._guard_source)
-            if current is None:
-                return 0
-            expected = (
-                current["oauth_subject_hash"],
-                current["workspace_id"],
-                current["machine_id"],
-                current["machine_installation_id"],
+        return int(
+            self._native_store_call(
+                "refresh_review_event_outbox_binding_for_identity",
+                _identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
             )
-            if supplied != expected:
-                return 0
-            return refresh_same_subject_binding(connection, self._guard_source)
+        )
 
     def refresh_review_event_outbox_binding(self) -> int:
-        with self._connect() as connection:
-            return refresh_same_subject_binding(connection, self._guard_source)
+        return int(self._native_store_call("refresh_review_event_outbox_binding", {}))
 
     def reassign_quarantined_review_events(
         self,
@@ -186,21 +195,19 @@ class StoreReviewEventOutboxMixin:
         approved_workspace_id: str,
         only_unbound: bool = False,
     ) -> int:
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            return explicitly_reassign_quarantined_events(
-                connection,
-                source=self._guard_source,
-                approved_source=approved_source,
-                approved_workspace_id=approved_workspace_id,
-                only_unbound=only_unbound,
+        return int(
+            self._native_store_call(
+                "reassign_quarantined_review_events",
+                {
+                    "approved_source": approved_source,
+                    "approved_workspace_id": approved_workspace_id,
+                    "only_unbound": only_unbound,
+                },
             )
+        )
 
     def count_recoverable_unbound_review_events(self) -> int:
-        from .store_review_event_outbox_binding import count_recoverable_unbound_events
-
-        with self._connect() as connection:
-            return count_recoverable_unbound_events(connection, source=self._guard_source)
+        return int(self._native_store_call("count_recoverable_unbound_review_events", {}))
 
     def list_ready_review_events(
         self,
@@ -214,57 +221,15 @@ class StoreReviewEventOutboxMixin:
         newest_first: bool = False,
     ) -> list[dict[str, object]]:
         del newest_first
-        query = """
-            select stream_sequence, event_id, local_request_id, request_sequence,
-                   event_type, event_schema_version, payload_json, payload_hash,
-                   occurred_at, oauth_source, oauth_subject_hash, workspace_id,
-                   machine_id, machine_installation_id, attempt_count
-            from guard_review_outbox_events
-            where oauth_source = ? and binding_status = 'ready'
-              and acknowledged_at is null
-              and (next_attempt_at is null or next_attempt_at <= ?)
-        """
-        parameters: list[object] = [self._guard_source, now]
-        identity = (oauth_subject_hash, workspace_id, machine_id, machine_installation_id)
-        if any(value is not None for value in identity):
-            if not all(isinstance(value, str) for value in identity):
-                raise ValueError("complete Review event OAuth binding is required")
-            binding = normalized_delivery_binding(
-                oauth_subject_hash=str(oauth_subject_hash),
-                workspace_id=str(workspace_id),
-                machine_id=str(machine_id),
-                machine_installation_id=str(machine_installation_id),
-            )
-            query += """
-              and oauth_subject_hash = ? and workspace_id = ?
-              and machine_id = ? and machine_installation_id = ?
-            """
-            parameters.extend(binding)
-        query += " order by stream_sequence asc limit ?"
-        parameters.append(max(1, int(limit)))
-        with self._connect() as connection:
-            rows = connection.execute(query, parameters).fetchall()
-        return [
+        events = self._native_store_call(
+            "list_ready_review_events",
             {
-                "sequence": int(row["stream_sequence"]),
-                "stream_sequence": int(row["stream_sequence"]),
-                "event_id": str(row["event_id"]),
-                "local_request_id": str(row["local_request_id"]),
-                "request_sequence": row["request_sequence"],
-                "event_type": str(row["event_type"]),
-                "event_schema_version": row["event_schema_version"],
-                "payload_json": str(row["payload_json"]),
-                "payload_hash": str(row["payload_hash"]),
-                "changed_at": str(row["occurred_at"]),
-                "oauth_source": str(row["oauth_source"]),
-                "oauth_subject_hash": row["oauth_subject_hash"],
-                "workspace_id": row["workspace_id"],
-                "machine_id": row["machine_id"],
-                "machine_installation_id": row["machine_installation_id"],
-                "attempt_count": int(row["attempt_count"]),
-            }
-            for row in rows
-        ]
+                "now": now,
+                "limit": int(limit),
+                **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
+            },
+        )
+        return [dict(event) for event in events]
 
     def acknowledge_review_events(
         self,
@@ -277,24 +242,19 @@ class StoreReviewEventOutboxMixin:
     ) -> int:
         """Compact the acknowledged deliverable prefix; retain quarantined evidence."""
 
-        acknowledged = {int(sequence) for sequence in sequences if int(sequence) > 0}
+        acknowledged = _positive_sequences(sequences)
         if not acknowledged:
             return 0
-        binding = normalized_delivery_binding(
-            oauth_subject_hash=oauth_subject_hash,
-            workspace_id=workspace_id,
-            machine_id=machine_id,
-            machine_installation_id=machine_installation_id,
-        )
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            return acknowledge_review_events(
-                connection,
-                source=self._guard_source,
-                sequences=sorted(acknowledged),
-                binding=binding,
-                acknowledged_at=datetime.now(timezone.utc).isoformat(),
+        return int(
+            self._native_store_call(
+                "acknowledge_review_events",
+                {
+                    "sequences": acknowledged,
+                    "acknowledged_at": _now(),
+                    **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
+                },
             )
+        )
 
     def retry_review_events(
         self,
@@ -307,40 +267,21 @@ class StoreReviewEventOutboxMixin:
         machine_id: str,
         machine_installation_id: str,
     ) -> int:
-        normalized = tuple(sorted({int(sequence) for sequence in sequences if int(sequence) > 0}))
+        normalized = _positive_sequences(sequences)
         if not normalized:
             return 0
-        binding = normalized_delivery_binding(
-            oauth_subject_hash=oauth_subject_hash,
-            workspace_id=workspace_id,
-            machine_id=machine_id,
-            machine_installation_id=machine_installation_id,
+        return int(
+            self._native_store_call(
+                "retry_review_events",
+                {
+                    "sequences": normalized,
+                    "now": now,
+                    "fallback_now": _now(),
+                    "error": error,
+                    **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
+                },
+            )
         )
-        updated = 0
-        with self._connect() as connection:
-            for sequence in normalized:
-                row = connection.execute(
-                    """
-                    select attempt_count from guard_review_outbox_events
-                    where stream_sequence = ? and oauth_source = ? and oauth_subject_hash = ?
-                      and workspace_id = ? and machine_id = ? and machine_installation_id = ?
-                      and acknowledged_at is null
-                    """,
-                    (sequence, self._guard_source, *binding),
-                ).fetchone()
-                if row is None:
-                    continue
-                attempts = int(row["attempt_count"]) + 1
-                cursor = connection.execute(
-                    """
-                    update guard_review_outbox_events
-                    set attempt_count = ?, next_attempt_at = ?, last_error = ?
-                    where stream_sequence = ?
-                    """,
-                    (attempts, _retry_at(now, attempts), error[:512], sequence),
-                )
-                updated += max(0, int(cursor.rowcount or 0))
-        return updated
 
     def quarantine_review_event(
         self,
@@ -355,24 +296,17 @@ class StoreReviewEventOutboxMixin:
     ) -> int:
         """Dead-letter one invalid event without acknowledging or deleting it."""
 
-        binding = normalized_delivery_binding(
-            oauth_subject_hash=oauth_subject_hash,
-            workspace_id=workspace_id,
-            machine_id=machine_id,
-            machine_installation_id=machine_installation_id,
-        )
-        with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                update guard_review_outbox_events
-                set binding_status = 'quarantined', quarantine_reason = ?, last_error = ?
-                where stream_sequence = ? and oauth_source = ? and oauth_subject_hash = ?
-                  and workspace_id = ? and machine_id = ? and machine_installation_id = ?
-                  and binding_status = 'ready' and acknowledged_at is null
-                """,
-                (reason[:128], error[:512], int(sequence), self._guard_source, *binding),
+        return int(
+            self._native_store_call(
+                "quarantine_review_event",
+                {
+                    "sequence": int(sequence),
+                    "reason": reason,
+                    "error": error,
+                    **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
+                },
             )
-            return max(0, int(cursor.rowcount or 0))
+        )
 
     def review_event_outbox_status(
         self,
@@ -383,112 +317,8 @@ class StoreReviewEventOutboxMixin:
         machine_id: str | None = None,
         machine_installation_id: str | None = None,
     ) -> dict[str, object]:
-        query = """
-            select count(*) as depth, min(occurred_at) as oldest_changed_at,
-                   max(attempt_count) as max_attempt_count, max(last_error) as last_error,
-                   min(next_attempt_at) as next_attempt_at,
-                   sum(case when next_attempt_at is null or next_attempt_at <= ? then 1 else 0 end)
-                     as ready_depth
-            from guard_review_outbox_events where oauth_source = ? and binding_status = 'ready'
-              and acknowledged_at is null
-        """
-        parameters: list[object] = [now, self._guard_source]
-        identity = (oauth_subject_hash, workspace_id, machine_id, machine_installation_id)
-        only_workspace = workspace_id is not None and all(
-            value is None for value in (oauth_subject_hash, machine_id, machine_installation_id)
+        status = self._native_store_call(
+            "review_event_outbox_status",
+            {"now": now, **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id)},
         )
-        if only_workspace:
-            query += " and workspace_id = ?"
-            parameters.append(workspace_id)
-        elif any(value is not None for value in identity):
-            if not all(isinstance(value, str) for value in identity):
-                raise ValueError("complete Review event OAuth binding is required")
-            binding = normalized_delivery_binding(
-                oauth_subject_hash=str(oauth_subject_hash),
-                workspace_id=str(workspace_id),
-                machine_id=str(machine_id),
-                machine_installation_id=str(machine_installation_id),
-            )
-            query += """
-              and oauth_subject_hash = ? and workspace_id = ?
-              and machine_id = ? and machine_installation_id = ?
-            """
-            parameters.extend(binding)
-        # Terminal continuation quarantine preserves evidence, not a broken
-        # OAuth identity. Only identity-specific reasons require identity repair.
-        diagnostics_query = """
-            select
-              sum(case when binding_status = 'quarantined' then 1 else 0 end) as quarantined_depth,
-              sum(case when binding_status = 'quarantined'
-                and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
-                then 1 else 0 end) as identity_quarantined_depth,
-              sum(case when binding_status = 'quarantined'
-                and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
-                and oauth_source is not null and workspace_id is not null
-                then 1 else 0 end) as identity_mismatch_depth,
-              sum(case when binding_status = 'quarantined'
-                and (oauth_source is null or workspace_id is null) then 1 else 0 end)
-                as unbound_depth,
-              0 as other_workspace_depth
-            from guard_review_outbox_events
-        """
-        diagnostics_parameters: list[object] = []
-        if workspace_id is not None:
-            diagnostics_query = """
-                select
-                  sum(case when binding_status = 'quarantined'
-                    and (oauth_source = ? or (oauth_source is null and (workspace_id is null or workspace_id = ?)))
-                    then 1 else 0 end) as quarantined_depth,
-                  sum(case when binding_status = 'quarantined'
-                    and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
-                    and (oauth_source = ? or (oauth_source is null and (workspace_id is null or workspace_id = ?)))
-                    then 1 else 0 end) as identity_quarantined_depth,
-                  sum(case when binding_status = 'quarantined'
-                    and quarantine_reason in ('identity_incomplete', 'identity_changed_requires_confirmation')
-                    and oauth_source is not null and workspace_id is not null
-                    and oauth_source = ? and workspace_id = ?
-                    then 1 else 0 end) as identity_mismatch_depth,
-                  sum(case when binding_status = 'quarantined'
-                    and (oauth_source is null or workspace_id is null)
-                    and (workspace_id is null or workspace_id = ?) then 1 else 0 end) as unbound_depth,
-                  sum(case when binding_status = 'quarantined' and workspace_id is not null
-                    and workspace_id != ? and (oauth_source = ? or oauth_source is null)
-                    then 1 else 0 end) as other_workspace_depth
-                from guard_review_outbox_events
-            """
-            diagnostics_parameters = [
-                self._guard_source,
-                workspace_id,
-                self._guard_source,
-                workspace_id,
-                self._guard_source,
-                workspace_id,
-                workspace_id,
-                workspace_id,
-                self._guard_source,
-            ]
-        with self._connect() as connection:
-            row = connection.execute(query, parameters).fetchone()
-            diagnostics = connection.execute(diagnostics_query, diagnostics_parameters).fetchone()
-        quarantined = int(diagnostics["quarantined_depth"] or 0) if diagnostics is not None else 0
-        identity_quarantined = int(diagnostics["identity_quarantined_depth"] or 0) if diagnostics is not None else 0
-        identity_mismatch = int(diagnostics["identity_mismatch_depth"] or 0) if diagnostics is not None else 0
-        unbound = int(diagnostics["unbound_depth"] or 0) if diagnostics is not None else 0
-        other_workspace = int(diagnostics["other_workspace_depth"] or 0) if diagnostics is not None else 0
-        return {
-            "oauth_source": self._guard_source,
-            "oauth_subject_hash": oauth_subject_hash,
-            "binding_state": "quarantined" if identity_quarantined else "healthy",
-            "binding_hint": "Review events require explicit identity repair." if identity_quarantined else None,
-            "depth": int(row["depth"] if row is not None else 0),
-            "ready_depth": int(row["ready_depth"] or 0) if row is not None else 0,
-            "oldest_changed_at": row["oldest_changed_at"] if row is not None else None,
-            "max_attempt_count": int(row["max_attempt_count"] or 0) if row is not None else 0,
-            "last_error": row["last_error"] if row is not None else None,
-            "next_attempt_at": row["next_attempt_at"] if row is not None else None,
-            "unbound_depth": unbound,
-            "other_workspace_depth": other_workspace,
-            "identity_mismatch_depth": identity_mismatch,
-            "quarantined_depth": quarantined,
-            "checked_at": now,
-        }
+        return dict(status)

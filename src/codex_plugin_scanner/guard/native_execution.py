@@ -140,6 +140,7 @@ def _resident_request(
         if operation in {
             "policy_decision_lookup",
             "local_cli_grant_decide",
+            "guard_store",
             "local_mcp_grant_decide",
             "contributed_mcp_decide",
             "approval_proof_decide",
