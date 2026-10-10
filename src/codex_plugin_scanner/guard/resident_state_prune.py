@@ -364,16 +364,17 @@ def prune_native_runtime(
         return False
 
     resident_dirs: list[Path] = []
-    state_present = True
+    state_metadata: os.stat_result | None
     try:
         state_metadata = state_dir.lstat()
     except FileNotFoundError:
-        state_present = False
+        state_metadata = None
     except OSError:
         report.status = "unavailable"
         report.errors.append("state_dir_unreadable")
         return report
-    if state_present:
+    state_present = state_metadata is not None
+    if state_metadata is not None:
         if not stat.S_ISDIR(state_metadata.st_mode) or not _owned_regular(state_metadata, uid):
             report.status = "unavailable"
             report.errors.append("state_dir_untrusted")

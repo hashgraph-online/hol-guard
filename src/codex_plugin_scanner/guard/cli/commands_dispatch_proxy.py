@@ -207,12 +207,6 @@ def _run_guard_uninstall_command(
     if bool(getattr(args, "dry_run", False)):
         print("Guard uninstall --dry-run requires --self.", file=sys.stderr)
         return 2
-    if bool(getattr(args, "all", False)) and getattr(args, "harness", None) is None and guard_home is not None:
-        # `uninstall --all` is the same full removal as `hooks remove --all`: it
-        # also sweeps unrecorded hooks and requires proof of user presence.
-        from .commands_hooks import run_hook_removal
-
-        return run_hook_removal(args, guard_home=guard_home, context=context, store=store, output_stream=output_stream)
     try:
         payload = apply_managed_install(
             "uninstall",

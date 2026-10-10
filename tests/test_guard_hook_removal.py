@@ -136,6 +136,57 @@ def test_remove_all_sweeps_unrecorded_hooks_with_backup(tmp_path: Path) -> None:
     assert again["status"] == "nothing_to_remove"
 
 
+def test_remove_all_backs_up_before_editing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import hook_removal
+
+    context = _context(tmp_path)
+    claude = context.home_dir / ".claude"
+    claude.mkdir()
+    settings = claude / "settings.json"
+    settings.write_text(json.dumps(_claude_settings()))
+    original = settings.read_bytes()
+    real_sweep = hook_removal.sweep_harness
+    seen_backups: list[bytes] = []
+
+    def sweep_after_backup_check(harness: str, ctx: HarnessContext, *, dry_run: bool):
+        if not dry_run and harness == "claude-code":
+            backup_root = context.guard_home / "backups"
+            seen_backups.extend(path.read_bytes() for path in backup_root.rglob("claude-code-*"))
+        return real_sweep(harness, ctx, dry_run=dry_run)
+
+    monkeypatch.setattr(hook_removal, "sweep_harness", sweep_after_backup_check)
+    report = remove_all_guard_hooks(context=context, store=GuardStore(context.guard_home))
+
+    assert report["status"] == "removed"
+    assert seen_backups == [original]
+
+
+def test_remove_all_skips_harness_when_backup_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import hook_removal
+
+    context = _context(tmp_path)
+    claude = context.home_dir / ".claude"
+    claude.mkdir()
+    settings = claude / "settings.json"
+    settings.write_text(json.dumps(_claude_settings()))
+    original = settings.read_bytes()
+
+    def refuse_backup_dir(_backup_dir: Path) -> None:
+        raise PermissionError("backup directory is read-only")
+
+    monkeypatch.setattr(hook_removal, "_private_backup_dir", refuse_backup_dir)
+    report = remove_all_guard_hooks(context=context, store=GuardStore(context.guard_home))
+
+    assert report["status"] == "partial"
+    assert settings.read_bytes() == original
+    harnesses = report["harnesses"]
+    assert isinstance(harnesses, list)
+    claude_entry = next(item for item in harnesses if item["harness"] == "claude-code")
+    assert claude_entry["adapter_uninstall"] == "skipped"
+    assert "PermissionError" in str(claude_entry["backup_error"])
+    assert report["backup_dir"] is None
+
+
 def test_typed_presence_refuses_non_interactive_and_wrong_phrase() -> None:
     with pytest.raises(ApprovalGateError) as non_tty:
         require_typed_presence(affected="codex", isatty=lambda: False)

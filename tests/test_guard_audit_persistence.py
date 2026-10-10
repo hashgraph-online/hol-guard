@@ -124,3 +124,49 @@ def test_non_contention_error_is_not_retried() -> None:
 
     assert store.calls == 1
     assert [event for event, _ in diagnostics.events] == [FAILED_EVENT]
+
+
+def test_worker_rechecks_queue_before_exiting() -> None:
+    import queue as queue_module
+
+    class _LateArrivalQueue(queue_module.Queue[tuple[str, dict[str, object], str]]):
+        """Reports empty once while an event is already queued, like a racing producer."""
+
+        def __init__(self) -> None:
+            super().__init__(maxsize=4)
+            self.raced = False
+
+        def get_nowait(self) -> tuple[str, dict[str, object], str]:
+            if not self.raced and self.qsize() == 1:
+                self.raced = True
+                raise queue_module.Empty
+            return super().get_nowait()
+
+    store = _FlakyStore(failures=1)
+    persistence = _persistence(store, _Diagnostics())
+    late_queue = _LateArrivalQueue()
+    persistence._queue = late_queue
+
+    assert persistence.persist("daemon.auth.unauthorized", {}, "now") is True
+
+    assert store.written.wait(timeout=5)
+    assert late_queue.raced
+    assert store.rows == ["daemon.auth.unauthorized"]
+
+
+def test_new_worker_starts_after_previous_one_exits() -> None:
+    store = _FlakyStore(failures=1)
+    persistence = _persistence(store, _Diagnostics())
+
+    assert persistence.persist("first", {}, "now") is True
+    assert store.written.wait(timeout=5)
+    deadline = time.monotonic() + 5
+    while persistence._worker is not None and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert persistence._worker is None
+
+    store.failures = store.calls + 1
+    store.written.clear()
+    assert persistence.persist("second", {}, "now") is True
+    assert store.written.wait(timeout=5)
+    assert store.rows == ["first", "second"]

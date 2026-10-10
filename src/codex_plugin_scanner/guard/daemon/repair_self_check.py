@@ -58,7 +58,7 @@ def run_self_check_once(
         guard_home=guard_home,
     )
     runtime_step = repair_native_runtime(guard_home, dry_run=False)
-    steps: dict[str, object] = {"native_runtime": runtime_step}
+    steps: dict[str, dict[str, object]] = {"native_runtime": runtime_step}
     if include_leaks:
         steps["onefile_leaks"] = repair_onefile_leaks(dry_run=False, guard_home=guard_home)
     try:
@@ -71,7 +71,7 @@ def run_self_check_once(
         "hooks_broken": broken,
         "hook_check_error": error,
         "finding": build_finding(broken),
-        "steps": {name: {"status": step["status"], "summary": step["summary"]} for name, step in steps.items()},  # type: ignore[index]
+        "steps": {name: {"status": step.get("status"), "summary": step.get("summary")} for name, step in steps.items()},
     }
 
 
@@ -80,7 +80,7 @@ def start_self_check(
     *,
     publish: Callable[[dict[str, object]], None],
     stop: threading.Event,
-    on_error: Callable[[str], None],
+    on_error: Callable[[str], object],
     interval: float = CHECK_INTERVAL_SECONDS,
 ) -> threading.Thread:
     """Run the check on a daemon thread until ``stop`` is set."""

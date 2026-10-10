@@ -63,7 +63,7 @@ def run_hook_removal(
     store: GuardStore,
     output_stream: TextIO | None = None,
 ) -> int:
-    """Shared by ``hooks remove`` and ``uninstall --all``.
+    """Run ``hooks remove``.
 
     With the approval gate enabled, the router already ran the step-up through
     ``enforce_lifecycle_gate`` before this is reached. With no gate there is

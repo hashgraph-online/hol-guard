@@ -30,7 +30,7 @@ from ..approval_gate import (
     public_config,
     require_high_risk,
 )
-from ..hook_removal import plan_hook_removal, remove_all_guard_hooks
+from ..hook_removal import HarnessPlan, plan_hook_removal, remove_all_guard_hooks
 from ..repair_engine import run_repair
 
 if TYPE_CHECKING:
@@ -105,8 +105,8 @@ def repair_request(store: GuardStore, payload: Mapping[str, object]) -> dict[str
     )
 
 
-def _harness_rows(plans: list[object]) -> list[dict[str, object]]:
-    return [plan.to_dict() for plan in plans if hasattr(plan, "to_dict")]
+def _harness_rows(plans: list[HarnessPlan]) -> list[dict[str, object]]:
+    return [plan.to_dict() for plan in plans]
 
 
 def removal_request(store: GuardStore, payload: Mapping[str, object]) -> dict[str, object]:
@@ -122,7 +122,7 @@ def removal_request(store: GuardStore, payload: Mapping[str, object]) -> dict[st
     report = remove_all_guard_hooks(context=context, store=store, dry_run=False)
     remaining = plan_hook_removal(context, store)
     report["post_state"] = {
-        "remaining_harnesses": _harness_rows(list(remaining)),
+        "remaining_harnesses": _harness_rows(remaining),
         "clean": not remaining,
     }
     return report

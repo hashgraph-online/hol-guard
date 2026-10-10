@@ -95,7 +95,7 @@ def repair_daemon(guard_home: Path, *, home_dir: Path, dry_run: bool) -> dict[st
 
 def repair_native_runtime(guard_home: Path, *, dry_run: bool) -> dict[str, object]:
     try:
-        from .native_runtime_prune import prune_native_runtime
+        from .resident_state_prune import prune_native_runtime
 
         report = prune_native_runtime(
             guard_home,
@@ -270,7 +270,8 @@ def repair_command_queue(store: GuardStore, *, dry_run: bool) -> dict[str, objec
         result = repair_command_queue_state(store)
     except Exception as error:
         return _error_step("command_queue", error)
-    count = int(result.get("repaired_count", 0) or 0)
+    raw_count = result.get("repaired_count")
+    count = raw_count if isinstance(raw_count, int) else 0
     if count:
         return _step("command_queue", "changed", f"Cleared {count} stuck queue item(s).")
     return _step("command_queue", "ok", "Command queue is healthy.")

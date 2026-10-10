@@ -10,13 +10,13 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.native_runtime_prune import (
+from codex_plugin_scanner.guard.repair_engine import build_report, repair_onefile_leaks, run_repair
+from codex_plugin_scanner.guard.resident_state_prune import (
     OWNER_LOCK_NAME,
     probe_owner_lock,
     probe_socket,
     prune_native_runtime,
 )
-from codex_plugin_scanner.guard.repair_engine import build_report, repair_onefile_leaks, run_repair
 from codex_plugin_scanner.guard.store import GuardStore
 
 NOW = 1_800_000_000.0

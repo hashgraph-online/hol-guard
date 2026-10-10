@@ -108,18 +108,30 @@ class AuditPersistence:
 
     def _ensure_worker(self) -> None:
         with self._worker_lock:
-            if self._worker is not None and self._worker.is_alive():
+            if self._worker is not None:
                 return
             self._worker = threading.Thread(target=self._drain, daemon=True, name="guard-audit-persistence")
             self._worker.start()
 
     def _drain(self) -> None:
-        while not self._stop.is_set():
-            try:
-                event_name, payload, now = self._queue.get_nowait()
-            except queue.Empty:
-                return
-            self._retry_one(event_name, payload, now)
+        try:
+            while not self._stop.is_set():
+                try:
+                    event_name, payload, now = self._queue.get_nowait()
+                except queue.Empty:
+                    # Decide to exit under the same lock producers take in
+                    # `_ensure_worker`, so an event queued after our empty check
+                    # either is seen here or starts a fresh worker.
+                    with self._worker_lock:
+                        if self._queue.empty():
+                            self._worker = None
+                            return
+                    continue
+                self._retry_one(event_name, payload, now)
+        finally:
+            with self._worker_lock:
+                if self._worker is threading.current_thread():
+                    self._worker = None
 
     def _retry_one(self, event_name: str, payload: dict[str, object], now: str) -> None:
         for delay in self._retry_delays:

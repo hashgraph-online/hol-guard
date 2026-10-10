@@ -14,7 +14,7 @@ from ._commands_shared import _GUARD_HELP_GROUPS
 from .commands_parser_cloud import _configure_guard_cloud_parsers
 from .commands_parser_cloud_review import configure_guard_cloud_review_parser
 from .commands_parser_desktop import _configure_guard_desktop_parser
-from .commands_hooks import configure_guard_hooks_parser
+from .commands_remove_hooks import configure_guard_hooks_parser
 from .commands_repair import configure_guard_repair_parser
 from .commands_parser_helpers import (
     _add_aibom_cli_args,
