@@ -194,3 +194,11 @@ def test_store_without_a_pinned_home_is_unavailable_not_allowed() -> None:
     artifact = _artifact(_identity("npx", "@modelcontextprotocol/server-filesystem"), "write_file")
     with pytest.raises(LocalCliIdentityUnavailableError):
         mcp_server_grants.apply_contributed_mcp_decision(_NoHome(), artifact, "allow")  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("action", [["allow"], {"action": "allow"}, 1, None])
+def test_decoder_rejects_non_text_action(action: object) -> None:
+    from codex_plugin_scanner.guard.native_contributed_mcp_decision import _decode_payload
+
+    payload = {"state": "decided", "action": action, "source": "catalog-mcp-extension", "reason": "r"}
+    assert _decode_payload(payload) is None

@@ -113,7 +113,7 @@ def _decode_payload(payload: object) -> NativeContributedMcpDecision | None:
         if action is None and source is None and reason is None:
             return NativeContributedMcpDecision("none", None, None, None)
         return None
-    if state != "decided" or action not in _ACTIONS:
+    if state != "decided" or not isinstance(action, str) or action not in _ACTIONS:
         return None
     if not isinstance(source, str) or not isinstance(reason, str):
         return None

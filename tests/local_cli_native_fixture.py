@@ -8,6 +8,8 @@ verifier key before each native call, then close the resident on teardown.
 
 from __future__ import annotations
 
+import atexit
+import shutil
 import tempfile
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -18,17 +20,27 @@ import pytest
 from .native_runtime_fixtures import _resolve_native_hook_runtime
 
 _TEST_GUARD_HOME: list[Path] = []
-_SCRATCH_GUARD_HOME = Path(tempfile.mkdtemp(prefix="native-guard-home-"))
+_SCRATCH_GUARD_HOME: list[Path] = []
+
+
+def _scratch_guard_home() -> Path:
+    """Create the shared scratch home on first use and remove it at exit."""
+
+    if not _SCRATCH_GUARD_HOME:
+        home = Path(tempfile.mkdtemp(prefix="native-guard-home-"))
+        atexit.register(shutil.rmtree, home, ignore_errors=True)
+        _SCRATCH_GUARD_HOME.append(home)
+    return _SCRATCH_GUARD_HOME[0]
 
 
 def native_test_guard_home() -> Path:
     """The per-test Guard home that synthetic stores hand the native resident.
 
     A fresh home per test keeps each resident's restart budget independent.
-    Tests that never reach the resident (the Python oracle) share one scratch home.
+    Stores built outside a test share one scratch home, created on demand.
     """
 
-    return _TEST_GUARD_HOME[0] if _TEST_GUARD_HOME else _SCRATCH_GUARD_HOME
+    return _TEST_GUARD_HOME[0] if _TEST_GUARD_HOME else _scratch_guard_home()
 
 
 @pytest.fixture(autouse=True)
