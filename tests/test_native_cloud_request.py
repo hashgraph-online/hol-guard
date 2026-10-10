@@ -187,3 +187,8 @@ def test_scrub_memo_keys_by_digest_and_stays_bounded(monkeypatch: pytest.MonkeyP
     memo.get("c")
     assert len(memo._entries) == 2
     assert all(isinstance(key, bytes) and len(key) == 32 for key in memo._entries)
+
+
+def test_row_refusal_codes_cover_unencodable_and_oversized_rows() -> None:
+    assert "native_runner_authority_component_unencodable" in cloud.NATIVE_ROW_REFUSAL_CODES
+    assert "native_runner_authority_request_too_large" in cloud.NATIVE_ROW_REFUSAL_CODES

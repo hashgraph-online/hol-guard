@@ -36,7 +36,13 @@ _ROW_ENVELOPE_KEYS = frozenset({"action_envelope_json"})
 _ERROR_TEXT_MAX_CHARS = 20_000
 WITHHELD_ERROR_TEXT = "[withheld: Cloud-safe scrub unavailable]"
 # Bound resident refusals that describe the row itself, not an outage.
-NATIVE_ROW_REFUSAL_CODES = frozenset({"native_runner_authority_request_too_large", "native_runner_authority_invalid"})
+NATIVE_ROW_REFUSAL_CODES = frozenset(
+    {
+        "native_runner_authority_request_too_large",
+        "native_runner_authority_invalid",
+        "native_runner_authority_component_unencodable",
+    }
+)
 # The resident accepts 4 MiB per request: send a snapshot in one call when it fits
 # and otherwise build its items in smaller chunks first.
 _ONE_SHOT_BYTES = 3_000_000
