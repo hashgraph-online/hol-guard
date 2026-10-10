@@ -135,6 +135,7 @@ use parser_executables::*;
 use parser_segments::*;
 pub mod pretool;
 mod runtime_read_paths;
+pub mod secret_path_probe;
 mod shell_command_wrappers;
 pub mod shell_execution_context;
 mod shell_execution_context_support;

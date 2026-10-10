@@ -125,7 +125,7 @@ def test_is_bulk_allow_once_eligible_plain_file_read(tmp_path: Path) -> None:
     store.add_approval_request(plain, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-plain")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_file_read_request_artifact_type(tmp_path: Path) -> None:
@@ -134,7 +134,7 @@ def test_is_bulk_allow_once_eligible_file_read_request_artifact_type(tmp_path: P
     store.add_approval_request(request, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-artifact-type")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_rejects_secret_file_read(tmp_path: Path) -> None:
@@ -162,7 +162,7 @@ def test_is_bulk_allow_once_eligible_rejects_secret_file_read(tmp_path: Path) ->
     store.add_approval_request(secret, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-secret")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_is_bulk_allow_once_eligible_rejects_secret_path_without_signal(tmp_path: Path) -> None:
@@ -171,7 +171,7 @@ def test_is_bulk_allow_once_eligible_rejects_secret_path_without_signal(tmp_path
     store.add_approval_request(secret_path, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-secret-path")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def _shell_request(
@@ -232,7 +232,7 @@ def test_is_bulk_allow_once_eligible_rejects_blocked(tmp_path: Path) -> None:
     store.add_approval_request(blocked, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-blocked")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_allow_once_never_overrides_sandbox_required(tmp_path: Path) -> None:
@@ -243,7 +243,7 @@ def test_bulk_allow_once_never_overrides_sandbox_required(tmp_path: Path) -> Non
     stored = store.get_approval_request("req-sandbox")
     assert stored is not None
     assert stored["policy_action"] == "sandbox-required"
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
     result = bulk_allow_read_only_once(
         store=store,
@@ -264,7 +264,7 @@ def test_is_bulk_allow_once_eligible_allows_shell_command(tmp_path: Path) -> Non
     store.add_approval_request(shell, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-shell")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_bulk_eligibility_ignores_generated_exfiltration_warning(tmp_path: Path) -> None:
@@ -278,7 +278,7 @@ def test_bulk_eligibility_ignores_generated_exfiltration_warning(tmp_path: Path)
 
     stored = store.get_approval_request("req-remote-read")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_bulk_eligibility_still_rejects_exfiltration_action_text(tmp_path: Path) -> None:
@@ -288,7 +288,7 @@ def test_bulk_eligibility_still_rejects_exfiltration_action_text(tmp_path: Path)
 
     stored = store.get_approval_request("req-exfiltration")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_eligibility_scans_full_prompt_text(tmp_path: Path) -> None:
@@ -301,7 +301,7 @@ def test_bulk_eligibility_scans_full_prompt_text(tmp_path: Path) -> None:
 
     stored = store.get_approval_request("req-long-prompt")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_eligibility_scans_raw_command_text(tmp_path: Path) -> None:
@@ -315,7 +315,7 @@ def test_bulk_eligibility_scans_raw_command_text(tmp_path: Path) -> None:
 
     stored = store.get_approval_request("req-raw-command")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_eligibility_ignores_generated_secret_warning_for_plain_read(tmp_path: Path) -> None:
@@ -329,7 +329,7 @@ def test_bulk_eligibility_ignores_generated_secret_warning_for_plain_read(tmp_pa
 
     stored = store.get_approval_request("req-plain-warning")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_allows_destructive_shell(tmp_path: Path) -> None:
@@ -341,7 +341,7 @@ def test_is_bulk_allow_once_eligible_allows_destructive_shell(tmp_path: Path) ->
     store.add_approval_request(destructive, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-rmrf")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_rejects_encoded_shell(tmp_path: Path) -> None:
@@ -354,7 +354,7 @@ def test_is_bulk_allow_once_eligible_rejects_encoded_shell(tmp_path: Path) -> No
     store.add_approval_request(encoded, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-b64")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_is_bulk_allow_once_eligible_rejects_prompt_injection(tmp_path: Path) -> None:
@@ -381,7 +381,7 @@ def test_is_bulk_allow_once_eligible_rejects_prompt_injection(tmp_path: Path) ->
     store.add_approval_request(injection, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-injection")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_allow_read_only_once_requires_gate(tmp_path: Path) -> None:

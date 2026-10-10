@@ -220,6 +220,11 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::ApprovalBulkEligibility(request) => {
+                crate::approval_bulk_eligibility_op::evaluate_approval_bulk_eligibility_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ApprovalQueueIdentity(request) => {
                 crate::approval_queue_identity_op::evaluate_approval_queue_identity_request(
                     &request,

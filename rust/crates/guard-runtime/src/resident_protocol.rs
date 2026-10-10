@@ -1,8 +1,9 @@
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
-    ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
-    ApprovalProofRequestV1, ApprovalQueueIdentityRequestV1, ApprovalResolutionPlanRequestV1,
+    ApplyStoredPackagePolicyRequestV1, ApprovalBulkEligibilityRequestV1,
+    ApprovalChallengeRequestV3, ApprovalChallengeRequestV4, ApprovalConsumeRequestV3,
+    ApprovalConsumeRequestV4, ApprovalGateRequestV1, ApprovalProofRequestV1,
+    ApprovalQueueIdentityRequestV1, ApprovalResolutionPlanRequestV1,
     ApprovalReuseDiagnosticRequestV1, ApprovalReuseRequestV1, ApprovalValidateRequestV3,
     ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1, CodexToolOutputRequestV1,
     CommandEffectBatchRequestV1, CommandEffectRequestV1, CompoundGitInspectionRequestV1,
@@ -88,6 +89,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE.into(),
         guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE.into(),
         guard_contracts::APPROVAL_REUSE_DIAGNOSTIC_FEATURE.into(),
+        guard_contracts::APPROVAL_BULK_ELIGIBILITY_FEATURE.into(),
         guard_contracts::APPROVAL_QUEUE_IDENTITY_FEATURE.into(),
         guard_contracts::APPROVAL_RESOLUTION_PLAN_FEATURE.into(),
         guard_contracts::GUARD_STORE_FEATURE.into(),
@@ -176,6 +178,7 @@ pub(crate) enum ResidentOperationV1 {
     GithubCliClassify(GithubCliClassifyRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),
+    ApprovalBulkEligibility(ApprovalBulkEligibilityRequestV1),
     ApprovalQueueIdentity(ApprovalQueueIdentityRequestV1),
     ApprovalResolutionPlan(ApprovalResolutionPlanRequestV1),
     GuardStore(GuardStoreRequestV1),

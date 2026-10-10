@@ -357,6 +357,7 @@
     "src/codex_plugin_scanner/guard/native_store_policy.py",
     "src/codex_plugin_scanner/guard/native_approval_resolution.py",
     "src/codex_plugin_scanner/guard/native_approval_queue_identity.py",
+    "src/codex_plugin_scanner/guard/native_approval_bulk_eligibility.py",
     "src/codex_plugin_scanner/guard/native_hook_decision.py",
     "src/codex_plugin_scanner/guard/native_daemon_route.py",
     "src/codex_plugin_scanner/guard/native_daemon_handler.py",
