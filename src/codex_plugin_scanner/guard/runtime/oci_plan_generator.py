@@ -255,16 +255,6 @@ def _require_str(value: object, label: str, *, max_length: int = 512) -> str:
 # --- Path validation ---
 
 
-def _is_forbidden_path(path: str) -> str | None:
-    """Return the matching forbidden source, or None."""
-    if not path:
-        return None
-    for forbidden in sorted(_FORBIDDEN_MOUNT_SOURCES):
-        if path == forbidden or path.startswith(forbidden + "/"):
-            return forbidden
-    return None
-
-
 def _is_forbidden_socket(path: str) -> str | None:
     """Return the matching forbidden socket, or None."""
     if path in _FORBIDDEN_SOCKETS:

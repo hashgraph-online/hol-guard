@@ -193,7 +193,8 @@ def test_daemon_api_uses_shared_limits_and_no_longer_advertises_4096_controls() 
     source = API_PATH.read_text(encoding="utf-8")
     assert "advertised_extension_control_limits" in source
     assert "MAX_CONTROLS_TOTAL" in source
-    assert "MAX_CATALOG_PAYLOAD_BYTES" in source
+    assert "MAX_DAEMON_CATALOG_RESPONSE_BYTES" in source
+    assert "MAX_CATALOG_PAYLOAD_BYTES =" not in source
     assert "_MAX_CONTROLS = 4096" not in source
 
 

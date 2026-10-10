@@ -131,7 +131,7 @@ def _stamp_hook_input(text: str) -> str:
     pager_ok = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?").fullmatch
     payload["guard_execution_environment"] = {
         "path": os.environ.get("PATH", ""),
-        "environment_names": sorted(active),
+        "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
         "environment_digest": hashlib.sha256(
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import os
 import secrets
+import time
 from pathlib import Path
 
 _DELETE = 0x00010000
@@ -25,6 +26,9 @@ _GENERIC_WRITE = 0x40000000
 _CREATE_NEW = 1
 _OPEN_EXISTING = 3
 _ERROR_ALREADY_EXISTS = 183
+_ERROR_SHARING_VIOLATION = 32
+# Guard processes briefly open these directories with add-file or delete access.
+_SHARING_VIOLATION_WAIT_SECONDS = 3.0
 _INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
 
@@ -208,15 +212,24 @@ def _extended_path(path: Path) -> str:
 
 def _open_locked_directory(api: _WindowsApi, path: Path) -> int:
     # Deny write/delete sharing so the locked directory cannot be replaced or turned into a junction.
-    handle = api.create_file(
-        path,
-        _FILE_LIST_DIRECTORY | _FILE_TRAVERSE,
-        _FILE_SHARE_READ,
-        _OPEN_EXISTING,
-        _FILE_FLAG_BACKUP_SEMANTICS | _FILE_FLAG_OPEN_REPARSE_POINT,
-    )
-    if handle == _INVALID_HANDLE_VALUE:
-        _raise_windows_error(f"unable to lock output directory {path}")
+    # That share mode conflicts with any open writer, so wait out short-lived ones.
+    deadline = time.monotonic() + _SHARING_VIOLATION_WAIT_SECONDS
+    delay = 0.005
+    while True:
+        handle = api.create_file(
+            path,
+            _FILE_LIST_DIRECTORY | _FILE_TRAVERSE,
+            _FILE_SHARE_READ,
+            _OPEN_EXISTING,
+            _FILE_FLAG_BACKUP_SEMANTICS | _FILE_FLAG_OPEN_REPARSE_POINT,
+        )
+        if handle != _INVALID_HANDLE_VALUE:
+            break
+        error_code = ctypes.get_last_error()
+        if error_code != _ERROR_SHARING_VIOLATION or time.monotonic() >= deadline:
+            raise OSError(error_code, f"unable to lock output directory {path}: {ctypes.FormatError(error_code)}")
+        time.sleep(delay)
+        delay = min(delay * 2, 0.1)
     info = _FileAttributeTagInfo()
     if not api.inspect_file(handle, info):
         api.close_handle(handle)

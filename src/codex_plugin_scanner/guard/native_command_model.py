@@ -35,10 +35,6 @@ _RESIDENT_FEATURE = "resident-command-model-shadow-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
 
-def _plain_int(value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
 def _assignment_name(token: str) -> str | None:
     name, separator, _value = token.partition("=")
     if not separator or not name:

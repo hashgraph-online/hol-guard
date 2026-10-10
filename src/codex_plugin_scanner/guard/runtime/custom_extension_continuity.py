@@ -386,40 +386,6 @@ def _plan_exact_settings(
     return _AuthorityUpdate(identity, cast(str, settings["state"]), commands)
 
 
-def _mark_cloud_removed(store: GuardStore, *, now: str) -> dict[str, object]:
-    previous = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
-    if not isinstance(previous, dict):
-        return {}
-    raw_items = previous.get("items")
-    items: dict[str, object] = {}
-    if isinstance(raw_items, dict):
-        for cli_id, raw in raw_items.items():
-            if isinstance(cli_id, str) and isinstance(raw, dict):
-                item = dict(raw)
-                item.update({"status": "removed", "reason": "removed_from_cloud_observation"})
-                items[cli_id] = item
-    events = [
-        (
-            "custom_extension_continuity/removed",
-            {"cli_id": cli_id, "status": "removed", "reason": "removed_from_cloud_observation"},
-        )
-        for cli_id in items
-    ]
-    state = {**previous, "items": items, "stale": False}
-    try:
-        _ = store.apply_custom_extension_continuity_transaction(
-            expected_revision=store.read_local_cli_revision(),
-            authority_updates=[],
-            sync_payloads={CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: state},
-            events=events,
-            updated_at=now,
-            sync_preconditions={CUSTOM_EXTENSION_CONTINUITY_STATE_KEY: previous},
-        )
-    except ValueError as error:
-        raise CustomExtensionContinuityError("local continuity state changed during Cloud removal") from error
-    return state
-
-
 def _updated_item_status(
     active: object,
     *,

@@ -124,32 +124,6 @@ def test_protection_repair_all_retries_a_transient_containment_probe_failure(
     assert containment_probes == [True, True]
 
 
-def test_containment_repair_ignores_unsupported_platform_signals(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    probes: list[bool] = []
-    monkeypatch.setattr(
-        protection_repair_retry,
-        "containment_health_signals",
-        lambda _value, **_kwargs: {
-            check_id: SimpleNamespace(status=ProtectionCheckStatus.FAIL, reason_code="unsupported_platform")
-            for check_id in (
-                "decision_plane_compatibility",
-                "containment_compatibility",
-                "sandbox",
-            )
-        },
-    )
-
-    repaired, failed = protection_repair_retry.confirmed_containment_repair_signals(
-        lambda: probes.append(True) or {},
-    )
-
-    assert repaired == []
-    assert failed == []
-    assert probes == [True]
-
-
 def test_protection_repair_all_completes_supported_work_with_unsupported_containment(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

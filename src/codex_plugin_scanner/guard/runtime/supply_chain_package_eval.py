@@ -4239,10 +4239,6 @@ def _resolved_target_version(
     return None
 
 
-def _bundle_package_versions(bundle_response: SupplyChainBundleResponse, target: dict[str, object]) -> list[str]:
-    return [item.version for item in bundle_response.bundle.packages if _bundle_package_name_matches(item, target)]
-
-
 def _bundle_package_name_matches(package: SupplyChainBundlePackage, target: dict[str, object]) -> bool:
     target_ecosystem = _optional_string(target.get("ecosystem"))
     if target_ecosystem is not None and package.ecosystem != normalize_ecosystem(target_ecosystem):

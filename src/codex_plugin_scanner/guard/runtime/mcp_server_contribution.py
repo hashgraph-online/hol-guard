@@ -350,21 +350,6 @@ def mcp_payload_for_catalog_id(extension_id: str) -> dict[str, object] | None:
     return _contribution_index().get(extension_id)
 
 
-def catalog_mcp_fields(extension_id: str) -> dict[str, object] | None:
-    payload = _contribution_index().get(extension_id)
-    if payload is None:
-        return None
-    launch = payload.get("launch")
-    tools = payload.get("tools")
-    if not isinstance(launch, dict) or not isinstance(tools, list):
-        return None
-    return {
-        "surface": "mcp",
-        "mcp_launch": dict(launch),
-        "mcp_tools": [dict(item) for item in tools if isinstance(item, dict)],
-    }
-
-
 def reset_mcp_contribution_cache() -> None:
     _contribution_index.cache_clear()
     _validator.cache_clear()
