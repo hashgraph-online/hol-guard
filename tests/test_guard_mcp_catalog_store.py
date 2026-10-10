@@ -10,6 +10,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 _FIRST = "2026-09-27T12:00:00Z"
 _SECOND = "2026-09-27T12:01:00Z"
 

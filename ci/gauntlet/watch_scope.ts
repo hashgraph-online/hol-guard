@@ -18,14 +18,25 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function permittedWatchInput(toolName: string, input: unknown, cwd = process.env.GAUNTLET_WATCH_WORKSPACE): boolean {
   if (toolName !== "bash" || !isRecord(input)) return false;
   const args = input;
-  if (args.command !== WATCH_COMMAND || Object.keys(args).some(key => !["command", "timeout", "cwd", "env", "pty", "async", "i", "intent"].includes(key))) return false;
+  if (args.command !== WATCH_COMMAND || Object.keys(args).some(key => !["command", "timeout", "cwd", "env", "pty", "async", "i", "intent", "name", "ready"].includes(key))) return false;
   // The SDK may attach a plain-text intent label; it never reaches the shell.
   if (["i", "intent"].some(key => args[key] !== undefined && typeof args[key] !== "string")) return false;
   // The pinned bash schema may emit these defaults even when no override was requested.
   if (args.env !== undefined && (!isRecord(args.env) || Object.keys(args.env).length !== 0)) return false;
   if (args.pty !== undefined && args.pty !== false) return false;
   if (args.async !== undefined && args.async !== false) return false;
-  if (args.cwd !== undefined && args.cwd !== cwd) {
+  // 18.4.12 service-mode defaults: a blank name is normalized to unset, and a
+  // ready spec is ignored entirely without a service name — neither can launch
+  // a service, wait on a port or log, or change execution.
+  if (args.name !== undefined && args.name !== "") return false;
+  if (args.ready !== undefined) {
+    if (!isRecord(args.ready)) return false;
+    for (const [key, value] of Object.entries(args.ready)) {
+      if (!["log", "port", "host", "timeout"].includes(key) || (value !== "" && value !== 0)) return false;
+    }
+  }
+  // An empty cwd resolves to the session cwd exactly like an omitted one.
+  if (args.cwd !== undefined && args.cwd !== "" && args.cwd !== cwd) {
     if (typeof args.cwd !== "string" || typeof cwd !== "string") return false;
     // Only the platform's own spelling may differ; never accept a task-owned symlink.
     if (cwdSpelling(args.cwd) !== cwdSpelling(cwd)) return false;
