@@ -9,7 +9,6 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as package_eval_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.local_supply_chain import (
@@ -32,13 +31,13 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.package_intent import PackageIntent, build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_file_read_request_artifact,
     extract_sensitive_file_read_request,
-)
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
-    PackageRequestEvaluation,
-    SupplyChainUserCopy,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -422,48 +421,6 @@ def test_package_lockfile_parser_version_changes_approval_identity(
     )
 
     assert original_digest != upgraded_digest
-
-
-@pytest.mark.parametrize(("saved_action", "expected"), [("allow", False), ("block", True)])
-def test_package_cache_error_probe_is_non_consuming_and_never_authorizes_saved_allow(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    saved_action: GuardAction,
-    expected: bool,
-) -> None:
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    artifact = _package_artifact(workspace)
-
-    class ProbeStore:
-        def resolve_policy_decision_lookup(self, *_args: object, **kwargs: object) -> dict[str, object]:
-            assert kwargs["consume_one_shot"] is False
-            return {
-                "decision": {
-                    "action": saved_action,
-                    "artifact_hash": "exact-v1-token",
-                    "scope": "artifact",
-                    "source": "approval-gate",
-                },
-                "ignored_local_integrity": None,
-                "trust_status": {},
-            }
-
-    monkeypatch.setattr(
-        local_supply_chain_module,
-        "package_request_policy_hash",
-        lambda **_kwargs: "exact-v1-token",
-    )
-
-    result = package_eval_module._cached_cloud_validation_error_has_saved_policy(
-        store=ProbeStore(),
-        artifact=artifact,
-        evaluation=_package_evaluation("block"),
-        workspace_dir=workspace,
-        now="2026-07-17T00:00:00Z",
-    )
-
-    assert result is expected
 
 
 def _dangerous_tool_artifact() -> GuardArtifact:

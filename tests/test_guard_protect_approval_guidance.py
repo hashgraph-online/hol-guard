@@ -10,7 +10,7 @@ from codex_plugin_scanner.guard.cli import render
 from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import _localize_pending_approval_copy
 from codex_plugin_scanner.guard.cli.protect_approvals import _queue_local_protect_approvals
 from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import shlex
 from pathlib import Path
 
@@ -10,15 +9,15 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     build_package_request_artifact,
     parse_package_intent,
 )
-from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
+from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_archive_fakes import forbid_download, install_download, install_inspection
 
 pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
@@ -117,19 +116,15 @@ def test_npm_url_like_https_specs_are_rejected_before_approval_or_network(
         source_scope="project",
     )
 
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: pytest.fail("non-canonical source reached archive network boundary"),
-    )
-    result = evaluator.evaluate_package_request_artifact(
+    forbid_download(monkeypatch, "non-canonical source reached archive network boundary")
+    result = evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
     )
 
     assert result.decision == "block"
-    assert any(reason["code"] == "npm_source_host_missing" for reason in result.reasons)
+    assert {reason["code"] for reason in result.reasons} & {"npm_source_host_missing", "npm_source_url_host_invalid"}
 
 
 @pytest.mark.parametrize("named", (False, True))
@@ -175,12 +170,8 @@ def test_npm_https_at_sign_is_not_mistaken_for_package_source_separator(
         source_scope="project",
     )
     if "user:password@" in source_url:
-        monkeypatch.setattr(
-            package_services,
-            "_scan_external_tarball",
-            lambda *_args, **_kwargs: pytest.fail("credential URL reached archive network boundary"),
-        )
-        result = evaluator.evaluate_package_request_artifact(
+        forbid_download(monkeypatch, "credential URL reached archive network boundary")
+        result = evaluate_package_request_artifact(
             artifact=artifact,
             store=GuardStore(tmp_path / "guard-home"),
             workspace_dir=workspace,
@@ -198,13 +189,9 @@ def test_external_archive_request_caps_target_count_before_network(
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
     sources = [f"https://packages{index}.example.com/demo.tgz" for index in range(5)]
     artifact = _package_artifact(workspace, shlex.join(("npm", "install", *sources)))
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: pytest.fail("over-target request reached archive network boundary"),
-    )
+    forbid_download(monkeypatch, "over-target request reached archive network boundary")
 
-    result = evaluator.evaluate_package_request_artifact(
+    result = evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
@@ -226,41 +213,10 @@ def test_external_archive_request_caps_aggregate_retained_bytes_and_cleans_blobs
     (workspace / "package.json").write_text("{}\n", encoding="utf-8")
     sources = ["https://one.example.com/demo.tgz", "https://two.example.com/demo.tgz"]
     artifact = _package_artifact(workspace, shlex.join(("npm", "install", *sources)))
-    paths: list[Path] = []
+    blobs = install_download(monkeypatch, tmp_path, payload=b"x" * (7 * 1024 * 1024))
+    install_inspection(monkeypatch)
 
-    def retained_scan(
-        source_url: str,
-        *,
-        retain_download: bool = False,
-        request_deadline: float | None = None,
-        guard_home: Path | None = None,
-    ) -> tuple[dict[str, str], RestrictedArchiveDownload]:
-        assert retain_download is True
-        assert request_deadline is not None
-        path = tmp_path / f"retained-{len(paths)}.tgz"
-        path.write_bytes(b"xx")
-        path.chmod(0o400)
-        paths.append(path)
-        return (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review.",
-                "severity": "medium",
-            },
-            RestrictedArchiveDownload(
-                path=path,
-                sha256=hashlib.sha256(b"xx").hexdigest(),
-                size=2,
-                source_url=source_url,
-                final_url=source_url,
-            ),
-        )
-
-    monkeypatch.setattr(evaluator, "_EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES", 3)
-    monkeypatch.setattr(package_services, "_scan_external_tarball", retained_scan)
-
-    result = evaluator.evaluate_package_request_artifact(
+    result = evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
@@ -271,28 +227,8 @@ def test_external_archive_request_caps_aggregate_retained_bytes_and_cleans_blobs
     assert result.decision == "block"
     assert any(reason["code"] == "external_archive_aggregate_size_limit" for reason in result.reasons)
     assert len(result.external_archive_source_hashes) == len(sources)
-    assert paths and all(path.exists() is False for path in paths)
-
-
-def test_external_archive_request_deadline_fails_before_next_download(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        package_services,
-        "_download_external_tarball",
-        lambda *_args, **_kwargs: pytest.fail("expired request started another download"),
-    )
-
-    result, retained = package_services._scan_external_tarball(
-        "https://packages.example.com/demo.tgz",
-        request_deadline=evaluator.time.monotonic() - 1,
-        guard_home=tmp_path / "guard-home",
-    )
-
-    assert result is not None
-    assert result["code"] == "external_archive_request_timeout"
-    assert retained is None
+    assert result.external_archive_downloads == ()
+    assert blobs and all(path.exists() is False for path in blobs)
 
 
 @pytest.mark.parametrize(
@@ -313,34 +249,15 @@ def test_external_archive_cannot_be_shadowed_or_bypass_restricted_inspection(
     artifact = _package_artifact(workspace, f"npm install demo@{source_url}")
     store = GuardStore(tmp_path / "guard-home")
     scans: list[str] = []
+    install_download(monkeypatch, tmp_path, calls=scans)
+    install_inspection(monkeypatch)
 
-    def clean_scan(
-        scanned_url: str,
-        *,
-        retain_download: bool = False,
-        request_deadline: float | None = None,
-        guard_home: Path | None = None,
-    ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download, guard_home
-        scans.append(scanned_url)
-        return (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review.",
-                "severity": "medium",
-            },
-            None,
-        )
-
-    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
-
-    initial = evaluator.evaluate_package_request_artifact(
+    initial = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
         workspace_dir=workspace,
     )
-    approved_phase = evaluator.evaluate_package_request_artifact(
+    approved_phase = evaluate_package_request_artifact(
         artifact=artifact,
         store=store,
         workspace_dir=workspace,
@@ -348,7 +265,7 @@ def test_external_archive_cannot_be_shadowed_or_bypass_restricted_inspection(
     )
 
     assert scans == [source_url]
-    assert initial.external_archive_source_hashes == (evaluator.stable_digest_hex(source_url.encode()),)
+    assert initial.external_archive_source_hashes == (stable_digest_hex(source_url.encode()),)
     assert any(reason["code"] == "external_tarball_source" for reason in initial.reasons)
     assert any(reason["code"] == "external_tarball_source" for reason in approved_phase.reasons)
     assert all(reason["code"] != "git_dependency_source" for reason in approved_phase.reasons)

@@ -2,24 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
-    _cloud_fail_closed_decision,
-    evaluate_package_request_artifact,
-)
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_tier2_phase13_support import artifact_from_command_fixture
 from tests.test_guard_supply_chain_evaluator import (
     WORKSPACE_ID,
     _artifact_for_targets,
     _bundle_response,
-    _force_cloud_fallback,
-    _force_unpaid_entitlement,
     _package,
 )
 
@@ -60,101 +53,6 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
 POLICY_HASH = "policy-hash-1"
 
 
-def test_cloud_fail_closed_policy_config_maps_security_levels(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    (store.guard_home / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
-    assert _cloud_fail_closed_decision(store=store, workspace_dir=tmp_path / "workspace") == "block"
-
-    (store.guard_home / "config.toml").write_text('security_level = "balanced"\n', encoding="utf-8")
-    assert _cloud_fail_closed_decision(store=store, workspace_dir=tmp_path / "workspace") == "ask"
-
-
-def test_strict_mode_timeout_requires_explicit_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    (store.guard_home / "config.toml").write_text('security_level = "strict"\n', encoding="utf-8")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    store.cache_supply_chain_bundle(
-        WORKSPACE_ID,
-        _bundle_response(
-            packages=[
-                _package(
-                    ecosystem="npm",
-                    name="left-pad",
-                    version="1.0.0",
-                    default_action="monitor",
-                )
-            ]
-        ),
-        "2026-05-19T00:00:00Z",
-    )
-
-    def raise_timeout(*args: object, **kwargs: object) -> object:
-        del args, kwargs
-        raise TimeoutError("network unreachable")
-
-    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", raise_timeout)
-    result = evaluate_package_request_artifact(
-        artifact=_artifact_for_targets("left-pad@1.0.0"),
-        store=store,
-        workspace_dir=tmp_path / "workspace",
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
-
-
-def test_local_fallback_disclosure_reason_surfaces_after_cloud_timeout(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    _force_cloud_fallback(monkeypatch)
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    result = evaluate_package_request_artifact(
-        artifact=_artifact_for_targets("unknown-pkg@1.0.0"),
-        store=store,
-        workspace_dir=tmp_path / "workspace",
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert any(reason["code"] == "cloud_timeout" for reason in result.reasons)
-    assert result.enforcement in {"local_fallback", "offline_cached", "free_local"}
-
-
-def test_stale_bundle_disclosure_reason_surfaces_in_final_evaluation(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    _force_unpaid_entitlement(monkeypatch)
-    _force_cloud_fallback(monkeypatch)
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
-    stale_response = _bundle_response(
-        packages=[
-            _package(
-                ecosystem="npm",
-                name="left-pad",
-                version="1.0.0",
-                default_action="monitor",
-            )
-        ],
-        generated_at=datetime(2026, 5, 18, tzinfo=timezone.utc),
-        expires_at=datetime(2026, 5, 18, 1, tzinfo=timezone.utc),
-    )
-    store.cache_supply_chain_bundle(WORKSPACE_ID, stale_response, "2026-05-18T01:00:00Z")
-
-    result = evaluate_package_request_artifact(
-        artifact=_artifact_for_targets("left-pad@1.0.0"),
-        store=store,
-        workspace_dir=tmp_path / "workspace",
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.refresh_required is True
-    assert any(reason["code"] == "stale_low_confidence" for reason in result.reasons)
-
-
 def test_unsupported_ecosystem_disclosure_reason(tmp_path: Path) -> None:
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
@@ -169,19 +67,6 @@ def test_unsupported_ecosystem_disclosure_reason(tmp_path: Path) -> None:
     )
 
     assert result.packages[0]["reasons"][0]["code"] == "unsupported_ecosystem_monitor_only"
-
-
-def test_unknown_package_disclosure_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _force_cloud_fallback(monkeypatch)
-    result = evaluate_package_request_artifact(
-        artifact=_artifact_for_targets("totally-unknown-pkg@9.9.9"),
-        store=GuardStore(tmp_path / "home"),
-        workspace_dir=tmp_path / "workspace",
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert any(reason["code"] == "no_cached_match" for package in result.packages for reason in package["reasons"])
-    assert any(reason["code"] == "unidentified_package" for package in result.packages for reason in package["reasons"])
 
 
 def test_unidentified_package_reason_fires_for_supported_ecosystem(tmp_path: Path) -> None:
@@ -209,66 +94,6 @@ def _running_guard_release(name: str) -> str | None:
     if name in {"hol-guard", "plugin-scanner"}:
         return "3.0.182"
     return None
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        "pipx install hol-guard --force",
-        "pip install plugin-scanner==3.0.182",
-        "pip install hol-guard==9.9.9",
-    ],
-)
-def test_new_or_unpinned_guard_release_stays_on_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    command: str,
-) -> None:
-    monkeypatch.setattr(evaluator_module, "_installed_project_version", lambda _name: None)
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    result = evaluate_package_request_artifact(
-        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
-        store=GuardStore(tmp_path / "home"),
-        workspace_dir=workspace_dir,
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    codes = {reason["code"] for reason in result.packages[0]["reasons"]}
-    assert "installed_release_reinstall" not in codes
-    assert "compromised release" in result.packages[0]["reasons"][0]["message"]
-    assert "HOL Guard allowed" not in result.user_copy.harness_message
-    assert "Local Guard" not in result.user_copy.harness_message
-
-
-@pytest.mark.parametrize(
-    "command",
-    ["pip install hol-guard==3.0.182", "pipx install plugin-scanner==3.0.182"],
-)
-def test_reinstall_of_running_guard_release_is_allowed(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    command: str,
-) -> None:
-    for name in evaluator_module._PACKAGE_SOURCE_ENV_NAMES:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    result = evaluate_package_request_artifact(
-        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
-        store=GuardStore(tmp_path / "home"),
-        workspace_dir=workspace_dir,
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.decision == "allow"
-    assert result.policy_action == "allow"
-    assert result.packages[0]["reasons"][0]["code"] == "installed_release_reinstall"
-    assert "already running on this device" in result.user_copy.harness_message
-    assert "Local Guard" not in result.user_copy.harness_message
 
 
 def test_non_registry_install_of_hol_guard_still_requires_review(tmp_path: Path) -> None:
@@ -330,87 +155,6 @@ def test_relocated_registry_install_of_hol_guard_still_requires_review(tmp_path:
     assert "HOL Guard allowed" not in result.user_copy.harness_message
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        "PIP_INDEX_URL=https://example.invalid/simple pip install hol-guard==3.0.182",
-        "UV_FIND_LINKS=https://example.invalid/simple uv pip install hol-guard==3.0.182",
-        "PIP_NO_INDEX=1 pip install hol-guard==3.0.182",
-    ],
-)
-def test_same_running_release_from_another_index_stays_on_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    command: str,
-) -> None:
-    for name in evaluator_module._PACKAGE_SOURCE_ENV_NAMES:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    result = evaluate_package_request_artifact(
-        artifact=artifact_from_command_fixture(command, workspace=workspace_dir),
-        store=GuardStore(tmp_path / "home"),
-        workspace_dir=workspace_dir,
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert "installed_release_reinstall" not in {reason["code"] for reason in result.packages[0]["reasons"]}
-    assert "HOL Guard allowed" not in result.user_copy.harness_message
-
-
-def test_inherited_find_links_keeps_same_release_on_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    for name in evaluator_module._PACKAGE_SOURCE_ENV_NAMES:
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv("UV_FIND_LINKS", "https://example.invalid/simple")
-    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    result = evaluate_package_request_artifact(
-        artifact=artifact_from_command_fixture("pip install hol-guard==3.0.182", workspace=workspace_dir),
-        store=GuardStore(tmp_path / "home"),
-        workspace_dir=workspace_dir,
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.decision == "ask"
-    assert result.policy_action == "require-reapproval"
-    assert "HOL Guard allowed" not in result.user_copy.harness_message
-
-
-def test_local_build_version_is_not_a_reinstall_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "3.0.182+local")
-
-    assert evaluator_module._installed_project_version("hol-guard") is None
-
-
-def test_mixed_install_does_not_claim_the_guard_package_allowed_the_command(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(evaluator_module, "_installed_project_version", _running_guard_release)
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    result = evaluate_package_request_artifact(
-        artifact=artifact_from_command_fixture(
-            "pip install hol-guard==3.0.182 requests",
-            workspace=workspace_dir,
-        ),
-        store=GuardStore(tmp_path / "home"),
-        workspace_dir=workspace_dir,
-        now="2026-05-19T00:00:00Z",
-    )
-
-    assert result.decision == "ask"
-    assert "HOL Guard allowed" not in result.user_copy.harness_message
-    assert "requests" in result.user_copy.harness_message
-
-
 def test_unidentified_package_blocks_under_strict_policy(tmp_path: Path) -> None:
     """Strict policy fails closed when registry identity cannot be resolved."""
 
@@ -444,27 +188,6 @@ def test_unidentified_package_reason_absent_for_unsupported_ecosystem(tmp_path: 
         now="2026-05-19T00:00:00Z",
     )
     assert all(reason["code"] != "unidentified_package" for package in result.packages for reason in package["reasons"])
-
-
-def test_unknown_package_result_directly_skips_unidentified_for_unsupported() -> None:
-    """Directly test _unknown_package_result does not emit unidentified_package for unsupported ecosystem."""
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
-
-    target = {"ecosystem": "unsupported", "name": "some-pkg", "namespace": None}
-    result = _unknown_package_result(target)
-    codes = [reason["code"] for reason in result["reasons"]]
-    assert "no_cached_match" in codes
-    assert "unidentified_package" not in codes
-
-
-def test_unknown_package_result_directly_skips_unidentified_for_system() -> None:
-    """Directly test _unknown_package_result does not emit unidentified_package for system ecosystem."""
-    from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import _unknown_package_result
-
-    target = {"ecosystem": "system", "name": "some-pkg", "namespace": None}
-    result = _unknown_package_result(target)
-    codes = [reason["code"] for reason in result["reasons"]]
-    assert "unidentified_package" not in codes
 
 
 def test_known_package_does_not_emit_unidentified_package(

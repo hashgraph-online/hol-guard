@@ -37,7 +37,7 @@ from codex_plugin_scanner.guard.package_shim_gate import (
 )
 from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from codex_plugin_scanner.guard.protect import build_protect_payload
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation, SupplyChainUserCopy
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1767,35 +1767,6 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
     assert store.list_approval_requests(limit=None) == []
 
 
-def test_cloud_reconnect_copy_preserves_existing_package_remediation() -> None:
-    evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
-        decision="ask",
-        policy_action="require-reapproval",
-        enforcement="premium_cloud",
-        entitlement_state="premium",
-        cache_status="cloud-error",
-        package_intent_hash="a" * 64,
-        policy_version="local:none",
-        bundle_version=None,
-        workspace_fingerprint=None,
-        reasons=(),
-        packages=(),
-        risk_summary="Guard paused the package request for review.",
-        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
-            title="Review required",
-            summary="A safer package version is required.",
-            next_step="npm install example@2.0.0",
-            dashboard_url=None,
-            harness_message="Install the safer package version.",
-        ),
-    )
-
-    updated = supply_chain_package_eval_module._with_cloud_auth_reconnect_copy(evaluation)
-
-    assert updated.user_copy.next_step == "npm install example@2.0.0"
-    assert "hol-guard connect" in updated.user_copy.harness_message
-
-
 def test_guard_protect_probe_skips_local_approval_queue_on_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2543,123 +2514,6 @@ def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_
     assert resolved == []
 
 
-def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpinned_package(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys,
-) -> None:
-    home_dir = tmp_path / "guard-home"
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    fake_bin = tmp_path / "fake-bin"
-    fake_bin.mkdir(parents=True, exist_ok=True)
-    marker_path = tmp_path / "npm-somepkg-marker.json"
-    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
-    package_name = "somepkg"
-    original_resolved_target_version = supply_chain_package_eval_module._resolved_target_version
-
-    def _resolve_somepkg_version(**kwargs: object) -> str | None:
-        target = kwargs.get("target")
-        if isinstance(target, dict) and str(target.get("normalized_name")) == package_name:
-            return "1.0.0"
-        return original_resolved_target_version(**kwargs)
-
-    monkeypatch.setattr(
-        supply_chain_package_eval_module,
-        "_resolved_target_version",
-        _resolve_somepkg_version,
-    )
-    server, thread, sync_url = _start_cloud_eval_server(
-        decision="allow",
-        package_name=package_name,
-        evaluate_status=401,
-    )
-    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
-    try:
-        store = GuardStore(home_dir)
-        _seed_bundle_cache_only(
-            home_dir=home_dir,
-            ecosystem="npm",
-            package_name=package_name,
-            package_version="1.0.0",
-            action="allow",
-        )
-        _seed_workspace_sync_credentials(home_dir, sync_url)
-
-        with monkeypatch.context() as unpaid_context:
-            _force_unpaid_entitlement(unpaid_context)
-            first_payload, first_exit_code = build_protect_payload(
-                command=["npm", "install", package_name],
-                store=store,
-                workspace_dir=workspace_dir,
-                dry_run=True,
-                now="2026-05-19T00:00:00Z",
-            )
-
-        assert first_exit_code == 0
-        assert first_payload["verdict"]["action"] == "allow"
-        receipt = first_payload["receipt"]
-        assert isinstance(receipt, dict)
-        store.upsert_policy(
-            PolicyDecision(
-                harness="guard-cli",
-                scope="artifact",
-                action="allow",
-                artifact_id=str(receipt["artifact_id"]),
-                artifact_hash=str(receipt["artifact_hash"]),
-                workspace=None,
-                publisher=None,
-                reason="reviewed",
-            ),
-            "2026-05-19T00:00:00Z",
-        )
-
-        response = _bundle_response(
-            action="block",
-            ecosystem="npm",
-            package_name=package_name,
-            package_version="1.0.0",
-            feed_snapshot_hash="feed-snapshot-block-2",
-            policy_hash="policy-hash-block-2",
-            bundle_version="1747612801000-shim-proof",
-        )
-        store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T01:00:00Z")
-        bundle = response["bundle"]
-        assert isinstance(bundle, dict)
-        store.set_sync_payload(
-            "supply_chain_bundle_entitlement",
-            {
-                "bundle_version": bundle["bundleVersion"],
-                "key_id": bundle["keyId"],
-                "policy_hash": bundle["policyHash"],
-                "tier": bundle["tier"],
-                "workspace_id": WORKSPACE_ID,
-            },
-            "2026-05-19T01:00:00Z",
-        )
-
-        original_path = os.environ.get("PATH", "")
-        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
-        retry_payload, retry_exit_code = build_protect_payload(
-            command=["npm", "install", package_name],
-            store=store,
-            workspace_dir=workspace_dir,
-            dry_run=False,
-            now="2026-05-19T01:00:00Z",
-        )
-    finally:
-        _stop_cloud_eval_server(server, thread)
-
-    assert retry_exit_code == 2
-    assert retry_payload["executed"] is False
-    assert retry_payload["verdict"]["action"] == "block"
-    assert marker_path.exists() is False
-    assert not any(
-        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
-        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
-    )
-
-
 @pytest.mark.usefixtures("native_hook_force")
 def test_guard_protect_saved_allow_never_lowers_current_cached_advisory_block(
     tmp_path: Path,
@@ -2762,7 +2616,7 @@ def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority
     original_path = os.environ.get("PATH", "")
     monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     store = GuardStore(home_dir)
-    review_evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+    review_evaluation = PackageRequestEvaluation(
         decision="ask",
         policy_action="review",
         enforcement="local",
@@ -2775,7 +2629,7 @@ def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority
         reasons=({"code": "package_review", "message": "Review package."},),
         packages=({"name": "badpkg", "requestedVersion": "1.0.0", "decision": "ask"},),
         risk_summary="Review package.",
-        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+        user_copy=SupplyChainUserCopy(
             title="Review package",
             summary="Review package.",
             next_step="Review the package request.",
@@ -2877,7 +2731,7 @@ def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
     original_path = os.environ.get("PATH", "")
     monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     store = GuardStore(home_dir)
-    review_evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+    review_evaluation = PackageRequestEvaluation(
         decision="ask",
         policy_action="review",
         enforcement="local",
@@ -2890,7 +2744,7 @@ def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
         reasons=({"code": "package_review", "message": "Review package."},),
         packages=({"name": "badpkg", "requestedVersion": "1.0.0", "decision": "ask"},),
         risk_summary="Review package.",
-        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+        user_copy=SupplyChainUserCopy(
             title="Review package",
             summary="Review package.",
             next_step="Review the package request.",

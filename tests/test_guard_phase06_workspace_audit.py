@@ -15,11 +15,12 @@ from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.local_supply_chain import (
     audit_receipt_metadata,
     build_workspace_audit_payload,
+    evaluate_package_request_artifact,
     managed_install_audit_workspace_dirs,
     resolve_supply_chain_audit_workspace_dir,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_workspace import bind_workspace
 from tests.test_guard_headless_daemon_api import (
     _dashboard_token_for,
     _read_json_response,
@@ -96,7 +97,7 @@ def _audit_payload_for_workspace(
     store = GuardStore(home_dir)
     _seed_premium_entitlement(store)
     if monkeypatch is not None:
-        monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+        bind_workspace(store, WORKSPACE_ID)
         store.cache_supply_chain_bundle(
             WORKSPACE_ID,
             _bundle_response(
@@ -550,7 +551,7 @@ def test_workspace_audit_lockfile_evaluation_preserves_dependency_path_and_fix_v
         ),
     )
     store = GuardStore(home_dir)
-    monkeypatch.setattr(store, "get_cloud_workspace_id", lambda: WORKSPACE_ID)
+    bind_workspace(store, WORKSPACE_ID)
     store.cache_supply_chain_bundle(
         WORKSPACE_ID,
         _bundle_response(

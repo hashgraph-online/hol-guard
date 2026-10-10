@@ -233,7 +233,7 @@ def evaluation_from_native_payload(payload: Mapping[str, object]) -> Any:
 
     Local import keeps the module importable without the eval dep.
     """
-    from .runtime.supply_chain_package_eval import PackageRequestEvaluation
+    from .runtime.package_request_evaluation import PackageRequestEvaluation
 
     data = dict(payload)
     bundle_version = data.get("bundle_version")

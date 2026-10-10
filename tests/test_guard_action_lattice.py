@@ -29,7 +29,7 @@ from codex_plugin_scanner.guard.policy.engine import guard_action_severity as po
 from codex_plugin_scanner.guard.proxy.runtime_mcp import _guard_action
 from codex_plugin_scanner.guard.receipts.manager import _resolve_policy_decision
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation
 
 EXPECTED_LATTICE: tuple[GuardAction, ...] = (
     "allow",

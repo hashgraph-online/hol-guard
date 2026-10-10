@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import importlib
 import inspect
@@ -21,7 +22,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal, TypeGuard, cast
+from typing import Any, Literal, TypeGuard, TypeVar, cast
 from uuid import uuid4
 
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
@@ -279,8 +280,8 @@ def compose_blocking_package_evaluation(kind: str, evaluation: Any, **facts: obj
     return module.compose_blocking_package_evaluation(kind, evaluation, **facts)
 
 
-def _supply_chain_package_eval_module():
-    return importlib.import_module(".runtime.supply_chain_package_eval", __package__)
+def _package_request_evaluation_module():
+    return importlib.import_module(".runtime.package_request_evaluation", __package__)
 
 
 def sync_local_guard_cloud_proof(
@@ -312,29 +313,21 @@ def evaluate_package_request_artifact(
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
 ):
-    """Evaluate a package request; the resident owns every verdict it can reach.
+    """Evaluate a package request in the resident, which owns every verdict.
 
-    The resident answers (or the request is blocked) for every workspace,
-    including Cloud-connected ones: signed bundle, synced policy rules, the
-    Cloud service call and the fail-closed ladder are all decided in Rust. Only
-    the second-phase external-archive acquisition that must hand a live
-    retained blob to the caller (RTM-029/030) still runs the Python evaluator.
+    The signed bundle, synced policy rules, the Cloud service call, the
+    external-archive review and the fail-closed ladder are all decided in Rust;
+    the caller only moves bytes. With ``retain_external_archive_blob`` the
+    evaluation carries the verified blobs the caller keeps for a reviewed launch
+    (RTM-029/030).
     """
-    if retain_external_archive_blob:
-        return _supply_chain_package_eval_module().evaluate_package_request_artifact(
-            artifact=artifact,
-            store=store,
-            workspace_dir=workspace_dir,
-            now=now,
-            external_archive_network_authorized=external_archive_network_authorized,
-            retain_external_archive_blob=retain_external_archive_blob,
-        )
     return _native_supply_chain_eval_module().evaluate_package_request_native(
         artifact=artifact,
         store=store,
         workspace_dir=workspace_dir,
         now=now,
         external_archive_network_authorized=external_archive_network_authorized,
+        retain_external_archive_blob=retain_external_archive_blob,
     )
 
 
@@ -363,7 +356,7 @@ def _parse_package_intent_native(
 
 
 def _is_package_request_evaluation(value: object) -> TypeGuard[Any]:
-    return isinstance(value, _supply_chain_package_eval_module().PackageRequestEvaluation)
+    return isinstance(value, _package_request_evaluation_module().PackageRequestEvaluation)
 
 
 def _package_firewall_refresh_state_path(guard_home: Path) -> Path:
@@ -1456,6 +1449,23 @@ def _package_manager_launch_environment(
     return launch_environment
 
 
+_BoundFunction = TypeVar("_BoundFunction", bound=Callable[..., Any])
+
+
+def _binds_store_guard_home(function: _BoundFunction) -> _BoundFunction:
+    """Bind the keyword ``store``'s guard home for the call and always reset it."""
+
+    @functools.wraps(function)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        from .native_context import bound_context_digest_home
+
+        with bound_context_digest_home(getattr(kwargs.get("store"), "guard_home", None)):
+            return function(*args, **kwargs)
+
+    return cast(_BoundFunction, wrapper)
+
+
+@_binds_store_guard_home
 def _build_package_protect_authority(
     *,
     command: Sequence[str],
@@ -1474,11 +1484,9 @@ def _build_package_protect_authority(
         raise ValueError("package workspace must resolve to an existing directory") from None
     if not launch_cwd.is_dir():
         raise ValueError("package workspace must resolve to an existing directory")
-    from .native_context import bind_context_digest_home
     from .native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 
     provision_native_verifier_key_for_store(store)
-    bind_context_digest_home(store.guard_home)
     launch_environment = _package_manager_launch_environment(
         os.environ,
         guard_home=store.guard_home,
@@ -1573,6 +1581,7 @@ def _build_package_protect_authority(
         raise
 
 
+@_binds_store_guard_home
 def _final_package_protect_authority(
     *,
     initial: _PackageProtectAuthority,
@@ -1588,9 +1597,6 @@ def _final_package_protect_authority(
 ) -> tuple[_PackageProtectAuthority, Any]:
     """Refresh mode, claim required approval, then rebuild authority before spawn."""
 
-    from .native_context import bind_context_digest_home
-
-    bind_context_digest_home(getattr(store, "guard_home", None))
     additional_action: object | None = initial.additional_current_action
     additional_context: dict[str, object] | None = initial.additional_policy_context
     current_config = config
@@ -2823,6 +2829,7 @@ def _package_current_policy_context(
     }
 
 
+@_binds_store_guard_home
 def _package_request_artifact_hash(
     artifact: GuardArtifact,
     *,
@@ -2835,9 +2842,6 @@ def _package_request_artifact_hash(
     additional_current_action: object | None = None,
     additional_policy_context: dict[str, object] | None = None,
 ) -> str:
-    from .native_context import bind_context_digest_home
-
-    bind_context_digest_home(getattr(store, "guard_home", None))
     policy_context = _package_current_policy_context(
         artifact=artifact,
         store=store,

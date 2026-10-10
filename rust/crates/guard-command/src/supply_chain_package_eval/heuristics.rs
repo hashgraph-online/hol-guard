@@ -60,8 +60,34 @@ pub(super) fn heuristic_result(
                 retained_archive_bytes += dl.size;
                 if retained_archive_bytes > EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES {
                     drop(dl);
-                } else {
-                    external_archive_downloads.push(dl);
+                    external_archive_downloads.clear();
+                    packages.push(heuristic_package_result(
+                        target,
+                        "block",
+                        "external_archive_aggregate_size_limit",
+                        "External archives exceeded Guard's aggregate retained-byte limit.",
+                        "high",
+                    ));
+                    break;
+                }
+                external_archive_downloads.push(dl);
+            }
+            let mut package_result = package_result;
+            if target.get("manifest_unsynced") == Some(&Value::Bool(true)) {
+                if let Some(current) = package_result.as_ref() {
+                    package_result = Some(with_package_reason(
+                        current,
+                        manifest_unsynced_reason(target),
+                    ));
+                }
+            }
+            let lockfile_parse_warning =
+                lockfile_parse_warning_result(deps, workspace_dir, artifact, target);
+            if let (Some(current), Some(warning)) =
+                (package_result.as_ref(), lockfile_parse_warning.as_ref())
+            {
+                if let Some(first_reason) = first_dict_item(warning.get("reasons")) {
+                    package_result = Some(with_package_reason(current, first_reason));
                 }
             }
             if let Some(pr) = package_result {
@@ -195,4 +221,25 @@ pub(super) fn heuristic_result(
         external_archive_downloads,
         external_archive_source_hashes,
     })
+}
+
+/// The reason a manifest dependency that the lockfile does not pin yet carries.
+fn manifest_unsynced_reason(target: &Map<String, Value>) -> Map<String, Value> {
+    let name = optional_string(target.get("package_name"))
+        .or_else(|| optional_string(target.get("name")))
+        .unwrap_or_else(|| "package".to_string());
+    let mut reason = Map::new();
+    reason.insert(
+        "code".into(),
+        Value::String("manifest_lockfile_unsynced".into()),
+    );
+    reason.insert(
+        "message".into(),
+        Value::String(format!(
+            "{name} is declared in the project manifest but is not pinned in the existing lockfile yet, so Guard requires review before install."
+        )),
+    );
+    reason.insert("severity".into(), Value::String("high".into()));
+    reason.insert("source".into(), Value::String("guard-local".into()));
+    reason
 }

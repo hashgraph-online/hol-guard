@@ -7,10 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.manifest_dependency_targets import unsynced_manifest_dependency_targets
+from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.runtime.workspace_path_guard import (
     existing_paths_within_workspace,
     read_text_within_workspace,
@@ -57,7 +56,7 @@ def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path,
     assert intent.manifest_paths == ()
 
 
-def test_unsynced_manifest_targets_do_not_read_symlinked_requirements(tmp_path: Path) -> None:
+def test_unsynced_manifest_evaluation_does_not_read_symlinked_requirements(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     secret = tmp_path / "secret.env"
     workspace.mkdir()
@@ -74,10 +73,16 @@ def test_unsynced_manifest_targets_do_not_read_symlinked_requirements(tmp_path: 
         source_scope="project",
     )
 
-    targets = unsynced_manifest_dependency_targets(artifact, workspace)
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=GuardStore(tmp_path / "guard-home"),
+        workspace_dir=workspace,
+        now="2026-06-14T00:00:00Z",
+    )
 
-    assert not any("AWS_SECRET" in str(target.get("package_name")) for target in targets)
-    assert not any("super-secret" in str(target.get("range")) for target in targets)
+    serialized = json.dumps(result.to_dict())
+    assert "AWS_SECRET" not in serialized
+    assert "super-secret" not in serialized
 
 
 def test_evaluate_package_request_artifact_does_not_leak_traversal_requirements(tmp_path: Path) -> None:
