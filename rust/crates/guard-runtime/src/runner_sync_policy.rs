@@ -11,9 +11,9 @@ use guard_contracts::utc_timestamp_micros;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
+use super::policy_bundle_py::{is_py_space, non_empty};
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
-use super::runner_sync_signals::{is_py_space, optional_string};
 
 const MATCHER_FAMILIES: [&str; 7] = [
     "file-read",
@@ -115,7 +115,7 @@ struct ReferenceKey {
 
 impl ReferenceKey {
     fn of(item: &Map<String, Value>) -> Self {
-        let text = |key: &str| optional_string(item.get(key));
+        let text = |key: &str| non_empty(item.get(key));
         let version = text("bundleVersion").unwrap_or("").to_owned();
         Self {
             // An unparseable timestamp sorts as the newest, so an unreadable
@@ -155,11 +155,11 @@ pub(crate) fn downgrade_reference(args: &Value) -> KindResult {
         let Some(item) = candidate.as_object() else {
             continue;
         };
-        if optional_string(item.get("issuedAt")).is_none() {
+        if non_empty(item.get("issuedAt")).is_none() {
             continue;
         }
         if let Some(workspace) = workspace {
-            let item_workspace = optional_string(item.get("workspaceId"));
+            let item_workspace = non_empty(item.get("workspaceId"));
             if item_workspace.is_some_and(|id| id != workspace) {
                 continue;
             }
@@ -177,7 +177,7 @@ pub(crate) fn downgrade_reference(args: &Value) -> KindResult {
 }
 
 fn matcher_family(receipt: &Map<String, Value>) -> Option<&'static str> {
-    let artifact_id = optional_string(receipt.get("artifact_id"))?;
+    let artifact_id = non_empty(receipt.get("artifact_id"))?;
     MATCHER_FAMILIES
         .iter()
         .copied()
@@ -224,7 +224,7 @@ pub(crate) fn policy_simulation(args: &Value) -> KindResult {
         .ok_or(ERR_INVALID)?;
     let decisions = read_decisions(args.get("decisions"))?;
     let now = args.get("now").and_then(Value::as_str).ok_or(ERR_INVALID)?;
-    let bundle_field = |key: &str| optional_string(args.get(key));
+    let bundle_field = |key: &str| non_empty(args.get(key));
     let (mut latest, mut oldest): (Stamp, Stamp) = (None, None);
     let mut counts = [0u64; 4];
     let (mut matched_count, mut unchanged_count) = (0u64, 0u64);
@@ -245,7 +245,7 @@ pub(crate) fn policy_simulation(args: &Value) -> KindResult {
         let Some(family) = matcher_family(receipt) else {
             continue;
         };
-        let harness = optional_string(receipt.get("harness")).unwrap_or("*");
+        let harness = non_empty(receipt.get("harness")).unwrap_or("*");
         let wanted = format!("family:{family}");
         let matched = decisions
             .iter()

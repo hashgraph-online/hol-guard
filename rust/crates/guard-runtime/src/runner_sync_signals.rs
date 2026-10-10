@@ -10,6 +10,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{json, Map, Value};
 
+use super::policy_bundle_py::non_empty;
 use super::runner_authority_detector::args_object;
 use super::runner_authority_op::{KindResult, ERR_INVALID};
 
@@ -23,20 +24,8 @@ const STOP_ACTIONS: [&str; 4] = ["review", "require-reapproval", "sandbox-requir
 
 type WarnKey = (String, String);
 
-/// Python `str.strip()` whitespace, which also covers the separator controls.
-pub(crate) fn is_py_space(c: char) -> bool {
-    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
-}
-
-/// `_optional_string`: the string itself when it has non-blank content.
-pub(crate) fn optional_string(value: Option<&Value>) -> Option<&str> {
-    value
-        .and_then(Value::as_str)
-        .filter(|text| !text.chars().all(is_py_space))
-}
-
 fn payload_string<'a>(payload: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
-    optional_string(payload.get(key))
+    non_empty(payload.get(key))
 }
 
 fn warning_key(payload: &Map<String, Value>) -> Option<WarnKey> {
@@ -123,9 +112,9 @@ fn summary(event_name: &str, payload: &Map<String, Value>) -> String {
 
 fn pain_signal_item(event: &Value, warn_counts: &BTreeMap<WarnKey, u64>) -> Option<Value> {
     let event = event.as_object()?;
-    let event_name = optional_string(event.get("event_name"))?;
+    let event_name = non_empty(event.get("event_name"))?;
     let payload = event.get("payload")?.as_object()?;
-    let occurred_at = optional_string(event.get("occurred_at"))?;
+    let occurred_at = non_empty(event.get("occurred_at"))?;
     let (artifact_id, artifact_name) = artifact_identity(event_name, payload)?;
     if !should_emit(event_name, payload, warn_counts) {
         return None;
@@ -180,7 +169,7 @@ pub(crate) fn pain_signal_batch(args: &Value) -> KindResult {
     let mut warn_counts = read_warn_counts(args.get("warn_counts"))?;
     let mut items = Vec::new();
     for event in events {
-        if optional_string(event.get("event_name")) == Some("install_time_warn") {
+        if non_empty(event.get("event_name")) == Some("install_time_warn") {
             if let Some(key) = event
                 .get("payload")
                 .and_then(Value::as_object)
@@ -219,7 +208,7 @@ fn any_signal(value: Option<&Value>, test: impl Fn(&str) -> bool) -> bool {
 fn value_metrics_counts(events: &[Value]) -> (u64, u64, u64) {
     let (mut installs, mut scripts, mut tokens) = (0, 0, 0);
     for event in events {
-        let name = optional_string(event.get("event_name")).unwrap_or("");
+        let name = non_empty(event.get("event_name")).unwrap_or("");
         let Some(payload) = event.get("payload").and_then(Value::as_object) else {
             continue;
         };

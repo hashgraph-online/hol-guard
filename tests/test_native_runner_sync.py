@@ -15,9 +15,15 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+from codex_plugin_scanner.guard.policy_bundle_parser import POLICY_BUNDLE_RULE_MATCHER_FAMILIES
 from codex_plugin_scanner.guard.runtime import runner_native_sync as sync
 
 _VECTORS = Path(__file__).parent / "fixtures" / "runner_sync_authority" / "vectors.json"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_url_cache() -> None:
+    sync._derived_url.cache_clear()
 
 
 def _vectors() -> list[dict[str, Any]]:
@@ -99,3 +105,33 @@ def test_native_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
         sync.normalized_receipts_sync_url("https://hol.org/guard/receipts/sync")
     with pytest.raises(NativeRunnerAuthorityError):
         sync.canonical_policy_enforcement_enabled(device_id="d", workspace_id=None)
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_simulation_covers_every_parser_matcher_family() -> None:
+    """The resident's family list must not drift from the bundle parser's."""
+
+    families = sorted(POLICY_BUNDLE_RULE_MATCHER_FAMILIES)
+    receipts = [
+        {
+            "receipt_id": f"r-{family}",
+            "artifact_id": f"guard:{family}:x",
+            "harness": "codex",
+            "policy_decision": "allow",
+        }
+        for family in families
+    ]
+    result = sync.policy_simulation(receipts, [], bundle_version="1", bundle_hash="h", now="2026-04-11T00:00:00Z")
+    assert sorted(match["matcher_family"] for match in result["matches"]) == families
+
+
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
+def test_url_derivation_is_reused_for_the_same_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "https://hol.org/guard/receipts/sync"
+    first = sync.normalized_runtime_sessions_sync_url(url)
+
+    def refuse(kind: str, args: object, guard_home: object = None) -> dict[str, Any]:
+        raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+    monkeypatch.setattr(sync, "native_runner_authority", refuse)
+    assert sync.normalized_runtime_sessions_sync_url(url) == first

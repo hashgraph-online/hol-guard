@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from typing import Any
 
 from ..native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
@@ -44,11 +45,20 @@ def _field(payload: Mapping[str, Any], key: str, kind: type | tuple[type, ...]) 
     return value
 
 
-def sync_url(route: str, url: str, **parameters: object) -> str:
-    """The endpoint ``route`` derives from the configured sync URL."""
-
-    payload = native_runner_authority("sync_url", {"route": route, "url": url, **parameters})
+@lru_cache(maxsize=256)
+def _derived_url(route: str, url: str, parameters: tuple[tuple[str, object], ...]) -> str:
+    payload = native_runner_authority("sync_url", {"route": route, "url": url, **dict(parameters)})
     return str(_field(payload, "url", str))
+
+
+def sync_url(route: str, url: str, **parameters: object) -> str:
+    """The endpoint ``route`` derives from the configured sync URL.
+
+    The derivation is a pure function of its inputs, so a resident answer is
+    reused for the same inputs; a failed round trip is never cached.
+    """
+
+    return _derived_url(route, url, tuple(sorted(parameters.items())))
 
 
 def normalized_receipts_sync_url(url: str) -> str:
@@ -89,6 +99,19 @@ def _slim_event(event: object) -> object:
     return {"event_name": event.get("event_name"), "occurred_at": event.get("occurred_at"), "payload": slim_payload}
 
 
+_METRIC_PAYLOAD_KEYS = ("changed_fields", "install_kind", "risk_signals")
+
+
+def _slim_metric_event(event: object) -> object:
+    if not isinstance(event, Mapping):
+        return None
+    payload = event.get("payload")
+    slim_payload: object = payload
+    if isinstance(payload, Mapping):
+        slim_payload = {key: payload[key] for key in _METRIC_PAYLOAD_KEYS if key in payload}
+    return {"event_name": event.get("event_name"), "payload": slim_payload}
+
+
 def pain_signal_batch(
     events: Sequence[object], warn_counts: Mapping[tuple[str, str], int]
 ) -> tuple[list[dict[str, object]], dict[tuple[str, str], int]]:
@@ -116,7 +139,7 @@ def pain_signal_batch(
 def value_metrics(events: Sequence[object], now: str) -> tuple[dict[str, dict[str, object]], dict[str, object]]:
     """Local value metrics and the weekly digest derived from stored events."""
 
-    slim = [_slim_event(event) for event in events]
+    slim = [_slim_metric_event(event) for event in events]
     payload = native_runner_authority("value_metrics", {"events": slim, "now": now})
     return _field(payload, "metrics", dict), _field(payload, "weekly_digest", dict)
 
