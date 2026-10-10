@@ -233,6 +233,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
             }
+            ResidentOperationV1::CompoundGitInspection(request) => {
+                crate::compound_git_inspection_op::evaluate_compound_git_inspection_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::GitExecutionSafety(request) => {
                 crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }
@@ -314,6 +319,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
+            // Static catalog metadata only: no policy store, guard home or
+            // effective-control state is read (ADR 0014).
+            ResidentOperationV1::CatalogRead(request) => encode_response(
+                &guard_command::catalog_read_model::evaluate_catalog_read(&request),
+            ),
             ResidentOperationV1::DataFlowAnalyze(request) => {
                 crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
             }
@@ -394,3 +404,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "catalog_read_op_tests.rs"]
+mod catalog_read_op_tests;

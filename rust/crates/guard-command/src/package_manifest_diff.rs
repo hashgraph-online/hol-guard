@@ -147,7 +147,7 @@ fn py_lstrip(text: &str) -> &str {
 
 /// Python `str.splitlines()` — splits on \n \r \r\n \v \f \x1c-\x1e \x85
 /// \u{2028} \u{2029}; Rust `str::lines` only handles \n and \r\n.
-fn py_splitlines(text: &str) -> Vec<&str> {
+pub(crate) fn py_splitlines(text: &str) -> Vec<&str> {
     let mut lines = Vec::new();
     let bytes = text.as_bytes();
     let mut start = 0usize;
@@ -384,6 +384,22 @@ pub fn parse_manifest_dependencies(
     }
     let deadline = Deadline::from_ms(deadline_ms);
     dependency_map_for_path(path, text, &deadline).unwrap_or_default()
+}
+
+/// Result-returning variant of `parse_manifest_dependencies` for callers that
+/// must tell a parse failure from an empty manifest (complete-or-fail lockfile
+/// parsing). The error is the lockfile `error_reason` the Python evaluator
+/// reports: `deadline_exceeded` or `parse_error`.
+pub fn try_dependency_map_for_path(
+    path: &str,
+    text: &str,
+    deadline_ms: u64,
+) -> Result<BTreeMap<String, String>, &'static str> {
+    let deadline = Deadline::from_ms(deadline_ms);
+    dependency_map_for_path(path, text, &deadline).map_err(|failure| match failure {
+        ParseFailure::Deadline => "deadline_exceeded",
+        ParseFailure::Error => "parse_error",
+    })
 }
 
 // ---------------------------------------------------------------------------

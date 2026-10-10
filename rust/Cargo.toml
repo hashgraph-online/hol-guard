@@ -1,6 +1,7 @@
 [workspace]
 exclude = ["crates/guard-command-build"]
 members = [
+    "crates/guard-alloc-probe",
     "crates/guard-archive",
     "crates/guard-command",
     "crates/guard-contracts",

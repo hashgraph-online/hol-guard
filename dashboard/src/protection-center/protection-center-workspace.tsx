@@ -14,21 +14,22 @@ import {
   applyExtensionMutation,
   ExtensionControlApiError,
   fetchEffectiveExtensionControls,
-  fetchExtensionCatalog,
   previewExtensionMutation,
   recoverExtensionControlAuthority,
   type EffectiveExtensionControls,
-  type ExtensionCatalogItem,
-  type ExtensionCatalogResponse,
-  type ExtensionMutationPayload,
+  type ExtensionCatalogSummary,
 } from "../extension-controls-api";
+import { loadCatalogReadModel, type CatalogReadModel } from "../extension-catalog-v2";
+import { CatalogExtensionDetail } from "./catalog-extension-detail";
+import { buildExtensionMutation, randomToken } from "./extension-mutation";
+
+export { buildExtensionMutation };
 import type { GuardRuntimeSnapshot } from "../guard-types";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { protectionCenterLoadError } from "./copy/protection-copy";
 import { ProtectionAuthorityNotice } from "./components/protection-authority-notice";
 import { ExtensionsOverview } from "./extensions-overview";
 import { pushExtensionHistory, replaceExtensionHistory } from "./extension-navigation";
-import { ProtectionModuleDetail } from "./protection-module-detail";
 import {
   ExtensionsLoadError,
   ExtensionsLoadingState,
@@ -39,7 +40,7 @@ import { ReviewModal, type ProtectionPendingChange } from "./protection-change-r
 type LoadState =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "ready"; catalog: ExtensionCatalogResponse; effective: EffectiveExtensionControls };
+  | { kind: "ready"; catalog: CatalogReadModel; effective: EffectiveExtensionControls };
 type RouteState = { route: ProtectionRoute; detail: ExtensionDetailUrlState };
 
 const DEFAULT_AUTHORITY_RECOVERY_COMMAND = "hol-guard command controls recover-authority";
@@ -86,51 +87,6 @@ export function authorityActionErrorMessage(
     : `Guard could not complete this action. Local protection continues. Try again, or run \`${command}\` in ${terminalName}.`;
 }
 
-function randomToken(): string {
-  return crypto.randomUUID().replaceAll("-", "");
-}
-
-export function buildExtensionMutation(
-  state: Extract<LoadState, { kind: "ready" }>,
-  change: ProtectionPendingChange,
-): ExtensionMutationPayload {
-  const layers = structuredClone(state.effective.layers);
-  let local = layers.find((layer) => layer.kind === "local-admin");
-  if (!local) {
-    local = {
-      schema_version: "1.0.0",
-      kind: "local-admin",
-      catalog_digest: state.catalog.catalog_digest,
-      global_lockdown: false,
-      controls: [],
-    };
-    layers.push(local);
-  }
-  if ("globalLockdown" in change) {
-    local.global_lockdown = change.globalLockdown;
-  } else {
-    local.controls = local.controls.filter(
-      (control) => control.target_kind !== "extension" || control.target_id !== change.extension.extension_id,
-    );
-    local.controls.push({
-      target_kind: "extension",
-      target_id: change.extension.extension_id,
-      state: change.enabled ? "enabled" : "disabled",
-    });
-    local.controls.sort((left, right) =>
-      `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`),
-    );
-  }
-  return {
-    previous_revision: state.effective.revision,
-    catalog_digest: state.catalog.catalog_digest,
-    layers,
-    actor_id: "dashboard-admin",
-    idempotency_key: randomToken(),
-    nonce: randomToken(),
-  };
-}
-
 export function ProtectionCenterWorkspace(props: {
   runtime?: GuardRuntimeSnapshot | null;
   onRefreshRuntime: () => Promise<GuardRuntimeSnapshot | null>;
@@ -151,6 +107,7 @@ export function ProtectionCenterWorkspace(props: {
   const aliasRedirected = useRef<string | null>(null);
   const overviewKeepAlive = useRef(false);
   const loadInFlightRef = useRef<Promise<EffectiveExtensionControls | null> | null>(null);
+  const catalogRef = useRef<CatalogReadModel | null>(null);
   const refreshInFlightRef = useRef<Promise<void> | null>(null);
   const localClis = useLocalCliCatalog();
   const load = useCallback((): Promise<EffectiveExtensionControls | null> => {
@@ -160,8 +117,12 @@ export function ProtectionCenterWorkspace(props: {
       // flight so an applied change's confirmation toast survives the reload.
       setState((current) => (current.kind === "ready" ? current : { kind: "loading" }));
       try {
-        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        const [fresh, effective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+        if (fresh.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        // An unchanged catalog keeps its model (and loaded details); effective state always refreshes.
+        const previous = catalogRef.current;
+        const catalog = previous?.catalog_digest === fresh.catalog_digest && previous.protocol === fresh.protocol ? previous : fresh;
+        catalogRef.current = catalog;
         setState({ kind: "ready", catalog, effective });
         return effective;
       } catch (error) {
@@ -195,7 +156,7 @@ export function ProtectionCenterWorkspace(props: {
     void localClis.discover();
   }, [localClis.discover, routeState.route.kind]);
 
-  const catalogExtensions = useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
+  const catalogExtensions = useMemo(() => state.kind === "ready" ? state.catalog.extensions : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
   const canonicalSelected = useMemo(() => canonicalExtensionId(catalogExtensions, requestedExtensionId), [catalogExtensions, requestedExtensionId]);
   const selectedExtension = useMemo(() => catalogExtensions.find((item) => item.extension_id === canonicalSelected) ?? null, [catalogExtensions, canonicalSelected]);
@@ -210,7 +171,7 @@ export function ProtectionCenterWorkspace(props: {
     setRouteState({ route: { kind: "detail", extensionId: canonicalSelected }, detail: routeState.detail });
   }, [canonicalSelected, routeState, state]);
 
-  const openExtension = useCallback((extension: ExtensionCatalogItem) => {
+  const openExtension = useCallback((extension: ExtensionCatalogSummary) => {
     pushExtensionHistory(extensionDetailHref(extension.extension_id, DEFAULT_EXTENSION_DETAIL_URL_STATE));
     setRouteState({ route: { kind: "detail", extensionId: extension.extension_id }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
@@ -271,7 +232,7 @@ export function ProtectionCenterWorkspace(props: {
       .catch(() => setMutationError("Guard could not load local approval settings. Check the local connection and try again."));
   }, [resolveApprovalGate]);
 
-  const handleRequestExtensionChange = useCallback((extension: ExtensionCatalogItem, enabled: boolean) => {
+  const handleRequestExtensionChange = useCallback((extension: ExtensionCatalogSummary, enabled: boolean) => {
     requestChange({ extension: { extension_id: extension.extension_id, name: extension.name }, enabled });
   }, [requestChange]);
 
@@ -414,6 +375,7 @@ export function ProtectionCenterWorkspace(props: {
       {keepOverviewMounted && state.kind === "ready" && status ? (
         <ExtensionsOverview
           catalogExtensions={catalogExtensions}
+          readModel={state.catalog}
           effective={state.effective}
           localCliItems={localClis.data?.items ?? []}
           seededItems={localClis.data?.seeded_items ?? []}
@@ -472,8 +434,9 @@ export function ProtectionCenterWorkspace(props: {
         />
       ) : null}
       {showDetail && selectedExtension && state.kind === "ready" ? (
-        <ProtectionModuleDetail
-          extension={selectedExtension}
+        <CatalogExtensionDetail
+          readModel={state.catalog}
+          summary={selectedExtension}
           effective={state.effective}
           catalogDigest={state.catalog.catalog_digest}
           runtime={props.runtime}
