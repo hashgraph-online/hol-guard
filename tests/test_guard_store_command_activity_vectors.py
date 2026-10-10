@@ -168,4 +168,3 @@ def test_recorded_scenarios_replay_through_the_resident(scenario: dict[str, Any]
             assert json.loads(json.dumps(_json(_invoke(store, source)))) == step["result"], label
         expected.update(step["post_changed"])
         assert _dump(path) == expected, label
-
