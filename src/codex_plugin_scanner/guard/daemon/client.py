@@ -385,6 +385,12 @@ class GuardSurfaceDaemonClient:
             if time.monotonic() >= deadline:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out")
             if not chunk:
+                # ``HTTPResponse.read1`` returns ``b""`` at an early EOF instead of
+                # raising, so a short Content-Length body would otherwise be
+                # returned as if complete and skip the caller's truncation retry.
+                missing = getattr(response, "length", None)
+                if type(missing) is int and missing > 0:
+                    raise http.client.IncompleteRead(b"".join(chunks), missing)
                 break
             total_bytes += len(chunk)
             if total_bytes > max_bytes:
