@@ -31,6 +31,9 @@ mod claim_reuse_binding_tests;
 mod claim_reuse_vectors_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
+mod cloud_receipt_payload;
+#[cfg(test)]
+mod cloud_receipt_vectors_tests;
 mod cloud_request_payload;
 mod cloud_request_snapshot;
 mod cloud_request_text;
@@ -67,6 +70,19 @@ mod daemon_handler_headless;
 mod daemon_handler_op;
 mod daemon_handler_policy;
 mod daemon_handler_requests;
+mod daemon_lifecycle_claims;
+mod daemon_lifecycle_command;
+mod daemon_lifecycle_decision_op;
+mod daemon_lifecycle_facts;
+mod daemon_lifecycle_inventory;
+mod daemon_lifecycle_malformed;
+mod daemon_lifecycle_ports;
+mod daemon_lifecycle_state;
+mod daemon_lifecycle_text;
+#[cfg(test)]
+mod daemon_lifecycle_unit_tests;
+#[cfg(test)]
+mod daemon_lifecycle_vectors_tests;
 mod daemon_policy_authority;
 mod daemon_route_op;
 mod daemon_route_paths;
@@ -165,6 +181,7 @@ mod oci_bundle_op;
 #[cfg(test)]
 mod oci_bundle_vectors_tests;
 mod oci_path;
+mod omp_yield_input_scan;
 mod oneshot;
 mod package_authority_config;
 mod package_authority_op;

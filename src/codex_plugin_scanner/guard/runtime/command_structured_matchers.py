@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import final
 
-from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand, CommandSegment
 
 
@@ -230,35 +230,6 @@ class EnvironmentNameMatcher:
                 )
             )
         return tuple(evidence)
-
-
-def structured_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[str], frozenset[str]] | None:
-    """Return conservative registry hints for matchers in this module."""
-
-    from .command_operand_matchers import operand_matcher_index_hints
-
-    operand_hints = operand_matcher_index_hints(matcher)
-    if operand_hints is not None:
-        return operand_hints
-    from .command_framework_extensions import framework_matcher_index_hints
-
-    framework_hints = framework_matcher_index_hints(matcher)
-    if framework_hints is not None:
-        return framework_hints
-    from .command_tui_runner_extensions import tui_runner_matcher_index_hints
-
-    tui_runner_hints = tui_runner_matcher_index_hints(matcher)
-    if tui_runner_hints is not None:
-        return tui_runner_hints
-    if isinstance(matcher, LeadingOperandCountMatcher):
-        return matcher.executables, frozenset()
-    if isinstance(matcher, SubcommandOperandPrefixMatcher):
-        return matcher.executables, frozenset(matcher.subcommands)
-    if isinstance(matcher, OptionValueKeyMatcher):
-        return matcher.executables, matcher.option_names
-    if isinstance(matcher, EnvironmentNameMatcher):
-        return matcher.executables, matcher.environment_names
-    return None
 
 
 def _segment_matches_executable(segment: CommandSegment, executables: frozenset[str]) -> bool:

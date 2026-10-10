@@ -1901,6 +1901,7 @@ class TestGuardSurfaceServer:
         monkeypatch,
     ) -> None:
         monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
+        monkeypatch.setattr(daemon_manager_module, "_inventory_has_competing_daemon", lambda _inventory: False)
         monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
         monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
         store = GuardStore(tmp_path / "guard-home")

@@ -195,26 +195,3 @@ def harness_capability_report(
         os_arch=os_arch,
         local_hosted=local_hosted,
     )
-
-
-def capability_report_for(
-    harness: str,
-    *,
-    build_id: str = "unknown",
-    commit: str = "unknown",
-    host_version_scope: str | None = None,
-    os_arch: str | None = None,
-    local_hosted: str | None = None,
-) -> HarnessCapabilityReport:
-    """Return one event report, including an explicit row for unknown hosts."""
-
-    from .capability_report import capability_report_for as build_for_host
-
-    return build_for_host(
-        harness,
-        build_id=build_id,
-        commit=commit,
-        host_version_scope=host_version_scope,
-        os_arch=os_arch,
-        local_hosted=local_hosted,
-    )

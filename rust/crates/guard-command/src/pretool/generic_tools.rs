@@ -230,6 +230,11 @@ pub(super) fn infer_action_type(
     if is_prompt_tool(tool) {
         return (PreToolActionTypeV1::Prompt, PreToolOperationV1::Submit);
     }
+    // Result reports need an explicit harness proof; referenced paths do not
+    // turn an unproved report into an automatically allowed file read.
+    if tool == "yield" {
+        return (PreToolActionTypeV1::Harness, PreToolOperationV1::Set);
+    }
     if is_harness_tool(tool) {
         let operation = if tool_matches(tool, &["stop", "end", "close"]) {
             PreToolOperationV1::Stop

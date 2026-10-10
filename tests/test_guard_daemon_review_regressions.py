@@ -199,7 +199,8 @@ def test_recovery_scheduler_contains_worker_when_reservation_bind_raises(
     )
 
     assert process.reaped is True
-    assert signals == [(4243, daemon_manager.signal.SIGTERM)]
+    # The native resident (not under test here) shares the patched ``os.killpg``.
+    assert [signal for signal in signals if signal[0] == FakeProcess.pid] == [(4243, daemon_manager.signal.SIGTERM)]
     assert daemon_manager._load_guard_daemon_recovery_reservation(guard_home) == {}  # pyright: ignore[reportPrivateUsage]
 
 
