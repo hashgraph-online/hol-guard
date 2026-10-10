@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import cast
 
 # ruff: noqa: F403,F405
+from .managed_install_revision import bump_managed_install_revision
 from .store_base import *
 from .store_receipt_rollups import reconcile_dirty_receipt_rollups, reconcile_pending_receipt_events
 
@@ -25,9 +26,12 @@ class StoreCloudEventsMixin:
         from .codex_install_transaction import codex_install_transaction
         from .runtime_transition import assert_transition_mutation_allowed
 
-        with codex_install_transaction(self.guard_home, self.path, actor="managed-install-record"):
-            assert_transition_mutation_allowed(self.guard_home)
-            self._set_managed_install_owned(harness, active, workspace, manifest, now)
+        try:
+            with codex_install_transaction(self.guard_home, self.path, actor="managed-install-record"):
+                assert_transition_mutation_allowed(self.guard_home)
+                self._set_managed_install_owned(harness, active, workspace, manifest, now)
+        finally:
+            bump_managed_install_revision()
 
     def _set_managed_install_owned(
         self, harness: str, active: bool, workspace: str | None, manifest: dict[str, object], now: str
@@ -47,6 +51,17 @@ class StoreCloudEventsMixin:
             )
 
     def compare_and_set_managed_installs(
+        self,
+        changes: Sequence[tuple[str, tuple[dict[str, object] | None, ...], dict[str, object] | None]],
+        *,
+        before_mutation: Callable[[], None],
+    ) -> bool:
+        try:
+            return self._compare_and_set_managed_installs(changes, before_mutation=before_mutation)
+        finally:
+            bump_managed_install_revision()
+
+    def _compare_and_set_managed_installs(
         self,
         changes: Sequence[tuple[str, tuple[dict[str, object] | None, ...], dict[str, object] | None]],
         *,
