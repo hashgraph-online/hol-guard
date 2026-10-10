@@ -109,7 +109,16 @@ fn serve(mut stream: TcpStream, spec: &Value, seen: &Seen) {
         .unwrap_or("")
         .to_owned();
     let body: Value = serde_json::from_slice(&buffer[header_end..]).unwrap_or(Value::Null);
-    seen.lock().expect("seen").push((path, body));
+    let index = {
+        let mut seen = seen.lock().expect("seen");
+        seen.push((path, body));
+        seen.len() - 1
+    };
+    // `responses` scripts one reply per request; the last one repeats.
+    let spec = spec["responses"]
+        .as_array()
+        .and_then(|replies| replies.get(index).or_else(|| replies.last()))
+        .unwrap_or(spec);
     if spec["mode"] == "dropped" {
         return;
     }
@@ -178,6 +187,18 @@ fn case_dir(name: &str) -> PathBuf {
 
 fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
     let name = case["name"].as_str().expect("name");
+    let (payload, sent) = evaluate_case(vectors, case)?;
+    if payload != case["expect"] {
+        return Err(format!(
+            "{name}: evaluation differs\n{}",
+            diff(&case["expect"], &payload)
+        ));
+    }
+    check_cloud_requests(name, case, &sent)
+}
+
+fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, Value)>), String> {
+    let name = case["name"].as_str().expect("name");
     let root = case_dir(name);
     let db_path = root.join("home").join("guard.db");
     seed_store(&db_path, vectors, case);
@@ -202,6 +223,7 @@ fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
         runtime_private_metadata: None,
         sync_auth_context_override: None,
         package_entitlement_override: None,
+        registry_metadata_override: None,
         saved_policy_probe: None,
     };
     if let Some(server) = &server {
@@ -246,13 +268,10 @@ fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
             result.status, result.code
         ));
     }
-    let payload = result.payload.unwrap_or(Value::Null);
-    if payload != case["expect"] {
-        return Err(format!(
-            "{name}: evaluation differs\n{}",
-            diff(&case["expect"], &payload)
-        ));
-    }
+    Ok((result.payload.unwrap_or(Value::Null), sent))
+}
+
+fn check_cloud_requests(name: &str, case: &Value, sent: &[(String, Value)]) -> Result<(), String> {
     let bodies: Vec<&Value> = sent.iter().map(|(_, body)| body).collect();
     let recorded: Vec<&Value> = case["cloud_requests"]
         .as_array()
@@ -322,4 +341,27 @@ fn resident_cloud_evaluation_matches_recorded_python_vectors() {
         std::fs::write(path, &report).expect("write report");
     }
     assert!(failures.is_empty(), "{} case(s) differ", failures.len());
+}
+
+#[test]
+fn refreshed_retry_with_invalid_payload_needs_review_not_a_stale_401() {
+    let vectors: Value = serde_json::from_str(VECTORS).expect("vectors parse");
+    let mut case = vectors["cases"]
+        .as_array()
+        .expect("cases")
+        .iter()
+        .find(|case| case["name"] == "cloud_http_401_paid")
+        .expect("401 case")
+        .clone();
+    // The first POST is rejected with 401; the forced-refresh retry answers
+    // with a body that is not a JSON object.
+    case["network"] = json!({"responses": [
+        {"mode": "http", "status": 401, "payload": {}},
+        {"mode": "http", "status": 200, "payload": []},
+    ]});
+    let (payload, sent) = evaluate_case(&vectors, &case).expect("evaluates");
+    assert_eq!(sent.len(), 2, "401 then one refreshed retry");
+    let reason = &payload["packages"][0]["reasons"][0];
+    assert_eq!(reason["code"], "cloud_validation_error");
+    assert_eq!(payload["decision"], "block");
 }

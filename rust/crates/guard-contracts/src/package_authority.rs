@@ -124,6 +124,14 @@ pub struct SupplyChainEvalRequestV1 {
     /// Python-only resolver the resident never runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_entitlement_override: Option<Value>,
+    /// Test-only public-registry metadata fixtures, keyed by the exact
+    /// metadata URL the resolver requests (`https://registry.npmjs.org/<name>`
+    /// or `https://pypi.org/pypi/<name>/json`) with the registry JSON object
+    /// as the value (`null` or an absent key means unresolved). Replaces the
+    /// network fetch so range-resolution tests are hermetic; the resolver's
+    /// URL selection and version choice still run for real.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub registry_metadata_override: Option<Value>,
     /// Saved-policy lookup the caller hydrated after the resident answered
     /// `saved_policy_probe_required` for a cached Cloud validation error.
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -1,5 +1,32 @@
 use super::*;
 
+pub(super) fn optional_value(value: Option<String>) -> Value {
+    value.map_or(Value::Null, Value::String)
+}
+
+/// Fields shared by every direct package result built from a target; both the
+/// target-only and the cached-bundle builders start from this one definition.
+pub(super) fn direct_result_base(target: &Map<String, Value>) -> Map<String, Value> {
+    let mut result = Map::new();
+    result.insert("direct".into(), Value::Bool(true));
+    result.insert("dependencyPath".into(), Value::Null);
+    result.insert(
+        "packageManager".into(),
+        Value::String(
+            optional_string(target.get("package_manager")).unwrap_or_else(|| "npm".to_owned()),
+        ),
+    );
+    result.insert(
+        "redactedCommand".into(),
+        optional_value(optional_string(target.get("redacted_command"))),
+    );
+    result.insert(
+        "alias".into(),
+        optional_value(optional_string(target.get("alias"))),
+    );
+    result
+}
+
 #[allow(dead_code)]
 pub(super) fn package_target_result(
     target: &Map<String, Value>,
@@ -7,7 +34,7 @@ pub(super) fn package_target_result(
     reasons: Vec<Map<String, Value>>,
     rule_id: Option<&str>,
 ) -> Map<String, Value> {
-    let mut r = Map::new();
+    let mut r = direct_result_base(target);
     r.insert("decision".to_string(), Value::String(decision.to_string()));
     r.insert(
         "ecosystem".to_string(),
@@ -36,26 +63,6 @@ pub(super) fn package_target_result(
     );
     r.insert("recommendedFixVersion".to_string(), Value::Null);
     r.insert("riskScore".to_string(), Value::Null);
-    r.insert("direct".to_string(), Value::Bool(true));
-    r.insert("dependencyPath".to_string(), Value::Null);
-    r.insert(
-        "packageManager".to_string(),
-        optional_string(target.get("package_manager"))
-            .map(Value::String)
-            .unwrap_or_else(|| Value::String("npm".into())),
-    );
-    r.insert(
-        "redactedCommand".to_string(),
-        optional_string(target.get("redacted_command"))
-            .map(Value::String)
-            .unwrap_or(Value::Null),
-    );
-    r.insert(
-        "alias".to_string(),
-        optional_string(target.get("alias"))
-            .map(Value::String)
-            .unwrap_or(Value::Null),
-    );
     if let Some(rid) = rule_id {
         r.insert("ruleId".to_string(), Value::String(rid.to_string()));
     }

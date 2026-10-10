@@ -150,3 +150,13 @@ pub trait ConfigLoaderApi {
         require_canonical_workspace: bool,
     ) -> EvalResult<GuardConfig>;
 }
+
+/// Public package-registry metadata seam
+/// (`supply_chain_package_services._npm_registry_resolved_version` /
+/// `_pypi_registry_resolved_version` transport half).
+pub trait RegistryMetadataApi {
+    /// GET `url` with the given `Accept` header and return the top-level JSON
+    /// object, or `None` for any failure (timeout, HTTP error, non-object or
+    /// undecodable body). The caller owns URL selection and version choice.
+    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<Map<String, Value>>;
+}

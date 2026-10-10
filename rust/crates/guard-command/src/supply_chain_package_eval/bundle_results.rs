@@ -169,32 +169,6 @@ fn bundle_reason_message(
     }
 }
 
-fn optional_value(value: Option<String>) -> Value {
-    value.map_or(Value::Null, Value::String)
-}
-
-/// Fields shared by every direct package result built from a target.
-fn direct_result_base(target: &Map<String, Value>) -> Map<String, Value> {
-    let mut result = Map::new();
-    result.insert("direct".into(), Value::Bool(true));
-    result.insert("dependencyPath".into(), Value::Null);
-    result.insert(
-        "packageManager".into(),
-        Value::String(
-            optional_string(target.get("package_manager")).unwrap_or_else(|| "npm".to_owned()),
-        ),
-    );
-    result.insert(
-        "redactedCommand".into(),
-        optional_value(optional_string(target.get("redacted_command"))),
-    );
-    result.insert(
-        "alias".into(),
-        optional_value(optional_string(target.get("alias"))),
-    );
-    result
-}
-
 /// `_bundle_package_result`.
 pub(super) fn bundle_package_result(
     target: &Map<String, Value>,

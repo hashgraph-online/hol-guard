@@ -696,7 +696,7 @@ fn sync_retry_poll_interval_seconds() -> f64 {
 
 /// `runner.py:801` — `_SYNC_RETRYABLE_GATEWAY_STATUS_CODES`, including the two
 /// Cloudflare codes (522, 524) whose omission stops a bounded retry early.
-fn status_is_retryable_gateway(status: u16) -> bool {
+pub(crate) fn status_is_retryable_gateway(status: u16) -> bool {
     matches!(status, 502..=504 | 522 | 524)
 }
 
@@ -870,11 +870,11 @@ fn http_error_reason_message(
     }
 }
 
-struct SyncResponse {
-    body_bytes: Vec<u8>,
+pub(crate) struct SyncResponse {
+    pub(crate) body_bytes: Vec<u8>,
 }
 
-enum SyncHttpError {
+pub(crate) enum SyncHttpError {
     Http {
         status: u16,
         headers: BTreeMap<String, String>,
@@ -888,13 +888,24 @@ fn execute_request(
     request: &GuardSyncRequest,
     timeout_seconds: f64,
 ) -> Result<SyncResponse, SyncHttpError> {
+    execute_request_following(request, timeout_seconds, 0)
+}
+
+/// One HTTP exchange with an explicit redirect budget. Guard Cloud requests
+/// carry credentials and never follow redirects (budget 0); unauthenticated
+/// public-registry reads follow them like `urllib` does.
+pub(crate) fn execute_request_following(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    max_redirects: u32,
+) -> Result<SyncResponse, SyncHttpError> {
     let config = ureq::config::Config::builder()
         .timeout_global(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .timeout_connect(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .timeout_recv_response(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .timeout_recv_body(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .http_status_as_error(false)
-        .max_redirects(0)
+        .max_redirects(max_redirects)
         .build();
     let agent = ureq::Agent::with_parts(
         config,

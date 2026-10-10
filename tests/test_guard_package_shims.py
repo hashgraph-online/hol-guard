@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import native_supply_chain_eval as native_supply_chain_eval_module
 from codex_plugin_scanner.guard import shims as guard_shims_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
@@ -37,7 +38,6 @@ from codex_plugin_scanner.guard.package_shim_gate import (
 from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from codex_plugin_scanner.guard.protect import build_protect_payload
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1725,9 +1725,9 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
     )
     try:
         monkeypatch.setattr(
-            package_services,
-            "_registry_resolved_target_version",
-            lambda **_kwargs: "1.2.3",
+            native_supply_chain_eval_module,
+            "_test_registry_metadata_override",
+            {"https://registry.npmjs.org/%40openai%2Fcodex": {"versions": {"1.2.3": {}}}},
         )
         _seed_bundle_cache_only(
             home_dir=home_dir,

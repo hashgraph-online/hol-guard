@@ -42,6 +42,7 @@ pub struct SupplyChainEvalDeps<'a> {
     pub store_extras: &'a dyn StoreExtrasApi,
     pub entitlement: &'a dyn EntitlementRefreshApi,
     pub config: &'a dyn ConfigLoaderApi,
+    pub registry: &'a dyn RegistryMetadataApi,
     pub saved_policy: &'a SavedPolicyProbe,
 }
 

@@ -290,7 +290,9 @@ impl CloudContext<'_> {
             Err(error) => match classify_post_failure(error) {
                 PostFailure::Http(retry_status) => Fetched::Status(retry_status),
                 PostFailure::Os(error) => Fetched::Done(Box::new(self.handle_os_error(&error))),
-                PostFailure::Invalid => Fetched::Status(status),
+                // A reply the refreshed request could not parse is an invalid
+                // Cloud response (review), not the stale 401 that triggered it.
+                PostFailure::Invalid => Fetched::Done(Box::new(self.invalid_response())),
             },
         }
     }

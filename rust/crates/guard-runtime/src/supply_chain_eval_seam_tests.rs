@@ -20,6 +20,7 @@ fn request() -> SupplyChainEvalRequestV1 {
         runtime_private_metadata: None,
         sync_auth_context_override: None,
         package_entitlement_override: None,
+        registry_metadata_override: None,
         saved_policy_probe: None,
     }
 }
@@ -59,6 +60,63 @@ fn unknown_wrongly_typed_or_oversized_seams_are_refused() {
         None
     ));
     assert!(refused(None, Some(json!({"reason": oversized}))));
+}
+
+#[test]
+fn diagnostics_alone_never_enable_the_test_seams() {
+    let only = |wanted: &'static str| {
+        move |name: &str| (name == wanted).then(|| std::ffi::OsString::from("1"))
+    };
+    assert!(!test_seams_enabled_from(only(
+        "HOL_GUARD_NATIVE_DIAGNOSTIC"
+    )));
+    assert!(!test_seams_enabled_from(|_| None));
+    assert!(test_seams_enabled_from(only(
+        "HOL_GUARD_RESIDENT_TEST_SEAMS"
+    )));
+}
+
+#[test]
+fn entitlement_override_requires_known_keys_and_types() {
+    let valid = |entitlement: Value| {
+        let mut request = request();
+        request.package_entitlement_override = Some(entitlement);
+        test_seam_overrides_are_valid(&request)
+    };
+    assert!(valid(json!({
+        "allowed": false,
+        "reason": "paid_guard_cloud_required",
+        "tier": "free",
+        "upgrade_cta": null,
+    })));
+    assert!(valid(json!({"upgrade_cta": "https://hol.org/upgrade"})));
+    assert!(!valid(json!({"allowed": "no"})));
+    assert!(!valid(json!({"reason": 7})));
+    assert!(!valid(json!({"tier": null})));
+    assert!(!valid(json!({"upgrade_cta": 1})));
+    assert!(!valid(json!({"unexpected": true})));
+}
+
+#[test]
+fn registry_override_requires_registry_urls_and_object_or_null_values() {
+    let valid = |fixtures: Value| {
+        let mut request = request();
+        request.registry_metadata_override = Some(fixtures);
+        test_seam_overrides_are_valid(&request)
+    };
+    assert!(valid(json!({
+        "https://registry.npmjs.org/left-pad": {"versions": {"1.0.0": {}}},
+        "https://pypi.org/pypi/requests/json": null,
+    })));
+    assert!(!valid(json!({"https://evil.example/left-pad": {}})));
+    assert!(!valid(
+        json!({"https://registry.npmjs.org/left-pad": "1.0.0"})
+    ));
+    assert!(!valid(json!(["https://registry.npmjs.org/left-pad"])));
+    let oversized = "x".repeat(TEST_SEAM_MAX_BYTES + 1);
+    assert!(!valid(
+        json!({"https://registry.npmjs.org/p": {"v": oversized}})
+    ));
 }
 
 fn probe_of(decision: Option<Value>) -> Option<SavedPolicyProbe> {

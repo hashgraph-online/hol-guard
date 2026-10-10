@@ -33,7 +33,7 @@ use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
-    PackageIdentityApi, RestrictedArchiveApi,
+    PackageIdentityApi, RegistryMetadataApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
     SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
@@ -1324,6 +1324,9 @@ impl SupplyChainStore for ResidentSupplyChainStore {
 ///     `EvalError::Validation`, which `evaluate_with_cloud` maps to the
 ///     `cloud_auth_error` fail-closed path (parity with
 ///     `GuardSyncAuthorizationExpiredError`).
+///   * `{"error": "trusted_session_failure"}` — surfaces as
+///     `EvalError::Internal`, the availability failure (for example a token
+///     refresh error) that every level routes to review.
 struct ResidentGuardSyncRunner {
     auth_context_override: Option<Map<String, Value>>,
 }
@@ -1340,6 +1343,12 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
             if override_ctx.get("error").and_then(Value::as_str) == Some("authorization_expired") {
                 return Err(EvalError::Validation(
                     "guard sync authorization expired (test override)".into(),
+                ));
+            }
+            if override_ctx.get("error").and_then(Value::as_str) == Some("trusted_session_failure")
+            {
+                return Err(EvalError::Internal(
+                    "guard sync trusted session unavailable (test override)".into(),
                 ));
             }
             let mut ctx = override_ctx.clone();
@@ -1622,7 +1631,7 @@ impl LockfileParseApi for ResidentLockfileParse {
 }
 
 /// Bundle seam — delegates to `guard_command::supply_chain_bundle` loaders.
-struct ResidentBundle;
+pub(crate) struct ResidentBundle;
 
 impl SupplyChainBundleApi for ResidentBundle {
     fn load_supply_chain_bundle_response(
@@ -1638,15 +1647,16 @@ impl SupplyChainBundleApi for ResidentBundle {
                 .as_object()
                 .cloned()
                 .unwrap_or_default(),
-            signed_bundle: resp.signed_bundle,
-            payload_hash: resp.payload_hash,
-            signature: resp.signature,
-            signature_algorithm: resp.signature_algorithm,
+            signed_bundle: resp.signed_bundle.clone(),
+            payload_hash: resp.payload_hash.clone(),
+            signature: resp.signature.clone(),
+            signature_algorithm: resp.signature_algorithm.clone(),
             verification_keys: resp
                 .verification_keys
                 .iter()
                 .filter_map(|k| k.to_dict().as_object().cloned())
                 .collect(),
+            parsed: Some(std::sync::Arc::new(resp)),
         })
     }
 
@@ -1669,11 +1679,19 @@ impl SupplyChainBundleApi for ResidentBundle {
         ecosystem: Option<&str>,
         now: Option<f64>,
     ) -> EvalResult<Map<String, Value>> {
-        let raw = response_to_bundle_json(response);
-        let typed = supply_chain_bundle::load_supply_chain_bundle_response(&raw)
-            .map_err(|e| EvalError::Validation(e.to_string()))?;
+        let reparsed;
+        let typed = match response.parsed.as_deref() {
+            Some(typed) => typed,
+            None => {
+                reparsed = supply_chain_bundle::load_supply_chain_bundle_response(
+                    &response_to_bundle_json(response),
+                )
+                .map_err(|e| EvalError::Validation(e.to_string()))?;
+                &reparsed
+            }
+        };
         let decision = supply_chain_bundle::evaluate_cached_supply_chain_bundle(
-            &typed,
+            typed,
             package_name,
             package_version,
             ecosystem,
@@ -2367,6 +2385,23 @@ impl EntitlementRefreshApi for ResidentEntitlementRefresh {
     }
 }
 
+/// Public-registry metadata for range resolution. The fetch is the shared
+/// plain-GET transport; the test override replaces it wholesale.
+struct ResidentRegistryMetadata {
+    metadata_override: Option<Map<String, Value>>,
+}
+
+impl RegistryMetadataApi for ResidentRegistryMetadata {
+    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<Map<String, Value>> {
+        match &self.metadata_override {
+            Some(fixtures) => fixtures.get(url).and_then(Value::as_object).cloned(),
+            None => {
+                guard_command::registry_metadata_transport::fetch_registry_metadata(url, accept)
+            }
+        }
+    }
+}
+
 /// Aggregate `SupplyChainEvalDeps` wired to the resident impls.
 pub struct ResidentEvalDeps {
     guard_sync: ResidentGuardSyncRunner,
@@ -2382,6 +2417,7 @@ pub struct ResidentEvalDeps {
     store_extras: ResidentStoreExtras,
     entitlement: ResidentEntitlementRefresh,
     config: ResidentConfigLoader,
+    registry: ResidentRegistryMetadata,
     saved_policy: SavedPolicyProbe,
 }
 
@@ -2419,8 +2455,18 @@ impl ResidentEvalDeps {
                 entitlement_override,
             },
             config: ResidentConfigLoader,
+            registry: ResidentRegistryMetadata {
+                metadata_override: None,
+            },
             saved_policy: SavedPolicyProbe::Unsupported,
         }
+    }
+
+    /// Test-only registry metadata fixtures keyed by metadata URL. With a map
+    /// present the network is never used: an absent key is unresolved.
+    pub fn with_registry_metadata_override(mut self, fixtures: Option<Map<String, Value>>) -> Self {
+        self.registry.metadata_override = fixtures;
+        self
     }
 
     /// The caller can hydrate a saved-policy lookup for a cached Cloud error.
@@ -2444,6 +2490,7 @@ impl ResidentEvalDeps {
             store_extras: &self.store_extras,
             entitlement: &self.entitlement,
             config: &self.config,
+            registry: &self.registry,
             saved_policy: &self.saved_policy,
         }
     }
@@ -2759,11 +2806,28 @@ pub(crate) fn evaluate_apply_stored_package_policy(
 pub(crate) fn evaluate_supply_chain_eval(
     request: &SupplyChainEvalRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let test_overrides = crate::resident_diagnostics::enabled();
+    let test_overrides = test_seams_enabled_from(|name| std::env::var_os(name));
     evaluate_supply_chain_eval_with_seams(request, test_overrides)
 }
 
+/// Dedicated opt-in for the supply-chain test seams. It is deliberately not
+/// `HOL_GUARD_NATIVE_DIAGNOSTIC`: diagnostics widen what the resident reports,
+/// and must never also let a request supply auth, entitlement, or registry
+/// fixtures. The resident only sees this variable when the spawner's isolated
+/// environment allowlist forwards it.
+pub(crate) const RESIDENT_TEST_SEAMS_ENV: &str = "HOL_GUARD_RESIDENT_TEST_SEAMS";
+
+/// Whether the supply-chain test seams are enabled for this resident. Only
+/// the dedicated variable counts; the lookup is injected so tests can prove
+/// diagnostics alone never enable them without mutating the process env.
+pub(crate) fn test_seams_enabled_from(lookup: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
+    lookup(RESIDENT_TEST_SEAMS_ENV).is_some()
+}
+
 const TEST_SEAM_MAX_BYTES: usize = 8192;
+const TEST_ENTITLEMENT_KEYS: [&str; 4] = ["allowed", "reason", "tier", "upgrade_cta"];
+const TEST_REGISTRY_URL_PREFIXES: [&str; 2] =
+    ["https://registry.npmjs.org/", "https://pypi.org/pypi/"];
 const TEST_AUTH_KEYS: [&str; 5] = [
     "sync_url",
     "access_token",
@@ -2794,11 +2858,38 @@ fn test_seam_overrides_are_valid(request: &SupplyChainEvalRequestV1) -> bool {
                     })
                 })
         });
-    let entitlement_valid = request
-        .package_entitlement_override
+    let entitlement_valid =
+        request
+            .package_entitlement_override
+            .as_ref()
+            .is_none_or(|entitlement| {
+                bounded(entitlement)
+                    && entitlement.as_object().is_some_and(|map| {
+                        map.iter().all(|(key, value)| {
+                            TEST_ENTITLEMENT_KEYS.contains(&key.as_str())
+                                && match key.as_str() {
+                                    "allowed" => value.is_boolean(),
+                                    "upgrade_cta" => value.is_null() || value.is_string(),
+                                    _ => value.is_string(),
+                                }
+                        })
+                    })
+            });
+    let registry_valid = request
+        .registry_metadata_override
         .as_ref()
-        .is_none_or(|entitlement| bounded(entitlement) && entitlement.is_object());
-    auth_valid && entitlement_valid
+        .is_none_or(|fixtures| {
+            bounded(fixtures)
+                && fixtures.as_object().is_some_and(|map| {
+                    map.iter().all(|(url, value)| {
+                        TEST_REGISTRY_URL_PREFIXES
+                            .iter()
+                            .any(|prefix| url.starts_with(prefix))
+                            && (value.is_null() || value.is_object())
+                    })
+                })
+        });
+    auth_valid && entitlement_valid && registry_valid
 }
 
 /// `evaluate_supply_chain_eval` with the test-seam gate injected, so in-process
@@ -2855,6 +2946,14 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
             .cloned(),
         request
             .package_entitlement_override
+            .as_ref()
+            .filter(|_| test_overrides)
+            .and_then(Value::as_object)
+            .cloned(),
+    )
+    .with_registry_metadata_override(
+        request
+            .registry_metadata_override
             .as_ref()
             .filter(|_| test_overrides)
             .and_then(Value::as_object)

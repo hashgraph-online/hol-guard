@@ -27,6 +27,8 @@ from .native_package_authority import (
     _resident_request,
     evaluation_from_native_payload,
 )
+from .native_runtime import native_runtime_status
+from .native_runtime_resilience import native_record_resident_failure
 
 SUPPLY_CHAIN_EVAL_FEATURE = "supply-chain-eval-v1"
 _EVAL_TIMEOUT_SECONDS = 25.0
@@ -52,14 +54,21 @@ _TEST_SEAM_MAX_BYTES = 8192
 _TEST_AUTH_KEYS = frozenset({"sync_url", "access_token", "issuer", "dpop_key_material", "error"})
 
 
+# Tests assign ``{metadata_url: registry_json_object | None}`` (monkeypatched) to
+# resolve package ranges without network. Only forwarded under pytest.
+_test_registry_metadata_override: dict[str, object] | None = None
+
+
 def _test_seam_overrides() -> dict[str, object]:
     """Return pytest-only Cloud seam overrides for the resident request.
 
     Production never forwards anything: the gate is ``PYTEST_CURRENT_TEST``, and
     the resident independently ignores the fields unless it was started with
-    ``HOL_GUARD_NATIVE_DIAGNOSTIC``. The values are the same hermetic Cloud
-    auth and entitlement fixtures the Python resolver honored, restricted to a
-    small known-key, bounded JSON shape.
+    the dedicated ``HOL_GUARD_RESIDENT_TEST_SEAMS`` opt-in (diagnostics alone
+    never enable them). The values are the same hermetic Cloud auth and
+    entitlement fixtures the Python resolver honored, plus public-registry
+    metadata fixtures keyed by metadata URL, restricted to a small known-key,
+    bounded JSON shape.
     """
 
     if not os.environ.get("PYTEST_CURRENT_TEST"):
@@ -91,6 +100,9 @@ def _test_seam_overrides() -> dict[str, object]:
             entitlement = None
         if isinstance(entitlement, dict):
             overrides["package_entitlement_override"] = entitlement
+    registry = _test_registry_metadata_override
+    if isinstance(registry, dict) and len(json.dumps(registry)) <= _TEST_SEAM_MAX_BYTES:
+        overrides["registry_metadata_override"] = dict(registry)
     return overrides
 
 
@@ -129,6 +141,13 @@ def _bound_response(response: object, request: dict[str, object], request_sha256
     return response
 
 
+def _record_unbound_answer(guard_home: Path) -> None:
+    """An answer not bound to this request is a resident failure, not a success."""
+    identity = native_runtime_status().identity
+    if identity is not None:
+        native_record_resident_failure(identity.sha256, guard_home, reason="native_supply_chain_eval_unbound")
+
+
 def _send_eval_request(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
     try:
         request_sha256 = "sha256:" + _canonical_request_sha256(request)
@@ -143,7 +162,15 @@ def _send_eval_request(request: dict[str, object], guard_home: Path) -> dict[str
         timeout_seconds=_EVAL_TIMEOUT_SECONDS,
         required_features=(SUPPLY_CHAIN_EVAL_FEATURE,),
     )
-    return _bound_response(response, request, request_sha256)
+    if response is None:
+        # `_resident_request` already recorded why (transport, schema) or that the
+        # resident refused; recording again would double-count one failure.
+        raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
+    try:
+        return _bound_response(response, request, request_sha256)
+    except NativeSupplyChainEvalError:
+        _record_unbound_answer(guard_home)
+        raise
 
 
 def native_supply_chain_eval_payload(
@@ -197,6 +224,7 @@ def native_supply_chain_eval_payload(
         raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
     payload = response.get("payload")
     if not _payload_is_complete(payload):
+        _record_unbound_answer(guard_home)
         raise NativeSupplyChainEvalError("Native package evaluation payload invalid")
     return payload
 

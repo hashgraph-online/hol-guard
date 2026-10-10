@@ -387,6 +387,8 @@ pub mod cloud_audit_sync;
 pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
+#[cfg(test)]
+mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;
 pub mod package_policy_override;
 pub mod package_protect_projection;
@@ -425,6 +427,7 @@ mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;
+pub mod registry_metadata_transport;
 pub mod restricted_archive;
 pub mod restricted_archive_transport;
 #[cfg(unix)]

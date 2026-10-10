@@ -142,7 +142,7 @@ pub(super) fn resolved_target_version(
     if let Some(exact) = exact_version(&requested) {
         return Some(exact);
     }
-    registry_resolved_target_version(deps, target)
+    registry_resolved_target_version(deps, target, &requested)
 }
 
 /// `_transitive_lockfile_decision`.

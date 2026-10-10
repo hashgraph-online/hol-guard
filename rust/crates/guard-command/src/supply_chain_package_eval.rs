@@ -90,9 +90,9 @@ pub use bundle_contracts::{
 #[path = "supply_chain_package_eval/runtime_contracts.rs"]
 mod runtime_contracts;
 pub use runtime_contracts::{
-    ConfigLoaderApi, EntitlementRefreshApi, NativeArchiveApi, RestrictedArchiveApi,
-    RestrictedArchiveDownload, RestrictedArchiveDownloadResult, RestrictedArchiveFailure,
-    StoreExtrasApi, WorkspaceIoApi,
+    ConfigLoaderApi, EntitlementRefreshApi, NativeArchiveApi, RegistryMetadataApi,
+    RestrictedArchiveApi, RestrictedArchiveDownload, RestrictedArchiveDownloadResult,
+    RestrictedArchiveFailure, StoreExtrasApi, WorkspaceIoApi,
 };
 #[path = "supply_chain_package_eval/evaluation.rs"]
 mod evaluation;
@@ -155,6 +155,9 @@ mod request_payload;
 use request_payload::{build_request_payload, workspace_fingerprint};
 #[path = "supply_chain_package_eval/package_resolution.rs"]
 mod package_resolution;
+/// Range -> concrete registry version, for resident replays of the recorded
+/// registry vectors.
+pub use package_resolution::registry_resolved_target_version as resolve_registry_target_version;
 use package_resolution::{
     exact_version, first_dict_item, hash_paths, lockfile_target_key, npm_source_spec,
     optional_string_map, registry_resolved_target_version, split_namespace_name, stable_hash,
@@ -169,7 +172,8 @@ use bundle_policy::{
 #[path = "supply_chain_package_eval/package_results.rs"]
 mod package_results;
 use package_results::{
-    heuristic_package_result, package_target_result, target_is_external_https_archive,
+    direct_result_base, heuristic_package_result, optional_value, package_target_result,
+    target_is_external_https_archive,
 };
 #[path = "supply_chain_package_eval/bundle_results.rs"]
 mod bundle_results;
