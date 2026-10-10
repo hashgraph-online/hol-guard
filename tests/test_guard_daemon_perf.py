@@ -118,6 +118,7 @@ class TestSlowDetectorThreshold:
         assert result.slow_detectors(threshold_ms=100) == ()
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 class TestLazyDetectorRegistry:
     def test_get_default_registry_returns_registry_instance(self) -> None:
         registry = _get_default_detector_registry()
@@ -149,6 +150,7 @@ class TestClientTimeoutConstants:
         assert pytest.approx(0.25) == _STATUS_REQUEST_TIMEOUT_S
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 class TestDoctorPerfPayload:
     def test_perf_payload_includes_all_detectors(self, tmp_path: Path) -> None:
         from codex_plugin_scanner.guard.cli.commands import _runtime_detector_perf_payload
@@ -180,6 +182,7 @@ class TestDoctorPerfPayload:
             assert item["slow"] == expected_slow
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 class TestProcessCountBound:
     """T620 — 100 safe hook evaluations must not spawn persistent threads."""
 

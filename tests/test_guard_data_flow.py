@@ -5,6 +5,8 @@ from __future__ import annotations
 from hashlib import sha256
 from typing import Final
 
+import pytest
+
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow import (
@@ -348,6 +350,7 @@ def test_data_flow_corpus_case_ids_are_unique() -> None:
     assert len(case_ids) == len(MALICIOUS_DATA_FLOW_CASES) + len(BENIGN_DATA_FLOW_CASES)
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path) -> None:
     failures: list[str] = []
     for command, expected_signal_id in MALICIOUS_DATA_FLOW_CASES:
@@ -360,6 +363,7 @@ def test_data_flow_exfiltration_detector_flags_malicious_shell_patterns(tmp_path
     assert not failures, "\n".join(failures)
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 def test_data_flow_exfiltration_detector_ignores_benign_shell_patterns(tmp_path) -> None:
     failures: list[str] = []
     for command in BENIGN_DATA_FLOW_CASES:

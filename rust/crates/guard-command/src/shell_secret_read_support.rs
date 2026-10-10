@@ -116,6 +116,11 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
             (".pypirc", "Python package credentials"),
             (".netrc", "netrc credentials"),
             (".git-credentials", "Git credential store"),
+            (".terraform.tfvars", "Terraform variable secrets"),
+            ("terraform.tfvars", "Terraform variable secrets"),
+            ("private-key.pem", "wallet/private-key file"),
+            ("private.key", "wallet/private-key file"),
+            ("wallet.key", "wallet/private-key file"),
             (".wallet", "wallet/private-key file"),
             ("wallet.dat", "wallet/private-key file"),
             ("id_rsa", "SSH private key"),
@@ -127,7 +132,13 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
     })
 }
 fn sensitive_basename_keywords() -> &'static [&'static str] {
-    &["private_key", "private-key", "privatekey"]
+    &[
+        "private_key",
+        "private-key",
+        "privatekey",
+        "wallet_key",
+        "wallet-key",
+    ]
 }
 fn redacted_basename_labels() -> &'static BTreeMap<&'static str, &'static str> {
     static M: OnceLock<BTreeMap<&'static str, &'static str>> = OnceLock::new();

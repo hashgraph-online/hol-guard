@@ -6,6 +6,7 @@ in the runtime bridge.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import importlib.metadata
 from collections.abc import Callable
@@ -201,7 +202,9 @@ def _decode_capabilities(payload: object) -> NativeRuntimeCapabilities | None:
     )
 
 
+@functools.lru_cache(maxsize=1)
 def _python_package_version() -> str | None:
+    # The installed distribution cannot change within one process.
     try:
         return importlib.metadata.version("hol-guard")
     except importlib.metadata.PackageNotFoundError:

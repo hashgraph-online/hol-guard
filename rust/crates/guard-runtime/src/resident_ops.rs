@@ -305,6 +305,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
+            ResidentOperationV1::DataFlowAnalyze(request) => {
+                crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
+            }
             #[cfg(not(unix))]
             ResidentOperationV1::SkillDirectoryIdentity(_)
             | ResidentOperationV1::ContainedNodeExecute(_)
