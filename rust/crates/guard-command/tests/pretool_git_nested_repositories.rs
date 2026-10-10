@@ -223,3 +223,70 @@ fn nested_repository_cannot_hide_execution_configuration() {
         "diff.external without --no-ext-diff"
     );
 }
+
+fn add_worktree(repository: &Path, path: &Path, branch: &str) {
+    git(
+        repository,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            branch,
+            path.to_str().unwrap(),
+        ],
+    );
+}
+
+#[test]
+fn same_named_linked_worktrees_with_suffixed_admin_names_are_routed() {
+    let (_cleanup, home, repository) = checkout("samename");
+    let first = home.join("a").join("feature");
+    let second = home.join("b").join("feature");
+    std::fs::create_dir_all(first.parent().unwrap()).unwrap();
+    std::fs::create_dir_all(second.parent().unwrap()).unwrap();
+    add_worktree(&repository, &first, "one");
+    add_worktree(&repository, &second, "two");
+    let admins = repository.join(".git").join("worktrees");
+    assert!(admins.join("feature").is_dir() && admins.join("feature1").is_dir());
+    for target in [&first, &second] {
+        let command = format!("git -C '{}' status --short", target.display());
+        let result = decide(&repository, &home, &command);
+        assert_eq!(
+            result.decision, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+    // Beneath the workspace, where the admin name differs from the directory name.
+    let nested = repository.join("sub").join("feature");
+    std::fs::create_dir_all(nested.parent().unwrap()).unwrap();
+    add_worktree(&repository, &nested, "three");
+    let result = decide(&repository, &home, "git -C sub/feature status --short");
+    assert_eq!(result.decision, "allow", "{}", result.reason_code);
+    // Swapping the backlinks breaks the two-way link and must stay reviewed.
+    let forged = home.join("c").join("feature");
+    std::fs::create_dir_all(&forged).unwrap();
+    std::fs::copy(second.join(".git"), forged.join(".git")).unwrap();
+    let command = format!("git -C '{}' status --short", forged.display());
+    assert_ne!(decide(&repository, &home, &command).decision, "allow");
+}
+
+#[test]
+fn registered_worktree_is_routed_among_many_registrations() {
+    let (_cleanup, home, repository) = checkout("many");
+    let target = home.join("wt").join("target");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    add_worktree(&repository, &target, "target");
+    let admins = repository.join(".git").join("worktrees");
+    for index in 0..300 {
+        std::fs::create_dir_all(admins.join(format!("filler-{index:03}"))).unwrap();
+    }
+    let command = format!("git -C '{}' status --short", target.display());
+    let result = decide(&repository, &home, &command);
+    assert_eq!(
+        result.decision, "allow",
+        "{command}: {}",
+        result.reason_code
+    );
+}

@@ -112,10 +112,9 @@ fn linked_worktree_git_entry_within_workspace(
     else {
         return false;
     };
-    if !worktree.starts_with(workspace)
-        || admin.file_name() != worktree.file_name()
-        || !admin.is_dir()
-    {
+    // Git suffixes administrative names on collisions (feature, feature1), so
+    // the name is not compared; the two-way gitdir link below binds the pair.
+    if !worktree.starts_with(workspace) || !admin.is_dir() {
         return false;
     }
     let Some(common) = bounded_git_metadata(&admin.join("commondir"))
@@ -123,7 +122,7 @@ fn linked_worktree_git_entry_within_workspace(
     else {
         return false;
     };
-    if !admin.starts_with(common.join("worktrees")) {
+    if admin.parent() != Some(common.join("worktrees").as_path()) {
         return false;
     }
     bounded_git_metadata(&admin.join("gitdir"))
@@ -148,7 +147,6 @@ fn bounded_git_metadata(path: &std::path::Path) -> Option<String> {
 // `worktrees/<name>/gitdir` must point at the target's `.git` file, and that
 // file must point back at the same administrative directory.
 fn registered_worktree_of_workspace(target: &std::path::Path, workspace: &std::path::Path) -> bool {
-    const MAX_WORKTREES: usize = 256;
     let entry = target.join(".git");
     let Ok(metadata) = std::fs::symlink_metadata(&entry) else {
         return false;
@@ -208,17 +206,12 @@ fn registered_worktree_of_workspace(target: &std::path::Path, workspace: &std::p
     else {
         return false;
     };
-    if !pointer.starts_with(common.join("worktrees")) {
+    // The pointer must be a direct entry of the registry; look it up directly
+    // instead of scanning, so there is no enumeration cap to fall off.
+    if pointer.parent() != Some(common.join("worktrees").as_path()) {
         return false;
     }
-    let Ok(registered) = std::fs::read_dir(common.join("worktrees")) else {
-        return false;
-    };
-    registered.take(MAX_WORKTREES).flatten().any(|admin| {
-        let admin = admin.path();
-        std::fs::canonicalize(&admin).is_ok_and(|admin| admin == pointer)
-            && bounded_git_metadata(&admin.join("gitdir"))
-                .and_then(|path| std::fs::canonicalize(admin.join(path.trim())).ok())
-                .is_some_and(|backlink| backlink == entry)
-    })
+    bounded_git_metadata(&pointer.join("gitdir"))
+        .and_then(|path| std::fs::canonicalize(pointer.join(path.trim())).ok())
+        .is_some_and(|backlink| backlink == entry)
 }
