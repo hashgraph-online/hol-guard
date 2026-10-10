@@ -370,6 +370,82 @@ def test_native_review_offers_and_honors_always_for_local_wrangler(
     assert third["approval_reuse_status"] == "accepted"
 
 
+def test_native_review_derives_the_exact_action_token_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    """The saved lookup and the queued request share one derivation of the same token."""
+    from codex_plugin_scanner.guard.daemon import hook_native_review_approval, hook_native_saved_approval
+
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    result, receipt = _verdict()
+    worker, store = _hook_worker(tmp_path, monkeypatch, result, receipt)
+    calls: list[str | None] = []
+    real = hook_native_saved_approval.native_exact_action_token
+
+    def counting(**kwargs: Any) -> str | None:
+        token = real(**kwargs)
+        calls.append(token)
+        return token
+
+    monkeypatch.setattr(hook_native_review_approval, "native_exact_action_token", counting)
+    monkeypatch.setattr(hook_native_saved_approval, "native_exact_action_token", counting)
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "session_id": "once",
+        "tool_use_id": "tool-once",
+        "tool_name": "Bash",
+        "tool_input": {"command": "npx wrangler --version"},
+        "cwd": str(workspace),
+    }
+    response = worker.review_http_payload(
+        payload=payload,
+        params={},
+        default_harness=_HARNESS,
+        home_dir=tmp_path / "home",
+        guard_home=tmp_path / "guard-home",
+        workspace=workspace,
+    )
+    assert response["policy_action"] == "review"
+    assert len(calls) == 1
+    row = store.get_approval_request(response["approval_request_id"])
+    assert row is not None
+    stored = row["action_envelope_json"][EXACT_ACTION_CONTEXT_TOKEN_KEY]
+    assert stored == calls[0]
+    assert stored == _token("npx wrangler --version", workspace, payload_extra={"session_id": "other"})
+
+
+def test_precomputed_token_binds_the_saved_decision_lookup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    """A supplied token (including None) replaces derivation inside the saved review lookup."""
+    from codex_plugin_scanner.guard.daemon import hook_native_saved_approval
+    from codex_plugin_scanner.guard.daemon.hook_native_saved_approval import native_saved_review_response
+
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    result, receipt = _verdict()
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        hook_native_saved_approval,
+        "native_exact_action_token",
+        lambda **_kwargs: pytest.fail("a precomputed token must not be re-derived"),
+    )
+    kwargs: dict[str, Any] = {
+        "harness": _HARNESS,
+        "tool_name": "Bash",
+        "artifact_id": _ARTIFACT_ID,
+        "payload": {"tool_name": "Bash", "tool_input": {"command": "npx wrangler --version"}, "cwd": str(workspace)},
+        "native_result": result,
+        "native_receipt": receipt,
+        "workspace": workspace,
+        "home_dir": tmp_path / "home",
+    }
+    assert native_saved_review_response(store, precomputed_token=None, **kwargs) is None
+    token = "a" * 64
+    _save(store, token, "block")
+    blocked = native_saved_review_response(store, precomputed_token=token, **kwargs)
+    assert blocked is not None and blocked["reason_code"] == "saved_exact_action_block"
+
+
 def _local_bin(workspace: Path, package: str, name: str) -> None:
     root = workspace / "node_modules" / package
     (root / "package.json").parent.mkdir(parents=True, exist_ok=True)
