@@ -187,22 +187,38 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
     return request_scope_contracts([request])[0]
 
 
+def scope_payload_for_request(
+    request: Mapping[str, object], contract: ApprovalScopeContract
+) -> dict[str, object]:
+    """Attach non-resident approval hints to a contract already derived."""
+
+    payload = contract.to_dict()
+    temporary_mcp_approval = temporary_mcp_approval_payload(request)
+    if temporary_mcp_approval is not None:
+        payload["temporary_mcp_approval"] = temporary_mcp_approval
+    local_tool_approval = local_tool_approval_payload(request)
+    if local_tool_approval is not None:
+        payload["local_tool_approval"] = local_tool_approval
+    return payload
+
+
 def request_scope_contract_payloads(requests: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
     for request, contract in zip(requests, request_scope_contracts(requests), strict=True):
-        payload = contract.to_dict()
-        temporary_mcp_approval = temporary_mcp_approval_payload(request)
-        if temporary_mcp_approval is not None:
-            payload["temporary_mcp_approval"] = temporary_mcp_approval
-        local_tool_approval = local_tool_approval_payload(request)
-        if local_tool_approval is not None:
-            payload["local_tool_approval"] = local_tool_approval
-        payloads.append(payload)
+        payloads.append(scope_payload_for_request(request, contract))
     return payloads
 
 
 def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, object]:
     return request_scope_contract_payloads([request])[0]
+
+
+def request_scope_observation(
+    request: Mapping[str, object],
+) -> tuple[ApprovalScopeContract, str | None]:
+    """Derive one request's contract and exact-action token in one resident call."""
+
+    return _native_scopes([request])[0]
 
 
 def tool_call_exact_context_token(request: Mapping[str, object]) -> str | None:
@@ -229,6 +245,7 @@ def resolve_request_scope_selection(
     requested_scope: str,
     contract_version: str | None,
     contract_digest: str | None,
+    contract: ApprovalScopeContract | None = None,
 ) -> ApprovalScopeSelection:
     if action == "allow":
         resolution_action: ResolutionAction = "allow"
@@ -239,7 +256,8 @@ def resolve_request_scope_selection(
     if requested_scope not in DECISION_SCOPE_VALUES:
         raise ValueError(f"Unsupported approval scope: {requested_scope}")
     typed_scope = _decision_scope(requested_scope)
-    contract = request_scope_contract(request)
+    if contract is None:
+        contract = request_scope_contract(request)
     if (contract_version is None) != (contract_digest is None):
         raise ValueError("incomplete_scope_contract")
     if contract_version is not None and (

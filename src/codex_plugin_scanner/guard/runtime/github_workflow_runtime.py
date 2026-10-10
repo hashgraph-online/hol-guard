@@ -196,7 +196,7 @@ def issue_github_workflow_capability_for_resolution(
     """Issue when eligible while keeping ordinary approvals unchanged."""
 
     try:
-        request = store.get_approval_request(request_id)
+        request = store.get_approval_request(request_id, derive_scope=False)
         if request is not None:
             _ = issue_resolved_github_workflow_capability(store, request, resolved_at=resolved_at)
     except Exception:

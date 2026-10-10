@@ -361,7 +361,9 @@ def list_approval_requests(
     return _rows_to_payloads(rows)
 
 
-def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
+def get_approval_request(
+    connection: sqlite3.Connection, request_id: str, *, derive_scope: bool = True
+) -> dict[str, object] | None:
     columns = _approval_columns(connection)
     row = connection.execute(
         f"""
@@ -394,7 +396,12 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
     ).fetchone()
     if row is None:
         return None
-    payload = _row_to_payload(row)
+    if derive_scope:
+        payload = _row_to_payload(row)
+    else:
+        payload, contract_error = _row_to_draft(row)
+        if contract_error is not None:
+            payload["decision_contract_error"] = contract_error
     reason = row["reason"]
     if (
         row["status"] == "expired"

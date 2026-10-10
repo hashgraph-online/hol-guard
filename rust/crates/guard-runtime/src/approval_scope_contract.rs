@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 use crate::approval_scope_material::scope_contract_digest;
 use crate::context_digest::parse_context_token;
 use crate::guard_store_json::py_strip;
-use caseless::default_case_fold_str as casefold;
+use crate::local_mcp_grant_identity::composio_requires_action_review;
 
 const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
     "file-read",
@@ -216,21 +216,6 @@ fn reusable_allow_scopes(
         scopes.extend(["harness", "global"]);
     }
     scopes
-}
-
-fn composio_requires_action_review(tool_name: &str) -> bool {
-    let tail = tool_name
-        .rfind("__")
-        .map_or(tool_name, |index| &tool_name[index + 2..]);
-    let name = casefold(tail);
-    match name.as_str() {
-        "composio_search_tools" | "composio_get_tool_schemas" => false,
-        "composio_multi_execute_tool"
-        | "composio_remote_workbench"
-        | "composio_remote_bash_tool"
-        | "composio_manage_connections" => true,
-        other => other.starts_with("composio_"),
-    }
 }
 
 pub(crate) fn unverified_provider_execution(view: &View<'_>) -> bool {
