@@ -16,6 +16,7 @@ use regex::Regex;
 
 use crate::command_model::CanonicalCommand;
 use crate::home_path_text::{expand_home, normalize_path};
+use crate::runtime_read_paths::path_is_relative_to;
 use crate::shell_execution_context_support::{
     split_shell_tokens, SHELL_CWD_MISSING_DIRECTORY, SHELL_CWD_NOT_DIRECTORY,
     SHELL_CWD_UNREADABLE_DIRECTORY,
@@ -41,7 +42,7 @@ pub(crate) const MAX_INLINE_SCRIPT_BYTES: usize = 64 * 1024;
 fn python_executable_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
+        Regex::new(r"^pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
     })
 }
 fn literal_read_re() -> &'static FancyRegex {
@@ -1479,7 +1480,7 @@ pub(crate) fn sensitive_path(
     }
     let lexical = PathBuf::from(normalize_path(&expand_home(value, home_dir), cwd));
     let roots: Vec<&Path> = [cwd, home_dir].into_iter().flatten().collect();
-    if !lexical.is_absolute() || !roots.iter().any(|r| lexical.starts_with(r)) {
+    if !lexical.is_absolute() || !roots.iter().any(|r| path_is_relative_to(&lexical, r)) {
         return None;
     }
     let resolved = match lexical.canonicalize() {
@@ -1734,7 +1735,11 @@ pub(crate) fn shell_command_string(executable: &str, args: &[String]) -> (Option
     (None, false)
 }
 
-/// `_script_operand` (:308-356). `(operand, is_path)`.
+/// `_script_operand` (:308-356). `(operand, is_shell)`.
+///
+/// Mirrors the retired Python exactly: an option scan that stops at `--`
+/// (the operand after it is still the script), the Python value-taking
+/// options, a `bun <script>` launch, and a path-qualified script executable.
 pub(crate) fn script_operand(executable: &str, args: &[String]) -> Option<(String, bool)> {
     let name = if executable == "." {
         ".".to_owned()
@@ -1742,48 +1747,75 @@ pub(crate) fn script_operand(executable: &str, args: &[String]) -> Option<(Strin
         basename_lower(executable)
     };
     let is_shell = SHELLS.contains(&name.as_str());
-    let is_interpreter =
-        ["node", "ruby", "perl"].contains(&name.as_str()) || python_executable(&name);
+    let is_python = python_executable(&name);
+    let is_interpreter = ["node", "ruby", "perl"].contains(&name.as_str()) || is_python;
     if is_shell || is_interpreter {
         let mut index = 0;
         while index < args.len() {
-            let arg = &args[index];
+            let arg = args[index].as_str();
+            if ["-c", "-e", "--eval", "-m", "--command"].contains(&arg)
+                || (is_shell && arg == "-s")
+                || (is_shell
+                    && arg.starts_with('-')
+                    && !arg.starts_with("--")
+                    && arg[1..].contains('c'))
+            {
+                return None;
+            }
             if arg == "--" {
-                return None;
+                index += 1;
+                break;
             }
-            if arg == "-s" && is_shell {
-                return None;
-            }
-            if is_shell && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('c')
-            {
-                return None;
-            }
-            if is_shell
-                && ["-o", "-O", "+o", "+O", "--rcfile", "--init-file"].contains(&arg.as_str())
-            {
+            if ["-o", "-O", "+o", "+O", "--rcfile", "--init-file"].contains(&arg) {
                 index += 2;
                 continue;
             }
-            if is_interpreter && ["-c", "-e", "--eval", "-p", "--print"].contains(&arg.as_str()) {
-                index += 2;
-                continue;
+            if is_interpreter && is_python {
+                if PYTHON_INTERPRETER_OPTIONS_WITH_VALUES.contains(&arg) {
+                    if index + 1 >= args.len() {
+                        return None;
+                    }
+                    index += 2;
+                    continue;
+                }
+                if PYTHON_INTERPRETER_OPTIONS_WITH_VALUES
+                    .iter()
+                    .any(|option| arg.starts_with(option) && arg.len() > option.len())
+                {
+                    index += 1;
+                    continue;
+                }
             }
-            if is_interpreter && (arg.starts_with("--eval=") || arg.starts_with("--print=")) {
-                index += 1;
-                continue;
+            if !arg.starts_with('-') && !arg.starts_with('+') {
+                break;
             }
-            if arg.starts_with('-') || arg.starts_with('+') {
-                index += 1;
-                continue;
+            index += 1;
+        }
+        if index < args.len() && args[index] != "-" {
+            let operand = &args[index];
+            if is_shell || is_python || script_like_operand(operand) {
+                return Some((operand.clone(), is_shell));
             }
-            if is_shell {
-                // `.`/`source` treat the first operand as the script.
-                return Some((arg.clone(), true));
-            }
-            return Some((arg.clone(), path_qualified(arg)));
+            return None;
         }
     }
+    if name == "bun" && args.first().is_some_and(|arg| ends_with_script_suffix(arg)) {
+        return Some((args[0].clone(), false));
+    }
+    if ends_with_script_suffix(executable)
+        && (executable.contains('/') || executable.starts_with('.'))
+    {
+        let is_shell_script = [".sh", ".bash", ".zsh", ".ksh", ".fish"]
+            .iter()
+            .any(|suffix| executable.ends_with(suffix));
+        return Some((executable.to_owned(), is_shell_script));
+    }
     None
+}
+
+/// Case-sensitive `str.endswith(_SCRIPT_SUFFIXES)`.
+fn ends_with_script_suffix(value: &str) -> bool {
+    SCRIPT_SUFFIXES.iter().any(|suffix| value.ends_with(suffix))
 }
 
 /// `_known_python_module_launch` (:359-370).
@@ -1886,11 +1918,11 @@ pub(crate) fn interpreter_inline_launch(executable: &str, args: &[String]) -> bo
 
 /// `_path_qualified` (:432-434).
 pub(crate) fn path_qualified(executable: &str) -> bool {
-    executable.contains('/') || executable.contains('\\')
+    !executable.is_empty()
+        && (executable.contains('/') || executable.contains('\\') || executable.starts_with('.'))
 }
 
 /// `_script_like_operand` (:436-443).
-#[allow(dead_code)]
 fn script_like_operand(operand: &str) -> bool {
     if operand.is_empty() || operand == "-" {
         return false;
@@ -1951,7 +1983,7 @@ pub(crate) fn local_executable_operand(
         return None;
     }
     let lexical = PathBuf::from(normalize_path(&expand_home(executable, home_dir), cwd));
-    if !lexical.is_absolute() || !roots.iter().any(|r| lexical.starts_with(r)) {
+    if !lexical.is_absolute() || !roots.iter().any(|r| path_is_relative_to(&lexical, r)) {
         return None;
     }
     Some(executable.to_owned())

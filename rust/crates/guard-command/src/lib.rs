@@ -23,6 +23,7 @@ pub mod command_evaluation_compose;
 pub mod command_evaluation_controls;
 #[cfg(test)]
 mod command_evaluation_lattice_tests;
+pub(crate) mod command_evaluation_support;
 #[cfg(test)]
 mod command_evaluation_tests;
 mod command_launcher_floors;
@@ -31,7 +32,6 @@ pub mod command_native_factors;
 mod command_operand_matchers;
 pub mod command_option_parsing;
 mod command_segment_parsing;
-#[cfg(unix)]
 pub mod command_shell_read_factors;
 mod command_specialized_matchers;
 mod command_structure;
@@ -98,15 +98,15 @@ mod powershell_reads;
 use parser_executables::*;
 use parser_segments::*;
 pub mod pretool;
-#[cfg(unix)]
 mod runtime_read_paths;
 mod shell_command_wrappers;
 mod shell_execution_context;
 mod shell_execution_context_support;
 mod shell_read_literal_wrapper;
 mod shell_secret_read_flow;
+#[cfg(test)]
+mod shell_secret_read_script_operand_tests;
 mod shell_secret_read_support;
-#[cfg(unix)]
 pub mod shell_secret_reads;
 mod shell_structure;
 pub mod typescript_launch_evidence;

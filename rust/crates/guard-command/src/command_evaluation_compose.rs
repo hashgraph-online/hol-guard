@@ -19,11 +19,13 @@ use crate::command_decision_adapter::{
 };
 use crate::command_evaluation::{
     decision_action_floor, match_precedence_key, rule_floor, stronger_floor, CommandDecisionFloor,
-    CommandSafetyRule, CompositeCommandEvaluation, NativeCommandExtensionObservation,
-    OwnedCommandRuleMatch, UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS,
+    CompositeCommandEvaluation, OwnedCommandRuleMatch, UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS,
 };
 use crate::command_evaluation_controls::{
     authority_evidence, authority_failure_for_health, control_layers_from_binding,
+};
+use crate::command_evaluation_support::{
+    github_capability_from_str, owned_match, sorted_uncertainties,
 };
 use crate::command_native_factors::{
     direct_github_permission_ids, explicit_permission_allow_factors, native_classification_factors,
@@ -31,7 +33,7 @@ use crate::command_native_factors::{
 use crate::command_verified_read_candidates::verified_read_candidate_factor;
 use crate::command_workspace_write_candidates::workspace_write_candidate_factors;
 use crate::effect_decision::{
-    evaluate_effect_decision, DecisionFactor, EffectDecisionRequest, GuardAction, UncertaintyKind,
+    evaluate_effect_decision, DecisionFactor, EffectDecisionRequest, GuardAction,
     EFFECT_DECISION_SCHEMA_VERSION,
 };
 use crate::extension_control::{resolve_extension_controls, ControlSurface, ResolverFailureCode};
@@ -41,7 +43,7 @@ use crate::github_capability_contract::GitHubCommandCapability;
 use crate::github_workflow_authorization::{
     github_workflow_authorization_evidence, GitHubWorkflowAuthorizationV1,
 };
-use crate::native_command_catalog::{CatalogRule, CommandCatalog};
+use crate::native_command_catalog::CommandCatalog;
 use crate::native_command_extension_evidence::observations_from_native_evidence;
 
 const ERR_UNKNOWN_IDENTITY: &str = "native_command_extension_evidence_unknown_identity";
@@ -57,70 +59,6 @@ pub struct CommandEvaluationInput<'a> {
     pub compatibility_reason: Option<&'a str>,
     pub workflow_authorization: Option<&'a GitHubWorkflowAuthorizationV1>,
     pub read_factors: Vec<DecisionFactor>,
-}
-
-fn github_capability_from_str(capability: &str) -> Option<GitHubCommandCapability> {
-    GitHubCommandCapability::ALL
-        .iter()
-        .find(|candidate| candidate.as_str() == capability)
-        .copied()
-}
-
-fn sorted_uncertainties(groups: [&[UncertaintyKind]; 2]) -> Vec<UncertaintyKind> {
-    let mut items: Vec<UncertaintyKind> = Vec::new();
-    for item in groups.into_iter().flatten() {
-        if !items.contains(item) {
-            items.push(*item);
-        }
-    }
-    items.sort_by_key(|item| item.as_str());
-    items
-}
-
-fn owned_match(
-    registry: &CommandCatalog,
-    observation: &NativeCommandExtensionObservation,
-    rule: &CatalogRule,
-    evidence: Vec<crate::command_evaluation::NativeMatcherEvidence>,
-    effective_compatibility_class: Option<&str>,
-    compatibility_reason: Option<&str>,
-    command: &CanonicalCommand,
-) -> Result<OwnedCommandRuleMatch, &'static str> {
-    let extension = registry
-        .get(&observation.extension_id)
-        .ok_or(ERR_UNKNOWN_IDENTITY)?;
-    let action_class = rule
-        .action_classes
-        .first()
-        .cloned()
-        .or_else(|| effective_compatibility_class.map(str::to_owned));
-    let mut reason = rule.description.clone();
-    if rule.compatibility_fallback {
-        if let Some(compatibility) = compatibility_reason {
-            reason = compatibility.to_owned();
-        }
-    }
-    Ok(OwnedCommandRuleMatch {
-        extension_id: extension.extension_id.clone(),
-        extension_required: extension.required,
-        extension_provenance_digest: String::new(),
-        extension_trust_class: extension.trust_class.clone(),
-        rule: CommandSafetyRule {
-            rule_id: rule.rule_id.clone(),
-            severity: rule.severity.clone(),
-            risk_classes: rule.risk_classes.clone(),
-            action_classes: rule.action_classes.clone(),
-            description: rule.description.clone(),
-            safer_alternatives: rule.safer_alternatives.clone(),
-            default_mode: rule.default_mode.clone(),
-            compatibility_fallback: rule.compatibility_fallback,
-            rule_version: rule.rule_version.clone(),
-        },
-        action_class,
-        reason,
-        matcher_evidence: evidence,
-        parse_confidence: command.confidence.clone(),
-    })
 }
 
 /// `evaluate_command`: evaluate every built-in rule without executing or
