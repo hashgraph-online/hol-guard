@@ -5,9 +5,9 @@ import { isAbsolute } from 'node:path';
 // through its installed Guard extension. No tool executes in this adapter.
 // The pinned SDK is imported lazily from the SDK root named on the command line,
 // so the pure helpers below can be unit tested without installing it.
-export const ADAPTER_ID = 'pinned-omp-native-luna-stream-v2';
+export const ADAPTER_ID = 'pinned-omp-native-luna-stream-v3';
 export const REQUEST_MODEL = 'native-luna';
-export const THINKING_LEVELS = ['medium', 'high'];
+export const THINKING_LEVELS = ['medium', 'high', 'low'];
 export const BACKEND_PROVIDER = 'openai-codex';
 export const BACKEND_MODEL = 'gpt-5.6-luna';
 let model: any;
@@ -76,6 +76,27 @@ export function authorized(header: string | null, token: string) {
   const expected = Buffer.from(`Bearer ${token}`);
   const given = Buffer.from(header);
   return expected.length === given.length && timingSafeEqual(expected, given);
+}
+
+// Cache affinity needs the relay's per-case session UUID; any other value
+// means no prompt-cache key for that request.
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export function promptCacheKey(header: string | null): string | undefined {
+  return header !== null && SESSION_ID.test(header) ? header : undefined;
+}
+
+// pi-ai Usage counts input excluding cached tokens; the OpenAI shape folds
+// them back into prompt_tokens and reports cached_tokens in the details.
+export function usageChunk(usage: any) {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const counted = (value: any) => Number.isInteger(value) && value >= 0;
+  const { input, output, cacheRead, cacheWrite, totalTokens } = usage;
+  if (![input, output, cacheRead, cacheWrite, totalTokens].every(counted)) return undefined;
+  const reasoningTokens = usage.reasoningTokens ?? 0;
+  if (!counted(reasoningTokens)) return undefined;
+  return { prompt_tokens: input + cacheRead + cacheWrite, completion_tokens: output,
+    total_tokens: totalTokens, prompt_tokens_details: { cached_tokens: cacheRead },
+    completion_tokens_details: { reasoning_tokens: reasoningTokens } };
 }
 
 export class WireArguments {
@@ -181,6 +202,9 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       // any tool choice, call count, argument, or model-selected batch.
       onPayload: (payload: any) => { payload.parallel_tool_calls = true; },
       onSseEvent: event => wire.capture(event),
+      // Prompt-cache affinity per case; sessionId stays unset so the
+      // websocket/session transport state is untouched.
+      promptCacheKey: promptCacheKey(request.headers.get('x-opencode-session')),
     });
     active.add(agent);
     const timer = setTimeout(() => agent.abort(), 240_000);
@@ -189,10 +213,11 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
         let finished = false;
         let bytes = 0;
         const indices = new Map<number, number>();
-        const send = (delta: any, finish_reason: string | null = null) => {
+        const send = (delta: any, finish_reason: string | null = null, usage?: any) => {
           const data = `data: ${JSON.stringify({ id: 'native-luna', object: 'chat.completion.chunk',
             // The real backend identity, recorded by the relay as the response model.
-            model: `${BACKEND_PROVIDER}/${BACKEND_MODEL}`, choices: [{ index: 0, delta, finish_reason }] })}\n\n`;
+            model: `${BACKEND_PROVIDER}/${BACKEND_MODEL}`, choices: [{ index: 0, delta, finish_reason }],
+            ...(usage ? { usage } : {}) })}\n\n`;
           bytes += Buffer.byteLength(data);
           if (bytes > 4_000_000) throw new Error('Transport response limit');
           sink.enqueue(new TextEncoder().encode(data));
@@ -208,7 +233,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
                 throw new Error('Backend identity changed');
               if (event.message.stopReason === 'error' || event.message.stopReason === 'aborted')
                 throw new Error('Native inference incomplete');
-              send({}, finishReason(event.message.stopReason));
+              send({}, finishReason(event.message.stopReason), usageChunk(event.message.usage));
               sink.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
               finished = true;
               sink.close();
