@@ -142,7 +142,6 @@ APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0"
 LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
 
 
-
 class ScanBudgetExceededError(RuntimeError):
     """Raised when analysis would be incomplete because a scan budget was exhausted."""
 
