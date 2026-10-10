@@ -58,7 +58,7 @@ _DEFAULT_APPROVAL_CENTER_PORT = 4781
 
 
 def pause_native_pre_tool_for_approval(
-    store: object,
+    store: GuardStore,
     *,
     harness: str,
     payload: Mapping[str, object],
@@ -343,9 +343,10 @@ def queue_native_pre_tool_review(
     raw_command: str | None = None
     if native_origin is not None and isinstance(native_origin.get("command_sha256"), str):
         from ..memory_decision_outbox import NATIVE_MEMORY_SOURCE_BINDING_FIELD, native_memory_source_binding
+        from ..store import GuardStore
 
         candidate = pre_tool_command(payload)
-        source_binding = native_memory_source_binding(store)
+        source_binding = native_memory_source_binding(store) if isinstance(store, GuardStore) else None
         if (
             candidate is not None
             and source_binding is not None

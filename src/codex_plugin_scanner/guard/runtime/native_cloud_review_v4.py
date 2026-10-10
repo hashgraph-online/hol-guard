@@ -402,7 +402,13 @@ def decode_native_application_result(payload: object) -> dict[str, object] | Non
         return None
     delta = consumed - datetime(1970, 1, 1, tzinfo=timezone.utc)
     milliseconds = delta.days * 86_400_000 + delta.seconds * 1000 + delta.microseconds // 1000
-    if not receipt["issued_at_ms"] <= milliseconds < receipt["expires_at_ms"]:
+    issued_at_ms = receipt.get("issued_at_ms")
+    expires_at_ms = receipt.get("expires_at_ms")
+    if (
+        type(issued_at_ms) is not int
+        or type(expires_at_ms) is not int
+        or not issued_at_ms <= milliseconds < expires_at_ms
+    ):
         return None
     return {**payload, "receipt": receipt}
 

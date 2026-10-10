@@ -22,21 +22,19 @@ pub(crate) fn apply_hook(
     {
         return Ok(baseline);
     }
-    let _consent = consent::CONSENT_LOCK
-        .lock()
-        .map_err(|_| "native_cloud_review_consent_unavailable".to_owned())?;
-    let _transaction = consent::transaction(store.state_base())?;
-    let permission = match consent::require_enabled(store.state_base(), now_ms()?) {
-        Ok(state) => state,
-        Err(error)
-            if matches!(
-                error.as_str(),
-                "native_cloud_review_consent_disabled" | "native_cloud_review_consent_expired"
-            ) =>
-        {
-            return Ok(baseline)
-        }
-        Err(error) => return Err(error),
+    // A review deny is already fail-closed. Missing, locked, or unusable consent
+    // must keep that decision instead of turning the hook into an outage.
+    let Ok(_consent) = consent::CONSENT_LOCK.lock() else {
+        return Ok(baseline);
+    };
+    let Ok(_transaction) = consent::transaction(store.state_base()) else {
+        return Ok(baseline);
+    };
+    let Ok(now) = now_ms() else {
+        return Ok(baseline);
+    };
+    let Ok(permission) = consent::require_enabled(store.state_base(), now) else {
+        return Ok(baseline);
     };
     let mut request_id = edge
         .pointer("/receipt/request_id")

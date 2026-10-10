@@ -549,6 +549,9 @@ def test_unacknowledged_snapshot_leaves_temporary_mcp_grant_pending(tmp_path: Pa
     class _Publisher:
         closed = False
 
+        def has_served_snapshot(self) -> bool:
+            return True
+
         def is_ready(self) -> bool:
             return True
 

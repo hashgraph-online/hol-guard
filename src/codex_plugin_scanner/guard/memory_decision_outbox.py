@@ -225,10 +225,12 @@ def native_memory_source_binding(store: GuardStore) -> dict[str, object] | None:
         if load_guard_config(store.guard_home, create_home=False).receipt_redaction_level != "none":
             return None
         capability = command_capability_status(store)
+        operations = capability.get("operations")
         if (
             capability["enabled"] is not True
             or capability["capability_valid"] is not True
-            or "guard.review.syncPolicyMemory" not in capability["operations"]
+            or not isinstance(operations, list)
+            or "guard.review.syncPolicyMemory" not in operations
         ):
             return None
         if exact_cloud_review_status(store).get("enabled") is not True:

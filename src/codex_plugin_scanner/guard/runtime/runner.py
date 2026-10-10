@@ -5552,7 +5552,8 @@ def _receipt_disclosure_before_send(
     rows = {row.get("receipt_id"): row for row in receipts}
 
     def prepare(request: urllib.request.Request) -> None:
-        body = json.loads(request.data or b"{}")
+        raw_body = request.data if isinstance(request.data, (str, bytes, bytearray)) else b"{}"
+        body = json.loads(raw_body or b"{}")
         authorization = request.get_header("Authorization", "")
         access_token = authorization.removeprefix("DPoP ") if authorization.startswith("DPoP ") else None
         for outgoing in body.get("receipts", []):

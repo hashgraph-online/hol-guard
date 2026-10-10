@@ -339,7 +339,7 @@ def _launch_identity(command: str, *, cwd: Path, home_dir: Path | None) -> dict[
 
 
 def _loads_unbound_code(name: str, arguments: list[str]) -> bool:
-    from .hook_native_review_approval import (
+    from .hook_native_review_command import (
         _FILE_BACKED_PROGRAM_COMMANDS,
         _rg_executes_unreviewed_preprocessor,
         _uses_file_backed_program,
@@ -355,7 +355,7 @@ def _loads_unbound_code(name: str, arguments: list[str]) -> bool:
 
 
 def _is_mutable_launcher(name: str) -> bool:
-    from .hook_native_review_approval import _MUTABLE_CODE_LAUNCHERS, _PYTHON_LAUNCHER
+    from .hook_native_review_command import _MUTABLE_CODE_LAUNCHERS, _PYTHON_LAUNCHER
 
     return name in _MUTABLE_CODE_LAUNCHERS or name in _EXTRA_MUTABLE_LAUNCHERS or bool(_PYTHON_LAUNCHER.fullmatch(name))
 

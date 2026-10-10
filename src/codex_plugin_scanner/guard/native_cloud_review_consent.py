@@ -116,4 +116,4 @@ def native_cloud_review_consent(
         or (operation == "disable" and result["status"] != "disabled")
     ):
         raise NativeCloudReviewConsentError("native_cloud_review_consent_invalid")
-    return cast(NativeCloudReviewConsentState, result)
+    return cast(NativeCloudReviewConsentState, cast(object, result))

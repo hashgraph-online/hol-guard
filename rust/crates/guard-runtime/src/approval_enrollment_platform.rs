@@ -99,15 +99,17 @@ pub(super) fn read_platform_secret(account: &str) -> Result<Option<String>, Stri
     read_platform_secret_with_limit(account, MAX_SECRET_TEXT_BYTES)
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(target_os = "linux", test))]
 fn test_secret_dir() -> Option<std::path::PathBuf> {
-    // Test-only escape hatch: Linux CI hosts lack secret-tool/dbus, so hosts
-    // can opt into a per-state file-backed store instead of failing closed.
-    // Never set in production; the file mode is 0o600 and the directory is
-    // per-test under `state_base`.
+    // Unit tests can opt into a file store. Release builds never consult this variable.
     std::env::var_os("HOL_GUARD_SECURE_STATE_DIR")
         .map(std::path::PathBuf::from)
         .filter(|path| path.is_dir())
+}
+
+#[cfg(all(target_os = "linux", not(test)))]
+fn test_secret_dir() -> Option<std::path::PathBuf> {
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -162,7 +164,15 @@ pub(super) fn write_platform_secret_with_limit(
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        return std::fs::write(&path, value.as_bytes())
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
+        return std::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o600)
+            .open(&path)
+            .and_then(|mut file| file.write_all(value.as_bytes()))
             .map_err(|_| SECURE_STATE_UNAVAILABLE.to_owned());
     }
     let output = bounded_transport::run_helper(

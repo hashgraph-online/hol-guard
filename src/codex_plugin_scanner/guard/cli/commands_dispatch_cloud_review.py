@@ -92,10 +92,12 @@ def apply_connect_time_cloud_review_consent(
         return {**payload, "cloud_review": {"enabled": False, "reason": "connect_not_completed"}}
     previously_enabled = exact_cloud_review_status(store).get("enabled") is True
     try:
+        factors = _native_consent_factors(store)
         capability = enable_exact_cloud_review(
             store,
             issuer="connect-consent",
-            **_native_consent_factors(store),
+            password=factors.get("password"),
+            totp_code=factors.get("totp_code"),
         )
         pending_requests_requeued = _requeue_pending_cloud_review_requests(store)
     except PendingReviewRequeueError:

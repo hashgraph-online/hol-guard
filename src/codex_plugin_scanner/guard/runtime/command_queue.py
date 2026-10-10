@@ -413,11 +413,12 @@ def poll_command_queue_once(store: GuardStore, context: HarnessContext) -> dict[
                 reason="capability_and_job_valid",
             )
             execution_item = item
-            if isinstance(native_binding, dict):
+            raw_payload = item.get("payload") if isinstance(item, dict) else None
+            if isinstance(native_binding, dict) and isinstance(raw_payload, dict):
                 # Derived only after authorization; never trust a payload-supplied binding.
                 execution_item = {
                     **item,
-                    "payload": {**item["payload"], "nativeDeliveryBinding": native_binding},
+                    "payload": {**raw_payload, "nativeDeliveryBinding": native_binding},
                 }
             try:
                 _LOGGER.info("Guard command leased.")

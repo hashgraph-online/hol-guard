@@ -199,7 +199,9 @@ def _decode_pre_tool_result(result: object, *, harness: str, event: str = "PreTo
         observed = decode_native_approval_v4_result(consumed, phase="consumed")
         if observed is None:
             return False
-        receipt = observed["receipt"]
+        receipt = observed.get("receipt")
+        if not isinstance(receipt, Mapping):
+            return False
         if (
             receipt["harness"] != harness
             or decision != "allow"

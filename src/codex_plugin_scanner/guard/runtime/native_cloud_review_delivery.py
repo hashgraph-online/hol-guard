@@ -47,31 +47,34 @@ def authorize_native_cloud_review_delivery(
     ):
         raise ExactCloudReviewError("remote_exact_native_context_invalid")
     target = job.get("serverResolvedBinding")
-    if not isinstance(target, Mapping) or not isinstance(target.get("localRequestId"), str):
+    local_id = target.get("localRequestId") if isinstance(target, Mapping) else None
+    if not isinstance(target, Mapping) or not isinstance(local_id, str):
         raise ExactCloudReviewError("remote_exact_native_binding_missing")
-    local_id = target["localRequestId"]
     snapshot = store.get_raw_approval_request_snapshot(local_id)
     if not isinstance(snapshot, dict):
         raise ExactCloudReviewError("remote_exact_native_origin_missing")
     origin = frozen_native_approval_origin(snapshot)
     if origin is None:
         raise ExactCloudReviewError("remote_exact_native_origin_missing")
-    challenge = origin["challenge"]
+    challenge = origin.get("challenge")
+    if not isinstance(challenge, Mapping):
+        raise ExactCloudReviewError("remote_exact_native_origin_missing")
     oauth = _oauth_metadata(store)
     if identity["deviceId"] != oauth.device_id or identity["workspaceId"] != oauth.workspace_id:
         raise ExactCloudReviewError("remote_exact_native_target_mismatch")
     try:
         claim = build_local_review_request_claim(request_row=snapshot, oauth=oauth, store=store)
     except GuardReviewContractError as error:
-        raise ExactCloudReviewError(error.code) from error
+        raise ExactCloudReviewError(str(error)) from error
+    local_version = target.get("localRequestVersion")
     if (
         payload["harness"] != snapshot.get("harness")
         or target.get("claimDigest") != claim["claimHash"]
         or target.get("approvalId") != claim["approvalId"]
-        or target.get("actionDigest") != challenge["action_digest"]
-        or target.get("localRequestId") != challenge["request_id"]
-        or type(target.get("localRequestVersion")) is not int
-        or target["localRequestVersion"] < 1
+        or target.get("actionDigest") != challenge.get("action_digest")
+        or target.get("localRequestId") != challenge.get("request_id")
+        or type(local_version) is not int
+        or cast(int, local_version) < 1
         or claim.get("nativeApprovalChallenge") != challenge
     ):
         raise ExactCloudReviewError("remote_exact_native_binding_mismatch")
@@ -82,10 +85,10 @@ def authorize_native_cloud_review_delivery(
         try:
             protected_renewal = get_native_approval_renewal(
                 store.guard_home,
-                request_id=cast(str, challenge["request_id"]),
+                request_id=cast(str, challenge.get("request_id")),
                 decision_receipt_id=cast(str, context["decisionReceiptId"]),
                 source_claim_hash=cast(str, claim["claimHash"]),
-                original_challenge=challenge,
+                original_challenge=cast(Mapping[str, object], challenge),
             )
         except NativeCloudReviewV4Error as error:
             raise ExactCloudReviewError(error.code) from error

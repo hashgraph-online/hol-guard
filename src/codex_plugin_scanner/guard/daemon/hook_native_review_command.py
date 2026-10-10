@@ -12,7 +12,7 @@ from pathlib import Path
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 
-_MUTABLE_CODE_LAUNCHERS = _MUTABLE_CODE_LAUNCHERS = {
+_MUTABLE_CODE_LAUNCHERS = {
     ".",
     "source",
     "sh",
@@ -43,7 +43,7 @@ _MUTABLE_CODE_LAUNCHERS = _MUTABLE_CODE_LAUNCHERS = {
 }
 _PYTHON_LAUNCHER = re.compile(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$", re.IGNORECASE)
 _FILE_BACKED_PROGRAM_COMMANDS = {"sed", "grep", "egrep", "fgrep", "rg"}
-_DIRECT_REUSABLE_COMMANDS = _DIRECT_REUSABLE_COMMANDS = {
+_DIRECT_REUSABLE_COMMANDS = {
     "cat",
     "head",
     "tail",

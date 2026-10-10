@@ -115,23 +115,27 @@ class StoreReviewEventOutboxMixin:
                 )
             ):
                 raise ValueError("native_application_delivery_cohort_changed")
+            consumed_at = application.get("consumedAt")
+            decision_receipt_id = application.get("decisionReceiptId")
+            if not isinstance(consumed_at, str) or not isinstance(decision_receipt_id, str):
+                raise ValueError("native_application_positive_invalid")
             if current["status"] == "pending":
                 connection.execute(
                     "update approval_requests set status = 'resolved', resolution_action = 'allow', "
                     "resolution_scope = 'once', resolved_at = ?, reason = ? "
                     "where request_id = ? and status = 'pending'",
                     (
-                        application["consumedAt"],
-                        "native_approval_v4_consumed:" + application["decisionReceiptId"],
+                        consumed_at,
+                        "native_approval_v4_consumed:" + decision_receipt_id,
                         request_id,
                     ),
                 )
             sequence = append_request_snapshot_event(
                 connection,
                 request_id=request_id,
+                source=self._guard_source,
                 event_type="review.native_application.applied",
-                oauth_source=self._guard_source,
-                occurred_at=str(application["consumedAt"]),
+                occurred_at=consumed_at,
                 native_application_result=application,
                 request_snapshot=request_snapshot,
             )
