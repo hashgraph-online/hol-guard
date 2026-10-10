@@ -1764,15 +1764,16 @@ class TestGuardSurfaceServer:
         assert health["hook_capacity"]["rejected"] == 1
         assert health["hook_capacity"]["per_harness_rejected"]["pi"] == 1
         assert health["hook_capacity"]["rejection_reasons"] == {"daemon_hook_queue_bytes": 1}
-        assert health["hook_workers"]["decisions"] == {}
         assert health["request_capacity"]["limit"] == 32
         assert health["request_capacity"]["critical_limit"] == 8
         operator_health = runtime["operator_health"]
         assert operator_health["state"] == "healthy"
         assert operator_health["repairable"] is False
         assert operator_health["queue_depth"] == health["hook_capacity"]["queued"]
-        assert operator_health["workers_busy"] == health["hook_workers"]["busy"]
-        assert operator_health["workers_ready"] == health["hook_workers"]["ready"]
+        assert operator_health["workers_busy"] == health["hook_capacity"]["active"]
+        assert operator_health["workers_ready"] == (
+            health["hook_capacity"]["limit"] - health["hook_capacity"]["active"]
+        )
         assert "automatically" in operator_health["automatic_recovery"]
         assert set(health["sqlite_profile"]) == {
             "connects",

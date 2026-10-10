@@ -80,6 +80,22 @@ def test_fresh_allow_requires_the_exact_original_action(tmp_path: Path) -> None:
     assert authorized is False
 
 
+def test_fresh_allow_rejects_a_reviewer_that_raises(tmp_path: Path) -> None:
+    request, hook_payload, home_dir = _fixture(tmp_path)
+
+    def raise_review(*_args: object) -> dict[str, object]:
+        raise RuntimeError("native edge unavailable")
+
+    authorized = revalidate_codex_live_allow(
+        request,
+        {"hook_input": json.dumps(hook_payload)},
+        home_dir=home_dir,
+        reviewer=raise_review,
+    )
+
+    assert authorized is False
+
+
 def test_fresh_allow_rejects_policy_that_became_terminal(tmp_path: Path) -> None:
     request, hook_payload, home_dir = _fixture(tmp_path)
 
