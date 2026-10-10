@@ -8,8 +8,9 @@ verifier key before each native call, then close the resident on teardown.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -27,25 +28,25 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch) -> Iterator
 
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(_resolve_native_hook_runtime()))
-    real = local_cli_grant_decision.native_local_cli_grant
     homes: set[Path] = set()
 
-    def keyed(*, guard_home: Path, **kwargs):
-        if guard_home not in homes:
-            provision_native_verifier_key_for_store(GuardStore(guard_home))
-            homes.add(guard_home)
-        return real(guard_home=guard_home, **kwargs)
+    def keyed(native: Callable[..., Any]) -> Callable[..., Any]:
+        """Wrap a native grant call so its home holds a verifier key first."""
 
-    real_mcp = local_mcp_grant_decision.native_local_mcp_grant
+        def call(*, guard_home: Path, **kwargs: Any) -> Any:
+            if guard_home not in homes:
+                provision_native_verifier_key_for_store(GuardStore(guard_home))
+                homes.add(guard_home)
+            return native(guard_home=guard_home, **kwargs)
 
-    def keyed_mcp(*, guard_home: Path, **kwargs):
-        if guard_home not in homes:
-            provision_native_verifier_key_for_store(GuardStore(guard_home))
-            homes.add(guard_home)
-        return real_mcp(guard_home=guard_home, **kwargs)
+        return call
 
-    monkeypatch.setattr(local_cli_grant_decision, "native_local_cli_grant", keyed)
-    monkeypatch.setattr(local_mcp_grant_decision, "native_local_mcp_grant", keyed_mcp)
+    monkeypatch.setattr(
+        local_cli_grant_decision, "native_local_cli_grant", keyed(local_cli_grant_decision.native_local_cli_grant)
+    )
+    monkeypatch.setattr(
+        local_mcp_grant_decision, "native_local_mcp_grant", keyed(local_mcp_grant_decision.native_local_mcp_grant)
+    )
     yield
     for home in homes:
         close_native_residents(home)

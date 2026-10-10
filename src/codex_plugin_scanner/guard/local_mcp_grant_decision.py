@@ -14,6 +14,7 @@ never reads grant rows to substitute.
 
 from __future__ import annotations
 
+import logging
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -21,7 +22,9 @@ from typing import Literal
 
 from .models import GuardAction, GuardArtifact
 from .native_local_cli_identity import LocalCliIdentityUnavailableError
-from .native_local_mcp_grant import native_local_mcp_grant
+from .native_local_mcp_grant import NativeLocalMcpGrantFailure, native_local_mcp_grant
+
+_LOGGER = logging.getLogger(__name__)
 
 McpGrantOutcome = Literal["allowed", "blocked", "review"]
 
@@ -63,10 +66,14 @@ def decide_local_mcp_grant(
         launcher_path=os.environ.get("PATH"),
         launcher_home=os.path.expanduser("~"),
     )
-    if native is None:
-        raise LocalCliIdentityUnavailableError("native_local_mcp_grant_unavailable")
-    if native.state in {"allowed", "blocked", "review"}:
-        return native.state  # type: ignore[return-value]
+    if isinstance(native, NativeLocalMcpGrantFailure):
+        # Callers hold the call for review without an answer; record why so a
+        # grant that stopped applying can be traced to its cause.
+        _LOGGER.warning("local MCP grant decision unavailable: %s", native.code)
+        raise LocalCliIdentityUnavailableError(native.code)
+    state = native.state
+    if state == "allowed" or state == "blocked" or state == "review":
+        return state
     return None
 
 

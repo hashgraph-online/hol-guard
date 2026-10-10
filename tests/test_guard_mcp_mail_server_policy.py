@@ -90,8 +90,9 @@ class _AuthorityStore:
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
 
-    def read_local_mcp_grant(self, *_args: object, **_kwargs: object) -> None:
-        return None
+    def has_local_cli_grant_rules(self) -> bool:
+        """No device grant rows exist, so an unavailable resident cannot hide one."""
+        return False
 
     def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
         assert registry is BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -422,8 +423,11 @@ def test_offline_unreviewed_launch_retains_host_policy(
     """Exercise native identity and final tool evaluation without invoking mail."""
     # No grants are enrolled here; an unkeyed home must not trip the shared resident.
     from codex_plugin_scanner.guard import local_mcp_grant_decision
+    from codex_plugin_scanner.guard.native_local_mcp_grant import NativeLocalMcpGrant
 
-    monkeypatch.setattr(local_mcp_grant_decision, "native_local_mcp_grant", lambda **_: None)
+    monkeypatch.setattr(
+        local_mcp_grant_decision, "native_local_mcp_grant", lambda **_: NativeLocalMcpGrant("none", None, None)
+    )
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace", mode="prompt")
     store = GuardStore(config.guard_home)
     artifact = _artifact(tool, command=command, args=args, env=env)

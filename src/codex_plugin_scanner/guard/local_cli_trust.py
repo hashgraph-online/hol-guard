@@ -124,12 +124,18 @@ def _hold_unverified_mcp_decision(
 
     Unlike CLI grants, MCP grants also produce review-only outcomes (per-tool
     review, unseen tools under an enrolled server, changed tool authority), and
-    each needs a grant row. Any row therefore holds an otherwise allowed call.
+    each needs a grant row. Any row therefore holds an otherwise allowed call,
+    and a call already under review stays decisively in review so a temporary
+    approval cannot upgrade it past a stored block.
     """
 
     contributed = _contributed_mcp_decision(store, artifact, current_action)
+    if contributed is not None and contributed[0] in {"block", "review"}:
+        return contributed
     effective = contributed[0] if contributed is not None else current_action
-    if effective in {"allow", "warn"} and _may_hold_mcp_grants(store):
+    # A review is held too: with no decisive answer, the caller would let a
+    # time-bounded approval upgrade it to allow past a stored device block.
+    if effective in {"allow", "warn", "review"} and _may_hold_mcp_grants(store):
         return (
             "review",
             "local-mcp-extension",

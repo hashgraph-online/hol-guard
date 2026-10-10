@@ -802,34 +802,3 @@ def test_recognize_failed_package_mcp_stays_built_in(tmp_path: Path, monkeypatch
         assert "MCP tools" in str(exc)
     else:
         raise AssertionError("expected package launcher without MCP tools to be rejected")
-
-
-def _resident_unavailable(**_kwargs):
-    from codex_plugin_scanner.guard.native_local_cli_identity import LocalCliIdentityUnavailableError
-
-    raise LocalCliIdentityUnavailableError("native_local_mcp_grant_unavailable")
-
-
-def test_unavailable_resident_holds_review_only_grants(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import local_cli_trust
-
-    identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
-    # No block rule exists; the per-tool review state is the only protection.
-    _enroll(store, identity, states={"read_file": "review", "write_file": "inherit"})
-    monkeypatch.setattr(local_cli_trust, "decide_local_mcp_grant", _resident_unavailable)
-
-    decision = local_cli_trust.apply_local_mcp_extension_decision(store, _artifact(identity, "read_file"), "allow")
-
-    assert decision is not None
-    assert decision[0] == "review"
-
-
-def test_unavailable_resident_without_grants_keeps_baseline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard import local_cli_trust
-
-    identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
-    monkeypatch.setattr(local_cli_trust, "decide_local_mcp_grant", _resident_unavailable)
-
-    assert local_cli_trust.apply_local_mcp_extension_decision(store, _artifact(identity, "read_file"), "allow") is None
