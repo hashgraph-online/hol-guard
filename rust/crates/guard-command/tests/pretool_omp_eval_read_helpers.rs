@@ -54,6 +54,7 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         "const r = await read('README.md'); display(r)",
         "display(await read(`README.md`))",
         "display(await read('notes:1'))",
+        "display(await tool.read({path:'notes:1'}))",
     ] {
         let result = evaluate(code);
         assert_eq!(
