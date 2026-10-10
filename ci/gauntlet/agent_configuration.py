@@ -18,12 +18,14 @@ def write_agent_configuration(path: Path, relay: InferenceRelay) -> None:
     ``config.yml`` pins ``launch.enabled`` off so the bash schema stays the
     non-service variant: otherwise 18.4.12 advertises ``name``/``ready`` and the
     model materializes inert defaults that add notice lines to every output.
+    Print mode must await delegated results, so ``async.enabled`` is off;
+    otherwise the primary turn can exit while subagents still stream.
     """
     path.mkdir(mode=0o700)
     # The eval scenario exercises the guarded JavaScript session-tool bridge;
     # Python/raw filesystem cells have a different admission contract.
     (path / "config.yml").write_text(
-        json.dumps({"launch": {"enabled": False}, "eval": {"py": False, "js": True}}),
+        json.dumps({"launch": {"enabled": False}, "async": {"enabled": False}, "eval": {"py": False, "js": True}}),
         encoding="utf-8",
     )
     configuration = {

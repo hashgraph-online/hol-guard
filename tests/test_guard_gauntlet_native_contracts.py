@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from ci.gauntlet.agent_configuration import write_agent_configuration
+from ci.gauntlet.case_helpers import _scenario_tools
+from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.evidence import reconcile
 
 
@@ -15,6 +17,15 @@ def test_eval_lane_uses_the_supported_javascript_session_bridge(tmp_path: Path) 
     config = json.loads((tmp_path / "agent" / "config.yml").read_text())
     assert config["eval"] == {"js": True, "py": False}
     assert config["launch"] == {"enabled": False}
+    # Print mode exits after the primary turn; wait for actual delegated
+    # results instead of abandoning background agents at process shutdown.
+    assert config["async"] == {"enabled": False}
+
+
+def test_eval_bridge_has_the_catalog_read_dependency_available() -> None:
+    scenarios = {scenario.id: scenario for scenario in load_catalog()}
+    assert _scenario_tools(scenarios["omp-native-eval-reads-skill-doc"]) == "eval,read"
+    assert _scenario_tools(scenarios["omp-native-task-readonly-lookup"]) == "task"
 
 
 def task_events(model: dict, host: dict) -> list[dict]:

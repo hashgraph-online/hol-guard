@@ -54,6 +54,10 @@ def _scenario_tools(scenario: Scenario) -> str:
         return "bash,read"
     if scenario.oracle == "native-tools":
         tools = list(scenario.required_tools)
+        # The SDK bridge only exposes enabled session tools. Keep read enabled
+        # so an eval cell can perform the catalog's real tool.read call.
+        if "eval" in tools and "read" not in tools:
+            tools.append("read")
         if scenario.commands and "bash" not in tools:
             tools.append("bash")
         return ",".join(tools)
