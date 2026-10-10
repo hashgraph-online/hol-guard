@@ -356,6 +356,28 @@ fn adjust_grok(envelope: &mut Envelope) {
     }
 }
 
+/// Oh My Pi tools that would otherwise fall back to the generic
+/// `config_change` label: `task` launches a delegated prompt, `eval` runs
+/// code, and `ls`/`find` list names.
+fn adjust_omp(envelope: &mut Envelope) {
+    if envelope.mcp_server.is_some() || envelope.command.is_some() {
+        return;
+    }
+    if envelope.event_name == "UserPromptSubmit" && envelope.prompt_excerpt.is_some() {
+        return;
+    }
+    let tool = py_lower(envelope.tool_name.as_deref().unwrap_or(""));
+    let action = match tool.as_str() {
+        "task" => "prompt",
+        "eval" => "shell_command",
+        "wait" | "todo" | "todo_write" => "harness_start",
+        "ls" | "find" => "file_read",
+        _ => return,
+    };
+    action.clone_into(&mut envelope.action_type);
+    envelope.action_id = envelope.compute_action_id();
+}
+
 fn adjust_cline(envelope: &mut Envelope, prepared: &OMap) {
     let original = prepared
         .get("tool_input")
@@ -381,6 +403,7 @@ pub fn normalize_harness_envelope(
         "cursor" => adjust_cursor(&mut envelope, &prepared)?,
         "grok" => adjust_grok(&mut envelope),
         "cline" => adjust_cline(&mut envelope, &prepared),
+        "omp" => adjust_omp(&mut envelope),
         _ => {}
     }
     Ok(envelope.into_map())
