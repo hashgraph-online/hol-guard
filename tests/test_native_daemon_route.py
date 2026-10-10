@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -279,6 +280,48 @@ def test_concurrent_asks_are_bounded_and_every_caller_is_answered(monkeypatch: p
 def test_waiting_for_an_ask_slot_past_the_deadline_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident(monkeypatch, lambda request: pytest.fail("resident must not be asked"))
     monkeypatch.setattr(route, "_ASK_SLOTS", threading.BoundedSemaphore(0))
+    monkeypatch.setattr(route, "_OPERATION", dataclasses.replace(route._OPERATION, timeout_seconds=0.05))
+    with pytest.raises(route.NativeDaemonRouteError) as caught:
+        route.native_route_facts("POST", "/v1/runtime")
+    assert caught.value.code == "native_daemon_route_unavailable"
+
+
+def test_slot_wait_and_resident_ask_share_one_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    budget = 0.6
+    seen: list[float] = []
+
+    class SlowSlots:
+        def acquire(self, timeout: float) -> bool:
+            time.sleep(0.2)
+            return True
+
+        def release(self) -> None:
+            return None
+
+    def transport(*, request: dict[str, object], timeout_seconds: float, **_kwargs: object) -> dict[str, object]:
+        seen.append(timeout_seconds)
+        return _good(request, dict(_ROUTE_PAYLOAD))
+
+    _resident(monkeypatch, lambda request: None)
+    monkeypatch.setattr(route, "_resident_request", transport)
+    monkeypatch.setattr(route, "_ASK_SLOTS", SlowSlots())
+    monkeypatch.setattr(route, "_OPERATION", dataclasses.replace(route._OPERATION, timeout_seconds=budget))
+    route.native_route_facts("POST", "/v1/runtime")
+    assert len(seen) == 1
+    assert 0 < seen[0] <= budget - 0.2 + 0.05
+
+
+def test_an_ask_whose_slot_wait_spent_the_budget_is_not_sent(monkeypatch: pytest.MonkeyPatch) -> None:
+    class SlowSlots:
+        def acquire(self, timeout: float) -> bool:
+            time.sleep(0.1)
+            return True
+
+        def release(self) -> None:
+            return None
+
+    _resident(monkeypatch, lambda request: pytest.fail("resident must not be asked"))
+    monkeypatch.setattr(route, "_ASK_SLOTS", SlowSlots())
     monkeypatch.setattr(route, "_OPERATION", dataclasses.replace(route._OPERATION, timeout_seconds=0.05))
     with pytest.raises(route.NativeDaemonRouteError) as caught:
         route.native_route_facts("POST", "/v1/runtime")
