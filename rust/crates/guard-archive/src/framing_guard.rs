@@ -118,6 +118,12 @@ pub(crate) struct Framer {
     /// A PAX record was read and has not yet been attached to a member.
     pending_pax: bool,
     pending_pax_size: Option<u64>,
+    /// The pending PAX record carries a `path` / `linkpath` key.
+    pending_pax_path: bool,
+    pending_pax_linkpath: bool,
+    /// A GNU long name / long link header was read for the next member.
+    pending_long_name: bool,
+    pending_long_link: bool,
     meta_cap: u64,
     entry_header_pos: Option<u64>,
 }
@@ -130,6 +136,10 @@ impl Framer {
             state: fresh_header(),
             pending_pax: false,
             pending_pax_size: None,
+            pending_pax_path: false,
+            pending_pax_linkpath: false,
+            pending_long_name: false,
+            pending_long_link: false,
             meta_cap: meta_cap.min(METADATA_RECORD_CAP),
             entry_header_pos: None,
         }
@@ -167,8 +177,19 @@ impl Framer {
                             return Err(Verdict::AmbiguousPax);
                         }
                         let size = pax_extensions_value(buf, "size");
+                        let (has_path, has_linkpath) = pax_path_keys(buf);
                         let padding = *padding;
+                        // A GNU long name and a PAX `path` (likewise a long
+                        // link and `linkpath`) name the same member twice and
+                        // extractors disagree on which wins.
+                        if (has_path && self.pending_long_name)
+                            || (has_linkpath && self.pending_long_link)
+                        {
+                            return Err(Verdict::AmbiguousPax);
+                        }
                         self.pending_pax_size = size;
+                        self.pending_pax_path = has_path;
+                        self.pending_pax_linkpath = has_linkpath;
                         self.state = skip_or_header(padding);
                     }
                 }
@@ -277,6 +298,21 @@ impl Framer {
             if size > self.meta_cap {
                 return Err(Verdict::MetadataTooLarge);
             }
+            match meta {
+                Meta::LongName => {
+                    if self.pending_pax_path {
+                        return Err(Verdict::AmbiguousPax);
+                    }
+                    self.pending_long_name = true;
+                }
+                Meta::LongLink => {
+                    if self.pending_pax_linkpath {
+                        return Err(Verdict::AmbiguousPax);
+                    }
+                    self.pending_long_link = true;
+                }
+                Meta::Pax => {}
+            }
             if meta == Meta::Pax {
                 if self.pending_pax {
                     // `tar` rejects two PAX records for one member.
@@ -302,6 +338,10 @@ impl Framer {
         // record whether or not the size override applied.
         self.pending_pax = false;
         self.pending_pax_size = None;
+        self.pending_pax_path = false;
+        self.pending_pax_linkpath = false;
+        self.pending_long_name = false;
+        self.pending_long_link = false;
         self.entry_header_pos = Some(self.header_start);
         if entry_type.is_gnu_sparse() {
             match header.as_gnu() {
@@ -345,6 +385,19 @@ fn pax_is_ambiguous(records: &[u8]) -> bool {
         }
     }
     paths > 1 || links > 1 || sizes > 1
+}
+
+/// Whether a PAX record set carries a `path` and a `linkpath` key.
+fn pax_path_keys(records: &[u8]) -> (bool, bool) {
+    let (mut path, mut linkpath) = (false, false);
+    for extension in PaxExtensions::new(records).flatten() {
+        match extension.key() {
+            Ok("path") => path = true,
+            Ok("linkpath") => linkpath = true,
+            _ => {}
+        }
+    }
+    (path, linkpath)
 }
 
 /// `tar`'s private `pax_extensions_value`, rebuilt on its public parser: the

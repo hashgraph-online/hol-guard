@@ -473,3 +473,35 @@ fn ambiguous_pax_record_sets_are_refused_before_tar_sees_them() {
     let harmless = pax_header(&[pax_record("comment", b"1"), pax_record("comment", b"2")].concat());
     assert_eq!(framer.feed(&harmless), Ok(()));
 }
+
+#[test]
+fn gnu_long_names_and_pax_paths_for_one_member_are_refused_in_either_order() {
+    let pax = |key: &str| pax_header(&pax_record(key, b"../../x"));
+    let cases: [(&str, Vec<u8>, Vec<u8>); 4] = [
+        ("path", pax("path"), gnu_longname(b"benign")),
+        ("linkpath", pax("linkpath"), gnu_longlink(b"benign")),
+        ("path", gnu_longname(b"benign"), pax("path")),
+        ("linkpath", gnu_longlink(b"benign"), pax("linkpath")),
+    ];
+    for (key, first, second) in cases {
+        let mut framer = Framer::new(CAP);
+        let result = framer.feed(&first).and_then(|()| framer.feed(&second));
+        assert_eq!(result, Err(Verdict::AmbiguousPax), "{key}");
+    }
+    // Unrelated pairings are not ambiguous, and the flags reset per member.
+    let mut framer = Framer::new(CAP);
+    let mixed = [
+        pax("path"),
+        gnu_longlink(b"benign"),
+        file("a", b""),
+        gnu_longname(b"benign"),
+        pax("linkpath"),
+        file("b", b""),
+        gnu_longname(b"benign"),
+        file("c", b""),
+        pax("path"),
+        file("d", b""),
+    ]
+    .concat();
+    assert_eq!(framer.feed(&mixed), Ok(()));
+}

@@ -541,6 +541,7 @@
     "rust/crates/guard-command/**",
     "rust/crates/guard-contracts/**",
     "rust/crates/guard-archive/**",
+    "rust/crates/guard-alloc-probe/**",
     "rust/crates/guard-policy-snapshot/**",
     "rust/crates/guard-rule-contract/**",
     "rust/crates/guard-rules/**",
