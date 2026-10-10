@@ -1707,10 +1707,6 @@ def _now() -> str:
     return _canonical_utc_timestamp(datetime.now(timezone.utc).isoformat())
 
 
-def _lease_expiry(now: str, lease_seconds: int) -> str:
-    return (datetime.fromisoformat(now) + timedelta(seconds=max(lease_seconds, 1))).isoformat()
-
-
 def _string_list(value: object) -> list[str]:
     if not isinstance(value, list):
         return []

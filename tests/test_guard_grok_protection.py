@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import tempfile
 from pathlib import Path
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, PreparedHarnessInstall
@@ -17,6 +18,7 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     uninstall_confirmation_token,
 )
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.store_approvals import (
     add_approval_request,
@@ -199,6 +201,7 @@ def test_normalize_harness_payload_supports_grok_secret_read(tmp_path: Path) -> 
 def _approval_connection() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
+    bind_connection_guard_home(connection, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
     connection.execute(approval_schema_statement())
     for statement in approval_index_statements():
         connection.execute(statement)
