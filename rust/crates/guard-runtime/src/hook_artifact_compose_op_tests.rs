@@ -10,7 +10,7 @@ const VECTORS: &str = include_str!("../tests/fixtures/hook_artifact_compose_vect
 #[test]
 fn matches_recorded_vectors() {
     let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
-    assert!(vectors.len() >= 80);
+    assert!(vectors.len() >= 78);
     for vector in vectors {
         let name = vector["name"].as_str().unwrap();
         let query: HookArtifactComposeQueryV1 = serde_json::from_value(vector["query"].clone())

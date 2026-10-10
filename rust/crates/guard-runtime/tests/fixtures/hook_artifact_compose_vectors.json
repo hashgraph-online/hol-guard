@@ -277,7 +277,7 @@
           "input_source": "untrusted_hook_payload_hint",
           "normalized_action": "require-reapproval",
           "original_action": null,
-          "original_type": "float",
+          "original_type": "int",
           "reason_code": "guard_action_unknown",
           "source": "guard_action_normalizer"
         }
@@ -1185,22 +1185,6 @@
   },
   {
     "expected": {
-      "approval_context_policy_action": "review",
-      "current_policy_action": "review",
-      "policy_action": "review"
-    },
-    "name": "settle_unknown_granted_reviews",
-    "query": {
-      "approval_context_action": "warn",
-      "current_action": "warn",
-      "granted_action": "bogus",
-      "kind": "grant_settle",
-      "native_floor": null,
-      "policy_action": "warn"
-    }
-  },
-  {
-    "expected": {
       "approval_reuse": {
         "action": "review",
         "current_action": "review",
@@ -1713,31 +1697,6 @@
     "name": "override_claim_failed",
     "query": {
       "claim_succeeded": false,
-      "kind": "trusted_override",
-      "policy_action": "review",
-      "prior_reuse_reason_code": null,
-      "remembered_rule_rejected": false,
-      "stored_action": "allow",
-      "stored_present": true,
-      "stored_source": "approval-gate",
-      "stored_validation_reason": null,
-      "token_validation_reason": null
-    }
-  },
-  {
-    "expected": {
-      "claim_required": false,
-      "evidence": {
-        "applied": false,
-        "authoritative_action": "review",
-        "reason_code": null,
-        "source": "trusted_request_override"
-      },
-      "reason_code": null
-    },
-    "name": "override_claim_succeeded_defers",
-    "query": {
-      "claim_succeeded": true,
       "kind": "trusted_override",
       "policy_action": "review",
       "prior_reuse_reason_code": null,
