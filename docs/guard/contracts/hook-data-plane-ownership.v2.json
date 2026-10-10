@@ -365,6 +365,7 @@
     "src/codex_plugin_scanner/guard/native_hook_decision.py",
     "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
     "src/codex_plugin_scanner/guard/native_hook_adapter.py",
+    "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
     "src/codex_plugin_scanner/guard/native_github_cli.py",
     "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
     "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
