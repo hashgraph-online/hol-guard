@@ -242,7 +242,7 @@ def test_non_object_answer_is_recorded_as_unbound_and_fails_closed(monkeypatch: 
     _resident(monkeypatch, lambda request: answer)
     recorded: list[tuple[bool, str]] = []
     monkeypatch.setattr(
-        shared, "record_resident", lambda _home, *, success, reason="": recorded.append((success, reason))
+        shared, "record_resident", lambda _home, *, success, reason="", status=None: recorded.append((success, reason))
     )
     with pytest.raises(route.NativeDaemonRouteError) as caught:
         route.native_route_facts("POST", "/v1/runtime")

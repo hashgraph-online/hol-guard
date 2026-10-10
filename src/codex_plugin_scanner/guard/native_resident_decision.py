@@ -17,7 +17,7 @@ from typing import Any
 from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
-from .native_runtime import native_runtime_status
+from .native_runtime import NativeRuntimeStatus, native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 
@@ -64,7 +64,13 @@ def shape_fields(value: object, fields: Mapping[str, Any], invalid: Callable[[],
     return value
 
 
-def record_resident(guard_home: Path, *, success: bool, reason: str = "") -> None:
+def record_resident(
+    guard_home: Path,
+    *,
+    success: bool,
+    reason: str = "",
+    status: NativeRuntimeStatus | None = None,
+) -> None:
     """Record resident health only once a reply has passed binding and validation.
 
     The shared transport would otherwise reset the failure streak on every
@@ -72,7 +78,8 @@ def record_resident(guard_home: Path, *, success: bool, reason: str = "") -> Non
     never open the circuit.
     """
 
-    status = native_runtime_status()
+    if status is None:
+        status = native_runtime_status()
     if status.identity is None:
         return
     if success:
@@ -119,6 +126,7 @@ def resident_decide(
         digest = "sha256:" + _canonical_request_sha256(request)
     except (OSError, TypeError, ValueError):
         raise spec.fail(f"{spec.prefix}_request_invalid") from None
+    runtime_status = native_runtime_status()
     response = transport(
         operation=spec.operation,
         request=request,
@@ -127,31 +135,32 @@ def resident_decide(
         required_feature=spec.feature,
         response_schema=spec.result_schema,
         record_success=False,
+        status=runtime_status,
     )
     if response is None:
         raise spec.fail(spec.unavailable)
     if not isinstance(response, dict):
-        record_resident(home, success=False, reason=f"{spec.prefix}_unbound")
+        record_resident(home, success=False, reason=f"{spec.prefix}_unbound", status=runtime_status)
         raise spec.fail(spec.unavailable)
     if (
         response.get("schema") != spec.result_schema
         or response.get("request_id") != request["request_id"]
         or response.get("request_sha256") != digest
     ):
-        record_resident(home, success=False, reason=f"{spec.prefix}_unbound")
+        record_resident(home, success=False, reason=f"{spec.prefix}_unbound", status=runtime_status)
         raise spec.fail(spec.unavailable)
     status, code = response.get("status"), response.get("code")
     if status == "error":
-        record_resident(home, success=True)
+        record_resident(home, success=True, status=runtime_status)
         raise spec.fail(code if isinstance(code, str) and spec.code_pattern().fullmatch(code) else spec.unavailable)
     payload = response.get("payload")
     if status != "ok" or code != "ok" or not isinstance(payload, dict) or payload.get("kind") != query.get("kind"):
-        record_resident(home, success=False, reason=f"{spec.prefix}_bad_status")
+        record_resident(home, success=False, reason=f"{spec.prefix}_bad_status", status=runtime_status)
         raise spec.fail(spec.unavailable)
     try:
         validate(payload)
     except spec.error:
-        record_resident(home, success=False, reason=f"{spec.prefix}_invalid")
+        record_resident(home, success=False, reason=f"{spec.prefix}_invalid", status=runtime_status)
         raise
-    record_resident(home, success=True)
+    record_resident(home, success=True, status=runtime_status)
     return payload
