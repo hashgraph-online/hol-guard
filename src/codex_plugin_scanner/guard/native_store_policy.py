@@ -105,37 +105,31 @@ def _payload(
     """The ``ok`` payload of a reply bound to ``request``, else ``None``.
 
     ``_resident_request`` is called with ``record_success=False``, so resident
-    health is recorded here: a reply that binds to the request and carries an
-    ``ok`` payload counts as a success, any other reply the resident sent counts
-    as a failure.
+    health is recorded here. A reply bound to the request (same id and request
+    digest) is the resident's real answer and counts as a success, including a
+    bound ``error`` such as store contention, which still yields ``None``. An
+    unbound reply or an ``ok`` reply with a malformed payload counts as a
+    failure.
     """
 
     if response is None:
         return None
-    payload = _bound_payload(response, request)
-    identity = native_runtime_status().identity
-    if identity is not None:
-        if payload is None:
-            native_record_resident_failure(identity.sha256, guard_home, reason="native_store_policy_binding")
-        else:
-            native_record_resident_success(identity.sha256, guard_home)
-    return payload
-
-
-def _bound_payload(response: dict[str, object], request: dict[str, object]) -> dict[str, object] | None:
     try:
         digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
         return None
-    if (
-        response.get("request_id") != request["request_id"]
-        or response.get("request_sha256") != digest
-        or response.get("status") != "ok"
-        or response.get("code") != "ok"
-    ):
-        return None
-    payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
+    bound = response.get("request_id") == request["request_id"] and response.get("request_sha256") == digest
+    status, payload = response.get("status"), response.get("payload")
+    ok_reply = status == "ok" and response.get("code") == "ok"
+    usable = ok_reply and isinstance(payload, dict)
+    healthy = bound and (usable or status == "error")
+    identity = native_runtime_status().identity
+    if identity is not None:
+        if healthy:
+            native_record_resident_success(identity.sha256, guard_home)
+        else:
+            native_record_resident_failure(identity.sha256, guard_home, reason="native_store_policy_binding")
+    return payload if bound and usable and isinstance(payload, dict) else None
 
 
 def native_claim_approval_reuse_decisions(

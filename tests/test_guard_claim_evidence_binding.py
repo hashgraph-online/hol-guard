@@ -336,3 +336,25 @@ def test_fresh_home_diagnostic_needs_no_resident(tmp_path: Path, monkeypatch: py
 
     assert store.approval_reuse_diagnostic("codex", _ARTIFACT_ID, _ARTIFACT_HASH, "/workspace/a", None) == (None, None)
     assert store.approval_reuse_validation_reason("codex", _ARTIFACT_ID, _ARTIFACT_HASH, None, None) is None
+
+
+def test_bound_error_replies_count_as_resident_success(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, selected = _local_store(tmp_path)
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        native_store_policy, "native_record_resident_success", lambda *_args, **_kwargs: recorded.append("success")
+    )
+    monkeypatch.setattr(
+        native_store_policy, "native_record_resident_failure", lambda *_args, **_kwargs: recorded.append("failure")
+    )
+    real = native_store_policy._resident_request
+
+    def busy(**kwargs: object) -> dict[str, object] | None:
+        response = real(**kwargs)  # type: ignore[arg-type]
+        assert response is not None
+        return {**response, "status": "error", "code": "native_claim_approval_reuse_store_unavailable"}
+
+    monkeypatch.setattr(native_store_policy, "_resident_request", busy)
+
+    assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is False
+    assert recorded == ["success"]
