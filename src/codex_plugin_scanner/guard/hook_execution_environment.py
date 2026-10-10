@@ -9,6 +9,8 @@ import re
 
 HOOK_EXECUTION_ENVIRONMENT_KEY = "guard_execution_environment"
 MAX_STAMPED_HOOK_INPUT_BYTES = 1_000_000
+# Present-but-empty pager variables still select Git's pager (empty disables it).
+_PAGER_NAMES = ("GIT_PAGER", "PAGER")
 _GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 # Git pages through `less` when no pager is configured, so an explicit `less`
 # adds no execution surface beyond the default. Only flags that take no
@@ -38,7 +40,7 @@ def collect_hook_execution_environment() -> dict[str, object]:
         "home": os.environ.get("HOME"),
         "git_pager_disabled": pager_default_equivalent(os.environ.get("GIT_PAGER")),
         "pager_disabled": pager_default_equivalent(os.environ.get("PAGER")),
-        "environment_names": sorted(active),
+        "environment_names": sorted(set(active) | {n for n in _PAGER_NAMES if n in os.environ}),
         "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
         "git_config_no_system": git_config_no_system_enabled(os.environ.get("GIT_CONFIG_NOSYSTEM")),
         "environment_digest": hashlib.sha256(

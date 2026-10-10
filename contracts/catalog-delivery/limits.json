@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "unit": "bytes",
+  "max_daemon_catalog_response_bytes": 8000000,
+  "max_daemon_get_response_bytes": 1048576,
+  "max_generated_catalog_artifact_bytes": 8000000,
+  "max_native_catalog_projection_bytes": 8000000,
+  "max_native_command_program_bytes": 4194304,
+  "cloud_v1_catalog_sync_max_body_bytes": 1016384
+}

@@ -52,14 +52,6 @@ class StoreReadStateMixin:
             ).fetchall()
         return [str(row["request_id"]) for row in rows]
 
-    def is_request_read(self, request_id: str) -> bool:
-        with self._connect() as connection:
-            row = connection.execute(
-                "select 1 from guard_request_read_state where request_id = ?",
-                (request_id,),
-            ).fetchone()
-        return row is not None
-
     def clear_read_state(self) -> None:
         with self._connect() as connection:
             connection.execute("delete from guard_request_read_state")

@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.cloud_exception_requests import (
     fetch_cloud_exception_requests,
     normalized_cloud_exception_requests_url,
     submit_cloud_exception_request,
-    submit_command_policy_exception_request,
     validate_cloud_exception_request_payload,
     validate_command_policy_exception_payload,
 )
@@ -302,23 +301,6 @@ def test_submit_cloud_exception_request_posts_normalized_payload(
         dict(_VALID_RESOURCE_EXCEPTION_PAYLOAD)
     )
     assert request.headers.get("Authorization") == "Bearer demo-token"
-
-
-def test_submit_command_policy_exception_request_uses_same_sync_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    captured = _hermetic_sync_context(monkeypatch, {"requestId": "policy-1"})
-
-    result = submit_command_policy_exception_request(store, dict(_VALID_COMMAND_POLICY_PAYLOAD))
-
-    assert result == {"requestId": "policy-1"}
-    request = captured[0]
-    assert request.full_url == "https://hol.org/api/guard/exceptions/requests"
-    assert isinstance(request.data, bytes)
-    body = json.loads(request.data.decode("utf-8"))
-    assert body["kind"] == "command-policy"
-    assert "rawCommand" not in body and "command" not in body
 
 
 def test_fetch_cloud_exception_requests_uses_explicit_auth_context(

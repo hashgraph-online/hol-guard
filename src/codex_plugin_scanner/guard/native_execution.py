@@ -28,8 +28,6 @@ if TYPE_CHECKING:
     from .contained_package_script_execution import ContainedPackageScriptResult
     from .contained_typescript_execution import ContainedTypeScriptResult
     from .contained_workspace_write_execution import ContainedWorkspaceWriteResult
-    from .runtime.containment_contract import ContainmentAttestation
-    from .runtime.containment_outputs import ContainmentCapturedOutput
     from .runtime.effect_decision import DecisionReason, EffectDecision, PositiveProof
 
 _MAX_REQUEST_BYTES = 256 * 1024
@@ -76,6 +74,7 @@ def _resident_request(
     timeout_seconds: float,
     required_feature: str,
     response_schema: str | None = None,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
 ) -> dict[str, object] | None:
     """Envelope + transport shared by all contained-execution ops."""
     status = native_runtime_status()
@@ -94,7 +93,7 @@ def _resident_request(
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
         return None
-    if len(payload) > _MAX_REQUEST_BYTES:
+    if len(payload) > max_request_bytes:
         return None
     environment = _isolated_environment()
     response = native_resident_client_request(
@@ -132,7 +131,12 @@ def _resident_request(
         # ("opened") / recv ("event") / close ("closed") and forced a silent
         # Python fallback the resident should own.
         accepted = _MCP_SESSION_ACCEPTED_STATUS.get(operation)
-        if operation in {"policy_decision_lookup", "local_cli_grant_decide"}:
+        if operation in {
+            "policy_decision_lookup",
+            "local_cli_grant_decide",
+            "local_mcp_grant_decide",
+            "approval_proof_decide",
+        }:
             accepted = frozenset({"ok", "error"})
         if accepted is not None:
             if decoded.get("status") not in accepted:
@@ -569,33 +573,6 @@ def _effect_decision(payload: dict[str, Any]) -> EffectDecision:
         controlling_reasons=tuple(_decision_reason(r) for r in raw_controlling),
         reasons=tuple(_decision_reason(r) for r in raw_reasons),
         proof_routes=frozenset(ProofRoute(r) for r in raw_routes),
-    )
-
-
-def _containment_attestation(payload: dict[str, Any]) -> ContainmentAttestation:
-    from .runtime.containment_contract import ContainmentAttestation, ContainmentBackend, ContainmentFailure
-
-    backend = _require_str(payload, "backend")
-    failure_raw = payload.get("failure")
-    return ContainmentAttestation(
-        backend=ContainmentBackend(backend),
-        backend_digest=_require_str(payload, "backend_digest"),
-        request_digest=_require_str(payload, "request_digest"),
-        policy_digest=_require_str(payload, "policy_digest"),
-        launch_digest=_require_str(payload, "launch_digest"),
-        executable_digest=_require_str(payload, "executable_digest"),
-        enforced=bool(payload.get("enforced", False)),
-        failure=ContainmentFailure(failure_raw) if isinstance(failure_raw, str) else None,
-    )
-
-
-def _captured_output(item: dict[str, Any]) -> ContainmentCapturedOutput:
-    from .runtime.containment_outputs import ContainmentCapturedOutput
-
-    return ContainmentCapturedOutput(
-        snapshot_path=_require_str(item, "snapshot_path"),
-        content=bytes.fromhex(_require_str(item, "content_hex")) if "content_hex" in item else b"",
-        content_digest=_require_str(item, "content_digest"),
     )
 
 

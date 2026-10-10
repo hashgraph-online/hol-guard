@@ -6,21 +6,28 @@ import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, cast
+from typing import cast
 
 from .action_lattice import most_restrictive_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
 from .local_cli_trust import apply_local_mcp_extension_decision
-from .mcp_fresh_approval import fresh_local_tool_approval_matches, fresh_lookup_preserves_claim
+from .mcp_tool_call_evidence import receipt_evidence_for_mcp_tool_call
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
+from .native_approval_proof import (
+    ApprovalReuseClaimDisposition,
+    claimed_approval_authorizes_postclaim_review,
+    fresh_local_tool_approval_matches,
+    fresh_lookup_preserves_claim,
+)
 from .native_context import (
     context_mcp_tool_approval_hash,
     context_mcp_tool_policy,
-    context_mcp_tool_risk,
     context_opaque_digest,
 )
+from .native_mcp_runtime_evidence import argument_entries, native_command_text
+from .native_mcp_tool_evidence import native_tool_risk_evidence
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -42,7 +49,7 @@ from .runtime.approval_reuse import (
     approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
-from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
+from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
@@ -50,7 +57,7 @@ from .runtime.mcp_protection import (
     mcp_server_identity_metadata,
     mcp_tool_identity_metadata,
 )
-from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
+from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
@@ -60,75 +67,6 @@ _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "sandbox-required": ("runtime_tool_call_sandbox_required", "runtime tool call requires an enforceable sandbox"),
     "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
 }
-
-ApprovalReuseClaimDisposition = Literal["consumed", "retained"]
-
-_APPROVAL_REUSE_DECISION_IDENTITY_KEYS = (
-    "action",
-    "approval_id",
-    "artifact_hash",
-    "artifact_id",
-    "decision_id",
-    "expires_at",
-    "harness",
-    "integrity_enforcement",
-    "integrity_generation",
-    "integrity_key_id",
-    "integrity_mode",
-    "integrity_status",
-    "integrity_version",
-    "owner",
-    "publisher",
-    "reason",
-    "request_id",
-    "scope",
-    "signed_at",
-    "source",
-    "updated_at",
-    "workspace",
-)
-
-
-def approval_reuse_decisions_match(
-    expected: Mapping[str, object] | None,
-    current: Mapping[str, object] | None,
-) -> bool:
-    """Return whether two lookups selected the same saved authority row."""
-
-    if expected is None or current is None:
-        return False
-    expected_approval_id = expected.get("approval_id")
-    current_approval_id = current.get("approval_id")
-    expected_decision_id = expected.get("decision_id")
-    current_decision_id = current.get("decision_id")
-    same_identifier = (
-        isinstance(expected_approval_id, str)
-        and bool(expected_approval_id)
-        and current_approval_id == expected_approval_id
-    ) or (
-        isinstance(expected_decision_id, int)
-        and not isinstance(expected_decision_id, bool)
-        and current_decision_id == expected_decision_id
-    )
-    return same_identifier and all(
-        expected.get(key) == current.get(key) for key in _APPROVAL_REUSE_DECISION_IDENTITY_KEYS
-    )
-
-
-def claimed_approval_authorizes_postclaim_review(
-    *,
-    claim_disposition: ApprovalReuseClaimDisposition | None,
-    claimed_decision: Mapping[str, object] | None,
-    current_decision: Mapping[str, object] | None,
-) -> bool:
-    """Validate the saved proof used to lower a fresh review after claiming."""
-
-    if claim_disposition == "consumed":
-        return True
-    return claim_disposition == "retained" and approval_reuse_decisions_match(
-        claimed_decision,
-        current_decision,
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,57 +122,14 @@ def resolve_tool_call_policy_action(
     return normalized
 
 
-_MCP_COMMAND_ARGUMENT_KEYS: tuple[str, ...] = (
-    "command",
-    "cmd",
-    "shell_command",
-    "shellCommand",
-    "script",
-    "expression",
-    "code",
-    "query",
-)
-
-_MCP_PATH_ARGUMENT_KEYS: tuple[str, ...] = (
-    "path",
-    "file_path",
-    "filePath",
-    "filepath",
-    "directory",
-    "dir",
-    "cwd",
-    "working_dir",
-    "workingDir",
-    "url",
-    "uri",
-)
-
-
 def extract_mcp_command_text(
     artifact: GuardArtifact,
     arguments: object,
+    *,
+    guard_home: Path | None = None,
 ) -> str | None:
-    """Extract a human-readable command string from MCP tool call arguments.
-
-    For tools like ctx_shell/bash the primary argument is a ``command`` string.
-    For file/path tools we surface the path. For other tools we return None so
-    the UI falls back to the artifact name.
-    """
-    if not isinstance(arguments, Mapping):
-        return None
-
-    tool_name = artifact.name
-    for key in _MCP_COMMAND_ARGUMENT_KEYS:
-        value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-
-    for key in _MCP_PATH_ARGUMENT_KEYS:
-        value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return f"{tool_name} {value.strip()}"
-
-    return None
+    """Return the native-owned display text for an MCP tool call (command or path)."""
+    return native_command_text(artifact.name, argument_entries(arguments, mapping_type=Mapping), guard_home=guard_home)
 
 
 def build_tool_call_artifact(
@@ -546,7 +441,8 @@ def _revalidate_claimed_tool_call_approval(
     if fresh_decision.approval_reuse_reason_code == "approval_reuse_integrity_failure":
         validation_reason = "approval_reuse_integrity_failure"
     elif fresh_decision.approval_reuse_status == "rejected" and not fresh_lookup_preserves_claim(
-        fresh_decision.approval_reuse_reason_code
+        fresh_decision.approval_reuse_reason_code,
+        guard_home=store.guard_home,
     ):
         validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
 
@@ -560,6 +456,7 @@ def _revalidate_claimed_tool_call_approval(
         claim_disposition=claim_disposition,
         claimed_decision=claimed_decision,
         current_decision=fresh_decision.pending_approval_reuse_decision,
+        guard_home=store.guard_home,
     ):
         validation_reason = APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
     if validation_reason is not None:
@@ -584,7 +481,10 @@ def _revalidate_claimed_tool_call_approval(
         fresh_local_approval=(
             claim_disposition == "consumed"
             and fresh_local_tool_approval_matches(
-                claimed_decision, artifact=fresh_artifact, artifact_hash=fresh_artifact_hash
+                claimed_decision,
+                artifact=fresh_artifact,
+                artifact_hash=fresh_artifact_hash,
+                guard_home=store.guard_home,
             )
         ),
     )
@@ -678,15 +578,12 @@ def _evaluate_current_tool_call(
             "config": _tool_call_configuration(config),
         }
     )
-    categories = tuple(policy["risk_categories"])
-    signals = _risk_signals_from_categories(artifact, arguments, categories)
-    summary = {
-        "no_risk": "Guard did not detect a high-risk signal in this tool call.",
-        "configuration_stricter": (
-            "Local Guard's current configuration is stricter than the tool-call-specific recommendation."
-        ),
-        "risk": _risk_summary_from_signals(signals),
-    }[policy["summary_code"]]
+    categories, signals, summary = native_tool_risk_evidence(
+        artifact,
+        arguments,
+        risk_categories=tuple(policy["risk_categories"]),
+        summary_code=policy["summary_code"],
+    )
     return ToolCallDecision(
         action=cast(GuardAction, policy["action"]),
         source=policy["source"],
@@ -741,61 +638,18 @@ def _tool_call_decision_with_reuse(
 
 
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    return _risk_signals_from_categories(artifact, arguments, tool_call_risk_categories(artifact, arguments))
-
-
-def _risk_signals_from_categories(
-    artifact: GuardArtifact,
-    arguments: object,
-    categories: tuple[str, ...],
-) -> tuple[str, ...]:
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    signals_by_category: dict[str, str] = {
-        "filesystem_access": "call shape implies filesystem path access",
-        "destructive_mutation": "tool name implies destructive file or system changes",
-        "command_execution": "tool name implies shell or command execution",
-        "outbound_network": "call arguments imply outbound network activity",
-        "secret_access": "call arguments mention sensitive local files or secrets",
-        "privileged_system_mutation": "call arguments imply privileged system mutation",
-        "tool_schema_mismatch": "tool name understates dangerous schema capabilities",
-    }
-    if browser_intent is not None:
-        target = browser_intent_display_target(browser_intent, arguments)
-        signals_by_category.update(
-            {
-                "browser_navigation": f"browser navigation to {target}",
-                "browser_inspection": f"browser inspection of {target}",
-                "browser_interaction": f"browser interaction on {target}",
-                "browser_transfer": f"browser file transfer involving {target}",
-                "browser_privileged": f"privileged browser access to {target}",
-                "browser_external_domain": f"first navigation to external domain {target}",
-                "browser_shared_profile": "browser MCP uses a shared or remote-debugging profile",
-                "browser_sensitive_surface": (
-                    "browser action touches sensitive surfaces: " + ", ".join(browser_intent.sensitive_surface_flags)
-                ),
-            }
-        )
-    return tuple(signals_by_category[category] for category in categories)
+    """Return Rust-owned human-readable risk signals for one MCP tool call."""
+    return native_tool_risk_evidence(artifact, arguments)[1]
 
 
 def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
     """Return Rust-owned Cloud risk categories for one MCP tool call."""
-    return context_mcp_tool_risk(
-        {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)},
-        arguments,
-    )
+    return native_tool_risk_evidence(artifact, arguments)[0]
 
 
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    return _risk_summary_from_signals(tool_call_risk_signals(artifact, arguments))
-
-
-def _risk_summary_from_signals(signals: tuple[str, ...]) -> str:
-    if len(signals) == 0:
-        return "No high-risk signal was detected in this tool call."
-    if len(signals) == 1:
-        return signals[0].capitalize() + "."
-    return f"{signals[0].capitalize()}, and it also {', and it also '.join(signals[1:])}."
+    """Return the Rust-owned risk summary for one MCP tool call."""
+    return native_tool_risk_evidence(artifact, arguments)[2]
 
 
 _INLINE_SOURCES = frozenset({"inline-approved", "inline-denied", "native-approved", "claude-native-approved"})
@@ -871,7 +725,10 @@ def allow_tool_call(
             now=now,
             approved=policy_action in {"allow", "warn"},
         )
-    raw_command_text = extract_mcp_command_text(artifact, arguments)
+    # Display-only evidence; failure degrades it, never the receipt or event.
+    raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
+        artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
+    )
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -884,13 +741,7 @@ def allow_tool_call(
         source_scope=artifact.source_scope,
         user_override="inline-approve" if decision_source == "inline-approved" else None,
         approval_source=_map_approval_source(decision_source),
-        scanner_evidence=(
-            scanner_evidence_for_mcp_skill_firewall(
-                artifact,
-                risk_categories=risk_categories,
-            ),
-            *additional_scanner_evidence,
-        ),
+        scanner_evidence=(firewall_evidence, *additional_scanner_evidence),
         raw_command_text=raw_command_text,
     )
     if emit_runtime_evidence:
@@ -935,7 +786,9 @@ def block_tool_call(
         now=now,
         approved=False,
     )
-    raw_command_text = extract_mcp_command_text(artifact, arguments)
+    raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
+        artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
+    )
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -948,13 +801,7 @@ def block_tool_call(
         source_scope=artifact.source_scope,
         user_override="inline-deny" if decision_source == "inline-denied" else None,
         approval_source=_map_approval_source(decision_source),
-        scanner_evidence=(
-            scanner_evidence_for_mcp_skill_firewall(
-                artifact,
-                risk_categories=risk_categories,
-            ),
-            *additional_scanner_evidence,
-        ),
+        scanner_evidence=(firewall_evidence, *additional_scanner_evidence),
         raw_command_text=raw_command_text,
     )
     store.add_receipt(receipt)

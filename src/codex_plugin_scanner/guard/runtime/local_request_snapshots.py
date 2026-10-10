@@ -35,20 +35,6 @@ LOCAL_REQUEST_COMMAND_FIELD_MAX_CHARS = 1_024
 _LOCAL_REQUEST_SNAPSHOT_CURSOR_SYNC_KEY = "guard_command_local_request_snapshot_cursor"
 
 
-def local_request_snapshot_items(store: GuardStore) -> list[dict[str, object]]:
-    pending_items, _ = _local_request_snapshot_items_for_status(
-        store,
-        status="pending",
-        limit=100,
-    )
-    resolved_items, _ = _local_request_snapshot_items_for_status(
-        store,
-        status="resolved",
-        limit=100,
-    )
-    return [*pending_items, *resolved_items]
-
-
 def local_request_snapshot_payload(store: GuardStore) -> dict[str, object]:
     pending_items, pending_complete = _local_request_snapshot_items_for_status(
         store,

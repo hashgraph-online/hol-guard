@@ -144,12 +144,26 @@ def _evaluate_tool_call(
             )
         )
 
+    saved_disposition = (
+        store.approval_reuse_claim_disposition(saved_decision)
+        if saved_decision is not None and saved_action == "allow"
+        else None
+    )
+    if (
+        validation_reason is None
+        and saved_decision is not None
+        and saved_action == "allow"
+        and saved_disposition is None
+    ):
+        # No authoritative disposition (unclaimable row or no resident answer):
+        # never reach the claim, which could consume the approval unlaunched.
+        validation_reason = calls.APPROVAL_REUSE_CLAIM_FAILED
     if (
         validation_reason is None
         and saved_decision is not None
         and saved_action == "allow"
         and calls.composio_requires_action_review(artifact.command or "")
-        and store.approval_reuse_claim_disposition(saved_decision) != "consumed"
+        and saved_disposition != "consumed"
     ):
         # No supported account resolver exists for this profile. A retained
         # wrapper approval could silently follow a changed default account.
@@ -163,8 +177,13 @@ def _evaluate_tool_call(
         fresh_local_approval=(
             validation_reason is None
             and saved_decision is not None
-            and store.approval_reuse_claim_disposition(saved_decision) == "consumed"
-            and calls.fresh_local_tool_approval_matches(saved_decision, artifact=artifact, artifact_hash=artifact_hash)
+            and saved_disposition == "consumed"
+            and calls.fresh_local_tool_approval_matches(
+                saved_decision,
+                artifact=artifact,
+                artifact_hash=artifact_hash,
+                guard_home=store.guard_home,
+            )
         ),
     )
     if reuse is None:
@@ -174,9 +193,7 @@ def _evaluate_tool_call(
     pending_decision: Mapping[str, object] | None = None
     claim_disposition: ApprovalReuseClaimDisposition | None = None
     if reuse.should_claim and saved_decision is not None:
-        raw_claim_disposition = store.approval_reuse_claim_disposition(saved_decision)
-        if raw_claim_disposition in {"consumed", "retained"}:
-            claim_disposition = raw_claim_disposition
+        claim_disposition = saved_disposition
         if claim_saved_approval:
             if not store.claim_approval_reuse_decision(saved_decision):
                 claim_failed = calls.evaluate_approval_reuse(

@@ -101,6 +101,20 @@ def test_agent_output_budget_leaves_room_for_reasoning(tmp_path: Path, effort, m
     assert configuration["providers"]["gauntlet-live"]["models"][0]["maxTokens"] == max_tokens
 
 
+def test_agent_configuration_disables_service_launch(tmp_path: Path):
+    """Gauntlet sessions keep the non-service bash schema; inert name/ready defaults stay unadvertised."""
+    relay = InferenceRelay(
+        base_url="https://provider.invalid/v1",
+        model="unit-transport-only",
+        api_key="test-only-key",
+        canary="synthetic-test-canary",
+        identity="unit-transport-only",
+    )
+    write_agent_configuration(tmp_path / "agent", relay)
+    configuration = json.loads((tmp_path / "agent" / "config.yml").read_text())
+    assert configuration == {"launch": {"enabled": False}}
+
+
 def test_invalid_environment_effort_fails_before_any_case(tmp_path: Path, monkeypatch, capsys):
     from ci.gauntlet import __main__ as cli
 

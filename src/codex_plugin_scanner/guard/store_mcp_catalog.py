@@ -29,14 +29,6 @@ def load_mcp_catalogs(connection: sqlite3.Connection) -> dict[str, tuple[str, di
     return catalogs
 
 
-def read_mcp_catalog(connection: sqlite3.Connection, cli_id: str, identity_hash: str) -> dict[str, object] | None:
-    row = connection.execute(
-        "select catalog_json from local_mcp_catalog where cli_id = ? and identity_hash = ?",
-        (cli_id, identity_hash),
-    ).fetchone()
-    return _decode_snapshot(row[0]) if row is not None else None
-
-
 def read_mcp_skill_page(
     connection: sqlite3.Connection,
     cli_id: str,

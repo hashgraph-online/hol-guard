@@ -19,6 +19,7 @@ from ..approval_gate import (
     input_from_mapping,
     require_extension_control,
 )
+from ..json_transport import escape_json_for_html
 from ..runtime import command_inspection
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
@@ -34,10 +35,10 @@ from ..runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from ..runtime.extension_control_limits import (
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CONTROL_LAYERS,
     MAX_CONTROLS_PER_LAYER,
     MAX_CONTROLS_TOTAL,
+    MAX_DAEMON_CATALOG_RESPONSE_BYTES,
     advertised_extension_control_limits,
 )
 from ..runtime.extension_control_proof import (
@@ -47,7 +48,7 @@ from ..runtime.extension_control_proof import (
     issue_extension_control_proof,
 )
 from ..runtime.extension_control_resolver import compose_control_layers
-from ..runtime.extension_control_runtime import ExtensionControlRuntime
+from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from .extension_control_errors import ExtensionControlApiError
 from .extension_control_request import request_needs_proof, required_request_string
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
@@ -95,6 +96,9 @@ class ExtensionControlApiService:
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
 
+    def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
+        return self._registry, self._runtime.current()
+
     def catalog(self) -> dict[str, object]:
         limits = advertised_extension_control_limits()
         payload: dict[str, object] = {
@@ -104,12 +108,13 @@ class ExtensionControlApiService:
             "extensions": [extension.to_dict() for extension in self._registry.extensions],
             "limits": {
                 **limits,
-                "max_body_bytes": limits["max_catalog_payload_bytes"],
+                "max_body_bytes": MAX_DAEMON_CATALOG_RESPONSE_BYTES,
                 "max_controls": limits["max_controls_total"],
             },
         }
-        wire_body = json.dumps(payload).encode("utf-8")
-        if len(wire_body) > MAX_CATALOG_PAYLOAD_BYTES:
+        # Measure the exact bytes the daemon writes, including its HTML-safe escaping.
+        wire_body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
+        if len(wire_body) > MAX_DAEMON_CATALOG_RESPONSE_BYTES:
             raise ExtensionControlApiError(413, "catalog_payload_limit_exceeded")
         return payload
 

@@ -368,6 +368,13 @@ def _main_inner() -> int:
         if proof:
             guard_env["HOL_GUARD_CURSOR_AFTER_SHELL_PROOF"] = proof
     payload_json = json.dumps(prepared)
+    try:
+        from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
+    except Exception:
+        pass
+    else:
+        # Git and pager proofs need the agent's environment, not the daemon's.
+        payload_json = stamp_hook_input_text(payload_json)
     deadline_monotonic = _HOOK_DEADLINE_MONOTONIC
     daemon_result, daemon_failure_kind = _daemon_hook_result(
         payload_json,

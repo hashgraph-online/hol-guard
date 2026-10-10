@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 from .native_business_document_compile import COMPILE_CAPABILITY, MAX_DOCUMENT_BYTES, UnverifiedBusinessDocument
 from .native_policy_snapshot_codec import _canonical_json_bytes_v3, _strict_json_loads_v3, _valid_digest_v3
-from .native_policy_snapshot_constants import NativePolicySnapshotError
+from .native_policy_snapshot_constants import BUSINESS_NATIVE_TIMEOUT_SECONDS, NativePolicySnapshotError
 
 if TYPE_CHECKING:
     from .native_runtime_values import NativeRuntimeStatus
@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 MAX_RECORD_BYTES = MAX_DOCUMENT_BYTES + 8192
 CODEC_CAPABILITY = "native-business-source-codec-v1"
 MAX_REQUEST_BYTES = 2 * MAX_RECORD_BYTES + 4096
+# One native codec call. A complete installation spans several native processes
+# and owns a larger budget; each call inside it still keeps this cap.
+OPERATION_BUDGET_SECONDS = BUSINESS_NATIVE_TIMEOUT_SECONDS
 _REQUIRED = {COMPILE_CAPABILITY, CODEC_CAPABILITY, "native-business-policy-retained-floor-v1"}
 _VERIFICATION_FIELDS = frozenset(
     {
@@ -67,10 +70,10 @@ def _invalid() -> NativePolicySnapshotError:
     return NativePolicySnapshotError("native_business_source_codec_response_invalid")
 
 
-def _deadline(value: float | None) -> float:
+def _deadline(value: float | None, *, budget_seconds: float = OPERATION_BUDGET_SECONDS) -> float:
     if value is not None and (isinstance(value, bool) or not math.isfinite(value)):
         raise NativePolicySnapshotError("native_policy_snapshot_deadline_invalid")
-    deadline = time.monotonic() + 5.0
+    deadline = time.monotonic() + budget_seconds
     return deadline if value is None else min(deadline, value)
 
 

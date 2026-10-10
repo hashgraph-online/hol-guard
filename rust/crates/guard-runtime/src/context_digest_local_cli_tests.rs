@@ -176,3 +176,29 @@ fn slug_matches_python_rules() {
         assert_eq!(slug(value, SLUG_MAX_PARTS), slugged, "{value:?}");
     }
 }
+
+#[test]
+fn runner_shim_identity_binds_the_launched_script() {
+    let shim = |bin_target: Option<&str>| {
+        let mut bin = json!({
+            "resolved_path": "C:/w/node_modules/.bin/wrangler",
+            "content_hash": format!("sha256:{CONTENT}"),
+            "installed_version": "4.149.0",
+        });
+        if let Some(bin_target) = bin_target {
+            bin["bin_target_content_hash"] = json!(bin_target);
+        }
+        identity(LocalCliIdentitySourceV1::RunnerLocalBin {
+            name: "wrangler".to_owned(),
+            package_name: "wrangler".to_owned(),
+            local_bin: bin,
+        })
+    };
+    let plain = shim(None).unwrap();
+    let first = shim(Some(&format!("sha256:{}", "c".repeat(64)))).unwrap();
+    let second = shim(Some(&format!("sha256:{}", "d".repeat(64)))).unwrap();
+    assert_eq!(first.cli_id, plain.cli_id);
+    assert_ne!(first.identity_hash, plain.identity_hash);
+    assert_ne!(first.identity_hash, second.identity_hash);
+    assert_eq!(shim(Some("")), None);
+}

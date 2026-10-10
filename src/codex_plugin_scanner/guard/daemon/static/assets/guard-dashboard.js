@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/harness-detection.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/confirm-dialog.js","assets/chunks/extensions-workspace.js","assets/chunks/extension-controls-api.js","assets/chunks/approval-proof-modal.js","assets/chunks/app-detail-workspace.js","assets/chunks/supply-chain-hub-workspace.js","assets/chunks/policy-workspace-page.js","assets/chunks/protection-repair-page.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/app-catalog.js","assets/chunks/harness-detection.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/confirm-dialog.js","assets/chunks/extensions-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/policy-workspace-page.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -177,7 +177,7 @@ function requireReact_production() {
     }
     throw thenable;
   }
-  function mapIntoArray(children, array, escapedPrefix, nameSoFar, callback) {
+  function mapIntoArray(children, array2, escapedPrefix, nameSoFar, callback) {
     var type = typeof children;
     if ("undefined" === type || "boolean" === type) children = null;
     var invokeCallback = false;
@@ -198,7 +198,7 @@ function requireReact_production() {
             case REACT_LAZY_TYPE:
               return invokeCallback = children._init, mapIntoArray(
                 invokeCallback(children._payload),
-                array,
+                array2,
                 escapedPrefix,
                 nameSoFar,
                 callback
@@ -206,7 +206,7 @@ function requireReact_production() {
           }
       }
     if (invokeCallback)
-      return callback = callback(children), invokeCallback = "" === nameSoFar ? "." + getElementKey(children, 0) : nameSoFar, isArrayImpl(callback) ? (escapedPrefix = "", null != invokeCallback && (escapedPrefix = invokeCallback.replace(userProvidedKeyEscapeRegex, "$&/") + "/"), mapIntoArray(callback, array, escapedPrefix, "", function(c) {
+      return callback = callback(children), invokeCallback = "" === nameSoFar ? "." + getElementKey(children, 0) : nameSoFar, isArrayImpl(callback) ? (escapedPrefix = "", null != invokeCallback && (escapedPrefix = invokeCallback.replace(userProvidedKeyEscapeRegex, "$&/") + "/"), mapIntoArray(callback, array2, escapedPrefix, "", function(c) {
         return c;
       })) : null != callback && (isValidElement(callback) && (callback = cloneAndReplaceKey(
         callback,
@@ -214,14 +214,14 @@ function requireReact_production() {
           userProvidedKeyEscapeRegex,
           "$&/"
         ) + "/") + invokeCallback
-      )), array.push(callback)), 1;
+      )), array2.push(callback)), 1;
     invokeCallback = 0;
     var nextNamePrefix = "" === nameSoFar ? "." : nameSoFar + ":";
     if (isArrayImpl(children))
       for (var i = 0; i < children.length; i++)
         nameSoFar = children[i], type = nextNamePrefix + getElementKey(nameSoFar, i), invokeCallback += mapIntoArray(
           nameSoFar,
-          array,
+          array2,
           escapedPrefix,
           type,
           callback
@@ -230,7 +230,7 @@ function requireReact_production() {
       for (children = i.call(children), i = 0; !(nameSoFar = children.next()).done; )
         nameSoFar = nameSoFar.value, type = nextNamePrefix + getElementKey(nameSoFar, i++), invokeCallback += mapIntoArray(
           nameSoFar,
-          array,
+          array2,
           escapedPrefix,
           type,
           callback
@@ -239,14 +239,14 @@ function requireReact_production() {
       if ("function" === typeof children.then)
         return mapIntoArray(
           resolveThenable(children),
-          array,
+          array2,
           escapedPrefix,
           nameSoFar,
           callback
         );
-      array = String(children);
+      array2 = String(children);
       throw Error(
-        "Objects are not valid as a React child (found: " + ("[object Object]" === array ? "object with keys {" + Object.keys(children).join(", ") + "}" : array) + "). If you meant to render a collection of children, use an array instead."
+        "Objects are not valid as a React child (found: " + ("[object Object]" === array2 ? "object with keys {" + Object.keys(children).join(", ") + "}" : array2) + "). If you meant to render a collection of children, use an array instead."
       );
     }
     return invokeCallback;
@@ -1857,15 +1857,15 @@ function requireReactDomClient_production() {
     children === defaultValue && "" !== children && null !== children && (element.value = children);
     track(element);
   }
-  function setTextContent(node, text) {
-    if (text) {
+  function setTextContent(node, text2) {
+    if (text2) {
       var firstChild = node.firstChild;
       if (firstChild && firstChild === node.lastChild && 3 === firstChild.nodeType) {
-        firstChild.nodeValue = text;
+        firstChild.nodeValue = text2;
         return;
       }
     }
-    node.textContent = text;
+    node.textContent = text2;
   }
   var unitlessNumbers = new Set(
     "animationIterationCount aspectRatio borderImageOutset borderImageSlice borderImageWidth boxFlex boxFlexGroup boxOrdinalGroup columnCount columns flex flexGrow flexPositive flexShrink flexNegative flexOrder gridArea gridRow gridRowEnd gridRowSpan gridRowStart gridColumn gridColumnEnd gridColumnSpan gridColumnStart fontWeight lineClamp lineHeight opacity order orphans scale tabSize widows zIndex zoom fillOpacity floodOpacity stopOpacity strokeDasharray strokeDashoffset strokeMiterlimit strokeOpacity strokeWidth MozAnimationIterationCount MozBoxFlex MozBoxFlexGroup MozLineClamp msAnimationIterationCount msFlex msZoom msFlexGrow msFlexNegative msFlexOrder msFlexPositive msFlexShrink msGridColumn msGridColumnSpan msGridRow msGridRowSpan WebkitAnimationIterationCount WebkitBoxFlex WebKitBoxFlexGroup WebkitBoxOrdinalGroup WebkitColumnCount WebkitColumns WebkitFlex WebkitFlexGrow WebkitFlexPositive WebkitFlexShrink WebkitLineClamp".split(
@@ -1997,14 +1997,14 @@ function requireReactDomClient_production() {
     return 3 === nativeEvent.nodeType ? nativeEvent.parentNode : nativeEvent;
   }
   var restoreTarget = null, restoreQueue = null;
-  function restoreStateOfTarget(target) {
-    var internalInstance = getInstanceFromNode(target);
-    if (internalInstance && (target = internalInstance.stateNode)) {
-      var props = target[internalPropsKey] || null;
-      a: switch (target = internalInstance.stateNode, internalInstance.type) {
+  function restoreStateOfTarget(target2) {
+    var internalInstance = getInstanceFromNode(target2);
+    if (internalInstance && (target2 = internalInstance.stateNode)) {
+      var props = target2[internalPropsKey] || null;
+      a: switch (target2 = internalInstance.stateNode, internalInstance.type) {
         case "input":
           updateInput(
-            target,
+            target2,
             props.value,
             props.defaultValue,
             props.defaultValue,
@@ -2015,7 +2015,7 @@ function requireReactDomClient_production() {
           );
           internalInstance = props.name;
           if ("radio" === props.type && null != internalInstance) {
-            for (props = target; props.parentNode; ) props = props.parentNode;
+            for (props = target2; props.parentNode; ) props = props.parentNode;
             props = props.querySelectorAll(
               'input[name="' + escapeSelectorAttributeValueInsideDoubleQuotes(
                 "" + internalInstance
@@ -2023,7 +2023,7 @@ function requireReactDomClient_production() {
             );
             for (internalInstance = 0; internalInstance < props.length; internalInstance++) {
               var otherNode = props[internalInstance];
-              if (otherNode !== target && otherNode.form === target.form) {
+              if (otherNode !== target2 && otherNode.form === target2.form) {
                 var otherProps = otherNode[internalPropsKey] || null;
                 if (!otherProps) throw Error(formatProdErrorMessage(90));
                 updateInput(
@@ -2039,14 +2039,14 @@ function requireReactDomClient_production() {
               }
             }
             for (internalInstance = 0; internalInstance < props.length; internalInstance++)
-              otherNode = props[internalInstance], otherNode.form === target.form && updateValueIfChanged(otherNode);
+              otherNode = props[internalInstance], otherNode.form === target2.form && updateValueIfChanged(otherNode);
           }
           break a;
         case "textarea":
-          updateTextarea(target, props.value, props.defaultValue);
+          updateTextarea(target2, props.value, props.defaultValue);
           break a;
         case "select":
-          internalInstance = props.value, null != internalInstance && updateOptions(target, !!props.multiple, internalInstance, false);
+          internalInstance = props.value, null != internalInstance && updateOptions(target2, !!props.multiple, internalInstance, false);
       }
     }
   }
@@ -2403,15 +2403,15 @@ function requireReactDomClient_production() {
     var nodeName = elem && elem.nodeName && elem.nodeName.toLowerCase();
     return "input" === nodeName ? !!supportedInputTypes[elem.type] : "textarea" === nodeName ? true : false;
   }
-  function createAndAccumulateChangeEvent(dispatchQueue, inst, nativeEvent, target) {
-    restoreTarget ? restoreQueue ? restoreQueue.push(target) : restoreQueue = [target] : restoreTarget = target;
+  function createAndAccumulateChangeEvent(dispatchQueue, inst, nativeEvent, target2) {
+    restoreTarget ? restoreQueue ? restoreQueue.push(target2) : restoreQueue = [target2] : restoreTarget = target2;
     inst = accumulateTwoPhaseListeners(inst, "onChange");
     0 < inst.length && (nativeEvent = new SyntheticEvent(
       "onChange",
       "change",
       null,
       nativeEvent,
-      target
+      target2
     ), dispatchQueue.push({ event: nativeEvent, listeners: inst }));
   }
   var activeElement$1 = null, activeElementInst$1 = null;
@@ -2454,8 +2454,8 @@ function requireReactDomClient_production() {
       batchedUpdates$1(runEventInBatch, dispatchQueue);
     }
   }
-  function handleEventsForInputEventPolyfill(domEventName, target, targetInst) {
-    "focusin" === domEventName ? (stopWatchingForValueChange(), activeElement$1 = target, activeElementInst$1 = targetInst, activeElement$1.attachEvent("onpropertychange", handlePropertyChange)) : "focusout" === domEventName && stopWatchingForValueChange();
+  function handleEventsForInputEventPolyfill(domEventName, target2, targetInst) {
+    "focusin" === domEventName ? (stopWatchingForValueChange(), activeElement$1 = target2, activeElementInst$1 = targetInst, activeElement$1.attachEvent("onpropertychange", handlePropertyChange)) : "focusout" === domEventName && stopWatchingForValueChange();
   }
   function getTargetInstForInputEventPolyfill(domEventName) {
     if ("selectionchange" === domEventName || "keyup" === domEventName || "keydown" === domEventName)
@@ -4146,8 +4146,8 @@ function requireReactDomClient_production() {
     if (null == memoCache) {
       var current = currentlyRenderingFiber.alternate;
       null !== current && (current = current.updateQueue, null !== current && (current = current.memoCache, null != current && (memoCache = {
-        data: current.data.map(function(array) {
-          return array.slice();
+        data: current.data.map(function(array2) {
+          return array2.slice();
         }),
         index: 0
       })));
@@ -5886,8 +5886,8 @@ function requireReactDomClient_production() {
         ), workInProgress2.memoizedState = SUSPENDED_MARKER, workInProgress2 = bailoutOffscreenComponent(null, nextProps));
       else if (pushPrimaryTreeSuspenseHandler(workInProgress2), isSuspenseInstanceFallback(nextPrimaryChildren)) {
         JSCompiler_temp = nextPrimaryChildren.nextSibling && nextPrimaryChildren.nextSibling.dataset;
-        if (JSCompiler_temp) var digest = JSCompiler_temp.dgst;
-        JSCompiler_temp = digest;
+        if (JSCompiler_temp) var digest2 = JSCompiler_temp.dgst;
+        JSCompiler_temp = digest2;
         nextProps = Error(formatProdErrorMessage(419));
         nextProps.stack = "";
         nextProps.digest = JSCompiler_temp;
@@ -5917,11 +5917,11 @@ function requireReactDomClient_production() {
       return workInProgress2;
     }
     if (showFallback)
-      return reuseSuspenseHandlerOnStack(), nextPrimaryChildren = nextProps.fallback, showFallback = workInProgress2.mode, prevState = current.child, digest = prevState.sibling, nextProps = createWorkInProgress(prevState, {
+      return reuseSuspenseHandlerOnStack(), nextPrimaryChildren = nextProps.fallback, showFallback = workInProgress2.mode, prevState = current.child, digest2 = prevState.sibling, nextProps = createWorkInProgress(prevState, {
         mode: "hidden",
         children: nextProps.children
-      }), nextProps.subtreeFlags = prevState.subtreeFlags & 65011712, null !== digest ? nextPrimaryChildren = createWorkInProgress(
-        digest,
+      }), nextProps.subtreeFlags = prevState.subtreeFlags & 65011712, null !== digest2 ? nextPrimaryChildren = createWorkInProgress(
+        digest2,
         nextPrimaryChildren
       ) : (nextPrimaryChildren = createFiberFromFragment(
         nextPrimaryChildren,
@@ -8157,9 +8157,9 @@ function requireReactDomClient_production() {
           );
           finishedRoot = finishedWork.stateNode;
           try {
-            var _finishedWork$memoize2 = finishedWork.memoizedProps, id = _finishedWork$memoize2.id, onPostCommit = _finishedWork$memoize2.onPostCommit;
+            var _finishedWork$memoize2 = finishedWork.memoizedProps, id2 = _finishedWork$memoize2.id, onPostCommit = _finishedWork$memoize2.onPostCommit;
             "function" === typeof onPostCommit && onPostCommit(
-              id,
+              id2,
               null === finishedWork.alternate ? "mount" : "update",
               finishedRoot.passiveEffectDuration,
               -0
@@ -8195,7 +8195,7 @@ function requireReactDomClient_production() {
         break;
       case 22:
         _finishedWork$memoize2 = finishedWork.stateNode;
-        id = finishedWork.alternate;
+        id2 = finishedWork.alternate;
         null !== finishedWork.memoizedState ? _finishedWork$memoize2._visibility & 2 ? recursivelyTraversePassiveMountEffects(
           finishedRoot,
           finishedWork,
@@ -8213,7 +8213,7 @@ function requireReactDomClient_production() {
           committedTransitions,
           0 !== (finishedWork.subtreeFlags & 10256) || false
         ));
-        flags & 2048 && commitOffscreenPassiveMountEffects(id, finishedWork);
+        flags & 2048 && commitOffscreenPassiveMountEffects(id2, finishedWork);
         break;
       case 24:
         recursivelyTraversePassiveMountEffects(
@@ -9763,11 +9763,11 @@ function requireReactDomClient_production() {
     var listenerSetKey = domEventName + "__bubble";
     JSCompiler_inline_result.has(listenerSetKey) || (addTrappedEventListener(targetElement, domEventName, 2, false), JSCompiler_inline_result.add(listenerSetKey));
   }
-  function listenToNativeEvent(domEventName, isCapturePhaseListener, target) {
+  function listenToNativeEvent(domEventName, isCapturePhaseListener, target2) {
     var eventSystemFlags = 0;
     isCapturePhaseListener && (eventSystemFlags |= 4);
     addTrappedEventListener(
-      target,
+      target2,
       domEventName,
       eventSystemFlags,
       isCapturePhaseListener
@@ -10154,17 +10154,17 @@ function requireReactDomClient_production() {
     while (inst && 5 !== inst.tag && 27 !== inst.tag);
     return inst ? inst : null;
   }
-  function accumulateEnterLeaveListenersForEvent(dispatchQueue, event, target, common, inCapturePhase) {
-    for (var registrationName = event._reactName, listeners2 = []; null !== target && target !== common; ) {
-      var _instance3 = target, alternate = _instance3.alternate, stateNode = _instance3.stateNode;
+  function accumulateEnterLeaveListenersForEvent(dispatchQueue, event, target2, common, inCapturePhase) {
+    for (var registrationName = event._reactName, listeners2 = []; null !== target2 && target2 !== common; ) {
+      var _instance3 = target2, alternate = _instance3.alternate, stateNode = _instance3.stateNode;
       _instance3 = _instance3.tag;
       if (null !== alternate && alternate === common) break;
-      5 !== _instance3 && 26 !== _instance3 && 27 !== _instance3 || null === stateNode || (alternate = stateNode, inCapturePhase ? (stateNode = getListener(target, registrationName), null != stateNode && listeners2.unshift(
-        createDispatchListener(target, stateNode, alternate)
-      )) : inCapturePhase || (stateNode = getListener(target, registrationName), null != stateNode && listeners2.push(
-        createDispatchListener(target, stateNode, alternate)
+      5 !== _instance3 && 26 !== _instance3 && 27 !== _instance3 || null === stateNode || (alternate = stateNode, inCapturePhase ? (stateNode = getListener(target2, registrationName), null != stateNode && listeners2.unshift(
+        createDispatchListener(target2, stateNode, alternate)
+      )) : inCapturePhase || (stateNode = getListener(target2, registrationName), null != stateNode && listeners2.push(
+        createDispatchListener(target2, stateNode, alternate)
       )));
-      target = target.return;
+      target2 = target2.return;
     }
     0 !== listeners2.length && dispatchQueue.push({ event, listeners: listeners2 });
   }
@@ -11134,8 +11134,8 @@ function requireReactDomClient_production() {
     }
     return null;
   }
-  function canHydrateTextInstance(instance, text, inRootOrSingleton) {
-    if ("" === text) return null;
+  function canHydrateTextInstance(instance, text2, inRootOrSingleton) {
+    if ("" === text2) return null;
     for (; 3 !== instance.nodeType; ) {
       if ((1 !== instance.nodeType || "INPUT" !== instance.nodeName || "hidden" !== instance.type) && !inRootOrSingleton)
         return null;
@@ -12356,13 +12356,13 @@ function requireReactDomClient_production() {
   function ReactDOMHydrationRoot(internalRoot) {
     this._internalRoot = internalRoot;
   }
-  ReactDOMHydrationRoot.prototype.unstable_scheduleHydration = function(target) {
-    if (target) {
+  ReactDOMHydrationRoot.prototype.unstable_scheduleHydration = function(target2) {
+    if (target2) {
       var updatePriority = resolveUpdatePriority();
-      target = { blockedOn: null, target, priority: updatePriority };
+      target2 = { blockedOn: null, target: target2, priority: updatePriority };
       for (var i = 0; i < queuedExplicitHydrationTargets.length && 0 !== updatePriority && updatePriority < queuedExplicitHydrationTargets[i].priority; i++) ;
-      queuedExplicitHydrationTargets.splice(i, 0, target);
-      0 === i && attemptExplicitHydrationTarget(target);
+      queuedExplicitHydrationTargets.splice(i, 0, target2);
+      0 === i && attemptExplicitHydrationTarget(target2);
     }
   };
   var isomorphicReactPackageVersion$jscomp$inline_1840 = React2.version;
@@ -13131,19 +13131,19 @@ function detectCategory(receipt) {
   const name = (receipt.artifact_name ?? receipt.artifact_id ?? "").toLowerCase();
   const summary = (receipt.capabilities_summary ?? "").toLowerCase();
   const artifactType = (receipt.artifact_type ?? "").toLowerCase();
-  const text = `${name} ${summary} ${artifactType}`;
-  if (SECRET_PATTERNS.some((p) => p.test(text))) return "secret";
-  if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) return "destructive";
-  if (HIDDEN_PATTERNS.some((p) => p.test(text))) return "hidden";
+  const text2 = `${name} ${summary} ${artifactType}`;
+  if (SECRET_PATTERNS.some((p) => p.test(text2))) return "secret";
+  if (DESTRUCTIVE_PATTERNS.some((p) => p.test(text2))) return "destructive";
+  if (HIDDEN_PATTERNS.some((p) => p.test(text2))) return "hidden";
   if (receipt.action_envelope_json?.action_type === "file_write") return "file-write";
   if (receipt.action_envelope_json?.action_type === "file_read") return "other";
-  if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text))) return "mcp";
-  if (SKILL_PATTERNS.some((p) => p.test(text))) return "skill";
-  if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text))) return "supply-chain";
-  if (NETWORK_PATTERNS.some((p) => p.test(text))) return "network";
-  if (TOOL_PATTERNS.some((p) => p.test(text))) return "tool-call";
-  if (artifactType.includes("file_write") || artifactType.includes("write") || FILE_WRITE_PATTERNS.some((p) => p.test(text))) return "file-write";
-  if (DATA_PATTERNS.some((p) => p.test(text))) return "data";
+  if (artifactType === "mcp_tool" || MCP_PATTERNS.some((p) => p.test(text2))) return "mcp";
+  if (SKILL_PATTERNS.some((p) => p.test(text2))) return "skill";
+  if (artifactType === "package_script" || SUPPLY_CHAIN_PATTERNS.some((p) => p.test(text2))) return "supply-chain";
+  if (NETWORK_PATTERNS.some((p) => p.test(text2))) return "network";
+  if (TOOL_PATTERNS.some((p) => p.test(text2))) return "tool-call";
+  if (artifactType.includes("file_write") || artifactType.includes("write") || FILE_WRITE_PATTERNS.some((p) => p.test(text2))) return "file-write";
+  if (DATA_PATTERNS.some((p) => p.test(text2))) return "data";
   if (artifactType.includes("file_read") || artifactType.includes("read")) return "other";
   return "other";
 }
@@ -13686,8 +13686,8 @@ function selectNextAfterResolution(result, currentItems) {
   }
   const resolvedIds = new Set(result.resolved_duplicate_ids);
   if (result.resolved_scope_ids !== void 0) {
-    for (const id of result.resolved_scope_ids) {
-      resolvedIds.add(id);
+    for (const id2 of result.resolved_scope_ids) {
+      resolvedIds.add(id2);
     }
   }
   if (result.resolved_request !== null) {
@@ -13788,8 +13788,8 @@ function formatQueueRequestDate(item) {
   }
   return queueDateFormatter.format(new Date(timestamp));
 }
-function queueCategoryById(id) {
-  return QUEUE_CATEGORY_BY_ID.get(id) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
+function queueCategoryById(id2) {
+  return QUEUE_CATEGORY_BY_ID.get(id2) ?? QUEUE_CATEGORIES[QUEUE_CATEGORIES.length - 1];
 }
 function resolveQueueCategory(item) {
   return queueCategoryById(resolveQueueCategoryId(item));
@@ -13805,37 +13805,37 @@ function resolveQueueCategoryId(item) {
   const envelope = item.action_envelope_json;
   const decisionCategories = item.decision_v2_json?.signals.map((signal) => signal.category) ?? [];
   const command = envelope?.command ?? item.queue_preview ?? item.launch_target ?? "";
-  const text = queueCategoryText(item);
+  const text2 = queueCategoryText(item);
   const isPromptReview = envelope?.action_type === "prompt" || decisionCategories.includes("prompt");
   const isWriteReview = envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command);
-  if (hasSecretSignal(decisionCategories, text) && hasExternalSink(text, command, !isWriteReview)) {
+  if (hasSecretSignal(decisionCategories, text2) && hasExternalSink(text2, command, !isWriteReview)) {
     return "secret_exfiltration";
   }
-  if (textIncludesAny(text, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
+  if (textIncludesAny(text2, ["credential-looking output", "contains credential-looking", "exposes token", "exposes key"])) {
     return "credential_output";
   }
-  if (isPromptReview && systemPromptAccessText(text)) {
+  if (isPromptReview && systemPromptAccessText(text2)) {
     return "system_prompt_access";
   }
-  if (isPromptReview && promptInjectionText(text)) {
+  if (isPromptReview && promptInjectionText(text2)) {
     return "prompt_injection";
   }
-  if (decisionCategories.includes("bypass") || !isWriteReview && guardBypassText(text)) {
+  if (decisionCategories.includes("bypass") || !isWriteReview && guardBypassText(text2)) {
     return "guard_bypass";
   }
-  if (decisionCategories.includes("persistence") || persistenceCommand(command, text)) {
+  if (decisionCategories.includes("persistence") || persistenceCommand(command, text2)) {
     return "persistence_change";
   }
-  if (decisionCategories.includes("encoded") || encodedCommand(text)) {
+  if (decisionCategories.includes("encoded") || encodedCommand(text2)) {
     return "encoded_shell";
   }
-  if (generatedInventoryEdit(command, text)) {
+  if (generatedInventoryEdit(command, text2)) {
     return "generated_inventory_edit";
   }
-  if (fileDeleteOrCleanupCommand(command, text)) {
+  if (fileDeleteOrCleanupCommand(command, text2)) {
     return "file_delete_cleanup";
   }
-  if (textIncludesAny(text, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
+  if (textIncludesAny(text2, ["destructive shell command", " rm -", "rm -rf", "delete files", "wipe", "force-clean", "git clean -fd", "truncate"])) {
     return "destructive_shell";
   }
   const commandCategory = categoryFromCommandExtension(
@@ -13865,7 +13865,7 @@ function resolveQueueCategoryId(item) {
   if (packageInstallCommand(command)) {
     return "package_install";
   }
-  if (secretReadAction(item, command, text) && hasSecretSignal(decisionCategories, text)) {
+  if (secretReadAction(item, command, text2) && hasSecretSignal(decisionCategories, text2)) {
     return "secret_file_read";
   }
   if (envelope?.action_type === "mcp_tool") {
@@ -13883,16 +13883,16 @@ function resolveQueueCategoryId(item) {
   if (envelope?.action_type === "file_read" || item.artifact_type === "file_read_request") {
     return "file_read";
   }
-  if (docsEditCommand(command, text)) {
+  if (docsEditCommand(command, text2)) {
     return "docs_edit";
   }
-  if (sourceEditCommand(command, text) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
+  if (sourceEditCommand(command, text2) || envelope?.action_type === "file_write" || commandLooksLikeFileEdit(command)) {
     return "source_edit";
   }
-  if (networkCommand(command, text) || decisionCategories.includes("network")) {
+  if (networkCommand(command, text2) || decisionCategories.includes("network")) {
     return "network";
   }
-  if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text.includes("shell command")) {
+  if (envelope?.action_type === "shell_command" || item.artifact_type === "command" || text2.includes("shell command")) {
     return "shell_command";
   }
   return "other";
@@ -13930,8 +13930,8 @@ function queueCategoryText(item) {
     ...item.decision_v2_json?.signals.map((signal) => `${signal.category} ${signal.title} ${signal.plain_reason}`) ?? []
   ].join(" ").toLowerCase();
 }
-function textIncludesAny(text, needles) {
-  return needles.some((needle) => text.includes(needle));
+function textIncludesAny(text2, needles) {
+  return needles.some((needle) => text2.includes(needle));
 }
 function commandLooksLikeFileEdit(command) {
   const normalized = command.trim().toLowerCase();
@@ -13940,8 +13940,8 @@ function commandLooksLikeFileEdit(command) {
   }
   return /\bperl\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bsed\b[\s\S]*\s-[\w-]*i\b/.test(normalized) || /\bpython(?:3)?\b[\s\S]*(?:write_text|open\([^)]*,\s*['"]w|path\.write)/.test(normalized) || /\btee\s+-a?\b/.test(normalized) || /\bapply_patch\b/.test(normalized);
 }
-function hasSecretSignal(decisionCategories, text) {
-  return decisionCategories.includes("secret") || textIncludesAny(text, [
+function hasSecretSignal(decisionCategories, text2) {
+  return decisionCategories.includes("secret") || textIncludesAny(text2, [
     "credential",
     "secret",
     ".env",
@@ -13955,31 +13955,31 @@ function hasSecretSignal(decisionCategories, text) {
     "github_token"
   ]);
 }
-function secretReadAction(item, command, text) {
+function secretReadAction(item, command, text2) {
   const envelope = item.action_envelope_json;
-  return envelope?.action_type === "file_read" || item.artifact_type === "file_read_request" || readCommand(command) && hasSecretPathText(text);
+  return envelope?.action_type === "file_read" || item.artifact_type === "file_read_request" || readCommand(command) && hasSecretPathText(text2);
 }
 function readCommand(command) {
   return /\b(?:cat|grep|rg|sed\s+-n|awk|less|more|head|tail)\b/.test(command.toLowerCase());
 }
-function hasSecretPathText(text) {
-  return textIncludesAny(text, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
+function hasSecretPathText(text2) {
+  return textIncludesAny(text2, [".env", "token", "secret", "credential", "password", "private key", "api key"]);
 }
-function hasExternalSink(text, command, allowTextHints) {
-  return fileUploadCommand(command) || outboundNetworkCommand(command, text) || allowTextHints && textIncludesAny(text, ["exfiltrat", "clipboard", "pastebin"]);
+function hasExternalSink(text2, command, allowTextHints) {
+  return fileUploadCommand(command) || outboundNetworkCommand(command, text2) || allowTextHints && textIncludesAny(text2, ["exfiltrat", "clipboard", "pastebin"]);
 }
-function outboundNetworkCommand(command, text) {
-  return networkCommand(command, text) && !inboundCopyCommand(command);
+function outboundNetworkCommand(command, text2) {
+  return networkCommand(command, text2) && !inboundCopyCommand(command);
 }
-function networkCommand(command, text) {
+function networkCommand(command, text2) {
   const normalized = command.toLowerCase();
-  return /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) || /(?:^|\s)ssh\s+/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text, ["network host", "outbound", "webhook", "https://", "http://"]);
+  return /(?:^|\s)(?:curl|wget|httpie|nc|netcat|scp|rsync|ftp|sftp)(?:\s|$)/.test(normalized) || /(?:^|\s)ssh\s+/.test(normalized) || /https?:\/\//.test(normalized) || textIncludesAny(text2, ["network host", "outbound", "webhook", "https://", "http://"]);
 }
-function fileUploadCommand(command, text) {
+function fileUploadCommand(command, text2) {
   return outboundCopyCommand(command) || /\bcurl\b[\s\S]*(?:--upload-file(?:=|\s+)\S+|(?:^|\s)-T(?:\S+|\s+\S+)|--form(?:=|\s+)\S*@|-F(?:\S*@|\s+\S*@)|--data(?:-binary|-raw|-urlencode)?(?:=|\s+)@\S+)/.test(command);
 }
-function systemPromptAccessText(text) {
-  return textIncludesAny(text, [
+function systemPromptAccessText(text2) {
+  return textIncludesAny(text2, [
     "system prompt",
     "developer instructions",
     "hidden instruction",
@@ -13988,8 +13988,8 @@ function systemPromptAccessText(text) {
     "show the prompt"
   ]);
 }
-function promptInjectionText(text) {
-  return textIncludesAny(text, [
+function promptInjectionText(text2) {
+  return textIncludesAny(text2, [
     "prompt injection",
     "ignore previous",
     "ignore all previous",
@@ -13999,8 +13999,8 @@ function promptInjectionText(text) {
     "act as"
   ]);
 }
-function guardBypassText(text) {
-  return textIncludesAny(text, [
+function guardBypassText(text2) {
+  return textIncludesAny(text2, [
     "bypass guard",
     "disable guard",
     "skip approval",
@@ -14010,13 +14010,13 @@ function guardBypassText(text) {
     "no guard"
   ]);
 }
-function persistenceCommand(command, text) {
+function persistenceCommand(command, text2) {
   const normalized = command.toLowerCase();
-  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text.includes("file_write");
-  return /\|\s*crontab\b/.test(normalized) || /\bcrontab\s+-(?!l\b)/.test(normalized) || /\b(?:schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text, ["persistence", "startup item", "scheduled task", "launch agent"]);
+  const mutatesPersistenceFile = commandLooksLikeFileEdit(command) || text2.includes("file_write");
+  return /\|\s*crontab\b/.test(normalized) || /\bcrontab\s+-(?!l\b)/.test(normalized) || /\b(?:schtasks|at)\b/.test(normalized) || /\bsystemctl\s+(?:enable|disable|preset|link)\b/.test(normalized) || /\blaunchctl\s+(?:load|unload|bootstrap|bootout)\b/.test(normalized) || mutatesPersistenceFile && /(?:\.zshrc|\.bashrc|\.bash_profile|\.profile|launchagents|launchdaemons|systemd|login item)/.test(normalized) || textIncludesAny(text2, ["persistence", "startup item", "scheduled task", "launch agent"]);
 }
-function encodedCommand(text) {
-  return textIncludesAny(text, [
+function encodedCommand(text2) {
+  return textIncludesAny(text2, [
     "encoded or encrypted shell command",
     "base64",
     "openssl enc",
@@ -14109,13 +14109,13 @@ function isInboundCopy(source, destination) {
 function remotePath(value) {
   return /^(?:s3|gs):\/\//.test(value) || /^[\w.-]+@?[\w.-]+:/.test(value);
 }
-function generatedInventoryEdit(command, text) {
-  const haystack = `${command} ${text}`.toLowerCase();
-  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
+function generatedInventoryEdit(command, text2) {
+  const haystack = `${command} ${text2}`.toLowerCase();
+  return (commandLooksLikeFileEdit(command) || text2.includes("file_write")) && /docs\/.*(?:api|route|cloud).*inventory\.generated\.(?:md|json|txt)/.test(haystack);
 }
-function fileDeleteOrCleanupCommand(command, text) {
+function fileDeleteOrCleanupCommand(command, text2) {
   const normalized = command.toLowerCase();
-  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--)\b/.test(normalized) || textIncludesAny(text, ["force-clean", "delete files", "wipe files"]);
+  return /\b(?:rm|unlink|rmdir|shred)\b/.test(normalized) || /\btruncate\s+-s\s+0\b/.test(normalized) || /\bgit\s+(?:clean|reset\s+--hard|checkout\s+--)\b/.test(normalized) || textIncludesAny(text2, ["force-clean", "delete files", "wipe files"]);
 }
 function gitOperationCommand(command) {
   const normalized = command.toLowerCase();
@@ -14133,13 +14133,13 @@ function packageInstallCommand(command) {
   const normalized = command.toLowerCase();
   return /\b(?:npm|pnpm|yarn|bun|pip|pipx|uv|poetry|brew|cargo|gem|go)\s+(?:add|i|install|remove|uninstall|update|upgrade|publish)\b/.test(normalized);
 }
-function docsEditCommand(command, text) {
-  const haystack = `${command} ${text}`.toLowerCase();
-  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
+function docsEditCommand(command, text2) {
+  const haystack = `${command} ${text2}`.toLowerCase();
+  return (commandLooksLikeFileEdit(command) || text2.includes("file_write")) && /(?:^|\s)(?:docs\/|readme|changelog|\.md\b|\.mdx\b)/.test(haystack);
 }
-function sourceEditCommand(command, text) {
-  const haystack = `${command} ${text}`.toLowerCase();
-  return (commandLooksLikeFileEdit(command) || text.includes("file_write")) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
+function sourceEditCommand(command, text2) {
+  const haystack = `${command} ${text2}`.toLowerCase();
+  return (commandLooksLikeFileEdit(command) || text2.includes("file_write")) && /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|swift|rb|php|css|scss|html|json|yaml|yml|toml)\b/.test(haystack);
 }
 function sortQueue(items, direction) {
   if (direction === "highest_risk") {
@@ -14242,7 +14242,7 @@ function countRetryBlockedActions(groups, items) {
   const byId = new Map(items.map((item) => [item.request_id, item]));
   let total = 0;
   for (const group of groups) {
-    const members = [group.primary, ...group.duplicateIds.map((id) => byId.get(id)).filter((item) => item !== void 0)];
+    const members = [group.primary, ...group.duplicateIds.map((id2) => byId.get(id2)).filter((item) => item !== void 0)];
     const blocked = members.filter((member) => retryCannotReuseApproval(member)).length;
     total += blocked === members.length ? 1 + group.duplicateCount : blocked;
   }
@@ -14401,9 +14401,9 @@ function resolveActionType(receipt) {
   if (artifactType.includes("plugin")) return "Plugin";
   return "Action";
 }
-function looksLikeId(text) {
-  if (/^\w+:[a-f0-9]{8,}$/i.test(text)) return true;
-  if (/^[a-f0-9]{8,}$/i.test(text)) return true;
+function looksLikeId(text2) {
+  if (/^\w+:[a-f0-9]{8,}$/i.test(text2)) return true;
+  if (/^[a-f0-9]{8,}$/i.test(text2)) return true;
   return false;
 }
 function resolveActionTitle(receipt) {
@@ -14425,9 +14425,9 @@ function resolveActionTitle(receipt) {
   if (type === "Network request" && host && host.length > 0) {
     return host;
   }
-  const mcpTool = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
-  if (type === "Tool call" && mcpTool && mcpTool.length > 0) {
-    return mcpTool;
+  const mcpTool2 = envelope?.mcp_tool?.trim() ?? envelope?.tool_name?.trim();
+  if (type === "Tool call" && mcpTool2 && mcpTool2.length > 0) {
+    return mcpTool2;
   }
   const signals = (receipt.scanner_evidence ?? []).filter(isRiskSignalEvidence);
   if (signals.length > 0 && signals[0]?.title) {
@@ -14519,9 +14519,9 @@ function formatSubtitle(subtitle) {
   if (subtitle.endsWith(".") || subtitle.endsWith("?") || subtitle.endsWith("!")) return subtitle + " ";
   return subtitle + ". ";
 }
-function truncate(text, max) {
-  if (text.length <= max) return text;
-  return text.slice(0, max - 1) + "…";
+function truncate(text2, max) {
+  if (text2.length <= max) return text2;
+  return text2.slice(0, max - 1) + "…";
 }
 function plainEnglishDescription(receipt) {
   const app = harnessDisplayName(receipt.harness);
@@ -14596,14 +14596,14 @@ function infinitiveVerb(type) {
       return "run";
   }
 }
-function isShellCommandRequest(request) {
-  const artifactType = (request.artifact_type ?? "").toLowerCase();
-  const actionType = (request.action_envelope_json?.action_type ?? "").toLowerCase();
+function isShellCommandRequest(request2) {
+  const artifactType = (request2.artifact_type ?? "").toLowerCase();
+  const actionType = (request2.action_envelope_json?.action_type ?? "").toLowerCase();
   return actionType === "shell_command" || artifactType.includes("shell") || artifactType.includes("command");
 }
-function isPackageDependencyMutationRequest(request) {
-  const envelope = request.action_envelope_json;
-  const command = [envelope?.command, request.raw_command_text, request.launch_target].find((value) => value?.trim())?.trim();
+function isPackageDependencyMutationRequest(request2) {
+  const envelope = request2.action_envelope_json;
+  const command = [envelope?.command, request2.raw_command_text, request2.launch_target].find((value) => value?.trim())?.trim();
   if (command && /(?:&&|[;|]|\r?\n)/.test(command)) {
     return false;
   }
@@ -14618,15 +14618,15 @@ function isPackageDependencyMutationRequest(request) {
     command
   );
 }
-function plainEnglishRequestTitle(request) {
+function plainEnglishRequestTitle(request2) {
   const category = detectCategory({
-    ...request,
-    timestamp: request.created_at,
-    policy_decision: normalizeGuardAction(request.policy_action),
-    receipt_id: request.request_id
+    ...request2,
+    timestamp: request2.created_at,
+    policy_decision: normalizeGuardAction(request2.policy_action),
+    receipt_id: request2.request_id
   });
-  const app = harnessDisplayName(request.harness);
-  const name = humanFileName(request.artifact_name ?? request.artifact_id);
+  const app = harnessDisplayName(request2.harness);
+  const name = humanFileName(request2.artifact_name ?? request2.artifact_id);
   switch (category) {
     case "secret":
       return `${app} wants to read ${name}`;
@@ -14641,18 +14641,18 @@ function plainEnglishRequestTitle(request) {
     case "tool-call":
       return `${app} wants to use a tool`;
     default:
-      if (isShellCommandRequest(request)) {
+      if (isShellCommandRequest(request2)) {
         return `${app} wants to run a shell command`;
       }
       return `${app} wants to do something with ${name}`;
   }
 }
-function whyPaused(request) {
+function whyPaused(request2) {
   const category = detectCategory({
-    ...request,
-    timestamp: request.created_at,
-    policy_decision: normalizeGuardAction(request.policy_action),
-    receipt_id: request.request_id
+    ...request2,
+    timestamp: request2.created_at,
+    policy_decision: normalizeGuardAction(request2.policy_action),
+    receipt_id: request2.request_id
   });
   switch (category) {
     case "secret":
@@ -14666,15 +14666,15 @@ function whyPaused(request) {
     case "file-write":
       return "Guard could not verify this file change as routine under the current policy. Review the target and changes before approving.";
     case "tool-call":
-      if ((request.artifact_name ?? "").startsWith("chrome-devtools:") || (request.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
+      if ((request2.artifact_name ?? "").startsWith("chrome-devtools:") || (request2.changed_fields ?? []).some((field) => field.toLowerCase().includes("browser"))) {
         return "This uses the browser. Confirm it if you meant to.";
       }
       return "This uses an outside tool. Guard stops new tools by default.";
     default:
-      if (isPackageDependencyMutationRequest(request)) {
+      if (isPackageDependencyMutationRequest(request2)) {
         return "This package install mutates project dependencies and installed packages. Guard pauses dependency changes so you can review them before running.";
       }
-      if (isShellCommandRequest(request)) {
+      if (isShellCommandRequest(request2)) {
         return "This shell command has parts Guard could not fully inspect. Guard pauses these so you can review before running.";
       }
       return "Guard paused this so you can review it first.";
@@ -15541,11 +15541,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$7(value) {
+function isRecord$8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$7(raw)) {
+  if (!isRecord$8(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15655,7 +15655,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$6(value) {
+function isRecord$7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15688,7 +15688,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$6(value)) return null;
+  if (!isRecord$7(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15779,7 +15779,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$6(value)) return null;
+  if (!isRecord$7(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15787,7 +15787,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$6(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$7(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -15885,21 +15885,21 @@ function remainingProtectionRepairMessage(health, displayName) {
     message: `${remaining} Open the repair details below for the exact check.`
   };
 }
-function isRecord$5(value) {
+function isRecord$6(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 function checkReasonMapValue(value) {
-  if (!isRecord$5(value)) return {};
-  const reasons = {};
+  if (!isRecord$6(value)) return {};
+  const reasons2 = {};
   for (const [checkId, reason] of Object.entries(value)) {
     if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
     if (typeof reason !== "string" || reason.length > 96 || !REASON_CODE_ID.test(reason)) continue;
-    reasons[checkId] = reason;
+    reasons2[checkId] = reason;
   }
-  return reasons;
+  return reasons2;
 }
-function isRecord$4(value) {
+function isRecord$5(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function stringValue$2(value) {
@@ -15926,7 +15926,7 @@ function normalizeSupplyChainRepairResult(result) {
   const failures = [];
   if (Array.isArray(result.failed_steps)) {
     for (const candidate of result.failed_steps) {
-      if (!isRecord$4(candidate)) continue;
+      if (!isRecord$5(candidate)) continue;
       const parsed = failedStep(candidate);
       if (parsed !== null) failures.push(parsed);
     }
@@ -15934,7 +15934,7 @@ function normalizeSupplyChainRepairResult(result) {
   const remaining = [];
   if (Array.isArray(result.remaining_steps)) {
     for (const candidate of result.remaining_steps) {
-      if (!isRecord$4(candidate)) continue;
+      if (!isRecord$5(candidate)) continue;
       const parsed = remainingStep(candidate);
       if (parsed !== null) remaining.push(parsed);
     }
@@ -16095,6 +16095,107 @@ function getDemoDiff(artifactId, harness) {
     return null;
   }
   return demoDiff;
+}
+const RECOMMENDATION_SCHEMA = "guard.approval-extension-recommendation.v1";
+const MAX_PERMISSIONS$1 = 3;
+const CATALOG_ID = /^command\.[A-Za-z0-9._-]{1,248}$/;
+const DIGEST$3 = /^[0-9a-f]{64}$/;
+const CAUTION_REASONS = /* @__PURE__ */ new Set(["critical", "destructive", "sensitive"]);
+function isRecord$4(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function boundedText(value, limit) {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, limit) : null;
+}
+function catalogId(value) {
+  return typeof value === "string" && CATALOG_ID.test(value) ? value : null;
+}
+function normalizePermission(raw) {
+  if (!isRecord$4(raw)) return null;
+  const permissionId = catalogId(raw.permission_id);
+  const extensionId = catalogId(raw.extension_id);
+  const label = boundedText(raw.label, 120);
+  const extensionName = boundedText(raw.extension_name, 120);
+  if (permissionId === null || extensionId === null || label === null || extensionName === null) return null;
+  if (typeof raw.caution !== "boolean") return null;
+  const ruleId = raw.rule_id === null || raw.rule_id === void 0 ? null : catalogId(raw.rule_id);
+  if (raw.rule_id !== null && raw.rule_id !== void 0 && ruleId === null) return null;
+  const cautionReason = typeof raw.caution_reason === "string" && CAUTION_REASONS.has(raw.caution_reason) ? raw.caution_reason : null;
+  return {
+    permission_id: permissionId,
+    label,
+    description: boundedText(raw.description, 240),
+    example_command: boundedText(raw.example_command, 160),
+    extension_id: extensionId,
+    extension_name: extensionName,
+    rule_id: ruleId,
+    risk_tier: boundedText(raw.risk_tier, 32),
+    caution: raw.caution,
+    caution_reason: raw.caution ? cautionReason : null,
+    caution_detail: raw.caution ? boundedText(raw.caution_detail, 240) : null,
+    // The CLI line is rebuilt from the validated id; never echo daemon text into a copyable command.
+    cli_command: `hol-guard command controls set ${permissionId} --state allow`
+  };
+}
+function normalizeApprovalExtensionRecommendation(raw) {
+  if (!isRecord$4(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
+  if (raw.status !== "available" && raw.status !== "authority_unavailable") return null;
+  if (!Array.isArray(raw.permissions) || raw.permissions.length === 0 || raw.permissions.length > MAX_PERMISSIONS$1) {
+    return null;
+  }
+  const permissions = raw.permissions.map(normalizePermission);
+  if (permissions.some((permission2) => permission2 === null)) return null;
+  const valid = permissions;
+  if (new Set(valid.map((permission2) => permission2.permission_id)).size !== valid.length) return null;
+  if (typeof raw.revision !== "number" || !Number.isInteger(raw.revision) || raw.revision < 0) return null;
+  if (typeof raw.catalog_digest !== "string" || !DIGEST$3.test(raw.catalog_digest)) return null;
+  return {
+    schema: RECOMMENDATION_SCHEMA,
+    status: raw.status,
+    permissions: valid,
+    caution: valid.some((permission2) => permission2.caution),
+    revision: raw.revision,
+    catalog_digest: raw.catalog_digest
+  };
+}
+function recommendationCommandLabel(permission2) {
+  return permission2.example_command ?? permission2.label;
+}
+function joinLabels(labels) {
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
+function extensionNames(recommendation) {
+  return joinLabels([...new Set(recommendation.permissions.map((permission2) => permission2.extension_name))]);
+}
+const CAUTION_REASON_COPY = {
+  critical: "is a critical-risk command",
+  destructive: "can destroy work or history",
+  sensitive: "touches sensitive data or access"
+};
+function approvalExtensionRecommendationCopy(recommendation) {
+  const commands = recommendation.permissions.map(recommendationCommandLabel);
+  const commandText = joinLabels(commands);
+  const owner = extensionNames(recommendation);
+  const cautionLines = recommendation.permissions.filter((permission2) => permission2.caution).map((permission2) => {
+    const command = recommendationCommandLabel(permission2);
+    const reason = CAUTION_REASON_COPY[permission2.caution_reason ?? "sensitive"];
+    return permission2.caution_detail ? `${command} ${reason}. ${permission2.caution_detail}` : `${command} ${reason}.`;
+  });
+  const firstExtension = recommendation.permissions[0]?.extension_name ?? owner;
+  return {
+    commands,
+    title: `${owner} covers ${commandText}`,
+    body: `${owner} asks before agents run ${commandText}. Allow it in ${owner} and future ${commandText} commands run without asking. Other protections still apply.`,
+    primaryLabel: `Approve & always allow ${commandText}`,
+    configureLabel: `Configure in ${firstExtension}`,
+    confirmTitle: `Always allow ${commandText}?`,
+    confirmDetail: `This approves this request and changes ${owner} so agents can run ${commandText} without asking. Other protections, secret-file rules, and blocks still apply. You can change this anytime in the extension settings.`,
+    cautionLines,
+    successMessage: `Approved. ${owner} now allows ${commandText} automatically.`
+  };
 }
 function isRecord$3(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -16970,7 +17071,7 @@ function parseActionEnvelope(raw) {
   const targetPaths = raw["target_paths"];
   const networkHosts = raw["network_hosts"];
   const mcpServer = raw["mcp_server"];
-  const mcpTool = raw["mcp_tool"];
+  const mcpTool2 = raw["mcp_tool"];
   const packageManager = raw["package_manager"];
   const packageName = raw["package_name"];
   const commandCategory = raw["command_category"];
@@ -16983,7 +17084,7 @@ function parseActionEnvelope(raw) {
   if (typeof schemaVersion !== "number" || typeof actionId !== "string" || typeof harness !== "string" || typeof eventName !== "string" || !isGuardActionType(actionType)) {
     return null;
   }
-  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || commandCategory !== void 0 && (!isStringOrNull(commandCategory) || typeof commandCategory === "string" && commandCategory.length > 160) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
+  if (!isStringOrNull(workspace) || !isStringOrNull(workspaceHash) || !isStringOrNull(toolName) || !isStringOrNull(command) || !isStringOrNull(promptExcerpt) || promptText !== void 0 && !isStringOrNull(promptText) || !isStringOrNull(mcpServer) || !isStringOrNull(mcpTool2) || !isStringOrNull(packageManager) || !isStringOrNull(packageName) || commandCategory !== void 0 && (!isStringOrNull(commandCategory) || typeof commandCategory === "string" && commandCategory.length > 160) || packageIntentKind !== void 0 && !isStringOrNull(packageIntentKind) || preExecutionResult !== void 0 && preExecutionResult !== null && !isGuardAction(preExecutionResult) || policyAction !== void 0 && policyAction !== null && !isGuardAction(policyAction) || !isStringOrNull(scriptName)) {
     return null;
   }
   if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
@@ -17007,7 +17108,7 @@ function parseActionEnvelope(raw) {
     target_paths: targetPaths,
     network_hosts: networkHosts,
     mcp_server: mcpServer,
-    mcp_tool: mcpTool,
+    mcp_tool: mcpTool2,
     package_manager: packageManager,
     package_name: packageName,
     command_category: isStringOrNull(commandCategory) ? commandCategory : null,
@@ -17117,7 +17218,12 @@ function parseOptionalString(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 function normalizeApprovalRequest(item) {
-  const { decision_contract_error: rawContractError, ...baseItem } = item;
+  const {
+    decision_contract_error: rawContractError,
+    extension_recommendation: rawExtensionRecommendation,
+    ...baseItem
+  } = item;
+  const extensionRecommendation = normalizeApprovalExtensionRecommendation(rawExtensionRecommendation);
   const policyAction = normalizeGuardAction(item.policy_action);
   const decisionV2 = parseDecisionV2(item.decision_v2_json);
   const actionEnvelope = parseActionEnvelope(item.action_envelope_json);
@@ -17177,6 +17283,7 @@ function normalizeApprovalRequest(item) {
     task_capability_eligibility: hasScopeContract ? taskCapabilityEligibility : void 0,
     action_envelope_json: hasDecisionContractError ? null : actionEnvelope,
     decision_v2_json: hasDecisionContractError ? null : decisionV2,
+    ...extensionRecommendation !== null && !hasDecisionContractError ? { extension_recommendation: extensionRecommendation } : {},
     ...hasDecisionContractError ? { decision_contract_error: AUTHORITATIVE_DECISION_INCONSISTENT } : {}
   };
 }
@@ -17301,15 +17408,15 @@ function normalizeCloudCommandCapability(raw) {
   }
   const pending = Array.isArray(raw["pending_commands"]) ? raw["pending_commands"].flatMap((item) => {
     if (!isRecord$2(item)) return [];
-    const id = item["id"];
+    const id2 = item["id"];
     const operation = item["operation"];
     const issuer = item["issuer"];
     const expiresAt = item["expiresAt"];
     const approveCommand = item["approveCommand"];
-    if (typeof id !== "string" || typeof operation !== "string" || typeof issuer !== "string" || typeof expiresAt !== "string" || typeof approveCommand !== "string") {
+    if (typeof id2 !== "string" || typeof operation !== "string" || typeof issuer !== "string" || typeof expiresAt !== "string" || typeof approveCommand !== "string") {
       return [];
     }
-    return [{ id, operation, issuer, expiresAt, approveCommand }];
+    return [{ id: id2, operation, issuer, expiresAt, approveCommand }];
   }) : [];
   const operations = Array.isArray(raw["operations"]) ? raw["operations"].filter((operation) => typeof operation === "string") : [];
   return {
@@ -18671,14 +18778,14 @@ function normalizePackageFirewallReceipt(value) {
   if (!isRecord$2(value)) {
     return null;
   }
-  const id = stringValue$1(value.id);
+  const id2 = stringValue$1(value.id);
   const operation = stringValue$1(value.operation);
   const status = stringValue$1(value.status);
   const timestamp = stringValue$1(value.timestamp);
-  if (id === null || operation === null || status === null || timestamp === null) {
+  if (id2 === null || operation === null || status === null || timestamp === null) {
     return null;
   }
-  return { id, operation, status, timestamp };
+  return { id: id2, operation, status, timestamp };
 }
 function normalizePackageFirewallActions(value) {
   if (!isRecord$2(value)) {
@@ -19600,7 +19707,7 @@ async function readCloudConnect(method, signal) {
   }
   return parseGuardCloudConnectHttp(response.status, payload);
 }
-async function withCloudRequestTimeout(request, parentSignal) {
+async function withCloudRequestTimeout(request2, parentSignal) {
   if (parentSignal?.aborted) {
     throw new DOMException("Cloud connection request stopped", "AbortError");
   }
@@ -19613,7 +19720,7 @@ async function withCloudRequestTimeout(request, parentSignal) {
     controller.abort();
   }, 5e3);
   try {
-    return await request(controller.signal);
+    return await request2(controller.signal);
   } catch (error) {
     if (timedOut && !parentSignal?.aborted && error instanceof DOMException && error.name === "AbortError") {
       throw new CloudRequestTimeoutError();
@@ -19927,11 +20034,11 @@ const ActionButton = reactExports.forwardRef(
   }
 );
 ActionButton.displayName = "ActionButton";
-function IconActionButton({ label, icon, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }) {
+function IconActionButton({ label, icon: icon2, variant = "outline", onClick, disabled, spinning, "aria-label": ariaLabel }) {
   const base = "inline-flex items-center justify-center gap-1.5 rounded-lg text-sm font-semibold transition-[color,background-color,border-color,opacity] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 min-h-9 h-9 px-2.5 sm:px-3";
   const tone = variant === "primary" ? "bg-brand-blue text-white shadow-sm hover:bg-brand-blue/90" : variant === "danger" ? "bg-brand-purple text-white shadow-sm hover:bg-brand-purple/90" : variant === "ghost" ? "text-slate-600 hover:bg-slate-100" : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick, disabled, "aria-label": ariaLabel ?? label, className: `${base} ${tone}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-4 w-4 ${spinning ? "animate-spin" : ""}`, "aria-hidden": "true", children: icon }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: `h-4 w-4 ${spinning ? "animate-spin" : ""}`, "aria-hidden": "true", children: icon2 }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden sm:inline", children: spinning ? "Running..." : label })
   ] });
 }
@@ -20716,7 +20823,7 @@ const UPDATE_STATUS_POLL_MS = 6e4;
 const RECONNECT_POLL_MS = 1500;
 const RECONNECT_TIMEOUT_MS = 18e4;
 function GuardUpdatePanel(props) {
-  const version = props.guardVersion ?? props.updateStatus?.current_version ?? null;
+  const version2 = props.guardVersion ?? props.updateStatus?.current_version ?? null;
   const phase = props.updatePhase ?? "idle";
   const embeddedInDesktop = dashboardEmbedsInDesktop();
   const helpCopy = updateHelpCopy(props.updateStatus, phase, props.updateError, embeddedInDesktop);
@@ -20776,16 +20883,16 @@ function GuardUpdatePanel(props) {
     updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsx(
       GuardUpdateChannelSummary,
       {
-        version,
+        version: version2,
         useAlpha,
         busy,
         onManage: handleOpenAlphaModal
       }
     );
-  } else if (version) {
-    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version}`, children: [
+  } else if (version2) {
+    updateChannelSummary = /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-mono text-[10px] text-brand-dark/70", "aria-label": `Guard version ${version2}`, children: [
       "v",
-      version
+      version2
     ] });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
@@ -21869,7 +21976,7 @@ function filterBySearch(receipts, search) {
   if (!q) return receipts;
   return receipts.filter((r) => {
     const name = (r.artifact_name ?? r.artifact_id ?? "").toLowerCase();
-    const id = r.artifact_id.toLowerCase();
+    const id2 = r.artifact_id.toLowerCase();
     const receiptId = r.receipt_id.toLowerCase();
     const harness = r.harness.toLowerCase();
     const caps = (r.capabilities_summary ?? "").toLowerCase();
@@ -21879,7 +21986,7 @@ function filterBySearch(receipts, search) {
     const decision = (r.policy_decision ?? "").toLowerCase();
     const hashRaw = (r.artifact_hash ?? "").toLowerCase();
     const hashNormalized = hashRaw.replace(/^sha256:/, "");
-    return name.includes(q) || id.includes(q) || receiptId.includes(q) || harness.includes(q) || caps.includes(q) || changed.includes(q) || provenance.includes(q) || scope.includes(q) || decision.includes(q) || hashRaw.startsWith(q) || hashNormalized.includes(q);
+    return name.includes(q) || id2.includes(q) || receiptId.includes(q) || harness.includes(q) || caps.includes(q) || changed.includes(q) || provenance.includes(q) || scope.includes(q) || decision.includes(q) || hashRaw.startsWith(q) || hashNormalized.includes(q);
   });
 }
 function filterBySourceScope(receipts, sourceScope) {
@@ -22683,8 +22790,8 @@ function useCopyFeedbackTimeout(resetMs) {
 }
 const EXPAND_CHAR_THRESHOLD = 180;
 const EXPAND_LINE_THRESHOLD = 4;
-function shouldOfferLoggedActionExpand(text) {
-  const trimmed = text.trim();
+function shouldOfferLoggedActionExpand(text2) {
+  const trimmed = text2.trim();
   if (trimmed.length === 0) {
     return false;
   }
@@ -22795,8 +22902,8 @@ function SeverityBadge({ severity }) {
 }
 function ScannerEvidenceSection$1({ signals }) {
   const [expanded, setExpanded] = reactExports.useState({});
-  const toggle = reactExports.useCallback((id) => {
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+  const toggle = reactExports.useCallback((id2) => {
+    setExpanded((prev) => ({ ...prev, [id2]: !prev[id2] }));
   }, []);
   if (signals.length === 0) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
@@ -23641,8 +23748,8 @@ function parseAuditActionResult(result) {
   if (packageCount !== null) {
     lines.push(`${packageCount} dependency ${packageCount === 1 ? "entry" : "entries"} indexed.`);
   }
-  for (const warning of lockfileWarnings.slice(0, 3)) {
-    const message = readString(warning.message);
+  for (const warning2 of lockfileWarnings.slice(0, 3)) {
+    const message = readString(warning2.message);
     if (message !== null) {
       lines.push(message);
     }
@@ -25765,8 +25872,8 @@ function ScopedEvidenceTable({
   const handleLoadMore = reactExports.useCallback(() => {
     setPage((prev) => prev + 1);
   }, []);
-  const handleSelectId = reactExports.useCallback((id) => {
-    setSelectedId((prev) => prev === id ? "" : id);
+  const handleSelectId = reactExports.useCallback((id2) => {
+    setSelectedId((prev) => prev === id2 ? "" : id2);
   }, []);
   const handleOpenExport = reactExports.useCallback(() => {
     setExportOpen(true);
@@ -26326,6 +26433,16 @@ function WorkspacePageHeader(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(WorkspacePageHeaderToolbar, { tabConfig, actions })
   ] }) });
 }
+function extensionPatternHref(extensionId, ruleId) {
+  const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
+  if (ruleId === null) return url.toString();
+  url.searchParams.set("tab", "permissions");
+  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
+  const params = new URLSearchParams(fragment);
+  params.set("rule", ruleId);
+  url.hash = params.toString();
+  return url.toString();
+}
 const DASHBOARD_LOCATION_EVENT = "guard-dashboard-location";
 function commitDashboardLocation(href) {
   window.history.pushState({}, "", href);
@@ -26518,14 +26635,6 @@ function CommandValue(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5", children: props.preview === null ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-slate-500", children: label }) : /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block select-text whitespace-pre-wrap break-all font-mono text-[13px] leading-5 text-brand-dark", children: label }) })
   ] });
 }
-function extensionPatternHref(extensionId, ruleId) {
-  const url = new URL(guardAwareHref(`/extensions/${extensionId}`), window.location.origin);
-  const fragment = url.hash.startsWith("#") ? url.hash.slice(1) : url.hash;
-  const params = new URLSearchParams(fragment);
-  params.set("rule", ruleId);
-  url.hash = params.toString();
-  return url.toString();
-}
 function MatchEvidence(props) {
   const effects = commandEffectLabels(props.match);
   const openPatternFromRule = reactExports.useCallback(() => {
@@ -26689,18 +26798,18 @@ function CommandActivityFiltersPanel(props) {
     [props.analytics, props.filters.harness]
   );
   const selectedExtension = props.extensions?.items.find(
-    (extension) => extension.extension_id === props.filters.extension_id
+    (extension2) => extension2.extension_id === props.filters.extension_id
   );
   const extensions = reactExports.useMemo(
     () => preserveActiveOption(
-      props.extensions?.items.map((extension) => ({ label: extension.name, value: extension.extension_id })) ?? [],
+      props.extensions?.items.map((extension2) => ({ label: extension2.name, value: extension2.extension_id })) ?? [],
       props.filters.extension_id
     ),
     [props.extensions, props.filters.extension_id]
   );
   const rules = reactExports.useMemo(
     () => preserveActiveOption(
-      selectedExtension?.rules.map((rule) => ({ label: rule.title, value: rule.rule_id })) ?? [],
+      selectedExtension?.rules.map((rule2) => ({ label: rule2.title, value: rule2.rule_id })) ?? [],
       props.filters.rule_id
     ),
     [props.filters.rule_id, selectedExtension]
@@ -26747,11 +26856,11 @@ function CommandActivityFiltersPanel(props) {
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Extension", value: props.filters.extension_id ?? "", onChange: handleExtension, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All extensions" }),
-        extensions.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: extension.value, children: extension.label }, extension.value))
+        extensions.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: extension2.value, children: extension2.label }, extension2.value))
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Rule", value: props.filters.rule_id ?? "", onChange: handleRule, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All rules" }),
-        rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule.value, children: rule.label }, rule.value))
+        rules.map((rule2) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: rule2.value, children: rule2.label }, rule2.value))
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(SelectField, { label: "Run result", value: props.filters.execution_status ?? "", onChange: handleExecution, children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All run results" }),
@@ -27178,7 +27287,7 @@ const FORBIDDEN_KEYS = /* @__PURE__ */ new Set([
 function invalid(kind) {
   throw new Error(`Invalid ${kind} payload`);
 }
-function record(value, kind) {
+function record$3(value, kind) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) invalid(kind);
   return value;
 }
@@ -27213,11 +27322,11 @@ function booleanValue(value, kind) {
   if (typeof value !== "boolean") invalid(kind);
   return value;
 }
-function integer(value, kind) {
+function integer$3(value, kind) {
   if (!Number.isSafeInteger(value) || value < 0) invalid(kind);
   return value;
 }
-function enumValue(value, values, kind) {
+function enumValue$2(value, values, kind) {
   if (typeof value !== "string" || !values.includes(value)) invalid(kind);
   return value;
 }
@@ -27230,54 +27339,54 @@ function objectArray(value, kind, limit = 100) {
   return value;
 }
 function normalizeMatch(value) {
-  const item = record(value, "command activity");
+  const item = record$3(value, "command activity");
   return {
-    ordinal: integer(item.ordinal, "command activity"),
+    ordinal: integer$3(item.ordinal, "command activity"),
     extension_id: stringValue(item.extension_id, "command activity"),
     extension_version: stringValue(item.extension_version, "command activity"),
     rule_id: stringValue(item.rule_id, "command activity"),
     rule_version: stringValue(item.rule_version, "command activity"),
-    match_class: enumValue(item.match_class, ["unsafe", "safe_variant", "uncertainty"], "command activity"),
+    match_class: enumValue$2(item.match_class, ["unsafe", "safe_variant", "uncertainty"], "command activity"),
     severity: stringValue(item.severity, "command activity"),
-    default_floor: enumValue(item.default_floor, GUARD_ACTIONS, "command activity"),
+    default_floor: enumValue$2(item.default_floor, GUARD_ACTIONS, "command activity"),
     safe_variant_id: nullableString(item.safe_variant_id, "command activity"),
     effect_classes: stringArray(item.effect_classes, "command activity", 32),
     schema_version: stringValue(item.schema_version, "command activity")
   };
 }
 function normalizeActivity(value) {
-  const item = record(value, "command activity");
+  const item = record$3(value, "command activity");
   const matches = objectArray(item.matches, "command activity").map(normalizeMatch);
-  const matchCount = integer(item.match_count, "command activity");
+  const matchCount = integer$3(item.match_count, "command activity");
   if (matches.length !== matchCount) invalid("command activity");
   return {
     activity_id: stringValue(item.activity_id, "command activity"),
     occurred_at: stringValue(item.occurred_at, "command activity"),
     harness: stringValue(item.harness, "command activity"),
-    hook_phase: enumValue(item.hook_phase, HOOK_PHASES, "command activity"),
-    execution_status: enumValue(
+    hook_phase: enumValue$2(item.hook_phase, HOOK_PHASES, "command activity"),
+    execution_status: enumValue$2(
       item.execution_status,
       EXECUTION_STATUSES,
       "command activity"
     ),
-    proof_level: enumValue(item.proof_level, PROOF_LEVELS, "command activity"),
-    policy_action: item.policy_action === null ? null : enumValue(item.policy_action, GUARD_ACTIONS, "command activity"),
+    proof_level: enumValue$2(item.proof_level, PROOF_LEVELS, "command activity"),
+    policy_action: item.policy_action === null ? null : enumValue$2(item.policy_action, GUARD_ACTIONS, "command activity"),
     decision_reason_code: nullableString(item.decision_reason_code, "command activity"),
     controlling_rule_id: nullableString(item.controlling_rule_id, "command activity"),
-    parse_confidence: item.parse_confidence === null ? null : enumValue(item.parse_confidence, ["exact", "fallback", "uncertain"], "command activity"),
+    parse_confidence: item.parse_confidence === null ? null : enumValue$2(item.parse_confidence, ["exact", "fallback", "uncertain"], "command activity"),
     uncertainty_class: nullableString(item.uncertainty_class, "command activity"),
     match_count: matchCount,
     prompted: booleanValue(item.prompted, "command activity"),
-    approval_reuse_status: enumValue(
+    approval_reuse_status: enumValue$2(
       item.approval_reuse_status,
       REUSE_STATUSES,
       "command activity"
     ),
-    receipt_link_status: enumValue(item.receipt_link_status, ["not_applicable", "linked"], "command activity"),
+    receipt_link_status: enumValue$2(item.receipt_link_status, ["not_applicable", "linked"], "command activity"),
     receipt_id: nullableString(item.receipt_id, "command activity"),
     evaluation_latency_bucket: stringValue(item.evaluation_latency_bucket, "command activity"),
     persistence_latency_bucket: stringValue(item.persistence_latency_bucket, "command activity"),
-    feedback_label: item.feedback_label === null ? null : enumValue(item.feedback_label, FEEDBACK_LABELS, "command activity"),
+    feedback_label: item.feedback_label === null ? null : enumValue$2(item.feedback_label, FEEDBACK_LABELS, "command activity"),
     schema_version: stringValue(item.schema_version, "command activity"),
     invocation_preview: nullableInvocationPreview(item.invocation_preview),
     matches
@@ -27285,7 +27394,7 @@ function normalizeActivity(value) {
 }
 function normalizeCommandActivityPage(value) {
   rejectForbidden(value, "command activity");
-  const payload = record(value, "command activity");
+  const payload = record$3(value, "command activity");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity");
   return {
     schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
@@ -27295,17 +27404,17 @@ function normalizeCommandActivityPage(value) {
 }
 function countBuckets(value, kind) {
   return objectArray(value, kind, 50).map((raw) => {
-    const item = record(raw, kind);
-    return { value: stringValue(item.value, kind), count: integer(item.count, kind) };
+    const item = record$3(raw, kind);
+    return { value: stringValue(item.value, kind), count: integer$3(item.count, kind) };
   });
 }
 function normalizeCommandActivityAnalytics(value) {
   rejectForbidden(value, "command activity analytics");
-  const payload = record(value, "command activity analytics");
-  const window2 = record(payload.window, "command activity analytics");
-  const scope = record(payload.scope, "command activity analytics");
-  const dimensions = record(payload.dimensions, "command activity analytics");
-  const health = record(payload.health, "command activity analytics");
+  const payload = record$3(value, "command activity analytics");
+  const window2 = record$3(payload.window, "command activity analytics");
+  const scope = record$3(payload.scope, "command activity analytics");
+  const dimensions = record$3(payload.dimensions, "command activity analytics");
+  const health = record$3(payload.health, "command activity analytics");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity analytics");
   const normalizedDimensions = Object.fromEntries(
     ANALYTICS_DIMENSIONS.map((name) => [name, countBuckets(dimensions[name], "command activity analytics")])
@@ -27315,30 +27424,30 @@ function normalizeCommandActivityAnalytics(value) {
     window: {
       from: stringValue(window2.from, "command activity analytics"),
       through: stringValue(window2.through, "command activity analytics"),
-      days: integer(window2.days, "command activity analytics")
+      days: integer$3(window2.days, "command activity analytics")
     },
     scope: {
-      dimension: scope.dimension === null ? null : enumValue(scope.dimension, ["harness", "extension", "rule"], "command activity analytics"),
+      dimension: scope.dimension === null ? null : enumValue$2(scope.dimension, ["harness", "extension", "rule"], "command activity analytics"),
       dimension_value: nullableString(scope.dimension_value, "command activity analytics")
     },
-    commands_checked: integer(payload.commands_checked, "command activity analytics"),
+    commands_checked: integer$3(payload.commands_checked, "command activity analytics"),
     trend: objectArray(payload.trend, "command activity analytics", 397).map((raw) => {
-      const item = record(raw, "command activity analytics");
-      return { day: stringValue(item.day, "command activity analytics"), count: integer(item.count, "command activity analytics") };
+      const item = record$3(raw, "command activity analytics");
+      return { day: stringValue(item.day, "command activity analytics"), count: integer$3(item.count, "command activity analytics") };
     }),
     dimensions: normalizedDimensions,
-    dimension_breakdowns_scope: enumValue(payload.dimension_breakdowns_scope, ["global"], "command activity analytics"),
+    dimension_breakdowns_scope: enumValue$2(payload.dimension_breakdowns_scope, ["global"], "command activity analytics"),
     feedback: objectArray(payload.feedback, "command activity analytics", 2).map((raw) => {
-      const item = record(raw, "command activity analytics");
+      const item = record$3(raw, "command activity analytics");
       return {
-        label: enumValue(item.label, FEEDBACK_LABELS, "command activity analytics"),
-        count: integer(item.count, "command activity analytics")
+        label: enumValue$2(item.label, FEEDBACK_LABELS, "command activity analytics"),
+        count: integer$3(item.count, "command activity analytics")
       };
     }),
     health: {
-      status: enumValue(health.status, ["healthy", "degraded"], "command activity analytics"),
-      dropped_events: integer(health.dropped_events, "command activity analytics"),
-      persistence_errors: integer(health.persistence_errors, "command activity analytics"),
+      status: enumValue$2(health.status, ["healthy", "degraded"], "command activity analytics"),
+      dropped_events: integer$3(health.dropped_events, "command activity analytics"),
+      persistence_errors: integer$3(health.persistence_errors, "command activity analytics"),
       last_error_class: nullableString(health.last_error_class ?? null, "command activity analytics"),
       last_error_at: nullableString(health.last_error_at ?? null, "command activity analytics")
     }
@@ -27346,7 +27455,7 @@ function normalizeCommandActivityAnalytics(value) {
 }
 function normalizeCommandExtensionsPage(value) {
   rejectForbidden(value, "command extensions");
-  const payload = record(value, "command extensions");
+  const payload = record$3(value, "command extensions");
   if (payload.schema_version !== COMMAND_EXTENSION_SCHEMA_VERSION || payload.source !== "built-in") {
     invalid("command extensions");
   }
@@ -27354,22 +27463,22 @@ function normalizeCommandExtensionsPage(value) {
     schema_version: COMMAND_EXTENSION_SCHEMA_VERSION,
     source: "built-in",
     items: objectArray(payload.items, "command extensions").map((raw) => {
-      const item = record(raw, "command extensions");
+      const item = record$3(raw, "command extensions");
       const rules = objectArray(item.rules, "command extensions").map((ruleRaw) => {
-        const rule = record(ruleRaw, "command extensions");
+        const rule2 = record$3(ruleRaw, "command extensions");
         return {
-          rule_id: stringValue(rule.rule_id, "command extensions"),
-          title: stringValue(rule.title, "command extensions", 512),
-          description: stringValue(rule.description, "command extensions", 2048),
-          severity: stringValue(rule.severity, "command extensions"),
-          risk_classes: stringArray(rule.risk_classes, "command extensions"),
-          action_classes: stringArray(rule.action_classes, "command extensions"),
-          default_mode: stringValue(rule.default_mode, "command extensions"),
-          safe_variant_ids: stringArray(rule.safe_variant_ids, "command extensions"),
-          compatibility_fallback: booleanValue(rule.compatibility_fallback, "command extensions")
+          rule_id: stringValue(rule2.rule_id, "command extensions"),
+          title: stringValue(rule2.title, "command extensions", 512),
+          description: stringValue(rule2.description, "command extensions", 2048),
+          severity: stringValue(rule2.severity, "command extensions"),
+          risk_classes: stringArray(rule2.risk_classes, "command extensions"),
+          action_classes: stringArray(rule2.action_classes, "command extensions"),
+          default_mode: stringValue(rule2.default_mode, "command extensions"),
+          safe_variant_ids: stringArray(rule2.safe_variant_ids, "command extensions"),
+          compatibility_fallback: booleanValue(rule2.compatibility_fallback, "command extensions")
         };
       });
-      const ruleCount = integer(item.rule_count, "command extensions");
+      const ruleCount = integer$3(item.rule_count, "command extensions");
       if (rules.length !== ruleCount) invalid("command extensions");
       return {
         extension_id: stringValue(item.extension_id, "command extensions"),
@@ -27393,26 +27502,26 @@ function normalizeCommandExtensionsPage(value) {
 }
 function normalizeCommandFeedbackResult(value) {
   rejectForbidden(value, "command feedback");
-  const payload = record(value, "command feedback");
+  const payload = record$3(value, "command feedback");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command feedback");
   return {
     schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
     activity_id: stringValue(payload.activity_id, "command feedback"),
-    label: enumValue(payload.label, FEEDBACK_LABELS, "command feedback"),
+    label: enumValue$2(payload.label, FEEDBACK_LABELS, "command feedback"),
     created_at: stringValue(payload.created_at, "command feedback"),
     updated_at: stringValue(payload.updated_at, "command feedback"),
     changed: booleanValue(payload.changed, "command feedback")
   };
 }
 function normalizedCounts(value, keys, kind) {
-  const payload = record(value, kind);
-  return Object.fromEntries(keys.map((key) => [key, integer(payload[key], kind)]));
+  const payload = record$3(value, kind);
+  return Object.fromEntries(keys.map((key) => [key, integer$3(payload[key], kind)]));
 }
 function normalizeCommandActivityDiagnostics(value) {
   rejectForbidden(value, "command activity diagnostics");
-  const payload = record(value, "command activity diagnostics");
-  const schemas = record(payload.schemas, "command activity diagnostics");
-  const stableIds = record(payload.stable_ids, "command activity diagnostics");
+  const payload = record$3(value, "command activity diagnostics");
+  const schemas = record$3(payload.schemas, "command activity diagnostics");
+  const stableIds = record$3(payload.stable_ids, "command activity diagnostics");
   if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity diagnostics");
   return {
     schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
@@ -27428,10 +27537,10 @@ function normalizeCommandActivityDiagnostics(value) {
       "command activity diagnostics"
     ),
     proof_coverage: objectArray(payload.proof_coverage, "command activity diagnostics", 3).map((raw) => {
-      const item = record(raw, "command activity diagnostics");
+      const item = record$3(raw, "command activity diagnostics");
       return {
-        proof_level: enumValue(item.proof_level, PROOF_LEVELS, "command activity diagnostics"),
-        count: integer(item.count, "command activity diagnostics")
+        proof_level: enumValue$2(item.proof_level, PROOF_LEVELS, "command activity diagnostics"),
+        count: integer$3(item.count, "command activity diagnostics")
       };
     }),
     stable_ids: {
@@ -27440,17 +27549,17 @@ function normalizeCommandActivityDiagnostics(value) {
       rules: stringArray(stableIds.rules, "command activity diagnostics", 1e3)
     },
     error_classes: objectArray(payload.error_classes, "command activity diagnostics", 4).map((raw) => {
-      const item = record(raw, "command activity diagnostics");
+      const item = record$3(raw, "command activity diagnostics");
       return {
         error_class: stringValue(item.error_class, "command activity diagnostics"),
-        count: integer(item.count, "command activity diagnostics")
+        count: integer$3(item.count, "command activity diagnostics")
       };
     })
   };
 }
 function normalizeCommandActivityDeletion(value) {
   rejectForbidden(value, "command activity deletion");
-  const payload = record(value, "command activity deletion");
+  const payload = record$3(value, "command activity deletion");
   if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity deletion");
   return {
     schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
@@ -27459,17 +27568,17 @@ function normalizeCommandActivityDeletion(value) {
 }
 function normalizeCommandActivityInvalidation(sequence, value) {
   rejectForbidden(value, "command activity invalidation");
-  const id = integer(sequence, "command activity invalidation");
-  const payload = record(value, "command activity invalidation");
+  const id2 = integer$3(sequence, "command activity invalidation");
+  const payload = record$3(value, "command activity invalidation");
   if (payload.event === "command_activity_invalidated") {
     return {
-      sequence: id,
+      sequence: id2,
       event: "command_activity_invalidated",
       activity_id: stringValue(payload.activity_id, "command activity invalidation")
     };
   }
   if (payload.event === "command_activity_reset" && payload.reset_required === true) {
-    return { sequence: id, event: "command_activity_reset", reset_required: true };
+    return { sequence: id2, event: "command_activity_reset", reset_required: true };
   }
   return invalid("command activity invalidation");
 }
@@ -27656,18 +27765,18 @@ async function clearCommandActivityEvidence(proof = {}, signal, transport) {
   );
 }
 function parseCommandActivitySseFrame(frame) {
-  let id = null;
+  let id2 = null;
   const data = [];
   for (const rawLine of frame.split(/\r?\n/)) {
     if (!rawLine || rawLine.startsWith(":")) continue;
     const separator = rawLine.indexOf(":");
     const field = separator === -1 ? rawLine : rawLine.slice(0, separator);
     const value = separator === -1 ? "" : rawLine.slice(separator + 1).replace(/^ /, "");
-    if (field === "id") id = value;
+    if (field === "id") id2 = value;
     else if (field === "data") data.push(value);
   }
-  if (id === null || !/^\d+$/.test(id) || data.length === 0) return null;
-  const sequence = Number(id);
+  if (id2 === null || !/^\d+$/.test(id2) || data.length === 0) return null;
+  const sequence = Number(id2);
   if (!Number.isSafeInteger(sequence)) return null;
   try {
     return normalizeCommandActivityInvalidation(sequence, JSON.parse(data.join("\n")));
@@ -28043,10 +28152,10 @@ function EvidenceWorkbench({ receiptItems, runtime, onClearEvidence, onNavigate 
   const handleFilterChange = reactExports.useCallback((patch) => {
     setFilters((prev) => ({ ...prev, ...patch }));
   }, []);
-  const handleSelectId = reactExports.useCallback((id) => {
+  const handleSelectId = reactExports.useCallback((id2) => {
     setFilters((prev) => ({
       ...prev,
-      selectedId: prev.selectedId === id ? "" : id
+      selectedId: prev.selectedId === id2 ? "" : id2
     }));
   }, []);
   const handleCloseDetail = reactExports.useCallback(() => {
@@ -28384,7 +28493,7 @@ function useRequestReadState() {
       if (requestIds.length === 0) return;
       setReadIds((prev) => {
         const next = new Set(prev);
-        for (const id of requestIds) next.add(id);
+        for (const id2 of requestIds) next.add(id2);
         return next;
       });
       void postReadStateMarkAllRead(requestIds).catch(() => {
@@ -29151,8 +29260,8 @@ function useQueueBulkApprove(props) {
     for (const group of groups) {
       const isApprovable = isBulkApprovableGroup(group);
       map.set(group.primary.request_id, isApprovable);
-      for (const id of group.duplicateIds) {
-        map.set(id, isApprovable);
+      for (const id2 of group.duplicateIds) {
+        map.set(id2, isApprovable);
       }
     }
     return map;
@@ -29161,8 +29270,8 @@ function useQueueBulkApprove(props) {
     const map = /* @__PURE__ */ new Map();
     for (const group of groups) {
       map.set(group.primary.request_id, group.primary.request_id);
-      for (const id of group.duplicateIds) {
-        map.set(id, group.primary.request_id);
+      for (const id2 of group.duplicateIds) {
+        map.set(id2, group.primary.request_id);
       }
     }
     return map;
@@ -30117,7 +30226,7 @@ function parseBusinessReviewSummary(value, requestId) {
   const item = value;
   if (Object.keys(item).length !== fields.length || !fields.every((field) => Object.hasOwn(item, field))) return null;
   if (item.schema !== "guard-native-local-business-review-summary.v1" || item.version !== 1 || item.request_id !== requestId || item.account_currentness !== "not_asserted" || item.execution_state !== "not_checked") return null;
-  if (![item.request_snapshot_digest, item.prepared_input_binding].every((digest) => typeof digest === "string" && /^[0-9a-f]{64}$/.test(digest))) return null;
+  if (![item.request_snapshot_digest, item.prepared_input_binding].every((digest2) => typeof digest2 === "string" && /^[0-9a-f]{64}$/.test(digest2))) return null;
   if (typeof item.service !== "string" || !Object.hasOwn(businessServiceLabels, item.service) || typeof item.operation !== "string" || !Object.hasOwn(businessOperationLabels, item.operation)) return null;
   const servicePrefix = { google_gmail: "mail_", google_drive: "drive_", google_calendar: "calendar_" }[item.service];
   if (!item.operation.startsWith(servicePrefix)) return null;
@@ -30179,6 +30288,1134 @@ function BusinessReviewSummaryPanel({ requestId }) {
   ] });
   return state.summary ? /* @__PURE__ */ jsxRuntimeExports.jsx(BusinessReviewSummaryDetails, { summary: state.summary }) : null;
 }
+function ApprovalProofModal(props) {
+  const {
+    title,
+    detail,
+    confirmLabel,
+    approvalGate,
+    busy = false,
+    busyLabel = "Repairing…",
+    error = null,
+    requireFreshTotp = false,
+    onCancel,
+    onConfirm
+  } = props;
+  const [password, setPassword] = reactExports.useState("");
+  const [totpCode, setTotpCode] = reactExports.useState("");
+  const formRef = reactExports.useRef(null);
+  useFocusTrap(true, formRef);
+  const handlePasswordChange = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotpChange = reactExports.useCallback((event) => {
+    setTotpCode(event.target.value);
+  }, []);
+  const confirmDisabled = isApprovalProofSubmitDisabled(
+    approvalGate,
+    { approvalPassword: password, approvalTotpCode: totpCode },
+    busy,
+    requireFreshTotp
+  );
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    if (confirmDisabled) {
+      return;
+    }
+    onConfirm(buildApprovalProofCredentials(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totpCode },
+      requireFreshTotp
+    ));
+  }, [approvalGate, confirmDisabled, onConfirm, password, requireFreshTotp, totpCode]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 flex items-center justify-center bg-brand-dark/30 px-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "form",
+    {
+      ref: formRef,
+      role: "dialog",
+      "aria-modal": "true",
+      "aria-labelledby": "approval-proof-modal-title",
+      "aria-describedby": "approval-proof-modal-detail",
+      className: "w-full max-w-md rounded-xl border border-slate-200 bg-white p-5 shadow-xl",
+      onSubmit: handleSubmit,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval required" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "approval-proof-modal-title", className: "mt-2 text-base font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "approval-proof-modal-detail", className: "mt-1 text-sm text-slate-500", children: detail }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofFieldInputs,
+          {
+            approvalGate,
+            approvalPassword: password,
+            approvalTotpCode: totpCode,
+            requireFreshTotp,
+            onApprovalPasswordChange: handlePasswordChange,
+            onApprovalTotpCodeChange: handleTotpChange
+          }
+        ) }),
+        error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-lg border border-brand-attention/20 bg-brand-attention/[0.06] px-3 py-2 text-sm text-brand-attention", children: error }) : null,
+        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "p",
+          {
+            role: "status",
+            tabIndex: 0,
+            className: "mt-4 text-sm font-medium text-brand-dark focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
+            children: busyLabel
+          }
+        ) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex justify-end gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "button", variant: "outline", onClick: onCancel, disabled: busy, children: "Cancel" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { type: "submit", disabled: confirmDisabled, children: busy ? busyLabel : confirmLabel })
+        ] })
+      ]
+    }
+  ) });
+}
+const DIGEST$2 = /^[a-f0-9]{64}$/;
+const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const MAX_EXTENSIONS = 512;
+const MAX_PERMISSIONS = 4096;
+const MAX_REASONS = 64;
+function record$2(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function text(value, label, max = 256) {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function integer$2(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
+  return value;
+}
+function boolean(value, label) {
+  if (typeof value !== "boolean") throw new Error(`Invalid ${label}`);
+  return value;
+}
+function enumValue$1(value, label, values) {
+  const candidate = text(value, label, 64);
+  if (!values.includes(candidate)) throw new Error(`Invalid ${label}`);
+  return candidate;
+}
+function id$1(value, label, pattern) {
+  const candidate = text(value, label).toLowerCase();
+  if (!pattern.test(candidate)) throw new Error(`Invalid ${label}`);
+  return candidate;
+}
+function reasons(value, label) {
+  if (!Array.isArray(value) || value.length > MAX_REASONS) throw new Error(`Invalid ${label}`);
+  return value.map((item, index) => text(item, `${label}[${index}]`, 128));
+}
+function extensionItem(value, label) {
+  const item = record$2(value, label);
+  return {
+    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
+    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
+    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
+    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
+    required: boolean(item.required, `${label}.required`),
+    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
+  };
+}
+function permissionItem(value, label) {
+  const item = record$2(value, label);
+  return {
+    permission_id: id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1),
+    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
+    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
+    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
+    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
+    configurable: boolean(item.configurable, `${label}.configurable`),
+    fixed_reason: item.fixed_reason === null ? null : text(item.fixed_reason, `${label}.fixed_reason`, 2048),
+    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
+  };
+}
+function normalizeEffectiveExtensionControlProjection(value) {
+  const root = record$2(value, "extension projection");
+  const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
+  if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
+  const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
+  if (!DIGEST$2.test(digest2)) throw new Error("Invalid projection.catalog_digest");
+  if (!Array.isArray(root.extensions) || root.extensions.length > MAX_EXTENSIONS) throw new Error("Invalid projection.extensions");
+  if (!Array.isArray(root.permissions) || root.permissions.length > MAX_PERMISSIONS) throw new Error("Invalid projection.permissions");
+  const extensions = root.extensions.map((item, index) => extensionItem(item, `projection.extensions[${index}]`));
+  const permissions = root.permissions.map((item, index) => permissionItem(item, `projection.permissions[${index}]`));
+  if (new Set(extensions.map((item) => item.extension_id)).size !== extensions.length) throw new Error("Duplicate projection extension ID");
+  if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
+  return {
+    schema_version: "guard.daemon.extension-control-projection.v1",
+    revision: integer$2(root.revision, "projection.revision"),
+    catalog_digest: digest2,
+    health: enumValue$1(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
+    extensions,
+    permissions
+  };
+}
+const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const RULE_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const DIGEST$1 = /^[a-f0-9]{64}$/;
+const VERSION = /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/;
+const EXTENSION_CLIENT_LIMITS = Object.freeze({
+  extensions: 512,
+  rulesPerExtension: 1024,
+  permissionsPerExtension: 512,
+  relationshipIds: 1024,
+  controls: 1024,
+  layers: 2,
+  failures: 256,
+  stringLength: 8192
+});
+class ExtensionControlProtocolError extends Error {
+  constructor(message) {
+    super(`Invalid extension-control response: ${message}`);
+  }
+}
+function record$1(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new ExtensionControlProtocolError(`${label} must be an object`);
+  }
+  return value;
+}
+function array(value, label, max) {
+  if (!Array.isArray(value)) throw new ExtensionControlProtocolError(`${label} must be an array`);
+  if (value.length > max) throw new ExtensionControlProtocolError(`${label} exceeds ${max} items`);
+  return value;
+}
+function string$1(value, label, allowEmpty = false) {
+  if (typeof value !== "string") throw new ExtensionControlProtocolError(`${label} must be a string`);
+  if (value.length > EXTENSION_CLIENT_LIMITS.stringLength) throw new ExtensionControlProtocolError(`${label} is too long`);
+  if (!allowEmpty && value.trim().length === 0) throw new ExtensionControlProtocolError(`${label} is required`);
+  return value;
+}
+function optionalString(value, label) {
+  if (value === null) return null;
+  return string$1(value, label);
+}
+function catalogText(value) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+function publisher(value, label) {
+  const item = record$1(value, label);
+  const url = item.url;
+  return {
+    id: string$1(item.id, `${label}.id`),
+    displayName: string$1(item.displayName, `${label}.displayName`),
+    ...url === void 0 ? {} : { url: string$1(url, `${label}.url`) }
+  };
+}
+function icon(value, label) {
+  if (value === void 0 || value === null) return { kind: "none" };
+  const item = record$1(value, label);
+  if (typeof item.kind === "string" && !["react-icon", "svg-ref", "none"].includes(item.kind)) return { kind: "none" };
+  const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"]);
+  const name = item.name === void 0 ? void 0 : string$1(item.name, `${label}.name`);
+  const background = item.background === void 0 ? void 0 : string$1(item.background, `${label}.background`);
+  return { kind, ...name ? { name } : {}, ...background ? { background } : {} };
+}
+function bool$1(value, label) {
+  if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
+  return value;
+}
+function integer$1(value, label, min = 0) {
+  if (!Number.isSafeInteger(value) || value < min) {
+    throw new ExtensionControlProtocolError(`${label} must be an integer >= ${min}`);
+  }
+  return value;
+}
+function enumValue(value, label, values) {
+  const candidate = string$1(value, label);
+  if (!values.includes(candidate)) throw new ExtensionControlProtocolError(`${label} has unsupported value`);
+  return candidate;
+}
+function id(value, label, pattern) {
+  const candidate = string$1(value, label).trim().toLowerCase();
+  if (!pattern.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not canonical`);
+  return candidate;
+}
+function digest$1(value, label) {
+  const candidate = string$1(value, label).trim().toLowerCase();
+  if (!DIGEST$1.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
+  return candidate;
+}
+function version(value, label) {
+  const candidate = string$1(value, label);
+  if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
+  return candidate;
+}
+function terminalCommands(value) {
+  if (value === void 0) return void 0;
+  const item = record$1(value, "effective.terminal_commands");
+  return {
+    ...item.shell === void 0 ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"]) },
+    enroll: string$1(item.enroll, "effective.terminal_commands.enroll"),
+    recover_authority: string$1(item.recover_authority, "effective.terminal_commands.recover_authority")
+  };
+}
+function stringList(value, label, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
+  return array(value, label, max).map((item, index) => string$1(item, `${label}[${index}]`));
+}
+function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
+  const items = array(value, label, max).map((item, index) => id(item, `${label}[${index}]`, pattern));
+  if (new Set(items).size !== items.length) throw new ExtensionControlProtocolError(`${label} contains duplicates`);
+  return items;
+}
+function safeVariant(value, label) {
+  const item = record$1(value, label);
+  return {
+    variant_id: string$1(item.variant_id, `${label}.variant_id`),
+    title: string$1(item.title, `${label}.title`),
+    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`)
+  };
+}
+function rule(value, extensionId, label) {
+  const item = record$1(value, label);
+  const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
+  if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
+  const rawVersion = item.rule_version;
+  if (!(typeof rawVersion === "string" || Number.isSafeInteger(rawVersion))) {
+    throw new ExtensionControlProtocolError(`${label}.rule_version must be string or integer`);
+  }
+  return {
+    rule_id: ruleId,
+    rule_version: rawVersion,
+    title: string$1(item.title, `${label}.title`),
+    description: string$1(item.description, `${label}.description`),
+    severity: enumValue(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
+    risk_classes: stringList(item.risk_classes, `${label}.risk_classes`),
+    action_classes: stringList(item.action_classes, `${label}.action_classes`),
+    safer_alternatives: stringList(item.safer_alternatives, `${label}.safer_alternatives`),
+    default_mode: enumValue(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
+    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`),
+    safe_variants: array(item.safe_variants, `${label}.safe_variants`, EXTENSION_CLIENT_LIMITS.relationshipIds).map((entry, index) => safeVariant(entry, `${label}.safe_variants[${index}]`)),
+    compatibility_fallback: bool$1(item.compatibility_fallback, `${label}.compatibility_fallback`)
+  };
+}
+function permission(value, extensionId, label) {
+  const item = record$1(value, label);
+  const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
+  const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
+  if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
+    throw new ExtensionControlProtocolError(`${label} belongs to another extension`);
+  }
+  const replacement = item.replacement_permission_id === null ? null : id(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID);
+  return {
+    permission_id: permissionId,
+    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
+    extension_id: owner,
+    implementation_version: version(item.implementation_version, `${label}.implementation_version`),
+    label: string$1(item.label, `${label}.label`),
+    description: string$1(item.description, `${label}.description`),
+    risk_tier: enumValue(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
+    baseline_floor: enumValue(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
+    default_enabled: bool$1(item.default_enabled, `${label}.default_enabled`),
+    configurable: bool$1(item.configurable, `${label}.configurable`),
+    fixed_reason: optionalString(item.fixed_reason, `${label}.fixed_reason`),
+    typed_capabilities: stringList(item.typed_capabilities, `${label}.typed_capabilities`),
+    action_classes: stringList(item.action_classes, `${label}.action_classes`),
+    rule_ids: idList$1(item.rule_ids, `${label}.rule_ids`, RULE_ID),
+    dependencies: idList$1(item.dependencies, `${label}.dependencies`, PERMISSION_ID),
+    conflicts: idList$1(item.conflicts, `${label}.conflicts`, PERMISSION_ID),
+    implied_permissions: idList$1(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID),
+    introduced_version: version(item.introduced_version, `${label}.introduced_version`),
+    deprecated: bool$1(item.deprecated, `${label}.deprecated`),
+    replacement_permission_id: replacement,
+    safer_guidance: stringList(item.safer_guidance, `${label}.safer_guidance`),
+    example_command: catalogText(item.example_command),
+    family: catalogText(item.family)
+  };
+}
+function mcpLaunch(value, label) {
+  const item = record$1(value, label);
+  if (typeof item.kind === "string" && !["package-launcher", "direct-command", "remote-http"].includes(item.kind)) {
+    return { kind: "unsupported" };
+  }
+  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "direct-command", "remote-http"]);
+  if (kind === "direct-command") {
+    return { kind, command: string$1(item.command, `${label}.command`) };
+  }
+  if (kind === "package-launcher") {
+    return {
+      kind,
+      command: string$1(item.command, `${label}.command`),
+      package: string$1(item.package, `${label}.package`)
+    };
+  }
+  return {
+    kind,
+    url: string$1(item.url, `${label}.url`),
+    serverNames: stringList(item.serverNames, `${label}.serverNames`, 8)
+  };
+}
+function mcpTool(value, label) {
+  const item = record$1(value, label);
+  return {
+    name: string$1(item.name, `${label}.name`),
+    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
+  };
+}
+function mcpCatalogFields(item, label) {
+  if (item.surface === void 0) return {};
+  if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
+  const surface = enumValue(item.surface, `${label}.surface`, ["mcp"]);
+  const launch = item.mcp_launch === void 0 ? void 0 : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
+  const tools = item.mcp_tools === void 0 ? void 0 : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));
+  return {
+    surface,
+    ...launch ? { mcp_launch: launch } : {},
+    ...tools ? { mcp_tools: tools } : {}
+  };
+}
+function extension(value, label) {
+  const item = record$1(value, label);
+  const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
+  const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
+  const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
+  const ruleIds = rules.map((entry) => entry.rule_id);
+  const permissionIds = permissions.map((entry) => entry.permission_id);
+  if (new Set(ruleIds).size !== ruleIds.length) throw new ExtensionControlProtocolError(`${label}.rules contains duplicate rule IDs`);
+  if (new Set(permissionIds).size !== permissionIds.length) throw new ExtensionControlProtocolError(`${label}.permissions contains duplicate permission IDs`);
+  const knownRules = new Set(ruleIds);
+  for (const spec of permissions) {
+    for (const ruleId of spec.rule_ids) {
+      if (!knownRules.has(ruleId)) throw new ExtensionControlProtocolError(`${label} permission references unknown rule ${ruleId}`);
+    }
+  }
+  const ruleCount = integer$1(item.rule_count, `${label}.rule_count`);
+  const permissionCount = integer$1(item.permission_count, `${label}.permission_count`);
+  if (ruleCount !== rules.length || permissionCount !== permissions.length) {
+    throw new ExtensionControlProtocolError(`${label} count metadata does not match payload`);
+  }
+  return {
+    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
+    extension_id: extensionId,
+    name: string$1(item.name, `${label}.name`),
+    description: string$1(item.description, `${label}.description`),
+    enabled: bool$1(item.enabled, `${label}.enabled`),
+    required: bool$1(item.required, `${label}.required`),
+    trust_class: item.trust_class === void 0 ? "first-party" : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"]),
+    activation: item.activation === void 0 ? "default-on" : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"]),
+    publisher: item.publisher === void 0 ? { id: "hol", displayName: "Hashgraph Online" } : publisher(item.publisher, `${label}.publisher`),
+    icon: icon(item.icon, `${label}.icon`),
+    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
+    version: version(item.version, `${label}.version`),
+    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID),
+    dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID),
+    conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID),
+    delegated_protection: optionalString(item.delegated_protection, `${label}.delegated_protection`),
+    ecosystem_ids: stringList(item.ecosystem_ids, `${label}.ecosystem_ids`),
+    executables: stringList(item.executables, `${label}.executables`),
+    project_markers: stringList(item.project_markers, `${label}.project_markers`),
+    reference_urls: stringList(item.reference_urls, `${label}.reference_urls`),
+    action_classes: stringList(item.action_classes, `${label}.action_classes`),
+    risk_classes: stringList(item.risk_classes, `${label}.risk_classes`),
+    safer_alternatives: stringList(item.safer_alternatives, `${label}.safer_alternatives`),
+    rule_count: ruleCount,
+    rules,
+    permission_count: permissionCount,
+    permissions,
+    ...mcpCatalogFields(item, label)
+  };
+}
+function normalizeExtensionControlLayer(value, label = "layer") {
+  const item = record$1(value, label);
+  const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
+    const raw = record$1(entry, `${label}.controls[${index}]`);
+    const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
+    return {
+      target_kind: kind,
+      target_id: id(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID),
+      state: enumValue(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
+    };
+  });
+  const keys = controls.map((control) => `${control.target_kind}:${control.target_id}`);
+  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
+  return {
+    schema_version: string$1(item.schema_version, `${label}.schema_version`),
+    kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
+    catalog_digest: digest$1(item.catalog_digest, `${label}.catalog_digest`),
+    global_lockdown: bool$1(item.global_lockdown, `${label}.global_lockdown`),
+    controls
+  };
+}
+function normalizeExtensionCatalog(value) {
+  const root = record$1(value, "catalog");
+  const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
+  const ids = extensions.map((entry) => entry.extension_id);
+  if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
+  const limits = root.limits === void 0 ? void 0 : record$1(root.limits, "catalog.limits");
+  return {
+    schema_version: string$1(root.schema_version, "catalog.schema_version"),
+    control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
+    catalog_digest: digest$1(root.catalog_digest, "catalog.catalog_digest"),
+    extensions,
+    limits: limits === void 0 ? void 0 : {
+      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$1(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
+      max_controls: limits.max_controls === void 0 ? void 0 : integer$1(limits.max_controls, "catalog.limits.max_controls", 1),
+      max_observations: limits.max_observations === void 0 ? void 0 : integer$1(limits.max_observations, "catalog.limits.max_observations", 1)
+    }
+  };
+}
+function normalizeEffectiveExtensionControls(value) {
+  const root = record$1(value, "effective");
+  const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
+    const raw = record$1(entry, `effective.controls[${index}]`);
+    const target2 = record$1(raw.target, `effective.controls[${index}].target`);
+    const kind = enumValue(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
+    return {
+      target: {
+        kind,
+        target_id: id(target2.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID)
+      },
+      state: enumValue(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
+    };
+  });
+  const keys = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
+  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
+  const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => normalizeExtensionControlLayer(entry, `effective.layers[${index}]`));
+  const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
+    const raw = record$1(entry, `effective.failures[${index}]`);
+    return {
+      code: string$1(raw.code, `effective.failures[${index}].code`),
+      detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
+      layer_kind: raw.layer_kind === void 0 ? void 0 : string$1(raw.layer_kind, `effective.failures[${index}].layer_kind`)
+    };
+  });
+  const managedControls = root.managed_controls === void 0 ? void 0 : (() => {
+    const managed = record$1(root.managed_controls, "effective.managed_controls");
+    const acknowledgement = record$1(
+      managed.acknowledgement,
+      "effective.managed_controls.acknowledgement"
+    );
+    const bundleVersion = managed.bundle_version;
+    if (!(typeof bundleVersion === "string" && bundleVersion.length > 0 && bundleVersion.length <= 160) && !(typeof bundleVersion === "number" && Number.isSafeInteger(bundleVersion) && bundleVersion >= 0)) {
+      throw new ExtensionControlProtocolError("effective.managed_controls.bundle_version is invalid");
+    }
+    const policyRevision = acknowledgement.policy_revision;
+    if (policyRevision !== void 0 && !(typeof policyRevision === "string" && policyRevision.length > 0 && policyRevision.length <= 160) && !(typeof policyRevision === "number" && Number.isSafeInteger(policyRevision) && policyRevision >= 0)) {
+      throw new ExtensionControlProtocolError("effective.managed_controls.acknowledgement.policy_revision is invalid");
+    }
+    return {
+      control_set_id: managed.control_set_id === void 0 ? void 0 : string$1(managed.control_set_id, "effective.managed_controls.control_set_id"),
+      control_set_name: managed.control_set_name === void 0 ? void 0 : string$1(managed.control_set_name, "effective.managed_controls.control_set_name"),
+      bundle_version: bundleVersion,
+      workspace_id: string$1(managed.workspace_id, "effective.managed_controls.workspace_id"),
+      authority_mode: managed.authority_mode === void 0 ? void 0 : enumValue(
+        managed.authority_mode,
+        "effective.managed_controls.authority_mode",
+        ["personal-shared", "workspace-shared", "managed-restrictive"]
+      ),
+      catalog_digest: digest$1(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
+      issued_at: managed.issued_at === void 0 ? void 0 : string$1(managed.issued_at, "effective.managed_controls.issued_at"),
+      expires_at: managed.expires_at === void 0 ? void 0 : string$1(managed.expires_at, "effective.managed_controls.expires_at"),
+      acknowledgement: {
+        extension_authority_revision: integer$1(
+          acknowledgement.extension_authority_revision,
+          "effective.managed_controls.acknowledgement.extension_authority_revision"
+        ),
+        policy_revision: policyRevision,
+        effective_projection_digest: acknowledgement.effective_projection_digest === void 0 ? void 0 : digest$1(
+          acknowledgement.effective_projection_digest,
+          "effective.managed_controls.acknowledgement.effective_projection_digest"
+        ),
+        status: string$1(acknowledgement.status, "effective.managed_controls.acknowledgement.status")
+      }
+    };
+  })();
+  return {
+    schema_version: string$1(root.schema_version, "effective.schema_version"),
+    health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
+    revision: integer$1(root.revision, "effective.revision"),
+    catalog_digest: digest$1(root.catalog_digest, "effective.catalog_digest"),
+    global_lockdown: bool$1(root.global_lockdown, "effective.global_lockdown"),
+    controls,
+    layers,
+    failures,
+    terminal_commands: terminalCommands(root.terminal_commands),
+    projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection),
+    managed_controls: managedControls
+  };
+}
+const DIGEST = /^[a-f0-9]{64}$/;
+const TARGET_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const MAX_CHANGED_TARGETS = 4096;
+const MAX_AFFECTED_IDS = 4096;
+const MAX_WARNINGS = 64;
+const MAX_TEXT = 8192;
+function record(value, label) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
+  return value;
+}
+function string(value, label, max = MAX_TEXT) {
+  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function integer(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function bool(value, label) {
+  if (typeof value !== "boolean") throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function digest(value, label) {
+  const candidate = string(value, label, 64);
+  if (!DIGEST.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
+  return candidate;
+}
+function targetId(value, label) {
+  const candidate = string(value, label, 256);
+  if (!TARGET_ID.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
+  return candidate;
+}
+function boundedArray(value, label, max) {
+  if (!Array.isArray(value) || value.length > max) throw new Error(`Invalid extension-control ${label}`);
+  return value;
+}
+function idList(value, label) {
+  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => targetId(item, `${label}[${index}]`));
+  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate IDs`);
+  return items;
+}
+function optionalIdList(value, label) {
+  return value === void 0 ? void 0 : idList(value, label);
+}
+function optionalStringList(value, label) {
+  if (value === void 0) return void 0;
+  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => string(item, `${label}[${index}]`, 128));
+  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate values`);
+  return items;
+}
+function warning(value, label) {
+  const item = record(value, label);
+  return {
+    code: string(item.code, `${label}.code`, 128),
+    message: string(item.message, `${label}.message`, 1024),
+    ...item.target_id === void 0 ? {} : { target_id: targetId(item.target_id, `${label}.target_id`) },
+    ...item.count === void 0 ? {} : { count: integer(item.count, `${label}.count`) }
+  };
+}
+function target(value, label) {
+  const item = record(value, label);
+  const rawTarget = record(item.target, `${label}.target`);
+  const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
+  if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
+  const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
+  const afterExplicit = string(item.after_explicit, `${label}.after_explicit`, 32);
+  if (!["inherited", "enabled", "disabled"].includes(beforeExplicit) || !["inherited", "enabled", "disabled"].includes(afterExplicit)) throw new Error(`Invalid extension-control ${label} explicit state`);
+  const beforeEffective = string(item.before_effective, `${label}.before_effective`, 32);
+  const afterEffective = string(item.after_effective, `${label}.after_effective`, 32);
+  if (!["allowed", "blocked"].includes(beforeEffective) || !["allowed", "blocked"].includes(afterEffective)) throw new Error(`Invalid extension-control ${label} effective state`);
+  const affectedExtensionIds = optionalIdList(item.affected_extension_ids, `${label}.affected_extension_ids`);
+  const dependencyPermissionIds = optionalIdList(item.dependency_permission_ids, `${label}.dependency_permission_ids`);
+  const impliedPermissionIds = optionalIdList(item.implied_permission_ids, `${label}.implied_permission_ids`);
+  const conflictPermissionIds = optionalIdList(item.conflict_permission_ids, `${label}.conflict_permission_ids`);
+  const provenance = optionalStringList(item.provenance, `${label}.provenance`);
+  return {
+    target: { kind, target_id: targetId(rawTarget.target_id, `${label}.target.target_id`) },
+    extension_id: targetId(item.extension_id, `${label}.extension_id`),
+    label: string(item.label, `${label}.label`, 512),
+    before_explicit: beforeExplicit,
+    after_explicit: afterExplicit,
+    before_effective: beforeEffective,
+    after_effective: afterEffective,
+    affected_permission_ids: idList(item.affected_permission_ids, `${label}.affected_permission_ids`),
+    affected_rule_ids: idList(item.affected_rule_ids, `${label}.affected_rule_ids`),
+    ...affectedExtensionIds === void 0 ? {} : { affected_extension_ids: affectedExtensionIds },
+    ...dependencyPermissionIds === void 0 ? {} : { dependency_permission_ids: dependencyPermissionIds },
+    ...impliedPermissionIds === void 0 ? {} : { implied_permission_ids: impliedPermissionIds },
+    ...conflictPermissionIds === void 0 ? {} : { conflict_permission_ids: conflictPermissionIds },
+    ...provenance === void 0 ? {} : { provenance },
+    warnings: boundedArray(item.warnings, `${label}.warnings`, MAX_WARNINGS).map((entry, index) => warning(entry, `${label}.warnings[${index}]`)),
+    ...item.extension_name === void 0 ? {} : { extension_name: string(item.extension_name, `${label}.extension_name`, 512) },
+    ...item.baseline_risk === void 0 ? {} : { baseline_risk: string(item.baseline_risk, `${label}.baseline_risk`, 32) },
+    ...item.baseline_floor === void 0 ? {} : { baseline_floor: string(item.baseline_floor, `${label}.baseline_floor`, 32) }
+  };
+}
+function normalizeExtensionSemanticPreview(value) {
+  const root = record(value, "semantic preview");
+  if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
+  const lockdown = record(root.global_lockdown, "semantic_preview.global_lockdown");
+  const summary = record(root.summary, "semantic_preview.summary");
+  const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
+  const changedTargetCount = integer(root.changed_target_count, "semantic_preview.changed_target_count");
+  if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
+  return {
+    schema_version: "guard.daemon.extension-control-semantic-preview.v1",
+    global_lockdown: {
+      before: bool(lockdown.before, "semantic_preview.global_lockdown.before"),
+      after: bool(lockdown.after, "semantic_preview.global_lockdown.after"),
+      changed: bool(lockdown.changed, "semantic_preview.global_lockdown.changed")
+    },
+    changed_target_count: changedTargetCount,
+    affected_permission_count: integer(root.affected_permission_count, "semantic_preview.affected_permission_count"),
+    affected_rule_count: integer(root.affected_rule_count, "semantic_preview.affected_rule_count"),
+    changed_targets: changedTargets,
+    ...root.approval_required === void 0 ? {} : { approval_required: bool(root.approval_required, "semantic_preview.approval_required") },
+    summary: {
+      newly_blocked_permissions: integer(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
+      newly_allowed_permissions: integer(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
+      effective_change_count: integer(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
+    }
+  };
+}
+function normalizeExtensionMutationPreview(value) {
+  const root = record(value, "mutation preview");
+  return {
+    schema_version: string(root.schema_version, "preview.schema_version", 128),
+    previous_revision: integer(root.previous_revision, "preview.previous_revision"),
+    next_revision: integer(root.next_revision, "preview.next_revision"),
+    catalog_digest: digest(root.catalog_digest, "preview.catalog_digest"),
+    canonical_diff_digest: digest(root.canonical_diff_digest, "preview.canonical_diff_digest"),
+    global_lockdown: bool(root.global_lockdown, "preview.global_lockdown"),
+    controls: integer(root.controls, "preview.controls"),
+    semantic_preview: normalizeExtensionSemanticPreview(root.semantic_preview),
+    ...root.proof_id === void 0 ? {} : { proof_id: string(root.proof_id, "preview.proof_id", 256) }
+  };
+}
+function normalizeExtensionMutationApply(value) {
+  const root = record(value, "mutation apply");
+  if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
+  return {
+    schema_version: string(root.schema_version, "apply.schema_version", 128),
+    status: "applied",
+    revision: integer(root.revision, "apply.revision"),
+    catalog_digest: digest(root.catalog_digest, "apply.catalog_digest")
+  };
+}
+class ExtensionControlApiError extends Error {
+  constructor(message, status, code, recoveryAction) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.recoveryAction = recoveryAction;
+  }
+  status;
+  code;
+  recoveryAction;
+}
+async function request(path, init) {
+  const response = await fetchExtensionControlApi(path, init);
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new ExtensionControlApiError(`Guard returned invalid JSON (${response.status})`, response.status);
+  }
+  if (!response.ok) {
+    const error = typeof payload === "object" && payload !== null ? payload : {};
+    throw new ExtensionControlApiError(
+      typeof error.error === "string" ? error.error : `Request failed (${response.status})`,
+      response.status,
+      typeof error.error === "string" ? error.error : void 0,
+      typeof error.recovery === "object" && error.recovery !== null && typeof error.recovery.action === "string" ? error.recovery.action : void 0
+    );
+  }
+  return payload;
+}
+async function fetchExtensionCatalog() {
+  return normalizeExtensionCatalog(await request("/v1/extension-controls/catalog"));
+}
+async function fetchEffectiveExtensionControls() {
+  const raw = await request("/v1/extension-controls/effective");
+  const normalized = normalizeEffectiveExtensionControls(raw);
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return normalized;
+  const projectionValue = raw.projection;
+  if (projectionValue === void 0) return normalized;
+  const projection = normalizeEffectiveExtensionControlProjection(projectionValue);
+  if (projection.revision !== normalized.revision || projection.catalog_digest !== normalized.catalog_digest || projection.health !== normalized.health) {
+    throw new ExtensionControlApiError("Guard returned an inconsistent extension-control projection", 502);
+  }
+  return { ...normalized, projection };
+}
+async function fetchExtensionControlHistory() {
+  const raw = await request("/v1/extension-controls/history");
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ExtensionControlApiError("Guard returned invalid settings history", 502);
+  const root = raw;
+  if (root.schema_version !== "guard.daemon.extension-control-history.v1") throw new ExtensionControlApiError("Guard returned unsupported settings history", 502);
+  if (!Number.isSafeInteger(root.revision) || root.revision < 0 || typeof root.catalog_digest !== "string") throw new ExtensionControlApiError("Guard returned invalid settings history metadata", 502);
+  if (!Array.isArray(root.items) || root.items.length > 50) throw new ExtensionControlApiError("Guard returned too much settings history", 502);
+  const items = root.items.map((value, index) => {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ExtensionControlApiError("Guard returned invalid settings history item", 502);
+    const item = value;
+    if (!Number.isSafeInteger(item.revision) || !Number.isSafeInteger(item.previous_revision) || typeof item.occurred_at !== "string" || typeof item.catalog_digest !== "string" || !Array.isArray(item.layers)) throw new ExtensionControlApiError("Guard returned invalid settings history item", 502);
+    const layers = item.layers.map((layer, layerIndex) => normalizeExtensionControlLayer(layer, `history.items[${index}].layers[${layerIndex}]`));
+    return {
+      revision: item.revision,
+      previous_revision: item.previous_revision,
+      occurred_at: item.occurred_at,
+      catalog_digest: item.catalog_digest,
+      layers
+    };
+  });
+  return {
+    schema_version: "guard.daemon.extension-control-history.v1",
+    revision: root.revision,
+    catalog_digest: root.catalog_digest,
+    items
+  };
+}
+async function recoverExtensionControlAuthority(credentials) {
+  const raw = await request("/v1/extension-controls/recover-authority", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_nonce: crypto.randomUUID().replaceAll("-", ""),
+      ...credentials
+    })
+  });
+  const normalized = normalizeEffectiveExtensionControls(raw);
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
+    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
+  }
+  return normalized;
+}
+async function acknowledgeDegradedExtensionControlAuthority(credentials) {
+  const raw = await request("/v1/extension-controls/acknowledge-degraded", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_nonce: crypto.randomUUID().replaceAll("-", ""),
+      ...credentials
+    })
+  });
+  const normalized = normalizeEffectiveExtensionControls(raw);
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
+    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
+  }
+  return normalized;
+}
+async function previewExtensionMutation(payload) {
+  try {
+    return normalizeExtensionMutationPreview(await request("/v1/extension-controls/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+  } catch (error) {
+    if (error instanceof ExtensionControlApiError) throw error;
+    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid preview response", 502);
+  }
+}
+async function applyExtensionMutation(payload) {
+  try {
+    return normalizeExtensionMutationApply(await request("/v1/extension-controls/apply", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+  } catch (error) {
+    if (error instanceof ExtensionControlApiError) throw error;
+    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid apply response", 502);
+  }
+}
+function cloneLayers(layers) {
+  return layers.map((layer) => ({
+    ...layer,
+    controls: layer.controls.map((control) => ({ ...control }))
+  }));
+}
+function sortedControls(layer) {
+  return {
+    ...layer,
+    controls: [...layer.controls].sort(
+      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
+    )
+  };
+}
+function localPermissionDraftState(layers, permissionId) {
+  const local = layers.find((layer) => layer.kind === "local-admin");
+  const control = local?.controls.find(
+    (item) => item.target_kind === "permission" && item.target_id === permissionId
+  );
+  if (!control) return "inherit";
+  return control.state === "enabled" ? "allow" : "block";
+}
+function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state) {
+  const next = cloneLayers(layers);
+  let local = next.find((layer) => layer.kind === "local-admin");
+  if (!local && state === "inherit") return next;
+  if (!local) {
+    local = {
+      schema_version: "1.0.0",
+      kind: "local-admin",
+      catalog_digest: catalogDigest,
+      global_lockdown: false,
+      controls: []
+    };
+    next.push(local);
+  }
+  const hadPermissionControl = local.controls.some(
+    (control) => control.target_kind === "permission" && control.target_id === permissionId
+  );
+  local.controls = local.controls.filter(
+    (control) => control.target_kind !== "permission" || control.target_id !== permissionId
+  );
+  if (state !== "inherit") {
+    local.controls.push({
+      target_kind: "permission",
+      target_id: permissionId,
+      state: state === "allow" ? "enabled" : "disabled"
+    });
+  }
+  if (state === "inherit" && hadPermissionControl && !local.global_lockdown && local.controls.length === 0) {
+    const localIndex = next.indexOf(local);
+    next.splice(localIndex, 1);
+  }
+  const normalized = next.map((layer) => sortedControls(layer));
+  normalized.sort((left, right) => left.kind.localeCompare(right.kind));
+  return normalized;
+}
+function setLocalPermissionDraftStates(layers, catalogDigest, permissionIds, state) {
+  return permissionIds.reduce(
+    (next, permissionId) => setLocalPermissionDraftState(next, catalogDigest, permissionId, state),
+    layers
+  );
+}
+function canonicalLayerValue(layers) {
+  return JSON.stringify(
+    [...layers].map((layer) => sortedControls(layer)).sort((left, right) => left.kind.localeCompare(right.kind))
+  );
+}
+function extensionPolicyDraftIsDirty(effective, draftLayers) {
+  return canonicalLayerValue(effective.layers) !== canonicalLayerValue(draftLayers);
+}
+function buildExtensionPolicyDraftMutation(effective, catalogDigest, draftLayers, identity) {
+  return {
+    previous_revision: effective.revision,
+    catalog_digest: catalogDigest,
+    layers: cloneLayers(draftLayers),
+    actor_id: "dashboard-admin",
+    idempotency_key: identity.idempotencyKey,
+    nonce: identity.nonce
+  };
+}
+function newExtensionPolicyDraftIdentity() {
+  return {
+    idempotencyKey: crypto.randomUUID().replaceAll("-", ""),
+    nonce: crypto.randomUUID().replaceAll("-", "")
+  };
+}
+function isCurrentExtensionPolicyDraft(generation, current) {
+  return generation === current;
+}
+const defaultExtensionAllowDeps = {
+  fetchEffective: fetchEffectiveExtensionControls,
+  preview: previewExtensionMutation,
+  apply: applyExtensionMutation
+};
+const CONFLICT_CODES = /* @__PURE__ */ new Set(["revision_conflict", "catalog_conflict", "authority_conflict"]);
+class ExtensionAllowUncertainError extends Error {
+}
+function cleanRejection(caught) {
+  return caught instanceof ExtensionControlApiError && caught.status >= 400 && caught.status < 500;
+}
+function extensionAllowFailureMessage(caught) {
+  if (caught instanceof ExtensionAllowUncertainError) return caught.message;
+  return caught instanceof Error && caught.message ? `${caught.message} Nothing was changed.` : "Guard could not save the extension setting. Nothing was changed.";
+}
+function isConflict(caught) {
+  return caught instanceof ExtensionControlApiError && CONFLICT_CODES.has(caught.code ?? "");
+}
+function randomNonce() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+async function enablePermissions(deps, permissionIds, credentials) {
+  const effective = await deps.fetchEffective();
+  if (effective.health !== "protected") {
+    throw new Error("Protection settings need attention before Guard can change them. Open the extension page for details.");
+  }
+  const pending = permissionIds.filter((id2) => localPermissionDraftState(effective.layers, id2) !== "allow");
+  if (pending.length === 0) return effective.revision;
+  const draftLayers = setLocalPermissionDraftStates(effective.layers, effective.catalog_digest, pending, "allow");
+  const mutation = buildExtensionPolicyDraftMutation(
+    effective,
+    effective.catalog_digest,
+    draftLayers,
+    newExtensionPolicyDraftIdentity()
+  );
+  const proof = await deps.preview({ ...mutation, ...credentials, session_nonce: (deps.sessionNonce ?? randomNonce)() });
+  if (!proof.proof_id) throw new Error("Guard did not issue an approval proof for this setting change.");
+  let applied;
+  try {
+    applied = await deps.apply({ ...mutation, proof_id: proof.proof_id });
+  } catch (caught) {
+    if (cleanRejection(caught)) throw caught;
+    throw new ExtensionAllowUncertainError(
+      "Guard could not confirm whether the extension setting was saved. Nothing was approved. Check the setting on the extension page before trying again."
+    );
+  }
+  if (applied.revision <= effective.revision) {
+    throw new Error("Guard did not save the extension setting. Nothing was approved.");
+  }
+  return applied.revision;
+}
+async function approveWithExtensionAllow(deps, permissionIds, credentials) {
+  if (permissionIds.length === 0) throw new Error("There is no extension setting to change.");
+  let revision;
+  try {
+    revision = await enablePermissions(deps, permissionIds, credentials);
+  } catch (caught) {
+    if (!isConflict(caught)) throw caught;
+    revision = await enablePermissions(deps, permissionIds, credentials);
+  }
+  try {
+    await deps.resolve(credentials);
+  } catch (caught) {
+    const reason = caught instanceof Error && caught.message ? ` ${caught.message}` : "";
+    return {
+      status: "saved_only",
+      revision,
+      message: `The extension setting was saved, so future matching commands run automatically. This request still needs a decision.${reason}`
+    };
+  }
+  return { status: "approved", revision };
+}
+function ApprovalExtensionRecommendationCard(props) {
+  const recommendation = props.item.extension_recommendation;
+  const [confirmOpen, setConfirmOpen] = reactExports.useState(false);
+  const [busy, setBusy] = reactExports.useState(false);
+  const inFlight = reactExports.useRef(false);
+  const [error, setError] = reactExports.useState(null);
+  const [savedMessage, setSavedMessage] = reactExports.useState(null);
+  const copy = reactExports.useMemo(
+    () => recommendation ? approvalExtensionRecommendationCopy(recommendation) : null,
+    [recommendation]
+  );
+  const primary = recommendation?.permissions[0] ?? null;
+  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange } = props;
+  const dialogActive = confirmOpen || busy;
+  reactExports.useEffect(() => {
+    onDialogActiveChange?.(dialogActive);
+  }, [dialogActive, onDialogActiveChange]);
+  reactExports.useEffect(() => () => onDialogActiveChange?.(false), [onDialogActiveChange]);
+  const openPattern = reactExports.useCallback(() => {
+    if (primary) commitDashboardLocation(extensionPatternHref(primary.extension_id, primary.rule_id));
+  }, [primary]);
+  const openConfirm = reactExports.useCallback(() => {
+    setError(null);
+    setConfirmOpen(true);
+  }, []);
+  const closeConfirm = reactExports.useCallback(() => {
+    if (!busy) setConfirmOpen(false);
+  }, [busy]);
+  const confirm = reactExports.useCallback(
+    (credentials) => {
+      if (!recommendation || !copy || inFlight.current) return;
+      inFlight.current = true;
+      setBusy(true);
+      setError(null);
+      void (async () => {
+        try {
+          const outcome = await approveWithExtensionAllow(
+            {
+              ...defaultExtensionAllowDeps,
+              resolve: async (proof) => {
+                await onResolve({
+                  ...buildDecisionPayload({
+                    item,
+                    action: "allow",
+                    scope: allowScope,
+                    reason: "approved in review; extension setting allowed",
+                    persistExactAction: false
+                  }),
+                  ...approvalGateRequiredForResolution(approvalGate, "allow", allowScope) ? proof : {}
+                });
+              }
+            },
+            recommendation.permissions.map((permission2) => permission2.permission_id),
+            credentials
+          );
+          setConfirmOpen(false);
+          if (outcome.status === "approved") {
+            onApproved(copy.successMessage);
+          } else {
+            setSavedMessage(outcome.message);
+          }
+        } catch (caught) {
+          setError(extensionAllowFailureMessage(caught));
+        } finally {
+          inFlight.current = false;
+          setBusy(false);
+        }
+      })();
+    },
+    [allowScope, approvalGate, copy, item, onApproved, onResolve, recommendation]
+  );
+  if (!recommendation || !copy || !primary) return null;
+  const caution = recommendation.caution;
+  const authorityUnavailable = recommendation.status === "authority_unavailable";
+  const gateReady = isBulkApproveGateReady(approvalGate);
+  const gateLocked = approvalGateIsLocked(approvalGate);
+  const tone = caution ? "border-brand-attention/30 bg-brand-attention/[0.05]" : "border-brand-blue/20 bg-brand-blue/[0.04]";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "section",
+    {
+      className: `mt-5 rounded-xl border p-4 ${tone}`,
+      "aria-labelledby": "approval-extension-recommendation-title",
+      "data-testid": "approval-extension-recommendation",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+          caution ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-attention", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniSparkles, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: "Recommended setting" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "approval-extension-recommendation-title", className: "mt-1 text-sm font-semibold text-brand-dark", children: copy.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: copy.body }),
+            copy.cautionLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", "aria-label": "Before you allow this", children: copy.cautionLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "text-sm font-medium text-brand-attention", children: line }, line)) }),
+            authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Protection settings need attention before Guard can change them from here." }),
+            savedMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-green-text", role: "status", children: savedMessage }),
+            error && !confirmOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple", role: "alert", children: error }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
+              !authorityUnavailable && savedMessage === null && gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ActionButton,
+                {
+                  variant: caution ? "outline" : "primary",
+                  onClick: openConfirm,
+                  disabled: props.disabled || busy || gateLocked,
+                  children: copy.primaryLabel
+                }
+              ),
+              !authorityUnavailable && savedMessage === null && !gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval password" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                "button",
+                {
+                  type: "button",
+                  onClick: openPattern,
+                  className: "inline-flex min-h-9 items-center gap-1 rounded-lg px-2 text-sm font-medium text-brand-blue underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-brand-blue/20",
+                  children: [
+                    copy.configureLabel,
+                    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+                  ]
+                }
+              )
+            ] }),
+            gateReady && gateLocked && !authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-slate-500", children: [
+              "Approval gate is temporarily locked. Try again in ",
+              approvalGateLockRemainingSeconds(approvalGate),
+              " seconds."
+            ] }),
+            !gateReady && !authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: "Changing protection settings needs an approval password so agents cannot change them on their own." })
+          ] })
+        ] }),
+        confirmOpen && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofModal,
+          {
+            title: copy.confirmTitle,
+            detail: caution ? `${copy.confirmDetail} ${copy.cautionLines.join(" ")}` : copy.confirmDetail,
+            confirmLabel: copy.primaryLabel,
+            approvalGate,
+            busy,
+            busyLabel: "Saving and approving…",
+            error,
+            onCancel: closeConfirm,
+            onConfirm: confirm
+          }
+        )
+      ]
+    }
+  );
+}
 const commonScopeValues = /* @__PURE__ */ new Set(["artifact", "workspace"]);
 function resolvedActionCopy(item, action, persistedExactAction) {
   if (item !== null) return buildRetryAfterApprovalCopy(item, action, persistedExactAction);
@@ -30206,6 +31443,7 @@ function ReviewDecisionCard(props) {
   const [approvalTotpCode, setApprovalTotpCode] = reactExports.useState("");
   const [useCooldown, setUseCooldown] = reactExports.useState(false);
   const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [extensionDialogActive, setExtensionDialogActive] = reactExports.useState(false);
   const [pendingContractKey, setPendingContractKey] = reactExports.useState(null);
   const [rememberExactAction, setRememberExactAction] = reactExports.useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = reactExports.useState(props.approvalGate);
@@ -30411,9 +31649,11 @@ function ReviewDecisionCard(props) {
   }, [handleRequestResolve]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
-      const target = event.target;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      if (submitting !== null || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
+        return;
+      }
+      const target2 = event.target;
+      if (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable) return;
       if (event.key === "a" || event.key === "A") {
         event.preventDefault();
         handleRequestResolve("allow");
@@ -30430,7 +31670,15 @@ function ReviewDecisionCard(props) {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
+  }, [
+    availableScopeChoices,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    submitting
+  ]);
   const handleModalSubmit = reactExports.useCallback(() => {
     if (pendingAction === null || submitting !== null) {
       return;
@@ -30468,6 +31716,14 @@ function ReviewDecisionCard(props) {
   const handleApprovalTotpCodeChange = reactExports.useCallback((event) => {
     setApprovalTotpCode(event.target.value);
   }, []);
+  const reviewedRequestId = item?.request_id ?? null;
+  const handleExtensionApproved = reactExports.useCallback(
+    (message) => {
+      if (reviewedRequestId === null) return;
+      setResolved({ requestId: reviewedRequestId, action: "allow", persistedExactAction: false, message });
+    },
+    [reviewedRequestId]
+  );
   const handleUseCooldownChange = reactExports.useCallback((event) => {
     setUseCooldown(event.target.checked);
   }, []);
@@ -30534,7 +31790,7 @@ function ReviewDecisionCard(props) {
               "aria-hidden": "true"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolvedActionCopy(item, resolved.action, resolved.persistedExactAction) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`, children: resolved.message ?? resolvedActionCopy(item, resolved.action, resolved.persistedExactAction) })
         ]
       }
     ),
@@ -30593,6 +31849,19 @@ function ReviewDecisionCard(props) {
         ),
         showConsequences && /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 rounded-xl border border-slate-200/70 bg-slate-50 p-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: whatWouldHappen }) })
       ] }),
+      resolutionBlockReason === null && resolved === null && !watchOnlyObservation && /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ApprovalExtensionRecommendationCard,
+        {
+          item,
+          approvalGate,
+          allowScope,
+          disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
+          onResolve: props.onResolve,
+          onApproved: handleExtensionApproved,
+          onDialogActiveChange: setExtensionDialogActive
+        },
+        item.request_id
+      ),
       resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsx(
         ReviewScopeControls,
         {
@@ -31282,13 +32551,13 @@ function ReviewWorkspace(props) {
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
-  const selectRequest = reactExports.useCallback((id) => {
-    props.onOpenRequest(id);
+  const selectRequest = reactExports.useCallback((id2) => {
+    props.onOpenRequest(id2);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
-  const handleOpenRequest = reactExports.useCallback((id) => {
-    selectRequest(id);
-    readState.markRead(id);
+  const handleOpenRequest = reactExports.useCallback((id2) => {
+    selectRequest(id2);
+    readState.markRead(id2);
   }, [selectRequest, readState]);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
     setMobileQueueOpen((v) => !v);
@@ -31317,8 +32586,8 @@ function ReviewWorkspace(props) {
   const categoryOptions = reactExports.useMemo(() => queueCategoriesForItems(requests), [requests]);
   const activeRequest = activeRequestId !== null ? requests.find((r) => r.request_id === activeRequestId) ?? (detail?.item.request_id === activeRequestId ? detail.item : null) : null;
   reactExports.useEffect(() => {
-    function isNestedQueueActionButton(target) {
-      return target instanceof HTMLElement && target.tagName.toLowerCase() === "button" && target.getAttribute("role") !== "option";
+    function isNestedQueueActionButton(target2) {
+      return target2 instanceof HTMLElement && target2.tagName.toLowerCase() === "button" && target2.getAttribute("role") !== "option";
     }
     function handleKeyDown(event) {
       if (pagedRequests.length === 0) return;
@@ -31365,8 +32634,8 @@ function ReviewWorkspace(props) {
   reactExports.useEffect(() => {
     if (!bulkApprove.bulkSelection.selectionMode) return;
     function handleBulkShortcut(event) {
-      const target = event.target;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) {
+      const target2 = event.target;
+      if (target2 && (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.tagName === "SELECT" || target2.isContentEditable)) {
         return;
       }
       if ((event.metaKey || event.ctrlKey) && (event.key === "a" || event.key === "A")) {
@@ -32127,11 +33396,11 @@ function resetRepairOutcomeTracker(tracker, currentSignature) {
   return tracker !== null && tracker.healthSignature !== currentSignature ? null : tracker;
 }
 function gapReasons(checks) {
-  const reasons = {};
+  const reasons2 = {};
   for (const check of repairableProtectionGaps(checks)) {
-    reasons[check.check_id] = check.reason_code;
+    reasons2[check.check_id] = check.reason_code;
   }
-  return reasons;
+  return reasons2;
 }
 function activeFailedHarnesses(failedHarnesses, repairHarnesses) {
   const repairable = new Set(repairHarnesses);
@@ -32230,17 +33499,17 @@ const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() =
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,3,7,5]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([8,9,7,10]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([8,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([11,10,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([9,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? __vite__mapDeps([12,10]) : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([13,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([10,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
@@ -32248,7 +33517,7 @@ const AboutWorkspace = lazyWorkspace(
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page.js"), true ? __vite__mapDeps([14,10,9]) : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -32438,8 +33707,8 @@ function App() {
   }, [activeRequestId, detailRefreshKey]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      const target = event.target;
-      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
+      const target2 = event.target;
+      if (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable) return;
       if (event.key === "?") {
         event.preventDefault();
         setHelpOpen((open) => !open);
@@ -33107,7 +34376,7 @@ export {
   hasRepairableProtectionGap as Z,
   remainingProtectionRepairParts as _,
   EvidenceActivityHeatmapMini as a,
-  HiMiniFolder as a$,
+  previewExtensionMutation as a$,
   repairOutcomeIsStalled as a0,
   ProtectionRepairFlowError as a1,
   nextProtectionRepairOutcome as a2,
@@ -33138,13 +34407,13 @@ export {
   Tag as aR,
   approvalGateCooldownLabel as aS,
   fetchLocalCliApi as aT,
-  HiMiniNoSymbol as aU,
-  useResolvedApprovalGate as aV,
-  HiMiniInformationCircle as aW,
-  GenIcon as aX,
-  HiMiniGlobeAlt as aY,
-  HiMiniCube as aZ,
-  HiMiniServerStack as a_,
+  localPermissionDraftState as aU,
+  setLocalPermissionDraftState as aV,
+  newExtensionPolicyDraftIdentity as aW,
+  extensionPolicyDraftIsDirty as aX,
+  setLocalPermissionDraftStates as aY,
+  buildExtensionPolicyDraftMutation as aZ,
+  ExtensionControlApiError as a_,
   HiMiniWrenchScrewdriver as aa,
   ProofStrip as ab,
   HiMiniEye as ac,
@@ -33172,107 +34441,123 @@ export {
   fetchRuntimeSnapshot as ay,
   clearPolicy as az,
   HiMiniCommandLine as b,
-  __vitePreload as b$,
-  FaWindows as b0,
-  FaAws as b1,
-  approvalProofRecentlySatisfied as b2,
-  isBulkApproveGateReady as b3,
-  HiMiniArrowLeft as b4,
-  HiMiniPlus as b5,
-  guardAwareHref as b6,
-  HiMiniCheck as b7,
-  startGuardCloudConnect as b8,
-  HiMiniArrowTopRightOnSquare as b9,
-  isSupplyChainAuditIncomplete as bA,
-  isSupplyChainAuditEvidence as bB,
-  readString$1 as bC,
-  isRecord$3 as bD,
-  HiMiniClock as bE,
-  IconActionButton as bF,
-  HiMiniBeaker as bG,
-  ActivationSummary as bH,
-  ActionResultPanel as bI,
-  HiMiniBugAnt as bJ,
-  ConnectFlowCard as bK,
-  ApprovalProofInline as bL,
-  HiMiniCloudArrowDown as bM,
-  fetchPackageFirewallStatus as bN,
-  runPackageAudit as bO,
-  resolveSupplyChainAuditFailure as bP,
-  runPackageSync as bQ,
-  startPackageFirewallConnect as bR,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as bS,
-  repairSupplyChainProtection as bT,
-  runPackageFirewallAction as bU,
-  parseInterceptProofSnapshot as bV,
-  activatePackageFirewallRuntime as bW,
-  EntitlementNotice as bX,
-  chooseSupplyChainAuditFolder as bY,
-  fetchReceipts as bZ,
-  lazyWorkspace as b_,
-  fetchExtensionControlApi as ba,
-  GuardModalLayer as bb,
-  runHarnessAction as bc,
-  GuardHarnessActionError as bd,
-  HiMiniRocketLaunch as be,
-  HiMiniTrash as bf,
-  isGuardDemoMode as bg,
-  fetchGuardApi as bh,
-  formatHarnessCommand as bi,
-  fetchApprovalPage as bj,
-  fetchPolicy as bk,
-  HiMiniHome as bl,
-  appSetupTarget as bm,
-  guardActionPresentation as bn,
-  DEFAULT_FILTER_STATE as bo,
-  filterEvidence as bp,
-  sortEvidence as bq,
-  computeMetrics as br,
-  CommandActivityWorkspace as bs,
-  EvidenceFilterBar as bt,
-  EvidenceInsightStrip as bu,
-  EvidenceActionList as bv,
-  EvidenceActionDetail as bw,
-  policyIdentityKey as bx,
-  clearLabelForScope as by,
-  HiMiniChartBar as bz,
+  ApprovalProofInline as b$,
+  isCurrentExtensionPolicyDraft as b0,
+  applyExtensionMutation as b1,
+  fetchExtensionCatalog as b2,
+  fetchEffectiveExtensionControls as b3,
+  fetchExtensionControlHistory as b4,
+  HiMiniNoSymbol as b5,
+  useResolvedApprovalGate as b6,
+  HiMiniInformationCircle as b7,
+  GenIcon as b8,
+  HiMiniGlobeAlt as b9,
+  fetchPolicy as bA,
+  HiMiniHome as bB,
+  appSetupTarget as bC,
+  guardActionPresentation as bD,
+  DEFAULT_FILTER_STATE as bE,
+  filterEvidence as bF,
+  sortEvidence as bG,
+  computeMetrics as bH,
+  CommandActivityWorkspace as bI,
+  EvidenceFilterBar as bJ,
+  EvidenceInsightStrip as bK,
+  EvidenceActionList as bL,
+  EvidenceActionDetail as bM,
+  policyIdentityKey as bN,
+  clearLabelForScope as bO,
+  HiMiniChartBar as bP,
+  isSupplyChainAuditIncomplete as bQ,
+  isSupplyChainAuditEvidence as bR,
+  readString$1 as bS,
+  isRecord$3 as bT,
+  HiMiniClock as bU,
+  IconActionButton as bV,
+  HiMiniBeaker as bW,
+  ActivationSummary as bX,
+  ActionResultPanel as bY,
+  HiMiniBugAnt as bZ,
+  ConnectFlowCard as b_,
+  HiMiniCube as ba,
+  HiMiniServerStack as bb,
+  HiMiniFolder as bc,
+  FaWindows as bd,
+  FaAws as be,
+  approvalProofRecentlySatisfied as bf,
+  isBulkApproveGateReady as bg,
+  HiMiniArrowLeft as bh,
+  HiMiniPlus as bi,
+  ApprovalProofModal as bj,
+  guardAwareHref as bk,
+  HiMiniCheck as bl,
+  startGuardCloudConnect as bm,
+  HiMiniArrowTopRightOnSquare as bn,
+  fetchExtensionControlApi as bo,
+  acknowledgeDegradedExtensionControlAuthority as bp,
+  recoverExtensionControlAuthority as bq,
+  GuardModalLayer as br,
+  runHarnessAction as bs,
+  GuardHarnessActionError as bt,
+  HiMiniRocketLaunch as bu,
+  HiMiniTrash as bv,
+  isGuardDemoMode as bw,
+  fetchGuardApi as bx,
+  formatHarnessCommand as by,
+  fetchApprovalPage as bz,
   HiMiniChevronRight as c,
-  scopeLabel as c0,
-  HiMiniDocumentText as c1,
-  HiMiniCloudArrowUp as c2,
-  HiMiniCodeBracket as c3,
-  HiMiniClipboardDocument as c4,
-  HiMiniUsers as c5,
-  HiMiniIdentification as c6,
-  policyActionLabel as c7,
-  createCloudExceptionRequest as c8,
-  HiMiniArrowRight as c9,
-  HiMiniPuzzlePiece as ca,
-  fetchCloudExceptions as cb,
-  fetchCloudExceptionRequests as cc,
-  downloadBlob as cd,
-  PolicyStatField as ce,
-  PaginationControls as cf,
-  HiMiniArrowDownTray as cg,
-  HiMiniQueueList as ch,
-  Surface as ci,
-  HiMiniCheckBadge as cj,
-  fetchResolvedApprovalGate as ck,
-  fetchMcpPolicyRequest as cl,
-  resolveMcpPolicyRequest as cm,
-  HiMiniDocumentPlus as cn,
-  HiMiniDocumentMagnifyingGlass as co,
-  fetchSupplyChainBundle as cp,
-  isSupplyChainScannerEvidence as cq,
-  isBlockedGuardAction as cr,
-  HiMiniShieldExclamation as cs,
-  HiMiniComputerDesktop as ct,
-  HiMiniChevronLeft as cu,
-  HiMiniFunnel as cv,
-  HiMiniArrowDown as cw,
-  HiMiniArrowUp as cx,
-  runAuditRemediation as cy,
-  HiMiniSignal as cz,
+  HiMiniCloudArrowDown as c0,
+  fetchPackageFirewallStatus as c1,
+  runPackageAudit as c2,
+  resolveSupplyChainAuditFailure as c3,
+  runPackageSync as c4,
+  startPackageFirewallConnect as c5,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as c6,
+  repairSupplyChainProtection as c7,
+  runPackageFirewallAction as c8,
+  parseInterceptProofSnapshot as c9,
+  fetchResolvedApprovalGate as cA,
+  fetchMcpPolicyRequest as cB,
+  resolveMcpPolicyRequest as cC,
+  HiMiniDocumentPlus as cD,
+  HiMiniDocumentMagnifyingGlass as cE,
+  fetchSupplyChainBundle as cF,
+  isSupplyChainScannerEvidence as cG,
+  isBlockedGuardAction as cH,
+  HiMiniShieldExclamation as cI,
+  HiMiniComputerDesktop as cJ,
+  HiMiniChevronLeft as cK,
+  HiMiniFunnel as cL,
+  HiMiniArrowDown as cM,
+  HiMiniArrowUp as cN,
+  runAuditRemediation as cO,
+  HiMiniSignal as cP,
+  activatePackageFirewallRuntime as ca,
+  EntitlementNotice as cb,
+  chooseSupplyChainAuditFolder as cc,
+  fetchReceipts as cd,
+  lazyWorkspace as ce,
+  __vitePreload as cf,
+  scopeLabel as cg,
+  HiMiniDocumentText as ch,
+  HiMiniCloudArrowUp as ci,
+  HiMiniCodeBracket as cj,
+  HiMiniClipboardDocument as ck,
+  HiMiniUsers as cl,
+  HiMiniIdentification as cm,
+  policyActionLabel as cn,
+  createCloudExceptionRequest as co,
+  HiMiniArrowRight as cp,
+  HiMiniPuzzlePiece as cq,
+  fetchCloudExceptions as cr,
+  fetchCloudExceptionRequests as cs,
+  downloadBlob as ct,
+  PolicyStatField as cu,
+  PaginationControls as cv,
+  HiMiniArrowDownTray as cw,
+  HiMiniQueueList as cx,
+  Surface as cy,
+  HiMiniCheckBadge as cz,
   createCommandActivityClient as d,
   updateSettings as e,
   fetchCommandActivityApi as f,
