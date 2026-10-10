@@ -152,7 +152,7 @@ pub(crate) fn global_config_environment_is_stable(
     };
     let xdg = environment
         .get("XDG_CONFIG_HOME")
-        .map_or("", |value| value.trim());
+        .map_or("", String::as_str);
     configured == account
         && (xdg.is_empty()
             || resolve_non_strict(Path::new(xdg))

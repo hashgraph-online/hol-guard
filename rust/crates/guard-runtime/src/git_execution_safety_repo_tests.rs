@@ -23,7 +23,24 @@ fn temp_root(label: &str) -> PathBuf {
 }
 
 fn git(repository: &Path, home: &Path, arguments: &[&str]) {
-    let status = Command::new("git")
+    let mut command = Command::new("git");
+    for name in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_CONFIG",
+        "GIT_CONFIG_GLOBAL",
+        "GIT_CONFIG_COUNT",
+        "GIT_CONFIG_PARAMETERS",
+        "XDG_CONFIG_HOME",
+    ] {
+        command.env_remove(name);
+    }
+    let status = command
         .args(arguments)
         .current_dir(repository)
         .env("HOME", home)
@@ -404,6 +421,10 @@ fn absent_account_config_directory_is_a_stable_global_config() {
     ));
     assert!(!global_config_environment_is_stable(
         &environment(format!("{}/../x", config.display())),
+        Some(&account),
+    ));
+    assert!(!global_config_environment_is_stable(
+        &environment("  ".to_owned()),
         Some(&account),
     ));
     let _ = std::fs::remove_dir_all(&home);
