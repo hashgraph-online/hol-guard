@@ -358,6 +358,7 @@
     "src/codex_plugin_scanner/guard/native_approval_errors.py",
     "src/codex_plugin_scanner/guard/native_approval_gate.py",
     "src/codex_plugin_scanner/guard/native_approval_reuse.py",
+    "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
     "src/codex_plugin_scanner/guard/native_package_authority.py",
     "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",

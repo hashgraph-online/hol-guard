@@ -230,6 +230,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
             }
+            ResidentOperationV1::GitExecutionSafety(request) => {
+                crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
+            }
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
             }
