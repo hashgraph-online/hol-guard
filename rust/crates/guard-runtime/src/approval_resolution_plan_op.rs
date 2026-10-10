@@ -467,10 +467,10 @@ fn evaluate(request: &ApprovalResolutionPlanRequestV1) -> Result<Value, String> 
         && scoped_hash
             .as_deref()
             .is_some_and(|hash| hash.starts_with(RUNTIME_EXACT_PREFIX));
-    let resolve_matching = request.resolve_scope_matches
-        && !(allow && scope != "artifact")
-        && !runtime_exact_scoped
-        && !exact_context_allow;
+    let resolve_matching = !(!request.resolve_scope_matches
+        || runtime_exact_scoped
+        || exact_context_allow
+        || (allow && scope != "artifact"));
     let matching = if resolve_matching {
         let harness = if scope == "global" {
             Value::Null
