@@ -122,6 +122,7 @@ from ..directory_path_authority import (
 )
 from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
+from ..harness_posture import harness_is_recording_only
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
@@ -180,7 +181,6 @@ from ..project_folder_picker import (
     ProjectFolderPickerUnavailableError,
     choose_project_folder,
 )
-from ..protection_posture import protection_is_off
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
@@ -260,6 +260,7 @@ from ..supply_chain_repair import (
 from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
+from .cloud_review_settings import cloud_review_reconnect_required
 from .command_activity_api import (
     handle_command_activity_analytics,
     handle_command_activity_diagnostics,
@@ -2134,7 +2135,9 @@ def _guard_cloud_connect_repair_mode_from_health(oauth_health: dict[str, object]
 
 
 def _guard_cloud_connect_repair_mode(store: GuardStore) -> bool:
-    return _guard_cloud_connect_repair_mode_from_health(store.get_oauth_local_credential_health())
+    return _guard_cloud_connect_repair_mode_from_health(store.get_oauth_local_credential_health()) or (
+        store.get_cloud_sync_profile() is not None and cloud_review_reconnect_required(store)
+    )
 
 
 def _guard_cloud_connect_required_for_insights(store: GuardStore) -> bool:
@@ -2142,7 +2145,7 @@ def _guard_cloud_connect_required_for_insights(store: GuardStore) -> bool:
     if _guard_cloud_connect_repair_mode_from_health(oauth_health):
         return True
     if bool(oauth_health.get("configured")) and str(oauth_health.get("state") or "") == "healthy":
-        return store.get_cloud_sync_profile() is None
+        return store.get_cloud_sync_profile() is None or cloud_review_reconnect_required(store)
     return True
 
 
@@ -6742,7 +6745,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if guard_home is None
                 else load_guard_config(guard_home, workspace=workspace_path, require_canonical_workspace=True)
             )
-            observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
+            observe_mode = harness_is_recording_only(loaded, harness)
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
         if observe_mode and not native_authoritative:
@@ -6773,7 +6776,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             home_dir=home_path,
             guard_home=guard_home,
             recording_only=(
-                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None))
+                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None), harness)
                 if native_authoritative
                 else observe_mode
             ),

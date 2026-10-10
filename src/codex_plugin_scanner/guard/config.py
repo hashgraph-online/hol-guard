@@ -28,6 +28,22 @@ from .config_file_io import read_config_file_bytes
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
 from .config_preset_support import apply_named_posture_harness_policy
 from .guard_home_state import database_has_custom_extension_state
+from .harness_posture import (
+    HARNESS_POSTURES_KEY,
+    HARNESS_WATCH_ENTERED_AT_KEY,
+    apply_harness_posture_patch,
+    coerce_harness_posture_patch,
+    coerce_loaded_harness_postures,
+    coerce_loaded_harness_watch_entered_at,
+    effective_harness_postures,
+    harness_posture_override,
+    harness_posture_status,
+    harness_watch_auto_revert_due,
+    managed_effective_harness_postures,
+    managed_locks_harness_postures,
+    reject_locked_harness_posture_patch,
+    stricter_risk_action,
+)
 from .mdm.contracts import ManagedPolicy, ManagedPolicyState
 from .mdm.policy import apply_managed_policy, fail_closed_managed_policy, load_managed_policy
 from .models import GUARD_ACTION_VALUES, GuardAction, GuardMode
@@ -36,9 +52,11 @@ from .presentation_mode import (
     coerce_persisted_presentation_mode,
     coerce_presentation_mode_write,
 )
+from .protection_events import record_harness_posture_changes_if_needed
 from .protection_posture import (
     DEFAULT_PROTECTION_POSTURE,
     DEFAULT_WATCH_AUTO_REVERT_HOURS,
+    POSTURE_RISK_ACTIONS,
     coerce_loaded_protection_posture,
     coerce_protection_posture,
     coerce_watch_auto_revert_hours,
@@ -82,11 +100,17 @@ def watch_should_auto_revert(config: GuardConfig, *, now: datetime | None = None
 
 def maybe_auto_revert_watch(guard_home: Path, *, now: datetime | None = None) -> GuardConfig:
     config = load_guard_config(guard_home)
-    if not watch_should_auto_revert(config, now=now):
+    revert: dict[str, object] = {}
+    if watch_should_auto_revert(config, now=now):
+        revert["protection_posture"] = "protected"
+    if due_harnesses := harness_watch_auto_revert_due(config, now=now):
+        # A harness reverts to inheriting the baseline posture.
+        revert[HARNESS_POSTURES_KEY] = dict.fromkeys(due_harnesses)
+    if not revert:
         return config
     return update_guard_settings(
         guard_home,
-        {"protection_posture": "protected"},
+        revert,
         event_source="auto-revert",
         skip_approval_gate=True,
     )
@@ -256,6 +280,7 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "protection_posture",
         "protection_posture_explicit",
         "watch_auto_revert_hours",
+        "harness_postures",
         "security_level",
         "default_action",
         "unknown_publisher_action",
@@ -295,6 +320,8 @@ WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
         "density",
         "protection_posture",
         "watch_auto_revert_hours",
+        "harness_postures",
+        "harness_watch_entered_at",
         "default_action",
         "unknown_publisher_action",
         "changed_hash_action",
@@ -380,6 +407,8 @@ class GuardConfig:
     protection_posture_explicit: bool = False
     watch_auto_revert_hours: int = DEFAULT_WATCH_AUTO_REVERT_HOURS
     watch_entered_at: str | None = None
+    harness_postures: dict[str, str] | None = None
+    harness_watch_entered_at: dict[str, str] | None = None
     security_level: str = DEFAULT_SECURITY_LEVEL
     default_action: GuardAction = "warn"
     unknown_publisher_action: GuardAction = "review"
@@ -530,6 +559,16 @@ def load_guard_config(
         ),
         None,
     )
+    local_harness_postures = coerce_loaded_harness_postures(merged.get(HARNESS_POSTURES_KEY))
+    loaded_harness_postures = (
+        managed_effective_harness_postures(
+            local_harness_postures,
+            locked_settings=effective_managed_policy.locked_settings,
+            managed_settings=effective_managed_policy.settings,
+        )
+        if effective_managed_policy is not None
+        else local_harness_postures
+    )
     persisted_presentation = coerce_persisted_presentation_mode(
         legacy_presentation_value,
         explicit=merged.get("presentation_mode_explicit", legacy_presentation_value is not None),
@@ -550,6 +589,11 @@ def load_guard_config(
         protection_posture_explicit=posture_explicit,
         watch_auto_revert_hours=coerce_watch_auto_revert_hours(merged.get("watch_auto_revert_hours")),
         watch_entered_at=_coerce_watch_entered_at(merged.get("watch_entered_at")),
+        harness_postures=loaded_harness_postures,
+        harness_watch_entered_at=coerce_loaded_harness_watch_entered_at(
+            merged.get(HARNESS_WATCH_ENTERED_AT_KEY),
+            loaded_harness_postures,
+        ),
         default_action=_coerce_loaded_guard_action_or_default(merged.get("default_action"), "warn"),
         unknown_publisher_action=_coerce_loaded_guard_action_or_default(
             merged.get("unknown_publisher_action"),
@@ -642,6 +686,11 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "protection_posture": config.protection_posture,
         "protection_posture_explicit": config.protection_posture_explicit,
         "watch_auto_revert_hours": config.watch_auto_revert_hours,
+        "harness_postures": dict(config.harness_postures or {}),
+        "harness_watch_entered_at": dict(config.harness_watch_entered_at or {}),
+        "harness_postures_effective": effective_harness_postures(config),
+        "harness_posture_status": harness_posture_status(config),
+        "harness_postures_locked": managed_locks_harness_postures(config.managed_locked_settings),
         "security_level": config.security_level,
         "default_action": config.default_action,
         "unknown_publisher_action": config.unknown_publisher_action,
@@ -750,8 +799,13 @@ def _update_guard_settings_locked(
     next_payload = apply_named_posture_harness_policy(
         next_payload, payload, valid_security_levels=VALID_SECURITY_LEVELS
     )
+    harness_posture_patch: dict[str, str | None] = {}
     for key, value in payload.items():
         if key not in EDITABLE_GUARD_SETTING_KEYS:
+            continue
+        if key == HARNESS_POSTURES_KEY:
+            harness_posture_patch = coerce_harness_posture_patch(value)
+            reject_locked_harness_posture_patch(harness_posture_patch, current_config.managed_locked_settings)
             continue
         if key in presentation_keys:
             if presentation_change:
@@ -769,6 +823,8 @@ def _update_guard_settings_locked(
         next_payload.get("security_level", current_config.security_level),
     )
     next_payload = _sync_protection_posture_payload(next_payload, current_config, payload)
+    if harness_posture_patch:
+        next_payload = apply_harness_posture_patch(next_payload, harness_posture_patch, now_iso=_utc_now_iso())
     effective_next_payload = next_payload
     if current_config.managed_policy is not None:
         effective_next_payload = apply_managed_policy(next_payload, current_config.managed_policy)
@@ -806,6 +862,12 @@ def _update_guard_settings_locked(
         selected=incoming_selected_posture,
         event_source=event_source,
     )
+    record_harness_posture_changes_if_needed(
+        guard_home,
+        previous=current_config.harness_postures or {},
+        updated=updated.harness_postures or {},
+        event_source=event_source,
+    )
     return updated
 
 
@@ -840,7 +902,11 @@ def reset_guard_settings(
 
     require_settings_write(guard_home, approval_gate_grant=approval_gate_grant)
     current = _read_toml(guard_home / "config.toml")
-    next_payload = {key: value for key, value in current.items() if key not in EDITABLE_GUARD_SETTING_KEYS}
+    next_payload = {
+        key: value
+        for key, value in current.items()
+        if key not in EDITABLE_GUARD_SETTING_KEYS and key != HARNESS_WATCH_ENTERED_AT_KEY
+    }
     _write_guard_config(guard_home / "config.toml", next_payload)
     updated = load_guard_config(guard_home)
     notify_native_policy_mutation(guard_home)
@@ -868,6 +934,8 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         if isinstance(value, bool):
             return value
         raise ValueError("protection_posture_explicit must be true or false.")
+    if key == HARNESS_POSTURES_KEY:
+        return coerce_harness_posture_patch(value)
     if key == "watch_auto_revert_hours":
         if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 168:
             return value
@@ -1062,13 +1130,21 @@ def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness:
 
     if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
         return None
-    if isinstance(harness, str) and config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
-    if config.risk_actions is not None and risk_class in config.risk_actions:
-        return config.risk_actions[risk_class]
-    return _posture_or_level_defaults(config).get(risk_class)
+    harness_actions = (
+        config.harness_risk_actions.get(harness)
+        if isinstance(harness, str) and config.harness_risk_actions is not None
+        else None
+    )
+    if harness_actions is not None and risk_class in harness_actions:
+        resolved = harness_actions[risk_class]
+    elif config.risk_actions is not None and risk_class in config.risk_actions:
+        resolved = config.risk_actions[risk_class]
+    else:
+        resolved = _posture_or_level_defaults(config).get(risk_class)
+    if harness_posture_override(config, harness) == "extra_careful":
+        # A per-harness Extra careful override only ever strengthens.
+        return stricter_risk_action(resolved, POSTURE_RISK_ACTIONS["extra_careful"].get(risk_class))
+    return resolved
 
 
 def _sync_protection_posture_payload(
@@ -1093,7 +1169,14 @@ def _sync_protection_posture_payload(
         )
         if posture == "watch":
             synced["mode"] = "observe"
-            if current_config.protection_posture != "watch" or not current_config.watch_entered_at:
+            # Entering Watch stamps the revert window. Re-selecting Watch while
+            # already in Watch restarts it only on an explicit request, so a
+            # full settings save never extends Watch on its own.
+            if (
+                current_config.protection_posture != "watch"
+                or not current_config.watch_entered_at
+                or _requests_watch_restart(incoming)
+            ):
                 synced["watch_entered_at"] = _utc_now_iso()
         else:
             synced.pop("watch_entered_at", None)
@@ -1122,6 +1205,19 @@ def _sync_protection_posture_payload(
     return synced
 
 
+_FULL_SETTINGS_SAVE_KEYS = frozenset({"mode", "security_level", "risk_actions", "protection_posture_explicit"})
+
+
+def _requests_watch_restart(incoming: Mapping[str, object]) -> bool:
+    """True for a targeted Watch re-selection, never for a full settings save.
+
+    ``hol-guard settings set protection watch`` sends only the posture;
+    the dashboard sends its whole draft, which carries the full-save keys.
+    """
+
+    return not (_FULL_SETTINGS_SAVE_KEYS & set(incoming))
+
+
 def _incoming_selects_protection_posture(
     incoming: Mapping[str, object],
     current_config: GuardConfig,
@@ -1136,7 +1232,9 @@ def _incoming_selects_protection_posture(
         incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))
         if not current_config.protection_posture_explicit:
             return True
-        return incoming_posture != current_config.protection_posture
+        return incoming_posture != current_config.protection_posture or (
+            incoming_posture == "watch" and _requests_watch_restart(incoming)
+        )
     if not {"mode", "security_level", "risk_actions"} & set(incoming):
         return True
     incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))

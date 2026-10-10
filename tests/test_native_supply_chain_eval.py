@@ -158,3 +158,167 @@ def test_store_without_paths_blocks(tmp_path: Path) -> None:
     )
     assert result.decision == "block"
     assert result.policy_version == "native-unavailable"
+
+
+def _probe_resident(monkeypatch: pytest.MonkeyPatch, statuses: list[str]) -> list[dict[str, object]]:
+    sent: list[dict[str, object]] = []
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
+
+    def resident(**kwargs: object) -> object:
+        request = kwargs["request"]
+        sent.append(dict(request))
+        probe = statuses[len(sent) - 1] == "probe"
+        return {
+            "schema": _RESULT_SCHEMA,
+            "request_id": request["request_id"],
+            "request_sha256": "sha256:" + _canonical_request_sha256(request),
+            "status": "ok",
+            "code": "saved_policy_probe_required" if probe else "ok",
+            "payload": _payload(),
+        }
+
+    monkeypatch.setattr(transport, "_resident_request", resident)
+    return sent
+
+
+def _payload_for(tmp_path: Path, lookup) -> dict[str, object]:
+    return transport.native_supply_chain_eval_payload(
+        artifact=_Artifact(),
+        store_path=tmp_path / "guard.db",
+        guard_home=tmp_path,
+        workspace_dir=tmp_path,
+        now="2026-05-19T00:00:00Z",
+        external_archive_network_authorized=False,
+        saved_policy_lookup=lookup,
+    )
+
+
+@pytest.mark.parametrize("row", [{"action": "block", "scope": "global"}, None])
+def test_probe_request_is_answered_once_with_the_hydrated_lookup(monkeypatch, tmp_path: Path, row) -> None:
+    sent = _probe_resident(monkeypatch, ["probe", "ok"])
+    seen: list[dict[str, object]] = []
+
+    def lookup(cached: dict[str, object]) -> dict[str, object] | None:
+        seen.append(cached)
+        return row
+
+    payload = _payload_for(tmp_path, lookup)
+
+    assert payload["decision"] == "allow"
+    assert seen == [_payload()]
+    assert len(sent) == 2
+    assert "saved_policy_probe" not in sent[0]
+    assert sent[1]["saved_policy_probe"] == ({} if row is None else {"decision": row})
+    assert sent[1]["request_id"] != sent[0]["request_id"]
+    assert {k: v for k, v in sent[1].items() if k not in {"request_id", "saved_policy_probe"}} == {
+        k: v for k, v in sent[0].items() if k != "request_id"
+    }
+
+
+def test_probe_request_is_not_repeated(monkeypatch, tmp_path: Path) -> None:
+    sent = _probe_resident(monkeypatch, ["probe", "probe"])
+
+    with pytest.raises(transport.NativeSupplyChainEvalError):
+        _payload_for(tmp_path, lambda _cached: None)
+
+    assert len(sent) == 2
+
+
+def test_probe_request_without_a_lookup_blocks(monkeypatch, tmp_path: Path) -> None:
+    sent = _probe_resident(monkeypatch, ["probe"])
+
+    with pytest.raises(transport.NativeSupplyChainEvalError):
+        _payload_for(tmp_path, None)
+
+    assert len(sent) == 1
+
+
+def test_test_seams_are_never_forwarded_outside_pytest(monkeypatch) -> None:
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", '{"allowed": true}')
+    monkeypatch.setenv("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON", '{"access_token": "t"}')
+
+    assert transport._test_seam_overrides() == {}
+
+
+def test_test_seams_are_bounded_and_limited_to_known_keys(monkeypatch) -> None:
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "seam")
+    monkeypatch.setenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", '{"allowed": false, "reason": "r"}')
+    monkeypatch.setenv("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON", '{"access_token": "t", "sync_url": "http://x"}')
+    monkeypatch.delenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", raising=False)
+
+    assert transport._test_seam_overrides() == {
+        "sync_auth_context_override": {"access_token": "t", "sync_url": "http://x"},
+        "package_entitlement_override": {"allowed": False, "reason": "r"},
+    }
+
+    monkeypatch.setenv("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON", '{"unexpected": "t"}')
+    monkeypatch.setenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", '{"reason": "' + "x" * 9000 + '"}')
+
+    assert transport._test_seam_overrides() == {}
+
+
+def test_registry_metadata_seam_is_forwarded_only_under_pytest_and_bounded(monkeypatch) -> None:
+    fixture = {"https://registry.npmjs.org/left-pad": {"versions": {"1.0.0": {}}}}
+    monkeypatch.setattr(transport, "_test_registry_metadata_override", fixture)
+    monkeypatch.delenv("HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", raising=False)
+
+    assert transport._test_seam_overrides()["registry_metadata_override"] == fixture
+
+    monkeypatch.setattr(transport, "_test_registry_metadata_override", {"https://registry.npmjs.org/x": "y" * 9000})
+    assert "registry_metadata_override" not in transport._test_seam_overrides()
+
+    monkeypatch.setattr(transport, "_test_registry_metadata_override", fixture)
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    assert transport._test_seam_overrides() == {}
+
+
+def _spy_failures(monkeypatch) -> list[str]:
+    failures: list[str] = []
+    monkeypatch.setattr(
+        transport, "native_runtime_status", lambda: SimpleNamespace(identity=SimpleNamespace(sha256="sha"))
+    )
+    monkeypatch.setattr(
+        transport,
+        "native_record_resident_failure",
+        lambda _sha, _home, *, reason: failures.append(reason),
+    )
+    return failures
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda r: r.update(request_id="other"),
+        lambda r: r.update(request_sha256="sha256:" + "0" * 64),
+        lambda r: r.update(extra="field"),
+        lambda r: r["payload"].pop("user_copy"),
+    ],
+)
+def test_unbound_or_malformed_answer_records_one_resident_failure(monkeypatch, tmp_path: Path, mutate) -> None:
+    _bind(monkeypatch, mutate=mutate)
+    failures = _spy_failures(monkeypatch)
+
+    assert _evaluate(tmp_path).decision == "block"
+
+    assert failures == ["native_supply_chain_eval_unbound"]
+
+
+def test_resident_request_that_already_failed_is_not_recorded_twice(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(transport, "_resident_request", lambda **_kwargs: None)
+    failures = _spy_failures(monkeypatch)
+
+    assert _evaluate(tmp_path).decision == "block"
+
+    assert failures == []
+
+
+def test_well_formed_answer_records_no_failure(monkeypatch, tmp_path: Path) -> None:
+    _bind(monkeypatch)
+    failures = _spy_failures(monkeypatch)
+
+    assert _evaluate(tmp_path).decision == "allow"
+
+    assert failures == []

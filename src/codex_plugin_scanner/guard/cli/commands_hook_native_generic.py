@@ -101,6 +101,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import guard_action_severity
+from ..harness_posture import harness_is_recording_only
 from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_reuse
@@ -1008,7 +1009,7 @@ def run_native_generic_payload(
             ),
             "claimed_context": _claimed_saved_allow_hash is not None,
             "asks_for_approval": asks_for_approval(config),
-            "observe_mode": config.mode == "observe",
+            "observe_mode": harness_is_recording_only(config, args.harness),
             "has_approval_requests_list": isinstance(payload_map.get("approval_requests"), list),
             "json_requested": bool(getattr(args, "json", False)),
             "output_stream_present": output_stream is not None,
