@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.config import HOOK_FAST_PATH_ENV, hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeStatus
@@ -19,16 +18,6 @@ pytestmark = pytest.mark.usefixtures("native_hook_force")
 
 def sha256_hex_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
-
-
-def test_resident_hook_worker_is_enabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv(HOOK_FAST_PATH_ENV, raising=False)
-    assert hook_fast_path_enabled() is True
-
-
-def test_resident_hook_worker_supports_emergency_disable(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(HOOK_FAST_PATH_ENV, "0")
-    assert hook_fast_path_enabled() is False
 
 
 @pytest.fixture()

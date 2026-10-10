@@ -272,7 +272,6 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
     monkeypatch.setattr(
         hook_worker_module,
@@ -328,7 +327,6 @@ def test_prepare_workspace_policy_uses_bounded_first_workspace_handshake(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -373,7 +371,6 @@ def test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -420,7 +417,6 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -469,7 +465,6 @@ def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))

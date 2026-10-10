@@ -9,7 +9,6 @@ from typing import Any, cast
 from ..action_lattice import coerce_guard_action
 from ..models import GuardAction, GuardArtifact
 from ..native_hook_artifact_compose import native_hook_compose
-from ..native_mode import native_mode_requires_rust
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from ..native_pretool import native_pre_tool_policy_floor
@@ -69,7 +68,7 @@ def _ensure_native_resident_verifier(
     intact instead of inventing a weaker native answer.
     """
 
-    if store is None or not native_mode_requires_rust():
+    if store is None:
         return
     key_path = guard_home / "native-runtime" / "policy-verifier.key"
     try:

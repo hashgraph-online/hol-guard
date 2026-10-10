@@ -292,7 +292,7 @@ def test_command_model_budget_is_bound_at_resident_envelope_top_level(
         native_command_model,
         "native_runtime_status",
         lambda: NativeRuntimeStatus(
-            mode="shadow",
+            mode="force",
             available=True,
             compatible=True,
             reason="ready",
@@ -356,7 +356,7 @@ def test_command_model_records_allowlisted_error_envelope(
         native_command_model,
         "native_runtime_status",
         lambda: NativeRuntimeStatus(
-            mode="shadow",
+            mode="force",
             available=True,
             compatible=True,
             reason="ready",

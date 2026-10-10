@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
-from contextlib import suppress
 from functools import wraps
 from pathlib import Path
 from typing import Any, TextIO
@@ -16,10 +15,6 @@ from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.hook_worker import HookWorker
 from ..daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from ..native_hook_adapter import hook_adapter_memo
-from ..native_mode import native_mode_is_fail_safe_disabled
-from ..native_mode import (
-    native_mode_requires_rust as _native_mode_requires_rust,
-)
 from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
 from ..store import GuardStore
 from .commands_hook_native_availability import _native_unavailable_exit_code
@@ -44,8 +39,6 @@ def try_native_hook_authority(
     through the same fail-closed Rust worker as the daemon. Out-of-scope
     events still return ``None`` for their compatibility handlers.
     """
-    if not _native_mode_requires_rust():
-        return None
     worker: HookWorker | None = None
     evidence_writer: RuntimeHookEvidenceWriter | None = None
     try:
@@ -123,46 +116,11 @@ def route_native_hook(
 ) -> int:
     """Route a hook through native authority and emit its result.
 
-    ``auto`` and ``force`` keep every hook result native or fail-safe. An
-    explicit ``off`` is also fail-safe; there is no Python semantic fallback.
+    Every hook result is native or fail-safe; there is no Python semantic
+    fallback.
     The Rust edge owns the decision floor; the pipeline composes mechanical
     presentation, approval queueing, and receipt persistence on top of it.
     """
-    if not _native_mode_requires_rust():
-        # ``off`` is an explicit disablement, not permission to restore a
-        # second semantic evaluator. Shadow never escapes to Python semantics.
-        reason_code = (
-            "native_hook_disabled" if native_mode_is_fail_safe_disabled() else "native_shadow_diagnostic_disabled"
-        )
-        if runtime_hook_event_name(payload) == "PreToolUse":
-            writer: RuntimeHookEvidenceWriter | None = None
-            # Evidence is bounded and best effort; denial never depends on it.
-            with suppress(Exception):
-                writer = RuntimeHookEvidenceWriter(store=store)
-                writer.submit_command_activity(
-                    harness=args.harness,
-                    event="PreToolUse",
-                    payload=payload,
-                    succeeded=True,
-                    policy_action="block",
-                    receipt_id=None,
-                    prompted=False,
-                )
-            if writer is not None:
-                with suppress(Exception):
-                    writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
-        response = availability_harness_response(
-            payload,
-            harness=args.harness,
-            event_name=runtime_hook_event_name(payload),
-            reason="HOL Guard could not complete the native hook decision safely.",
-            reason_code=reason_code,
-            workspace=runtime_workspace,
-            home_dir=context.home_dir,
-            guard_home=context.guard_home,
-        )
-        _emit("hook", response, True)
-        return _native_unavailable_exit_code(args, response, runtime_hook_event_name(payload))
     from .commands_hook_native_pipeline import run_native_hook_pipeline
 
     def run_pipeline(worker: HookWorker) -> int:

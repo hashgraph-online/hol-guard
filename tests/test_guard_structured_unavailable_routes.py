@@ -10,21 +10,16 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 
 @pytest.mark.parametrize("harness", ["pi", "omp"])
-@pytest.mark.parametrize("mode", ["off", "shadow"])
 @pytest.mark.parametrize("required", [False, True])
-@pytest.mark.parametrize("mode_surface", [False, True])
 def test_daemon_unavailable_routes_withhold_only_required_structured_content(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     harness: str,
-    mode: str,
     required: bool,
-    mode_surface: bool,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    monkeypatch.setattr(hook_worker, "native_mode", lambda: mode)
     worker = hook_worker.HookWorker(store=GuardStore(guard_home))
     monkeypatch.setattr(
         worker,
@@ -35,8 +30,9 @@ def test_daemon_unavailable_routes_withhold_only_required_structured_content(
             reason_code="structured_managed_authority_unavailable" if required else None,
         ),
     )
-    if not mode_surface:
-        monkeypatch.setattr(worker, "_mode_surface_response", lambda *_, **__: None)
+    # Pin the native edge as unavailable so the result is independent of any
+    # runtime binary installed on the machine running the test.
+    monkeypatch.setattr(worker, "_review_raw_hook_native", lambda **_: None)
     try:
         result = worker.review_http_payload(
             payload={

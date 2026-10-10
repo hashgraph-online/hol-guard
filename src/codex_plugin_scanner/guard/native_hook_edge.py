@@ -351,8 +351,7 @@ def review_raw_hook_native(
         if event_key not in {"userpromptsubmit", "userpromptsubmitted", "prompt"}:
             required_features.add("git-execution-context-v1")
     if (
-        status.mode not in {"auto", "force"}
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None

@@ -782,13 +782,10 @@ def _assert_negative_results(
 
 
 def _probe_native_identity() -> tuple[Any, Any, Any]:
-    from codex_plugin_scanner.guard.config import hook_fast_path_enabled
     from codex_plugin_scanner.guard.native_runtime import native_mode, native_runtime_status
 
     if native_mode() != "auto":
         raise ProbeError(f"unexpected native mode: {native_mode()}")
-    if not hook_fast_path_enabled():
-        raise ProbeError("unset fast-path configuration must be enabled")
     status = native_runtime_status()
     if not status.available or not status.compatible or status.reason != "native_ready":
         raise ProbeError(f"installed native runtime is not ready: {status}")

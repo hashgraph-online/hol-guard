@@ -61,13 +61,13 @@ def test_old_cursor_hooks_deny_empty_stdin_without_baked_event() -> None:
     assert deny["permission"] == "deny"
 
 
-def test_native_off_pretool_denies_without_watch(tmp_path: Path) -> None:
+def test_native_unavailable_pretool_denies_without_watch(tmp_path: Path) -> None:
     payload = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",
         event_name="PreToolUse",
-        reason_code="native_hook_disabled",
-        reason="native off",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
         workspace=tmp_path,
         home_dir=tmp_path / "home",
     )
@@ -76,8 +76,8 @@ def test_native_off_pretool_denies_without_watch(tmp_path: Path) -> None:
         {"hook_event_name": "PermissionRequest"},
         harness="claude-code",
         event_name="PermissionRequest",
-        reason_code="native_hook_disabled",
-        reason="native off",
+        reason_code="native_pre_tool_unavailable",
+        reason="native unavailable",
     )
     assert permission["continue"] is True
     daemon_miss = availability_harness_response(
