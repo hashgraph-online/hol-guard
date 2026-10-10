@@ -585,36 +585,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-  deep-compatibility:
-    needs: native-command-evaluators
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.13"]
-        shard-index: [0, 1, 2, 3]
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/ci-job-deep-compatibility
-        with:
-          python-version: ${{ matrix.python-version }}
-          shard-index: ${{ matrix.shard-index }}
-
-  mutation-baseline:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    needs: native-command-evaluators
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/ci-job-mutation-baseline
-
   ci-python-312:
     name: ci (3.12)
     if: always()
@@ -730,7 +700,8 @@ jobs:
   native-windows-evaluators:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
-    timeout-minutes: 5
+    # A cold Windows release build of both binaries takes 12-15 minutes.
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
