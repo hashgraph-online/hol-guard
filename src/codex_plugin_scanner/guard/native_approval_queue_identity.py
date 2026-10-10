@@ -154,7 +154,11 @@ def _batch_was_rejected(response: Mapping[str, object], request: dict[str, objec
         return False
     if response.get("status") == "ok":
         return True
-    return response.get("code") == "rejected"
+    return response.get("code") in {
+        "rejected",
+        "native_approval_queue_identity_invalid",
+        "native_approval_queue_identity_too_large",
+    }
 
 
 def _verifier_key_present(guard_home: Path) -> bool:
