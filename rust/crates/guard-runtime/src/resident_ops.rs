@@ -247,14 +247,31 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ApprovalProofDecide(request) => {
                 crate::approval_proof_op::evaluate_approval_proof_request(&request)
             }
+            ResidentOperationV1::HookDecide(request) => {
+                crate::hook_decision_op::evaluate_hook_decision_request(&request)
+            }
+            ResidentOperationV1::HookArtifactCompose(request) => {
+                crate::hook_artifact_compose_op::evaluate_hook_artifact_compose_request(&request)
+            }
             ResidentOperationV1::LocalMcpGrantDecide(request) => {
                 crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
+            }
+            ResidentOperationV1::RequestContextBuild(request) => {
+                crate::request_context_op::evaluate_request_context_request(&request)
             }
             #[cfg(unix)]
             ResidentOperationV1::SkillDirectoryIdentity(request) => {
                 crate::skill_directory_identity_op::evaluate_skill_directory_identity_request(
                     &request,
                 )
+            }
+            ResidentOperationV1::ContributedMcpDecide(request) => {
+                crate::contributed_mcp_decision_op::evaluate_contributed_mcp_decision_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::McpToolPolicyDecide(request) => {
+                crate::mcp_tool_policy_decide_op::evaluate_mcp_tool_policy_decide_request(&request)
             }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
@@ -385,6 +402,8 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::RequestContextBuild(request) => Some(&request.guard_home),
         ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
         _ => None,
     }
@@ -401,6 +420,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
         _ => None,
     }
 }
