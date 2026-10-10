@@ -85,8 +85,10 @@ def test_command_inspection_maps_existing_sensitive_actions_to_extensions(
 
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] == action_class
-    assert payload["extensions"][0]["extension_id"] == extension_id
-    assert payload["rules"][0]["rule_id"].startswith(f"{extension_id}.")
+    # Read-only identification rules from sibling extensions may also match;
+    # the classification above proves which extension governs the decision.
+    assert extension_id in {extension["extension_id"] for extension in payload["extensions"]}
+    assert any(rule["rule_id"].startswith(f"{extension_id}.") for rule in payload["rules"])
     assert payload["command_model"]["transport"] == "shell_string"
     assert payload["policy_evaluation"] == "not_run"
     assert payload["side_effects"] == "none"
