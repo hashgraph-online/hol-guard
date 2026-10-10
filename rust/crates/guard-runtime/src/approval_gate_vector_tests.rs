@@ -305,3 +305,21 @@ fn recent_totp_is_bound_to_session_signals() {
     assert_eq!(satisfied("sid=b"), json!(false));
     let _ = std::fs::remove_dir_all(&home);
 }
+
+/// The caller's session signals are part of the contract: a request without
+/// them is rejected rather than bound to the resident's own process.
+#[test]
+fn a_request_without_session_signals_is_a_contract_error() {
+    let request = json!({
+        "schema": "guard-approval-gate-request.v1",
+        "request_id": "missing-signals",
+        "guard_home": "/synthetic",
+        "method": "public_config",
+    });
+    assert!(
+        serde_json::from_value::<guard_contracts::ApprovalGateRequestV1>(request.clone()).is_err()
+    );
+    let mut with_signals = request;
+    with_signals["session_signals"] = json!([]);
+    assert!(serde_json::from_value::<guard_contracts::ApprovalGateRequestV1>(with_signals).is_ok());
+}

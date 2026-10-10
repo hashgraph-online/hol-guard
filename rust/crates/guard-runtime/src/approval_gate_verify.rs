@@ -41,15 +41,6 @@ const TOTP_RECENT_STATE_KEY: &str = "totp_recent_proof";
 const TOTP_RECENT_INTEGRITY_PURPOSE: &str = "guard-approval-gate-totp-recent";
 /// `APPROVAL_GATE_TOTP_RECENT_TTL_SECONDS` — see `totp.rs` / :_TOTP_RECENT ttl.
 const TOTP_RECENT_TTL_SECONDS: f64 = 60.0;
-/// `_TOTP_SESSION_ENV_KEYS` (:97-104).
-const TOTP_SESSION_ENV_KEYS: [&str; 6] = [
-    "TERM_SESSION_ID",
-    "WT_SESSION",
-    "WEZTERM_PANE",
-    "KITTY_WINDOW_ID",
-    "TMUX_PANE",
-    "SSH_TTY",
-];
 /// `_INVALIDATED_AUTH_STATE_KEYS` (:105-113).
 const INVALIDATED_AUTH_STATE_KEYS: [&str; 7] = [
     "approval_sessions",
@@ -94,54 +85,25 @@ fn cooldown_seconds(state: &Value) -> Result<i64, ApprovalGateErrorV1> {
         .map_err(|_| crate::approval_gate_settings::invalid_cooldown())
 }
 
-/// `_current_totp_session_binding` (:1305-1321) — `sid`/`ppid`/`pid` +
-/// terminal env vars, sha256 hex of `"\0"`-joined signals.
-/// Read `ppid` (field 4) and `sid` (field 6) from `/proc/self/stat` without
-/// unsafe. `/proc` layout: `pid (comm) state ppid pgrp session ...` — `comm`
-/// may contain spaces so parse after the last `)`.
-#[cfg(unix)]
-fn proc_self_ppid_sid() -> (i64, i64) {
-    let stat = match std::fs::read_to_string("/proc/self/stat") {
-        Ok(s) => s,
-        Err(_) => return (0, -1),
-    };
-    let after = match stat.rfind(')') {
-        Some(i) => &stat[i + 1..],
-        None => return (0, -1),
-    };
-    // after `)`: " S ppid pgrp session ..."
-    let fields: Vec<&str> = after.split_whitespace().collect();
-    // fields[0]=state, [1]=ppid, [2]=pgrp, [3]=session(sid)
-    let ppid = fields
-        .get(1)
-        .and_then(|v| v.parse::<i64>().ok())
-        .unwrap_or(0);
-    let sid = fields
-        .get(3)
-        .and_then(|v| v.parse::<i64>().ok())
-        .unwrap_or(-1);
-    (ppid, sid)
-}
-
 thread_local! {
-    static CALLER_SESSION_SIGNALS: std::cell::RefCell<Option<Vec<String>>> =
-        const { std::cell::RefCell::new(None) };
+    static CALLER_SESSION_SIGNALS: std::cell::RefCell<Vec<String>> =
+        const { std::cell::RefCell::new(Vec::new()) };
 }
 
 /// Scope guard binding the caller-supplied session signals to the current
-/// request; restores the prior value on drop.
-pub(crate) struct SessionSignalsScope(Option<Vec<String>>);
+/// request; restores the prior value on drop. Only the calling process can
+/// observe its own session, so every request carries its signals.
+pub(crate) struct SessionSignalsScope(Vec<String>);
 
 impl SessionSignalsScope {
-    pub(crate) fn enter(signals: Option<&[String]>) -> Self {
-        let next = signals.filter(|s| !s.is_empty()).map(<[String]>::to_vec);
-        Self(CALLER_SESSION_SIGNALS.with(|cell| cell.replace(next)))
+    pub(crate) fn enter(signals: &[String]) -> Self {
+        Self(CALLER_SESSION_SIGNALS.with(|cell| cell.replace(signals.to_vec())))
     }
 }
 
 impl Drop for SessionSignalsScope {
     fn drop(&mut self) {
-        let previous = self.0.take();
+        let previous = std::mem::take(&mut self.0);
         CALLER_SESSION_SIGNALS.with(|cell| {
             cell.replace(previous);
         });
@@ -155,51 +117,10 @@ fn hash_session_signals(signals: &[String]) -> String {
     hex::encode(h.finalize())
 }
 
-#[cfg(unix)]
-fn own_process_signals() -> Vec<String> {
-    let mut signals: Vec<String> = Vec::new();
-    let (_ppid, sid) = proc_self_ppid_sid();
-    if sid >= 0 {
-        signals.push(format!("sid={sid}"));
-    }
-    signals.extend(env_signals());
-    if signals.is_empty() {
-        let (parent_pid, _sid) = proc_self_ppid_sid();
-        if parent_pid > 0 {
-            signals.push(format!("ppid={parent_pid}"));
-        } else {
-            signals.push(format!("pid={}", std::process::id()));
-        }
-    }
-    signals
-}
-
-#[cfg(not(unix))]
-fn own_process_signals() -> Vec<String> {
-    let mut signals = env_signals();
-    if signals.is_empty() {
-        signals.push(format!("pid={}", std::process::id()));
-    }
-    signals
-}
-
-fn env_signals() -> Vec<String> {
-    TOTP_SESSION_ENV_KEYS
-        .iter()
-        .filter_map(|key| match std::env::var(key) {
-            Ok(value) if !value.is_empty() => Some(format!("{key}={value}")),
-            _ => None,
-        })
-        .collect()
-}
-
-/// The recent-TOTP session binding: the caller's signals when the request
-/// carried them, else this process's own.
-pub(crate) fn current_totp_session_binding() -> Option<String> {
-    let caller = CALLER_SESSION_SIGNALS.with(|cell| cell.borrow().clone());
-    Some(hash_session_signals(
-        &caller.unwrap_or_else(own_process_signals),
-    ))
+/// `_current_totp_session_binding` (:1305-1321) — sha256 hex of the
+/// `"\0"`-joined signals the calling process sent with the request.
+pub(crate) fn current_totp_session_binding() -> String {
+    CALLER_SESSION_SIGNALS.with(|cell| hash_session_signals(&cell.borrow()))
 }
 
 /// `_validate_totp_state_or_raise` (:1204-1218).
@@ -234,9 +155,9 @@ fn record_recent_totp_satisfaction(
 ) {
     let session_binding = current_totp_session_binding();
     let secret_id = optional_string(state.get("totp_secret_id"));
-    let (session_binding, secret_id) = match (session_binding, secret_id) {
-        (Some(b), Some(s)) => (b, s),
-        _ => {
+    let secret_id = match secret_id {
+        Some(s) => s,
+        None => {
             if let Some(obj) = state.as_object_mut() {
                 obj.remove(TOTP_RECENT_STATE_KEY);
             }
@@ -311,10 +232,7 @@ pub(crate) fn recent_totp_satisfied_locked(
         Some(i) => i.clone(),
         None => return false,
     };
-    let session_binding = match current_totp_session_binding() {
-        Some(b) => b,
-        None => return false,
-    };
+    let session_binding = current_totp_session_binding();
     let secret_id = match optional_string(state.get("totp_secret_id")) {
         Some(s) => s,
         None => return false,

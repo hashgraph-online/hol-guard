@@ -38,7 +38,7 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard
 
 _MAX_REQUEST_BYTES = 64 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-_APPROVAL_GATE_FEATURE = "approval-gate-v1"
+_APPROVAL_GATE_FEATURE = "approval-gate-v2"
 _REQUEST_SCHEMA = "guard-approval-gate-request.v1"
 _RESULT_SCHEMA = "guard-approval-gate-result.v1"
 

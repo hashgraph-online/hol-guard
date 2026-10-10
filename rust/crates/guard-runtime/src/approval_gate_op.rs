@@ -129,7 +129,7 @@ pub(crate) fn evaluate_approval_gate_request(
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request).map_err(str::to_owned)?;
     let _session =
-        crate::approval_gate_verify::SessionSignalsScope::enter(request.session_signals.as_deref());
+        crate::approval_gate_verify::SessionSignalsScope::enter(&request.session_signals);
     let (status, code, error_status, message, payload) = match evaluate(request) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), None, None, Some(payload)),
         Err(e) => (
@@ -433,7 +433,7 @@ mod tests {
             now: None,
             duration_seconds: None,
             device_label: None,
-            session_signals: None,
+            session_signals: vec!["sid=test".to_owned()],
         }
     }
 

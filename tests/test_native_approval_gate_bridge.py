@@ -19,7 +19,7 @@ def _provision(monkeypatch: pytest.MonkeyPatch, answer, *, failure_code: str | N
         available=True,
         compatible=True,
         identity=SimpleNamespace(path=Path("/native"), sha256="sha"),
-        capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v1")),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v2")),
     )
     monkeypatch.setattr(bridge, "native_runtime_status", lambda: status)
 
@@ -134,3 +134,18 @@ def test_only_configuration_calls_establish_the_resident_verifier_key(
     monkeypatch.setattr(bridge, "ensure_resident_prerequisite", establish)
     bridge.approval_gate_native("require_approval_decision", tmp_path, provision_prerequisite=provision)
     assert len(provisioned) == expected_calls
+
+
+def test_runtime_without_the_current_approval_gate_capability_is_not_asked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _provision(monkeypatch, _ok({"grant": None}))
+    stale = SimpleNamespace(
+        mode="force",
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=Path("/native"), sha256="sha"),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v1")),
+    )
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: stale)
+    assert bridge.approval_gate_native("require_approval_decision", tmp_path) is None
