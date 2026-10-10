@@ -30,6 +30,16 @@ def test_pr_canary_requires_maintainer_opt_in_for_same_repository_prs() -> None:
     assert workflow[True]["pull_request"] == {
         "branches": ["main", "release/3.0", "release/3.2"],
         "types": ["opened", "synchronize", "reopened", "labeled"],
+        "paths": [
+            "**",
+            "!tests/**",
+            "!docs/**",
+            "!fuzzers/**",
+            "!**/*.md",
+            "README.md",
+            "!.github/workflows/**",
+            ".github/workflows/publish.yml",
+        ],
     }
     assert workflow["permissions"] == {"contents": "read", "pull-requests": "read"}
     job = workflow["jobs"]["publish-testpypi"]

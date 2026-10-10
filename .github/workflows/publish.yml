@@ -31,6 +31,17 @@ on:
   pull_request:
     branches: [main, release/3.0, release/3.2]
     types: [opened, synchronize, reopened, labeled]
+    # Build + Verify only reads what ships in the wheel; skip pull requests that
+    # touch nothing but tests, docs or unrelated workflows.
+    paths:
+      - "**"
+      - "!tests/**"
+      - "!docs/**"
+      - "!fuzzers/**"
+      - "!**/*.md"
+      - "README.md"
+      - "!.github/workflows/**"
+      - ".github/workflows/publish.yml"
 
 permissions:
   contents: read
