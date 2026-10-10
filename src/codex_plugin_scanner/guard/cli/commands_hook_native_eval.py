@@ -817,15 +817,16 @@ def evaluate_native_artifact_hook(
             )
             if block_answer is not None:
                 policy_action = cast(GuardAction, block_answer["policy_action"])
+                approval_reuse_source = approval_reuse_source or "saved_policy_decision"
             else:
-                # Resident unreachable: never end weaker than the recomputed action.
-                policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
-            approval_reuse_source = approval_reuse_source or "saved_policy_decision"
+                # Resident unreachable: hold the stored block and never end weaker
+                # than the recomputed action; no saved decision is claimed as the source.
+                policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action, "block")
             if not package_reuse_applied:
                 scanner_evidence_payload.append(
                     {
                         "source": "approval_reuse",
-                        "input_source": approval_reuse_source,
+                        "input_source": approval_reuse_source or "saved_policy_decision",
                         **approval_reuse.to_evidence(),
                     }
                 )
