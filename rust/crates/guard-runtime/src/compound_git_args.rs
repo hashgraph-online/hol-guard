@@ -118,6 +118,28 @@ pub(crate) fn safe_repository_path(value: &str) -> bool {
     !components.is_empty() && components_are_safe(components)
 }
 
+/// `:!<path>` / `:^<path>` exclusion pathspec with a safe repository path.
+fn safe_exclude_pathspec(value: &str) -> bool {
+    let Some(remainder) = value
+        .strip_prefix(":!")
+        .or_else(|| value.strip_prefix(":^"))
+    else {
+        return false;
+    };
+    !remainder.is_empty()
+        && !remainder.starts_with([':', '/', '~'])
+        && safe_repository_path(remainder)
+}
+
+/// Pathspecs after `--` in a staged diff: every one must be a safe repository
+/// path or a safe exclusion. An empty list is not a path scope.
+pub(crate) fn safe_cached_diff_pathspecs(values: &[String]) -> bool {
+    !values.is_empty()
+        && values
+            .iter()
+            .all(|value| safe_repository_path(value) || safe_exclude_pathspec(value))
+}
+
 /// Components of a `~/` tail after the prefix.
 pub(crate) fn safe_home_tail(tail: &str) -> bool {
     !tail.is_empty()

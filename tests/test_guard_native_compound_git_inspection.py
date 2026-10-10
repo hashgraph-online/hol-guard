@@ -3,14 +3,20 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 
 import pytest
 
 from codex_plugin_scanner.guard import native_compound_git_inspection as bridge
 from codex_plugin_scanner.guard.native_compound_git_inspection import CompoundGitAnswer
+from codex_plugin_scanner.guard.native_path_anchor import anchor_to_process_directory
 from codex_plugin_scanner.guard.runtime.shell_execution_context import ShellExecutionSegment
+
+if TYPE_CHECKING:
+    from codex_plugin_scanner.guard.runtime.shell_execution_context import ShellExecutionContext
 
 _FEATURES = ("resident-protocol-v2", "compound-git-inspection-v1")
 
@@ -194,3 +200,46 @@ def test_open_circuit_or_missing_prerequisite_never_reaches_the_resident(
     monkeypatch.setattr(bridge, "native_runtime_health_snapshot", lambda *_a: SimpleNamespace(circuit_open=True))
     assert bridge.compound_git_inspection_native("repository_path", value=".").allowed is False
     assert recorder.payloads == []
+
+
+def test_batched_pathspecs_are_one_resident_request(recorder: _Recorder) -> None:
+    answer = bridge.compound_git_inspection_native("cached_diff_pathspecs", values=("src", ":!vendor", "docs"))
+    assert answer.allowed is True
+    assert len(recorder.payloads) == 1
+    request = recorder.payloads[0]["request"]
+    assert isinstance(request, dict)
+    assert request["check"] == "cached_diff_pathspecs"
+    assert request["values"] == ["src", ":!vendor", "docs"]
+    assert "value" not in request
+
+
+def test_cached_diff_operands_make_one_resident_request(recorder: _Recorder) -> None:
+    from codex_plugin_scanner.guard.runtime.git_index_inspection import _cached_diff_operands_are_safe
+
+    operands = ("--cached", "--", *(f"path{index}" for index in range(16)))
+    assert _cached_diff_operands_are_safe(operands) is True
+    assert len(recorder.payloads) == 1
+    assert _cached_diff_operands_are_safe(("--cached", "--")) is False
+    assert len(recorder.payloads) == 1
+
+
+def test_compound_inspection_skips_the_resident_for_shapes_that_cannot_match(recorder: _Recorder) -> None:
+    from codex_plugin_scanner.guard.runtime.compound_git_inspection import is_low_risk_compound_git_inspection
+
+    cd = replace(_segment(("cd", "repo"), Path("/repo")), directory_operation="cd")
+    git = _segment(("git", "status"), Path("/repo"))
+    incomplete = SimpleNamespace(complete=False, segments=(cd, git))
+    single = SimpleNamespace(complete=True, segments=(git,))
+    no_cd = SimpleNamespace(complete=True, segments=(git, git))
+    for context in (incomplete, single, no_cd):
+        assert is_low_risk_compound_git_inspection(cast("ShellExecutionContext", context)) is False
+    assert recorder.payloads == []
+    complete = SimpleNamespace(complete=True, segments=(cd, git))
+    assert is_low_risk_compound_git_inspection(cast("ShellExecutionContext", complete)) is True
+    assert len(recorder.payloads) == 1
+
+
+def test_relative_paths_are_anchored_with_the_shared_helper() -> None:
+    assert anchor_to_process_directory("a/b") == os.path.join(os.getcwd(), "a/b")
+    absolute = os.path.abspath(os.sep)
+    assert anchor_to_process_directory(absolute) == absolute

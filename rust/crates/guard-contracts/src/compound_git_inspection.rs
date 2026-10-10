@@ -36,6 +36,9 @@ pub enum CompoundGitCheckV1 {
     HomeGitCPath,
     /// A safe repository-relative path.
     RepositoryPath,
+    /// Every pathspec after `--` in a staged diff is a safe repository path
+    /// or a safe `:!`/`:^` exclusion (one request for the whole list).
+    CachedDiffPathspecs,
     /// `git diff`/`show`/`blame` cannot run an external diff or textconv.
     ShowConfig,
     /// Git log-family output cannot invoke an executable pager.
@@ -77,6 +80,9 @@ pub struct CompoundGitInspectionRequestV1 {
     /// Path operand for `repository_path`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
+    /// Pathspecs for `cached_diff_pathspecs`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
     /// Absolute execution directory for `object_existence_query`/`log_config`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,

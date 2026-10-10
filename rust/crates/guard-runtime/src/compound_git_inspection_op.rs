@@ -25,6 +25,7 @@ const MAX_SEGMENTS: usize = 128;
 const MAX_TOKENS: usize = 512;
 const MAX_STRING_BYTES: usize = 16 * 1024;
 const MAX_ENVIRONMENT: usize = 128;
+const MAX_PATHSPECS: usize = 16;
 const ALLOWED_PAGER_KEYS: [&str; 3] = ["pager.log", "pager.blame", "pager.branch"];
 
 pub(crate) struct Verdict {
@@ -78,6 +79,11 @@ fn request_is_bounded(request: &CompoundGitInspectionRequestV1) -> bool {
         && request.segments.iter().all(segment_is_bounded)
         && request.environment.len() <= MAX_ENVIRONMENT
         && request.groups.len() <= 256
+        && request.values.len() <= MAX_PATHSPECS
+        && request
+            .values
+            .iter()
+            .all(|value| value.len() <= MAX_STRING_BYTES)
         && request
             .command_text
             .iter()
@@ -146,6 +152,9 @@ pub(crate) fn decide(
         }
         CompoundGitCheckV1::RepositoryPath => {
             Verdict::of(args::safe_repository_path(request.value.as_deref()?))
+        }
+        CompoundGitCheckV1::CachedDiffPathspecs => {
+            Verdict::of(args::safe_cached_diff_pathspecs(&request.values))
         }
         CompoundGitCheckV1::ShowConfig => Verdict::of(segments::show_config_is_execution_free(
             facts,

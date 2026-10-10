@@ -7,7 +7,7 @@ modeled shell segments and map the reply; an unavailable resident denies.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 
 from ..native_compound_git_inspection import compound_git_inspection_native
@@ -41,6 +41,11 @@ def canonical_home_git_c_path(command_text: str) -> str | None:
 def is_low_risk_compound_git_inspection(context: ShellExecutionContext) -> bool:
     """Recognize a deterministic leading-cd Git routine."""
 
+    # These shape checks can only deny, so they grant nothing outside Rust and
+    # spare the resident round trip for commands that cannot match.
+    segments = context.segments
+    if not context.complete or len(segments) < 2 or segments[0].directory_operation != "cd":
+        return False
     return _segments_allowed("compound", context.segments, complete=context.complete)
 
 
@@ -110,6 +115,14 @@ def _git_show_has_execution_free_config(
 
 def _safe_repository_path(value: str) -> bool:
     return compound_git_inspection_native("repository_path", value=value).allowed
+
+
+def _cached_diff_pathspecs_allowed(values: Sequence[str]) -> bool:
+    """One resident request for every pathspec after ``--`` in a staged diff."""
+
+    if not values:
+        return False
+    return compound_git_inspection_native("cached_diff_pathspecs", values=values).allowed
 
 
 __all__ = (

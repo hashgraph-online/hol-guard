@@ -19,6 +19,8 @@ mod command_effect;
 mod compound_git_args;
 mod compound_git_chain;
 mod compound_git_facts;
+#[cfg(test)]
+mod compound_git_facts_tests;
 mod compound_git_inspection_op;
 #[cfg(test)]
 mod compound_git_inspection_op_tests;
@@ -26,7 +28,6 @@ mod compound_git_inspection_op_tests;
 mod compound_git_inspection_vectors_tests;
 mod compound_git_paths;
 mod compound_git_segments;
-mod compound_git_shlex;
 #[cfg(unix)]
 mod contained_op;
 mod context_digest;

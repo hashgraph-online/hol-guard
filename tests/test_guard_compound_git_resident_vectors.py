@@ -8,6 +8,7 @@ the same fixture.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,11 @@ import pytest
 from codex_plugin_scanner.guard.runtime.compound_git_inspection import (
     _safe_repository_path,
     canonical_home_git_c_path,
+)
+
+pytestmark = pytest.mark.skipif(
+    not (os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1" and os.environ.get("HOL_GUARD_NATIVE_BINARY")),
+    reason="native runtime binary is not provisioned for this run",
 )
 
 _FIXTURE = (

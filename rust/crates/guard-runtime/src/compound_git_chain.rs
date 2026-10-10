@@ -11,7 +11,7 @@ use crate::compound_git_paths::resolve;
 use crate::compound_git_segments::{
     is_low_risk_git_inspection_segment, is_low_risk_git_push_segment,
 };
-use crate::compound_git_shlex;
+use crate::local_mcp_grant_identity::shlex_split;
 
 const MAX_OUTPUT_LINES: u64 = 1000;
 
@@ -116,7 +116,7 @@ pub(crate) fn is_safe_standalone_git_object_existence_query(
     command_text: &str,
     cwd: &Path,
 ) -> bool {
-    let Some(parts) = compound_git_shlex::split(command_text) else {
+    let Some(parts) = shlex_split(command_text) else {
         return false;
     };
     let Some(execution_cwd) = resolve(cwd) else {

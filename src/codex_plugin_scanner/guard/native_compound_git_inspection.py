@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, cast
 
 from . import native_git_execution_safety as _git_safety
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
+from .native_path_anchor import anchor_to_process_directory
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
@@ -55,17 +56,6 @@ def _deny(code: str) -> CompoundGitAnswer:
     return CompoundGitAnswer(False, None, code)
 
 
-def _absolute(path: str | os.PathLike[str]) -> str:
-    """Anchor a path at the process directory without normalizing it.
-
-    The resident resolves relative paths against its own directory, so callers'
-    paths are made absolute here; symlink and ``..`` resolution stays in Rust.
-    """
-
-    text = os.fspath(path)
-    return text if os.path.isabs(text) else os.path.join(os.getcwd(), text)
-
-
 def _segment_payload(segment: ShellExecutionSegment) -> dict[str, object]:
     payload: dict[str, object] = {
         "tokens": list(segment.tokens),
@@ -73,7 +63,7 @@ def _segment_payload(segment: ShellExecutionSegment) -> dict[str, object]:
         "control_after": list(segment.control_after),
     }
     if segment.effective_cwd is not None:
-        payload["effective_cwd"] = _absolute(segment.effective_cwd)
+        payload["effective_cwd"] = anchor_to_process_directory(segment.effective_cwd)
     if segment.directory_operation is not None:
         payload["directory_operation"] = segment.directory_operation
     return payload
@@ -86,6 +76,7 @@ def compound_git_inspection_native(
     complete: bool = False,
     command_text: str | None = None,
     value: str | None = None,
+    values: Iterable[str] = (),
     cwd: str | os.PathLike[str] | None = None,
     home_dir: str | os.PathLike[str] | None = None,
     repository_path: str | None = None,
@@ -126,11 +117,11 @@ def compound_git_inspection_native(
         optional: tuple[tuple[str, str | None], ...] = (
             ("command_text", command_text),
             ("value", value),
-            ("cwd", None if cwd is None else _absolute(cwd)),
-            ("home_dir", None if home_dir is None else _absolute(home_dir)),
+            ("cwd", None if cwd is None else anchor_to_process_directory(cwd)),
+            ("home_dir", None if home_dir is None else anchor_to_process_directory(home_dir)),
             ("repository_path", repository_path),
             ("pager_key", pager_key),
-            ("git_binary", None if git_binary is None else _absolute(git_binary)),
+            ("git_binary", None if git_binary is None else anchor_to_process_directory(git_binary)),
             ("account_home", _git_safety._account_home_directory()),
         )
     except (OSError, RuntimeError):
@@ -138,6 +129,9 @@ def compound_git_inspection_native(
     for name, item in optional:
         if item is not None:
             request[name] = item
+    pathspecs = list(values)
+    if pathspecs:
+        request["values"] = pathspecs
     _request_counter += 1
     request["request_id"] = f"cgi-{os.getpid()}-{_request_counter}"
     remaining_seconds = effective_deadline - time.monotonic()

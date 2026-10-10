@@ -71,6 +71,7 @@ pub(crate) fn request(check: CompoundGitCheckV1) -> CompoundGitInspectionRequest
         complete: true,
         command_text: None,
         value: None,
+        values: Vec::new(),
         cwd: None,
         home_dir: None,
         repository_path: None,
@@ -180,6 +181,44 @@ fn oversized_and_nul_bearing_fields_are_refused() {
     req.git_binary = Some("/usr/bin/git".to_owned());
     req.pager_key = Some("core.sshCommand".to_owned());
     assert_eq!(envelope(&req, &StubFacts::default())["status"], "error");
+}
+
+fn pathspec_verdict(values: &[&str]) -> serde_json::Value {
+    let mut req = request(CompoundGitCheckV1::CachedDiffPathspecs);
+    req.values = values.iter().map(|value| (*value).to_owned()).collect();
+    envelope(&req, &StubFacts::default())
+}
+
+#[test]
+fn cached_diff_pathspecs_are_decided_in_one_request() {
+    assert_eq!(
+        pathspec_verdict(&["src", "docs/a.md", ":!vendor"])["allowed"],
+        true
+    );
+    assert_eq!(pathspec_verdict(&[":^dist/out"])["allowed"], true);
+    // One unsafe pathspec denies the whole list.
+    for bad in [
+        &["src", "/etc/passwd"][..],
+        &["src", ":!/abs"],
+        &["src", ":!"],
+        &["src", ":!~/x"],
+        &["src", ":!:(glob)x"],
+        &["src", ":(top)x"],
+        &["src", "$HOME"],
+        &["src", ".."],
+    ] {
+        let result = pathspec_verdict(bad);
+        assert_eq!(result["status"], "ok", "{bad:?}");
+        assert_eq!(result["allowed"], false, "{bad:?}");
+    }
+    // No pathspecs is not a path scope.
+    assert_eq!(pathspec_verdict(&[])["allowed"], false);
+    // More than the bounded count is refused outright.
+    let many: Vec<String> = (0..17).map(|index| format!("p{index}")).collect();
+    let refs: Vec<&str> = many.iter().map(String::as_str).collect();
+    let result = pathspec_verdict(&refs);
+    assert_eq!(result["status"], "error");
+    assert_eq!(result["allowed"], false);
 }
 
 #[test]
