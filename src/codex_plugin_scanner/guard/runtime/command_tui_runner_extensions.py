@@ -24,7 +24,7 @@ from dataclasses import dataclass
 
 from .command_extension_matchers import executable_names
 from .command_extension_specs import CommandExtensionSpec
-from .command_matcher_contracts import CommandMatcher, MatcherEvidence
+from .command_matcher_contracts import MatcherEvidence
 from .command_model import CanonicalCommand
 from .command_rules import (
     AnyMatcher,
@@ -107,16 +107,6 @@ class TuiRunnerUnresolvedExpansionMatcher:
                     )
                 break
         return tuple(evidence)
-
-
-def tui_runner_matcher_index_hints(matcher: CommandMatcher) -> tuple[frozenset[str], frozenset[str]] | None:
-    """Return conservative registry hints for the TUI Runner expansion matcher."""
-
-    if not isinstance(matcher, TuiRunnerUnresolvedExpansionMatcher):
-        return None
-    executables = frozenset().union(*(executable_names(launcher[0]) for launcher in matcher.launchers))
-    keywords = frozenset(launcher[1] for launcher in matcher.launchers if len(launcher) > 1)
-    return executables, keywords
 
 
 _TUI_RUNNER_RECONFIGURE_WITH_EXPANSIONS = AnyMatcher(

@@ -14,7 +14,6 @@ from .policy_document_diff import diff_policy_documents
 from .policy_document_types import CompiledPolicyRow, PolicyCompilationError, PolicyDocumentDiff
 from .policy_document_yaml import (
     MAX_POLICY_BYTES,
-    format_policy_document_yaml,
     parse_policy_document_yaml,
 )
 
@@ -195,12 +194,6 @@ def load_trusted_policy_document(path: Path) -> GuardPolicyDocument:
     return parse_policy_document_yaml(read_trusted_policy_text(path))
 
 
-def format_trusted_policy_file(source: Path, destination: Path) -> GuardPolicyDocument:
-    document = load_trusted_policy_document(source)
-    write_private_policy_text(destination, format_policy_document_yaml(document))
-    return document
-
-
 __all__ = (
     "CompiledPolicyRow",
     "PolicyCompilationError",
@@ -209,7 +202,6 @@ __all__ = (
     "build_policy_document_from_rows",
     "compile_policy_document",
     "diff_policy_documents",
-    "format_trusted_policy_file",
     "load_trusted_policy_document",
     "read_trusted_policy_bytes",
     "read_trusted_policy_text",

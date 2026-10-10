@@ -409,16 +409,6 @@ def prepare_authenticated_hook_manifest_repair(spec: CodexHookManifestSpec) -> P
     return prepared
 
 
-def authenticated_manifest_for_ownership(spec: CodexHookManifestSpec) -> dict[str, object] | None:
-    """Return exact authenticated ownership evidence for conservative cleanup."""
-
-    try:
-        manifest = load_authenticated_hook_manifest(spec.guard_home, spec.config_path)
-    except (CodexHookIntegrityError, OSError):
-        return None
-    return manifest if _manifest_has_owned_installation_context(manifest, spec) else None
-
-
 def manifest_bindings(manifest: object) -> list[dict[str, object]]:
     if not isinstance(manifest, dict):
         return []
@@ -774,7 +764,6 @@ __all__ = [
     "CodexHookManifestSpec",
     "PreparedCodexHookPublication",
     "assert_package_reauthentication_is_safe",
-    "authenticated_manifest_for_ownership",
     "build_authenticated_hook_manifest",
     "load_hook_manifest_baseline",
     "manifest_bindings",

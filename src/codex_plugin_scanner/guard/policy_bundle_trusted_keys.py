@@ -182,10 +182,6 @@ def policy_bundle_keys_from_supply_chain_keyring(raw: object) -> tuple[PolicyBun
     )
 
 
-def builtin_policy_bundle_verification_keys() -> tuple[PolicyBundleVerificationKey, ...]:
-    return ()
-
-
 def managed_policy_bundle_verification_keys() -> tuple[
     bool,
     tuple[PolicyBundleVerificationKey, ...],
@@ -245,21 +241,6 @@ def resolve_policy_bundle_signing_key(
     return None
 
 
-def signing_key_is_trusted(
-    signing_key: PolicyBundleVerificationKey,
-    anchored_keys: tuple[PolicyBundleVerificationKey, ...],
-) -> bool:
-    try:
-        result = native_policy_bundle(
-            "key_is_trusted", {"key": signing_key.to_dict(), "anchored_keys": _wire(anchored_keys)}
-        )
-    except PolicyBundleNativeUnavailableError:
-        raise
-    except ValueError:
-        return False
-    return result.get("value") is True
-
-
 def signing_key_is_current(
     signing_key: PolicyBundleVerificationKey,
     *,
@@ -281,44 +262,6 @@ def signing_key_is_current(
     except ValueError:
         return False
     return result.get("value") is True
-
-
-def resolve_authorized_policy_bundle_signing_key(
-    key_id: str,
-    *,
-    trusted_keys: tuple[PolicyBundleVerificationKey, ...],
-    anchored_keys: tuple[PolicyBundleVerificationKey, ...],
-    expected_workspace_id: str | None,
-    now: float | None = None,
-) -> tuple[PolicyBundleVerificationKey | None, str | None]:
-    """Resolve authority from the pinned anchor, never advertised key metadata."""
-
-    try:
-        result = policy_bundle_verdict(
-            "resolve_authorized",
-            {
-                "key_id": key_id,
-                "trusted_keys": _wire(trusted_keys),
-                "anchored_keys": _wire(anchored_keys),
-                "expected_workspace_id": expected_workspace_id,
-                "now": now if now is not None else time.time(),
-            },
-        )
-        (key,) = _keys_from_wire([result.get("key")])
-    except PolicyBundleNativeError as error:
-        return None, native_rejection_code(error)
-    except ValueError as error:
-        return None, getattr(error, "code", "native_policy_bundle_authority_invalid")
-    return key, None
-
-
-def load_policy_bundle_verification_keys_from_sync(
-    payload: dict[str, object],
-) -> tuple[PolicyBundleVerificationKey, ...]:
-    verification_keys = payload.get("policyBundleVerificationKeys")
-    if verification_keys is None:
-        return ()
-    return safe_load_policy_bundle_verification_keys(verification_keys)
 
 
 def migrate_legacy_policy_bundle_anchors(
@@ -492,20 +435,3 @@ def validate_synced_policy_bundle(
     payload = {key: policy_bundle[key] for key in payload_keys if key != "payloadHash"}
     payload["payloadHash"] = payload_hash
     return payload, None, updated
-
-
-def persistable_policy_bundle_keyring(
-    *,
-    anchored_keys: tuple[PolicyBundleVerificationKey, ...],
-    policy_bundle: dict[str, object],
-) -> tuple[PolicyBundleVerificationKey, ...]:
-    try:
-        result = policy_bundle_verdict(
-            "persistable",
-            {"anchored_keys": _wire(anchored_keys), "bundle_chunks": policy_bundle_chunks(policy_bundle)},
-        )
-        return _keys_from_wire(result.get("keys"))
-    except PolicyBundleNativeUnavailableError:
-        raise
-    except ValueError:
-        return ()

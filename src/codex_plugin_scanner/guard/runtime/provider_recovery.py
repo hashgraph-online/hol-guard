@@ -269,11 +269,6 @@ def _build_notice(state: RecoveryState) -> str:
     return f"[{state.phase.value.upper()}] {label} (attempt {state.attempt}/{_MAX_ATTEMPTS})"
 
 
-def to_provider_health_state(phase: RecoveryPhase) -> ProviderHealthState:
-    """Map a RecoveryPhase to the corresponding ProviderHealthState."""
-    return _RECOVERY_TO_HEALTH[phase]
-
-
 def from_provider_health_state(
     health: ProviderHealthState,
 ) -> RecoveryPhase:
@@ -288,5 +283,4 @@ __all__ = [
     "from_provider_health_state",
     "next_recovery_state",
     "recovery_notice",
-    "to_provider_health_state",
 ]
