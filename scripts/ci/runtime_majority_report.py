@@ -64,7 +64,10 @@ def load_scope(path: Path) -> dict[str, Any]:
             raise ScopeError(f"exclusion {entry.get('id')!r} needs a non-empty path list")
         if not str(entry.get("reason", "")).strip() or not str(entry.get("category", "")).strip():
             raise ScopeError(f"exclusion {entry.get('id')!r} needs a category and a reason")
-    validate_entries(scope["python"].get("function_exclusions", []))
+    validate_entries(
+        scope["python"].get("function_exclusions", []),
+        frozenset(str(entry.get("id")) for entry in scope["python"]["exclusions"]),
+    )
     for item in scope["rust"].get("exclude_paths", []):
         if not str(item.get("reason", "")).strip():
             raise ScopeError(f"rust exclusion {item.get('path')!r} needs a reason")

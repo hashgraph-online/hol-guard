@@ -18,6 +18,7 @@ import ast
 import io
 import re
 import tokenize
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -207,47 +208,76 @@ def check_external_references(
     in_scope: dict[str, str],
     plans: dict[str, ModulePlan],
 ) -> None:
-    """Reject any other in-scope module that imports an excluded symbol."""
+    """Reject retained code in any in-scope module that reaches an excluded symbol."""
     by_module = {name: plans[module.path] for name, module in modules.items() if module.path in plans}
     for name in sorted(in_scope):
         module = modules[name]
-        if module.path in plans:
-            continue
         try:
             tree = ast.parse((repo / module.path).read_text(encoding="utf-8"))
         except SyntaxError:
             continue
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom):
-                continue
+        own = plans.get(module.path)
+        nodes = list(_retained_nodes(tree, own.skip_linenos if own else set()))
+        bindings = _check_imports(nodes, name, module, {m: p for m, p in by_module.items() if p is not own})
+        _check_attribute_chains(nodes, module.path, bindings, {m: p for m, p in by_module.items() if p is not own})
+
+
+def _retained_nodes(node: ast.AST, skip: set[int]) -> Iterator[ast.AST]:
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.stmt) and child.lineno in skip:
+            continue
+        yield child
+        yield from _retained_nodes(child, skip)
+
+
+def _check_imports(nodes: list[ast.AST], name: str, module: Any, by_module: dict[str, ModulePlan]) -> dict[str, str]:
+    """Reject imports of excluded symbols and return local name to dotted target bindings."""
+    bindings: dict[str, str] = {}
+    for node in nodes:
+        if isinstance(node, ast.ImportFrom):
             base = _resolve_from(name, module.is_package, node)
+            plan = by_module.get(base)
             for alias in node.names:
-                target = base if alias.name == "*" else f"{base}.{alias.name}"
-                plan = by_module.get(base)
-                if plan is not None and alias.name in plan.symbol_lines:
+                if plan is not None and (alias.name == "*" or alias.name in plan.symbol_lines):
                     raise ScopeError(f"{module.path} imports excluded {alias.name} from {plan.path}")
-                if target in by_module and alias.name != "*":
-                    attr_users = _attribute_uses(tree, alias.asname or alias.name, by_module[target])
-                    if attr_users:
-                        raise ScopeError(f"{module.path} uses excluded {attr_users} of {by_module[target].path}")
+                if alias.name != "*":
+                    bindings[alias.asname or alias.name] = f"{base}.{alias.name}"
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                root = alias.name.split(".")[0]
+                bindings[alias.asname or root] = alias.name if alias.asname else root
+    return bindings
 
 
-def _attribute_uses(tree: ast.AST, alias: str, plan: ModulePlan) -> list[str]:
-    return sorted(
-        {
-            node.attr
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Attribute)
-            and isinstance(node.value, ast.Name)
-            and node.value.id == alias
-            and node.attr in plan.symbol_lines
-        }
-    )
+def _check_attribute_chains(
+    nodes: list[ast.AST], path: str, bindings: dict[str, str], by_module: dict[str, ModulePlan]
+) -> None:
+    """Reject attribute access that resolves to an excluded symbol through any import form."""
+    for node in nodes:
+        if not isinstance(node, ast.Attribute):
+            continue
+        parts: list[str] = []
+        current: ast.AST = node
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+        if not (isinstance(current, ast.Name) and current.id in bindings):
+            continue
+        dotted = ".".join([bindings[current.id], *reversed(parts)])
+        for module_name, plan in by_module.items():
+            if dotted.startswith(f"{module_name}."):
+                symbol = dotted[len(module_name) + 1 :].split(".")[0]
+                if symbol in plan.symbol_lines:
+                    raise ScopeError(f"{path} uses excluded {symbol} of {plan.path}")
 
 
-def validate_entries(entries: list[dict[str, Any]]) -> None:
+def validate_entries(entries: list[dict[str, Any]], taken_ids: frozenset[str] = frozenset()) -> None:
+    seen = set(taken_ids)
     for entry in entries:
         ident = entry.get("id")
+        if ident in seen:
+            raise ScopeError(f"function exclusion id {ident!r} is not unique")
+        seen.add(ident)
         path = entry.get("path")
         symbols = entry.get("symbols")
         if not isinstance(path, str) or not path:

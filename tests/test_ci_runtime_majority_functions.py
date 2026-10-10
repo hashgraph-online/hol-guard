@@ -122,6 +122,28 @@ def test_other_module_importing_an_excluded_symbol_is_rejected(tmp_path: Path) -
         build_report(repo, scope)
 
 
+@pytest.mark.parametrize(
+    ("root_extra", "message"),
+    [
+        ("import pkg.render as r\nr._human(1)\n", "uses excluded _human"),
+        ("import pkg.render\npkg.render._human(1)\n", "uses excluded _human"),
+        ("from pkg import render\nrender._human(1)\n", "uses excluded _human"),
+        ("from pkg.render import *\n", "imports excluded \\* from"),
+    ],
+)
+def test_every_import_form_is_checked_for_excluded_symbols(tmp_path: Path, root_extra: str, message: str) -> None:
+    render = RENDER.replace('\n\n_TABLE["x"] = _human\n', "\n")
+    repo, scope = _repo(tmp_path, entries=[_entry()], render=render, root_extra=root_extra)
+    with pytest.raises(ScopeError, match=message):
+        build_report(repo, scope)
+
+
+def test_function_entry_ids_must_be_unique(tmp_path: Path) -> None:
+    repo, scope = _repo(tmp_path, entries=[_entry(), _entry(symbols=["_TABLE"])])
+    with pytest.raises(ScopeError, match="is not unique"):
+        build_report(repo, scope)
+
+
 def test_runtime_roots_cannot_be_partially_excluded(tmp_path: Path) -> None:
     repo, scope = _repo(tmp_path, entries=[_entry(path="src/pkg/root.py", symbols=["emit"], entry_points=[])])
     with pytest.raises(ScopeError, match="runtime root"):
