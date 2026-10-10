@@ -35,31 +35,24 @@ if TYPE_CHECKING:
     )
 
 
-from ..action_lattice import (
-    GuardActionNormalization,
-    coerce_guard_action,
-    guard_action_severity,
-    most_restrictive_guard_action,
-    normalize_guard_action,
-    normalize_guard_action_result,
-)
+from ..action_lattice import coerce_guard_action, guard_action_severity, most_restrictive_guard_action
 from ..approval_scope_support import package_request_runtime_workspace_scope
 from ..local_supply_chain import (
     _package_evaluation_requires_external_archive_binding,
     package_external_archive_override,
 )
 from ..models import GuardAction
+from ..native_hook_artifact_compose import NativeHookComposeError, native_hook_compose
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
     APPROVAL_REUSE_REAPPROVAL_REQUIRED,
     ApprovalReuseDecision,
-    ApprovalReuseValidationFailure,
+    ApprovalReuseMalformedResultError,
+    _decision_from_native_payload,
     approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
-    with_saved_artifact_hash_provenance,
 )
 from ..runtime.github_workflow_runtime import resolved_github_workflow_capability_preflight
 from ..runtime.signals import GuardRiskSignalV3
@@ -78,9 +71,9 @@ from .commands_hook_github_workflow import (
 from .commands_hook_native_edge_floor import _native_edge_floor_action
 from .commands_hook_native_floor import (
     _runtime_package_raw_command,
-    apply_local_grant_then_native_floor,
-    attach_native_pre_tool_floor,
+    native_pre_tool_floor,
     runtime_hook_scanner_setup,
+    settle_local_grants,
 )
 from .commands_hook_native_state import NativeArtifactHookState
 from .commands_parser_helpers import *
@@ -96,22 +89,24 @@ from .commands_support_runtime_policy import (
 )
 
 
-def _resolved_guard_action(value: object, fallback: GuardAction) -> GuardAction:
-    return coerce_guard_action(value) or fallback
+def _compose_reuse(
+    kind: str,
+    fields: dict[str, object],
+    *,
+    guard_home: Path,
+    current_action: GuardAction,
+) -> tuple[dict[str, object] | None, ApprovalReuseDecision]:
+    """Ask the resident for a saved-approval reuse decision.
 
+    Resident unreachable or malformed: preserve the recomputed action and claim
+    no saved approval.
+    """
 
-def _requested_policy_action_normalization(
-    cli_action: object | None,
-    stored_action: object | None,
-    payload: Mapping[str, object],
-) -> GuardActionNormalization | None:
-    if cli_action is not None:
-        return normalize_guard_action_result(cli_action, unknown_action="require-reapproval")
-    if stored_action is not None:
-        return normalize_guard_action_result(stored_action, unknown_action="require-reapproval")
-    if "policy_action" in payload:
-        return normalize_guard_action_result(payload.get("policy_action"), unknown_action="require-reapproval")
-    return None
+    try:
+        answer = native_hook_compose(kind, fields, guard_home=guard_home)
+        return answer, _decision_from_native_payload(answer["approval_reuse"])
+    except (NativeHookComposeError, ApprovalReuseMalformedResultError, KeyError):
+        return None, approval_reuse_authority_unavailable(current_action)
 
 
 def _cursor_native_saved_approval_hash(
@@ -396,42 +391,13 @@ def evaluate_native_artifact_hook(
     artifact_name = runtime_artifact.name
     policy_harness = _canonical_harness_name(args.harness)
     cli_action = getattr(args, "policy_action", None)
-    cli_action_normalization = (
-        normalize_guard_action_result(cli_action, unknown_action="require-reapproval")
-        if cli_action is not None
-        else None
-    )
-    payload_action_normalization = (
-        normalize_guard_action_result(payload_map.get("policy_action"), unknown_action="require-reapproval")
-        if "policy_action" in payload_map
-        else None
-    )
-    requested_action_normalization = cli_action_normalization or payload_action_normalization
-    requested_policy_action = (
-        requested_action_normalization.original_action if requested_action_normalization is not None else None
-    )
     _stamp_runtime_posture_metadata(runtime_artifact, data_flow_signals)
     _stamp_runtime_posture_metadata(approval_context_artifact, data_flow_signals)
-    current_config_action = _resolved_guard_action(
-        _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
-        "warn",
-    )
-    approval_context_config_action = _resolved_guard_action(
-        _runtime_artifact_policy_action(config, approval_context_artifact, policy_harness),
-        "warn",
-    )
     current_action_override = config.resolve_action_override(
         policy_harness,
         runtime_artifact.artifact_id,
         runtime_artifact.publisher,
     )
-    current_action_inputs: list[GuardAction] = [current_config_action]
-    if cli_action_normalization is not None:
-        current_action_inputs.append(cli_action_normalization.action)
-    if payload_action_normalization is not None:
-        # Hook payloads are untrusted hints.  They may make a decision stricter,
-        # but can never lower current local policy or suppress later scanners.
-        current_action_inputs.append(payload_action_normalization.action)
     # ``package_request`` artifacts are decided by the package evaluator, not
     # the generic command floor: the evaluator is the fail-closed semantic
     # authority for installs, and an unproven-command ``review`` floor would
@@ -440,38 +406,19 @@ def evaluate_native_artifact_hook(
     # own native-evidence-bound evaluation already adjudicated this exact
     # command against the published control layer, so a control-blind floor
     # re-review can only re-raise the cataloged risk the grant accepted.
-    native_pre_tool_floor = (
+    native_floor = (
         None
         if runtime_artifact.artifact_type == "package_request"
         or _runtime_artifact_has_explicit_permission_allow(runtime_artifact)
-        else attach_native_pre_tool_floor(
+        else native_pre_tool_floor(
             event_name,
             payload_map,
             action_envelope,
-            current_action_inputs,
             guard_home=context.guard_home,
             cwd=runtime_workspace,
             home_dir=context.home_dir,
             store=store,
         )
-    )
-    native_edge_action = _native_edge_floor_action(
-        native_edge_result,
-        event_name,
-        artifact_default_action=runtime_artifact.metadata.get("guard_default_action"),
-        artifact_type=runtime_artifact.artifact_type,
-    )
-    if native_edge_action is not None:
-        current_action_inputs.append(native_edge_action)
-        native_pre_tool_floor = (
-            native_edge_action
-            if native_pre_tool_floor is None
-            else most_restrictive_guard_action(native_pre_tool_floor, native_edge_action)
-        )
-    policy_action = most_restrictive_guard_action(*current_action_inputs)
-    approval_context_policy_action = most_restrictive_guard_action(
-        approval_context_config_action,
-        *(item for item in current_action_inputs[1:]),
     )
     changed_capabilities, artifact_metadata, scanner_evidence = runtime_hook_scanner_setup(
         runtime_artifact,
@@ -479,39 +426,7 @@ def evaluate_native_artifact_hook(
         runtime_workspace,
         _runtime_cisco_scanner_evidence,
     )
-    scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
-    if action_envelope is not None and isinstance(action_envelope.command, str):
-        scanner_evidence_payload.extend(_embedded_script_evidence(action_envelope.command))
-    if workflow_state.approval_record is not None:
-        scanner_evidence_payload.append(github_workflow_approval_evidence(workflow_state.approval_record))
-    for input_source, normalization in (
-        ("trusted_cli_override", cli_action_normalization),
-        ("untrusted_hook_payload_hint", payload_action_normalization),
-    ):
-        if normalization is not None and not normalization.recognized:
-            scanner_evidence_payload.append(
-                {
-                    "source": "guard_action_normalizer",
-                    "input_source": input_source,
-                    "reason_code": normalization.reason_code,
-                    "original_action": normalization.original_action,
-                    "original_type": normalization.original_type,
-                    "normalized_action": normalization.action,
-                }
-            )
-    if package_execution_context is not None:
-        scanner_evidence_payload.append(package_execution_context.to_evidence())
-    package_policy_action: GuardAction | None = (
-        normalize_guard_action(package_evaluation.policy_action) if package_evaluation is not None else None
-    )
-    if package_policy_action is not None:
-        policy_action = most_restrictive_guard_action(policy_action, package_policy_action)
-        approval_context_policy_action = most_restrictive_guard_action(
-            approval_context_policy_action,
-            package_policy_action,
-        )
-    data_flow_action: GuardAction | None = None
-    approval_context_data_flow_action: GuardAction | None = None
+    configured_data_flow_action = None
     if data_flow_signals:
         configured_data_flow_action = resolve_risk_action(
             config,
@@ -520,50 +435,86 @@ def evaluate_native_artifact_hook(
         )
         from ..protection_posture import apply_posture_confidence, is_high_confidence
 
-        data_flow_confidence = (
-            "strong"
-            if any(is_high_confidence(getattr(signal, "confidence", None)) for signal in data_flow_signals)
-            else None
-        )
         if configured_data_flow_action is not None:
             configured_data_flow_action = apply_posture_confidence(
                 posture=config.protection_posture,
                 explicit=config.protection_posture_explicit,
                 risk_class="data_flow_exfiltration",
                 action=configured_data_flow_action,
-                confidence=data_flow_confidence,
+                confidence=(
+                    "strong"
+                    if any(is_high_confidence(getattr(signal, "confidence", None)) for signal in data_flow_signals)
+                    else None
+                ),
             )
-        data_flow_action = _resolved_guard_action(configured_data_flow_action, policy_action)
-        approval_context_data_flow_action = _resolved_guard_action(
-            configured_data_flow_action,
-            approval_context_policy_action,
-        )
-        policy_action = most_restrictive_guard_action(policy_action, data_flow_action)
-        approval_context_policy_action = most_restrictive_guard_action(
-            approval_context_policy_action,
-            approval_context_data_flow_action,
-        )
-    _pre_scanner_policy_action = policy_action
-    package_controls_pre_scanner_summary = (
-        package_evaluation is not None
-        and package_policy_action is not None
-        and guard_action_severity(package_policy_action) >= guard_action_severity(_pre_scanner_policy_action)
+    compound_finding_count = artifact_metadata.get("compound_finding_count")
+    has_compound_findings = isinstance(compound_finding_count, int) and compound_finding_count > 1
+    scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
+    stack = native_hook_compose(
+        "policy_stack",
+        {
+            "config_action": _runtime_artifact_policy_action(config, runtime_artifact, args.harness),
+            "approval_context_config_action": _runtime_artifact_policy_action(
+                config, approval_context_artifact, policy_harness
+            ),
+            "cli_action": cli_action,
+            "payload_action_present": "policy_action" in payload_map,
+            "payload_action": payload_map.get("policy_action"),
+            "native_floor": native_floor,
+            "edge_floor": _native_edge_floor_action(
+                native_edge_result,
+                event_name,
+                artifact_default_action=runtime_artifact.metadata.get("guard_default_action"),
+                artifact_type=runtime_artifact.artifact_type,
+            ),
+            "current_action_override_present": current_action_override is not None,
+            "has_package": package_evaluation is not None,
+            "package_policy_action": package_evaluation.policy_action if package_evaluation is not None else None,
+            "has_data_flow": bool(data_flow_signals),
+            "data_flow_configured_action": configured_data_flow_action,
+            "has_scanner": bool(scanner_evidence),
+            "scanner_action": (
+                policy_action_for_cisco_signals(scanner_evidence, config=config, harness=policy_harness)
+                if scanner_evidence
+                else None
+            ),
+            "has_compound_findings": has_compound_findings,
+            "artifact_risk_signals": list(artifact_risk_signals(runtime_artifact)),
+            "data_flow_reasons": [signal.plain_reason for signal in data_flow_signals],
+            "artifact_risk_summary": artifact_risk_summary(runtime_artifact),
+            "data_flow_summary": _runtime_data_flow_summary(data_flow_signals) if data_flow_signals else None,
+            "package_risk_signals": (
+                [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
+                if package_evaluation is not None
+                else []
+            ),
+            "package_risk_summary": package_evaluation.risk_summary if package_evaluation is not None else None,
+            "scanner_risk_signals": scanner_risk_signals,
+        },
+        guard_home=guard_home,
     )
-    scanner_action: GuardAction | None = None
-    if scanner_evidence:
-        scanner_action = policy_action_for_cisco_signals(
-            scanner_evidence,
-            config=config,
-            harness=policy_harness,
-        )
-        policy_action = most_restrictive_guard_action(policy_action, scanner_action)
-        approval_context_policy_action = most_restrictive_guard_action(
-            approval_context_policy_action,
-            scanner_action,
-        )
-    scanner_raised_to_block = (
-        policy_action == "block" and _pre_scanner_policy_action != "block" and bool(scanner_evidence)
-    )
+    policy_action = cast(GuardAction, stack["policy_action"])
+    approval_context_policy_action = cast(GuardAction, stack["approval_context_policy_action"])
+    approval_context_config_action = cast(GuardAction, stack["approval_context_config_action"])
+    current_config_action = cast(GuardAction, stack["current_config_action"])
+    trusted_cli_action = cast("GuardAction | None", stack["trusted_cli_action"])
+    untrusted_payload_action = cast("GuardAction | None", stack["untrusted_payload_action"])
+    requested_policy_action = cast("str | None", stack["requested_policy_action"])
+    package_policy_action = cast("GuardAction | None", stack["package_policy_action"])
+    data_flow_action = cast("GuardAction | None", stack["data_flow_action"])
+    approval_context_data_flow_action = cast("GuardAction | None", stack["approval_context_data_flow_action"])
+    scanner_action = cast("GuardAction | None", stack["scanner_action"])
+    scanner_raised_to_block = bool(stack["scanner_raised_to_block"])
+    risk_signals = stack["risk_signals"]
+    risk_summary = cast(str, stack["risk_summary"])
+    scanner_evidence_payload = [signal.to_dict() for signal in scanner_evidence]
+    if action_envelope is not None and isinstance(action_envelope.command, str):
+        scanner_evidence_payload.extend(_embedded_script_evidence(action_envelope.command))
+    if workflow_state.approval_record is not None:
+        scanner_evidence_payload.append(github_workflow_approval_evidence(workflow_state.approval_record))
+    scanner_evidence_payload.extend(cast("list[dict[str, object]]", stack["normalizer_evidence"]))
+    if package_execution_context is not None:
+        scanner_evidence_payload.append(package_execution_context.to_evidence())
     artifact_decision_signals = artifact_risk_signals_v2(runtime_artifact)
     base_decision_signals = tuple(
         {signal.signal_id: signal for signal in (*artifact_decision_signals, *data_flow_signals)}.values()
@@ -573,33 +524,7 @@ def evaluate_native_artifact_hook(
         decision_signals = (*scanner_decision_signals, *base_decision_signals)
     else:
         decision_signals = (*base_decision_signals, *scanner_decision_signals)
-    compound_finding_count = artifact_metadata.get("compound_finding_count")
-    has_compound_findings = isinstance(compound_finding_count, int) and compound_finding_count > 1
-    scanner_risk_signals = [signal.plain_language_summary for signal in scanner_evidence]
-    risk_signals = list(
-        dict.fromkeys(
-            [
-                *artifact_risk_signals(runtime_artifact),
-                *(signal.plain_reason for signal in data_flow_signals),
-            ]
-        )
-    )
-    risk_summaries = [artifact_risk_summary(runtime_artifact)]
-    if data_flow_signals and not has_compound_findings:
-        risk_summaries.append(_runtime_data_flow_summary(data_flow_signals))
     if package_evaluation is not None:
-        package_risk_signals = [
-            str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons
-        ]
-        if has_compound_findings and package_controls_pre_scanner_summary:
-            risk_signals = list(dict.fromkeys([*package_risk_signals, *risk_signals]))
-            risk_summaries.insert(0, package_evaluation.risk_summary)
-        elif has_compound_findings:
-            risk_signals = list(dict.fromkeys([*risk_signals, *package_risk_signals]))
-            risk_summaries.append(package_evaluation.risk_summary)
-        elif package_controls_pre_scanner_summary:
-            risk_signals = package_risk_signals
-            risk_summaries = [package_evaluation.risk_summary]
         scanner_evidence_payload.extend(
             {
                 "decision": package_evaluation.decision,
@@ -610,26 +535,10 @@ def evaluate_native_artifact_hook(
             }
             for package in package_evaluation.packages
         )
-    risk_summary = " ".join(dict.fromkeys(summary for summary in risk_summaries if summary))
-    if scanner_risk_signals:
-        risk_signals = list(dict.fromkeys([*risk_signals, *scanner_risk_signals]))
-        if scanner_raised_to_block:
-            risk_summary = (
-                " ".join(dict.fromkeys([scanner_risk_signals[0], risk_summary]))
-                if has_compound_findings
-                else scanner_risk_signals[0]
-            )
     current_policy_action = policy_action
     local_tool_eligibility: LocalToolApprovalEligibility | None = None
     raw_runtime_command = _runtime_package_raw_command(payload_map, action_envelope)
-    local_grants_allowed = (
-        current_action_override is None
-        and cli_action_normalization is None
-        and payload_action_normalization is None
-        and not data_flow_signals
-        and not scanner_evidence
-        and (package_evaluation is None or package_policy_action != "block")
-    )
+    local_grants_allowed = bool(stack["local_grants_allowed"])
     if (
         event_name == "PreToolUse"
         and runtime_artifact.artifact_type in {"tool_action_request", "package_request"}
@@ -652,7 +561,8 @@ def evaluate_native_artifact_hook(
     )
     if local_tool_eligibility is not None:
         scanner_evidence_payload.append(local_tool_eligibility.to_evidence())
-    if local_tool_grant is not None and local_tool_eligibility is not None:
+    tool_grant_applied = local_tool_grant is not None and local_tool_eligibility is not None
+    if local_tool_eligibility is not None and tool_grant_applied:
         scanner_evidence_payload.append(
             {
                 "source": "trusted_local_tool_grant",
@@ -661,11 +571,9 @@ def evaluate_native_artifact_hook(
                 "capability": local_tool_eligibility.capability,
             }
         )
-        current_policy_action = "allow"
-        policy_action = "allow"
-        approval_context_policy_action = "allow"
-    policy_action, current_policy_action, approval_context_policy_action = apply_local_grant_then_native_floor(
+    policy_action, current_policy_action, approval_context_policy_action = settle_local_grants(
         store=store,
+        guard_home=guard_home,
         command=raw_runtime_command,
         cwd=runtime_workspace or Path.cwd(),
         home_dir=context.home_dir,
@@ -673,7 +581,8 @@ def evaluate_native_artifact_hook(
         policy_action=policy_action,
         approval_context_policy_action=approval_context_policy_action,
         grant_allowed=local_grants_allowed,
-        native_floor=native_pre_tool_floor,
+        tool_grant_applied=tool_grant_applied,
+        native_floor=cast("GuardAction | None", stack["native_floor"]),
     )
     runtime_artifact_hash = _runtime_hook_approval_context_token(
         artifact=approval_context_artifact,
@@ -682,10 +591,8 @@ def evaluate_native_artifact_hook(
         action_envelope=action_envelope,
         config=config,
         current_config_action=approval_context_config_action,
-        trusted_cli_action=cli_action_normalization.action if cli_action_normalization is not None else None,
-        untrusted_payload_action=(
-            payload_action_normalization.action if payload_action_normalization is not None else None
-        ),
+        trusted_cli_action=trusted_cli_action,
+        untrusted_payload_action=untrusted_payload_action,
         package_action=package_policy_action,
         data_flow_action=approval_context_data_flow_action,
         scanner_action=scanner_action,
@@ -891,27 +798,35 @@ def evaluate_native_artifact_hook(
                 package_approval_consumed=package_approval_claim_disposition == "consumed",
             )
         policy_action = (
-            _resolved_guard_action(package_evaluation.policy_action, current_policy_action)
+            coerce_guard_action(package_evaluation.policy_action) or current_policy_action
             if package_reuse_applied
             else current_policy_action
         )
         if stored_policy_action == "block":
-            block_reuse = evaluate_approval_reuse(
-                current_policy_action,
-                "block",
-                saved_decision_present=True,
+            block_answer, approval_reuse = _compose_reuse(
+                "saved_block_reuse",
+                {
+                    "current_action": current_policy_action,
+                    "policy_action": policy_action,
+                    "stored_artifact_hash": (
+                        stored_policy_decision.get("artifact_hash") if stored_policy_decision is not None else None
+                    ),
+                },
+                guard_home=guard_home,
+                current_action=current_policy_action,
             )
-            approval_reuse = with_saved_artifact_hash_provenance(
-                block_reuse if block_reuse is not None else approval_reuse_authority_unavailable(current_policy_action),
-                stored_policy_decision.get("artifact_hash") if stored_policy_decision is not None else None,
-            )
-            policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action)
-            approval_reuse_source = approval_reuse_source or "saved_policy_decision"
+            if block_answer is not None:
+                policy_action = cast(GuardAction, block_answer["policy_action"])
+                approval_reuse_source = approval_reuse_source or "saved_policy_decision"
+            else:
+                # Resident unreachable: hold the stored block and never end weaker
+                # than the recomputed action; no saved decision is claimed as the source.
+                policy_action = most_restrictive_guard_action(policy_action, approval_reuse.action, "block")
             if not package_reuse_applied:
                 scanner_evidence_payload.append(
                     {
                         "source": "approval_reuse",
-                        "input_source": approval_reuse_source,
+                        "input_source": approval_reuse_source or "saved_policy_decision",
                         **approval_reuse.to_evidence(),
                     }
                 )
@@ -919,35 +834,28 @@ def evaluate_native_artifact_hook(
             risk_signals = [str(item.get("message") or item.get("code") or "") for item in package_evaluation.reasons]
             risk_summary = package_evaluation.risk_summary
     else:
-        saved_action: object | None = stored_policy_action
-        saved_present = stored_policy_decision is not None
-        diagnosed_stored_hash: str | None = None
-        validation_reason: ApprovalReuseValidationFailure | None = None
-        if policy_lookup.get("ignored_local_integrity") is not None:
-            # A matching integrity-invalid local rule is security-relevant even
-            # when a different, valid saved allow also matched.  Letting the
-            # valid row win would make a tampered broader block invisible.
-            validation_reason = "approval_reuse_integrity_failure"
-        elif stored_policy_decision is not None:
-            stored_validation_reason = _runtime_saved_allow_validation_reason(
+        stored_validation_reason = (
+            _runtime_saved_allow_validation_reason(
                 stored_policy_decision,
                 artifact=runtime_artifact,
                 artifact_hash=runtime_artifact_hash,
             )
-            if stored_validation_reason is not None:
-                validation_reason = cast(ApprovalReuseValidationFailure, stored_validation_reason)
-        if not saved_present and cursor_native_approval_hash is not None:
-            saved_action = "allow"
-            saved_present = True
-            approval_reuse_source = "cursor_native_approval"
-            cursor_validation_reason = approval_context_tokens_validation_reason(
-                cursor_native_approval_hash,
-                runtime_artifact_hash,
-            )
-            if cursor_validation_reason is not None:
-                validation_reason = cast(ApprovalReuseValidationFailure, cursor_validation_reason)
-        elif not saved_present and validation_reason is None:
-            diagnosed_reason, diagnosed_stored_hash = store.approval_reuse_diagnostic(
+            if stored_policy_decision is not None and policy_lookup.get("ignored_local_integrity") is None
+            else None
+        )
+        cursor_validation_reason = (
+            approval_context_tokens_validation_reason(cursor_native_approval_hash, runtime_artifact_hash)
+            if cursor_native_approval_hash is not None
+            else None
+        )
+        diagnostic_reason: str | None = None
+        diagnostic_stored_hash: object | None = None
+        if (
+            stored_policy_decision is None
+            and cursor_native_approval_hash is None
+            and policy_lookup.get("ignored_local_integrity") is None
+        ):
+            diagnostic_reason, diagnostic_stored_hash = store.approval_reuse_diagnostic(
                 policy_harness,
                 artifact_id,
                 runtime_artifact_hash,
@@ -955,36 +863,28 @@ def evaluate_native_artifact_hook(
                 runtime_artifact.publisher,
                 _now(),
             )
-            if diagnosed_reason is not None:
-                validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
-                saved_action = "allow"
-        if saved_present:
-            approval_reuse_source = approval_reuse_source or "saved_policy_decision"
-        elif validation_reason is not None:
-            saved_present = True
-            approval_reuse_source = (
-                "saved_policy_integrity"
-                if validation_reason == "approval_reuse_integrity_failure"
-                else "invalidated_saved_policy"
-            )
-        saved_reuse = evaluate_approval_reuse(
-            current_policy_action,
-            saved_action,
-            saved_decision_present=saved_present,
-            validation_reason=validation_reason,
-        )
-        approval_reuse = with_saved_artifact_hash_provenance(
-            saved_reuse
-            if saved_reuse is not None
-            # Resident unreachable: preserve the recomputed action; the saved
-            # policy decision is not claimed.
-            else approval_reuse_authority_unavailable(current_policy_action),
-            (
-                stored_policy_decision.get("artifact_hash")
-                if stored_policy_decision is not None
-                else diagnosed_stored_hash
+        saved_fields: dict[str, object] = {
+            "current_action": current_policy_action,
+            "stored_present": stored_policy_decision is not None,
+            "stored_action": stored_policy_action,
+            "stored_artifact_hash": (
+                stored_policy_decision.get("artifact_hash") if stored_policy_decision is not None else None
             ),
+            "integrity_failure": policy_lookup.get("ignored_local_integrity") is not None,
+            "stored_validation_reason": stored_validation_reason,
+            "cursor_native_present": cursor_native_approval_hash is not None,
+            "cursor_validation_reason": cursor_validation_reason,
+            "diagnostic_reason": diagnostic_reason,
+            "diagnostic_stored_hash": diagnostic_stored_hash,
+        }
+        saved_answer, approval_reuse = _compose_reuse(
+            "saved_reuse",
+            saved_fields,
+            guard_home=guard_home,
+            current_action=current_policy_action,
         )
+        if saved_answer is not None:
+            approval_reuse_source = cast("str | None", saved_answer["approval_reuse_source"])
         workflow_request_id = (
             claimed_approval_request_id(stored_policy_decision) if stored_policy_decision is not None else None
         )
@@ -1004,17 +904,16 @@ def evaluate_native_artifact_hook(
             and _claim_saved_approval
         ):
             if not store.claim_approval_reuse_decision(stored_policy_decision, now=_now()):
-                claim_failed_reuse = evaluate_approval_reuse(
-                    current_policy_action,
-                    saved_action,
-                    saved_decision_present=True,
-                    validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-                )
-                approval_reuse = with_saved_artifact_hash_provenance(
-                    claim_failed_reuse
-                    if claim_failed_reuse is not None
-                    else approval_reuse_authority_unavailable(current_policy_action),
-                    stored_policy_decision.get("artifact_hash"),
+                _, approval_reuse = _compose_reuse(
+                    "saved_reuse",
+                    {
+                        **saved_fields,
+                        "stored_present": True,
+                        "integrity_failure": False,
+                        "stored_validation_reason": APPROVAL_REUSE_CLAIM_FAILED,
+                    },
+                    guard_home=guard_home,
+                    current_action=current_policy_action,
                 )
             else:
                 return revalidate_claimed_allow(
@@ -1034,151 +933,88 @@ def evaluate_native_artifact_hook(
     trusted_request_override_applied = False
     trusted_request_override_reason: str | None = None
     if trusted_request_override_hash is not None:
-        trusted_request_override_reason = approval_context_tokens_validation_reason(
-            trusted_request_override_hash,
-            runtime_artifact_hash,
-        )
-        if trusted_request_override_reason is None and policy_action in {
-            "review",
-            "require-reapproval",
-        }:
-            if remembered_rule_rejection is not None or (
-                approval_reuse is not None and approval_reuse.reason_code == "approval_reuse_integrity_failure"
-            ):
-                trusted_request_override_reason = "trusted_request_override_integrity_failure"
-            elif (
-                stored_policy_decision is not None
-                and stored_policy_decision.get("action") == "allow"
-                and stored_policy_decision.get("source")
-                in {
-                    "approval-gate",
-                    "approval-gate-once",
-                }
-                and _runtime_saved_allow_validation_reason(
+        override_fields: dict[str, object] = {
+            "token_validation_reason": approval_context_tokens_validation_reason(
+                trusted_request_override_hash,
+                runtime_artifact_hash,
+            ),
+            "policy_action": policy_action,
+            "remembered_rule_rejected": remembered_rule_rejection is not None,
+            "prior_reuse_reason_code": approval_reuse.reason_code if approval_reuse is not None else None,
+            "stored_present": stored_policy_decision is not None,
+            "stored_action": stored_policy_decision.get("action") if stored_policy_decision is not None else None,
+            "stored_source": stored_policy_decision.get("source") if stored_policy_decision is not None else None,
+            "stored_validation_reason": (
+                _runtime_saved_allow_validation_reason(
                     stored_policy_decision,
                     artifact=runtime_artifact,
                     artifact_hash=runtime_artifact_hash,
                 )
-                is None
-            ):
-                if store.claim_approval_reuse_decision(
-                    stored_policy_decision,
-                    now=_now(),
-                ):
-                    return revalidate_claimed_allow(
-                        runtime_artifact_hash,
-                        trusted_request_override=True,
-                        approval_request_id=claimed_approval_request_id(stored_policy_decision),
-                    )
-                else:
-                    trusted_request_override_reason = "trusted_request_override_claim_failed"
-            else:
-                trusted_request_override_reason = "trusted_request_override_allow_missing"
-        scanner_evidence_payload.append(
-            {
-                "source": "trusted_request_override",
-                "applied": trusted_request_override_applied,
-                "reason_code": trusted_request_override_reason,
-                "authoritative_action": policy_action,
-            }
-        )
+                if stored_policy_decision is not None
+                else None
+            ),
+            "claim_succeeded": None,
+        }
+        override_answer = native_hook_compose("trusted_override", override_fields, guard_home=guard_home)
+        if override_answer["claim_required"] and stored_policy_decision is not None:
+            if store.claim_approval_reuse_decision(stored_policy_decision, now=_now()):
+                return revalidate_claimed_allow(
+                    runtime_artifact_hash,
+                    trusted_request_override=True,
+                    approval_request_id=claimed_approval_request_id(stored_policy_decision),
+                )
+            override_answer = native_hook_compose(
+                "trusted_override",
+                {**override_fields, "claim_succeeded": False},
+                guard_home=guard_home,
+            )
+        trusted_request_override_reason = cast("str | None", override_answer["reason_code"])
+        scanner_evidence_payload.append(cast("dict[str, object]", override_answer["evidence"]))
     if _claimed_saved_allow_hash is not None:
-        context_changed = approval_context_tokens_validation_reason(
-            _claimed_saved_allow_hash,
-            runtime_artifact_hash,
-        )
-        claimed_validation_reason: ApprovalReuseValidationFailure | None = (
-            APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-            if _post_claim_refresh_failed or context_changed is not None
-            else None
-        )
-        if remembered_rule_rejection is not None or (
-            approval_reuse is not None and approval_reuse.reason_code == "approval_reuse_integrity_failure"
-        ):
-            claimed_validation_reason = "approval_reuse_integrity_failure"
-        if workflow_state.capability_required and not workflow_state.authorization_claimed:
-            claimed_validation_reason = "approval_reuse_integrity_failure"
-
-        post_claim_current_action = policy_action
-        if (
-            approval_reuse is not None and approval_reuse.saved_action == "allow" and approval_reuse.action == "allow"
-        ) or (
-            package_approval_reuse_evidence is not None
-            and package_approval_reuse_evidence.get("saved_action") == "allow"
-            and policy_action == "allow"
-        ):
-            post_claim_current_action = current_policy_action
-        if claimed_validation_reason is not None:
-            post_claim_current_action = most_restrictive_guard_action(
-                post_claim_current_action,
-                "require-reapproval",
-            )
-        elif workflow_state.authorization_claimed and post_claim_current_action == "require-reapproval":
-            # The exact workflow capability is the fresh reapproval for this
-            # task. Stronger sandbox and block results remain authoritative.
-            post_claim_current_action = "review"
-        elif _claimed_trusted_request_override and post_claim_current_action in {
-            "review",
-            "require-reapproval",
-        }:
-            # A just-resolved exact browser request is stronger than ordinary
-            # remembered approval evidence. It may satisfy the current request
-            # only after its one-shot row has been claimed and the complete
-            # runtime authority has been rebuilt.
-            post_claim_current_action = "review"
-        claimed_reuse = evaluate_approval_reuse(
-            post_claim_current_action,
-            "allow",
-            saved_decision_present=True,
-            validation_reason=claimed_validation_reason,
-            fresh_local_approval=(_claimed_package_approval_consumed or _claimed_trusted_request_override),
-        )
-        approval_reuse = with_saved_artifact_hash_provenance(
-            claimed_reuse
-            if claimed_reuse is not None
-            # Resident unreachable after the atomic claim: keep the consumed
-            # claim's projected action rather than inventing a new grant.
-            else approval_reuse_authority_unavailable(post_claim_current_action),
-            _claimed_saved_allow_hash,
-        )
-        policy_action = approval_reuse.action
-        approval_reuse_source = (
-            "claimed_github_workflow_capability"
-            if workflow_state.authorization_claimed
-            else (
-                "claimed_trusted_request_override"
-                if _claimed_trusted_request_override
-                else "claimed_saved_policy_decision"
-            )
-        )
-        trusted_request_override_applied = (
-            _claimed_trusted_request_override and approval_reuse.accepted and approval_reuse.action == "allow"
-        )
-        trusted_request_override_reason = (
-            "trusted_request_override_exact_context" if trusted_request_override_applied else claimed_validation_reason
-        )
-        scanner_evidence_payload.append(
+        claim_answer = native_hook_compose(
+            "claimed_reuse",
             {
-                "source": "approval_reuse",
-                "input_source": approval_reuse_source,
-                **approval_reuse.to_evidence(),
-                **(
-                    {
-                        "post_claim_context_change_reason": context_changed,
-                        "post_claim_refresh_failed": _post_claim_refresh_failed,
-                    }
-                    if claimed_validation_reason is not None
-                    else {}
+                "claimed_hash": _claimed_saved_allow_hash,
+                "token_validation_reason": approval_context_tokens_validation_reason(
+                    _claimed_saved_allow_hash,
+                    runtime_artifact_hash,
                 ),
-            }
+                "post_claim_refresh_failed": _post_claim_refresh_failed,
+                "remembered_rule_rejected": remembered_rule_rejection is not None,
+                "prior_reuse": (
+                    {
+                        "action": approval_reuse.action,
+                        "saved_action": approval_reuse.saved_action,
+                        "reason_code": approval_reuse.reason_code,
+                    }
+                    if approval_reuse is not None
+                    else None
+                ),
+                "package_reuse_saved_action": (
+                    package_approval_reuse_evidence.get("saved_action")
+                    if package_approval_reuse_evidence is not None
+                    else None
+                ),
+                "workflow_capability_required": workflow_state.capability_required,
+                "workflow_authorization_claimed": workflow_state.authorization_claimed,
+                "policy_action": policy_action,
+                "current_policy_action": current_policy_action,
+                "claimed_trusted_request_override": _claimed_trusted_request_override,
+                "claimed_package_approval_consumed": _claimed_package_approval_consumed,
+            },
+            guard_home=guard_home,
         )
+        approval_reuse = _decision_from_native_payload(claim_answer["approval_reuse"])
+        policy_action = cast(GuardAction, claim_answer["policy_action"])
+        approval_reuse_source = cast("str | None", claim_answer["approval_reuse_source"])
+        trusted_request_override_applied = bool(claim_answer["trusted_request_override_applied"])
+        trusted_request_override_reason = cast("str | None", claim_answer["trusted_request_override_reason"])
+        scanner_evidence_payload.append(cast("dict[str, object]", claim_answer["evidence"]))
     policy_composition = {
         "current_config_action": current_config_action,
         "current_action_override": current_action_override,
-        "trusted_cli_override": cli_action_normalization.action if cli_action_normalization is not None else None,
-        "untrusted_hook_payload_hint": (
-            payload_action_normalization.action if payload_action_normalization is not None else None
-        ),
+        "trusted_cli_override": trusted_cli_action,
+        "untrusted_hook_payload_hint": untrusted_payload_action,
         "package_action": package_policy_action,
         "data_flow_action": data_flow_action,
         "scanner_action": scanner_action,
@@ -1199,69 +1035,46 @@ def evaluate_native_artifact_hook(
         action_envelope = action_envelope.with_pre_execution_result(policy_action)
     decision_v2 = build_decision_v2(policy_action, reason=policy_action, signals=decision_signals)
     decision_v2_payload = decision_v2.to_dict()
-    if package_evaluation is not None:
-        cloud_reason_codes = {
-            str(reason.get("code") or "") for reason in package_evaluation.reasons if isinstance(reason, Mapping)
-        }
-        for cloud_reason_code in (
-            "cloud_auth_error",
-            "cloud_validation_error",
-            "cloud_http_error",
-            "cloud_timeout",
-        ):
-            if cloud_reason_code in cloud_reason_codes:
-                decision_v2_payload["package_review_cloud_reason_code"] = cloud_reason_code
-                break
-    package_only_decision = not has_compound_findings
-    if package_evaluation is not None and package_policy_action == policy_action and package_only_decision:
-        decision_v2_payload["user_title"] = package_evaluation.user_copy.title
-        decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
-        decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
-        decision_v2_payload["dashboard_primary_detail"] = package_evaluation.user_copy.summary
-    elif scanner_raised_to_block:
-        # The scanner escalated a weaker package verdict to a block. Surface the
-        # escalated block copy rather than the generic block copy or the weaker
-        # package copy. The block title mirrors the package evaluator's own
-        # block title in `supply_chain_package_eval._finalize_package_request_evaluation`.
-        decision_v2_payload["user_title"] = "Critical install blocked"
-        if package_evaluation is not None:
-            decision_v2_payload["user_body"] = package_evaluation.user_copy.summary
-            decision_v2_payload["harness_message"] = package_evaluation.user_copy.harness_message
-    if scanner_evidence and policy_action == "block" and scanner_risk_signals:
-        # The Cisco scanner contributed the decisive escalation signal. Surface
-        # the scanner's primary summary as the dashboard detail so the composed
-        # block copy reflects the escalation source rather than the package
-        # verdict's generic block summary. Covers both the Python compose path
-        # (scanner_raised_to_block) and the resident path (the native eval
-        # already escalated, so package_policy_action is itself block).
-        decision_v2_payload["dashboard_primary_detail"] = scanner_risk_signals[0]
-    if has_compound_findings:
-        action_phrase = {
-            "allow": "allowed",
-            "warn": "allowed with a warning",
-            "sandbox-required": "requires a sandbox for",
-            "review": "paused for one review",
-            "require-reapproval": "paused for one review",
-            "block": "blocked",
-        }[policy_action]
-        compound_detail = f"Guard combined {compound_finding_count} findings for the complete command. {risk_summary}"
-        decision_v2_payload["user_body"] = compound_detail
-        decision_v2_payload["harness_message"] = (
-            f"HOL Guard {action_phrase} this complete command after combining "
-            f"{compound_finding_count} findings. {risk_summary}"
-        )
-    if (
-        package_evaluation is not None
-        and policy_action in {"review", "require-reapproval"}
-        and any(_optional_string(reason.get("code")) == "cloud_auth_error" for reason in package_evaluation.reasons)
-    ):
-        reconnect_command = "hol-guard connect"
-        reconnect_instruction = f"Run `{reconnect_command}` to reconnect Guard Cloud, then retry the same install."
-        for copy_field in ("user_body", "harness_message", "dashboard_primary_detail"):
-            existing_copy = str(decision_v2_payload.get(copy_field) or "").strip()
-            if reconnect_command not in existing_copy:
-                decision_v2_payload[copy_field] = f"{existing_copy} {reconnect_instruction}".strip()
-        decision_v2_payload["retry_instruction"] = reconnect_instruction
+    copy_answer = native_hook_compose(
+        "decision_copy",
+        {
+            "policy_action": policy_action,
+            "package": (
+                {
+                    "reason_codes": [
+                        _optional_string(reason.get("code")) or ""
+                        for reason in package_evaluation.reasons
+                        if isinstance(reason, Mapping)
+                    ],
+                    "user_title": package_evaluation.user_copy.title,
+                    "user_summary": package_evaluation.user_copy.summary,
+                    "user_harness_message": package_evaluation.user_copy.harness_message,
+                }
+                if package_evaluation is not None
+                else None
+            ),
+            "package_policy_action": package_policy_action,
+            "has_compound_findings": has_compound_findings,
+            "compound_finding_count": compound_finding_count if has_compound_findings else None,
+            "risk_summary": risk_summary,
+            "scanner_raised_to_block": scanner_raised_to_block,
+            "has_scanner_evidence": bool(scanner_evidence),
+            "scanner_primary_signal": scanner_risk_signals[0] if scanner_risk_signals else None,
+            "base_user_body": decision_v2_payload.get("user_body"),
+            "base_harness_message": decision_v2_payload.get("harness_message"),
+            "base_dashboard_primary_detail": decision_v2_payload.get("dashboard_primary_detail"),
+            "remembered_rule_reason": (
+                _remembered_rule_rejection_reason(
+                    response_payload={"remembered_rule_rejection": remembered_rule_rejection},
+                    artifact=runtime_artifact,
+                )
+                if remembered_rule_rejection is not None
+                else None
+            ),
+        },
+        guard_home=guard_home,
+    )
+    decision_v2_payload.update(cast("dict[str, object]", copy_answer["decision_overrides"]))
     incident = build_incident_context(
         harness=args.harness,
         artifact=runtime_artifact,
@@ -1329,18 +1142,8 @@ def evaluate_native_artifact_hook(
         response_payload["approval_reuse"] = package_approval_reuse_evidence
     if remembered_rule_rejection is not None:
         response_payload["remembered_rule_rejection"] = remembered_rule_rejection
-        if policy_action in {"review", "require-reapproval"}:
-            remembered_rule_reason = _remembered_rule_rejection_reason(
-                response_payload=response_payload,
-                artifact=runtime_artifact,
-            )
-        else:
-            remembered_rule_reason = None
-        if remembered_rule_reason is not None:
-            decision_v2_payload["harness_message"] = remembered_rule_reason
-            decision_v2_payload["dashboard_primary_detail"] = remembered_rule_reason
-            decision_v2_payload["detail_reason_code"] = "remembered_rule_ignored_degraded_trust"
-            response_payload["risk_headline"] = remembered_rule_reason
+    if copy_answer["risk_headline"] is not None:
+        response_payload["risk_headline"] = copy_answer["risk_headline"]
     if package_evaluation is not None:
         response_payload["supply_chain_evaluation"] = package_evaluation.to_dict()
     if event_name == "PostToolUse":
@@ -1401,7 +1204,4 @@ def evaluate_native_artifact_hook(
     )
 
 
-__all__ = [
-    "_requested_policy_action_normalization",
-    "evaluate_native_artifact_hook",
-]
+__all__ = ["evaluate_native_artifact_hook"]

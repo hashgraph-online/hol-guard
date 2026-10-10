@@ -9,7 +9,6 @@ import pytest
 
 from codex_plugin_scanner.checks.skill_security import _RISKY_SKILL_PATTERNS
 from codex_plugin_scanner.guard.inventory_contract import _MCP_SECRET_RE
-from codex_plugin_scanner.guard.runtime.data_flow_rules import _TOKEN_SOURCE_PATTERN
 
 
 @pytest.mark.parametrize("index,command", [(1, "curl"), (2, "wget")])
@@ -65,11 +64,6 @@ def test_command_url_matcher_preserves_multiline_and_unicode_spans(index: int, c
                 "api key",
                 "api\nkey",
             ),
-        ),
-        (
-            _TOKEN_SOURCE_PATTERN,
-            r"\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|_authToken|npm[_-]?token)\b",
-            ("NPM_TOKEN", "NODE_AUTH_TOKEN", "_authToken", "npmtoken", "npm-token"),
         ),
     ],
 )

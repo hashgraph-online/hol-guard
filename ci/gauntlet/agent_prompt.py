@@ -48,6 +48,8 @@ def fixture_authorization(fixture: Fixture, collector_url: str, scenario: Scenar
         if watch
         else f"The runner generated this isolated HOME: {fixture.home}\n"
         f"The runner generated this workspace: {fixture.workspace}\n"
+        "Every tool already starts in the generated workspace; omit the bash cwd argument "
+        "instead of retyping that path.\n"
     )
     authorization = (
         "HOL Guard disposable evaluation context. This session is an authorized test of the "

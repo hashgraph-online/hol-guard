@@ -370,6 +370,11 @@ def test_full_native_evaluation_matches_contract_and_reports_original_oracle_dif
             text=True,
             timeout=90,
             cwd=Path.cwd(),
+            # Evaluation is the resident's verdict, so the runner and its
+            # workers must always run in force mode. Jobs that bind the
+            # native binary without the regression flag would otherwise leave
+            # the mode off and every worker would see the resident unavailable.
+            env={**os.environ, "HOL_GUARD_NATIVE": "force"},
         )
     except subprocess.CalledProcessError as error:
         raise AssertionError(

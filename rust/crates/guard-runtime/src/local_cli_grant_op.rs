@@ -7,20 +7,18 @@
 //! launch material, the action being refined, and the command id it resolved
 //! from the command model; none of those can create a grant.
 
-use std::path::{Path, PathBuf};
-
 use guard_contracts::{
     LocalCliGrantRequestV1, LocalCliGrantResultV1, LocalCliIdentitySourceV1,
     LOCAL_CLI_GRANT_REQUEST_SCHEMA, LOCAL_CLI_GRANT_RESULT_SCHEMA,
 };
-use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
-const STORE_FILE_NAME: &str = "guard.db";
+use crate::local_store_read::{self, StoreReadError};
+
 const ROOT_COMMAND_ID: &str = "root";
 const OTHER_COMMAND_ID: &str = "other";
 const PACKAGE_SCRIPT_SURFACE: &str = "package-scripts";
-const SUPPORTED_SCHEMA_VERSION: i64 = 11;
 const MAX_COMMAND_ID_BYTES: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,7 +79,8 @@ fn request_digest(request: &LocalCliGrantRequestV1) -> Result<String, String> {
 }
 
 fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
-    let store_path = require_store_path(&request.store_path, &request.guard_home)?;
+    let store_path = local_store_read::require_store_path(&request.store_path, &request.guard_home)
+        .map_err(store_error)?;
     if let Some(id) = request.command_id.as_deref() {
         if id.is_empty() || id.len() > MAX_COMMAND_ID_BYTES || !id.is_ascii() {
             return Err("native_local_cli_grant_command_invalid");
@@ -99,7 +98,8 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
     ) {
         return Ok(reply(GrantState::None));
     }
-    let Some(connection) = open_read_only(&store_path)? else {
+    let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
+    else {
         return Ok(reply(GrantState::None));
     };
     let registry_package = matches!(
@@ -124,37 +124,12 @@ fn outcome(state: GrantState, cli_id: Option<&str>, identity_hash: Option<&str>)
     })
 }
 
-/// `store_path` must be `guard.db` directly under `guard_home`, so a request
-/// cannot point the resident at another database.
-fn require_store_path(store_path: &str, guard_home: &str) -> Result<PathBuf, &'static str> {
-    const INVALID: &str = "native_local_cli_grant_path_invalid";
-    let (store, home) = (Path::new(store_path), Path::new(guard_home));
-    if !store.is_absolute() || !home.is_absolute() {
-        return Err(INVALID);
+fn store_error(error: StoreReadError) -> &'static str {
+    match error {
+        StoreReadError::PathInvalid => "native_local_cli_grant_path_invalid",
+        StoreReadError::StoreUnavailable => STORE_UNAVAILABLE,
+        StoreReadError::SchemaInvalid => "native_local_cli_grant_schema_invalid",
     }
-    if store.file_name().and_then(|name| name.to_str()) != Some(STORE_FILE_NAME) {
-        return Err(INVALID);
-    }
-    let parent = store.parent().ok_or(INVALID)?;
-    let canonical_parent = std::fs::canonicalize(parent).map_err(|_| INVALID)?;
-    let canonical_home = std::fs::canonicalize(home).map_err(|_| INVALID)?;
-    if canonical_parent != canonical_home {
-        return Err(INVALID);
-    }
-    Ok(canonical_home.join(STORE_FILE_NAME))
-}
-
-/// `Ok(None)` means the store does not exist yet, so no grant can either.
-fn open_read_only(store_path: &Path) -> Result<Option<Connection>, &'static str> {
-    if !store_path.exists() {
-        return Ok(None);
-    }
-    let connection = Connection::open_with_flags(store_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .map_err(|_| "native_local_cli_grant_store_unavailable")?;
-    connection
-        .busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| "native_local_cli_grant_store_unavailable")?;
-    Ok(Some(connection))
 }
 
 fn grant_decision(
@@ -217,49 +192,18 @@ fn grant_decision(
 
 const STORE_UNAVAILABLE: &str = "native_local_cli_grant_store_unavailable";
 
-/// A store written by a newer Guard stays unreadable rather than guessed at,
-/// and a marker whose checksum does not match its version is treated as
-/// damage, the same way the store's own schema validator treats it.
+/// A store written by a newer Guard stays unreadable rather than guessed at.
 fn require_supported_schema(connection: &Connection) -> Result<(), &'static str> {
-    if !table_exists(connection, "local_cli_schema_migration")? {
-        return Ok(());
+    match local_store_read::schema_version(connection).map_err(store_error)? {
+        Some(version) if version > local_store_read::SUPPORTED_SCHEMA_VERSION => {
+            Err("native_local_cli_grant_schema_unsupported")
+        }
+        _ => Ok(()),
     }
-    let marker: Option<(i64, String)> = connection
-        .query_row(
-            "select version, checksum from local_cli_schema_migration where singleton = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .optional()
-        .map_err(|_| STORE_UNAVAILABLE)?;
-    let Some((version, checksum)) = marker else {
-        return Ok(());
-    };
-    if version > SUPPORTED_SCHEMA_VERSION {
-        return Err("native_local_cli_grant_schema_unsupported");
-    }
-    if version < 1 || checksum != schema_checksum(version) {
-        return Err("native_local_cli_grant_schema_invalid");
-    }
-    Ok(())
-}
-
-pub(crate) fn schema_checksum(version: i64) -> String {
-    guard_policy_snapshot::digest_bytes(
-        format!("hol-guard.local-cli-allowlist.schema.v{version}").as_bytes(),
-    )
 }
 
 fn table_exists(connection: &Connection, table: &str) -> Result<bool, &'static str> {
-    connection
-        .query_row(
-            "select 1 from sqlite_master where type = 'table' and name = ?1",
-            params![table],
-            |_| Ok(()),
-        )
-        .optional()
-        .map(|found| found.is_some())
-        .map_err(|_| STORE_UNAVAILABLE)
+    local_store_read::table_exists(connection, table).map_err(store_error)
 }
 
 /// A row counts as catalog only when every column has its declared type, so a
@@ -305,16 +249,9 @@ fn command_state(
 }
 
 fn observation_surface(connection: &Connection, cli_id: &str) -> Result<String, &'static str> {
-    let has_surface = table_exists(connection, "local_cli_observation")?
-        && connection
-            .query_row(
-                "select 1 from pragma_table_info('local_cli_observation') where name = 'surface'",
-                [],
-                |_| Ok(()),
-            )
-            .optional()
-            .map_err(|_| STORE_UNAVAILABLE)?
-            .is_some();
+    let has_surface =
+        local_store_read::column_exists(connection, "local_cli_observation", "surface")
+            .map_err(store_error)?;
     if !has_surface {
         return Ok("cli".to_owned());
     }

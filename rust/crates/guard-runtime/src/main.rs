@@ -8,6 +8,7 @@ mod approval_gate_op;
 mod approval_gate_settings;
 mod approval_gate_state;
 mod approval_gate_verify;
+mod approval_proof_op;
 mod approval_reuse;
 mod archive_inspect;
 mod archive_inspect_containment;
@@ -16,29 +17,82 @@ mod business_source_codec;
 mod claim_approval_reuse_op;
 mod claim_reuse;
 mod command_effect;
+mod compound_git_args;
+mod compound_git_chain;
+mod compound_git_facts;
+#[cfg(test)]
+mod compound_git_facts_tests;
+mod compound_git_inspection_op;
+#[cfg(test)]
+mod compound_git_inspection_op_tests;
+#[cfg(test)]
+mod compound_git_inspection_vectors_tests;
+mod compound_git_paths;
+mod compound_git_segments;
 #[cfg(unix)]
 mod contained_op;
 mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
+mod contributed_mcp_decision_op;
 mod daemon_policy_authority;
+mod data_flow_analyze_op;
 mod edge;
 mod encrypted_secret_store;
+mod false_positive_rules_op;
+mod git_execution_safety_binary;
+mod git_execution_safety_checks;
+mod git_execution_safety_config;
+mod git_execution_safety_op;
+mod git_execution_safety_probe;
+#[cfg(all(test, unix))]
+mod git_execution_safety_repo_tests;
+#[cfg(test)]
+mod git_execution_safety_tests;
+mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod hardening;
+mod hook_artifact_compose_op;
+mod hook_artifact_compose_reuse;
+mod hook_decision_compose;
+mod hook_decision_directive;
+mod hook_decision_finalize;
+mod hook_decision_op;
 mod hook_process_spawn;
 mod local_cli_grant_op;
+mod local_mcp_grant_identity;
+mod local_mcp_grant_launcher;
+mod local_mcp_grant_op;
 mod local_once_store;
+mod local_store_read;
 mod managed_resident;
 mod mcp_probe_op;
+mod mcp_proxy_actions;
+mod mcp_proxy_catalog;
+mod mcp_proxy_decision_op;
+#[cfg(test)]
+mod mcp_proxy_decision_tests;
+#[cfg(test)]
+mod mcp_proxy_decision_vectors_tests;
+mod mcp_proxy_package;
+mod mcp_proxy_postclaim;
+mod mcp_proxy_route;
 mod mcp_runtime_evidence_op;
 mod mcp_stdio_session_op;
+mod mcp_tool_evidence_op;
+mod mcp_tool_policy_composio;
+mod mcp_tool_policy_decide_op;
+mod mcp_tool_policy_decision;
+mod mcp_tool_policy_flow;
+mod mcp_tool_policy_grants;
+mod mcp_tool_policy_revalidate;
 mod native_hook_receipt;
 mod native_runtime_admission;
 mod native_runtime_resilience;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oneshot;
+mod package_authority_config;
 mod package_authority_op;
 mod package_evaluation_compose_op;
 mod policy_decision_lookup_op;
@@ -47,6 +101,8 @@ mod policy_integrity_resolver;
 mod policy_snapshot_build;
 mod policy_store;
 mod prompt_analyze_op;
+mod request_context_op;
+mod request_context_shell;
 mod resident_client;
 mod resident_diagnostics;
 mod resident_endpoint;
@@ -60,8 +116,22 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod runner_authority_detector;
+mod runner_authority_evaluation;
+mod runner_authority_op;
+mod runner_authority_signature;
 mod runtime_cli;
 mod shim_op;
+#[cfg(unix)]
+mod skill_directory_identity_op;
+#[cfg(unix)]
+mod skill_identity_canon;
+#[cfg(unix)]
+mod skill_identity_discovery;
+#[cfg(unix)]
+mod skill_identity_inspect;
+#[cfg(unix)]
+mod skill_identity_walk;
 #[cfg(unix)]
 mod state_directory_lock;
 mod strict_json;

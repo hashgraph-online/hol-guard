@@ -80,7 +80,7 @@ impl Fixture {
         connection
             .execute(
                 "insert into local_cli_schema_migration values (1, 11, ?1)",
-                [super::schema_checksum(11)],
+                [crate::local_store_read::schema_checksum(11)],
             )
             .unwrap();
         Self { home, connection }

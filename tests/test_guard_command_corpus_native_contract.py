@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import copy
 import json
+import os
+import sys
 from dataclasses import replace
 from itertools import chain
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -122,9 +124,16 @@ def test_native_contract_rejects_changed_immutable_source_identity(
 
 @pytest.fixture(scope="module")
 def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
-    from codex_plugin_scanner.guard.runtime import package_protect_projection
+    from codex_plugin_scanner.guard.runtime import (
+        github_command_capabilities,
+        package_protect_projection,
+        shell_secret_reads,
+    )
+    from codex_plugin_scanner.guard.runtime.shell_execution_context import ShellExecutionContext
     from tests.guard_command_corpus_native import evaluate_native_corpus_batch
     from tests.harness_attribution_env import HARNESS_ENV_MARKERS
+    from tests.native_command_test_support import _native_binaries
+    from tests.native_github_offline import _MODULE, install_offline_github_classifier
 
     selected: dict[str, tuple[CommandCorpusCase, OracleRecord]] = {}
     for case, oracle in _pairs():
@@ -137,7 +146,36 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
         for marker in HARNESS_ENV_MARKERS:
             attribution.delenv(marker, raising=False)
         attribution.setenv("__CFBundleIdentifier", "com.apple.Terminal")
+        # Command composition is resident-only; this module fixture runs before the
+        # function-scoped autouse native-mode fixture, so select the compiled
+        # authority the same way that fixture does for regression jobs.
+        attribution.setenv("HOL_GUARD_TEST_MODE", "1")
+        attribution.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+        if "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
+            attribution.setenv("HOL_GUARD_NATIVE", "force")
         attribution.setattr(package_protect_projection, "resolve_parent_process_harness", lambda: None)
+        # GitHub CLI classification is resident-only; answer it from the same Rust classifier
+        # without leaking the stub module or its memoized answers into other tests.
+        attribution.setitem(sys.modules, _MODULE, ModuleType(_MODULE))
+        attribution.setattr(github_command_capabilities, "_NATIVE_CACHE", {})
+        # Shell request context is resident-only too. This contract checks the evaluator's signature,
+        # not the context op, so answer "complete, no directory model" and keep the read assessment
+        # on its literal-marker path instead of its fail-closed native-unavailable path.
+        attribution.setattr(
+            shell_secret_reads,
+            "model_shell_execution_context",
+            lambda command_text, **_kwargs: ShellExecutionContext(
+                command_text=command_text,
+                initial_cwd=None,
+                workspace_root=None,
+                workspace_identity=None,
+                segments=(),
+                complete=True,
+                reason_code=None,
+                directory_change_present=False,
+            ),
+        )
+        install_offline_github_classifier(_native_binaries()[0])
         evaluated = evaluate_native_corpus_batch(
             [case for case, _ in selected.values()], cwd=contract.ROOT / "workspace", home_dir=contract.ROOT / "home"
         )

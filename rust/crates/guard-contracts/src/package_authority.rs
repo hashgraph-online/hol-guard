@@ -19,6 +19,10 @@ pub const PACKAGE_AUTHORITY_RESULT_SCHEMA: &str = "guard-package-authority-resul
 pub const PACKAGE_AUTHORITY_FEATURE: &str = "package-authority-v1";
 /// Capability advertised when the package-evaluation composition op exists.
 pub const PACKAGE_EVALUATION_COMPOSE_FEATURE: &str = "package-evaluation-compose-v1";
+/// Capability advertised when `supply_chain_eval` is the sole package-verdict
+/// authority: the resident owns Cloud, bundle, lockfile and heuristic
+/// decisions, and callers have no Python evaluation to fall back to.
+pub const SUPPLY_CHAIN_EVAL_FEATURE: &str = "supply-chain-eval-v1";
 
 /// Largest canonical request serialization any of these ops will accept.
 pub const PACKAGE_AUTHORITY_MAX_BYTES: usize = 1024 * 1024;

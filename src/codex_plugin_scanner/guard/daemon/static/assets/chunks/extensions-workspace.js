@@ -1,4 +1,4 @@
-import { aT as fetchLocalCliApi, r as reactExports, aU as localPermissionDraftState, aV as setLocalPermissionDraftState, aW as newExtensionPolicyDraftIdentity, aX as extensionPolicyDraftIsDirty, aY as setLocalPermissionDraftStates, aZ as buildExtensionPolicyDraftMutation, a_ as ExtensionControlApiError, a$ as previewExtensionMutation, b0 as isCurrentExtensionPolicyDraft, b1 as applyExtensionMutation, b2 as fetchExtensionCatalog, b3 as fetchEffectiveExtensionControls, b4 as fetchExtensionControlHistory, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, b5 as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, b6 as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, b7 as HiMiniInformationCircle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, au as buildApprovalProofCredentials, b8 as GenIcon, Q as HiMiniBolt, b9 as HiMiniGlobeAlt, ba as HiMiniCube, K as HiMiniCloud, bb as HiMiniServerStack, b as HiMiniCommandLine, bc as HiMiniFolder, bd as FaWindows, be as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, bf as approvalProofRecentlySatisfied, bg as isBulkApproveGateReady, bh as HiMiniArrowLeft, bi as HiMiniPlus, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, bj as ApprovalProofModal, bk as guardAwareHref, aN as HiMiniMagnifyingGlass, an as HiMiniAdjustmentsHorizontal, bl as HiMiniCheck, bm as startGuardCloudConnect, bn as HiMiniArrowTopRightOnSquare, aM as WorkspacePageHeader, bo as fetchExtensionControlApi, bp as acknowledgeDegradedExtensionControlAuthority, bq as recoverExtensionControlAuthority } from "../guard-dashboard.js";
+import { aT as fetchLocalCliApi, r as reactExports, aU as fetchExtensionCatalog, aV as normalizeExtensionCatalogSummary, aW as normalizeExtensionPermission, aX as ExtensionControlProtocolError, aY as ExtensionControlApiError, aZ as normalizeExtensionCatalogItem, a_ as guardApiCacheScope, a$ as fetchExtensionCatalogV2Api, b0 as localPermissionDraftState, b1 as setLocalPermissionDraftState, b2 as newExtensionPolicyDraftIdentity, b3 as extensionPolicyDraftIsDirty, b4 as setLocalPermissionDraftStates, b5 as buildExtensionPolicyDraftMutation, b6 as previewExtensionMutation, b7 as isCurrentExtensionPolicyDraft, b8 as applyExtensionMutation, b9 as fetchEffectiveExtensionControls, ba as fetchExtensionControlHistory, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, bb as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, bc as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, bd as HiMiniInformationCircle, au as buildApprovalProofCredentials, be as GenIcon, Q as HiMiniBolt, bf as HiMiniGlobeAlt, bg as HiMiniCube, K as HiMiniCloud, bh as HiMiniServerStack, b as HiMiniCommandLine, bi as HiMiniFolder, bj as FaWindows, bk as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, bl as approvalProofRecentlySatisfied, bm as isBulkApproveGateReady, bn as HiMiniArrowLeft, bo as HiMiniPlus, bp as startGuardCloudConnect, bq as HiMiniArrowTopRightOnSquare, br as fetchExtensionControlApi, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, bs as ApprovalProofModal, bt as guardAwareHref, aN as HiMiniMagnifyingGlass, an as HiMiniAdjustmentsHorizontal, bu as HiMiniCheck, aM as WorkspacePageHeader, bv as acknowledgeDegradedExtensionControlAuthority, bw as recoverExtensionControlAuthority } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -260,7 +260,7 @@ function initialAddCommand(search) {
 }
 const CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-function isRecord(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null;
 }
 function requiredString(value, field) {
@@ -281,7 +281,7 @@ function isLocalCliId(value) {
 }
 async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
   const normalize = (body) => {
-    if (!isRecord(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
+    if (!isRecord$1(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
       throw new Error("Invalid discovery progress");
     }
     return body;
@@ -449,7 +449,7 @@ function normalizeSuggestedState(value) {
   return value === "inherit" || value === "allow" || value === "review" || value === "block" ? { suggested_state: value } : {};
 }
 function normalizeMcpClassification(value) {
-  if (!isRecord(value) || value.schema_version !== "guard.mcp-classification.v1" || value.advisory_only !== true || !["reviewed-mapping", "limited"].includes(String(value.confidence))) return void 0;
+  if (!isRecord$1(value) || value.schema_version !== "guard.mcp-classification.v1" || value.advisory_only !== true || !["reviewed-mapping", "limited"].includes(String(value.confidence))) return void 0;
   const labels = [value.effect, value.data, value.destination, value.reversibility];
   if (!labels.every((label) => typeof label === "string" && /^[a-z-]{1,40}$/.test(label))) return void 0;
   const codes = (list) => Array.isArray(list) && list.length <= 16 && list.every((code) => typeof code === "string" && /^[a-z0-9:-]{1,80}$/.test(code));
@@ -465,7 +465,7 @@ function normalizeMcpClassification(value) {
   };
 }
 function normalizeLocalCliItem(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI item");
+  if (!isRecord$1(value)) throw new Error("Invalid local CLI item");
   const cliId = requiredString(value.cli_id, "id");
   if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
   const identityHash = requiredString(value.identity_hash, "identity");
@@ -506,7 +506,7 @@ function normalizeLocalCliItem(value) {
   };
 }
 function normalizeMcpCatalog(value) {
-  if (!isRecord(value) || typeof value.complete !== "boolean" || typeof value.stale !== "boolean") return null;
+  if (!isRecord$1(value) || typeof value.complete !== "boolean" || typeof value.stale !== "boolean") return null;
   const count = (candidate) => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 1e4;
   if (!count(value.pages) || !count(value.listed_count) || !count(value.known_count)) return null;
   if (value.listed_count > value.known_count) return null;
@@ -516,7 +516,7 @@ function normalizeMcpCatalog(value) {
   if (value.complete && reason !== null) return null;
   const changes = normalizeMcpCatalogChanges(value.changes);
   const skills = value.skills_catalog;
-  const skillsCatalog = isRecord(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
+  const skillsCatalog = isRecord$1(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
     declared: skills.declared,
     complete: skills.complete,
     stale: skills.stale,
@@ -541,7 +541,7 @@ function normalizeMcpCatalog(value) {
   };
 }
 function normalizeProviderCatalog(value) {
-  if (!isRecord(value) || value.provider !== "composio" || value.coverage !== "discovery-subset" || value.account_binding !== "unverified" || typeof value.known_count !== "number" || !Number.isSafeInteger(value.known_count) || value.known_count < 1 || value.known_count > 1e4 || typeof value.full_schema_count !== "number" || !Number.isSafeInteger(value.full_schema_count) || value.full_schema_count < 0 || value.full_schema_count > value.known_count || typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return void 0;
+  if (!isRecord$1(value) || value.provider !== "composio" || value.coverage !== "discovery-subset" || value.account_binding !== "unverified" || typeof value.known_count !== "number" || !Number.isSafeInteger(value.known_count) || value.known_count < 1 || value.known_count > 1e4 || typeof value.full_schema_count !== "number" || !Number.isSafeInteger(value.full_schema_count) || value.full_schema_count < 0 || value.full_schema_count > value.known_count || typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return void 0;
   return {
     provider: "composio",
     known_count: value.known_count,
@@ -552,7 +552,7 @@ function normalizeProviderCatalog(value) {
   };
 }
 function normalizeMcpCatalogChanges(value) {
-  if (!isRecord(value)) return void 0;
+  if (!isRecord$1(value)) return void 0;
   const result = { added: [], changed: [], removed: [], stale: [] };
   for (const key of ["added", "changed", "removed", "stale"]) {
     const names = value[key];
@@ -564,7 +564,7 @@ function normalizeMcpCatalogChanges(value) {
   return result;
 }
 function normalizeContinuity(value) {
-  if (!isRecord(value)) return null;
+  if (!isRecord$1(value)) return null;
   const status = value.status;
   if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
   return {
@@ -601,7 +601,7 @@ function optionalSourceLabel(value) {
   return value.trim().slice(0, 120) || null;
 }
 function normalizeLocalCliCommand(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI command");
+  if (!isRecord$1(value)) throw new Error("Invalid local CLI command");
   const state = value.state;
   if (state !== "inherit" && state !== "allow" && state !== "review" && state !== "block") {
     throw new Error("Invalid local CLI command state");
@@ -622,8 +622,8 @@ function normalizeLocalCliCommand(value) {
   };
 }
 function normalizeLocalCliList(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI list");
-  const cloud = isRecord(value.cloud) ? value.cloud : {};
+  if (!isRecord$1(value)) throw new Error("Invalid local CLI list");
+  const cloud = isRecord$1(value.cloud) ? value.cloud : {};
   const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
     try {
       return [normalizeLocalCliItem(entry)];
@@ -643,9 +643,9 @@ function normalizeLocalCliList(value) {
   const discoveryIssue = value.discovery_issue;
   const hostInventory = normalizeCodexHostInventory(value.host_inventory);
   let nativePublication;
-  if (isRecord(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
+  if (isRecord$1(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
     nativePublication = { state: publication.state, revision };
-  } else if (isRecord(publication) && publication.state === "acknowledged" && publication.revision === revision && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
+  } else if (isRecord$1(publication) && publication.state === "acknowledged" && publication.revision === revision && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
     nativePublication = { state: "acknowledged", revision, generation: publication.generation };
   }
   return {
@@ -850,7 +850,7 @@ function suggestionMatchesQuery(item, needle) {
 async function readJson(response) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const record2 = isRecord(payload) ? payload : {};
+    const record2 = isRecord$1(payload) ? payload : {};
     const code = typeof record2.error === "string" ? record2.error : "local_cli_request_failed";
     const message = typeof record2.message === "string" ? record2.message : "Guard could not update this custom extension.";
     throw new LocalCliApiError(code, message);
@@ -869,7 +869,7 @@ async function previewLocalCliMutation(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   }));
-  if (!isRecord(body)) throw new Error("Invalid local CLI preview");
+  if (!isRecord$1(body)) throw new Error("Invalid local CLI preview");
   return { summary: requiredString(body.summary, "summary") };
 }
 async function recognizeLocalCli(command, options) {
@@ -882,7 +882,7 @@ async function recognizeLocalCli(command, options) {
       ...options?.refresh ? { refresh: true } : {}
     })
   }));
-  if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
+  if (!isRecord$1(body)) throw new Error("Invalid local CLI recognition");
   const item = normalizeLocalCliItem(body.item);
   return {
     item,
@@ -945,9 +945,9 @@ async function fetchMcpProviderActions(cliId, options) {
       ...options.catalogToken ? { catalog_token: options.catalogToken } : {}
     })
   }));
-  if (!isRecord(body) || body.cli_id !== cliId || body.coverage !== "discovery-subset" || !Array.isArray(body.actions) || body.actions.length > 50 || typeof body.catalog_token !== "string" || !SHA256_PATTERN.test(body.catalog_token)) throw new Error("Invalid provider action inventory");
+  if (!isRecord$1(body) || body.cli_id !== cliId || body.coverage !== "discovery-subset" || !Array.isArray(body.actions) || body.actions.length > 50 || typeof body.catalog_token !== "string" || !SHA256_PATTERN.test(body.catalog_token)) throw new Error("Invalid provider action inventory");
   const actions = body.actions.map((entry) => {
-    if (!isRecord(entry) || typeof entry.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.tool_slug) || typeof entry.toolkit !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.toolkit) || typeof entry.description !== "string" || entry.description.length > 2e3 || typeof entry.full_schema !== "boolean" || !["review", "block"].includes(String(entry.permission_state)) || entry.allow_supported !== false || entry.account_binding !== "unverified" || typeof entry.revision !== "number" || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || typeof entry.updated_at !== "string" || !Number.isFinite(Date.parse(entry.updated_at))) {
+    if (!isRecord$1(entry) || typeof entry.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.tool_slug) || typeof entry.toolkit !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.toolkit) || typeof entry.description !== "string" || entry.description.length > 2e3 || typeof entry.full_schema !== "boolean" || !["review", "block"].includes(String(entry.permission_state)) || entry.allow_supported !== false || entry.account_binding !== "unverified" || typeof entry.revision !== "number" || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || typeof entry.updated_at !== "string" || !Number.isFinite(Date.parse(entry.updated_at))) {
       throw new Error("Invalid provider action evidence");
     }
     return {
@@ -1022,6 +1022,236 @@ function useModalDialog(onClose, canClose = true) {
     };
   }, []);
   return dialogRef;
+}
+const CATALOG_V2_PATH = "/v2/extension-controls/catalog/";
+const PAGE_LIMIT = 100;
+const MAX_CATALOG_V2_PAGE_BYTES = 262144;
+const MAX_TRAVERSAL_PAGES = 4096;
+const MAX_TRAVERSAL_BYTES = 64 * 1024 * 1024;
+const MAX_CACHE_ENTRIES = 256;
+const UNSUPPORTED = /* @__PURE__ */ new Set(["404:", "404:not_found", "501:catalog_read_model_unavailable"]);
+const CATALOG_SNAPSHOT_EXPIRED = "catalog_snapshot_expired";
+class CatalogV2UnsupportedError extends ExtensionControlApiError {
+}
+const readCache = /* @__PURE__ */ new Map();
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function protocolError(message, code) {
+  return new ExtensionControlApiError(message, code === CATALOG_SNAPSHOT_EXPIRED ? 409 : 502, code);
+}
+async function readOnce(path, ifNoneMatch, signal) {
+  const headers = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {};
+  const response = await fetchExtensionCatalogV2Api(path, { headers, cache: "no-store", signal });
+  const etag = response.headers.get("ETag");
+  if (response.status === 304) return { status: 304, etag };
+  const declared = Number(response.headers.get("Content-Length") ?? "0");
+  if (declared > MAX_CATALOG_V2_PAGE_BYTES) throw protocolError("Guard returned an oversized catalog page");
+  const text = await response.text();
+  const size = new TextEncoder().encode(text).byteLength;
+  if (size > MAX_CATALOG_V2_PAGE_BYTES) throw protocolError("Guard returned an oversized catalog page");
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    payload = void 0;
+  }
+  if (!response.ok) {
+    const code = isRecord(payload) && typeof payload.error === "string" ? payload.error : void 0;
+    if (UNSUPPORTED.has(`${response.status}:${code ?? ""}`)) {
+      throw new CatalogV2UnsupportedError("Guard does not serve the v2 catalog", response.status, code);
+    }
+    throw new ExtensionControlApiError(code ?? `Request failed (${response.status})`, response.status, code);
+  }
+  if (!isRecord(payload)) throw protocolError(`Guard returned invalid JSON (${response.status})`);
+  return { status: 200, etag, payload, size };
+}
+async function readSized(route, query, signal) {
+  const path = `${CATALOG_V2_PATH}${route}${query ? `?${query}` : ""}`;
+  const key = `${guardApiCacheScope()}|${path}`;
+  const cached = readCache.get(key);
+  let response = await readOnce(path, cached?.etag ?? null, signal);
+  if (response.status === 304) {
+    if (cached && response.etag === cached.etag) {
+      readCache.delete(key);
+      readCache.set(key, cached);
+      return cached;
+    }
+    response = await readOnce(path, null, signal);
+    if (response.status !== 200) throw protocolError("Guard answered 304 to an unconditional catalog request");
+  }
+  if (!response.etag) throw protocolError("Guard catalog response is missing its validator");
+  const entry = { etag: response.etag, payload: response.payload, size: response.size };
+  readCache.delete(key);
+  readCache.set(key, entry);
+  while (readCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = readCache.keys().next().value;
+    if (oldest === void 0) break;
+    readCache.delete(oldest);
+  }
+  return entry;
+}
+function pageFields(page) {
+  const { snapshot_id, native_catalog_digest, total_count, items, next_cursor } = page;
+  if (typeof snapshot_id !== "string" || typeof native_catalog_digest !== "string" || !Number.isSafeInteger(total_count) || !Array.isArray(items) || !items.every(isRecord) || !(next_cursor === null || next_cursor === void 0 || typeof next_cursor === "string")) {
+    throw protocolError("Guard returned an invalid catalog page");
+  }
+  return { snapshot_id, digest: native_catalog_digest, total: total_count, items, next: next_cursor ?? null };
+}
+async function traverseOnce(route, itemKey, params, signal) {
+  const items = [];
+  const seenItems = /* @__PURE__ */ new Set();
+  const seenCursors = /* @__PURE__ */ new Set();
+  let first = null;
+  let cursor = null;
+  let consumed = 0;
+  for (let index = 0; index < MAX_TRAVERSAL_PAGES; index += 1) {
+    signal?.throwIfAborted();
+    const query = { limit: String(PAGE_LIMIT), ...params, ...cursor ? { cursor } : {} };
+    const encoded = new URLSearchParams(Object.entries(query).sort(([left], [right]) => left.localeCompare(right))).toString();
+    const read = await readSized(route, encoded, signal);
+    consumed += read.size;
+    if (consumed > MAX_TRAVERSAL_BYTES) throw protocolError("Guard catalog traversal exceeded its byte budget");
+    const page = pageFields(read.payload);
+    if (first === null) {
+      first = page;
+    } else if (page.snapshot_id !== first.snapshot_id || page.digest !== first.digest || page.total !== first.total) {
+      throw protocolError("Guard catalog changed during the read", CATALOG_SNAPSHOT_EXPIRED);
+    }
+    for (const item of page.items) {
+      const identity = item[itemKey];
+      if (typeof identity !== "string" || seenItems.has(identity)) throw protocolError("Guard catalog traversal returned a duplicate item");
+      seenItems.add(identity);
+      items.push(item);
+    }
+    if (page.next === null) {
+      if (items.length !== first.total) throw protocolError("Guard catalog traversal was incomplete");
+      return { snapshot_id: first.snapshot_id, digest: first.digest, items };
+    }
+    if (seenCursors.has(page.next) || page.items.length === 0) throw protocolError("Guard catalog traversal did not advance");
+    seenCursors.add(page.next);
+    cursor = page.next;
+  }
+  throw protocolError("Guard catalog traversal exceeded its page budget");
+}
+async function traverse(route, itemKey, params = {}, signal) {
+  try {
+    return await traverseOnce(route, itemKey, params, signal);
+  } catch (error) {
+    if (!(error instanceof ExtensionControlApiError) || error.code !== CATALOG_SNAPSHOT_EXPIRED) throw error;
+  }
+  return traverseOnce(route, itemKey, params, signal);
+}
+function extensionRoute(extensionId, collection) {
+  const route = `extensions/${encodeURIComponent(extensionId)}`;
+  return collection ? `${route}/${collection}` : route;
+}
+function sortedByName(items) {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name));
+}
+function requireSnapshot(observed, expected) {
+  if (observed !== expected) throw protocolError("Guard catalog changed. Reload to continue.", CATALOG_SNAPSHOT_EXPIRED);
+}
+async function v2Detail(extensionId, snapshotId) {
+  const detail = (await readSized(extensionRoute(extensionId), "")).payload;
+  const { extension, collections } = detail;
+  if (typeof detail.snapshot_id !== "string" || !isRecord(extension) || !isRecord(collections) || !isRecord(extension.catalog_defaults)) {
+    throw protocolError("Guard returned an invalid catalog detail");
+  }
+  requireSnapshot(detail.snapshot_id, snapshotId);
+  const { catalog_defaults: defaults, content_revision: _revision, ...fields } = extension;
+  const reads = await Promise.all([
+    traverse(extensionRoute(extensionId, "permissions"), "permission_id"),
+    traverse(extensionRoute(extensionId, "rules"), "rule_id"),
+    "mcp_tools" in collections ? traverse(extensionRoute(extensionId, "mcp-tools"), "name") : null
+  ]);
+  for (const read of reads) if (read) requireSnapshot(read.snapshot_id, snapshotId);
+  const [permissions, rules, tools] = reads;
+  return normalizeExtensionCatalogItem({
+    ...fields,
+    enabled: defaults.enabled,
+    activation: defaults.activation,
+    permissions: permissions?.items,
+    rules: rules?.items,
+    ...tools ? { mcp_tools: tools.items } : {}
+  }, `catalog.extensions.${extensionId}`);
+}
+function searchTerms(query) {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+async function loadV2() {
+  const index = await traverse("index", "extension_id");
+  const summaries = index.items.map((item, position) => normalizeExtensionCatalogSummary(item, `catalog.index[${position}]`));
+  const byId = new Map(summaries.map((summary) => [summary.extension_id, summary]));
+  const details = /* @__PURE__ */ new Map();
+  return {
+    protocol: "v2",
+    catalog_digest: index.digest,
+    extensions: sortedByName(summaries),
+    detail(extensionId) {
+      const summary = byId.get(extensionId);
+      if (!summary) return Promise.reject(new ExtensionControlProtocolError(`Unknown extension ${extensionId}`));
+      const key = `${extensionId}|${summary.content_revision ?? ""}`;
+      let pending = details.get(key);
+      if (!pending) {
+        pending = v2Detail(extensionId, index.snapshot_id);
+        details.set(key, pending);
+        pending.catch(() => details.delete(key));
+      }
+      return pending;
+    },
+    async searchPermissions(query, signal) {
+      const terms = searchTerms(query);
+      if (!terms.length) return [];
+      const result = await traverse("permissions", "permission_id", { q: terms.join(" ") }, signal);
+      requireSnapshot(result.snapshot_id, index.snapshot_id);
+      return result.items.map((item, position) => {
+        const permission = normalizeExtensionPermission(item, `catalog.permissions[${position}]`);
+        const extension = byId.get(permission.extension_id);
+        if (!extension) throw protocolError("Guard returned a permission for an unknown extension");
+        return { extension, permission };
+      });
+    }
+  };
+}
+function catalogReadModelFromCatalog(catalog) {
+  const byId = new Map(catalog.extensions.map((item) => [item.extension_id, item]));
+  const localSearch = (query) => {
+    const terms = searchTerms(query);
+    if (!terms.length) return [];
+    return catalog.extensions.flatMap((extension) => extension.permissions.filter((permission) => {
+      const text = [
+        permission.label,
+        permission.example_command ?? "",
+        permission.permission_id,
+        permission.description,
+        permission.family ?? "",
+        extension.name,
+        extension.extension_id,
+        ...extension.executables
+      ].join(" ").toLowerCase();
+      return terms.every((term) => text.includes(term));
+    }).map((permission) => ({ extension, permission })));
+  };
+  return {
+    protocol: "v1",
+    catalog_digest: catalog.catalog_digest,
+    extensions: sortedByName(catalog.extensions),
+    detail(extensionId) {
+      const item = byId.get(extensionId);
+      return item ? Promise.resolve(item) : Promise.reject(new ExtensionControlProtocolError(`Unknown extension ${extensionId}`));
+    },
+    searchPermissions: (query) => Promise.resolve(localSearch(query)),
+    localSearch
+  };
+}
+async function loadCatalogReadModel() {
+  try {
+    return await loadV2();
+  } catch (error) {
+    if (error instanceof CatalogV2UnsupportedError) return catalogReadModelFromCatalog(await fetchExtensionCatalog());
+    throw error;
+  }
 }
 function permissionSuffix(permissionId) {
   const marker = ".permission.";
@@ -1243,13 +1473,14 @@ function useExtensionPolicyDraft(props) {
     setPreviewBusy(true);
     setError(null);
     try {
-      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const pairs = oldExtensions.map((oldExtension) => {
+      const [latestCatalog, latestEffective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+      const matches = oldExtensions.map((oldExtension) => {
         const exact = latestCatalog.extensions.find((item) => item.extension_id === oldExtension.extension_id);
-        if (exact) return { oldExtension, latestExtension: exact };
+        if (exact) return { oldExtension, latestId: exact.extension_id };
         const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(oldExtension.extension_id));
-        return aliasMatches.length === 1 ? { oldExtension, latestExtension: aliasMatches[0] } : null;
-      }).filter((pair) => Boolean(pair));
+        return aliasMatches.length === 1 ? { oldExtension, latestId: aliasMatches[0].extension_id } : null;
+      }).filter((match) => Boolean(match));
+      const pairs = await Promise.all(matches.map(async ({ oldExtension, latestId }) => ({ oldExtension, latestExtension: await latestCatalog.detail(latestId) })));
       if (!pairs.length) {
         setError("These extensions no longer exist in the authoritative catalog. Discard the draft and refresh before continuing.");
         return;
@@ -5443,26 +5674,6 @@ function LocalCliDetail(props) {
     ) : null
   ] });
 }
-const PROTECTION_TERMS = {
-  pageTitle: "Extensions"
-};
-function looksLikeUnauthorizedSession(message) {
-  const lower = message.trim().toLowerCase();
-  if (!lower || lower === "unauthorized" || lower.includes("unauthorized") || lower.includes("session")) return true;
-  return /(^|[^0-9])401([^0-9]|$)/.test(lower);
-}
-function protectionCenterLoadError(message) {
-  if (looksLikeUnauthorizedSession(message)) {
-    return {
-      title: "This view needs a signed local session",
-      detail: "Local protection is still running on this device. Open Extensions from the local Guard dashboard and try again after Guard signs this session."
-    };
-  }
-  return {
-    title: "Extensions unavailable",
-    detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
-  };
-}
 function effectiveStatusKey(effective, options = {}) {
   const managed = effective.managed_controls;
   const approvalGate = options.approvalGate;
@@ -5497,6 +5708,1031 @@ function effectiveStatusKey(effective, options = {}) {
       }
     } : null
   });
+}
+function safeCloudSignInHref(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+function ManagedControlsPrimaryAction(props) {
+  if (!props.action) return null;
+  if (props.action.href) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: props.action.href, target: "_blank", rel: "noopener noreferrer", className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: [
+      props.action.label,
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+    ] });
+  }
+  if (props.action.action === "refresh") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onRefresh,
+        disabled: props.checking,
+        "aria-busy": props.checking,
+        className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-60",
+        children: props.checking ? "Checking…" : props.action.label
+      }
+    );
+  }
+  if (props.action.action === "connect-cloud") {
+    if (props.connectHref) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: props.connectHref, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "size-4", "aria-hidden": "true" }),
+        "Open Guard Cloud sign-in"
+      ] });
+    }
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onConnect, disabled: props.connecting, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "size-4", "aria-hidden": "true" }),
+      props.connecting ? "Starting sign-in..." : props.action.label
+    ] });
+  }
+  return null;
+}
+function extensionPermissionIds(effective, extension) {
+  const ids = new Set(
+    (effective.projection?.permissions ?? []).filter((item) => item.extension_id === extension.extension_id).map((item) => item.permission_id)
+  );
+  if ("permissions" in extension) for (const permission of extension.permissions) ids.add(permission.permission_id);
+  return ids;
+}
+function layerTargetsExtension(effective, extension, permissionIds, kind) {
+  return effective.layers.some(
+    (layer) => layer.kind === kind && layer.controls.some(
+      (control) => control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
+    )
+  );
+}
+function managedSource(effective) {
+  const managed = effective.managed_controls;
+  return managed?.authority_mode === "managed-restrictive" ? `Managed by ${managed.workspace_id}` : "Synced from Guard Cloud";
+}
+function extensionProtectionAuthority(effective, extension) {
+  if (effective.global_lockdown) {
+    return { effectiveState: "lockdown", source: "Emergency Lockdown", sources: ["Emergency Lockdown"] };
+  }
+  const permissionIds = extensionPermissionIds(effective, extension);
+  const extensionProjection = effective.projection?.extensions.find(
+    (item) => item.extension_id === extension.extension_id
+  );
+  const permissionProjections = effective.projection?.permissions.filter(
+    (item) => item.extension_id === extension.extension_id || permissionIds.has(item.permission_id)
+  ) ?? [];
+  const projections = extensionProjection ? [extensionProjection, ...permissionProjections] : permissionProjections;
+  const managed = managedSource(effective);
+  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension, permissionIds, "signed-cloud");
+  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension, permissionIds, "local-admin");
+  const sources = [];
+  if (hasManaged) sources.push(managed);
+  if (hasLocal) sources.push("Set on this device");
+  if (sources.length === 0) sources.push(extension.required ? "Required by Guard" : "Recommended by Guard");
+  const managedBlocks = projections.some(
+    (item) => item.effective_state === "blocked" && item.managed_state === "disabled"
+  ) || effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+  ));
+  const localBlocks = projections.some(
+    (item) => item.effective_state === "blocked" && item.local_state === "disabled"
+  ) || effective.layers.some((layer) => layer.kind === "local-admin" && layer.controls.some(
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+  ));
+  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension) === "disabled";
+  const permissionStates = "permissions" in extension ? extension.permissions.map((permission) => permissionEffectiveState(effective, extension, permission)) : permissionProjections.map((item) => item.effective_state === "allowed" ? "enabled" : "disabled");
+  const blockedPermissionCount = permissionStates.filter((state) => state === "disabled").length;
+  let effectiveState;
+  if (extensionBlocked) effectiveState = "blocked";
+  else if (blockedPermissionCount > 0 && blockedPermissionCount < permissionStates.length) effectiveState = "partial";
+  else if (blockedPermissionCount > 0 || localBlocks || managedBlocks) effectiveState = "blocked";
+  else if (extension.required) effectiveState = "required";
+  else effectiveState = extensionEffectiveState(effective, extension) === "enabled" ? "allowed" : "blocked";
+  let source = sources.at(-1) ?? "Recommended by Guard";
+  if (localBlocks) source = "Set on this device";
+  if (managedBlocks) source = managed;
+  return { effectiveState, source, sources };
+}
+function extensionProtectionSource(effective, extension) {
+  return extensionProtectionAuthority(effective, extension).source;
+}
+function cloudBase(runtime) {
+  const candidate = runtime?.dashboard_url?.trim() || runtime?.connect_url?.trim();
+  return candidate || void 0;
+}
+function recoveryNotice(recovery) {
+  if (recovery === "unsupported-version") {
+    return "This Control Set uses a newer control schema. Update Guard before applying it; the last verified authority remains in force.";
+  }
+  if (recovery === "catalog-mismatch") {
+    return "The Control Set and local Extension catalog do not match. Guard keeps the last verified authority fail-safe until compatibility is restored.";
+  }
+  if (recovery === "degraded") {
+    return "Local control authority needs recovery. Guard keeps the last verified authority fail-safe while you refresh or repair it.";
+  }
+  return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
+}
+function extensionLocalProtectionInput(extension, effective, runtime) {
+  const managed = effective.managed_controls;
+  const authority = extensionProtectionAuthority(effective, extension);
+  const failureCodes = new Set(effective.failures.map((failure) => failure.code.toLowerCase()));
+  let recovery;
+  if (failureCodes.has("unsupported-control-schema")) recovery = "unsupported-version";
+  else if (failureCodes.has("catalog-digest-mismatch") || failureCodes.has("catalog-unavailable")) recovery = "catalog-mismatch";
+  else if (runtime?.cloud_policy_sync_error || [...failureCodes].some((code) => code.includes("stale"))) recovery = "stale";
+  else if (effective.health !== "protected") recovery = "degraded";
+  return {
+    extensionName: extension.name,
+    extensionId: extension.extension_id,
+    effectiveState: authority.effectiveState,
+    source: authority.source,
+    sources: authority.sources,
+    catalogDigest: effective.catalog_digest,
+    recovery,
+    cloudControlsUrl: cloudBase(runtime),
+    controlSetName: managed?.control_set_name ?? managed?.control_set_id,
+    controlSetVersion: managed?.bundle_version,
+    workspace: managed?.workspace_id,
+    authorityMode: managed?.authority_mode,
+    acknowledgementRevision: managed?.acknowledgement.extension_authority_revision,
+    acknowledgementStatus: managed?.acknowledgement.status,
+    lastAcknowledgedAt: runtime?.cloud_policy_last_ack_at ?? void 0,
+    effectiveProjectionDigest: managed?.acknowledgement.effective_projection_digest
+  };
+}
+function ExtensionManagedControlsPanel(props) {
+  const [connecting, setConnecting] = reactExports.useState(false);
+  const [connectHref, setConnectHref] = reactExports.useState(null);
+  const [connectMessage, setConnectMessage] = reactExports.useState(null);
+  const [refreshState, setRefreshState] = reactExports.useState("idle");
+  const [refreshError, setRefreshError] = reactExports.useState(null);
+  const refreshBaselineRef = reactExports.useRef(null);
+  const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
+  const view = buildLocalProtectionView(input);
+  const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
+  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, extensionPermissionIds(props.effective, props.extension), "signed-cloud");
+  const refresh = reactExports.useCallback(async () => {
+    if (refreshState === "checking") return;
+    refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
+    setRefreshState("checking");
+    setRefreshError(null);
+    try {
+      await props.onRefresh();
+      setRefreshState("complete");
+    } catch {
+      setRefreshState("error");
+      setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
+    }
+  }, [props.effective, props.onRefresh, props.runtime, refreshState]);
+  const connect = reactExports.useCallback(() => {
+    setConnecting(true);
+    setConnectMessage(null);
+    void startGuardCloudConnect().then((status) => {
+      if (!status.connect_required) {
+        setConnectMessage("Guard Cloud is connected.");
+        return;
+      }
+      const href = safeCloudSignInHref(status.connect_flow?.authorize_url) ?? safeCloudSignInHref(status.connect_flow?.connect_url);
+      setConnectHref(href);
+      setConnectMessage(href ? "Complete sign-in to resume synced Control Sets." : "Guard could not start sign-in. Try again.");
+    }).catch((error) => {
+      setConnectMessage(error instanceof Error ? error.message : "Guard could not start sign-in. Try again.");
+    }).finally(() => setConnecting(false));
+  }, []);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "managed-controls-heading", className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Source and authority" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "managed-controls-heading", className: "mt-1 text-lg font-semibold text-brand-dark", children: hasManagedControl ? "Active managed control" : "No Control Set targets this Extension" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: view.summary })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex self-start rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark", children: view.source })
+      ] }),
+      view.status === "needs-attention" || view.status === "unsupported" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
+        recoveryNotice(input.recovery)
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: view.technicalDetails.map((detail) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase tracking-wide text-brand-dark/55", children: detail.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all text-sm text-brand-dark", children: detail.value })
+      ] }, detail.label)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ManagedControlsPrimaryAction,
+        {
+          action: view.primaryAction,
+          connecting,
+          checking: refreshState === "checking",
+          connectHref,
+          onConnect: connect,
+          onRefresh: refresh
+        }
+      ) }),
+      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null,
+      refreshState === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: "Checking current protection status…" }) : null,
+      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, { runtime: props.runtime }) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
+      refreshState === "error" && refreshError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-rose-800", children: refreshError }) : null
+    ] }),
+    !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,
+    hasManagedControl && input.authorityMode === "managed-restrictive" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950", children: "This is a managed-restrictive Control Set. Local settings can add stricter blocks, but they cannot weaken this workspace restriction." }) : null
+  ] });
+}
+function receiptMatchesExtension(receipt, extension) {
+  const identities = /* @__PURE__ */ new Set([
+    extension.extension_id,
+    ...extension.permissions.map((permission) => permission.permission_id),
+    ...extension.rules.map((rule) => rule.rule_id)
+  ]);
+  if (identities.has(receipt.artifact_id)) return true;
+  if (receipt.changed_capabilities.some((capability) => identities.has(capability))) return true;
+  const envelope = receipt.action_envelope_json;
+  if (!envelope) return false;
+  if (envelope.command_category === extension.extension_id) return true;
+  const toolName = envelope.tool_name?.trim().toLowerCase();
+  return Boolean(toolName && extension.executables.some((executable) => executable.toLowerCase() === toolName));
+}
+function recentExtensionReceipts(receipts, extension, limit = 8) {
+  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
+}
+function receiptDecisionLabel(receipt) {
+  if (receipt.policy_decision === "allow") return "Allowed";
+  if (receipt.policy_decision === "block") return "Blocked";
+  return "Reviewed";
+}
+function ExtensionActivity(props) {
+  const receipts = recentExtensionReceipts(props.receipts, props.extension);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Recent Extension decisions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Receipt-backed decisions mapped to this canonical Extension. Guard does not synthesize activity." }),
+    receipts.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-100", "aria-label": "Recent Extension receipts", children: receipts.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
+          receiptDecisionLabel(receipt),
+          " · ",
+          receipt.harness
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark/60", children: [
+          receipt.capabilities_summary,
+          " · ",
+          new Date(receipt.timestamp).toLocaleString()
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: `/evidence?view=actions&selected=${encodeURIComponent(receipt.receipt_id)}&search=${encodeURIComponent(receipt.receipt_id)}`, className: "inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline", children: [
+        "Open receipt ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+      ] })
+    ] }, receipt.receipt_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-brand-dark/70", children: "No matching receipts are available on this device yet." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: `/evidence?view=actions&search=${encodeURIComponent(props.extension.extension_id)}`, className: "mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
+      "View matching Evidence ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+    ] })
+  ] });
+}
+function toolStateLabel(state) {
+  if (state === "allow") return "Allow";
+  if (state === "review") return "Review";
+  if (state === "block") return "Block";
+  return "Recommended";
+}
+function McpServerDefaults({ extension }) {
+  if (extension.surface !== "mcp") return null;
+  const launch = extension.mcp_launch;
+  const tools = extension.mcp_tools ?? [];
+  const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
+  const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
+  const directLaunch = launch?.kind === "direct-command" ? launch : null;
+  const unsupportedLaunch = launch?.kind === "unsupported";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
+    unsupportedLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", "data-testid": "mcp-launch-unsupported", children: "This server uses a launch type this version of Guard does not recognize, so its launch details are unavailable. Update Guard to see them." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : directLaunch ? "Matching launches use this command. Defaults apply only after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: remoteLaunch.url })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
+        ] })
+      ] }) : directLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: directLaunch.command })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: packageLaunch?.command ?? "Package launcher" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Package" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: packageLaunch?.package ?? "Unknown package" })
+        ] })
+      ] }) })
+    ] }),
+    tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "text-xs uppercase tracking-wide text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 pr-4 font-semibold", children: "Tool" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 font-semibold", children: "Default" })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: tools.map((tool) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-slate-100", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "py-2 pr-4 font-mono text-xs text-brand-dark", children: tool.name }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "py-2 text-sm text-brand-dark", children: toolStateLabel(tool.state) })
+      ] }, tool.name)) })
+    ] }) }) : null
+  ] });
+}
+const DECISIONS = /* @__PURE__ */ new Set(["allowed", "ask-first", "blocked"]);
+const MINIMUM_ACTIONS = /* @__PURE__ */ new Set(["allow", "monitor", "review", "block"]);
+const SEVERITIES = /* @__PURE__ */ new Set(["low", "medium", "high", "critical"]);
+function record$1(value) {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Guard returned an invalid Test Lab response");
+  return value;
+}
+function boundedString(value, field, limit = 512) {
+  if (typeof value !== "string" || !value.trim() || value.length > limit) throw new Error(`Guard returned an invalid ${field}`);
+  return value;
+}
+function stringList(value, field, limit) {
+  if (!Array.isArray(value) || value.length > limit || !value.every((item) => typeof item === "string" && item.length <= 320)) {
+    throw new Error(`Guard returned an invalid ${field}`);
+  }
+  return [...value];
+}
+function normalizeProtectionTestResult(value) {
+  const raw = record$1(value);
+  if (raw.schema_version !== "guard.daemon.extension-control-test.v1") throw new Error("Guard returned an unsupported Test Lab response");
+  if (typeof raw.decision !== "string" || !DECISIONS.has(raw.decision)) throw new Error("Guard returned an invalid Test Lab decision");
+  if (typeof raw.minimum_action !== "string" || !MINIMUM_ACTIONS.has(raw.minimum_action)) throw new Error("Guard returned an invalid Test Lab action");
+  if (typeof raw.matched !== "boolean" || typeof raw.module_matched !== "boolean" || typeof raw.other_protection_matched !== "boolean") {
+    throw new Error("Guard returned invalid Test Lab match state");
+  }
+  if (!Array.isArray(raw.matches) || raw.matches.length > 32) throw new Error("Guard returned too many Test Lab matches");
+  const matches = raw.matches.map((item) => {
+    const match = record$1(item);
+    if (typeof match.severity !== "string" || !SEVERITIES.has(match.severity)) throw new Error("Guard returned an invalid Test Lab severity");
+    return {
+      extension_id: boundedString(match.extension_id, "extension ID", 256),
+      extension_name: boundedString(match.extension_name, "extension name", 120),
+      rule_id: boundedString(match.rule_id, "rule ID", 256),
+      permission_id: typeof match.permission_id === "string" && match.permission_id.trim() ? match.permission_id : null,
+      rule_title: boundedString(match.rule_title, "rule title", 160),
+      description: boundedString(match.description, "rule description", 320),
+      severity: match.severity,
+      risk_classes: stringList(match.risk_classes, "risk classes", 16)
+    };
+  });
+  if (typeof raw.revision !== "number" || !Number.isSafeInteger(raw.revision) || raw.revision < 0) throw new Error("Guard returned an invalid Test Lab revision");
+  return {
+    schema_version: "guard.daemon.extension-control-test.v1",
+    decision: raw.decision,
+    minimum_action: raw.minimum_action,
+    matched: raw.matched,
+    module_matched: raw.module_matched,
+    other_protection_matched: raw.other_protection_matched,
+    explanation: boundedString(raw.explanation, "Test Lab explanation", 320),
+    matches,
+    safer_alternatives: stringList(raw.safer_alternatives, "safer alternatives", 8),
+    authority_health: boundedString(raw.authority_health, "authority health", 64),
+    revision: raw.revision,
+    catalog_digest: boundedString(raw.catalog_digest, "catalog digest", 128)
+  };
+}
+async function testProtectionCommand(extensionId, command) {
+  const response = await fetchExtensionControlApi("/v1/extension-controls/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ extension_id: extensionId, command })
+  });
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    throw new Error(`Guard returned invalid JSON (${response.status})`);
+  }
+  if (!response.ok) {
+    const raw = typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload : {};
+    throw new Error(typeof raw.error === "string" ? raw.error.replaceAll("_", " ") : `Test Lab request failed (${response.status})`);
+  }
+  return normalizeProtectionTestResult(payload);
+}
+function safeExamples(extension) {
+  const executable = extension.executables[0];
+  const examples = extension.extension_id === "command.git" ? ["git status", "git reset --hard HEAD~1", "git push --force-with-lease"] : executable ? [`${executable} --help`] : [];
+  return examples.slice(0, 3);
+}
+function resultTitle(result) {
+  if (result.decision === "blocked") return "Guard would block this";
+  if (result.decision === "ask-first") return "Guard would ask first";
+  return "Guard would allow this";
+}
+function ProtectionTestLab({ extension }) {
+  const [command, setCommand] = reactExports.useState("");
+  const [result, setResult] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const examples = reactExports.useMemo(() => safeExamples(extension), [extension]);
+  const run = async () => {
+    const candidate = command.trim();
+    if (!candidate || busy) return;
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await testProtectionCommand(extension.extension_id, candidate));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Test Lab could not evaluate this command.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-test-lab-heading", className: "mt-10 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-test-lab-heading", className: "text-lg font-semibold tracking-tight text-brand-dark", children: "Test Lab" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Nothing is executed. The check runs locally and is not saved." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
+      "See how Guard would handle a ",
+      extension.name,
+      " command without running it."
+    ] }),
+    examples.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: examples.map((example) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: () => {
+      setCommand(example);
+      setResult(null);
+      setError(null);
+    }, className: `${EXTENSION_CHIP_CLASS} disabled:cursor-not-allowed disabled:opacity-50`, children: example }, example)) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-col gap-2 sm:flex-row", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          value: command,
+          disabled: busy,
+          onChange: (event) => {
+            setCommand(event.target.value.slice(0, 4096));
+            setResult(null);
+            setError(null);
+          },
+          onKeyDown: (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              void run();
+            }
+          },
+          maxLength: 4096,
+          spellCheck: false,
+          autoComplete: "off",
+          "aria-label": "Command to check",
+          placeholder: "Paste a command Guard stopped, like git reset --hard HEAD~1",
+          className: "min-h-11 w-full flex-1 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark placeholder:font-sans placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
+        void run();
+      }, disabled: busy || !command.trim(), className: "min-h-11 shrink-0 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50", children: busy ? "Checking…" : "Check safely" })
+    ] }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800", children: error }) : null,
+    result ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "mt-5 rounded-xl bg-slate-50 p-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionDecisionBadge, { result: result.decision }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: resultTitle(result) }),
+        result.decision === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "size-5 text-emerald-700", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-5 text-amber-700", "aria-hidden": "true" })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm leading-6 text-brand-dark/80", children: result.explanation }),
+      result.matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Protection rules involved" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 space-y-2", children: result.matches.slice(0, 6).map((match) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl bg-white p-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: match.rule_title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-semibold capitalize text-brand-dark/55", children: [
+              match.severity,
+              " risk"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: match.description })
+        ] }, `${match.extension_id}:${match.rule_id}`)) })
+      ] }) : null,
+      result.safer_alternatives.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Safer alternatives" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 list-disc space-y-1 pl-5 text-sm text-brand-dark/80", children: result.safer_alternatives.map((alternative) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: alternative }, alternative)) })
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-xs text-slate-500", children: "This result uses the current local protection state. It is a read-only evaluation and does not create an approval or receipt." })
+    ] }) : null
+  ] });
+}
+const DRAFT_EXIT_MESSAGE = "Discard your unreviewed protection setting changes?";
+const DETAIL_TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "permissions", label: "Permissions" },
+  { id: "managed-controls", label: "Managed controls" },
+  { id: "activity", label: "Activity" },
+  { id: "technical", label: "Technical details" }
+];
+function canonicalProtectionDetailTab(tab) {
+  if (tab === "commands" || tab === "policy") return "permissions";
+  if (tab === "test-lab") return "activity";
+  if (tab === "managed-controls" || tab === "permissions" || tab === "technical") return tab;
+  return tab === "activity" ? "activity" : "overview";
+}
+function availabilityTitle(extension) {
+  if (extension.surface === "mcp") return "MCP tools available";
+  if (extension.surface === "unsupported") return "Protection available";
+  return "Commands available";
+}
+function requiredLine(extension) {
+  if (!extension.required) return null;
+  return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
+}
+function availabilityCopy(extension, enabled) {
+  if (extension.surface === "unsupported") {
+    return enabled ? "This protection follows the settings below. Update Guard to see what it covers." : "This protection is off on this device. Update Guard to see what it covers.";
+  }
+  if (extension.surface === "mcp" && extension.trust_class === "external") {
+    if (enabled) {
+      return "Matching MCP tools follow the protection settings below. Turn off to leave this community server inactive.";
+    }
+    return "This community MCP server stays off until you turn it on.";
+  }
+  if (extension.trust_class === "external") {
+    if (enabled) {
+      return "Matching commands follow the protection settings below. Turn off to leave this community tool inactive.";
+    }
+    return "This community tool stays off until you turn it on.";
+  }
+  if (enabled) {
+    return "Matching commands follow the protection settings below. Turn off to block every command this tool owns on this device.";
+  }
+  return "Every command this tool owns is blocked on this device. Turn on to follow the protection settings below.";
+}
+function protectionStateLabel(state) {
+  return state.charAt(0).toUpperCase() + state.slice(1);
+}
+function DeveloperModuleDetails(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalDetails, { title: "Developer details", testId: "protection-more-detail", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Canonical module" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Extension ID" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-xs", children: props.extension.extension_id }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Version" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "text-sm", children: props.extension.version })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Catalog digest" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-xs", children: props.catalogDigest }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Provenance" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "text-sm", children: controlProvenance(props.effective, "extension", props.extension.extension_id).join(" · ") })
+        ] })
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Detections" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 max-h-96 overflow-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-xs", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "sticky top-0 bg-[var(--surface-1)] text-brand-dark/80", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Detection" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Severity" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Matcher" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Default" })
+        ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: props.extension.rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-[rgba(63,65,116,0.08)]", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-brand-dark/80", children: rule.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-[10px] text-brand-dark/80", children: rule.rule_id })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.severity }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.matcher_kind }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: treatmentLabel(rule.default_mode) })
+        ] }, rule.rule_id)) })
+      ] }) })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Protection setting identifiers" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-2", children: props.extension.permissions.map((permission) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-medium text-brand-dark/80", children: permission.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-brand-dark/80", children: permission.permission_id }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-brand-dark/80", children: permission.action_classes.join(", ") || "No action classes" })
+      ] }, permission.permission_id)) })
+    ] })
+  ] }) });
+}
+function ProtectionModuleDetail(props) {
+  const [policyDirty, setPolicyDirty] = reactExports.useState(false);
+  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
+  const urlStateRef = reactExports.useRef(props.urlState);
+  urlStateRef.current = props.urlState;
+  const onUrlStateRef = reactExports.useRef(props.onUrlState);
+  onUrlStateRef.current = props.onUrlState;
+  reactExports.useEffect(() => {
+    let highlightTimer = 0;
+    let highlighted = null;
+    const clearHighlight = () => {
+      if (highlightTimer) window.clearTimeout(highlightTimer);
+      highlightTimer = 0;
+      highlighted?.classList.remove("guard-pattern-row-highlight");
+      highlighted = null;
+    };
+    const highlight = () => {
+      const anchor = window.location.hash;
+      let rowId = null;
+      let ruleId = null;
+      if (anchor.startsWith("#pattern-")) {
+        rowId = anchor.slice(1);
+      } else if (anchor.startsWith("#rule-")) {
+        ruleId = anchor.slice("#rule-".length);
+      } else {
+        const fragment = anchor.startsWith("#") ? anchor.slice(1) : anchor;
+        const requested = new URLSearchParams(fragment).get("rule");
+        if (requested) ruleId = requested;
+      }
+      if (ruleId) {
+        const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
+        const permission = rule ? permissionForRule(props.extension, rule) : null;
+        rowId = permission ? `pattern-${permission.permission_id}` : null;
+      }
+      clearHighlight();
+      if (!rowId) return;
+      const row = document.getElementById(rowId);
+      if (!row) return;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      row.classList.add("guard-pattern-row-highlight");
+      highlighted = row;
+      highlightTimer = window.setTimeout(clearHighlight, 2400);
+    };
+    highlight();
+    window.addEventListener("hashchange", highlight);
+    return () => {
+      window.removeEventListener("hashchange", highlight);
+      clearHighlight();
+    };
+  }, [props.extension.extension_id, props.extension.rules]);
+  const requiredNote = requiredLine(props.extension);
+  const extensionEnabled = extensionEffectiveState(props.effective, props.extension) === "enabled";
+  const requestExtensionChange = props.extension.required ? void 0 : props.onRequestExtensionChange;
+  const activeTab = canonicalProtectionDetailTab(props.urlState?.tab ?? "overview");
+  const protectionView = buildLocalProtectionView(
+    extensionLocalProtectionInput(props.extension, props.effective, props.runtime)
+  );
+  const orgManaged = protectionView.sources.some(
+    (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by ")
+  );
+  const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || void 0;
+  const setActiveTab = reactExports.useCallback(async (tab) => {
+    if (!props.onUrlState) return false;
+    const needsConfirmation = tab !== activeTab && policyDirty;
+    if (needsConfirmation && !await requestConfirmation({
+      title: "Discard unreviewed changes?",
+      description: DRAFT_EXIT_MESSAGE,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "destructive"
+    })) {
+      return false;
+    }
+    const latestUrlState = urlStateRef.current;
+    const latestOnUrlState = onUrlStateRef.current;
+    if (!latestOnUrlState) return false;
+    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
+      return false;
+    }
+    latestOnUrlState({
+      ...latestUrlState ?? {
+        tab: "overview",
+        query: "",
+        risk: "all",
+        state: "all",
+        configurable: "all",
+        source: "all",
+        deprecated: "all",
+        type: "all",
+        sort: "name",
+        ruleId: null
+      },
+      tab,
+      ruleId: null
+    });
+    return true;
+  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
+  const handleTabKeyDown = async (event, tab) => {
+    if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
+    const index = DETAIL_TABS.findIndex((item) => item.id === tab);
+    let nextIndex = index;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % DETAIL_TABS.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = DETAIL_TABS.length - 1;
+    if (nextIndex === index && event.key !== "Home" && event.key !== "End") return;
+    event.preventDefault();
+    const next = DETAIL_TABS[nextIndex];
+    if (!next) return;
+    if (!await setActiveTab(next.id)) return;
+    window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
+  };
+  const handleBack = async () => {
+    if (policyDirty && !await requestConfirmation({
+      title: "Discard unreviewed changes?",
+      description: DRAFT_EXIT_MESSAGE,
+      confirmLabel: "Discard changes",
+      cancelLabel: "Keep editing",
+      tone: "destructive"
+    })) return;
+    props.onBack();
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "protection-module-detail", className: "w-full", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => void handleBack(), className: "inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
+      "Extensions"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-4 border-b border-slate-200 pb-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ExtensionBrandMark,
+          {
+            extension_id: props.extension.extension_id,
+            name: props.extension.name,
+            executables: props.extension.executables,
+            ecosystem_ids: props.extension.ecosystem_ids,
+            size: "lg"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.extension.executables.join(" · ") }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.extension.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: props.extension.description }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark", children: protectionView.source })
+        ] })
+      ] }),
+      requiredNote ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80", children: requiredNote }) : null,
+      requestExtensionChange ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            role: "switch",
+            "aria-checked": extensionEnabled,
+            disabled: props.effective.health !== "protected",
+            onClick: () => requestExtensionChange(props.extension, !extensionEnabled),
+            className: "guard-tool-switch",
+            "data-testid": "extension-availability-switch",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-tool-switch-knob" })
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: availabilityTitle(props.extension) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/75", children: availabilityCopy(props.extension, extensionEnabled) })
+        ] })
+      ] }) : null,
+      orgManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", children: "Your organization controls part of this protection. Local changes cannot weaken organization policy." }) : null,
+      props.effective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
+        "Emergency Lockdown currently controls this module. Matching optional actions remain blocked."
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "mt-5 flex gap-5 overflow-x-auto border-b border-slate-200", role: "tablist", "aria-label": "Extension detail sections", children: DETAIL_TABS.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        id: `protection-tab-${tab.id}`,
+        type: "button",
+        role: "tab",
+        "aria-selected": activeTab === tab.id,
+        "aria-controls": `protection-panel-${tab.id}`,
+        tabIndex: activeTab === tab.id ? 0 : -1,
+        onClick: () => void setActiveTab(tab.id),
+        onKeyDown: (event) => void handleTabKeyDown(event, tab.id),
+        className: `-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`,
+        children: tab.label
+      },
+      tab.id
+    )) }),
+    activeTab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "protection-panel-overview", role: "tabpanel", "aria-labelledby": "protection-tab-overview", className: "mt-6 grid gap-4 lg:grid-cols-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Effective protection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: protectionView.summary }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "State" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm font-semibold text-brand-dark", children: protectionStateLabel(protectionView.effectiveState) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Source" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm font-semibold text-brand-dark", children: protectionView.source })
+          ] }),
+          protectionView.sources.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Contributors" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: protectionView.sources.join(" · ") })
+          ] }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Required" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.required ? "Yes" : "No" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Delegated protection" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.delegated_protection === "package-firewall" ? "Package Firewall" : props.extension.delegated_protection ?? "None" })
+          ] })
+        ] }),
+        props.extension.delegated_protection === "package-firewall" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: "/supply-chain", className: "mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline", children: [
+          "Open Package Firewall enforcement ",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
+        ] }) : null
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "What this Extension protects" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Choose Permissions to review effective behavior, built-in floors, and settings you may tighten locally." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Permissions" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.permission_count })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Detection rules" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.rule_count })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Baseline floors" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission) => treatmentLabel(permission.baseline_floor)))].join(", ") || "Built-in" })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Configurable" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 text-sm text-brand-dark", children: [
+              props.extension.permissions.filter((permission) => permission.configurable).length,
+              " of ",
+              props.extension.permission_count
+            ] })
+          ] })
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(McpServerDefaults, { extension: props.extension })
+    ] }) : null,
+    activeTab === "permissions" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-permissions", role: "tabpanel", "aria-labelledby": "protection-tab-permissions", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionPolicyPanel,
+      {
+        extension: props.extension,
+        effective: props.effective,
+        catalogDigest: props.catalogDigest,
+        onRefresh: props.onRefresh,
+        onDirtyChange: setPolicyDirty,
+        cloudControlsUrl
+      }
+    ) }) : null,
+    activeTab === "managed-controls" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-managed-controls", role: "tabpanel", "aria-labelledby": "protection-tab-managed-controls", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionManagedControlsPanel,
+      {
+        extension: props.extension,
+        effective: props.effective,
+        runtime: props.runtime,
+        onRefresh: props.onRefresh
+      }
+    ) }) : null,
+    activeTab === "activity" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "protection-panel-activity", role: "tabpanel", "aria-labelledby": "protection-tab-activity", className: "mt-6 space-y-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionActivity, { extension: props.extension, receipts: props.runtime?.latest_receipts ?? [] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionTestLab, { extension: props.extension })
+    ] }) : null,
+    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null,
+    confirmDialog
+  ] });
+}
+function ExtensionsLoadingState(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid min-h-[60vh] place-items-center", "aria-busy": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      HiMiniArrowPath,
+      {
+        className: "size-7 animate-spin text-brand-blue motion-reduce:animate-none",
+        "aria-hidden": "true"
+      }
+    )
+  ] }) });
+}
+function ExtensionsLoadError(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-4xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${EXTENSION_PANEL_CLASS} guard-extensions-tone-danger`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold text-red-950", children: props.title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-2 text-sm text-red-800", children: props.detail }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs font-medium text-red-900", children: "Local protection continues on this device." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onRetry,
+        className: "mt-4 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-white",
+        children: "Try again"
+      }
+    )
+  ] }) });
+}
+function ExtensionsNotFound(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-4xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${EXTENSION_PANEL_CLASS} guard-extensions-tone-attention`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "font-semibold text-amber-950", children: props.title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-amber-900", children: props.detail }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: props.onBack,
+        className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white",
+        children: "Back to Extensions"
+      }
+    )
+  ] }) });
+}
+function CatalogExtensionDetail(props) {
+  const { readModel, summary, ...detailProps } = props;
+  const key = `${readModel.catalog_digest}|${summary.extension_id}|${summary.content_revision ?? ""}`;
+  const [state, setState] = reactExports.useState({ kind: "loading", key });
+  const [attempt, setAttempt] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading", key });
+    readModel.detail(summary.extension_id).then(
+      (extension) => {
+        if (!cancelled) setState({ kind: "ready", key, extension });
+      },
+      (error) => {
+        if (cancelled) return;
+        const stale2 = error instanceof ExtensionControlApiError && error.code === CATALOG_SNAPSHOT_EXPIRED;
+        setState({ kind: "error", key, stale: stale2, message: error instanceof Error ? error.message : "Extension details are unavailable" });
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt, key, readModel, summary.extension_id]);
+  const { onRefresh } = detailProps;
+  const stale = state.kind === "error" && state.stale;
+  const retry = reactExports.useCallback(async () => {
+    if (stale) await onRefresh();
+    setAttempt((value) => value + 1);
+  }, [onRefresh, stale]);
+  if (state.key !== key || state.kind === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading extension" });
+  if (state.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadError, { title: "Extension details unavailable", detail: state.message, onRetry: () => {
+      void retry();
+    } });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionModuleDetail, { ...detailProps, extension: state.extension });
+}
+function randomToken() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+function buildExtensionMutation(state, change) {
+  const layers = structuredClone(state.effective.layers);
+  let local = layers.find((layer) => layer.kind === "local-admin");
+  if (!local) {
+    local = {
+      schema_version: "1.0.0",
+      kind: "local-admin",
+      catalog_digest: state.catalog.catalog_digest,
+      global_lockdown: false,
+      controls: []
+    };
+    layers.push(local);
+  }
+  if ("globalLockdown" in change) {
+    local.global_lockdown = change.globalLockdown;
+  } else {
+    local.controls = local.controls.filter(
+      (control) => control.target_kind !== "extension" || control.target_id !== change.extension.extension_id
+    );
+    local.controls.push({
+      target_kind: "extension",
+      target_id: change.extension.extension_id,
+      state: change.enabled ? "enabled" : "disabled"
+    });
+    local.controls.sort(
+      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
+    );
+  }
+  return {
+    previous_revision: state.effective.revision,
+    catalog_digest: state.catalog.catalog_digest,
+    layers,
+    actor_id: "dashboard-admin",
+    idempotency_key: randomToken(),
+    nonce: randomToken()
+  };
+}
+const PROTECTION_TERMS = {
+  pageTitle: "Extensions"
+};
+function looksLikeUnauthorizedSession(message) {
+  const lower = message.trim().toLowerCase();
+  if (!lower || lower === "unauthorized" || lower.includes("unauthorized") || lower.includes("session")) return true;
+  return /(^|[^0-9])401([^0-9]|$)/.test(lower);
+}
+function protectionCenterLoadError(message) {
+  if (looksLikeUnauthorizedSession(message)) {
+    return {
+      title: "This view needs a signed local session",
+      detail: "Local protection is still running on this device. Open Extensions from the local Guard dashboard and try again after Guard signs this session."
+    };
+  }
+  return {
+    title: "Extensions unavailable",
+    detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
+  };
 }
 const DEFAULT_TERMINAL_COMMANDS = {
   enroll: "hol-guard command controls enroll",
@@ -5739,7 +6975,7 @@ function ProtectionAuthorityNotice(props) {
   ] });
 }
 const digest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-const record$1 = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const record = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const integer = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 async function request(payload, signal) {
   const response = await fetchLocalCliApi("/v1/local-clis/skills", {
@@ -5749,15 +6985,15 @@ async function request(payload, signal) {
     signal
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(record$1(body) && typeof body.message === "string" ? body.message : "Could not read skill metadata.");
-  if (!record$1(body)) throw new Error("Invalid skill metadata response");
+  if (!response.ok) throw new Error(record(body) && typeof body.message === "string" ? body.message : "Could not read skill metadata.");
+  if (!record(body)) throw new Error("Invalid skill metadata response");
   return body;
 }
 async function fetchLocalSkillRoots(signal) {
   const body = await request({ operation: "roots" }, signal);
   if (!Array.isArray(body.roots) || body.roots.length > 16 || body.permissions_granted !== false) throw new Error("Invalid skill roots");
   return body.roots.map((root) => {
-    if (!record$1(root) || !digest(root.root_id) || typeof root.path !== "string" || root.path.length > 4096 || typeof root.available !== "boolean") throw new Error("Invalid skill root");
+    if (!record(root) || !digest(root.root_id) || typeof root.path !== "string" || root.path.length > 4096 || typeof root.available !== "boolean") throw new Error("Invalid skill root");
     return { root_id: root.root_id, path: root.path, available: root.available };
   });
 }
@@ -5781,7 +7017,7 @@ async function fetchLocalSkillPage(options) {
     throw new Error("Invalid skill inventory");
   }
   const skills = body.skills.map((skill) => {
-    if (!record$1(skill) || !digest(skill.skill_id) || !digest(skill.root_id) || !digest(skill.metadata_digest) || skill.origin !== "local-agent-skill" || skill.permission_state !== "not-granted" || skill.requirements_complete !== false || skill.instruction_content_loaded !== false || typeof skill.name !== "string" || skill.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name) || typeof skill.description !== "string" || skill.description.length > 1024 || typeof skill.uri !== "string" || !skill.uri.startsWith("file://") || skill.uri.length > 8192 || typeof skill.compatibility !== "string" || skill.compatibility.length > 500 || typeof skill.requested_tools !== "string" || skill.requested_tools.length > 2048 || typeof skill.duplicate_name !== "boolean") throw new Error("Invalid local skill evidence");
+    if (!record(skill) || !digest(skill.skill_id) || !digest(skill.root_id) || !digest(skill.metadata_digest) || skill.origin !== "local-agent-skill" || skill.permission_state !== "not-granted" || skill.requirements_complete !== false || skill.instruction_content_loaded !== false || typeof skill.name !== "string" || skill.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name) || typeof skill.description !== "string" || skill.description.length > 1024 || typeof skill.uri !== "string" || !skill.uri.startsWith("file://") || skill.uri.length > 8192 || typeof skill.compatibility !== "string" || skill.compatibility.length > 500 || typeof skill.requested_tools !== "string" || skill.requested_tools.length > 2048 || typeof skill.duplicate_name !== "boolean") throw new Error("Invalid local skill evidence");
     return {
       skill_id: skill.skill_id,
       root_id: skill.root_id,
@@ -5814,9 +7050,9 @@ async function prepareSkillWorkflow(skillId, signal) {
   await waitForMcpDiscoveryJob(`skill:${skillId}`, job, signal);
   if (signal.aborted) return null;
   const body = await request({ operation: "preflight-result", skill_id: skillId }, signal);
-  if (body.skill_id !== skillId || body.schema_version !== "guard.workflow-preflight.v1" || body.dependency_source !== "guard-extension" || !["absent", "invalid", "declared"].includes(String(body.dependency_status)) || !integer(body.authority_revision) || !integer(body.expires_in_seconds) || body.expires_in_seconds > 30 || body.requirements_complete !== false || body.permissions_granted !== false || body.runtime_checks_required !== true || !Array.isArray(body.requirements) || body.requirements.length > 50 || !record$1(body.inspection) || !["complete", "incomplete"].includes(String(body.inspection.status)) || !integer(body.inspection.entry_count) || body.inspection.permissions_granted !== false || body.inspection.status === "complete" && (typeof body.inspection.manifest_digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(body.inspection.manifest_digest))) throw new Error("Invalid workflow preflight");
+  if (body.skill_id !== skillId || body.schema_version !== "guard.workflow-preflight.v1" || body.dependency_source !== "guard-extension" || !["absent", "invalid", "declared"].includes(String(body.dependency_status)) || !integer(body.authority_revision) || !integer(body.expires_in_seconds) || body.expires_in_seconds > 30 || body.requirements_complete !== false || body.permissions_granted !== false || body.runtime_checks_required !== true || !Array.isArray(body.requirements) || body.requirements.length > 50 || !record(body.inspection) || !["complete", "incomplete"].includes(String(body.inspection.status)) || !integer(body.inspection.entry_count) || body.inspection.permissions_granted !== false || body.inspection.status === "complete" && (typeof body.inspection.manifest_digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(body.inspection.manifest_digest))) throw new Error("Invalid workflow preflight");
   const requirements = body.requirements.map((entry) => {
-    if (!record$1(entry) || typeof entry.connection_id !== "string" || !isLocalCliId(entry.connection_id) || typeof entry.tool_name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(entry.tool_name) || !["saved-allow", "deny", "ask", "unresolved"].includes(String(entry.state))) throw new Error("Invalid workflow requirement");
+    if (!record(entry) || typeof entry.connection_id !== "string" || !isLocalCliId(entry.connection_id) || typeof entry.tool_name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(entry.tool_name) || !["saved-allow", "deny", "ask", "unresolved"].includes(String(entry.state))) throw new Error("Invalid workflow requirement");
     return {
       connection_id: entry.connection_id,
       tool_name: entry.tool_name,
@@ -6823,23 +8059,63 @@ function termBand(term, bands) {
   if (bands[EXAMPLE_MATCH].includes(term)) return EXAMPLE_MATCH;
   return CONTEXT_MATCH;
 }
-function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
+function commandPatternQuery(rawQuery) {
   const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
-  if (!normalized) return [];
-  const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
+  return normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap).join(" ");
+}
+function searchCommandPatterns(candidates, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
+  const query = commandPatternQuery(rawQuery);
+  if (!query) return [];
+  const terms = query.split(" ");
   const matches = [];
-  for (const extension of extensions) {
-    for (const permission of extension.permissions) {
-      const bands = patternSearchBands(extension, permission);
-      const text = bands.join(" ");
-      if (!terms.every((term) => text.includes(term))) continue;
-      const score = Math.max(...terms.map((term) => termBand(term, bands)));
-      matches.push({ extension, permission, score });
-    }
+  for (const { extension, permission } of candidates) {
+    const bands = patternSearchBands(extension, permission);
+    const text = bands.join(" ");
+    if (!terms.every((term) => text.includes(term))) continue;
+    const score = Math.max(...terms.map((term) => termBand(term, bands)));
+    matches.push({ extension, permission, score });
   }
   return matches.sort(
     (left, right) => left.score - right.score || catalogOriginRank(left.extension) - catalogOriginRank(right.extension) || (RISK_TIER_SEVERITY[right.permission.risk_tier] ?? 0) - (RISK_TIER_SEVERITY[left.permission.risk_tier] ?? 0) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
   ).slice(0, limit);
+}
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = reactExports.useState(value);
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
+const SEARCH_DEBOUNCE_MS = 150;
+function useCatalogPermissionSearch(catalog, rawQuery) {
+  const current = commandPatternQuery(rawQuery);
+  const query = useDebounce(current, SEARCH_DEBOUNCE_MS);
+  const [state, setState] = reactExports.useState({ query: "", hits: [], error: null });
+  const local = reactExports.useMemo(
+    () => catalog.localSearch ? { query: current, hits: catalog.localSearch(current), error: null } : null,
+    [catalog, current]
+  );
+  reactExports.useEffect(() => {
+    if (local) return;
+    if (!query) {
+      setState({ query, hits: [], error: null });
+      return;
+    }
+    const controller = new AbortController();
+    catalog.searchPermissions(query, controller.signal).then(
+      (hits) => {
+        if (!controller.signal.aborted) setState({ query, hits, error: null });
+      },
+      (error) => {
+        if (controller.signal.aborted) return;
+        setState({ query, hits: [], error: error instanceof Error ? error.message : "Guard could not search command patterns." });
+      }
+    );
+    return () => controller.abort();
+  }, [catalog, local, query]);
+  if (local) return { ...local, pending: false };
+  return { ...state, pending: current !== "" && state.query !== current };
 }
 function CatalogSearchRow(props) {
   const handleOpen = reactExports.useCallback(() => {
@@ -6904,13 +8180,15 @@ function PatternSearchConsole(props) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [searchActive]);
   const totalPermissionCount = reactExports.useMemo(
-    () => props.catalog.reduce((total, extension) => total + extension.permissions.length, 0),
+    () => props.catalog.reduce((total, extension) => total + extension.permission_count, 0),
     [props.catalog]
   );
-  const allMatches = reactExports.useMemo(
-    () => searchCommandPatterns(props.catalog, query, totalPermissionCount),
-    [props.catalog, query, totalPermissionCount]
-  );
+  const search = useCatalogPermissionSearch(props.readModel, query);
+  const allMatches = reactExports.useMemo(() => {
+    const visible = new Set(props.catalog.map((extension) => extension.extension_id));
+    const candidates = search.hits.filter((hit) => visible.has(hit.extension.extension_id));
+    return searchCommandPatterns(candidates, query, totalPermissionCount);
+  }, [props.catalog, search.hits, query, totalPermissionCount]);
   const matches = reactExports.useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
   const toolMatches = reactExports.useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -6923,8 +8201,8 @@ function PatternSearchConsole(props) {
   const grouped = reactExports.useMemo(() => {
     const groups = /* @__PURE__ */ new Map();
     for (const match of matches) {
-      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissionIds: [] };
-      group.permissionIds.push(match.permission.permission_id);
+      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissions: [] };
+      group.permissions.push(match.permission);
       groups.set(match.extension.extension_id, group);
     }
     return [...groups.values()];
@@ -6990,6 +8268,7 @@ function PatternSearchConsole(props) {
         refreshRequired
       }
     ) : null,
+    showResults && search.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm font-medium text-rose-800", children: search.error }) : null,
     showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
       matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -7027,9 +8306,7 @@ function PatternSearchConsole(props) {
           group.extension.executables.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.extension.executables[0] }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: extensionDisplayName(group.extension.name) })
         ] }),
-        group.permissionIds.map((permissionId) => {
-          const permission = group.extension.permissions.find((item) => item.permission_id === permissionId);
-          if (!permission) return null;
+        group.permissions.map((permission) => {
           return /* @__PURE__ */ jsxRuntimeExports.jsx(
             PermissionPolicyRow,
             {
@@ -7062,7 +8339,7 @@ function PatternSearchConsole(props) {
         managedCount === 1 ? "" : "s are",
         " managed by your organization and cannot be weakened on this device."
       ] }) : null
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No command patterns or tools match this search." }) : null,
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: search.pending ? "Searching command patterns…" : "No command patterns or tools match this search." }) : null,
     dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
         changeCount,
@@ -7117,231 +8394,6 @@ function PatternSearchConsole(props) {
         }
       }
     ) : null
-  ] });
-}
-function safeCloudSignInHref(value) {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-function ManagedControlsPrimaryAction(props) {
-  if (!props.action) return null;
-  if (props.action.href) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: props.action.href, target: "_blank", rel: "noopener noreferrer", className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", children: [
-      props.action.label,
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
-    ] });
-  }
-  if (props.action.action === "refresh") {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: props.onRefresh,
-        disabled: props.checking,
-        "aria-busy": props.checking,
-        className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-60",
-        children: props.checking ? "Checking…" : props.action.label
-      }
-    );
-  }
-  if (props.action.action === "connect-cloud") {
-    if (props.connectHref) {
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: props.connectHref, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "size-4", "aria-hidden": "true" }),
-        "Open Guard Cloud sign-in"
-      ] });
-    }
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onConnect, disabled: props.connecting, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "size-4", "aria-hidden": "true" }),
-      props.connecting ? "Starting sign-in..." : props.action.label
-    ] });
-  }
-  return null;
-}
-function layerTargetsExtension(effective, extension, kind) {
-  const permissionIds = new Set(extension.permissions.map((permission) => permission.permission_id));
-  return effective.layers.some(
-    (layer) => layer.kind === kind && layer.controls.some(
-      (control) => control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
-    )
-  );
-}
-function managedSource(effective) {
-  const managed = effective.managed_controls;
-  return managed?.authority_mode === "managed-restrictive" ? `Managed by ${managed.workspace_id}` : "Synced from Guard Cloud";
-}
-function extensionProtectionAuthority(effective, extension) {
-  if (effective.global_lockdown) {
-    return { effectiveState: "lockdown", source: "Emergency Lockdown", sources: ["Emergency Lockdown"] };
-  }
-  const permissionIds = new Set(extension.permissions.map((permission) => permission.permission_id));
-  const extensionProjection = effective.projection?.extensions.find(
-    (item) => item.extension_id === extension.extension_id
-  );
-  const permissionProjections = effective.projection?.permissions.filter(
-    (item) => item.extension_id === extension.extension_id || permissionIds.has(item.permission_id)
-  ) ?? [];
-  const projections = extensionProjection ? [extensionProjection, ...permissionProjections] : permissionProjections;
-  const managed = managedSource(effective);
-  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension, "signed-cloud");
-  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension, "local-admin");
-  const sources = [];
-  if (hasManaged) sources.push(managed);
-  if (hasLocal) sources.push("Set on this device");
-  if (sources.length === 0) sources.push(extension.required ? "Required by Guard" : "Recommended by Guard");
-  const managedBlocks = projections.some(
-    (item) => item.effective_state === "blocked" && item.managed_state === "disabled"
-  ) || effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
-    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
-  ));
-  const localBlocks = projections.some(
-    (item) => item.effective_state === "blocked" && item.local_state === "disabled"
-  ) || effective.layers.some((layer) => layer.kind === "local-admin" && layer.controls.some(
-    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
-  ));
-  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension) === "disabled";
-  const permissionStates = extension.permissions.map(
-    (permission) => permissionEffectiveState(effective, extension, permission)
-  );
-  const blockedPermissionCount = permissionStates.filter((state) => state === "disabled").length;
-  let effectiveState;
-  if (extensionBlocked) effectiveState = "blocked";
-  else if (blockedPermissionCount > 0 && blockedPermissionCount < permissionStates.length) effectiveState = "partial";
-  else if (blockedPermissionCount > 0 || localBlocks || managedBlocks) effectiveState = "blocked";
-  else if (extension.required) effectiveState = "required";
-  else effectiveState = extensionEffectiveState(effective, extension) === "enabled" ? "allowed" : "blocked";
-  let source = sources.at(-1) ?? "Recommended by Guard";
-  if (localBlocks) source = "Set on this device";
-  if (managedBlocks) source = managed;
-  return { effectiveState, source, sources };
-}
-function extensionProtectionSource(effective, extension) {
-  return extensionProtectionAuthority(effective, extension).source;
-}
-function cloudBase(runtime) {
-  const candidate = runtime?.dashboard_url?.trim() || runtime?.connect_url?.trim();
-  return candidate || void 0;
-}
-function recoveryNotice(recovery) {
-  if (recovery === "unsupported-version") {
-    return "This Control Set uses a newer control schema. Update Guard before applying it; the last verified authority remains in force.";
-  }
-  if (recovery === "catalog-mismatch") {
-    return "The Control Set and local Extension catalog do not match. Guard keeps the last verified authority fail-safe until compatibility is restored.";
-  }
-  if (recovery === "degraded") {
-    return "Local control authority needs recovery. Guard keeps the last verified authority fail-safe while you refresh or repair it.";
-  }
-  return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
-}
-function extensionLocalProtectionInput(extension, effective, runtime) {
-  const managed = effective.managed_controls;
-  const authority = extensionProtectionAuthority(effective, extension);
-  const failureCodes = new Set(effective.failures.map((failure) => failure.code.toLowerCase()));
-  let recovery;
-  if (failureCodes.has("unsupported-control-schema")) recovery = "unsupported-version";
-  else if (failureCodes.has("catalog-digest-mismatch") || failureCodes.has("catalog-unavailable")) recovery = "catalog-mismatch";
-  else if (runtime?.cloud_policy_sync_error || [...failureCodes].some((code) => code.includes("stale"))) recovery = "stale";
-  else if (effective.health !== "protected") recovery = "degraded";
-  return {
-    extensionName: extension.name,
-    extensionId: extension.extension_id,
-    effectiveState: authority.effectiveState,
-    source: authority.source,
-    sources: authority.sources,
-    catalogDigest: effective.catalog_digest,
-    recovery,
-    cloudControlsUrl: cloudBase(runtime),
-    controlSetName: managed?.control_set_name ?? managed?.control_set_id,
-    controlSetVersion: managed?.bundle_version,
-    workspace: managed?.workspace_id,
-    authorityMode: managed?.authority_mode,
-    acknowledgementRevision: managed?.acknowledgement.extension_authority_revision,
-    acknowledgementStatus: managed?.acknowledgement.status,
-    lastAcknowledgedAt: runtime?.cloud_policy_last_ack_at ?? void 0,
-    effectiveProjectionDigest: managed?.acknowledgement.effective_projection_digest
-  };
-}
-function ExtensionManagedControlsPanel(props) {
-  const [connecting, setConnecting] = reactExports.useState(false);
-  const [connectHref, setConnectHref] = reactExports.useState(null);
-  const [connectMessage, setConnectMessage] = reactExports.useState(null);
-  const [refreshState, setRefreshState] = reactExports.useState("idle");
-  const [refreshError, setRefreshError] = reactExports.useState(null);
-  const refreshBaselineRef = reactExports.useRef(null);
-  const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
-  const view = buildLocalProtectionView(input);
-  const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
-  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
-  const refresh = reactExports.useCallback(async () => {
-    if (refreshState === "checking") return;
-    refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
-    setRefreshState("checking");
-    setRefreshError(null);
-    try {
-      await props.onRefresh();
-      setRefreshState("complete");
-    } catch {
-      setRefreshState("error");
-      setRefreshError("Guard could not refresh this status. The last verified local authority remains in force; try again.");
-    }
-  }, [props.effective, props.onRefresh, props.runtime, refreshState]);
-  const connect = reactExports.useCallback(() => {
-    setConnecting(true);
-    setConnectMessage(null);
-    void startGuardCloudConnect().then((status) => {
-      if (!status.connect_required) {
-        setConnectMessage("Guard Cloud is connected.");
-        return;
-      }
-      const href = safeCloudSignInHref(status.connect_flow?.authorize_url) ?? safeCloudSignInHref(status.connect_flow?.connect_url);
-      setConnectHref(href);
-      setConnectMessage(href ? "Complete sign-in to resume synced Control Sets." : "Guard could not start sign-in. Try again.");
-    }).catch((error) => {
-      setConnectMessage(error instanceof Error ? error.message : "Guard could not start sign-in. Try again.");
-    }).finally(() => setConnecting(false));
-  }, []);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "managed-controls-heading", className: "space-y-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-bold uppercase tracking-[0.18em] text-brand-blue", children: "Source and authority" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "managed-controls-heading", className: "mt-1 text-lg font-semibold text-brand-dark", children: hasManagedControl ? "Active managed control" : "No Control Set targets this Extension" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: view.summary })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "inline-flex self-start rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark", children: view.source })
-      ] }),
-      view.status === "needs-attention" || view.status === "unsupported" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "alert", className: "mt-4 flex gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
-        recoveryNotice(input.recovery)
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3", children: view.technicalDetails.map((detail) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase tracking-wide text-brand-dark/55", children: detail.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all text-sm text-brand-dark", children: detail.value })
-      ] }, detail.label)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ManagedControlsPrimaryAction,
-        {
-          action: view.primaryAction,
-          connecting,
-          checking: refreshState === "checking",
-          connectHref,
-          onConnect: connect,
-          onRefresh: refresh
-        }
-      ) }),
-      connectMessage ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: connectMessage }) : null,
-      refreshState === "checking" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: "Checking current protection status…" }) : null,
-      refreshState === "complete" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: "mt-3 text-sm text-brand-dark/75", children: effectiveStatusKey(props.effective, { runtime: props.runtime }) === refreshBaselineRef.current ? "Check complete. No change detected; the current verified authority is still in use." : "Check complete. Protection status updated." }) : null,
-      refreshState === "error" && refreshError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-rose-800", children: refreshError }) : null
-    ] }),
-    !connected ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-brand-dark/75", children: "Guard Cloud is disconnected. Local protection and local tightening remain available on this device; cross-device Control Sets resume after reconnecting." }) : null,
-    hasManagedControl && input.authorityMode === "managed-restrictive" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950", children: "This is a managed-restrictive Control Set. Local settings can add stricter blocks, but they cannot weaken this workspace restriction." }) : null
   ] });
 }
 function sourceIsManaged(effective, extensionId) {
@@ -7532,6 +8584,7 @@ function ExtensionsOverview(props) {
           PatternSearchConsole,
           {
             catalog: visibleCatalog,
+            readModel: props.readModel,
             effective: props.effective,
             active: props.active,
             query,
@@ -7617,706 +8670,6 @@ function pushExtensionHistory(href) {
 }
 function replaceExtensionHistory(href) {
   window.history.replaceState({}, "", guardAwareHref(href));
-}
-function receiptMatchesExtension(receipt, extension) {
-  const identities = /* @__PURE__ */ new Set([
-    extension.extension_id,
-    ...extension.permissions.map((permission) => permission.permission_id),
-    ...extension.rules.map((rule) => rule.rule_id)
-  ]);
-  if (identities.has(receipt.artifact_id)) return true;
-  if (receipt.changed_capabilities.some((capability) => identities.has(capability))) return true;
-  const envelope = receipt.action_envelope_json;
-  if (!envelope) return false;
-  if (envelope.command_category === extension.extension_id) return true;
-  const toolName = envelope.tool_name?.trim().toLowerCase();
-  return Boolean(toolName && extension.executables.some((executable) => executable.toLowerCase() === toolName));
-}
-function recentExtensionReceipts(receipts, extension, limit = 8) {
-  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
-}
-function receiptDecisionLabel(receipt) {
-  if (receipt.policy_decision === "allow") return "Allowed";
-  if (receipt.policy_decision === "block") return "Blocked";
-  return "Reviewed";
-}
-function ExtensionActivity(props) {
-  const receipts = recentExtensionReceipts(props.receipts, props.extension);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Recent Extension decisions" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Receipt-backed decisions mapped to this canonical Extension. Guard does not synthesize activity." }),
-    receipts.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-100", "aria-label": "Recent Extension receipts", children: receipts.map((receipt) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-semibold text-brand-dark", children: [
-          receiptDecisionLabel(receipt),
-          " · ",
-          receipt.harness
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark/60", children: [
-          receipt.capabilities_summary,
-          " · ",
-          new Date(receipt.timestamp).toLocaleString()
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: `/evidence?view=actions&selected=${encodeURIComponent(receipt.receipt_id)}&search=${encodeURIComponent(receipt.receipt_id)}`, className: "inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline", children: [
-        "Open receipt ",
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
-      ] })
-    ] }, receipt.receipt_id)) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 rounded-2xl bg-slate-50 p-4 text-sm text-brand-dark/70", children: "No matching receipts are available on this device yet." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: `/evidence?view=actions&search=${encodeURIComponent(props.extension.extension_id)}`, className: "mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
-      "View matching Evidence ",
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
-    ] })
-  ] });
-}
-function toolStateLabel(state) {
-  if (state === "allow") return "Allow";
-  if (state === "review") return "Review";
-  if (state === "block") return "Block";
-  return "Recommended";
-}
-function McpServerDefaults({ extension }) {
-  if (extension.surface !== "mcp") return null;
-  const launch = extension.mcp_launch;
-  const tools = extension.mcp_tools ?? [];
-  const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
-  const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
-  const directLaunch = launch?.kind === "direct-command" ? launch : null;
-  const unsupportedLaunch = launch?.kind === "unsupported";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
-    unsupportedLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", "data-testid": "mcp-launch-unsupported", children: "This server uses a launch type this version of Guard does not recognize, so its launch details are unavailable. Update Guard to see them." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : directLaunch ? "Matching launches use this command. Defaults apply only after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: remoteLaunch.url })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
-        ] })
-      ] }) : directLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: directLaunch.command })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: packageLaunch?.command ?? "Package launcher" })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Package" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: packageLaunch?.package ?? "Unknown package" })
-        ] })
-      ] }) })
-    ] }),
-    tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "text-xs uppercase tracking-wide text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 pr-4 font-semibold", children: "Tool" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 font-semibold", children: "Default" })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: tools.map((tool) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-slate-100", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "py-2 pr-4 font-mono text-xs text-brand-dark", children: tool.name }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "py-2 text-sm text-brand-dark", children: toolStateLabel(tool.state) })
-      ] }, tool.name)) })
-    ] }) }) : null
-  ] });
-}
-const DECISIONS = /* @__PURE__ */ new Set(["allowed", "ask-first", "blocked"]);
-const MINIMUM_ACTIONS = /* @__PURE__ */ new Set(["allow", "monitor", "review", "block"]);
-const SEVERITIES = /* @__PURE__ */ new Set(["low", "medium", "high", "critical"]);
-function record(value) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Guard returned an invalid Test Lab response");
-  return value;
-}
-function boundedString(value, field, limit = 512) {
-  if (typeof value !== "string" || !value.trim() || value.length > limit) throw new Error(`Guard returned an invalid ${field}`);
-  return value;
-}
-function stringList(value, field, limit) {
-  if (!Array.isArray(value) || value.length > limit || !value.every((item) => typeof item === "string" && item.length <= 320)) {
-    throw new Error(`Guard returned an invalid ${field}`);
-  }
-  return [...value];
-}
-function normalizeProtectionTestResult(value) {
-  const raw = record(value);
-  if (raw.schema_version !== "guard.daemon.extension-control-test.v1") throw new Error("Guard returned an unsupported Test Lab response");
-  if (typeof raw.decision !== "string" || !DECISIONS.has(raw.decision)) throw new Error("Guard returned an invalid Test Lab decision");
-  if (typeof raw.minimum_action !== "string" || !MINIMUM_ACTIONS.has(raw.minimum_action)) throw new Error("Guard returned an invalid Test Lab action");
-  if (typeof raw.matched !== "boolean" || typeof raw.module_matched !== "boolean" || typeof raw.other_protection_matched !== "boolean") {
-    throw new Error("Guard returned invalid Test Lab match state");
-  }
-  if (!Array.isArray(raw.matches) || raw.matches.length > 32) throw new Error("Guard returned too many Test Lab matches");
-  const matches = raw.matches.map((item) => {
-    const match = record(item);
-    if (typeof match.severity !== "string" || !SEVERITIES.has(match.severity)) throw new Error("Guard returned an invalid Test Lab severity");
-    return {
-      extension_id: boundedString(match.extension_id, "extension ID", 256),
-      extension_name: boundedString(match.extension_name, "extension name", 120),
-      rule_id: boundedString(match.rule_id, "rule ID", 256),
-      permission_id: typeof match.permission_id === "string" && match.permission_id.trim() ? match.permission_id : null,
-      rule_title: boundedString(match.rule_title, "rule title", 160),
-      description: boundedString(match.description, "rule description", 320),
-      severity: match.severity,
-      risk_classes: stringList(match.risk_classes, "risk classes", 16)
-    };
-  });
-  if (typeof raw.revision !== "number" || !Number.isSafeInteger(raw.revision) || raw.revision < 0) throw new Error("Guard returned an invalid Test Lab revision");
-  return {
-    schema_version: "guard.daemon.extension-control-test.v1",
-    decision: raw.decision,
-    minimum_action: raw.minimum_action,
-    matched: raw.matched,
-    module_matched: raw.module_matched,
-    other_protection_matched: raw.other_protection_matched,
-    explanation: boundedString(raw.explanation, "Test Lab explanation", 320),
-    matches,
-    safer_alternatives: stringList(raw.safer_alternatives, "safer alternatives", 8),
-    authority_health: boundedString(raw.authority_health, "authority health", 64),
-    revision: raw.revision,
-    catalog_digest: boundedString(raw.catalog_digest, "catalog digest", 128)
-  };
-}
-async function testProtectionCommand(extensionId, command) {
-  const response = await fetchExtensionControlApi("/v1/extension-controls/test", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ extension_id: extensionId, command })
-  });
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    throw new Error(`Guard returned invalid JSON (${response.status})`);
-  }
-  if (!response.ok) {
-    const raw = typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload : {};
-    throw new Error(typeof raw.error === "string" ? raw.error.replaceAll("_", " ") : `Test Lab request failed (${response.status})`);
-  }
-  return normalizeProtectionTestResult(payload);
-}
-function safeExamples(extension) {
-  const executable = extension.executables[0];
-  const examples = extension.extension_id === "command.git" ? ["git status", "git reset --hard HEAD~1", "git push --force-with-lease"] : executable ? [`${executable} --help`] : [];
-  return examples.slice(0, 3);
-}
-function resultTitle(result) {
-  if (result.decision === "blocked") return "Guard would block this";
-  if (result.decision === "ask-first") return "Guard would ask first";
-  return "Guard would allow this";
-}
-function ProtectionTestLab({ extension }) {
-  const [command, setCommand] = reactExports.useState("");
-  const [result, setResult] = reactExports.useState(null);
-  const [busy, setBusy] = reactExports.useState(false);
-  const [error, setError] = reactExports.useState(null);
-  const examples = reactExports.useMemo(() => safeExamples(extension), [extension]);
-  const run = async () => {
-    const candidate = command.trim();
-    if (!candidate || busy) return;
-    setBusy(true);
-    setError(null);
-    setResult(null);
-    try {
-      setResult(await testProtectionCommand(extension.extension_id, candidate));
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Test Lab could not evaluate this command.");
-    } finally {
-      setBusy(false);
-    }
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-test-lab-heading", className: "mt-10 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-test-lab-heading", className: "text-lg font-semibold tracking-tight text-brand-dark", children: "Test Lab" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Nothing is executed. The check runs locally and is not saved." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
-      "See how Guard would handle a ",
-      extension.name,
-      " command without running it."
-    ] }),
-    examples.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: examples.map((example) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: () => {
-      setCommand(example);
-      setResult(null);
-      setError(null);
-    }, className: `${EXTENSION_CHIP_CLASS} disabled:cursor-not-allowed disabled:opacity-50`, children: example }, example)) }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-col gap-2 sm:flex-row", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          value: command,
-          disabled: busy,
-          onChange: (event) => {
-            setCommand(event.target.value.slice(0, 4096));
-            setResult(null);
-            setError(null);
-          },
-          onKeyDown: (event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              void run();
-            }
-          },
-          maxLength: 4096,
-          spellCheck: false,
-          autoComplete: "off",
-          "aria-label": "Command to check",
-          placeholder: "Paste a command Guard stopped, like git reset --hard HEAD~1",
-          className: "min-h-11 w-full flex-1 rounded-xl border border-slate-200 bg-white px-3 font-mono text-sm text-brand-dark placeholder:font-sans placeholder:text-slate-400 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
-        }
-      ),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: () => {
-        void run();
-      }, disabled: busy || !command.trim(), className: "min-h-11 shrink-0 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50", children: busy ? "Checking…" : "Check safely" })
-    ] }),
-    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800", children: error }) : null,
-    result ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "status", className: "mt-5 rounded-xl bg-slate-50 p-4", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionDecisionBadge, { result: result.decision }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: resultTitle(result) }),
-        result.decision === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "size-5 text-emerald-700", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "size-5 text-amber-700", "aria-hidden": "true" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm leading-6 text-brand-dark/80", children: result.explanation }),
-      result.matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Protection rules involved" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 space-y-2", children: result.matches.slice(0, 6).map((match) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl bg-white p-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: match.rule_title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-xs font-semibold capitalize text-brand-dark/55", children: [
-              match.severity,
-              " risk"
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-brand-dark/70", children: match.description })
-        ] }, `${match.extension_id}:${match.rule_id}`)) })
-      ] }) : null,
-      result.safer_alternatives.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-slate-400", children: "Safer alternatives" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 list-disc space-y-1 pl-5 text-sm text-brand-dark/80", children: result.safer_alternatives.map((alternative) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: alternative }, alternative)) })
-      ] }) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-xs text-slate-500", children: "This result uses the current local protection state. It is a read-only evaluation and does not create an approval or receipt." })
-    ] }) : null
-  ] });
-}
-const DRAFT_EXIT_MESSAGE = "Discard your unreviewed protection setting changes?";
-const DETAIL_TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "permissions", label: "Permissions" },
-  { id: "managed-controls", label: "Managed controls" },
-  { id: "activity", label: "Activity" },
-  { id: "technical", label: "Technical details" }
-];
-function canonicalProtectionDetailTab(tab) {
-  if (tab === "commands" || tab === "policy") return "permissions";
-  if (tab === "test-lab") return "activity";
-  if (tab === "managed-controls" || tab === "permissions" || tab === "technical") return tab;
-  return tab === "activity" ? "activity" : "overview";
-}
-function availabilityTitle(extension) {
-  if (extension.surface === "mcp") return "MCP tools available";
-  if (extension.surface === "unsupported") return "Protection available";
-  return "Commands available";
-}
-function requiredLine(extension) {
-  if (!extension.required) return null;
-  return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
-}
-function availabilityCopy(extension, enabled) {
-  if (extension.surface === "unsupported") {
-    return enabled ? "This protection follows the settings below. Update Guard to see what it covers." : "This protection is off on this device. Update Guard to see what it covers.";
-  }
-  if (extension.surface === "mcp" && extension.trust_class === "external") {
-    if (enabled) {
-      return "Matching MCP tools follow the protection settings below. Turn off to leave this community server inactive.";
-    }
-    return "This community MCP server stays off until you turn it on.";
-  }
-  if (extension.trust_class === "external") {
-    if (enabled) {
-      return "Matching commands follow the protection settings below. Turn off to leave this community tool inactive.";
-    }
-    return "This community tool stays off until you turn it on.";
-  }
-  if (enabled) {
-    return "Matching commands follow the protection settings below. Turn off to block every command this tool owns on this device.";
-  }
-  return "Every command this tool owns is blocked on this device. Turn on to follow the protection settings below.";
-}
-function protectionStateLabel(state) {
-  return state.charAt(0).toUpperCase() + state.slice(1);
-}
-function DeveloperModuleDetails(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(TechnicalDetails, { title: "Developer details", testId: "protection-more-detail", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Canonical module" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Extension ID" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-xs", children: props.extension.extension_id }) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Version" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "text-sm", children: props.extension.version })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Catalog digest" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-xs", children: props.catalogDigest }) })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-brand-dark/80", children: "Provenance" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "text-sm", children: controlProvenance(props.effective, "extension", props.extension.extension_id).join(" · ") })
-        ] })
-      ] })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Detections" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 max-h-96 overflow-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-xs", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "sticky top-0 bg-[var(--surface-1)] text-brand-dark/80", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Detection" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Severity" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Matcher" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Default" })
-        ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: props.extension.rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-[rgba(63,65,116,0.08)]", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-brand-dark/80", children: rule.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-[10px] text-brand-dark/80", children: rule.rule_id })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.severity }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.matcher_kind }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: treatmentLabel(rule.default_mode) })
-        ] }, rule.rule_id)) })
-      ] }) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Protection setting identifiers" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-2", children: props.extension.permissions.map((permission) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-medium text-brand-dark/80", children: permission.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-brand-dark/80", children: permission.permission_id }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-brand-dark/80", children: permission.action_classes.join(", ") || "No action classes" })
-      ] }, permission.permission_id)) })
-    ] })
-  ] }) });
-}
-function ProtectionModuleDetail(props) {
-  const [policyDirty, setPolicyDirty] = reactExports.useState(false);
-  const { confirm: requestConfirmation, dialog: confirmDialog } = useConfirmDialog();
-  const urlStateRef = reactExports.useRef(props.urlState);
-  urlStateRef.current = props.urlState;
-  const onUrlStateRef = reactExports.useRef(props.onUrlState);
-  onUrlStateRef.current = props.onUrlState;
-  reactExports.useEffect(() => {
-    let highlightTimer = 0;
-    let highlighted = null;
-    const clearHighlight = () => {
-      if (highlightTimer) window.clearTimeout(highlightTimer);
-      highlightTimer = 0;
-      highlighted?.classList.remove("guard-pattern-row-highlight");
-      highlighted = null;
-    };
-    const highlight = () => {
-      const anchor = window.location.hash;
-      let rowId = null;
-      let ruleId = null;
-      if (anchor.startsWith("#pattern-")) {
-        rowId = anchor.slice(1);
-      } else if (anchor.startsWith("#rule-")) {
-        ruleId = anchor.slice("#rule-".length);
-      } else {
-        const fragment = anchor.startsWith("#") ? anchor.slice(1) : anchor;
-        const requested = new URLSearchParams(fragment).get("rule");
-        if (requested) ruleId = requested;
-      }
-      if (ruleId) {
-        const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
-        const permission = rule ? permissionForRule(props.extension, rule) : null;
-        rowId = permission ? `pattern-${permission.permission_id}` : null;
-      }
-      clearHighlight();
-      if (!rowId) return;
-      const row = document.getElementById(rowId);
-      if (!row) return;
-      row.scrollIntoView({ behavior: "smooth", block: "center" });
-      row.classList.add("guard-pattern-row-highlight");
-      highlighted = row;
-      highlightTimer = window.setTimeout(clearHighlight, 2400);
-    };
-    highlight();
-    window.addEventListener("hashchange", highlight);
-    return () => {
-      window.removeEventListener("hashchange", highlight);
-      clearHighlight();
-    };
-  }, [props.extension.extension_id, props.extension.rules]);
-  const requiredNote = requiredLine(props.extension);
-  const extensionEnabled = extensionEffectiveState(props.effective, props.extension) === "enabled";
-  const requestExtensionChange = props.extension.required ? void 0 : props.onRequestExtensionChange;
-  const activeTab = canonicalProtectionDetailTab(props.urlState?.tab ?? "overview");
-  const protectionView = buildLocalProtectionView(
-    extensionLocalProtectionInput(props.extension, props.effective, props.runtime)
-  );
-  const orgManaged = protectionView.sources.some(
-    (source) => source === "Synced from Guard Cloud" || source.startsWith("Managed by ")
-  );
-  const cloudControlsUrl = props.runtime?.dashboard_url?.trim() || props.runtime?.connect_url?.trim() || void 0;
-  const setActiveTab = reactExports.useCallback(async (tab) => {
-    if (!props.onUrlState) return false;
-    const needsConfirmation = tab !== activeTab && policyDirty;
-    if (needsConfirmation && !await requestConfirmation({
-      title: "Discard unreviewed changes?",
-      description: DRAFT_EXIT_MESSAGE,
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-      tone: "destructive"
-    })) {
-      return false;
-    }
-    const latestUrlState = urlStateRef.current;
-    const latestOnUrlState = onUrlStateRef.current;
-    if (!latestOnUrlState) return false;
-    if (needsConfirmation && canonicalProtectionDetailTab(latestUrlState?.tab ?? "overview") !== activeTab) {
-      return false;
-    }
-    latestOnUrlState({
-      ...latestUrlState ?? {
-        tab: "overview",
-        query: "",
-        risk: "all",
-        state: "all",
-        configurable: "all",
-        source: "all",
-        deprecated: "all",
-        type: "all",
-        sort: "name",
-        ruleId: null
-      },
-      tab,
-      ruleId: null
-    });
-    return true;
-  }, [activeTab, policyDirty, props.onUrlState, requestConfirmation]);
-  const handleTabKeyDown = async (event, tab) => {
-    if (!event.key.startsWith("Arrow") && event.key !== "Home" && event.key !== "End") return;
-    const index = DETAIL_TABS.findIndex((item) => item.id === tab);
-    let nextIndex = index;
-    if (event.key === "ArrowRight") nextIndex = (index + 1) % DETAIL_TABS.length;
-    if (event.key === "ArrowLeft") nextIndex = (index - 1 + DETAIL_TABS.length) % DETAIL_TABS.length;
-    if (event.key === "Home") nextIndex = 0;
-    if (event.key === "End") nextIndex = DETAIL_TABS.length - 1;
-    if (nextIndex === index && event.key !== "Home" && event.key !== "End") return;
-    event.preventDefault();
-    const next = DETAIL_TABS[nextIndex];
-    if (!next) return;
-    if (!await setActiveTab(next.id)) return;
-    window.requestAnimationFrame(() => document.getElementById(`protection-tab-${next.id}`)?.focus());
-  };
-  const handleBack = async () => {
-    if (policyDirty && !await requestConfirmation({
-      title: "Discard unreviewed changes?",
-      description: DRAFT_EXIT_MESSAGE,
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-      tone: "destructive"
-    })) return;
-    props.onBack();
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "data-testid": "protection-module-detail", className: "w-full", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: () => void handleBack(), className: "inline-flex min-h-11 items-center gap-2 rounded-lg px-1 text-sm font-semibold text-brand-dark/80 hover:text-brand-dark", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowLeft, { className: "size-4", "aria-hidden": "true" }),
-      "Extensions"
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-4 border-b border-slate-200 pb-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ExtensionBrandMark,
-          {
-            extension_id: props.extension.extension_id,
-            name: props.extension.name,
-            executables: props.extension.executables,
-            ecosystem_ids: props.extension.ecosystem_ids,
-            size: "lg"
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.extension.executables.join(" · ") }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.extension.name }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: props.extension.description }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-3 inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-brand-dark", children: protectionView.source })
-        ] })
-      ] }),
-      requiredNote ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/80", children: requiredNote }) : null,
-      requestExtensionChange ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            role: "switch",
-            "aria-checked": extensionEnabled,
-            disabled: props.effective.health !== "protected",
-            onClick: () => requestExtensionChange(props.extension, !extensionEnabled),
-            className: "guard-tool-switch",
-            "data-testid": "extension-availability-switch",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-tool-switch-knob" })
-          }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: availabilityTitle(props.extension) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/75", children: availabilityCopy(props.extension, extensionEnabled) })
-        ] })
-      ] }) : null,
-      orgManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", children: "Your organization controls part of this protection. Local changes cannot weaken organization policy." }) : null,
-      props.effective.global_lockdown ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 flex gap-2 text-sm text-brand-dark", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniLockClosed, { className: "mt-0.5 size-4 shrink-0" }),
-        "Emergency Lockdown currently controls this module. Matching optional actions remain blocked."
-      ] }) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("nav", { className: "mt-5 flex gap-5 overflow-x-auto border-b border-slate-200", role: "tablist", "aria-label": "Extension detail sections", children: DETAIL_TABS.map((tab) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        id: `protection-tab-${tab.id}`,
-        type: "button",
-        role: "tab",
-        "aria-selected": activeTab === tab.id,
-        "aria-controls": `protection-panel-${tab.id}`,
-        tabIndex: activeTab === tab.id ? 0 : -1,
-        onClick: () => void setActiveTab(tab.id),
-        onKeyDown: (event) => void handleTabKeyDown(event, tab.id),
-        className: `-mb-px min-h-11 shrink-0 whitespace-nowrap border-b-2 px-1 pb-3 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue ${activeTab === tab.id ? "border-brand-blue text-brand-blue" : "border-transparent text-brand-dark/60 hover:text-brand-dark"}`,
-        children: tab.label
-      },
-      tab.id
-    )) }),
-    activeTab === "overview" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: "protection-panel-overview", role: "tabpanel", "aria-labelledby": "protection-tab-overview", className: "mt-6 grid gap-4 lg:grid-cols-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "Effective protection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: protectionView.summary }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "State" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm font-semibold text-brand-dark", children: protectionStateLabel(protectionView.effectiveState) })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Source" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm font-semibold text-brand-dark", children: protectionView.source })
-          ] }),
-          protectionView.sources.length > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Contributors" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: protectionView.sources.join(" · ") })
-          ] }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Required" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.required ? "Yes" : "No" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Delegated protection" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.delegated_protection === "package-firewall" ? "Package Firewall" : props.extension.delegated_protection ?? "None" })
-          ] })
-        ] }),
-        props.extension.delegated_protection === "package-firewall" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("a", { href: "/supply-chain", className: "mt-4 inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand-blue hover:underline", children: [
-          "Open Package Firewall enforcement ",
-          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
-        ] }) : null
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "What this Extension protects" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: "Choose Permissions to review effective behavior, built-in floors, and settings you may tighten locally." }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Permissions" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.permission_count })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Detection rules" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: props.extension.rule_count })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Baseline floors" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission) => treatmentLabel(permission.baseline_floor)))].join(", ") || "Built-in" })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Configurable" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 text-sm text-brand-dark", children: [
-              props.extension.permissions.filter((permission) => permission.configurable).length,
-              " of ",
-              props.extension.permission_count
-            ] })
-          ] })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(McpServerDefaults, { extension: props.extension })
-    ] }) : null,
-    activeTab === "permissions" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-permissions", role: "tabpanel", "aria-labelledby": "protection-tab-permissions", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ExtensionPolicyPanel,
-      {
-        extension: props.extension,
-        effective: props.effective,
-        catalogDigest: props.catalogDigest,
-        onRefresh: props.onRefresh,
-        onDirtyChange: setPolicyDirty,
-        cloudControlsUrl
-      }
-    ) }) : null,
-    activeTab === "managed-controls" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-managed-controls", role: "tabpanel", "aria-labelledby": "protection-tab-managed-controls", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ExtensionManagedControlsPanel,
-      {
-        extension: props.extension,
-        effective: props.effective,
-        runtime: props.runtime,
-        onRefresh: props.onRefresh
-      }
-    ) }) : null,
-    activeTab === "activity" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "protection-panel-activity", role: "tabpanel", "aria-labelledby": "protection-tab-activity", className: "mt-6 space-y-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionActivity, { extension: props.extension, receipts: props.runtime?.latest_receipts ?? [] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionTestLab, { extension: props.extension })
-    ] }) : null,
-    activeTab === "technical" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: "protection-panel-technical", role: "tabpanel", "aria-labelledby": "protection-tab-technical", className: "mt-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(DeveloperModuleDetails, { extension: props.extension, effective: props.effective, catalogDigest: props.catalogDigest }) }) : null,
-    confirmDialog
-  ] });
-}
-function ExtensionsLoadingState(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid min-h-[60vh] place-items-center", "aria-busy": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/70", children: props.label }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      HiMiniArrowPath,
-      {
-        className: "size-7 animate-spin text-brand-blue motion-reduce:animate-none",
-        "aria-hidden": "true"
-      }
-    )
-  ] }) });
-}
-function ExtensionsLoadError(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-4xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${EXTENSION_PANEL_CLASS} guard-extensions-tone-danger`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold text-red-950", children: props.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-2 text-sm text-red-800", children: props.detail }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs font-medium text-red-900", children: "Local protection continues on this device." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: props.onRetry,
-        className: "mt-4 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-white",
-        children: "Try again"
-      }
-    )
-  ] }) });
-}
-function ExtensionsNotFound(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mx-auto max-w-4xl", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${EXTENSION_PANEL_CLASS} guard-extensions-tone-attention`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "font-semibold text-amber-950", children: props.title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-amber-900", children: props.detail }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "button",
-      {
-        type: "button",
-        onClick: props.onBack,
-        className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white",
-        children: "Back to Extensions"
-      }
-    )
-  ] }) });
 }
 function deriveProtectionStatus(effective) {
   if (effective.global_lockdown) {
@@ -8477,46 +8830,6 @@ function authorityActionErrorMessage(error, recoveryCommand, recoveryShell) {
   }
   return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message) ? error.message : `Guard could not complete this action. Local protection continues. Try again, or run \`${command}\` in ${terminalName}.`;
 }
-function randomToken() {
-  return crypto.randomUUID().replaceAll("-", "");
-}
-function buildExtensionMutation(state, change) {
-  const layers = structuredClone(state.effective.layers);
-  let local = layers.find((layer) => layer.kind === "local-admin");
-  if (!local) {
-    local = {
-      schema_version: "1.0.0",
-      kind: "local-admin",
-      catalog_digest: state.catalog.catalog_digest,
-      global_lockdown: false,
-      controls: []
-    };
-    layers.push(local);
-  }
-  if ("globalLockdown" in change) {
-    local.global_lockdown = change.globalLockdown;
-  } else {
-    local.controls = local.controls.filter(
-      (control) => control.target_kind !== "extension" || control.target_id !== change.extension.extension_id
-    );
-    local.controls.push({
-      target_kind: "extension",
-      target_id: change.extension.extension_id,
-      state: change.enabled ? "enabled" : "disabled"
-    });
-    local.controls.sort(
-      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
-    );
-  }
-  return {
-    previous_revision: state.effective.revision,
-    catalog_digest: state.catalog.catalog_digest,
-    layers,
-    actor_id: "dashboard-admin",
-    idempotency_key: randomToken(),
-    nonce: randomToken()
-  };
-}
 function ProtectionCenterWorkspace(props) {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [routeState, setRouteState] = reactExports.useState(() => currentExtensionRouteState());
@@ -8533,6 +8846,7 @@ function ProtectionCenterWorkspace(props) {
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
   const loadInFlightRef = reactExports.useRef(null);
+  const catalogRef = reactExports.useRef(null);
   const refreshInFlightRef = reactExports.useRef(null);
   const localClis = useLocalCliCatalog();
   const load = reactExports.useCallback(() => {
@@ -8540,8 +8854,11 @@ function ProtectionCenterWorkspace(props) {
     const request2 = (async () => {
       setState((current) => current.kind === "ready" ? current : { kind: "loading" });
       try {
-        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        const [fresh, effective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+        if (fresh.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        const previous = catalogRef.current;
+        const catalog = previous?.catalog_digest === fresh.catalog_digest && previous.protocol === fresh.protocol ? previous : fresh;
+        catalogRef.current = catalog;
         setState({ kind: "ready", catalog, effective });
         return effective;
       } catch (error) {
@@ -8576,7 +8893,7 @@ function ProtectionCenterWorkspace(props) {
     if (routeState.route.kind !== "add-custom") return;
     void localClis.discover();
   }, [localClis.discover, routeState.route.kind]);
-  const catalogExtensions = reactExports.useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
+  const catalogExtensions = reactExports.useMemo(() => state.kind === "ready" ? state.catalog.extensions : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
   const canonicalSelected = reactExports.useMemo(() => canonicalExtensionId(catalogExtensions, requestedExtensionId), [catalogExtensions, requestedExtensionId]);
   const selectedExtension = reactExports.useMemo(() => catalogExtensions.find((item) => item.extension_id === canonicalSelected) ?? null, [catalogExtensions, canonicalSelected]);
@@ -8770,6 +9087,7 @@ function ProtectionCenterWorkspace(props) {
       ExtensionsOverview,
       {
         catalogExtensions,
+        readModel: state.catalog,
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
         seededItems: localClis.data?.seeded_items ?? [],
@@ -8823,9 +9141,10 @@ function ProtectionCenterWorkspace(props) {
       }
     ) : null,
     showDetail && selectedExtension && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ProtectionModuleDetail,
+      CatalogExtensionDetail,
       {
-        extension: selectedExtension,
+        readModel: state.catalog,
+        summary: selectedExtension,
         effective: state.effective,
         catalogDigest: state.catalog.catalog_digest,
         runtime: props.runtime,

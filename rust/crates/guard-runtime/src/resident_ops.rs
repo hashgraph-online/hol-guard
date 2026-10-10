@@ -203,8 +203,14 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::CommandEffectDecide(request) => {
                 crate::command_effect::evaluate_command_effect_request(&request)
             }
+            ResidentOperationV1::CommandEffectDecideBatch(request) => {
+                crate::command_effect::evaluate_command_effect_batch_request(&request)
+            }
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
+            }
+            ResidentOperationV1::GithubCliClassify(request) => {
+                crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
@@ -230,8 +236,48 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
             }
+            ResidentOperationV1::CompoundGitInspection(request) => {
+                crate::compound_git_inspection_op::evaluate_compound_git_inspection_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::McpProxyDecide(request) => {
+                crate::mcp_proxy_decision_op::evaluate_mcp_proxy_decision(&request)
+            }
+            ResidentOperationV1::GitExecutionSafety(request) => {
+                crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
+            }
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
+            }
+            ResidentOperationV1::ApprovalProofDecide(request) => {
+                crate::approval_proof_op::evaluate_approval_proof_request(&request)
+            }
+            ResidentOperationV1::HookDecide(request) => {
+                crate::hook_decision_op::evaluate_hook_decision_request(&request)
+            }
+            ResidentOperationV1::HookArtifactCompose(request) => {
+                crate::hook_artifact_compose_op::evaluate_hook_artifact_compose_request(&request)
+            }
+            ResidentOperationV1::LocalMcpGrantDecide(request) => {
+                crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
+            }
+            ResidentOperationV1::RequestContextBuild(request) => {
+                crate::request_context_op::evaluate_request_context_request(&request)
+            }
+            #[cfg(unix)]
+            ResidentOperationV1::SkillDirectoryIdentity(request) => {
+                crate::skill_directory_identity_op::evaluate_skill_directory_identity_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::ContributedMcpDecide(request) => {
+                crate::contributed_mcp_decision_op::evaluate_contributed_mcp_decision_request(
+                    &request,
+                )
+            }
+            ResidentOperationV1::McpToolPolicyDecide(request) => {
+                crate::mcp_tool_policy_decide_op::evaluate_mcp_tool_policy_decide_request(&request)
             }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
@@ -284,11 +330,29 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::McpRuntimeEvidence(request) => {
                 crate::mcp_runtime_evidence_op::evaluate_mcp_runtime_evidence(&request)
             }
+            ResidentOperationV1::FalsePositiveRules(request) => {
+                crate::false_positive_rules_op::evaluate_false_positive_rules(&request)
+            }
+            ResidentOperationV1::RunnerAuthority(request) => {
+                crate::runner_authority_op::evaluate_runner_authority(&request)
+            }
+            ResidentOperationV1::McpToolEvidence(request) => {
+                crate::mcp_tool_evidence_op::evaluate_mcp_tool_evidence(&request)
+            }
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
+            // Static catalog metadata only: no policy store, guard home or
+            // effective-control state is read (ADR 0014).
+            ResidentOperationV1::CatalogRead(request) => encode_response(
+                &guard_command::catalog_read_model::evaluate_catalog_read(&request),
+            ),
+            ResidentOperationV1::DataFlowAnalyze(request) => {
+                crate::data_flow_analyze_op::evaluate_data_flow_analyze(&request)
+            }
             #[cfg(not(unix))]
-            ResidentOperationV1::ContainedNodeExecute(_)
+            ResidentOperationV1::SkillDirectoryIdentity(_)
+            | ResidentOperationV1::ContainedNodeExecute(_)
             | ResidentOperationV1::ContainedTypescriptExecute(_)
             | ResidentOperationV1::ContainedPackageScriptExecute(_)
             | ResidentOperationV1::ContainedWorkspaceWriteExecute(_)
@@ -339,7 +403,14 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
+        ResidentOperationV1::FalsePositiveRules(request) => Some(&request.guard_home),
+        ResidentOperationV1::RunnerAuthority(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::RequestContextBuild(request) => Some(&request.guard_home),
+        ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
         _ => None,
     }
 }
@@ -354,6 +425,12 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.store_path),
         _ => None,
     }
 }
+
+#[cfg(test)]
+#[path = "catalog_read_op_tests.rs"]
+mod catalog_read_op_tests;

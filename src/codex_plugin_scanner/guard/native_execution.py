@@ -74,8 +74,18 @@ def _resident_request(
     timeout_seconds: float,
     required_feature: str,
     response_schema: str | None = None,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
+    record_success: bool = True,
 ) -> dict[str, object] | None:
-    """Envelope + transport shared by all contained-execution ops."""
+    """Envelope + transport shared by all contained-execution ops.
+
+    Pass ``record_success=False`` when the caller validates the reply further
+    and records success itself; otherwise a resident that keeps sending
+    unusable replies would reset the failure streak on every call. With
+    ``record_success=False`` every resident-originated ``None`` (transport,
+    malformed or non-object body, wrong schema, unaccepted status) records its
+    own failure here, so the caller must not record those again.
+    """
     status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return None
@@ -92,7 +102,7 @@ def _resident_request(
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
         return None
-    if len(payload) > _MAX_REQUEST_BYTES:
+    if len(payload) > max_request_bytes:
         return None
     environment = _isolated_environment()
     response = native_resident_client_request(
@@ -111,6 +121,8 @@ def _resident_request(
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if not isinstance(decoded, dict):
+        if not record_success:
+            native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
     if response_schema is not None and decoded.get("schema") != response_schema:
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
@@ -130,14 +142,26 @@ def _resident_request(
         # ("opened") / recv ("event") / close ("closed") and forced a silent
         # Python fallback the resident should own.
         accepted = _MCP_SESSION_ACCEPTED_STATUS.get(operation)
-        if operation in {"policy_decision_lookup", "local_cli_grant_decide"}:
+        if operation in {
+            "mcp_proxy_decide",
+            "policy_decision_lookup",
+            "local_cli_grant_decide",
+            "local_mcp_grant_decide",
+            "contributed_mcp_decide",
+            "approval_proof_decide",
+            "hook_decide",
+            "request_context_build",
+        }:
             accepted = frozenset({"ok", "error"})
-        if accepted is not None:
-            if decoded.get("status") not in accepted:
-                return None
-        elif decoded.get("status") != "ok":
+        elif operation == "mcp_tool_policy_decide":
+            accepted = frozenset({"ok", "need", "error"})
+        accepted_statuses = accepted if accepted is not None else frozenset({"ok"})
+        if decoded.get("status") not in accepted_statuses:
+            if not record_success:
+                native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_status")
             return None
-    native_record_resident_success(status.identity.sha256, guard_home)
+    if record_success:
+        native_record_resident_success(status.identity.sha256, guard_home)
     return decoded
 
 
