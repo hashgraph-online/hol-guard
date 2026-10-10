@@ -219,3 +219,48 @@ def test_expired_approval_cannot_open_committed_marker_after_sql_commit(tmp_path
         store, candidate, approval_gate_grant=_grant(store, candidate, initialize=False)
     )
     assert owner.read_installed_business_source(store, _key(store)) == recovered
+
+
+def test_unchanged_installation_reuses_verification_without_native_calls(tmp_path: Path, native_mcp_probe, monkeypatch):
+    store = GuardStore(tmp_path / "memo-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    calls: list[str] = []
+    verify_record = owner.verify_business_source_record
+    verify_anchor = owner.verify_business_source_anchor
+
+    def counted_record(*args, **kwargs):
+        calls.append("record")
+        return verify_record(*args, **kwargs)
+
+    def counted_anchor(*args, **kwargs):
+        calls.append("anchor")
+        return verify_anchor(*args, **kwargs)
+
+    monkeypatch.setattr(owner, "verify_business_source_record", counted_record)
+    monkeypatch.setattr(owner, "verify_business_source_anchor", counted_anchor)
+    with owner._VERIFIED_LOCK:
+        owner._VERIFIED.pop(str(store.guard_home), None)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    assert calls == ["anchor", "record"]
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    assert calls == ["anchor", "record"]
+
+
+def test_changed_installation_bytes_or_key_are_verified_again(tmp_path: Path, native_mcp_probe):
+    store = GuardStore(tmp_path / "memo-tamper-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    with pytest.raises(NativePolicySnapshotError):
+        owner.read_installed_business_source(store, bytes(32))
+    record_path = store.guard_home / "native-runtime" / owner.SOURCE_FILE_NAME
+    original = record_path.read_bytes()
+    record_path.write_bytes(original.replace(b'"mutation_revision":1', b'"mutation_revision":7', 1))
+    assert record_path.read_bytes() != original
+    with pytest.raises(NativePolicySnapshotError):
+        owner.read_installed_business_source(store, _key(store))
+    record_path.write_bytes(original)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
