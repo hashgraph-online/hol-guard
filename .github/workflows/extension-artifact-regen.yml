@@ -28,6 +28,9 @@ on:
       - scripts/render_command_extension_directory.py
       - scripts/extension_artifact_bundle.py
       - scripts/publish_extension_snapshot.py
+      - scripts/extension_claim_provenance.py
+      - scripts/reconcile_extension_claim_notices.py
+      - scripts/notify_merged_extension_claimants.py
       - docs/guard/extensions/contributing.md
       - .github/workflows/extension-artifact-regen.yml
   workflow_dispatch:
@@ -55,6 +58,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.13"
@@ -72,7 +76,8 @@ jobs:
       - name: Build the immutable snapshot
         env:
           SOURCE_SHA: ${{ github.sha }}
-        run: uv run --no-sync python scripts/extension_artifact_bundle.py --source-sha "$SOURCE_SHA" --output extension-snapshot
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python scripts/extension_artifact_bundle.py --source-sha "$SOURCE_SHA" --output extension-snapshot --resolve-claimants
       - name: Attest the immutable snapshot
         id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
@@ -94,3 +99,62 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.sha }}
         run: uv run --no-sync python scripts/publish_extension_snapshot.py --source-sha "$SOURCE_SHA" --directory extension-snapshot
+
+  claim-notice-plan:
+    needs: regen
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      pull_requests: ${{ steps.plan.outputs.pull_requests }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: extension-artifacts-${{ github.sha }}
+          path: extension-snapshot
+      - name: Plan missing introducing-contributor invitations
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          pending=$(python3 scripts/reconcile_extension_claim_notices.py --directory extension-snapshot --source-sha "$SOURCE_SHA" --plan)
+          echo "pull_requests=$pending" >> "$GITHUB_OUTPUT"
+
+  claim-notices:
+    needs: claim-notice-plan
+    if: needs.claim-notice-plan.outputs.pull_requests != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        pr_number: ${{ fromJSON(needs.claim-notice-plan.outputs.pull_requests) }}
+    # Share the immediate merge workflow's lock so reconciliation cannot
+    # race it into duplicate invitations on the same PR.
+    concurrency:
+      group: extension-claim-notice-${{ matrix.pr_number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Deliver missing claim invitation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.pr_number }}
+        run: python3 scripts/notify_merged_extension_claimants.py --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER" --source-root "$GITHUB_WORKSPACE"

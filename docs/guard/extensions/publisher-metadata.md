@@ -11,20 +11,24 @@ The stable contribution ID is the public identity. `command.blitcp` uses
 `mcp.filesystem` keeps that identity even though its runtime catalog entry is
 `command.mcp-filesystem`.
 
-Publisher verification uses numeric GitHub account IDs recorded in accepted
-publisher metadata. Pull-request authorship is attribution evidence only; it never
-creates publisher authority by itself. A profile link, username, repository
-membership, authorship of the contribution, commit email, or authorship of an
-unrelated change is not sufficient. The contribution and the authority-bearing
-metadata must still exist on canonical `main`. Ambiguous history, renames, direct
-pushes, and disputed attribution require maintainer review rather than an automatic
-grant.
+When an external contribution merges, its initial publisher identity comes from
+the verified PR that first added its source to protected `main`. Verification
+checks the complete source history, the introducing PR and its numeric GitHub
+User ID, and current source and trust classification. A later fix, username,
+commit email, credit field, or onboarding link cannot grant ownership. Ambiguous
+history, renames, reused paths, direct pushes, and disputed attribution require
+maintainer review.
 
-The first accepted claimant set is established through normal protected repository
-review of `maintainerGithubIds`. Adding or removing one of those IDs is an
-authority-bearing metadata change and must be reviewed as such. An empty claimant
-set deliberately leaves the extension unclaimable until maintainers accept an
-explicit mapping; consumers must not fall back to PR authorship.
+No listing PR or manually entered ID is needed for that initial claim. The
+post-merge workflow sends a claim invitation, and the snapshot publisher recovers
+missed invitations after publication. These generated records never commit to
+the repository or open another PR.
+
+An optional `maintainerGithubIds` field overrides automatic initial ownership
+when maintainers delegate or withdraw claim authority. Changing that field is an
+authority change and requires normal protected repository review. An explicit
+empty array disables automatic claims; omitting the field preserves the verified
+introducing author's claim.
 
 First-party and trusted-library coverage is project-maintained. It is not claimable
 by the last person who edited its source.
@@ -37,9 +41,8 @@ Publisher presentation and claim authority belong in:
 contributions/extension-listings/<contribution-id>.json
 ```
 
-A sidecar is optional for public presentation, but an external extension cannot be
-automatically claimed until an accepted sidecar names at least one authorized
-numeric GitHub ID.
+A sidecar is optional for public presentation and initial claim eligibility.
+Use `maintainerGithubIds` only when an explicit authority override is needed.
 
 New sidecars use v2. v1 sidecars remain readable so existing accepted mappings
 keep their exact semantics. Example for `command.blitcp`:

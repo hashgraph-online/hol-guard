@@ -51,6 +51,9 @@ def listing_v2(extension_id: str, ids: list[str]) -> dict[str, Any]:
 
 
 class FakeGitHub:
+    repo = "hashgraph-online/hol-guard"
+    base_url = "https://api.github.com/repos/hashgraph-online/hol-guard"
+
     def __init__(self) -> None:
         self.default_branch = "main"
         self.merged = True
@@ -67,6 +70,9 @@ class FakeGitHub:
 
     def repo_metadata(self) -> dict[str, Any]:
         return {"default_branch": self.default_branch}
+
+    def _request(self, url: str) -> Any:
+        raise MODULE.ClaimProvenanceError("Fixture has no verified introducing history")
 
     def pull_request(self, number: int) -> dict[str, Any]:
         return {
@@ -86,6 +92,11 @@ class FakeGitHub:
         return self.files
 
     def file_json(self, path: str, ref: str, *, missing_ok: bool = False) -> dict[str, Any] | None:
+        if path.startswith("contracts/extensions/trust/") and (ref, path) not in self.file_payloads:
+            runtime_id = path.removeprefix("contracts/extensions/trust/").removesuffix(".v1.json")
+            return {
+                "schemaVersion": "guard.extension-trust-binding.v1", "extension": runtime_id, "trustClass": "external",
+            }
         value = self.file_payloads.get((ref, path))
         if value is None and not missing_ok:
             raise AssertionError(f"unexpected missing file: {path}@{ref}")
@@ -188,6 +199,77 @@ def test_source_only_command_contribution_gets_mapping_guidance() -> None:
     assert MODULE.GUIDANCE_MARKER in body
     assert "contributions/extension-listings/command.sourceonly.json" in body
     assert MODULE.MARKER not in body
+
+
+class VerifiedHistoryGitHub(FakeGitHub):
+    def pull_request(self, number: int) -> dict[str, Any]:
+        pull = super().pull_request(number)
+        pull.update({"merged": self.merged, "user": {"id": 100, "login": "source-author", "type": "User"}})
+        pull["base"]["repo"] = {"full_name": self.repo}
+        return pull
+
+    def _request(self, url: str) -> Any:
+        route = url.removeprefix(self.base_url + "/")
+        source_path = self.files[0]["filename"]
+        if route.startswith("commits?"):
+            return [{"sha": MERGE_SHA}]
+        if route == f"commits/{MERGE_SHA}?per_page=100":
+            return {"files": [{"filename": source_path, "status": "added"}]}
+        if route == f"commits/{MERGE_SHA}/pulls?per_page=100":
+            return [{"number": 7}]
+        if route == "commits/main":
+            return {"sha": MERGE_SHA}
+        raise AssertionError(f"Unexpected provenance route: {route}")
+
+    def compare(self, base: str, head: str) -> dict[str, Any]:
+        if base == head == MERGE_SHA:
+            return {"status": "identical"}
+        return super().compare(base, head)
+
+
+def test_verified_source_only_merge_gets_direct_claim_link_without_listing() -> None:
+    client = VerifiedHistoryGitHub()
+    configure_new_command_source(client, "command.sourceonly")
+    client.logins = {"100": "source-author"}
+
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert len(client.posted) == 1
+    body = client.posted[0][1]
+    assert MODULE.MARKER in body
+    assert "claim=command.sourceonly" in body
+    assert "@source-author" in body
+    assert MODULE.GUIDANCE_MARKER not in body
+    assert "extension-listings" not in body
+
+
+def test_explicit_empty_current_authority_revokes_automatic_claim_link() -> None:
+    client = VerifiedHistoryGitHub()
+    configure_new_command_source(client, "command.revoked")
+    client.file_payloads[(client.default_branch, "contributions/extension-listings/command.revoked.json")] = listing(
+        "command.revoked", []
+    )
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert not client.posted
+
+
+def test_historical_introduction_without_binding_uses_current_external_classification() -> None:
+    client = VerifiedHistoryGitHub()
+    configure_new_command_source(client, "command.sourceonly")
+    client.file_payloads[(MERGE_SHA, "contracts/extensions/trust/command.sourceonly.v1.json")] = None
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert MODULE.MARKER in client.posted[0][1]
+
+
+def test_project_reclassification_blocks_an_automatic_invitation() -> None:
+    client = VerifiedHistoryGitHub()
+    configure_new_command_source(client, "command.sourceonly")
+    client.file_payloads[(client.default_branch, "contracts/extensions/trust/command.sourceonly.v1.json")] = {
+        "schemaVersion": "guard.extension-trust-binding.v1",
+        "extension": "command.sourceonly",
+        "trustClass": "first-party",
+    }
+    assert MODULE.process(client, 7, MODULE.DEFAULT_STUDIO_URL) == 0
+    assert not client.posted
 
 
 def test_source_only_command_contribution_with_listing_gets_claim_notice() -> None:
