@@ -7,13 +7,14 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
-from ci.gauntlet import qualify, qualify_setup
+from ci.gauntlet import fixtures, qualify, qualify_setup
 
 SHA = "a" * 40
 
@@ -203,7 +204,7 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
             "verifier_sha": "c" * 40,
             "verifier_clean": True,
             "verifier_on_main": True,
-            "trusted_verifier": True,
+            "independent_verifier": True,
             "gnu_sed": None,
         },
     )
@@ -265,7 +266,7 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     assert kwargs["source_root"] == tmp_path / "run" / "candidate"
     assert kwargs["expected_sha"] == SHA
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
-    assert result["qualified"] is True and result["trusted_verifier"] is True
+    assert result["qualified"] is True and result["independent_verifier"] is True
     assert result["attempts"][0]["pass"] is True
     # Passing attempts remove their short work root; it stays out of `kept`.
     assert result["attempts"][0]["work_root"] == str((tmp_path / "w" / "1").resolve())
@@ -340,10 +341,102 @@ def test_private_dir_requires_an_owned_mode_700_directory(tmp_path: Path) -> Non
     link.symlink_to(path, target_is_directory=True)
     with pytest.raises(RuntimeError, match="real directory"):
         qualify_setup.private_dir(link)
+    not_dir = tmp_path / "file"
+    not_dir.write_text("x")
+    with pytest.raises(RuntimeError, match="real directory"):
+        qualify_setup.private_dir(not_dir)
+    # A pre-existing owned-but-shared directory is tightened, not rejected.
     shared = tmp_path / "shared"
     shared.mkdir(mode=0o770)
-    with pytest.raises(RuntimeError, match="not private"):
-        qualify_setup.private_dir(shared)
+    assert qualify_setup.private_dir(shared) == shared
+    assert (shared.stat().st_mode & 0o777) == 0o700
+
+
+def test_mkdir_private_creates_every_missing_component_mode_700(tmp_path: Path) -> None:
+    deep = tmp_path / "a" / "b" / "c"
+    fixtures.mkdir_private(deep)
+    for level in (tmp_path / "a", tmp_path / "a" / "b", deep):
+        assert (level.stat().st_mode & 0o777) == 0o700
+
+
+def test_work_roots_continue_past_999(tmp_path: Path) -> None:
+    (tmp_path / "w").mkdir(mode=0o700)
+    for name in ("997", "999", "note"):
+        (tmp_path / "w" / name).mkdir(mode=0o700)
+    assert qualify.attempt_work_root(tmp_path / "w").name == "1000"
+    assert qualify.attempt_work_root(tmp_path / "w").name == "1001"
+
+
+def test_setup_command_group_is_reaped_when_the_driver_is_interrupted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pid_file = tmp_path / "child.pid"
+    real_wait = subprocess.Popen.wait
+    waits = {"n": 0}
+
+    def interrupted(self: subprocess.Popen[Any], timeout: float | None = None) -> int:
+        waits["n"] += 1
+        if waits["n"] > 1:
+            return real_wait(self, timeout)
+        # The interrupt lands only after the child started and reported its group.
+        deadline = time.monotonic() + 10
+        while not pid_file.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(subprocess.Popen, "wait", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        qualify_setup.run_logged(
+            ["sh", "-c", f"sleep 30 & echo $$ $! > {pid_file}; wait"],
+            cwd=tmp_path,
+            log=tmp_path / "setup.log",
+        )
+    pgid, child = (int(value) for value in pid_file.read_text().split())
+    for _ in range(50):
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail("setup process group survived the interrupted driver")
+    with pytest.raises(ProcessLookupError):
+        os.kill(child, 0)
+
+
+def test_cold_wheel_build_requires_cargo_and_jq(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(qualify_setup.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(qualify_setup.shutil, "which", lambda _tool: None)
+    monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path / "no-home"))
+    with pytest.raises(RuntimeError, match="cargo"):
+        qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run")
+    monkeypatch.setattr(qualify_setup.shutil, "which", lambda tool: "/bin/" + tool if tool == "cargo" else None)
+    with pytest.raises(RuntimeError, match="jq"):
+        qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run")
+    # A supplied wheel skips the toolchain check entirely.
+    wheel = tmp_path / "hol_guard-1.0.0-any.whl"
+    wheel.write_bytes(b"wheel")
+    result = qualify_setup.ensure_wheel(tmp_path / "cache", tmp_path / "repo", SHA, tmp_path / "run", wheel=wheel)
+    assert result["path"] == str(wheel)
+
+
+def test_driver_resolves_relative_roots_before_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    _fake_setup(monkeypatch, tmp_path, [_summary([{"id": "a", "outcome": "pass"}], True)])
+    args = _args(
+        tmp_path,
+        run_root=Path("rel-run"),
+        cache_root=Path("rel-cache"),
+        work_parent=Path("rel-w"),
+        sdk_root=Path("sdk"),
+    )
+    assert qualify.main(args) == 0
+    assert args.run_root.is_absolute() and args.work_parent.is_absolute()
+    result = json.loads((tmp_path / "rel-run" / "qualification.json").read_text())
+    assert result["run_root"] == str((tmp_path / "rel-run").resolve())
+    assert result["sdk"]["root"] == str((tmp_path / "sdk").resolve())
+    assert result["attempts"][0]["work_root"] == str((tmp_path / "rel-w" / "1").resolve())
 
 
 def test_prepare_failure_still_cleans_the_candidate_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

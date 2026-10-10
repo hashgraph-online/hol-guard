@@ -48,9 +48,27 @@ def scenario_fixture_name(scenario_id: str) -> str:
         raise ValueError("unknown scenario id: " + scenario_id) from None
 
 
+def mkdir_private(path: Path) -> Path:
+    """Create path and any missing parents, giving every new directory mode 0o700."""
+    missing: list[Path] = []
+    cursor = path
+    while not cursor.exists():
+        missing.append(cursor)
+        cursor = cursor.parent
+    for directory in reversed(missing):
+        directory.mkdir(mode=0o700, exist_ok=True)
+    return path
+
+
 def create_numbered_dir(parent: Path, prefix: str = "") -> Path:
     """Allocate a short copy-safe directory; never reuse a pre-existing entry."""
-    for number in range(1, 1000):
+    highest = 0
+    if parent.is_dir():
+        for entry in parent.iterdir():
+            suffix = entry.name.removeprefix(prefix)
+            if entry.name.startswith(prefix) and suffix.isdigit():
+                highest = max(highest, int(suffix))
+    for number in range(highest + 1, highest + 1001):
         path = parent / f"{prefix}{number}"
         try:
             path.mkdir(mode=0o700)

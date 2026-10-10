@@ -17,7 +17,7 @@ from .catalog import Scenario, catalog_digest, load_catalog
 from .fixtures import create_run_root, digest_file
 from .harness_case import run_harness_case
 from .harnesses import adapter
-from .parallel import run_scheduled, terminate_as_exit, validate_jobs
+from .parallel import Lease, run_scheduled, terminate_as_exit, validate_jobs
 from .source_identity import source_identity
 
 HERE = Path(__file__).resolve().parent
@@ -114,7 +114,7 @@ def run_harness_suite(
         workdir = root / "workers"
         workdir.mkdir(mode=0o700)
 
-        def spawn(scenario: Scenario) -> Any:
+        def spawn(scenario: Scenario, lease: Lease | None = None) -> Any:
             return SubprocessCaseWorker(
                 scenario.id,
                 {
@@ -129,6 +129,7 @@ def run_harness_suite(
                     "build_sha": capabilities.build_sha,
                 },
                 workdir,
+                pass_fds=(lease.fd,) if lease is not None and lease.fd is not None else (),
             )
 
         (output / "cases").mkdir(parents=True, exist_ok=True)

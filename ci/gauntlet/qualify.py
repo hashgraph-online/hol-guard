@@ -3,7 +3,7 @@
 Run this module's ``qualify`` command from a clean trusted main checkout. Each
 attempt is a complete fresh ``run`` of the candidate's own code in a detached
 worktree; retries cover only infrastructure outcomes and the in-process verifier
-here is trusted only when ``trusted_verifier`` is reported true.
+here is trusted only when ``independent_verifier`` is reported true.
 """
 
 from __future__ import annotations
@@ -271,6 +271,10 @@ def main(args: Any) -> int:
         raise ValueError("--max-load must be a positive finite number")
     if not math.isfinite(args.max_load_wait) or args.max_load_wait < 0:
         raise ValueError("--max-load-wait must be a finite number >= 0")
+    for field in ("cache_root", "run_root", "work_parent", "wheel", "sdk_root"):
+        value = getattr(args, field)
+        if value is not None:
+            setattr(args, field, Path(value).resolve())
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_root = (args.run_root or Path(f"/tmp/hol-guard-gauntlet-{os.getuid()}") / f"{sha[:12]}-{stamp}").resolve()
     if run_root.exists():
@@ -291,7 +295,7 @@ def main(args: Any) -> int:
         with terminate_as_exit():
             qualify_setup.private_dir(args.cache_root)
             info = qualify_setup.preflight(REPO)
-            progress(f"preflight trusted_verifier={info['trusted_verifier']}")
+            progress(f"preflight independent_verifier={info['independent_verifier']}")
             qualify_setup.ensure_commit(REPO, sha)
             if args.sdk_root is not None:
                 sdk_info = {
@@ -386,7 +390,7 @@ def main(args: Any) -> int:
             "sha": sha,
             "candidate_sha": args.candidate_sha,
             "qualified": qualified,
-            "trusted_verifier": info.get("trusted_verifier"),
+            "independent_verifier": info.get("independent_verifier"),
             "verifier_sha": info.get("verifier_sha"),
             "platform": platform.system().lower(),
             "wheel": wheel_info,

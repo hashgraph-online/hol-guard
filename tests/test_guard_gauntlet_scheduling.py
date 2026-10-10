@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -143,7 +145,7 @@ def test_host_slots_share_one_inventory_and_release_on_collect(tmp_path: Path) -
     live: list[FakeWorker] = []
     peak = 0
 
-    def spawn(name: str) -> FakeWorker:
+    def spawn(name: str, _lease: parallel.Lease | None = None) -> FakeWorker:
         nonlocal peak
         worker = FakeWorker(name, [], 2)
         live.append(worker)
@@ -172,7 +174,7 @@ def test_host_slot_leases_survive_cancel_and_spawn_failure(tmp_path: Path) -> No
         parallel.run_scheduled(
             ["a", "b"],
             jobs=2,
-            spawn=lambda n: FakeWorker(n, log, 99),
+            spawn=lambda n, _lease: FakeWorker(n, log, 99),
             sleep=lambda _s: (_ for _ in ()).throw(KeyboardInterrupt()),
             grace=0.0,
             slots=slots,
@@ -183,7 +185,7 @@ def test_host_slot_leases_survive_cancel_and_spawn_failure(tmp_path: Path) -> No
     for lease in held:
         lease.release()
 
-    def spawn(name: str) -> FakeWorker:
+    def spawn(name: str, _lease: parallel.Lease | None = None) -> FakeWorker:
         raise OSError("cannot start")
 
     with pytest.raises(OSError):
@@ -225,6 +227,32 @@ def test_host_slots_follow_the_latest_shared_capacity(tmp_path: Path) -> None:
     assert freed[2] is None
     for lease in [*freed[:2], *held[4:]]:
         lease.release()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="flock host slots")
+def test_host_slots_create_a_private_directory_tree(tmp_path: Path) -> None:
+    slots_dir = tmp_path / "nested" / "slots"
+    parallel.HostSlots(slots_dir, 1)
+    for level in (tmp_path / "nested", slots_dir):
+        assert (level.stat().st_mode & 0o777) == 0o700
+
+
+@pytest.mark.skipif(os.name != "posix", reason="flock host slots")
+def test_slot_stays_held_while_a_child_keeps_the_lease_fd(tmp_path: Path) -> None:
+    slots_dir = tmp_path / "slots"
+    slots = parallel.HostSlots(slots_dir, 1)
+    lease = slots.try_acquire()
+    assert lease is not None and lease.fd is not None
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"], pass_fds=(lease.fd,))
+    try:
+        lease.release()
+        assert slots.try_acquire() is None
+    finally:
+        child.terminate()
+        child.wait(timeout=30)
+    freed = slots.try_acquire()
+    assert freed is not None
+    freed.release()
 
 
 @pytest.mark.skipif(os.name != "posix", reason="flock host slots")

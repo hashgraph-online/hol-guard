@@ -40,7 +40,7 @@ from .input_evidence import (
     public_native_receipt,
 )
 from .latency import summarize_hook_latency
-from .parallel import HostSlots, LoadGate, run_scheduled, validate_jobs
+from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
@@ -406,7 +406,7 @@ def run_suite(
         workdir = root / "workers"
         workdir.mkdir(mode=0o700)
 
-        def spawn(scenario: Scenario) -> Any:
+        def spawn(scenario: Scenario, lease: Lease | None = None) -> Any:
             return SubprocessCaseWorker(
                 scenario.id,
                 {
@@ -420,6 +420,7 @@ def run_suite(
                     "build_sha": capabilities.build_sha,
                 },
                 workdir,
+                pass_fds=(lease.fd,) if lease is not None and lease.fd is not None else (),
             )
 
         (output / "cases").mkdir(parents=True, exist_ok=True)

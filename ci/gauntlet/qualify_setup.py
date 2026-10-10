@@ -12,15 +12,16 @@ import json
 import os
 import platform
 import shutil
+import signal
 import stat
 import subprocess
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
-from .fixtures import digest_file
+from .fixtures import digest_file, mkdir_private
 
 REQUIRED_TOOLS = ("git", "uv", "bun", "npm", "rg", "curl")
 GNU_SED_DIRS = (
@@ -30,16 +31,42 @@ GNU_SED_DIRS = (
 LOCK_DIR = "ci/pi-exact-continuation"
 
 
+def _reap_group(process: subprocess.Popen[Any]) -> None:
+    """SIGTERM then SIGKILL a setup process group so it cannot outlive the driver."""
+    with suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, signal.SIGTERM)
+    try:
+        process.wait(timeout=30)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    with suppress(ProcessLookupError, PermissionError):
+        os.killpg(process.pid, signal.SIGKILL)
+    with suppress(subprocess.TimeoutExpired):
+        process.wait(timeout=30)
+
+
 def run_logged(argv: list[str], *, cwd: Path, log: Path, env: dict[str, str] | None = None) -> None:
-    """Append one setup command's output to the run log; surface only its tail on failure."""
+    """Append one setup command's output to the run log; surface only its tail on failure.
+
+    The command runs in its own process group so an interrupted driver reaps the
+    whole setup tree (including the niced wheel build) before any lock releases.
+    """
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("ab") as stream:
-        result = subprocess.run(argv, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=7200)
-    if result.returncode:
+        process = subprocess.Popen(
+            argv, cwd=cwd, env=env, stdout=stream, stderr=subprocess.STDOUT, start_new_session=True
+        )
+        try:
+            returncode = process.wait(timeout=7200)
+        except BaseException:
+            _reap_group(process)
+            raise
+    if returncode:
         tail = log.read_text(encoding="utf-8", errors="replace").splitlines()[-20:]
         for line in tail:
             print("qualify: setup | " + line, file=sys.stderr)
-        raise RuntimeError(f"setup command failed ({result.returncode}); full log at {log}")
+        raise RuntimeError(f"setup command failed ({returncode}); full log at {log}")
 
 
 def git(repo: Path, *args: str, check: bool = True) -> str:
@@ -66,14 +93,19 @@ def git_show(repo: Path, sha: str, path: str) -> bytes:
 
 def private_dir(path: Path) -> Path:
     """Create or verify a directory only this user can enter, rejecting shared parents."""
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    mkdir_private(path)
     info = os.lstat(path)
     if not stat.S_ISDIR(info.st_mode):
         raise RuntimeError("not a real directory: " + str(path))
     if info.st_uid != os.getuid():
         raise RuntimeError("not owned by this user: " + str(path))
     if info.st_mode & 0o077:
-        raise RuntimeError("directory is not private to this user: " + str(path))
+        # An older version left group/other bits on this user's own directories;
+        # tighten rather than refuse, then re-verify the result.
+        with suppress(OSError):
+            os.chmod(path, 0o700)
+        if os.lstat(path).st_mode & 0o077:
+            raise RuntimeError("directory is not private to this user: " + str(path))
     return path
 
 
@@ -135,7 +167,7 @@ def preflight(repo: Path) -> dict[str, Any]:
         "verifier_sha": verifier_sha,
         "verifier_clean": verifier_clean,
         "verifier_on_main": on_main,
-        "trusted_verifier": verifier_clean and on_main,
+        "independent_verifier": verifier_clean and on_main,
         "gnu_sed": sed_dir,
     }
 
@@ -203,6 +235,11 @@ def _cached_wheel(store: Path) -> dict[str, Any] | None:
 
 def _build_wheel(store: Path, repo: Path, sha: str, tag: str, target: str, deployment: str, run_root: Path) -> None:
     """Build the tested commit's wheel in the persistent warm worktree."""
+    cargo = Path.home() / ".cargo" / "bin"
+    if shutil.which("cargo") is None and not (cargo / "cargo").is_file():
+        raise RuntimeError("a cold wheel build requires cargo on PATH or under ~/.cargo/bin")
+    if shutil.which("jq") is None:
+        raise RuntimeError("a cold wheel build requires jq on PATH")
     cache_root = store.parent.parent
     setup_log = run_root / "logs" / "setup.log"
     git_env = {**os.environ, "GIT_CONFIG_NOSYSTEM": "1"}
@@ -234,7 +271,6 @@ def _build_wheel(store: Path, repo: Path, sha: str, tag: str, target: str, deplo
             env=env,
             log=setup_log,
         )
-        cargo = Path.home() / ".cargo" / "bin"
         build_env = {
             **env,
             "HOL_GUARD_BUILD_SHA": sha,

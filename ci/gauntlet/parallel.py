@@ -18,6 +18,8 @@ from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any, Protocol, TypeVar
 
+from .fixtures import mkdir_private
+
 if os.name == "posix":
     import fcntl
 
@@ -114,18 +116,26 @@ def cancel_all(
 
 
 class Lease:
-    """One held host-wide case slot; ``release`` is idempotent and process exit frees it."""
+    """One held host-wide case slot; ``release`` is idempotent and process exit frees it.
+
+    The slot fd is passed to the case worker so the lock outlives a killed runner:
+    the kernel frees the flock only when the last fd (parent's and worker's copies)
+    is closed, so ``release`` must close but never explicitly unlock.
+    """
 
     def __init__(self, fd: int):
         self._fd: int | None = fd
 
+    @property
+    def fd(self) -> int | None:
+        """The lease's open file description; the case worker inherits a copy."""
+        return self._fd
+
     def release(self) -> None:
-        """Unlock and close the slot file exactly once."""
+        """Close this copy of the slot fd; an inheriting worker keeps the slot held."""
         fd, self._fd = self._fd, None
         if fd is None:
             return
-        with suppress(OSError):
-            fcntl.flock(fd, fcntl.LOCK_UN)
         with suppress(OSError):
             os.close(fd)
 
@@ -152,7 +162,7 @@ class HostSlots:
             raise ValueError("host slots require a POSIX host")
         if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= MAX_SLOTS:
             raise ValueError(f"host slot count must be an integer from 1 to {MAX_SLOTS}")
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        mkdir_private(directory)
         self.directory = directory
         self.count = count
         staging = directory / f".capacity-{os.getpid()}.tmp"
@@ -269,8 +279,11 @@ def run_scheduled(
     ``order`` is the spawn order as item indices and must be a permutation of them.
     When ``admit`` is given a worker starts only while it returns true, and when
     ``slots`` is given a worker starts only while a host slot is held, without
-    ever blocking the scheduling loop. A true ``should_stop`` result stops new
-    spawns; in-flight workers finish normally and unrun items come back as ``None``.
+    ever blocking the scheduling loop; in that case ``spawn`` is called as
+    ``spawn(item, lease)`` so the worker process inherits the lease fd and the
+    slot stays held until the child exits. A true ``should_stop`` result stops
+    new spawns; in-flight workers finish normally and unrun items come back as
+    ``None``.
     """
     validate_jobs(jobs)
     if order is None:
@@ -295,7 +308,7 @@ def run_scheduled(
                     index = pending.popleft()
                     try:
                         with deferred_signals():
-                            running[index] = spawn(items[index])
+                            running[index] = spawn(items[index], lease) if slots is not None else spawn(items[index])
                     except BaseException:
                         if lease is not None:
                             lease.release()
