@@ -25,22 +25,7 @@ import sys
 from collections.abc import Mapping
 from typing import TextIO
 
-from .hook_payloads import normalize_session_and_workspace_aliases
-
-# ZCode surfaces tools using Claude Code names (Bash, Read, Write, Edit, ...) and
-# MCP tools as ``mcp__<server>__<tool>``. No alias table is needed because the
-# canonical tool name already matches the Guard runtime contract.
-_ZCODE_TOOL_ALIASES: dict[str, str] = {
-    "run_terminal_command": "Bash",
-    "run_command": "Bash",
-    "read_file": "Read",
-    "write_file": "Write",
-    "search_replace": "Edit",
-    "multi_edit": "MultiEdit",
-    "grep": "Grep",
-    "web_fetch": "WebFetch",
-    "web_search": "WebSearch",
-}
+from ..native_hook_adapter import native_prepare_payload
 
 # Review-tier actions become ZCode's ``ask`` so the native permission prompt
 # (allow once / always / deny) can satisfy them; hard denials stay ``deny``.
@@ -80,42 +65,10 @@ def _canonical_zcode_event_name(raw_event: str) -> str:
     return mapping.get(normalized, raw_event or "PreToolUse")
 
 
-def _canonical_zcode_tool_name(raw_tool: object | None) -> str | None:
-    if not isinstance(raw_tool, str) or not raw_tool.strip():
-        return None
-    stripped = raw_tool.strip()
-    return _ZCODE_TOOL_ALIASES.get(stripped.lower(), stripped)
-
-
 def prepare_zcode_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
     """Map a ZCode hook stdin JSON object onto Guard's shared hook shape."""
 
-    normalized = dict(payload)
-    raw_event = _raw_hook_event_name(normalized)
-    if raw_event:
-        normalized["hook_event_name"] = _canonical_zcode_event_name(raw_event)
-
-    tool_name = normalized.get("tool_name")
-    if tool_name is None:
-        tool_name = normalized.get("toolName")
-    canonical_tool = _canonical_zcode_tool_name(tool_name)
-    if canonical_tool is not None:
-        normalized["tool_name"] = canonical_tool
-
-    tool_input = normalized.get("tool_input")
-    if tool_input is None:
-        tool_input = normalized.get("toolInput")
-    if tool_input is None:
-        tool_input = normalized.get("arguments")
-    if tool_input is not None:
-        normalized["tool_input"] = tool_input
-
-    normalize_session_and_workspace_aliases(normalized)
-
-    prompt = normalized.get("prompt")
-    if prompt is None and isinstance(normalized.get("userPrompt"), str):
-        normalized["prompt"] = normalized["userPrompt"]
-    return normalized
+    return native_prepare_payload("zcode", payload)
 
 
 def _event_name_for_response(payload: Mapping[str, object]) -> str:

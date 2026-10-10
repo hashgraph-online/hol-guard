@@ -78,6 +78,9 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Same correlation-only digest for the hook artifact composition op.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
+        # Same correlation-only digest for the per-harness hook adapter op.
+        "src/codex_plugin_scanner/guard/native_hook_adapter.py",
+        "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
@@ -125,6 +128,10 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident hook artifact composition response; the
         # answer is strictly bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
+        # Decodes the bounded resident hook adapter response; the answer is
+        # strictly bound and validated, never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_hook_adapter.py",
+        "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
         # Decodes the bounded resident MCP tool-policy envelope; the decision
@@ -167,6 +174,9 @@ _ASYNC_POLICY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
         "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
+        # Publisher-written, HMAC-bound per-harness posture sidecar for the
+        # ACKed snapshot; read only to decide record-only versus enforce.
+        "src/codex_plugin_scanner/guard/native_policy_snapshot_harness_postures.py",
         # Native-authenticated source binding and asynchronous snapshot bytes;
         # Rust remains the document compiler and resident admission authority.
         "src/codex_plugin_scanner/guard/native_policy_snapshot_codec.py",

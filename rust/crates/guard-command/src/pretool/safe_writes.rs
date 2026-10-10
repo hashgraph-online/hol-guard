@@ -19,6 +19,23 @@ pub(super) fn bounded_native_file_write_target(
     bounded_write_target(value, home_dir, cwd, false, true)
 }
 
+/// A single absolute file write into a temporary directory the user owns.
+/// It never widens the workspace or home boundaries; see the copy carve-out.
+pub(super) fn bounded_native_temporary_write_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    bounded_temporary_copy_target(
+        value,
+        super::PathContext {
+            home_dir,
+            cwd,
+            cdpath_unset: false,
+        },
+    )
+}
+
 fn bounded_write_target(
     value: &str,
     home_dir: Option<&str>,
