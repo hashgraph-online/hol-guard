@@ -24,6 +24,7 @@ from .native_package_authority import _REQUEST_SCHEMA, _RESULT_SCHEMA, _request_
 _APPROVAL_HASH_FEATURE = "package-approval-hash-v1"
 _GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _TOKEN_PREFIX = "guard-approval-context:v1:"
+_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _EVALUATION_FIELDS = (
     "bundle_version",
     "decision",
@@ -89,16 +90,20 @@ def _feed_snapshot_hash(store: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
+def _view_item(item: object) -> object:
+    if isinstance(item, Mapping):
+        return dict(item)
+    return item
+
+
+def _view_value(value: object) -> object:
+    if isinstance(value, (list, tuple)):
+        return [_view_item(item) for item in value]
+    return value
+
+
 def _evaluation_view(evaluation: Any) -> dict[str, object]:
-    view: dict[str, object] = {}
-    for field in _EVALUATION_FIELDS:
-        value = getattr(evaluation, field)
-        view[field] = (
-            [dict(item) if isinstance(item, Mapping) else item for item in value]
-            if isinstance(value, (list, tuple))
-            else value
-        )
-    return view
+    return {field: _view_value(getattr(evaluation, field)) for field in _EVALUATION_FIELDS}
 
 
 def _transport(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
@@ -117,6 +122,7 @@ def _transport(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
         guard_home=guard_home,
         timeout_seconds=2.0,
         required_features=(_APPROVAL_HASH_FEATURE,),
+        max_request_bytes=_MAX_REQUEST_BYTES,
     )
     if (
         not isinstance(response, dict)
@@ -150,7 +156,7 @@ def native_package_current_action(
     }
     if additional_current_action is not None:
         request["additional_current_action"] = additional_current_action
-    payload = _transport(request, _resolve_digest_home(None))
+    payload = _transport(request, _resolve_digest_home(config.guard_home if config is not None else None))
     action = payload.get("current_action")
     if action not in _GUARD_ACTIONS:
         raise NativePackageApprovalHashError("Native package approval hash action invalid")
