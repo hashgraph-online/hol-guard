@@ -1007,7 +1007,7 @@ pub fn classify_github_auth(normalized: &[String]) -> Option<GitHubCommandAssess
     }
     if sub == "status" {
         return Some(assessment(
-            Cap::ReadLocal,
+            Cap::ReadRemote,
             "github.command.local-auth-read",
             "The command reads local CLI auth state.",
         ));
