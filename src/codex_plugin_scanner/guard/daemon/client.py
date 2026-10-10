@@ -286,6 +286,11 @@ class GuardSurfaceDaemonClient:
         response = self._post("/v1/policy/claim", payload)
         return response.get("claimed") is True
 
+    def open_get(self, path: str, headers: dict[str, str], *, timeout: float) -> http.client.HTTPResponse:
+        """Open an authenticated loopback GET; the caller owns and closes the response."""
+        request = urllib.request.Request(f"{self.daemon_url}{path}", headers=headers, method="GET")
+        return urllib.request.urlopen(request, timeout=timeout)
+
     def _get(
         self,
         path: str,

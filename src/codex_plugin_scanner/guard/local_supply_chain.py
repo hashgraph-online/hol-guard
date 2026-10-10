@@ -261,6 +261,10 @@ def _native_package_authority_module():
     return importlib.import_module(".native_package_authority", __package__)
 
 
+def _native_supply_chain_eval_module():
+    return importlib.import_module(".native_supply_chain_eval", __package__)
+
+
 def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
     """Resident-owned package verdict rewrite; raises when the resident cannot answer."""
 
@@ -299,11 +303,40 @@ def _resolve_guard_sync_auth_context(store: GuardStore):
     return _runtime_runner_module()._resolve_guard_sync_auth_context(store)
 
 
-def evaluate_package_request_artifact(*args: object, **kwargs: object):
-    native = _evaluate_package_request_artifact_native(args, kwargs)
-    if native is not None:
-        return native
-    return _supply_chain_package_eval_module().evaluate_package_request_artifact(*args, **kwargs)
+def evaluate_package_request_artifact(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    workspace_dir: Path | None,
+    now: str | None = None,
+    external_archive_network_authorized: bool = False,
+    retain_external_archive_blob: bool = False,
+):
+    """Evaluate a package request; the resident owns every locally-decidable verdict.
+
+    The resident answers (or the request is blocked) for workspaces without a
+    Guard Cloud workspace. Two paths still run the Python evaluator because
+    their Rust ports are not complete: requests for a Cloud-connected workspace
+    (signed bundle, policy rules and the Cloud service call) and the
+    second-phase external-archive acquisition that must hand a live retained
+    blob to the caller (RTM-029/030).
+    """
+    if retain_external_archive_blob or store.get_cloud_workspace_id() is not None:
+        return _supply_chain_package_eval_module().evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now=now,
+            external_archive_network_authorized=external_archive_network_authorized,
+            retain_external_archive_blob=retain_external_archive_blob,
+        )
+    return _native_supply_chain_eval_module().evaluate_package_request_native(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        now=now,
+        external_archive_network_authorized=external_archive_network_authorized,
+    )
 
 
 def _parse_package_intent_native(
@@ -328,108 +361,6 @@ def _parse_package_intent_native(
     except Exception:
         return None
     return intent if isinstance(intent, PackageIntent) else None
-
-
-def _native_cloud_transport_unavailable(payload: dict[str, object]) -> bool:
-    """The resident cloud client is still a stub. Treat that miss as transport
-    failure so the Python evaluator can observe the real timeout or network error.
-    """
-    reasons = payload.get("reasons")
-    if not isinstance(reasons, list):
-        return False
-    return any(isinstance(reason, dict) and reason.get("code") == "cloud_network_error" for reason in reasons)
-
-
-def _python_cloud_auth_failed(store: GuardStore) -> bool:
-    """A patched auth seam is the test contract for expired cloud sessions.
-    Production keeps the resident path and does not refresh tokens here.
-    """
-    from .runtime import runner
-    from .runtime import supply_chain_package_eval as package_eval
-    from .runtime.runner import GuardSyncAuthorizationExpiredError
-
-    resolver = package_eval._resolve_guard_sync_auth_context
-    if resolver is runner._resolve_guard_sync_auth_context:
-        return False
-    try:
-        resolver(store, allow_primary_repair=False)
-    except GuardSyncAuthorizationExpiredError:
-        return True
-    except Exception:
-        return False
-    return False
-
-
-def _evaluate_package_request_artifact_native(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
-    """Best-effort native evaluation through the resident package authority.
-
-    ``None`` means transport failure (or an unsupported call shape), so the
-    caller falls back to the Python evaluator. Business errors propagate.
-    """
-    if args:
-        return None
-    artifact = kwargs.get("artifact")
-    store = kwargs.get("store")
-    if artifact is None or store is None:
-        return None
-    to_dict = getattr(artifact, "to_dict", None)
-    if not callable(to_dict):
-        return None
-    guard_home = getattr(store, "guard_home", None)
-    store_path = getattr(store, "path", None)
-    if not isinstance(guard_home, Path) or not isinstance(store_path, Path):
-        return None
-    workspace_dir = kwargs.get("workspace_dir")
-    if workspace_dir is not None and not isinstance(workspace_dir, Path):
-        return None
-    now = kwargs.get("now")
-    if now is not None and not isinstance(now, str):
-        return None
-    if bool(kwargs.get("retain_external_archive_blob", False)):
-        return None
-    if _python_cloud_auth_failed(store):
-        return None
-    native_authority = _native_package_authority_module()
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is not None and not native_authority.supply_chain_cloud_transport_available():
-        # Cloud service calls remain in Python until the native client supports
-        # both credential resolution and HTTP. Do not let the current stub
-        # persist a false terminal verdict before the real client runs.
-        return None
-    payload = native_authority.supply_chain_eval_native(
-        artifact=to_dict(),
-        guard_home=guard_home,
-        store_path=store_path,
-        workspace_dir=workspace_dir,
-        now=now,
-        external_archive_network_authorized=bool(kwargs.get("external_archive_network_authorized", False)),
-        retain_external_archive_blob=bool(kwargs.get("retain_external_archive_blob", False)),
-        runtime_private_metadata=getattr(artifact, "runtime_private_metadata", None),
-    )
-    if payload is None:
-        return None
-    if _native_cloud_transport_unavailable(payload):
-        return None
-    # The resident returns the decision; the Python store still owns the
-    # evidence row. A payload that cannot be reconstructed falls back to the
-    # Python evaluator; a persist failure propagates — the Python evaluator
-    # would hit the same store error, so swallowing it just re-runs the eval.
-    now_text = now if isinstance(now, str) else None
-    if now_text is None:
-        from datetime import datetime, timezone
-
-        now_text = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        evaluation = native_authority.evaluation_from_native_payload(payload)
-    except (TypeError, ValueError, KeyError, AttributeError):
-        return None
-    _supply_chain_package_eval_module()._persist_evidence(
-        store=store,
-        artifact=artifact,
-        evaluation=evaluation,
-        now=now_text,
-    )
-    return evaluation
 
 
 def _is_package_request_evaluation(value: object) -> TypeGuard[Any]:

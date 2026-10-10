@@ -252,6 +252,7 @@ from ..supply_chain_repair import (
 )
 from .aibom_inventory_persist import persist_aibom_inventory_context
 from .bounded_http import BoundedThreadingHTTPServer
+from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from .command_activity_api import (
     handle_command_activity_analytics,
     handle_command_activity_diagnostics,
@@ -2632,7 +2633,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         headers = self._cors_headers_for_request(
             allow_methods="GET, POST, DELETE, OPTIONS",
-            allow_headers=("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"),
+            allow_headers=(
+                "Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"
+            ),
         )
         if headers is None:
             self._write_empty(status=403)
@@ -2719,6 +2722,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 self._write_json({"error": str(error)}, status=400)
                 return
             stream_command_activity_events(self, cursor)
+            return
+        if parsed.path.startswith("/v2/"):
+            # /v2/ is outside the /v1/ prefix check below; authenticate it
+            # explicitly before any metadata or ETag comparison.
+            if self._query_has_guard_token(parsed.query):
+                self._record_query_token_rejection()
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            if parsed.path.startswith(CATALOG_V2_PREFIX):
+                daemon = self._daemon_server()
+                serve_catalog_read_v2(
+                    self,
+                    path=parsed.path,
+                    query=parsed.query,
+                    if_none_match=self.headers.get("If-None-Match"),
+                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+                    catalog_digest=daemon.extension_control_api.catalog_digest,
+                )
+                return
+            self._write_json({"error": "not_found"}, status=404)
             return
         if parsed.path.startswith("/v1/") and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
@@ -7826,7 +7852,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return secrets.compare_digest(provided, expected)
 
     def _touch_runtime_heartbeat(self, path: str) -> None:
-        if path != "/healthz" and not path.startswith("/v1/"):
+        if path != "/healthz" and not path.startswith(("/v1/", "/v2/")):
             return
         self.server.last_activity_monotonic = time.monotonic()  # type: ignore[attr-defined]
         self._daemon_server().runtime_heartbeat.touch(_now())
@@ -7955,6 +7981,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }:
             return True
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "receipts"]:
+            return True
+        if len(path_parts) >= 4 and path_parts[:3] == ["v2", "extension-controls", "catalog"]:
             return True
         if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
             return True
@@ -8572,6 +8600,17 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         extra_headers: dict[str, str] | None = None,
     ) -> None:
         body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
+        self._write_json_bytes(body, status=status, extra_headers=extra_headers)
+
+    def _write_json_bytes(
+        self,
+        body: bytes,
+        *,
+        status: int,
+        extra_headers: dict[str, str] | None = None,
+    ) -> None:
+        """Write already HTML-safe JSON bytes with the standard response headers."""
+
         headers = {**dict(extra_headers or {}), "X-Content-Type-Options": "nosniff"}
         cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS")
         if cors_headers is not None:
@@ -8586,6 +8625,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except _PEER_DISCONNECT_ERRORS:
             self.close_connection = True
+
+    def write_catalog_v2_body(self, body: bytes, *, status: int, headers: dict[str, str]) -> None:
+        self._write_json_bytes(body, status=status, extra_headers=headers)
+
+    def write_catalog_v2_empty(self, *, status: int, headers: dict[str, str]) -> None:
+        cors_headers = self._cors_headers_for_request(allow_methods="GET, POST, OPTIONS") or {}
+        self._write_empty(status=status, extra_headers={**cors_headers, **headers})
+
+    def write_catalog_v2_error(self, error_code: str, *, status: int) -> None:
+        self._write_json({"error": error_code}, status=status, extra_headers={"Cache-Control": "no-store"})
 
     def _write_empty(
         self,
@@ -8605,6 +8654,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _validated_headers(extra_headers: dict[str, str] | None) -> dict[str, str]:
         allowed_headers = {
             "Access-Control-Allow-Origin",
+            "Access-Control-Expose-Headers",
+            "ETag",
             "Access-Control-Allow-Methods",
             "Access-Control-Allow-Headers",
             "Access-Control-Allow-Private-Network",

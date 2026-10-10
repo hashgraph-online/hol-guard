@@ -22,6 +22,7 @@ const PROBE_ENVIRONMENT: &[&str] = &[
     "GIT_DISCOVERY_ACROSS_FILESYSTEM",
 ];
 
+#[derive(Clone)]
 pub(crate) struct ProbeOutput {
     pub(crate) code: Option<i32>,
     pub(crate) stdout: Vec<u8>,

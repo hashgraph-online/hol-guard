@@ -78,6 +78,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
+        "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
         # reattachment integrity but never authorize or evaluate an action.
         "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -101,6 +102,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         # Bounded response decoding for resident package-verdict composition patches.
         "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
+        # Strict resident transport and DTO hydration for package supply-chain evaluation.
+        "src/codex_plugin_scanner/guard/native_supply_chain_eval.py",
         # Decodes the bounded resident approval-reuse response envelope.
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
         # Decodes the bounded resident approval-proof response; the answer is
@@ -112,6 +115,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
+        "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.
@@ -239,7 +243,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/browser_mcp_intent.py",
         "src/codex_plugin_scanner/guard/runtime/command_decision_adapter.py",
         "src/codex_plugin_scanner/guard/runtime/command_evaluation.py",
-        "src/codex_plugin_scanner/guard/runtime/compound_git_inspection.py",
         "src/codex_plugin_scanner/guard/runtime/contained_execution_common.py",
         "src/codex_plugin_scanner/guard/runtime/containment_executor.py",
         "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py",
