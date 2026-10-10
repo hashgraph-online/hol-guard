@@ -255,6 +255,8 @@ def _read_summary(evidence: Path) -> dict[str, Any] | None:
 
 def main(args: Any) -> int:
     """Drive cached setup, bounded fresh attempts and trusted in-process verification."""
+    if os.name == "nt":
+        raise ValueError("qualify requires a POSIX host")
     started = time.monotonic()
     sha = args.sha
     if SHA.fullmatch(sha) is None:
@@ -276,7 +278,8 @@ def main(args: Any) -> int:
         if value is not None:
             setattr(args, field, Path(value).resolve())
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_root = (args.run_root or qualify_setup.DEFAULT_TMP_ROOT / f"{sha[:12]}-{stamp}").resolve()
+    run_root = (args.run_root or qualify_setup.default_tmp_root() / f"{sha[:12]}-{stamp}").resolve()
+    work_parent = (args.work_parent or qualify_setup.default_tmp_root() / "w").resolve()
     if run_root.exists():
         raise ValueError("run root must not already exist: " + str(run_root))
     qualify_setup.private_dir(run_root.parent, tighten=qualify_setup.driver_owned(run_root.parent))
@@ -317,7 +320,7 @@ def main(args: Any) -> int:
             progress("candidate installed")
             for k in range(1, args.attempts + 1):
                 evidence = run_root / "evidence" / f"attempt-{k}"
-                work = attempt_work_root(args.work_parent)
+                work = attempt_work_root(work_parent)
                 argv = attempt_argv(
                     python=candidate / ".venv" / "bin" / "python",
                     effort=args.effort,

@@ -92,13 +92,18 @@ def git_show(repo: Path, sha: str, path: str) -> bytes:
 
 
 DEFAULT_CACHE_ROOT = Path.home() / ".cache" / "hol-guard-gauntlet"
-DEFAULT_TMP_ROOT = Path("/tmp") / f"hol-guard-gauntlet-{os.getuid()}"
+
+
+def default_tmp_root() -> Path:
+    """The per-user private temporary root; POSIX only (``os.getuid``)."""
+    return Path("/tmp") / f"hol-guard-gauntlet-{os.getuid()}"
 
 
 def driver_owned(path: Path) -> bool:
     """Whether path sits inside one of the driver's own default roots."""
     resolved = path.resolve()
-    return resolved.is_relative_to(DEFAULT_CACHE_ROOT.resolve()) or resolved.is_relative_to(DEFAULT_TMP_ROOT.resolve())
+    defaults = (DEFAULT_CACHE_ROOT.resolve(), default_tmp_root().resolve())
+    return any(resolved.is_relative_to(root) for root in defaults)
 
 
 def private_dir(path: Path, *, tighten: bool = False) -> Path:

@@ -152,8 +152,7 @@ def main() -> int:
     qualify.add_argument(
         "--work-parent",
         type=Path,
-        default=Path(f"/tmp/hol-guard-gauntlet-{os.getuid()}/w"),
-        help="Parent for the short per-attempt fixture work directories",
+        help="Parent for the short per-attempt fixture work directories (default /tmp/hol-guard-gauntlet-<uid>/w)",
     )
     qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
     qualify.add_argument("--sdk-root", type=Path, help="Pinned SDK directory; skips the lock-keyed SDK cache")
