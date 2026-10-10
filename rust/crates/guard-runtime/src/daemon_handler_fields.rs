@@ -2,6 +2,7 @@
 //! `str.strip`, `parse_qs(...)[-1]`, the boolean spellings a body or query may
 //! use, and `int()` over a query value.
 
+use crate::daemon_handler_digits::decimal_digit;
 use crate::policy_bundle_py::py_strip;
 use guard_contracts::DaemonFieldV1;
 
@@ -100,8 +101,8 @@ pub(crate) enum ParsedInt {
     Huge { negative: bool },
 }
 
-/// `int(text)` for ASCII digits: surrounding whitespace, one sign, and single
-/// underscores between digits. Non-ASCII digit forms are rejected.
+/// `int(text)`: surrounding whitespace, one sign, single underscores between
+/// digits, and any Unicode decimal digit form.
 pub(crate) fn parse_int(text: &str) -> Option<ParsedInt> {
     let trimmed = py_strip(text);
     let (negative, digits) = match trimmed.strip_prefix('-') {
@@ -115,22 +116,15 @@ pub(crate) fn parse_int(text: &str) -> Option<ParsedInt> {
     {
         return None;
     }
-    let cleaned: String = digits.chars().filter(|ch| *ch != '_').collect();
-    if !cleaned.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
+    let mut ascii = String::with_capacity(digits.len() + 1);
+    if negative {
+        ascii.push('-');
     }
-    let significant = cleaned.trim_start_matches('0');
-    if significant.len() > 18 {
-        return Some(ParsedInt::Huge { negative });
+    for ch in digits.chars().filter(|ch| *ch != '_') {
+        ascii.push(char::from_digit(decimal_digit(ch)?, 10)?);
     }
-    let magnitude: i64 = if significant.is_empty() {
-        0
-    } else {
-        significant.parse().ok()?
-    };
-    Some(ParsedInt::Value(if negative {
-        -magnitude
-    } else {
-        magnitude
-    }))
+    match ascii.parse::<i64>() {
+        Ok(value) => Some(ParsedInt::Value(value)),
+        Err(_) => Some(ParsedInt::Huge { negative }),
+    }
 }

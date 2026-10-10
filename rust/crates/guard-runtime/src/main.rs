@@ -37,6 +37,7 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
+mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_op;
 mod daemon_handler_policy;

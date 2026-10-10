@@ -156,14 +156,17 @@ def _decide(
     validate: Callable[[dict[str, Any]], None] | None = None,
     *,
     operation: ResidentOperation | None = None,
+    max_request_bytes: int | None = None,
 ) -> dict[str, Any]:
     """Ask the resident and return its payload once it is bound and strictly shaped.
 
     ``operation`` selects the resident operation; every daemon operation shares
-    the in-flight ask slots and the pinned transport.
+    the in-flight ask slots and the pinned transport. ``max_request_bytes``
+    raises the envelope cap for an operation that carries larger requests.
     """
 
     operation = operation or _OPERATION
+    size_cap = {} if max_request_bytes is None else {"max_request_bytes": max_request_bytes}
 
     def check(payload: dict[str, Any]) -> None:
         shape_fields(payload, {"kind": str, **fields}, lambda: operation.fail(operation.invalid))
@@ -179,7 +182,7 @@ def _decide(
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 return None
-            return _resident_request(timeout_seconds=min(timeout_seconds, remaining), **kwargs)
+            return _resident_request(timeout_seconds=min(timeout_seconds, remaining), **size_cap, **kwargs)
         finally:
             _ASK_SLOTS.release()
 

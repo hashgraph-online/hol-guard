@@ -15,8 +15,10 @@ pub const DAEMON_HANDLER_REQUEST_SCHEMA: &str = "guard-daemon-handler-request.v1
 pub const DAEMON_HANDLER_RESULT_SCHEMA: &str = "guard-daemon-handler-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const DAEMON_HANDLER_FEATURE: &str = "daemon-handler-v1";
-/// Largest canonical request serialization the op will accept.
-pub const DAEMON_HANDLER_MAX_BYTES: usize = 1024 * 1024;
+/// Largest canonical request serialization the op will accept. The daemon
+/// admits request bodies of 1,000,000 bytes and the canonical form escapes
+/// non-ASCII text to as much as three times its UTF-8 size.
+pub const DAEMON_HANDLER_MAX_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]

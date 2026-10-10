@@ -21,6 +21,50 @@ from .native_resident_decision import ResidentOperation
 DAEMON_HANDLER_FEATURE = "daemon-handler-v1"
 _TIMEOUT_SECONDS = 2.0
 _OUTCOMES = frozenset({"reject", "proceed"})
+# Envelope cap for this operation: the daemon accepts bodies up to 1,000,000
+# bytes and ``json.dumps`` escapes non-ASCII text to as much as three times its
+# UTF-8 size. It matches the resident's canonical-request bound plus the envelope.
+_MAX_REQUEST_BYTES = 4 * 1024 * 1024 + 64 * 1024
+
+_MAX_LIST_ITEMS = 4_096
+_TEXT = (str,)
+_OPT_TEXT = (str, type(None))
+# Exact fields a ``proceed`` answer must carry per query kind, with the types
+# each may hold. A bound answer that deviates is unusable and fails closed.
+_PROCEED_FIELDS: dict[str, dict[str, tuple[type, ...]]] = {
+    "policy_upsert": {
+        "harness": _TEXT,
+        "scope": _TEXT,
+        "action": _TEXT,
+        "artifact_id": _OPT_TEXT,
+        "workspace": _OPT_TEXT,
+        "publisher": _OPT_TEXT,
+        "reason": _OPT_TEXT,
+    },
+    "policy_clear": {
+        "harness": _OPT_TEXT,
+        "source": _OPT_TEXT,
+        "scope": _OPT_TEXT,
+        "artifact_id": _OPT_TEXT,
+        "artifact_hash": _OPT_TEXT,
+        "artifact_id_is_null": (bool,),
+        "artifact_hash_is_null": (bool,),
+        "workspace": _OPT_TEXT,
+        "publisher": _OPT_TEXT,
+    },
+    "requests_clear": {"status": _TEXT, "harness": _OPT_TEXT},
+    "bulk_allow": {"request_ids": (list,)},
+    "requests_list": {
+        "limit": (int,),
+        "status": _OPT_TEXT,
+        "include_totals": (bool,),
+        "cursor": _OPT_TEXT,
+        "harness": _OPT_TEXT,
+        "search": _OPT_TEXT,
+    },
+    "harness_action": {"dry_run": (bool, type(None))},
+    "events_cursor": {"cursor": (int,)},
+}
 
 # Request-body keys each body handler reads, in contract order.
 _BODY_KEYS: dict[str, tuple[str, ...]] = {
@@ -84,14 +128,34 @@ def _field(value: object) -> dict[str, object]:
     if isinstance(value, str):
         return {"state": "text", "value": value}
     if isinstance(value, list):
-        return {"state": "list", "len": len(value), "strings": [item for item in value if isinstance(item, str)]}
+        # The resident bounds list size; a longer list is sent by length only and rejected there.
+        strings = [item for item in value if isinstance(item, str)] if len(value) <= _MAX_LIST_ITEMS else []
+        return {"state": "list", "len": len(value), "strings": strings}
     return {"state": "other"}
+
+
+def _typed(value: object, allowed: tuple[type, ...]) -> bool:
+    if isinstance(value, bool):
+        return bool in allowed
+    return isinstance(value, allowed)
+
+
+def _proceed_fields_valid(kind: object, fields: dict[str, Any]) -> bool:
+    spec = _PROCEED_FIELDS.get(kind) if isinstance(kind, str) else None
+    if spec is None or set(fields) != set(spec):
+        return False
+    if not all(_typed(fields[key], allowed) for key, allowed in spec.items()):
+        return False
+    request_ids = fields.get("request_ids")
+    return request_ids is None or all(isinstance(item, str) for item in request_ids)
 
 
 def _ask(query: dict[str, object], guard_home: Path | None) -> HandlerDecision:
     def validate(payload: dict[str, Any]) -> None:
         status = payload["status"]
         if payload["outcome"] not in _OUTCOMES or not 100 <= status <= 599:
+            raise NativeDaemonHandlerError(_OPERATION.invalid)
+        if payload["outcome"] == "proceed" and not _proceed_fields_valid(payload["kind"], payload["fields"]):
             raise NativeDaemonHandlerError(_OPERATION.invalid)
 
     answer = _decide(
@@ -100,6 +164,7 @@ def _ask(query: dict[str, object], guard_home: Path | None) -> HandlerDecision:
         {"outcome": str, "status": int, "body": dict, "fields": dict},
         validate,
         operation=_OPERATION,
+        max_request_bytes=_MAX_REQUEST_BYTES,
     )
     return HandlerDecision(answer["outcome"], answer["status"], answer["body"], answer["fields"])
 

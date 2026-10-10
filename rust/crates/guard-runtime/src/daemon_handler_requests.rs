@@ -23,6 +23,10 @@ pub(crate) fn requests_clear(status: &DaemonFieldV1, harness: &DaemonFieldV1) ->
     Reply::proceed(fields.clone(), fields)
 }
 
+/// Most request ids one bulk allow-once may name: the resident protocol's
+/// per-list item bound, so the daemon sends only the length of a longer list.
+const BULK_ALLOW_MAX_IDS: usize = 4_096;
+
 pub(crate) fn bulk_allow(request_ids: &DaemonFieldV1) -> Reply {
     let missing = || {
         Reply::reject(
@@ -35,6 +39,12 @@ pub(crate) fn bulk_allow(request_ids: &DaemonFieldV1) -> Reply {
     };
     if *len == 0 {
         return missing();
+    }
+    if *len > BULK_ALLOW_MAX_IDS {
+        return Reply::reject(
+            400,
+            json!({"error": "too_many_request_ids", "resolved_count": 0, "failed": []}),
+        );
     }
     let normalized: Vec<&str> = strings
         .iter()

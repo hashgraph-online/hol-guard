@@ -99,3 +99,61 @@ def test_handler_fails_closed_with_a_503_when_the_resident_cannot_answer(tmp_pat
     assert written[-1] == (400, {"error": "x"})
     proceed = handler_transport.HandlerDecision("proceed", 200, {}, {"a": 1})
     assert handler._native_handler_decision(lambda: proceed) is proceed
+
+
+@pytest.mark.parametrize(
+    ("kind", "fields"),
+    [
+        ("requests_clear", {"status": "pending"}),
+        ("requests_clear", {"status": "pending", "harness": None, "extra": 1}),
+        ("requests_clear", {"status": 3, "harness": None}),
+        ("bulk_allow", {"request_ids": "abc"}),
+        ("bulk_allow", {"request_ids": [1]}),
+        (
+            "requests_list",
+            {"limit": True, "status": None, "include_totals": True, "cursor": None, "harness": None, "search": None},
+        ),
+        ("harness_action", {"dry_run": "yes"}),
+        ("events_cursor", {}),
+        ("events_cursor", {"cursor": 1.5}),
+        ("unknown_kind", {"cursor": 1}),
+    ],
+)
+def test_bound_replies_with_unusable_fields_raise(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, kind: str, fields: dict[str, object]
+) -> None:
+    def answer(query, guard_home, shape, validate, **_kwargs):  # type: ignore[no-untyped-def]
+        validate({"kind": kind, "outcome": "proceed", "status": 200, "body": {}, "fields": fields})
+        raise AssertionError("an unusable reply was accepted")
+
+    monkeypatch.setattr(handler_transport, "_decide", answer)
+    with pytest.raises(NativeDaemonHandlerError):
+        handler_transport.native_events_cursor("cursor=1", guard_home=tmp_path)
+
+
+def test_a_body_near_the_daemon_limit_reaches_the_resident(native_approval_reuse_runtime: Path) -> None:
+    reason = "\U0001f600" * 250_000  # a 1,000,000-byte body that escapes to 3 MB
+    decision = handler_transport.native_body_handler(
+        "policy_upsert",
+        {"harness": "codex", "scope": "artifact", "action": "allow", "artifact_id": "a", "reason": reason},
+        guard_home=native_approval_reuse_runtime,
+    )
+    assert decision.outcome == "proceed"
+    assert decision.fields["reason"] == reason
+
+
+def test_a_bulk_list_beyond_the_resident_bound_is_rejected_not_unavailable(native_approval_reuse_runtime: Path) -> None:
+    decision = handler_transport.native_body_handler(
+        "bulk_allow",
+        {"request_ids": [f"id-{index}" for index in range(4_097)]},
+        guard_home=native_approval_reuse_runtime,
+    )
+    assert (decision.outcome, decision.status) == ("reject", 400)
+    assert decision.body["error"] == "too_many_request_ids"
+    allowed = handler_transport.native_body_handler(
+        "bulk_allow",
+        {"request_ids": [f"id-{index}" for index in range(4_096)]},
+        guard_home=native_approval_reuse_runtime,
+    )
+    assert allowed.outcome == "proceed"
+    assert len(allowed.fields["request_ids"]) == 4_096

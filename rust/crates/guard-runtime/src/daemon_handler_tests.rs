@@ -150,9 +150,12 @@ fn schema_mismatch_is_a_bound_error() {
 
 #[test]
 fn oversized_request_is_refused_before_any_decision() {
+    // Each string is under the parser's per-string bound; together they pass the op's cap.
+    let chunk = "a".repeat(1_000_000);
+    let strings = vec![chunk; DAEMON_HANDLER_MAX_BYTES / 1_000_000 + 1];
     let query = json!({
-        "kind": "requests_list",
-        "query": "a".repeat(DAEMON_HANDLER_MAX_BYTES),
+        "kind": "bulk_allow",
+        "request_ids": {"state": "list", "len": strings.len(), "strings": strings},
     });
     let error = try_resident(&query).unwrap_err();
     assert_eq!(error, "native_daemon_handler_too_large");
@@ -186,4 +189,16 @@ fn large_bulk_lists_are_accepted_up_to_the_limit() {
         answer["fields"]["request_ids"].as_array().unwrap().len(),
         4000
     );
+}
+
+#[test]
+fn a_list_longer_than_the_bound_is_rejected_by_length() {
+    let query = json!({
+        "kind": "bulk_allow",
+        "request_ids": {"state": "list", "len": 4097, "strings": []},
+    });
+    let answer = payload(&query);
+    assert_eq!(answer["outcome"], "reject");
+    assert_eq!(answer["status"], 400);
+    assert_eq!(answer["body"]["error"], "too_many_request_ids");
 }
