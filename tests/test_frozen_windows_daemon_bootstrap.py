@@ -50,16 +50,21 @@ def _assert_windows_process_stopped(pid: object) -> None:
 
 def _diagnostics(env: dict[str, str]) -> str:
     guard_home = Path(env["HOL_GUARD_HOME"])
-    lines = [f"state={_safe_read(guard_home / 'daemon-state.json')!r}"]
-    for sub in ("daemon-lifecycle", "logs", "native-runtime"):
-        directory = guard_home / sub
-        if directory.is_dir():
-            for entry in sorted(directory.rglob("*"))[-12:]:
-                if entry.is_file():
-                    lines.append(f"{entry.relative_to(guard_home)} {_safe_read(entry)[-400:]!r}")
-                else:
-                    lines.append(str(entry))
-    return "\n".join(lines)
+    lines = []
+    journal = guard_home / "daemon-lifecycle"
+    if journal.is_dir():
+        for entry in sorted(journal.iterdir()):
+            try:
+                event = json.loads(entry.read_text())
+                lines.append(f"{event.get('event')}:{event.get('pid')}:{event.get('reason', '')}")
+            except (OSError, ValueError):
+                lines.append("unreadable")
+    logs = guard_home / "logs"
+    if logs.is_dir():
+        for entry in sorted(logs.rglob("*"))[-6:]:
+            if entry.is_file():
+                lines.append(f"{entry.name}={_safe_read(entry)[-300:]!r}")
+    return " | ".join(lines)
 
 
 def _safe_read(path: Path) -> str:
