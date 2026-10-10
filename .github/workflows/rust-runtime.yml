@@ -151,7 +151,6 @@ jobs:
           tests/test_native_hook_edge.py
           tests/test_rust_posttool_authority.py
           ci/native_runtime/test_native_hook_worker_modes.py
-          tests/test_guard_hook_process_deadline_contract.py
           ci/native_runtime/test_native_hook_client_transport.py
           --tb=short
 

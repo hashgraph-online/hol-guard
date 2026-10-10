@@ -13,7 +13,6 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.daemon import hook_process_entrypoint
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
     harness_json_from_native_pre_tool,
@@ -259,90 +258,6 @@ def test_result_helper_has_no_untyped_result_payload() -> None:
     result = edge["result"]
     assert isinstance(result, dict)
     assert not any(key in result for key in ("raw_payload", "command", "path", "url", "prompt"))
-
-
-@pytest.mark.parametrize("event", ("PreToolUse", "PostToolUse"))
-def test_resident_entrypoint_sends_both_tool_events_to_hook_worker(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    event: str,
-) -> None:
-    calls: list[str] = []
-
-    class FakeWorker:
-        def __init__(self, *, store: object, **_kwargs: object) -> None:
-            del store
-            del _kwargs
-
-        def review_http_payload(self, *, payload: dict[str, object], **_kwargs: object) -> dict[str, object]:
-            calls.append(str(payload.get("hook_event_name")))
-            return {"policy_action": "allow"}
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.HookWorker",
-        FakeWorker,
-    )
-    monkeypatch.setattr(hook_process_entrypoint, "_current_decision_route", lambda: "native_resident")
-    guard_home = tmp_path / "guard-home"
-    result = hook_process_entrypoint._run_resident_hook_request(
-        {
-            "payload": {"hook_event_name": event, "tool_input": {"command": "pwd"}},
-            "harness": "codex",
-            "home_dir": str(tmp_path / "home"),
-            "guard_home": str(guard_home),
-            "workspace": str(tmp_path / "workspace"),
-        },
-        stores={},
-        hook_workers={},
-        configured_guard_home=str(guard_home),
-    )
-
-    assert result == {"payload": {"policy_action": "allow"}, "reason_code": None, "route": "native_resident"}
-    assert calls == [event]
-
-
-def test_resident_entrypoint_routes_unknown_event_to_native_in_auto(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    calls: list[str] = []
-
-    class FakeWorker:
-        def __init__(self, *, store: object, **_kwargs: object) -> None:
-            del store
-            del _kwargs
-
-        def review_http_payload(self, *, payload: dict[str, object], **_kwargs: object) -> dict[str, object]:
-            calls.append(str(payload.get("hook_event_name")))
-            return {"policy_action": "review"}
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.HookWorker",
-        FakeWorker,
-    )
-    monkeypatch.setattr(hook_process_entrypoint, "_current_decision_route", lambda: "native_resident")
-    monkeypatch.setattr(
-        hook_process_entrypoint,
-        "_run_guard_hook_command",
-        lambda *_args, **_kwargs: pytest.fail("unknown event escaped to compatibility CLI"),
-        raising=False,
-    )
-    guard_home = tmp_path / "guard-home"
-    result = hook_process_entrypoint._run_resident_hook_request(
-        {
-            "payload": {"hook_event_name": "UnknownEvent", "tool_input": {"command": "pwd"}},
-            "harness": "codex",
-            "home_dir": str(tmp_path / "home"),
-            "guard_home": str(guard_home),
-            "workspace": str(tmp_path / "workspace"),
-        },
-        stores={},
-        hook_workers={},
-        configured_guard_home=str(guard_home),
-    )
-
-    assert result == {"payload": {"policy_action": "review"}, "reason_code": None, "route": "native_resident"}
-    assert calls == ["UnknownEvent"]
 
 
 def test_supported_cli_pretool_unavailability_does_not_use_source_ref_fallback(

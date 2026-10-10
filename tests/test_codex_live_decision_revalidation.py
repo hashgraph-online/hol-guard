@@ -7,7 +7,6 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from pathlib import Path
-from typing import cast
 
 import pytest
 
@@ -16,9 +15,6 @@ from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
     _hook_action_envelope,
 )
 from codex_plugin_scanner.guard.codex_live_decision_revalidation import revalidate_codex_live_allow
-from codex_plugin_scanner.guard.daemon.hook_process_entrypoint import (
-    _run_resident_hook_request,  # pyright: ignore[reportPrivateUsage]
-)
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -226,23 +222,21 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(
         "tool_input": {"file_path": str(workspace / ".npmrc")},
         "cwd": str(workspace),
     }
-    request: dict[str, object] = {
-        "payload": payload,
-        "harness": "codex",
-        "home_dir": str(home_dir),
-        "guard_home": str(guard_home),
-        "workspace": str(workspace),
-    }
-    stores: dict[str, GuardStore] = {str(guard_home): acknowledged_live_policy}
-    workers: dict[str, HookWorker] = {}
-    first = _run_resident_hook_request(
-        request,
-        stores=stores,
-        hook_workers=workers,
-        configured_guard_home=str(guard_home),
-    )
-    assert first["reason_code"] is None
-    store = stores[str(guard_home)]
+    store = acknowledged_live_policy
+    worker = HookWorker(store=store, wait_for_native_policy=False, publish_native_policy=False)
+
+    def review(**claims: object) -> dict[str, object]:
+        return worker.review_http_payload(
+            payload=dict(payload),
+            params={"runtime-harness": ["codex"]},
+            default_harness="codex",
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            **claims,  # type: ignore[arg-type]
+        )
+
+    first = review()
     approvals = store.list_approval_requests(limit=1)
     assert len(approvals) == 1, first
     approval = approvals[0]
@@ -273,20 +267,11 @@ def test_first_exact_live_allow_revalidates_through_resident_worker(
         claimed_hash: str | None,
         claimed_request_id: str | None,
     ) -> Mapping[str, object] | None:
-        second = _run_resident_hook_request(
-            {
-                **request,
-                "claim_saved_approval": False,
-                "claimed_saved_allow_hash": claimed_hash,
-                "claimed_approval_request_id": claimed_request_id,
-            },
-            stores=stores,
-            hook_workers=workers,
-            configured_guard_home=str(guard_home),
+        return review(
+            claim_saved_approval=False,
+            claimed_saved_allow_hash=claimed_hash,
+            claimed_approval_request_id=claimed_request_id,
         )
-        assert second["reason_code"] is None
-        second_payload = second["payload"]
-        return cast(Mapping[str, object], second_payload) if isinstance(second_payload, Mapping) else None
 
     authorized = revalidate_codex_live_allow(
         {**approval, "resolution_action": "allow"},

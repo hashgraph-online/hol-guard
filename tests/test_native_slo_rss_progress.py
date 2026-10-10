@@ -31,11 +31,11 @@ def test_rss_failure_retains_stage_and_request_accounting(failure: str) -> None:
         return Observation("codex", "PreToolUse", "1k", 1.0, "native_resident", True)
 
     def stats() -> dict[str, int]:
-        return {"target": 1, "workers": 1, "ready": 1, "busy": 0}
+        return {"active_limit": 1, "active": 0}
 
     session = SimpleNamespace(
         observe=observe,
-        daemon=SimpleNamespace(_server=SimpleNamespace(hook_process_runner=SimpleNamespace(stats=stats))),
+        daemon=SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=stats))),
     )
 
     def baseline(run_wave: Callable[[], tuple[list[Observation], int]], **_kwargs: object) -> int:
