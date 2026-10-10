@@ -46,6 +46,8 @@ mod command_verified_read_candidates;
 #[cfg(test)]
 mod command_verified_read_candidates_tests;
 mod command_workspace_write_candidates;
+pub mod contributed_mcp_decision;
+mod contributed_mcp_url;
 mod data_flow;
 pub mod effect_decision;
 mod env_wrapper;
@@ -105,8 +107,9 @@ use parser_segments::*;
 pub mod pretool;
 mod runtime_read_paths;
 mod shell_command_wrappers;
-mod shell_execution_context;
+pub mod shell_execution_context;
 mod shell_execution_context_support;
+mod shell_model_limits;
 mod shell_read_literal_wrapper;
 mod shell_secret_read_flow;
 #[cfg(test)]
