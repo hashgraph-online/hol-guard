@@ -138,6 +138,21 @@ def test_every_import_form_is_checked_for_excluded_symbols(tmp_path: Path, root_
         build_report(repo, scope)
 
 
+def test_rebinding_a_local_name_does_not_hide_an_excluded_symbol(tmp_path: Path) -> None:
+    render = RENDER.replace('\n\n_TABLE["x"] = _human\n', "\n")
+    extra = "from pkg import render\nrender._human(1)\n\n\ndef other():\n    from pkg import helpers as render\n"
+    repo, scope = _repo(tmp_path, entries=[_entry()], render=render, root_extra=extra)
+    with pytest.raises(ScopeError, match="uses excluded _human"):
+        build_report(repo, scope)
+
+
+def test_removed_and_retained_statements_sharing_a_line_are_rejected(tmp_path: Path) -> None:
+    render = RENDER.replace('\n\n_TABLE["x"] = _human\n', "\n") + "_KEEP = 1; _GONE = 2\n"
+    repo, scope = _repo(tmp_path, entries=[_entry(symbols=["_human", "_GONE"])], render=render)
+    with pytest.raises(ScopeError, match="share source lines"):
+        build_report(repo, scope)
+
+
 def test_function_entry_ids_must_be_unique(tmp_path: Path) -> None:
     repo, scope = _repo(tmp_path, entries=[_entry(), _entry(symbols=["_TABLE"])])
     with pytest.raises(ScopeError, match="is not unique"):
