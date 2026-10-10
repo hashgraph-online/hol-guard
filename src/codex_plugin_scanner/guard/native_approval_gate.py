@@ -2,14 +2,16 @@
 
 Mirrors ``native_pretool.review_pre_tool_native``: each ``approval_gate.py``
 free fn calls :func:`approval_gate_native` first; when the resident answers it
-returns the decoded payload, when the resident is unavailable/mismatched it
-returns ``None`` and the caller falls back to the in-process Python body.
+returns the decoded payload. When no native runtime is provisioned (off,
+missing, incompatible, or capability absent) it returns ``None`` and the caller
+uses the in-process Python body.
 
 The bridge raises ``ApprovalGateError`` (reconstructed from the op's
 ``code``/``status``/``message``) for business-rule rejections — those are
-deterministic and must propagate. It returns ``None`` only for transport
-failures (resident missing, timeout, malformed envelope, capability absent),
-which are non-deterministic and safe to fall back on.
+deterministic and must propagate. A provisioned runtime that fails to answer
+(timeout, overload, malformed or mismatched envelope) is not a reason to
+recompute authority in Python: it raises ``native_approval_gate_unavailable``
+and the caller fails closed.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .native_resident_client import native_resident_client_request
+from .native_resident_client import native_resident_client_failure_code, native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
     native_record_overload,
@@ -38,6 +40,69 @@ _REQUEST_SCHEMA = "guard-approval-gate-request.v1"
 _RESULT_SCHEMA = "guard-approval-gate-result.v1"
 
 _request_counter = 0
+_UNAVAILABLE_CODE = "native_approval_gate_unavailable"
+# Resident errors meaning this guard home was never provisioned for a resident
+# (no verifier key, no private state directory). They are the same answer as
+# "runtime off"; every other failure of a provisioned resident fails closed.
+_UNPROVISIONED_ERRORS = frozenset({"native_policy_verifier_key_missing", "native_resident_state_dir_create_failed"})
+_CONFIG_KEYS = frozenset(
+    {
+        "enabled",
+        "configured",
+        "cooldown_seconds",
+        "cooldown_active",
+        "fail_closed",
+        "strict_all_decisions",
+        "totp_enabled",
+        "totp_pending",
+    }
+)
+_CONFIG_METHODS = frozenset(
+    {
+        "public_config",
+        "update_settings",
+        "revoke_cooldown",
+        "unlock_cooldown",
+        "confirm_totp_enrollment",
+        "disable_totp",
+    }
+)
+_GRANT_METHODS = frozenset(
+    {"require_approval_decision", "require_high_risk", "require_extension_control", "require_local_cli_trust"}
+)
+
+
+def _payload_is_well_formed(method: str, payload: dict[str, object]) -> bool:
+    """Whether an ``ok`` payload has the shape its method promises.
+
+    Callers fall back to the Python body when they cannot decode a payload, so
+    a provisioned resident's malformed answer must be rejected here instead.
+    """
+    if method in _CONFIG_METHODS:
+        return payload.keys() >= _CONFIG_KEYS
+    if method in _GRANT_METHODS:
+        return "grant" in payload and (payload["grant"] is None or isinstance(payload["grant"], dict))
+    if method == "recent_totp_satisfied":
+        return isinstance(payload.get("satisfied"), bool)
+    if method == "begin_totp_enrollment":
+        return bool(payload)
+    return True
+
+
+def _is_unprovisioned_envelope(envelope: object) -> bool:
+    return (
+        isinstance(envelope, dict)
+        and set(envelope) == {"error", "retryable"}
+        and envelope.get("error") in _UNPROVISIONED_ERRORS
+    )
+
+
+def _unavailable_error():
+    return _gate_error_cls()(
+        _UNAVAILABLE_CODE,
+        "The native approval authority did not answer. Retry the approval.",
+        status=503,
+    )
 
 
 def _gate_error_cls():
@@ -108,13 +173,14 @@ def approval_gate_native(
     now: str | None = None,
     duration_seconds: int | None = None,
     device_label: str | None = None,
-    timeout_seconds: float = 2.0,
+    timeout_seconds: float = 5.0,
 ) -> dict[str, object] | None:
     """Run one approval-gate method in the resident.
 
     Returns the decoded ``payload`` on success, raises ``ApprovalGateError`` on
-    a business-rule rejection, and returns ``None`` when the resident cannot
-    service the call (caller falls back to the Python implementation).
+    a business-rule rejection or when a provisioned resident fails to answer
+    (fail closed, no Python recomputation), and returns ``None`` only when no
+    native runtime is provisioned for this process.
     """
     global _request_counter
     status = native_runtime_status()
@@ -167,7 +233,7 @@ def approval_gate_native(
         ensure_ascii=False,
     ).encode("utf-8")
     if len(resident) > _MAX_REQUEST_BYTES:
-        return None
+        raise _unavailable_error()
 
     output = native_resident_client_request(
         executable=status.identity.path,
@@ -177,21 +243,27 @@ def approval_gate_native(
         deadline_monotonic=deadline_monotonic,
     )
     if output is None:
+        if native_resident_client_failure_code() in _UNPROVISIONED_ERRORS:
+            return None
         native_record_resident_failure(status.identity.sha256, guard_home, reason="native_approval_gate_unavailable")
-        return None
+        raise _unavailable_error()
     try:
         envelope = json.loads(output)
     except (UnicodeDecodeError, json.JSONDecodeError):
         native_record_resident_failure(status.identity.sha256, guard_home, reason="native_approval_gate_decode_failed")
-        return None
+        raise _unavailable_error() from None
     if _native_error(envelope) == "native_overloaded":
         native_record_overload(status.identity.sha256, guard_home)
+        raise _unavailable_error()
+    if _is_unprovisioned_envelope(envelope):
+        # The resident answered that this home holds no verifier key or private
+        # state: no native approval authority is provisioned, same as runtime off.
         return None
     if not isinstance(envelope, dict) or envelope.get("schema") != _RESULT_SCHEMA:
         native_record_resident_failure(
             status.identity.sha256, guard_home, reason="native_approval_gate_schema_mismatch"
         )
-        return None
+        raise _unavailable_error()
 
     native_record_resident_success(status.identity.sha256, guard_home)
     envelope_status = envelope.get("status")
@@ -207,6 +279,9 @@ def approval_gate_native(
     # `-> None` caller would otherwise proceed unauthenticated.
     if envelope_status != "ok":
         native_record_resident_failure(status.identity.sha256, guard_home, reason="native_approval_gate_bad_status")
-        return None
+        raise _unavailable_error()
     payload = envelope.get("payload")
-    return payload if isinstance(payload, dict) else None
+    if not isinstance(payload, dict) or not _payload_is_well_formed(method, payload):
+        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_approval_gate_bad_payload")
+        raise _unavailable_error()
+    return payload
