@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.gauntlet.case_helpers import read_case_logs
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.evidence import reconcile
 from ci.gauntlet.host_evidence import complete_host_events
@@ -64,3 +65,27 @@ def test_delegation_scope_keeps_exact_read_and_result_report(tmp_path: Path) -> 
         assert native_tools_scope_error(scenario, bad, case)
     assert native_tools_scope_error(scenario, calls, {"delegated_call_ids": ["absent"]})
     assert native_tools_scope_error(scenario, calls, {"delegated_call_ids": ["child", "child"]})
+
+
+def test_wait_scenario_observes_its_own_delegated_file() -> None:
+    scenario = next(s for s in load_catalog() if s.id == "omp-native-wait-on-task")
+    calls = [
+        {"id": "task", "name": "task", "args": {}},
+        {"id": "wait", "name": "wait", "args": {}},
+        {"id": "child", "name": "read", "args": {"path": "src/one.ts"}},
+    ]
+    case = {"delegated_call_ids": ["child"]}
+    assert native_tools_scope_error(scenario, calls, case) is None
+    calls[-1]["args"]["path"] = "README.md"
+    assert native_tools_scope_error(scenario, calls, case)
+
+
+def test_parent_evidence_survives_lifecycle_failure_for_cleanup(tmp_path: Path) -> None:
+    parent, observer = tmp_path / "parent.jsonl", tmp_path / "observer.jsonl"
+    events = lifecycle("call", "bash", {"command": "mktemp -d"})
+    write(parent, events)
+    write(observer, [])
+    case = {"events": []}
+    with pytest.raises(ValueError):
+        read_case_logs(case, parent, tmp_path / "absent-guard.jsonl", {}, observer)
+    assert any(event.get("args", {}).get("command") == "mktemp -d" for event in case["events"])

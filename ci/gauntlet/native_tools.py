@@ -63,13 +63,18 @@ def native_tools_scope_error(
         return "malformed delegated host inventory"
     if set(delegated) - {call["id"] for call in calls}:
         return "delegated host inventory names an absent call"
-    if delegated and scenario.id != "omp-native-task-readonly-lookup":
+    delegated_file = {
+        "omp-native-task-readonly-lookup": "README.md",
+        "omp-native-wait-on-task": "src/one.ts",
+    }.get(scenario.id)
+    if delegated and delegated_file is None:
         return "unexpected delegated work"
+    delegated_paths = {delegated_file, f"{{{{workspace}}}}/{delegated_file}"}
     for call in calls:
         if call["id"] not in delegated:
             continue
         if call["name"] == "read":
-            if _write_path(call["args"]) not in {"README.md", "{{workspace}}/README.md"}:
+            if _write_path(call["args"]) not in delegated_paths:
                 return "delegated lookup read outside its requested file"
         elif call["name"] == "yield":
             data = call["args"].get("data")
@@ -80,7 +85,7 @@ def native_tools_scope_error(
                     return "delegated result report contained extra operations"
                 files = data.get("files", [])
                 if not isinstance(files, list) or any(
-                    not isinstance(file, dict) or file.get("path") not in {"README.md", "{{workspace}}/README.md"}
+                    not isinstance(file, dict) or file.get("path") not in delegated_paths
                     for file in files
                 ):
                     return "delegated report referenced an unexpected file"
