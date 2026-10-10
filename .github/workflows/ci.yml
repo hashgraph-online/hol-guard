@@ -207,10 +207,12 @@ jobs:
               nextest_bin="$(python3 scripts/ci/install_nextest.py)"
               PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --workspace --all-targets \
                 --test-threads 4 --retries 0 --no-fail-fast
-              "$SCCACHE_PATH" --show-stats || true
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
+      - name: Report compiler cache statistics
+        if: always() && matrix.check == 'test'
+        run: '"$SCCACHE_PATH" --show-stats || true'
       - name: Bind successful strict Clippy report
         if: matrix.check == 'clippy'
         run: python3 -m scripts.ci.clippy_report bind
