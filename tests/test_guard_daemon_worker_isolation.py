@@ -9,6 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import server as guard_daemon_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 
 
 @pytest.mark.daemon_headless_refresh
@@ -21,7 +22,7 @@ def test_daemon_headless_refresh_stops_cleanly(tmp_path: Path, monkeypatch: pyte
         synced.set()
         return {"status": "synced"}
 
-    monkeypatch.setattr(guard_daemon_module, "_run_headless_cloud_sync", _fake_sync)
+    patch_daemon_global(monkeypatch, "_run_headless_cloud_sync", _fake_sync)
     daemon = guard_daemon_module.GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=60)
     daemon._headless_cloud_sync_interval_seconds = 0.05
 

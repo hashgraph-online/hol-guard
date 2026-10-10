@@ -33,7 +33,6 @@ from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detectio
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon import client as daemon_client_module
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.models import (
     GuardApprovalRequest,
     GuardArtifact,
@@ -43,6 +42,7 @@ from codex_plugin_scanner.guard.models import (
 )
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 
 _AGENT_CONTEXT_ENV_MARKERS = (
     "HOL_GUARD_HOOK_ARGV",
@@ -2077,7 +2077,7 @@ class TestGuardApprovals:
                 return heartbeat_values.pop(0)
             return heartbeat_values[0]
 
-        monkeypatch.setattr(daemon_server_module, "_now", next_heartbeat)
+        patch_daemon_global(monkeypatch, "_now", next_heartbeat)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
@@ -2850,7 +2850,9 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 200
-        assert allow_headers == ("Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
+        assert allow_headers == (
+            "Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token"
+        )
 
     def test_guard_daemon_limits_request_resolution_to_local_dashboard_origin(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")

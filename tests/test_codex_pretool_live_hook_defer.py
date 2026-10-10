@@ -8,9 +8,9 @@ import pytest
 
 from codex_plugin_scanner.guard import codex_resume as resume
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.test_guard_codex_resume_endpoints import _post_json, _request, _seed_codex_operation
 
 _FROZEN_NOW = "2026-05-19T10:00:00+00:00"
@@ -57,7 +57,7 @@ def test_codex_approve_pretooluse_defers_within_bridge_wait(
         browser_wait_deadline_at="2026-05-19T10:00:05+00:00",
         status="waiting_on_approval",
     )
-    monkeypatch.setattr(daemon_server, "_now", lambda: _FROZEN_NOW)
+    patch_daemon_global(monkeypatch, "_now", lambda: _FROZEN_NOW)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 
@@ -140,7 +140,7 @@ def test_codex_approve_pretooluse_uses_configured_wait_timeout(
         waits_for_browser_approval=False,
         status="waiting_on_approval",
     )
-    monkeypatch.setattr(daemon_server, "_now", lambda: "2026-05-19T10:00:06+00:00")
+    patch_daemon_global(monkeypatch, "_now", lambda: "2026-05-19T10:00:06+00:00")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
 

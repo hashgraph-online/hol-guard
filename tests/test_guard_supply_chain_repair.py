@@ -9,7 +9,8 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
-from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler, _repair_detected_package_shims
+from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
+from codex_plugin_scanner.guard.daemon.server_control_connect_state import _repair_detected_package_shims
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotConfiguredError,
@@ -20,6 +21,7 @@ from codex_plugin_scanner.guard.supply_chain_repair import (
     coordinate_supply_chain_repair,
 )
 from codex_plugin_scanner.guard.supply_chain_repair_sync import repair_sync_intelligence
+from tests.daemon_control_patching import patch_daemon_global
 
 
 @pytest.mark.parametrize("allowed,proof_required", [(False, False), (True, False), (True, True)])
@@ -44,26 +46,21 @@ def test_guided_repair_checks_cloud_access_before_requesting_local_proof(
         handler, "_write_approval_gate_error", lambda error: responses.append((error.status, {"error": error.code}))
     )
     monkeypatch.setattr(handler, "_record_headless_receipt", lambda **kwargs: None)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.package_shim_status", lambda context: {"installed_managers": []}
-    )
+    patch_daemon_global(monkeypatch, "package_shim_status", lambda context: {"installed_managers": []})
 
     def require_proof(*args, **kwargs):
         events.append("proof")
         if proof_required:
             raise ApprovalGateError("approval_gate_required", "Local approval required.")
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.require_high_risk", require_proof)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._repair_detected_package_shims",
+    patch_daemon_global(monkeypatch, "require_high_risk", require_proof)
+    patch_daemon_global(
+        monkeypatch,
+        "_repair_detected_package_shims",
         lambda *args, **kwargs: events.append("repair"),
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._activate_package_firewall_runtime", lambda context: (200, {})
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.repair_sync_intelligence", lambda *args, **kwargs: None
-    )
+    patch_daemon_global(monkeypatch, "_activate_package_firewall_runtime", lambda context: (200, {}))
+    patch_daemon_global(monkeypatch, "repair_sync_intelligence", lambda *args, **kwargs: None)
 
     handler._handle_supply_chain_repair({})
 
@@ -173,8 +170,9 @@ def test_repair_sync_intelligence_defers_unconfigured_cloud(tmp_path: Path, monk
     def unconfigured(_store: object) -> dict[str, object]:
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._resolve_guard_sync_auth_context",
+    patch_daemon_global(
+        monkeypatch,
+        "_resolve_guard_sync_auth_context",
         unconfigured,
     )
 
@@ -193,8 +191,9 @@ def test_repair_sync_intelligence_refreshes_bundle_without_auditing_workspaces(
     store = GuardStore(tmp_path / "guard")
     refreshed: list[tuple[GuardStore, dict[str, object]]] = []
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._resolve_guard_sync_auth_context",
+    patch_daemon_global(
+        monkeypatch,
+        "_resolve_guard_sync_auth_context",
         lambda _store: auth_context,
     )
 
@@ -230,8 +229,9 @@ def test_repair_sync_intelligence_keeps_untrusted_endpoint_as_failure(
     def untrusted(_store: object) -> dict[str, object]:
         raise GuardSyncEndpointUntrustedError("Guard Cloud endpoint failed trust validation.")
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server._resolve_guard_sync_auth_context",
+    patch_daemon_global(
+        monkeypatch,
+        "_resolve_guard_sync_auth_context",
         untrusted,
     )
 
@@ -269,8 +269,9 @@ def test_local_recovery_without_cloud_access_does_not_install_new_managers(
 ) -> None:
     context = HarnessContext(guard_home=tmp_path, home_dir=tmp_path, workspace_dir=tmp_path)
     observed: list[tuple[str, ...]] = []
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.package_shim_status",
+    patch_daemon_global(
+        monkeypatch,
+        "package_shim_status",
         lambda context: {
             "installed_managers": ["npm"],
             "detected_managers": ["npm", "pip3"],
@@ -278,8 +279,9 @@ def test_local_recovery_without_cloud_access_does_not_install_new_managers(
             "manager_details": [{"manager": "npm", "integrity": "ok"}, {"manager": "pip3", "integrity": "missing"}],
         },
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.activate_package_shims",
+    patch_daemon_global(
+        monkeypatch,
+        "activate_package_shims",
         lambda context, *, managers, repair: observed.append(managers) or {},
     )
 
@@ -299,8 +301,7 @@ def test_local_recovery_without_cloud_access_does_not_install_new_managers(
             "code": "paid_guard_cloud_required",
             "action": "check_access",
             "message": (
-                "Existing package tools were repaired. "
-                "Check Cloud access to protect additional detected tools: pip3."
+                "Existing package tools were repaired. Check Cloud access to protect additional detected tools: pip3."
             ),
         }
     ]

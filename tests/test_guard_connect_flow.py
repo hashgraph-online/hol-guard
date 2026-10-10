@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.package_firewall_entitlement import resolve_pack
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import SystemKeyringSecretStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_oauth_token_support import oauth_binding_access_token
 from tests.test_guard_store_migrations import _install_fake_system_keyring
 
@@ -198,11 +199,11 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
         preflight_calls.append(preflight_store)
         return {}
 
-    monkeypatch.setattr(daemon_server_module, "start_guard_browser_session", lambda **_: session)
-    monkeypatch.setattr(daemon_server_module, "open_browser_url", lambda _url: True)
-    monkeypatch.setattr(daemon_server_module, "prepare_guard_cloud_connect_authorization", fake_connect_preflight)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(monkeypatch, "start_guard_browser_session", lambda **_: session)
+    patch_daemon_global(monkeypatch, "open_browser_url", lambda _url: True)
+    patch_daemon_global(monkeypatch, "prepare_guard_cloud_connect_authorization", fake_connect_preflight)
+    patch_daemon_global(
+        monkeypatch,
         "exchange_guard_authorization_code",
         lambda **_: GuardOAuthTokenExchangeResult(
             access_token="access-token-123",
@@ -220,8 +221,8 @@ def test_daemon_guard_cloud_connect_persists_oauth_state_for_dashboard(
             workspace_id="workspace-123",
         ),
     )
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "sync_local_guard_cloud_proof",
         lambda *_args, **_kwargs: {
             "synced_at": "2026-06-01T12:00:00+00:00",

@@ -406,6 +406,14 @@
         ]
       },
       {
+        "id": "daemon-control-plane-routes",
+        "category": "control_plane",
+        "reason": "Daemon control-plane routes split out of daemon/server.py: package-firewall and supply-chain actions, Guard Cloud connect and dashboard reconnect, headless app actions and receipts, harness/notification/insights/read-state routes, protection-repair and settings routes, and the headless cloud-sync queue and connect-state machines. Each is reached only from a /v1 control route dispatched by do_GET/do_POST or from the daemon's background cloud-sync loop. Evidence: the transitive self-call closure of _handle_runtime_hook, _handle_runtime_hook_fast, _handle_hook_readiness, _execute_runtime_hook and the _runtime_hook_* helpers contains none of the moved methods, and none of the moved module-level functions is referenced from those methods. Helpers shared with the admission path or the server (server_common.py: logger, clock, local-URL builder, string-dict guard, settings response shaper) stay in scope.",
+        "path": [
+          "src/codex_plugin_scanner/guard/daemon/server_control_*.py"
+        ]
+      },
+      {
         "id": "runtime-transition-lifecycle",
         "category": "control_plane",
         "reason": "Core-owned runtime transition coordination, qualification and capture; one-shot activation lifecycle rather than per-request enforcement. runtime_transition.py (RuntimeTransition, TransitionFile, TransitionError, assert_transition_mutation_allowed) is reached only from install, uninstall, prepare, migrate and repair functions: adapters/base.py (PreparedHarnessInstall.publish, prepare_install, _owned_adapter_mutation), the adapters' prepare_install/install/uninstall/_install_owned/_uninstall_owned/prepare_codex_* methods, cursor_hooks._prepare_cursor_hooks, codex_hook_manifest.prepare_authenticated_hook_*, codex_hook_integrity._ordinary_hook_writer, shims.prepare_guard_shim/install_guard_shim/remove_guard_shim/ensure_guard_shim_path_in_shell_profile, store_cloud_events.set_managed_install (called only by install/bootstrap/paseo install), and the excluded transition coordinator modules. No hook, run, protect or MCP route calls it.",
@@ -463,6 +471,8 @@
     "reviewed_runtime": [
       {
         "path": [
+          "src/codex_plugin_scanner/guard/daemon/server_common.py",
+          "src/codex_plugin_scanner/guard/harness_disconnect_gate.py",
           "src/codex_plugin_scanner/guard/daemon/hook_*.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",

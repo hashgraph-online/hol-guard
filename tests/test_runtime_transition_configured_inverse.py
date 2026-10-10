@@ -57,7 +57,7 @@ for name in ('_start_aibom_inventory_refresh', '_start_supply_chain_bundle_refre
     setattr(server.GuardDaemonServer, name, lambda _self: None)
 server.start_command_queue_worker = lambda _store, existing: existing
 server.start_cloud_sync_sync_worker = lambda _store, existing, **_kwargs: existing
-server._queue_headless_cloud_sync = lambda **_kwargs: {'status': 'not_configured'}
+_ctl_cloud_sync._queue_headless_cloud_sync = lambda **_kwargs: {'status': 'not_configured'}
 daemon = server.GuardDaemonServer(GuardStore(guard), host='127.0.0.1', port=0, home_dir=home)
 try:
     daemon.start()

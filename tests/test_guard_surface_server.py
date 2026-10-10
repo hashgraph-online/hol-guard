@@ -39,6 +39,7 @@ from codex_plugin_scanner.guard.runtime.surface_server import GuardSurfaceRuntim
 from codex_plugin_scanner.guard.schemas import build_surface_server_contract
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
+from tests.daemon_control_patching import patch_daemon_global
 from tests.daemon_hook_test_client import open_authenticated_claude_request
 from tests.support.network import urlopen_json
 
@@ -111,8 +112,8 @@ class TestGuardSurfaceServer:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-        monkeypatch.setattr(
-            daemon_server_module,
+        patch_daemon_global(
+            monkeypatch,
             "apply_managed_install",
             lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("private adapter detail")),
         )
@@ -273,12 +274,12 @@ class TestGuardSurfaceServer:
             GuardStore, "get_command_activity_persistence_health", lambda self: SimpleNamespace(active_error_count=0)
         )
         monkeypatch.setattr(GuardStore, "count_command_activities", lambda self: 0)
-        monkeypatch.setattr(
-            daemon_server_module,
+        patch_daemon_global(
+            monkeypatch,
             "_repair_command_activity_persistence_health",
             lambda _store: None,
         )
-        monkeypatch.setattr(daemon_server_module, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
+        patch_daemon_global(monkeypatch, "repair_failing_managed_harness_hooks", lambda _store: ((), ()))
         monkeypatch.setattr(GuardStore, "list_managed_installs", lambda self: [{"harness": "codex", "active": True}])
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -357,8 +358,8 @@ class TestGuardSurfaceServer:
         def fail_probe(_store: GuardStore) -> None:
             raise sqlite3.OperationalError("write failed")
 
-        monkeypatch.setattr(
-            daemon_server_module,
+        patch_daemon_global(
+            monkeypatch,
             "_repair_command_activity_persistence_health",
             fail_probe,
         )
@@ -476,14 +477,14 @@ class TestGuardSurfaceServer:
             "_containment_health_payload",
             lambda self, **_kwargs: (_ for _ in ()).throw(RuntimeError("probe failed")),
         )
-        monkeypatch.setattr(
-            daemon_server_module,
+        patch_daemon_global(
+            monkeypatch,
             "repair_failing_managed_harness_hooks",
             lambda _store: (_ for _ in ()).throw(RuntimeError("hook discovery failed")),
         )
         activity_probes: list[GuardStore] = []
-        monkeypatch.setattr(
-            daemon_server_module,
+        patch_daemon_global(
+            monkeypatch,
             "_repair_command_activity_persistence_health",
             lambda current_store: activity_probes.append(current_store),
         )
@@ -1064,7 +1065,7 @@ class TestGuardSurfaceServer:
                 notifier_path="/usr/local/bin/terminal-notifier",
             )
 
-        monkeypatch.setattr(daemon_server_module, "ensure_desktop_notification_setup", fake_setup)
+        patch_daemon_global(monkeypatch, "ensure_desktop_notification_setup", fake_setup)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
@@ -1096,7 +1097,7 @@ class TestGuardSurfaceServer:
         def fail_setup(*_args, **_kwargs) -> DesktopNotificationSetupResult:
             raise OSError("settings unavailable")
 
-        monkeypatch.setattr(daemon_server_module, "ensure_desktop_notification_setup", fail_setup)
+        patch_daemon_global(monkeypatch, "ensure_desktop_notification_setup", fail_setup)
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
 
@@ -3894,7 +3895,7 @@ class TestGuardSurfaceServer:
         store = GuardStore(tmp_path / "guard-home")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         opened_urls: list[str] = []
-        monkeypatch.setattr(daemon_server_module, "open_browser_url", lambda url: opened_urls.append(url) or True)
+        patch_daemon_global(monkeypatch, "open_browser_url", lambda url: opened_urls.append(url) or True)
         daemon.start()
 
         try:

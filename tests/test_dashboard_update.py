@@ -33,6 +33,7 @@ from codex_plugin_scanner.guard.daemon.dashboard_update import (
     write_dashboard_update_outcome,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.update_context_test_support import build_legacy_status_distribution
 
 
@@ -265,8 +266,9 @@ def test_update_status_uses_persisted_alpha_channel(tmp_path: Path, monkeypatch:
 
 def test_daemon_update_status_route(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "9.9.9",
             "latest_version": "9.9.9",
@@ -309,8 +311,9 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
         scheduled["daemon_port"] = daemon_port
         return {"scheduled": True, "message": "scheduled"}
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.1",
@@ -327,8 +330,9 @@ def test_daemon_update_schedule_route(tmp_path: Path, monkeypatch: pytest.Monkey
             "blocked_reason": None,
         },
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         fake_schedule,
     )
 
@@ -367,8 +371,8 @@ def test_alpha_update_channel_persists_and_schedules_alpha(tmp_path: Path, monke
         scheduled.update(kwargs)
         return {"scheduled": True, "message": "scheduled"}
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload", fake_status)
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update", fake_schedule)
+    patch_daemon_global(monkeypatch, "build_guard_update_status_payload", fake_status)
+    patch_daemon_global(monkeypatch, "schedule_guard_dashboard_update", fake_schedule)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -427,8 +431,9 @@ def test_alpha_update_channel_requires_and_accepts_approval_proof(tmp_path: Path
 
 def test_daemon_update_schedule_rejects_non_updatable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
@@ -446,8 +451,9 @@ def test_daemon_update_schedule_rejects_non_updatable(tmp_path: Path, monkeypatc
         },
     )
     schedule_mock = MagicMock()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         schedule_mock,
     )
 
@@ -1626,8 +1632,9 @@ def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
         scheduled["force_pypi_reinstall"] = kwargs.get("force_pypi_reinstall")
         return {"scheduled": True, "message": "reinstall scheduled"}
 
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
@@ -1646,8 +1653,9 @@ def test_daemon_update_schedules_recovery_reinstall_for_local_folder(
             "recovery_reinstall_command": "pipx install --force hol-guard",
         },
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         fake_schedule,
     )
 
@@ -1668,8 +1676,9 @@ def test_daemon_update_recovery_reinstall_rejected_for_editable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "1.0.0",
             "latest_version": "1.0.0",
@@ -1689,8 +1698,9 @@ def test_daemon_update_recovery_reinstall_rejected_for_editable(
         },
     )
     schedule_mock = MagicMock()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         schedule_mock,
     )
 
@@ -1711,8 +1721,9 @@ def test_daemon_update_recovery_reinstall_rejected_when_python_incompatible(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = _store(tmp_path)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.build_guard_update_status_payload",
+    patch_daemon_global(
+        monkeypatch,
+        "build_guard_update_status_payload",
         lambda **_kwargs: {
             "current_version": "2.0.789",
             "latest_version": "2.0.807",
@@ -1735,8 +1746,9 @@ def test_daemon_update_recovery_reinstall_rejected_when_python_incompatible(
         },
     )
     schedule_mock = MagicMock()
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.server.schedule_guard_dashboard_update",
+    patch_daemon_global(
+        monkeypatch,
+        "schedule_guard_dashboard_update",
         schedule_mock,
     )
 
