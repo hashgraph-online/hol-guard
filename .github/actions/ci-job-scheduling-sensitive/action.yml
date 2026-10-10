@@ -74,7 +74,7 @@ runs:
           selected+=("${nodes[$i]}")
         fi
       done
-      uv run --no-sync pytest "${selected[@]}" --tb=short --reruns 1 --reruns-delay 2
+      uv run --no-sync pytest "${selected[@]}" --tb=short --reruns 1 --reruns-delay 5
     shell: bash
   - name: Run extended reconnect soak without tracing
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
