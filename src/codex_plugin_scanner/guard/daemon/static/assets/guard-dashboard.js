@@ -13295,6 +13295,32 @@ function normalizeDecisionScope(item, action, scope) {
   }
   return recommendedScopeForAction(item, action);
 }
+const ONCE_ONLY_REASON_COPY = {
+  no_command_identity: "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
+  mutable_launcher: "Always allow is unavailable: this program can run other code or config, so Guard cannot prove what it will do next time. You can allow it once.",
+  compound_command: "Always allow is unavailable: this command chains steps that Guard cannot verify one by one. You can allow it once.",
+  guard_control: "Changes to Guard itself are always reviewed. You can allow this one time.",
+  package_action: "Package installs and updates are always reviewed. You can allow this one time.",
+  non_overridable: "Guard policy does not let this action be remembered. You can allow it once.",
+  unproven_launch: "Always allow is unavailable: Guard could not verify exactly what this command launches. You can allow it once.",
+  sensitive_path: "Always allow is unavailable for files that may hold secrets. You can allow it once.",
+  broad_scope: "Always allow is unavailable: this search covers too much. Narrow it to a project folder to remember it.",
+  git_helper_config: "Always allow is unavailable: this repository or environment configures git helpers Guard cannot verify. You can allow it once.",
+  destructive_command: "Always allow is unavailable for commands that delete, move or send data. You can allow it once.",
+  provider_unverified: "Always allow is unavailable until the provider account is verified. You can allow it once."
+};
+const EXTENSION_ROUTE_BLOCKED_REASONS = /* @__PURE__ */ new Set([
+  "guard_control",
+  "package_action",
+  "non_overridable",
+  "provider_unverified",
+  "sensitive_path",
+  "destructive_command"
+]);
+const GENERIC_ONCE_ONLY_COPY = "Always allow is not available for this action. You can allow it once.";
+function onceOnlyReasonCopy(reason) {
+  return (typeof reason === "string" ? ONCE_ONLY_REASON_COPY[reason] : void 0) ?? GENERIC_ONCE_ONLY_COPY;
+}
 function taskCapabilityExplanation(item) {
   const eligibility = item.task_capability_eligibility;
   if (eligibility === void 0) {
@@ -13306,8 +13332,15 @@ function taskCapabilityExplanation(item) {
   if (eligibility.reason_codes.includes("current_action_not_overridable") || item.scope_restrictions?.includes("current_action_not_overridable") === true) {
     return "Task access cannot override this blocked or protected Guard action.";
   }
+  if (item.exact_action_persistence_eligible === true) {
+    return null;
+  }
   if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
-    return "Task access is not available for this action. Guard will ask again after this one-time approval.";
+    const reason = item.once_only_reason;
+    if (item.extension_recommendation && !EXTENSION_ROUTE_BLOCKED_REASONS.has(reason ?? "")) {
+      return null;
+    }
+    return onceOnlyReasonCopy(reason);
   }
   return "Task access is unavailable because this request does not include complete reusable proof.";
 }

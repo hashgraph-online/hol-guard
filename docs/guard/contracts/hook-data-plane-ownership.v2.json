@@ -470,6 +470,8 @@
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_binding.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_saved_approval.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_native_exact_identity.py",
+    "src/codex_plugin_scanner/guard/daemon/hook_native_launch_identity.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_local_cli.py",
     "src/codex_plugin_scanner/guard/daemon/hook_native_review_fence.py",
     "src/codex_plugin_scanner/guard/**/continuation*.py"
