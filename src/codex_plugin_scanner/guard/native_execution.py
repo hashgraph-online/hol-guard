@@ -159,6 +159,8 @@ def _resident_request(
             "hook_decide",
             "hook_adapter",
             "request_context_build",
+            "claim_approval_reuse_decisions",
+            "approval_reuse_diagnostic",
             "daemon_route",
         }:
             accepted = frozenset({"ok", "error"})
