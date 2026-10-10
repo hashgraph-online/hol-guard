@@ -70,6 +70,11 @@ pub(crate) fn parse(
             }
         }
         let tokens = canonicalize(&statement.call)?;
+        // PowerShell binds piped input to a web request body, which the curl
+        // mapping cannot express.
+        if statement.pipeline_index > 0 && tokens.first().is_some_and(|name| name == "curl") {
+            return Err("powershell_piped_request_body_not_supported");
+        }
         total_tokens = total_tokens.saturating_add(tokens.len());
         if total_tokens > MAX_COMMAND_TOKENS {
             return Err("command_token_limit_exceeded");

@@ -226,7 +226,9 @@ fn read_arg(
     in_call: bool,
     output: &mut Vec<PsArg>,
 ) -> Result<(), Reason> {
-    let current = chars[*index];
+    let Some(&current) = chars.get(*index) else {
+        return Err("malformed_shell_quoting");
+    };
     match current {
         '\'' | '"' => {
             let value = read_string(chars, index)?;

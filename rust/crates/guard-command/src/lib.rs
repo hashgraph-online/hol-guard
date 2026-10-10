@@ -226,11 +226,16 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
     if request.dialect != "posix" || !powershell_reads::windows_powershell_host() {
         return Ok(posix);
     }
-    // Windows agents run PowerShell. Retry with its bounded subset when POSIX
-    // cannot prove the command, or when POSIX only saw an unknown cmdlet name.
-    let retry =
-        posix.confidence != "exact" || powershell_command::names_powershell_effect(&posix.segments);
-    if retry && raw.chars().count() <= MAX_COMMAND_BYTES && raw.len() <= MAX_COMMAND_BYTES {
+    // Windows agents run PowerShell. A cmdlet name means POSIX only saw an
+    // unknown word, so the PowerShell result stands even when it is uncertain.
+    if posix.confidence == "exact" && powershell_command::names_powershell_effect(&posix.segments) {
+        return Ok(parse_explicit_powershell(request, raw));
+    }
+    // Otherwise retry only input that POSIX cannot prove.
+    if posix.confidence != "exact"
+        && raw.chars().count() <= MAX_COMMAND_BYTES
+        && raw.len() <= MAX_COMMAND_BYTES
+    {
         if let Ok(model) = powershell_command::parse(request, raw) {
             return Ok(model);
         }

@@ -127,10 +127,12 @@ fn unsupported_powershell_stays_fail_closed() {
             let plain = evaluate(&open, command, windows);
             assert_ne!(plain.minimum_action, "allow", "{command}");
         }
-        assert_eq!(
-            evaluate(&open, command, true).reason_code,
-            evaluate(&open, command, false).reason_code,
-            "{command}"
+        // Windows may only be stricter: a rejected cmdlet fails closed.
+        let windows = evaluate(&open, command, true).reason_code;
+        let posix = evaluate(&open, command, false).reason_code;
+        assert!(
+            windows == posix || windows == "native_command_extension_evaluation_failed",
+            "{command}: {windows} vs {posix}"
         );
     }
 }
