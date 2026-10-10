@@ -15,9 +15,12 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_daemon_route as route
+from codex_plugin_scanner.guard import native_resident_decision as shared
 from codex_plugin_scanner.guard.approval_scope_support import APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.server import _HEADLESS_APP_ACTIONS, _GuardDaemonHandler
+
+pytestmark = pytest.mark.native_route_unpinned
 
 _DOCUMENT = json.loads(
     (
@@ -183,7 +186,7 @@ def _good(request: dict[str, object], body: dict[str, object], **overrides: obje
     reply: dict[str, object] = {
         "schema": "guard-daemon-route-result.v1",
         "request_id": request["request_id"],
-        "request_sha256": "sha256:" + route._canonical_request_sha256(request),
+        "request_sha256": "sha256:" + shared._canonical_request_sha256(request),
         "status": "ok",
         "code": "ok",
         "payload": body,
@@ -193,11 +196,9 @@ def _good(request: dict[str, object], body: dict[str, object], **overrides: obje
 
 
 def _resident(monkeypatch: pytest.MonkeyPatch, reply) -> None:
-    route._route_facts.cache_clear()
-    route._origin_decision.cache_clear()
-    monkeypatch.setattr(route, "_resolve_digest_home", lambda _home: Path("/tmp/daemon-route-home"))
-    monkeypatch.setattr(route, "ensure_resident_prerequisite", lambda _home: True)
-    monkeypatch.setattr(route, "_record_resident", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(shared, "_resolve_digest_home", lambda _home: Path("/tmp/daemon-route-home"))
+    monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(shared, "record_resident", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(route, "_resident_request", lambda *, request, **_kwargs: reply(request))
 
 
@@ -236,10 +237,42 @@ def test_unbound_or_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, mut
 
 def test_unavailable_resident_raises_without_a_request(monkeypatch: pytest.MonkeyPatch) -> None:
     _resident(monkeypatch, lambda request: pytest.fail("resident must not be asked"))
-    monkeypatch.setattr(route, "ensure_resident_prerequisite", lambda _home: False)
+    monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: False)
     with pytest.raises(route.NativeDaemonRouteError) as caught:
         route.native_route_facts("POST", "/v1/runtime")
     assert caught.value.code == "native_daemon_route_unavailable"
+
+
+_ORIGIN_PAYLOAD = {"kind": "origin", "allowed": True, "hosted_origin": False}
+
+
+def test_verdicts_are_never_reused_after_the_resident_becomes_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    def answer(request: dict[str, object]) -> dict[str, object]:
+        kind = request["query"]["kind"]  # type: ignore[index]
+        return _good(request, dict(_ROUTE_PAYLOAD if kind == "route" else _ORIGIN_PAYLOAD))
+
+    _resident(monkeypatch, answer)
+    assert route.native_route_facts("POST", "/v1/runtime") == route.RouteFacts(True, False, "none")
+    assert route.native_origin_decision("http://127.0.0.1:4781", "/v1/runtime").allowed is True
+    # Identical repeat calls still reach the resident, so losing it must fail them closed.
+    monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: False)
+    with pytest.raises(route.NativeDaemonRouteError):
+        route.native_route_facts("POST", "/v1/runtime")
+    with pytest.raises(route.NativeDaemonRouteError):
+        route.native_origin_decision("http://127.0.0.1:4781", "/v1/runtime")
+
+
+def test_native_off_after_a_native_answer_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, native_approval_reuse_runtime: Path
+) -> None:
+    home = native_approval_reuse_runtime
+    assert route.native_route_facts("POST", "/v1/hooks/codex/pre", guard_home=home).requires_header_token
+    assert route.native_origin_decision("https://hol.org", "/v1/runtime", guard_home=home) is not None
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+    with pytest.raises(route.NativeDaemonRouteError):
+        route.native_route_facts("POST", "/v1/hooks/codex/pre", guard_home=home)
+    with pytest.raises(route.NativeDaemonRouteError):
+        route.native_origin_decision("https://hol.org", "/v1/runtime", guard_home=home)
 
 
 def test_resolve_replies_with_an_unknown_outcome_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

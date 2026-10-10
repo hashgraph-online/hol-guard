@@ -706,6 +706,7 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
     assert not marker.exists()
 
 
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
