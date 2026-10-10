@@ -16,6 +16,7 @@ a refusal into ``ProviderPlanError``; it never computes a verdict itself.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import time
 from dataclasses import dataclass, field
@@ -381,8 +382,8 @@ def _evidence_wire(evidence: OCIBundleEvidence) -> dict[str, object]:
             return value.value
         if isinstance(value, tuple):
             return [section(item) for item in cast(tuple[object, ...], value)]
-        if hasattr(value, "__dataclass_fields__"):
-            return {name: section(getattr(value, name)) for name in value.__dataclass_fields__}
+        if dataclasses.is_dataclass(value) and not isinstance(value, type):
+            return {field.name: section(getattr(value, field.name)) for field in dataclasses.fields(value)}
         return value
 
     return cast(dict[str, object], section(evidence))
