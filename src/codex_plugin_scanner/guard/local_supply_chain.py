@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools
 import hashlib
 import importlib
 import inspect
@@ -22,7 +21,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal, TypeGuard, TypeVar, cast
+from typing import Any, Literal, TypeGuard, cast
 from uuid import uuid4
 
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots, resolves_within_root
@@ -99,6 +98,7 @@ from .runtime.workspace_path_guard import (
 from .shims import package_shim_dashboard_status, package_shim_supported_managers
 from .stable_digest import stable_digest_hex
 from .store import GuardStore
+from .store_guard_home_binding import binds_store_guard_home
 
 _MANIFEST_CANDIDATES = (
     "package.json",
@@ -1449,23 +1449,7 @@ def _package_manager_launch_environment(
     return launch_environment
 
 
-_BoundFunction = TypeVar("_BoundFunction", bound=Callable[..., Any])
-
-
-def _binds_store_guard_home(function: _BoundFunction) -> _BoundFunction:
-    """Bind the keyword ``store``'s guard home for the call and always reset it."""
-
-    @functools.wraps(function)
-    def wrapper(*args: Any, **kwargs: Any) -> Any:
-        from .native_context import bound_context_digest_home
-
-        with bound_context_digest_home(getattr(kwargs.get("store"), "guard_home", None)):
-            return function(*args, **kwargs)
-
-    return cast(_BoundFunction, wrapper)
-
-
-@_binds_store_guard_home
+@binds_store_guard_home
 def _build_package_protect_authority(
     *,
     command: Sequence[str],
@@ -1581,7 +1565,7 @@ def _build_package_protect_authority(
         raise
 
 
-@_binds_store_guard_home
+@binds_store_guard_home
 def _final_package_protect_authority(
     *,
     initial: _PackageProtectAuthority,
@@ -2829,7 +2813,7 @@ def _package_current_policy_context(
     }
 
 
-@_binds_store_guard_home
+@binds_store_guard_home
 def _package_request_artifact_hash(
     artifact: GuardArtifact,
     *,

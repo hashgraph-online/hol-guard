@@ -1971,24 +1971,9 @@ impl NativeArchiveApi for ResidentNativeArchive {
         _max_nested_archives: u64,
         _max_path_depth: u64,
     ) -> EvalResult<Map<String, Value>> {
-        let unavailable =
-            || EvalError::Internal("native archive inspection unavailable in resident".into());
-        let verdict = guard_command::egress_broker::supplied_inspection(expected_sha256)
-            .ok_or_else(unavailable)?;
-        if !matches!(verdict.status.as_str(), "clean" | "blocked" | "incomplete")
-            || ![&verdict.code, &verdict.message, &verdict.severity]
-                .iter()
-                .all(|text| text.len() <= 512)
-        {
-            return Err(unavailable());
-        }
-        let mut result = Map::new();
-        result.insert("status".into(), Value::String(verdict.status));
-        result.insert("code".into(), Value::String(verdict.code));
-        result.insert("message".into(), Value::String(verdict.message));
-        result.insert("severity".into(), Value::String(verdict.severity));
-        result.insert("sha256".into(), Value::String(expected_sha256.to_owned()));
-        Ok(result)
+        crate::archive_verdict_seam::reported_archive_verdict(expected_sha256).ok_or_else(|| {
+            EvalError::Internal("native archive inspection unavailable in resident".into())
+        })
     }
 }
 
