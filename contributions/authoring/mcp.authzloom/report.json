@@ -1,0 +1,74 @@
+{
+  "activeProtectionChanged": false,
+  "binaryIdentityVerified": false,
+  "coverageMeaning": "Enumerated metadata only; not a security certification or proof of runtime completeness.",
+  "discoveredOperations": 5,
+  "discoveryDigest": "ddaa4139d7db8e63c5636decf29fb38d7cb61baf7486513a396a55ac816854f0",
+  "limitations": [
+    "mcp-inventory-is-snapshot",
+    "mcp-schemas-fingerprinted-not-executed",
+    "mcp-tool-annotations-untrusted",
+    "metadata-is-not-semantics"
+  ],
+  "operations": [
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-418b066cb3a401fd",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "authzloom_export",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-db3928748425fd7a",
+      "path": [],
+      "reviewed": true,
+      "state": "inherit",
+      "toolName": "authzloom_ingest",
+      "untrustedHints": []
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-cae76fab9f2025d7",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "authzloom_plan",
+      "untrustedHints": [
+        "read-only-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-69c3136c5e53bbf7",
+      "path": [],
+      "reviewed": true,
+      "state": "review",
+      "toolName": "authzloom_run",
+      "untrustedHints": [
+        "destructive-hint"
+      ]
+    },
+    {
+      "exactSafeInvocations": [],
+      "id": "tool-d0e02aa57b90cd76",
+      "path": [],
+      "reviewed": true,
+      "state": "allow",
+      "toolName": "authzloom_status",
+      "untrustedHints": [
+        "read-name",
+        "read-only-hint"
+      ]
+    }
+  ],
+  "reviewedOperations": 5,
+  "revisionDigest": "8c5d0fb5f52fee32482602d0a9ec4420d9d4e47436aa59cc350d612ad1e5f1af",
+  "schemaVersion": "guard.extension-coverage-report.v1",
+  "unknownOperationBehavior": "inherit",
+  "upstreamVersion": "1.0.1"
+}
