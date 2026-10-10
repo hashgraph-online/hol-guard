@@ -27,7 +27,7 @@ MAX_UNSPLIT_FILE_TARGET_MULTIPLIER = 1.15
 MAX_NODES_PER_AFFINITY_GROUP = 8
 # These assertions share one full, independently checked corpus evaluation.
 # Keep them in one process rather than paying the 51,000-case setup per shard.
-SINGLE_PROCESS_FILES = frozenset({"tests/test_guard_command_decision_diff.py"})
+SINGLE_PROCESS_FILES = frozenset()
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
         "tests/test_guard_continuation_contract.py::test_bounded_adapter_cancels_a_hung_worker_and_records_timeout",
@@ -184,6 +184,7 @@ def build_affinity_node_shards(
         for node_id in node_ids
         if node_id not in SCHEDULING_ONLY_NODE_IDS
         and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        and node_file(node_id) not in SCHEDULING_ONLY_NODE_IDS
     ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
