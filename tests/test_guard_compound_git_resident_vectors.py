@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime.compound_git_inspection import (
-    _safe_repository_path,
     canonical_home_git_c_path,
 )
 
@@ -37,11 +36,6 @@ _FIXTURE = (
 def _cases(check: str) -> list[dict[str, object]]:
     corpus = json.loads(_FIXTURE.read_text(encoding="utf-8"))
     return [case for case in corpus["cases"] if case["check"] == check]
-
-
-@pytest.mark.parametrize("case", _cases("repository_path"), ids=lambda case: repr(case["value"]))
-def test_repository_path_matches_the_retired_python_vectors(case: dict[str, object]) -> None:
-    assert _safe_repository_path(str(case["value"])) is case["expected"]
 
 
 @pytest.mark.parametrize("case", _cases("home_git_c_path"), ids=lambda case: repr(case["command_text"]))

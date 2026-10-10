@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliComman
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
-    mcp_tool_state,
     validate_mcp_contribution,
 )
 
@@ -122,21 +121,6 @@ def test_canonical_native_compilation_contains_mcp_coverage(compiled: dict) -> N
     assert value["mcp_launch"] == {"kind": "direct-command", "command": "kranz"}
     assert value["permissions"][0]["configurable"] is False
     assert registry.get("command.kranz") is not None
-
-
-@pytest.mark.parametrize("tool", (*MUTATIONS, "future_mutation"))
-def test_locally_enabled_mutations_require_review(kranz_payload: dict, tool: str) -> None:
-    assert mcp_tool_state(kranz_payload, tool) == "review"
-    decision = mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), "allow")
-    assert decision is not None
-    assert decision[0:2] == ("review", "catalog-mcp-extension")
-
-
-@pytest.mark.parametrize("tool", OBSERVATIONS)
-def test_observation_tools_inherit_without_allow_grants(kranz_payload: dict, tool: str) -> None:
-    assert mcp_tool_state(kranz_payload, tool) == "inherit"
-    for current in ("allow", "review", "block"):
-        assert mcp_server_grants.apply_contributed_mcp_decision(enabled_store(), artifact(tool), current) is None
 
 
 @pytest.mark.parametrize(

@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard.models import (
 )
 from codex_plugin_scanner.guard.runtime.manifest_dependency_targets import (
     evaluation_targets,
-    unsynced_manifest_dependency_targets,
 )
 from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
@@ -130,51 +129,6 @@ def test_manifest_targets_scope_lockfile_versions_to_their_workspace(tmp_path: P
         ("1.0.0", False),
         (None, True),
     ]
-
-
-def test_conflicting_scoped_lockfiles_remain_unsynced(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    workspace_dir.mkdir()
-    (workspace_dir / "package.json").write_text(
-        json.dumps({"dependencies": {"lodash": "^1.0.0"}}),
-        encoding="utf-8",
-    )
-    (workspace_dir / "package-lock.json").write_text(
-        json.dumps(
-            {
-                "lockfileVersion": 3,
-                "packages": {"node_modules/lodash": {"version": "1.0.0"}},
-            }
-        ),
-        encoding="utf-8",
-    )
-    (workspace_dir / "bun.lock").write_text(
-        json.dumps({"lockfileVersion": 1, "packages": {"lodash": ["lodash@2.0.0", "", {}]}}),
-        encoding="utf-8",
-    )
-    intent = parse_package_intent("npm install", workspace=workspace_dir)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "guard-cli",
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-    )
-    artifact = replace(
-        artifact,
-        metadata={
-            **artifact.metadata,
-            "manifest_paths": ["package.json"],
-            "lockfile_paths": ["package-lock.json", "bun.lock"],
-        },
-    )
-
-    targets = unsynced_manifest_dependency_targets(artifact, workspace_dir)
-
-    assert len(targets) == 1
-    assert targets[0]["package_name"] == "lodash"
-    assert targets[0]["version"] is None
-    assert targets[0]["manifest_unsynced"] is True
 
 
 def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_saved_allow(

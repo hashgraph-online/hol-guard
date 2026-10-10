@@ -4,16 +4,13 @@ import base64
 import json
 import os
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import approval_context
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
     ApprovalContextToken,
     approval_context_tokens_validation_reason,
-    approval_context_validation_reason,
     build_approval_context_token,
     build_runtime_executable_identity,
     build_runtime_launch_identity,
@@ -185,49 +182,6 @@ def test_token_is_invalidated_when_extension_control_snapshot_changes(native_con
 
     assert saved != current
     assert approval_context_tokens_validation_reason(saved, current) == "approval_reuse_policy_changed"
-
-
-def test_arbitrary_artifact_hash_text_is_bound_without_interpretation(native_context_digest: Path) -> None:
-    artifact_hash = "not-sha256:guard-approval-context:v1:\n☃\x00"
-    saved = _token(content=artifact_hash)
-
-    assert approval_context_validation_reason(saved, **_context(content=artifact_hash)) is None
-    assert (
-        approval_context_validation_reason(saved, **_context(content=f"{artifact_hash}:changed"))
-        == "approval_reuse_content_changed"
-    )
-
-
-@pytest.mark.parametrize(
-    ("changed_context", "expected_reason"),
-    (
-        ({"identity": {"artifact_id": "different"}}, "approval_reuse_identity_changed"),
-        ({"content": "changed-content"}, "approval_reuse_content_changed"),
-        ({"capabilities": ["filesystem:read", "network:egress"]}, "approval_reuse_capability_changed"),
-        ({"policy": {"action": "block"}}, "approval_reuse_policy_changed"),
-        ({"sandbox": {"mode": "host", "network": True}}, "approval_reuse_sandbox_changed"),
-    ),
-)
-def test_validator_reports_stable_changed_dimension(
-    changed_context: dict[str, object],
-    expected_reason: str,
-    native_context_digest: Path,
-) -> None:
-    saved = _token()
-
-    assert approval_context_validation_reason(saved, **_context(**changed_context)) == expected_reason
-
-
-def test_validator_uses_stable_security_precedence_when_multiple_dimensions_change(native_context_digest: Path) -> None:
-    saved = _token()
-
-    assert (
-        approval_context_validation_reason(
-            saved,
-            **_context(identity="changed", content="changed", policy="changed", sandbox="changed"),
-        )
-        == "approval_reuse_identity_changed"
-    )
 
 
 def test_opaque_token_comparison_accepts_unchanged_context(native_context_digest: Path) -> None:

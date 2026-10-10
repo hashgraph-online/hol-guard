@@ -113,10 +113,6 @@ def _git_show_has_execution_free_config(
     return _segments_allowed("show_config", (segment,), repository_path=repository_path)
 
 
-def _safe_repository_path(value: str) -> bool:
-    return compound_git_inspection_native("repository_path", value=value).allowed
-
-
 def _cached_diff_pathspecs_allowed(values: Sequence[str]) -> bool:
     """One resident request for every pathspec after ``--`` in a staged diff."""
 

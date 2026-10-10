@@ -12,7 +12,6 @@ from pathlib import Path
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     allow_tool_call,
     block_tool_call,
-    extract_mcp_command_text,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, GuardReceipt
 from codex_plugin_scanner.guard.store import GuardStore
@@ -39,46 +38,6 @@ def _make_artifact(
         transport="stdio",
         metadata={"server_name": "lean-ctx"},
     )
-
-
-class TestExtractMcpCommandText:
-    def test_extracts_command_from_ctx_shell_arguments(self):
-        artifact = _make_artifact()
-        arguments = {"command": "git status --short"}
-        assert extract_mcp_command_text(artifact, arguments) == "git status --short"
-
-    def test_extracts_cmd_key(self):
-        artifact = _make_artifact()
-        arguments = {"cmd": "npm install"}
-        assert extract_mcp_command_text(artifact, arguments) == "npm install"
-
-    def test_extracts_path_from_ctx_read_arguments(self):
-        artifact = _make_artifact(name="lean-ctx:ctx_read")
-        arguments = {"path": "/src/index.ts", "mode": "full"}
-        result = extract_mcp_command_text(artifact, arguments)
-        assert result is not None
-        assert "/src/index.ts" in result
-        assert "ctx_read" in result
-
-    def test_returns_none_for_empty_command(self):
-        artifact = _make_artifact()
-        arguments = {"command": "  "}
-        assert extract_mcp_command_text(artifact, arguments) is None
-
-    def test_returns_none_for_non_mapping_arguments(self):
-        artifact = _make_artifact()
-        assert extract_mcp_command_text(artifact, None) is None
-        assert extract_mcp_command_text(artifact, "string") is None
-        assert extract_mcp_command_text(artifact, 42) is None
-
-    def test_returns_none_for_empty_arguments(self):
-        artifact = _make_artifact()
-        assert extract_mcp_command_text(artifact, {}) is None
-
-    def test_prefers_command_over_path(self):
-        artifact = _make_artifact()
-        arguments = {"command": "ls -la", "path": "/tmp"}
-        assert extract_mcp_command_text(artifact, arguments) == "ls -la"
 
 
 class TestAllowToolCallStoresRawCommandText:

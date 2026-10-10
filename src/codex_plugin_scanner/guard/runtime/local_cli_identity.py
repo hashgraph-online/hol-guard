@@ -22,8 +22,6 @@ from .local_cli_runner import runner_name, unwrap_local_runner
 
 LocalCliKind = Literal["executable", "script"]
 
-# ``local-cli.pkg-`` is taken by package.json script identities.
-REGISTRY_PACKAGE_CLI_PREFIX = "local-cli.npm-"
 REGISTRY_PACKAGE_PATH_CLASS = "registry-package"
 _CLI_ID_PATTERN = re.compile(r"^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$")
 _INTERPRETER_NAMES = frozenset(

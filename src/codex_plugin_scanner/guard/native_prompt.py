@@ -128,15 +128,6 @@ def should_force_reapproval(
     return result
 
 
-def prompt_request_id(request_class: str, matched_text: str, normalized_prompt: str) -> str:
-    result = analyze(
-        "request_id", request_class=request_class, matched_text=matched_text, prompt_text=normalized_prompt
-    )
-    if not isinstance(result, str) or len(result) != 64 or any(char not in "0123456789abcdef" for char in result):
-        raise NativePromptAnalysisError("native_prompt_analysis_invalid_result")
-    return result
-
-
 def trailing_secret_read_state(content: str, *, guard_home: Path | None = None) -> tuple[int, bool] | None:
     result = analyze("trailing_secret_read_state", prompt_text=content, guard_home=guard_home)
     if not isinstance(result, dict) or "state" not in result:

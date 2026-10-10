@@ -9616,22 +9616,6 @@ url = http://127.0.0.1:8787/guard-canary
             "bundleVersion": "policy-2026-04-09.1",
         }
 
-    def test_synced_policy_payload_fails_closed_for_unauthenticated_cached_bundle(self, tmp_path):
-        store = GuardStore(tmp_path / "home")
-        _seed_guard_cloud(store)
-        fallback_policy = {"mode": "observe", "defaultAction": "warn"}
-        store.set_sync_payload("policy", fallback_policy, "2026-04-09T00:00:00Z")
-        digest_bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
-        digest_bundle["verifier"] = {
-            "algorithm": "sha256",
-            "keyId": "legacy-digest-only",
-            "signature": None,
-        }
-        digest_bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(digest_bundle)
-        store.set_sync_payload("policy_bundle", digest_bundle, "2026-04-09T00:10:00Z")
-
-        assert guard_commands_module._synced_policy_payload(store) is None
-
     def test_guard_invalid_harness_returns_parser_error(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

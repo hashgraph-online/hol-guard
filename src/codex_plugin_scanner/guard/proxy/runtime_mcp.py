@@ -19,9 +19,6 @@ from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
 from uuid import uuid4
 
-from ..action_lattice import (
-    normalize_guard_action,
-)
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
@@ -96,11 +93,6 @@ from .stdio import (
     _readline_with_timeout,
     _timeout_response,
 )
-
-
-def _guard_action(value: object) -> GuardAction:
-    return normalize_guard_action(value)
-
 
 _SHELL_COMMAND_ARGUMENT_KEYS = frozenset({"cmd", "command", "shellCommand", "shell_command"})
 
@@ -255,14 +247,6 @@ def _safe_mcp_arguments(value: object) -> object:
 
 def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
     return cast(dict[str, object], _safe_mcp_arguments(params))
-
-
-def _mcp_arguments_digest(arguments: object) -> str:
-    """sha256 over the canonical JSON encoding of the RAW arguments."""
-    from ..native_context import context_mcp_arguments_projection
-
-    _safe, _launch, digest = context_mcp_arguments_projection("", arguments)
-    return digest
 
 
 def _browser_intent_payload(

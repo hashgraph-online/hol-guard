@@ -24,7 +24,6 @@ from .native_runtime_resilience import (
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_RESULT_TEXT = 2_048
 _PRETOOL_AUTHORITY_FEATURE = "pre-tool-command-authority-v1"
-_PRETOOL_GENERIC_AUTHORITY_FEATURE = "pre-tool-generic-authority-v1"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PRETOOL_RESULT_KEYS = {
     "schema",
