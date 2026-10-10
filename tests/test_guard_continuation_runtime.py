@@ -293,6 +293,8 @@ def test_live_hook_completion_wins_over_inflight_waiting_owner(tmp_path: Path, m
 
 
 def test_codex_app_server_result_is_bounded_and_opaque(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # Session rows live in the resident; the scheduling-sensitive lane runs in auto mode.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     store = GuardStore(tmp_path / "codex-app-server")
     request = _seed_request(
         store,
