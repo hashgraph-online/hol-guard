@@ -1418,6 +1418,8 @@ jobs:
           uv run --with packaging==25.0 python scripts/validate_alpha_release.py "${validator_args[@]}"
       - name: Refuse PyPI upload when the project is over quota
         if: steps.pypi.outputs.hol_guard_upload == 'true'
+        env:
+          HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES: ${{ vars.HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES }}
         run: uv run --with packaging==25.0 python scripts/pypi_project_storage.py --fail-if-over-limit
       - name: Publish HOL Guard to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
@@ -1784,6 +1786,9 @@ jobs:
       - name: Check PyPI quota admission
         id: pypi_quota
         if: steps.pypi.outputs.hol_guard_upload == 'true'
+        env:
+          HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES: ${{ vars.HOL_GUARD_PYPI_PROJECT_LIMIT_BYTES }}
+          VERSION: ${{ needs.build.outputs.version }}
         run: |
           set -euo pipefail
           quota_output=""
@@ -1795,6 +1800,7 @@ jobs:
             echo "blocked=false" >> "$GITHUB_OUTPUT"
           elif jq -e '.over_limit == true' <<< "$quota_output" >/dev/null 2>&1; then
             echo "blocked=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=PyPI publication deferred::hol-guard ${VERSION} was not uploaded because the PyPI project limit is reached. Free space or raise the limit, then dispatch a repair publish."
             {
               echo "### PyPI publication"
               echo "PyPI publication was deferred after the quota admission check reported the project limit."

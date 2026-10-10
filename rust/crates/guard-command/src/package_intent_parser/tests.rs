@@ -141,3 +141,88 @@ fn compound_package_install_survives_quoted_and_unquoted_heredocs() {
         assert_eq!(intent.targets[0].package_name.as_deref(), Some("lodash"));
     }
 }
+
+fn which_fixture(label: &str) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "guard_which_on_path_{label}_{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("empty")).unwrap();
+    std::fs::create_dir_all(dir.join("bin")).unwrap();
+    dir
+}
+
+#[cfg(unix)]
+#[test]
+fn which_on_path_searches_every_unix_path_entry() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = which_fixture("unix");
+    let npx = dir.join("bin").join("npx");
+    std::fs::write(&npx, "#!/bin/sh\n").unwrap();
+    std::fs::set_permissions(&npx, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = format!(
+        "{}::{}",
+        dir.join("empty").display(),
+        dir.join("bin").display()
+    );
+    assert_eq!(
+        which_on_path("npx", &path).as_deref(),
+        Some(npx.to_string_lossy().as_ref())
+    );
+    assert_eq!(which_on_path("missing", &path), None);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(windows)]
+#[test]
+fn which_on_path_uses_windows_separator_and_launcher_extensions() {
+    let dir = which_fixture("windows");
+    // npm ships an extensionless POSIX shim next to the launchable `.cmd`.
+    std::fs::write(dir.join("bin").join("npx"), "#!/bin/sh\n").unwrap();
+    let npx_cmd = dir.join("bin").join("npx.cmd");
+    std::fs::write(&npx_cmd, "@echo off\r\n").unwrap();
+    let path = format!(
+        "{};{}",
+        dir.join("empty").display(),
+        dir.join("bin").display()
+    );
+    let expected = npx_cmd.to_string_lossy().into_owned();
+    assert_eq!(
+        which_on_path("npx", &path).as_deref(),
+        Some(expected.as_str())
+    );
+    assert_eq!(
+        which_on_path("npx.cmd", &path).as_deref(),
+        Some(expected.as_str())
+    );
+    assert_eq!(which_on_path("missing", &path), None);
+    // A direct path picks the launcher too, never the extensionless sh shim.
+    let direct = dir.join("bin").join("npx").to_string_lossy().into_owned();
+    assert_eq!(
+        which_on_path(&direct, &path).as_deref(),
+        Some(expected.as_str())
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn path_for_resolution_keeps_unix_entries_and_anchors_relative_ones() {
+    let cwd = Path::new("/work");
+    assert_eq!(
+        path_for_resolution("/usr/bin::bin", Some(cwd)),
+        "/usr/bin:/work/.:/work/bin"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn path_for_resolution_keeps_windows_drive_letter_entries() {
+    let cwd = Path::new(r"C:\work");
+    assert_eq!(
+        path_for_resolution(r"C:\tools\node;D:\bin", Some(cwd)),
+        r"C:\tools\node;D:\bin"
+    );
+}

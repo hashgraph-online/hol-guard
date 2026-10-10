@@ -74,6 +74,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
         # reattachment integrity but never authorize or evaluate an action.
         "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -102,6 +103,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident approval-proof response; the answer is
         # strictly validated and never reinterpreted into a decision.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",

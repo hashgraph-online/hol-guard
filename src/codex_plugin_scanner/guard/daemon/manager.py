@@ -1273,6 +1273,24 @@ def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
     return token or None
 
 
+def ensure_guard_daemon_auth_token(guard_home: Path) -> str:
+    """Return the guard home's daemon auth token, creating it only when absent.
+
+    Every daemon for one guard home must share this token: hooks sign approval
+    links with the file's token, so a daemon minting its own would reject them.
+    """
+
+    token_path = _auth_token_path(guard_home)
+    _ensure_private_directory(token_path.parent)
+    with _guard_daemon_state_write_lock(guard_home):
+        token = load_guard_daemon_auth_token(guard_home)
+        if token is not None and token.strip():
+            return token
+        token = secrets.token_hex(16)
+        _write_private_atomic_text(token_path, token)
+        return token
+
+
 def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.request.Request:
     headers: dict[str, str] = {}
     if isinstance(auth_token, str) and auth_token.strip():
@@ -1331,7 +1349,9 @@ def _adopt_existing_guard_daemon(
     if isinstance(preferred_port, int) and preferred_port > 0:
         adopted = _initialize_existing_guard_daemon(guard_home, preferred_port)
         if adopted is not None:
-            write_guard_daemon_state(guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"])
+            write_guard_daemon_state(
+                guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"], write_auth_token=False
+            )
             return adopted["url"]
     candidate_ports = _adoptable_guard_daemon_ports(guard_home)
     if isinstance(preferred_port, int) and preferred_port > 0:
@@ -1340,7 +1360,7 @@ def _adopt_existing_guard_daemon(
         adopted = _initialize_existing_guard_daemon(guard_home, port)
         if adopted is None:
             continue
-        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=adopted["pid"])
+        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=adopted["pid"], write_auth_token=False)
         return adopted["url"]
     return None
 
@@ -1526,7 +1546,10 @@ def write_guard_daemon_state(
             state_payload,
             discovery_key=discovery_key,
         )
-        if write_auth_token:
+        # ``write_auth_token=False`` never replaces another daemon's token, but
+        # a missing file is restored so hooks can keep signing approval links.
+        existing_token = load_guard_daemon_auth_token(guard_home)
+        if write_auth_token or existing_token is None or not existing_token.strip():
             _write_private_atomic_text(_auth_token_path(guard_home), auth_token)
         _write_private_atomic_text(
             state_path,

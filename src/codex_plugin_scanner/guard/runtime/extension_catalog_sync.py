@@ -10,8 +10,8 @@ from datetime import datetime
 from typing import Protocol, TypedDict
 
 from .extension_control_limits import (
+    CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CATALOG_EXTENSIONS,
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_INPUT_TEXT_LENGTH,
     MAX_PERMISSIONS_PER_EXTENSION,
 )
@@ -53,6 +53,10 @@ _FORBIDDEN_WIRE_KEYS = frozenset(
         "workingdirectory",
     }
 )
+
+
+class ExtensionCatalogLimitError(ValueError):
+    """A catalog exceeds a Cloud v1 count or byte limit."""
 
 
 class ExtensionCatalogPermissionWire(TypedDict):
@@ -164,7 +168,7 @@ def _extension_wire(extension: ExtensionLike) -> ExtensionCatalogEntryWire:
         key=lambda permission: permission["id"],
     )
     if len(permissions) > MAX_PERMISSIONS_PER_EXTENSION:
-        raise ValueError("Extension catalog permission limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog permission limit exceeded")
     return {
         "id": extension.extension_id,
         "version": extension.version,
@@ -225,8 +229,8 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
     """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
 
     encoded = _canonical_json(payload).encode("utf-8")
-    if len(encoded) > MAX_CATALOG_PAYLOAD_BYTES:
-        raise ValueError("Extension catalog payload limit exceeded")
+    if len(encoded) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
+        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
     if not isinstance(payload, dict):
         raise ValueError("Extension catalog must be an object")
     expected_top_level = {
@@ -255,7 +259,7 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
     expected_limits = {
         "maxExtensions": MAX_CATALOG_EXTENSIONS,
         "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-        "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+        "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
         "maxStringLength": 8_192,
     }
     if payload.get("limits") != expected_limits:
@@ -430,7 +434,7 @@ def build_extension_catalog_wire(
         key=lambda extension: extension["id"],
     )
     if len(extensions) > MAX_CATALOG_EXTENSIONS:
-        raise ValueError("Extension catalog limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog limit exceeded")
     payload: ExtensionCatalogWire = {
         "schemaVersion": EXTENSION_CATALOG_SCHEMA_VERSION,
         "catalogDigest": catalog_digest_for_extensions(extensions),
@@ -440,14 +444,14 @@ def build_extension_catalog_wire(
         "limits": {
             "maxExtensions": MAX_CATALOG_EXTENSIONS,
             "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-            "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+            "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
             "maxStringLength": 8_192,
         },
         "extensions": extensions,
     }
     _reject_private_wire_keys(payload)
-    if len(_canonical_json(payload).encode("utf-8")) > MAX_CATALOG_PAYLOAD_BYTES:
-        raise ValueError("Extension catalog payload limit exceeded")
+    if len(_canonical_json(payload).encode("utf-8")) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
+        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
     return validate_extension_catalog_wire(payload)
 
 

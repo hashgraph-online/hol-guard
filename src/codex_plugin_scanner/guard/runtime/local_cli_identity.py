@@ -314,6 +314,10 @@ def _runner_identity(
             identity_source=registry_source,
         )
     evidence = {key: value for key in _LOCAL_BIN_IDENTITY_KEYS if isinstance(value := local_bin.get(key), str)}
+    bin_target = local_bin.get("bin_target")
+    if isinstance(bin_target, dict):
+        # A ``.bin`` shim only launches this script, so it binds the grant too.
+        evidence["bin_target_content_hash"] = str(bin_target.get("content_hash") or "")
     local_bin_source = {
         "source": "runner_local_bin",
         "name": name,
