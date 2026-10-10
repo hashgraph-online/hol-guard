@@ -11,6 +11,7 @@
   },
   "overrides": {
     "sharp": "0.35.5",
+    "lucide-react": "1.50.0",
     "@earendil-works/pi-coding-agent": {
       "brace-expansion": "5.0.12"
     }
