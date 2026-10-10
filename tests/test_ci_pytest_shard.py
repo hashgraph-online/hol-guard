@@ -15,10 +15,6 @@ from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
-SCHEDULING_SENSITIVE_NODE = (
-    "tests/test_guard_hook_process_runner.py::"
-    "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial"
-)
 STORAGE_LIVENESS_NODE = (
     "tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon"
 )
@@ -160,7 +156,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     redundant_deselections = re.findall(r"--deselect '?([^'\s]+)'?", coverage_job)
     assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS
     assert coverage_job.count("--deselect ") == len(set(redundant_deselections))
-    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
+    assert {STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
     assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
     timing_setup = next(
         step

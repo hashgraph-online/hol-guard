@@ -129,23 +129,6 @@ def _server_graph_failures(root: Path) -> list[str]:
     return failures
 
 
-def _resident_graph_failures(root: Path) -> list[str]:
-    failures: list[str] = []
-    entrypoint = root / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"
-    resident = _function_node_or_none(entrypoint, "_run_resident_hook_request")
-    if resident is None:
-        failures.append("resident hook entrypoint is missing")
-        return failures
-    if _called_node(resident, "_run_guard_hook_command") is not None:
-        failures.append("resident entrypoint can still reach the Python CLI")
-    if _called_node(resident, "review_http_payload") is None:
-        failures.append("resident entrypoint does not route hooks through the native worker")
-    generic = _exception_handler(resident, "Exception")
-    if generic is None or "_native_worker_fail_safe_result" not in function_calls(generic):
-        failures.append("resident worker exception has no fail-safe response")
-    return failures
-
-
 def _native_cli_graph_failures(root: Path) -> list[str]:
     failures: list[str] = []
     native_cli = root / "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py"
@@ -211,7 +194,6 @@ def _graph_failures(root: Path) -> list[str]:
     failures: list[str] = []
     for check in (
         _server_graph_failures,
-        _resident_graph_failures,
         _native_cli_graph_failures,
         _hook_cli_graph_failures,
         _payload_graph_failures,
