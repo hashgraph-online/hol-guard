@@ -65,6 +65,7 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
 )
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
+from codex_plugin_scanner.guard.proxy import stdio_sensitive_read as stdio_sensitive_read_module
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
@@ -14610,10 +14611,10 @@ def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp
     # asserted hook call. The digest result is intentionally unused: it is a
     # best-effort warm, and a None (transport/startup failure) must not mask the
     # real call - which runs next and is what the asserts actually exercise.
+    from codex_plugin_scanner.guard.native_context import native_context_digest
     from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
         provision_native_verifier_key_for_store,
     )
-    from codex_plugin_scanner.guard.native_context import native_context_digest
 
     provision_native_verifier_key_for_store(store)
     native_context_digest(
@@ -20011,7 +20012,7 @@ def test_stdio_proxy_rewrites_stale_request_url_to_active_approval_center(tmp_pa
     workspace_dir.mkdir(parents=True, exist_ok=True)
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=workspace_dir)
     monkeypatch.setattr(
-        stdio_proxy_module,
+        stdio_sensitive_read_module,
         "queue_blocked_approvals",
         lambda **_kwargs: [
             {

@@ -16,7 +16,9 @@ use serde_json::Value;
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::{mcp_proxy_catalog as catalog, mcp_proxy_package as package};
-use crate::{mcp_proxy_postclaim as postclaim, mcp_proxy_route as route};
+use crate::{
+    mcp_proxy_postclaim as postclaim, mcp_proxy_route as route, mcp_sensitive_read as sensitive,
+};
 
 const INVALID: &str = "native_mcp_proxy_decision_invalid";
 const SCHEMA_MISMATCH: &str = "native_mcp_proxy_decision_schema_mismatch";
@@ -41,6 +43,9 @@ pub(crate) fn decide(query: &McpProxyQueryV1) -> Value {
         McpProxyQueryV1::RouteToolCall(query) => route::route_tool_call(query),
         McpProxyQueryV1::ObserveToolForward(query) => route::observe_tool_forward(query),
         McpProxyQueryV1::EvidenceItem(query) => postclaim::evidence_item(query),
+        McpProxyQueryV1::SensitiveReadContext(query) => sensitive::context(query),
+        McpProxyQueryV1::SensitiveReadReuse(query) => sensitive::reuse(query),
+        McpProxyQueryV1::SensitiveReadHint(query) => sensitive::hint(query),
     }
 }
 

@@ -55,6 +55,8 @@ mod local_mcp_grant;
 pub use local_mcp_grant::*;
 mod mcp_proxy_decision;
 pub use mcp_proxy_decision::*;
+mod mcp_sensitive_read;
+pub use mcp_sensitive_read::*;
 mod request_context;
 pub use request_context::*;
 mod skill_directory_identity;
