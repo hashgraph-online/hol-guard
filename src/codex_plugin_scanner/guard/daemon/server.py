@@ -163,6 +163,7 @@ from ..native_policy_bundle import (
     PolicyBundleNativeUnavailableError,
     native_rejection_code,
 )
+from ..native_runtime_request_scope import native_status_request_scope
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -246,7 +247,6 @@ from ..shims import (
     uninstall_package_shims,
 )
 from ..sqlite_recovery import quarantined_store_summary
-from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
@@ -264,7 +264,11 @@ from ..supply_chain_repair import (
     coordinate_supply_chain_repair,
     repair_sync_intelligence,
 )
+from . import repair_api, repair_self_check
 from .aibom_inventory_persist import persist_aibom_inventory_context
+from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
+from .audit_persistence import WRITTEN as AUDIT_WRITTEN
+from .audit_persistence import AuditPersistence
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from .cloud_review_settings import cloud_review_reconnect_required
@@ -522,6 +526,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
     onefile_extraction_status: dict[str, object] | None
+    repair_self_check_status: dict[str, object] | None
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
@@ -579,6 +584,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
     denial_audit_lock: threading.Lock
+    audit_persistence: AuditPersistence
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
     home_dir: Path
@@ -599,6 +605,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def server_close(self) -> None:
         _ = self._stop_request_executors()
+        audit_persistence = getattr(self, "audit_persistence", None)
+        if audit_persistence is not None:
+            audit_persistence.close()
         hook_worker = getattr(self, "hook_worker", None)
         if hook_worker is not None:
             with suppress(Exception):
@@ -648,10 +657,14 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.diagnostics = diagnostics
         self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
         self.auth_audit_windows = {}
+        self.audit_persistence = AuditPersistence(
+            store, diagnostics, attempt_timeout_seconds=_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS
+        )
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
         self.onefile_extraction_status = None
+        self.repair_self_check_status = None
         self.guard_cloud_connect_state = None
         self.guard_cloud_connect_state_lock = threading.Lock()
         self.guard_cloud_browser_session_lock = threading.Lock()
@@ -3323,7 +3336,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             handle_command_activity_feedback(self, payload)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
-            self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            # One hook request shares a single native-binary validation across
+            # its decision, approval/review, queue, and response handling.
+            with native_status_request_scope():
+                self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
             self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])
@@ -3412,6 +3428,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/protection/repair":
             self._handle_protection_repair(payload)
+            return
+        if parsed.path in {"/v1/repair", "/v1/protection/remove-hooks"}:
+            self._handle_repair_api(parsed.path, payload)
             return
         if parsed.path == "/v1/supply-chain/repair":
             self._run_package_firewall_mutation("repair_all", lambda: self._handle_supply_chain_repair(payload))
@@ -5414,6 +5433,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _record_incomplete_protection_repair(self, check_reasons: Mapping[str, str]) -> None:
         record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
 
+    def _handle_repair_api(self, path: str, payload: dict[str, object]) -> None:
+        server = self._daemon_server()
+        handler = repair_api.repair_request if path == "/v1/repair" else repair_api.removal_request
+        try:
+            result = handler(server.store, payload, home_dir=server.home_dir, workspace_dir=server.workspace_dir)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        except repair_api.RemovalConfirmationError:
+            self._write_json(
+                {"error": "confirmation_required", "confirm": repair_api.REMOVE_CONFIRMATION},
+                status=400,
+            )
+            return
+        self._write_json(result, extra_headers={"Cache-Control": "no-store, max-age=0"})
+
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
         store = self.server.store  # type: ignore[attr-defined]
@@ -7281,23 +7316,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "persisted": False,
             }
             daemon_server.auth_audit_windows[key] = window
-        try:
-            with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                daemon_server.store.add_event("daemon.auth.unauthorized", payload, _now())
-        except Exception:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["suppressed_count"] += 1
-            daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-        else:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["persisted"] = True
-                    window["suppressed_count"] -= reported_suppressed_count
+        outcome = daemon_server.audit_persistence.persist("daemon.auth.unauthorized", payload, _now())
+        with daemon_server.auth_audit_lock:
+            if daemon_server.auth_audit_windows.get(key) is not window:
+                return
+            window["pending"] = False
+            if outcome == AUDIT_NOT_PERSISTED:
+                window["suppressed_count"] += 1
+                return
+            # A queued row carries the suppressed count, but its retry can still
+            # fail, so only a confirmed write lets the window coalesce later events.
+            window["suppressed_count"] -= reported_suppressed_count
+            window["persisted"] = outcome == AUDIT_WRITTEN
 
     def _record_query_token_rejection(self) -> None:
         self._record_bounded_denial_event(
@@ -7319,23 +7349,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _record_bounded_denial_event(self, event_name: str, payload: dict[str, object]) -> None:
         daemon_server = self._daemon_server()
         with daemon_server.denial_audit_lock:
-            for attempt in range(2):
-                try:
-                    with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                        daemon_server.store.add_event(event_name, payload, _now())
-                except TimeoutError:
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_timeout")
-                    return
-                except sqlite3.OperationalError as error:
-                    if attempt == 0 and any(
-                        marker in str(error).lower() for marker in ("database is locked", "database table is locked")
-                    ):
-                        continue
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-                except sqlite3.DatabaseError:
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-                else:
-                    return
+            _ = daemon_server.audit_persistence.persist(event_name, payload, _now())
 
     def _route_home(self) -> Path | None:
         return getattr(getattr(self.server, "store", None), "guard_home", None)
@@ -7753,6 +7767,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "sqlite_migration_gate": sqlite_migration_gate,
             "quarantined_store": quarantined_store_summary(store.guard_home),
             "onefile_extraction": daemon_server.onefile_extraction_status,
+            "repair_self_check": daemon_server.repair_self_check_status,
             "uptime_seconds": uptime,
             "pid": os.getpid(),
             "tables": store.list_table_names(),
@@ -8593,6 +8608,7 @@ class GuardDaemonServer:
             )
             self._start_command_activity_maintenance()
             self._start_onefile_extraction_reclaim()
+            self._start_repair_self_check()
             self._record_lifecycle("ready")
             self._owned_service_ready = True
             self._diagnostics.record("daemon_ready")
@@ -8781,6 +8797,17 @@ class GuardDaemonServer:
         )
         self._onefile_extraction_reclaim_thread.start()
 
+    def _start_repair_self_check(self) -> None:
+        def publish(status: dict[str, object]) -> None:
+            self._server.repair_self_check_status = status
+
+        repair_self_check.start_self_check(
+            self._server.store,
+            publish=publish,
+            stop=self._shutdown_started,
+            on_error=self._diagnostics.record_exception,
+        )
+
     def _onefile_extraction_reclaim_loop(self) -> None:
         while not self._shutdown_started.is_set():
             self._reclaim_onefile_extraction_dirs_once()
@@ -8790,12 +8817,14 @@ class GuardDaemonServer:
     def _reclaim_onefile_extraction_dirs_once(self) -> None:
         try:
             from ..onefile_extraction import reclaim_orphaned_extraction_dirs
+            from ..onefile_open_paths import scan_open_extraction_dirs
 
             result = reclaim_orphaned_extraction_dirs(
                 temp_root=Path(tempfile.gettempdir()),
                 current_meipass=getattr(sys, "_MEIPASS", None),
                 now=datetime.now(timezone.utc),
                 should_stop=self._shutdown_started.is_set,
+                open_path_scanner=scan_open_extraction_dirs,
             )
         except Exception:
             self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
@@ -8811,6 +8840,9 @@ class GuardDaemonServer:
             "killed_launches_last_run": result.killed_launches,
             "unmarked_legacy_count": result.unmarked_count,
             "unmarked_legacy_bytes_estimate": result.unmarked_bytes_estimate,
+            "unmarked_reclaimed_count": result.unmarked_reclaimed_count,
+            "unmarked_reclaimed_bytes": result.unmarked_reclaimed_bytes,
+            "unmarked_scan": result.unmarked_scan,
             "error_count": len(result.errors),
         }
         self._diagnostics.record(

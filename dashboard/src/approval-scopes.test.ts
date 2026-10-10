@@ -11,6 +11,7 @@ import {
   requestSupportsScope,
   scopeChoicesForRequest,
   standardScopeChoicesForRequest,
+  onceOnlyReasonCopy,
   taskCapabilityExplanation,
   willPersistExactAction,
 } from "./approval-scopes";
@@ -275,8 +276,46 @@ assert(
   "T-AS-14: task access copy explains protected actions",
 );
 assert(
-  taskCapabilityExplanation(BASE_REQUEST)?.includes("not available") === true,
-  "T-AS-15: task access copy truthfully explains disabled eligibility",
+  taskCapabilityExplanation(BASE_REQUEST) === null,
+  "T-AS-15: no task-access note when exact-action Always is available",
+);
+const onceOnlyRequest = (reason: string | null): GuardApprovalRequest => ({
+  ...BASE_REQUEST,
+  exact_action_persistence_eligible: false,
+  once_only_reason: reason,
+});
+for (const [reason, fragment] of [
+  ["no_command_identity", "no stable command or file"],
+  ["mutable_launcher", "run other code or config"],
+  ["compound_command", "chains steps"],
+  ["guard_control", "Changes to Guard itself"],
+  ["package_action", "Package installs and updates"],
+  ["non_overridable", "does not let this action be remembered"],
+  ["unproven_launch", "could not verify exactly what this command launches"],
+  ["sensitive_path", "may hold secrets"],
+  ["broad_scope", "covers too much"],
+  ["git_helper_config", "configures git helpers"],
+  ["destructive_command", "delete, move or send data"],
+  ["provider_unverified", "provider account is verified"],
+] as const) {
+  const copy = taskCapabilityExplanation(onceOnlyRequest(reason));
+  assert(copy?.includes(fragment) === true, `T-AS-15a: once-only copy for ${reason}`);
+  assert(copy?.includes("Task access") === false, `T-AS-15b: ${reason} copy never mentions task access`);
+}
+assert(
+  taskCapabilityExplanation(onceOnlyRequest(null)) === onceOnlyReasonCopy("unknown_future_code"),
+  "T-AS-15c: missing or unknown reasons use the generic once-only copy",
+);
+assert(
+  taskCapabilityExplanation({
+    ...onceOnlyRequest("compound_command"),
+    extension_recommendation: { permissions: [{ permission_id: "p" }] },
+  } as unknown as GuardApprovalRequest) === null,
+  "T-AS-15e: an available extension permission route suppresses the unavailable note",
+);
+assert(
+  taskCapabilityExplanation(onceOnlyRequest(null))?.includes("Task access") === false,
+  "T-AS-15d: the generic copy is not the task-access note",
 );
 
 assert(ADVANCED_SCOPE_VALUES.has("global"), "T-AS-16: global remains the only advanced scope");

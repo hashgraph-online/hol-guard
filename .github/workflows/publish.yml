@@ -2092,7 +2092,25 @@ jobs:
           fi
           mapfile -d '' local_files < <(find dist -maxdepth 1 -type f -print0 | sort -z)
           [[ "${#local_files[@]}" -gt 0 ]]
-          if release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>/dev/null); then
+          # Release Please usually creates this release first. Only "not found"
+          # may fall through to create; a rate-limited or failed lookup retries.
+          release_json=""
+          for attempt in 1 2 3 4 5; do
+            if release_json=$(gh release view "$tag" --json isDraft,isPrerelease,assets 2>"$RUNNER_TEMP/release-view.err"); then
+              break
+            fi
+            release_json=""
+            if grep -q "release not found" "$RUNNER_TEMP/release-view.err"; then
+              break
+            fi
+            cat "$RUNNER_TEMP/release-view.err" >&2
+            if [[ "$attempt" == "5" ]]; then
+              echo "Could not inspect the GitHub release for ${VERSION}" >&2
+              exit 1
+            fi
+            sleep $((attempt * 60))
+          done
+          if [[ -n "$release_json" ]]; then
             if ! jq -e '.isDraft == false and .isPrerelease == false' <<< "$release_json" >/dev/null; then
               echo "Existing stable release is a draft or prerelease" >&2
               exit 1
