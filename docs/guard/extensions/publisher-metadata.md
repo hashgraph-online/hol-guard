@@ -90,8 +90,8 @@ pull-request, issue, commit, or discussion URLs. `upstream` is an optional
 public project reference. These fields help a publisher profile prefill public
 attribution, but they are never claim authority, runtime behavior, or a reason
 to infer GitHub access. A credit can be present while `maintainerGithubIds` is
-empty; that extension stays unclaimable until maintainers review an explicit
-mapping.
+explicitly empty; that extension stays unclaimable until maintainers change the
+reviewed override. Omitting the field permits verified introducing-author authority.
 
 ### Reviewed claim authority
 
@@ -100,10 +100,12 @@ Each ID is an explicit, reviewed authorization to manage the extension's publish
 profile. It never changes runtime trust, code ownership, or upstream ownership.
 GitHub login names remain display data and can change without changing identity.
 
-Omitting `maintainerGithubIds` and providing an empty array both mean there is no
-automatic publisher claimant. Pull-request authorship remains useful context for a
-maintainer review, but it cannot substitute for an accepted numeric-ID mapping.
-The directory always emits an array. For `claimPolicy: provenance`, Cloud must grant
+Omitting `maintainerGithubIds` permits automatic attribution to the verified
+introducing contributor's numeric GitHub ID. Providing an explicit empty array
+disables automatic claims. Ambiguous or incomplete history still requires review;
+unverified authorship and public credit cannot grant authority.
+The published directory always emits the resulting accepted array. For
+`claimPolicy: provenance`, Cloud must grant
 or transfer elevated publisher authority only to IDs present in that accepted array.
 `claimPolicy: project` never grants a third-party claim through this field.
 

@@ -25,6 +25,7 @@ class Client:
         self.author_type = "User"
         self.large_files = False
         self.errors = False
+        self.truncated = False
 
     def _request(self, url, *, method, payload):
         assert url == "https://api.github.com/graphql" and method == "POST"
@@ -34,7 +35,7 @@ class Client:
         repository = {}
         for alias, sha in re.findall(r'(c\d+): object\(oid:"([a-f0-9]{40})"\)', payload["query"]):
             repository[alias] = {"oid": sha, "associatedPullRequests": {
-                "pageInfo": {"hasNextPage": False}, "nodes": [{
+                "pageInfo": {"hasNextPage": self.truncated}, "nodes": [{
                     "number": 7, "merged": True, "mergedAt": "2026-10-10T00:00:00Z", "baseRefName": "main",
                     "repository": {"nameWithOwner": self.repo}, "mergeCommit": {"oid": sha},
                     "author": {"__typename": self.author_type, "databaseId": 100, "login": "original-author"},
@@ -93,6 +94,13 @@ def test_partial_api_errors_stop_publication(monkeypatch: pytest.MonkeyPatch) ->
     client.errors = True
     with pytest.raises(RuntimeError, match="query failed"):
         prepare(monkeypatch, client)
+
+
+def test_truncated_associated_pr_page_cannot_grant_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = Client()
+    client.truncated = True
+    with pytest.raises(ClaimProvenanceError, match="evidence is incomplete"):
+        resolve_introducing_claimant(prepare(monkeypatch, client), PATH, SHA)
 
 
 def test_local_canonical_ancestry_needs_no_remote_comparisons(tmp_path: Path) -> None:

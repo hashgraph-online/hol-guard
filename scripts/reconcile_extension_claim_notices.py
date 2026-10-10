@@ -15,6 +15,7 @@ _helper_dir = str(Path(__file__).resolve().parent)
 sys.path.insert(0, _helper_dir)
 try:
     from extension_artifact_bundle import ARCHIVE, verify_bundle
+    from extension_claim_github_comments import batched_pull_comments
     from notify_merged_extension_claimants import DEFAULT_STUDIO_URL, GitHubApi, process, trusted_notice_comment
 finally:
     sys.path.remove(_helper_dir)
@@ -72,8 +73,17 @@ def pending_pull_requests(client: GitHubApi, directory: Path, source_sha: str) -
         entries = json.loads(archive.read(PLAN))["entries"]
     expected = {number: {row["extensionId"] for row in entries if row["pullRequest"] == number} for number in numbers}
     pending = []
+    comment_batches = batched_pull_comments(client, numbers)
     for number in numbers:
-        notice = trusted_notice_comment(client.comments(number))
+        try:
+            comments = comment_batches[number] if number in comment_batches else client.comments(number)
+            notice = trusted_notice_comment(comments)
+        except Exception as error:
+            # Delivery re-reads comments under the shared lock. A failed lookup
+            # can schedule a retry but cannot post a duplicate or grant authority.
+            print(f"PR #{number}: comment lookup failed; scheduling recheck: {error}", file=sys.stderr)
+            pending.append(number)
+            continue
         covered: set[str] = set()
         if notice is not None:
             for url in re.findall(r"\]\((https://hol\.org/guard/extension-studio\?[^)\s]+)\)", notice.get("body", "")):

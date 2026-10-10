@@ -114,3 +114,15 @@ def test_existing_notice_must_cover_each_planned_extension(
         def comments(self, number):
             return [{"id": 99, "body": body, "user": {"id": 41898282, "type": "Bot"}}]
     assert notices.pending_pull_requests(Client(), directory, SHA) == expected
+
+
+def test_comment_lookup_outage_schedules_safe_locked_recheck(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    directory = fixture(tmp_path, monkeypatch)
+    class Client:
+        def comments(self, number):
+            raise OSError("Synthetic comment lookup outage")
+    assert notices.pending_pull_requests(Client(), directory, SHA) == [7]
+    output = capsys.readouterr()
+    assert not output.out and "scheduling recheck" in output.err

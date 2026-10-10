@@ -59,6 +59,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TRUSTED_NOTICE_ACTOR_ID = 41898282
 MAX_LISTING_BYTES = 16_384
+MAX_GITHUB_RESPONSE_BYTES = 8 * 1024 * 1024
 LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
 LISTING_SCHEMA_V2 = "guard.extension-listing.v2"
 LISTING_REQUIRED_KEYS = frozenset({"schemaVersion", "extensionId", "tagline", "category", "limitations"})
@@ -134,12 +135,14 @@ class GitHubApi:
         request = urllib.request.Request(url, headers=headers, method=method, data=body)
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
-                raw = response.read()
+                raw = response.read(MAX_GITHUB_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             raise ClaimNoticeError(f"GitHub API {error.code} for {url}: {detail[:300]}") from error
         except OSError as error:
             raise ClaimNoticeError(f"GitHub API request failed for {url}: {error}") from error
+        if len(raw) > MAX_GITHUB_RESPONSE_BYTES:
+            raise ClaimNoticeError("GitHub API response exceeds the byte limit")
         if not raw:
             return None
         try:

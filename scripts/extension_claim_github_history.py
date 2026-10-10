@@ -25,6 +25,7 @@ class SnapshotClaimHistory:
         self.client = client
         self.prepared_history: dict[str, list[tuple[str, str]]] = {}
         self._associated: dict[str, list[dict[str, int]]] = {}
+        self._incomplete_commits: set[str] = set()
         self._pulls: dict[int, dict[str, Any]] = {}
         self._files: dict[int, list[dict[str, str]]] = {}
         def get(path: str) -> Any:
@@ -64,8 +65,9 @@ class SnapshotClaimHistory:
                 nodes = connection.get("nodes")
                 if not isinstance(nodes, list) or len(nodes) > 9:
                     raise RuntimeError("Snapshot associated PR evidence is invalid")
-                if connection.get("pageInfo", {}).get("hasNextPage") and len(nodes) < 9:
-                    raise RuntimeError("Snapshot associated PR evidence is incomplete")
+                if connection.get("pageInfo", {}).get("hasNextPage"):
+                    self._incomplete_commits.add(sha)
+                    continue
                 self._associated[sha] = []
                 for row in nodes:
                     number = row.get("number") if isinstance(row, dict) else None
@@ -98,6 +100,8 @@ class SnapshotClaimHistory:
         prefix = self.client.base_url + "/commits/"
         if url.startswith(prefix) and url.endswith("/pulls?per_page=100"):
             sha = url.removeprefix(prefix).removesuffix("/pulls?per_page=100")
+            if sha in self._incomplete_commits:
+                raise ClaimProvenanceError("Snapshot associated PR evidence is incomplete")
             if sha in self._associated:
                 return self._associated[sha]
         return self.client._request(url)
