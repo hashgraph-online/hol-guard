@@ -68,6 +68,7 @@ from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
 from codex_plugin_scanner.guard.proxy import stdio as stdio_proxy_module
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.runtime import secret_file_requests as secret_file_requests_module
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.approval_context import (
@@ -438,21 +439,21 @@ class _FlushTrackingOutput(io.StringIO):
 
 class TestGuardRuntime:
     def test_runtime_sessions_sync_url_preserves_query_parameters(self) -> None:
-        runtime_sync_url = guard_runner_module._normalized_runtime_sessions_sync_url(
+        runtime_sync_url = runner_native_sync.normalized_runtime_sessions_sync_url(
             "https://hol.org/custom/sync?tenant=guard",
         )
 
         assert runtime_sync_url == "https://hol.org/custom/sync/runtime/sessions/sync?tenant=guard"
 
     def test_runtime_sessions_sync_url_normalizes_registry_receipts_path(self) -> None:
-        runtime_sync_url = guard_runner_module._normalized_runtime_sessions_sync_url(
+        runtime_sync_url = runner_native_sync.normalized_runtime_sessions_sync_url(
             "https://hol.org/registry/api/v1?tenant=guard",
         )
 
         assert runtime_sync_url == "https://hol.org/registry/api/v1/guard/runtime/sessions/sync?tenant=guard"
 
     def test_supply_chain_bundle_url_normalizes_registry_receipts_path(self) -> None:
-        bundle_url = guard_runner_module._normalized_supply_chain_bundle_url(
+        bundle_url = runner_native_sync.normalized_supply_chain_bundle_url(
             "https://hol.org/registry/api/v1?tenant=guard",
             "workspace-1",
         )
