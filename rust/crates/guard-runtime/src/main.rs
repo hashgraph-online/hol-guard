@@ -16,6 +16,10 @@ mod business_document_compile;
 mod business_source_codec;
 mod claim_approval_reuse_op;
 mod claim_reuse;
+mod codex_tool_output_git;
+mod codex_tool_output_op;
+#[cfg(test)]
+mod codex_tool_output_vectors_tests;
 mod command_effect;
 mod compound_git_args;
 mod compound_git_chain;

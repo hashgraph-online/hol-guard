@@ -15,6 +15,8 @@ mod git_execution_safety;
 pub use git_execution_safety::*;
 mod compound_git_inspection;
 pub use compound_git_inspection::*;
+mod codex_tool_output;
+pub use codex_tool_output::*;
 mod claim_approval_reuse;
 pub use claim_approval_reuse::*;
 mod policy_decision_lookup;

@@ -241,6 +241,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::CodexToolOutput(request) => {
+                crate::codex_tool_output_op::evaluate_codex_tool_output_request(&request)
+            }
             ResidentOperationV1::GitExecutionSafety(request) => {
                 crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }

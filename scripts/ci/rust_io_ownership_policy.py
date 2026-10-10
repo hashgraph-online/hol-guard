@@ -56,6 +56,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/manager.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
+        # Resident request transport; the observed git path is a fact, never a verdict.
+        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     }
 )
@@ -129,6 +131,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
+        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.
@@ -233,7 +236,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_prepare.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_apply_patch_policy.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_commands.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_git.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_git_config.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
