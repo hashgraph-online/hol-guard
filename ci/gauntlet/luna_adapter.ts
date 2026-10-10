@@ -9,7 +9,7 @@ export const ADAPTER_ID = 'pinned-omp-native-luna-stream-v3';
 export const REQUEST_MODEL = 'native-luna';
 export const THINKING_LEVELS = ['medium', 'high', 'low'];
 export const BACKEND_PROVIDER = 'openai-codex';
-export const BACKEND_MODEL = 'gpt-5.6-luna';
+export const BACKEND_MODEL = 'gpt-6-luna';
 let model: any;
 export function setModel(value: any) { model = value; }
 const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0,

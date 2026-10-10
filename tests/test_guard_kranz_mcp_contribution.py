@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical
@@ -198,25 +199,25 @@ def test_unrelated_launchers_and_remote_transport_do_not_match(
 
 
 @pytest.mark.parametrize("state,expected", [("allow", "allow"), ("review", "review"), ("block", "block")])
-def test_this_device_grant_precedes_catalog_defaults(monkeypatch, state: str, expected: str) -> None:
-    tool = artifact("action_run")
-    identity = tool.metadata["mcp_server_identity"]
+def test_this_device_grant_precedes_catalog_defaults(monkeypatch, tmp_path: Path, state: str, expected: str) -> None:
+    from codex_plugin_scanner.guard.store import GuardStore
 
-    class Store:
-        def read_local_mcp_grant(self, identity_hash, **kwargs):
-            assert identity_hash == identity["identity_hash"]
-            assert kwargs["command"] == "kranz"
-            assert kwargs["args_hash"] == identity["args_hash"]
-            return {
-                "state": "allowed",
-                "commands": [LocalCliCommand("action_run", "Run action", "action_run", "Run action")],
-                "command_states": {"action_run": state},
-            }
+    from .test_guard_local_mcp_grants import _enroll
+
+    tool = artifact("action_run")
+    identity = build_mcp_server_identity(config_path="", command="kranz", args=("mcp",), transport="stdio")
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(
+        store,
+        identity,
+        states={"action_run": state},
+        commands=(LocalCliCommand("action_run", "Run action", "action_run", "Run action"),),
+    )
 
     def unexpected_catalog_read():
         pytest.fail("A this-device grant must take precedence over contributed defaults")
 
     monkeypatch.setattr(grants, "load_mcp_contribution_payloads", unexpected_catalog_read)
-    decision = apply_local_mcp_extension_decision(Store(), tool, "review")
+    decision = apply_local_mcp_extension_decision(store, tool, "review")
     assert decision is not None
     assert decision[0:2] == (expected, "local-mcp-extension")

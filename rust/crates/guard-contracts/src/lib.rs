@@ -37,6 +37,8 @@ mod local_cli_identity;
 pub use local_cli_identity::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
+mod local_mcp_grant;
+pub use local_mcp_grant::*;
 mod skill_directory_identity;
 pub use skill_directory_identity::*;
 mod browser_mcp_intent;
@@ -85,6 +87,8 @@ pub use package_authority::*;
 
 mod contained_execution;
 pub use contained_execution::*;
+mod data_flow_analyze;
+pub use data_flow_analyze::*;
 mod prompt_requests;
 pub use prompt_requests::*;
 mod business_action;
