@@ -249,7 +249,6 @@
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_enrollment.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_queue.py",
           "src/codex_plugin_scanner/guard/runtime/native_business_review_*.py",
-          "src/codex_plugin_scanner/guard/store_review_event_acknowledgment.py",
           "src/codex_plugin_scanner/guard/store_review_event_sequence_recovery.py",
           "src/codex_plugin_scanner/guard/sqlite_cloud_review_recovery.py",
           "src/codex_plugin_scanner/guard/cloud_exception_requests.py",

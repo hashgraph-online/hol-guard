@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 
 from ..approval_gate import input_from_mapping, public_config, require_high_risk
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..runtime.exact_cloud_review import (
     ExactCloudReviewError,
     disable_exact_cloud_review,
@@ -26,13 +27,21 @@ class CloudReviewSettingsError(ValueError):
 
 def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
     status = exact_cloud_review_status(store)
-    binding = store.get_review_event_oauth_binding()
+    outbox_unavailable: str | None = None
+    try:
+        binding = store.get_review_event_oauth_binding()
+        delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
+        outbox = store.review_event_outbox_status(
+            now=datetime.now(timezone.utc).isoformat(),
+            **(delivery_binding or {}),
+        )
+        held_events = store.count_recoverable_unbound_review_events()
+    except NativeGuardStoreUnavailable as error:
+        binding, delivery_binding = None, None
+        outbox = unavailable_outbox_status(error)
+        outbox_unavailable = error.reason
+        held_events = 0
     profile = store.get_cloud_sync_profile()
-    delivery_binding = {key: value for key, value in binding.items() if key != "oauth_source"} if binding else None
-    outbox = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(delivery_binding or {}),
-    )
     sync_key = "guard_cloud_review_sync_state"
     if store.guard_source != "default":
         sync_key += f":{store.guard_source}"
@@ -48,7 +57,7 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         "workspace_id": binding["workspace_id"] if binding else None,
         "source": binding["oauth_source"] if binding else None,
         "pending_uploads": outbox.get("depth", 0) if binding else 0,
-        "held_events": store.count_recoverable_unbound_review_events(),
+        "held_events": held_events,
         "isolated_events": outbox.get("quarantined_depth", 0),
         "activation_error": recovery.get("error"),
         "last_synced_at": (
@@ -58,6 +67,8 @@ def cloud_review_settings_status(store: GuardStore) -> dict[str, object]:
         ),
         "delivery_state": sync.get("state", "idle"),
         "approval_gate": public_config(store.guard_home).to_dict(),
+        "outbox_available": outbox_unavailable is None,
+        "outbox_unavailable_reason": outbox_unavailable,
     }
 
 

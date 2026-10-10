@@ -44,6 +44,15 @@ regexes = [
 ]
 
 [[rules.allowlists]]
+description = "Synthetic OAuth subject digest recorded in the guard-store parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/vectors\.json$''']
+regexes = [
+  '''^00d1c1c9f0bcc58c43e6d0b1c69ce3c8250dd42a15f9127dc42eb95303c4bec6$''',
+]
+
+[[rules.allowlists]]
 description = "Canonical source digest, not a credential"
 condition = "AND"
 regexTarget = "line"
