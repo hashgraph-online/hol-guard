@@ -14,6 +14,11 @@ from .native_policy_snapshot_constants import (
     _REQUIRED_PUBLISH_FEATURES,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_harness_postures import (
+    HARNESS_POSTURES_BINDING_KEY,
+    valid_harness_postures,
+    write_harness_postures_sidecar,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -268,6 +273,16 @@ class NativePolicySnapshotPublicationMixin:
                         publisher._source_control_fingerprint(command_extensions, business_source),
                     )
                     publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
+                    # Per-harness posture rides this same ACK: capture the
+                    # overrides compiled into the snapshot being acknowledged,
+                    # never a later re-read of config.toml.
+                    publisher._harness_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
+                    write_harness_postures_sidecar(
+                        publisher.store,
+                        generation=cast(int, snapshot["generation"]),
+                        policy_digest=cast(str, snapshot["policy_digest"]),
+                        postures=publisher._harness_postures,
+                    )
                     publisher._acked = True
                     publisher._last_error = None
                     publisher._renewal_after_generation = None

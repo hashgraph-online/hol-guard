@@ -73,6 +73,7 @@ import type {
   SupplyChainSnapshot,
   GuardSettingsPayload,
   GuardSettingsExport,
+  GuardHarnessPosturePatch,
   GuardSettings,
   GuardUpdateScheduleResult,
   GuardDaemonReconnectAuthorization,
@@ -2301,10 +2302,36 @@ export async function changeCloudReviewSettings(input: {
   });
 }
 
-export async function updateSettings(settings: Partial<GuardSettings>): Promise<GuardSettingsPayload> {
+function applyHarnessPosturePatch(
+  current: GuardSettings["harness_postures"],
+  patch: GuardHarnessPosturePatch,
+): NonNullable<GuardSettings["harness_postures"]> {
+  const next = { ...(current ?? {}) };
+  for (const [harness, posture] of Object.entries(patch)) {
+    if (posture === null) delete next[harness];
+    else next[harness] = posture;
+  }
+  return next;
+}
+
+export type GuardSettingsUpdate = Omit<Partial<GuardSettings>, "harness_postures"> & {
+  harness_postures?: GuardHarnessPosturePatch;
+};
+
+export async function updateSettings(settings: GuardSettingsUpdate): Promise<GuardSettingsPayload> {
   if (isGuardDemoMode()) {
     const current = await fetchSettings();
-    return { ...current, settings: { ...current.settings, ...settings } };
+    const { harness_postures: posturePatch, ...rest } = settings;
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        ...rest,
+        ...(posturePatch === undefined
+          ? {}
+          : { harness_postures: applyHarnessPosturePatch(current.settings.harness_postures, posturePatch) }),
+      },
+    };
   }
   return readJson<GuardSettingsPayload>("/v1/settings", {
     method: "POST",

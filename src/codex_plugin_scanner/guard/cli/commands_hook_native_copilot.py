@@ -35,6 +35,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import most_restrictive_guard_action, normalize_guard_action
+from ..harness_posture import harness_is_recording_only
 from ..mcp_tool_calls import resolve_tool_call_policy_action
 from ..models import GuardAction
 from ..retry_lineage import capture_retry_lineage
@@ -202,7 +203,7 @@ def run_native_copilot_pretool(
     saved_policy_blocks = decision.saved_action == "block"
     now = _now()
     observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
+    if harness_is_recording_only(config, "copilot") and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         observe_mode_evidence: dict[str, object] = {
             "source": "observe_mode",
@@ -211,7 +212,7 @@ def run_native_copilot_pretool(
         }
         decision_scanner_evidence = (*decision_scanner_evidence, observe_mode_evidence)
         policy_action = "allow"
-    if config.mode == "observe" and observed_policy_action is not None:
+    if harness_is_recording_only(config, "copilot") and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,
@@ -412,7 +413,9 @@ def run_native_copilot_permission_request(
     from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 
     safe_alternative = (
-        config.mode != "observe" and policy_action in {"review", "require-reapproval"} and not asks_for_approval(config)
+        not harness_is_recording_only(config, "copilot")
+        and policy_action in {"review", "require-reapproval"}
+        and not asks_for_approval(config)
     )
     if safe_alternative:
         _record_copilot_silent_review(
@@ -468,7 +471,7 @@ def run_native_copilot_permission_request(
     if decision_scanner_evidence:
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
     observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
+    if harness_is_recording_only(config, "copilot") and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         response_payload["approval_requests"] = []
         if terminal_action:
@@ -483,7 +486,7 @@ def run_native_copilot_permission_request(
         response_payload["scanner_evidence"] = list(decision_scanner_evidence)
         policy_action = "allow"
         response_payload["policy_action"] = "allow"
-    if config.mode == "observe" and observed_policy_action is not None:
+    if harness_is_recording_only(config, "copilot") and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,

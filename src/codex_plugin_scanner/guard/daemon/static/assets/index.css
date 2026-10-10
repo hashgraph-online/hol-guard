@@ -1523,6 +1523,10 @@
     min-width: calc(var(--spacing) * 11);
   }
 
+  .min-w-24 {
+    min-width: calc(var(--spacing) * 24);
+  }
+
   .min-w-56 {
     min-width: calc(var(--spacing) * 56);
   }
