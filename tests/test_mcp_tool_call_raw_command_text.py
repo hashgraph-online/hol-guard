@@ -6,6 +6,7 @@ MCP tool call arguments and store it as raw_command_text in the receipt.
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 from codex_plugin_scanner.guard.mcp_tool_calls import (
@@ -233,6 +234,57 @@ def test_allow_keeps_receipt_event_and_local_evidence_when_native_evidence_fails
     evidence = receipt.scanner_evidence[0]
     assert "runtimeAction" not in evidence
     assert evidence["runtimeEvidence"] == "native_unavailable"
+
+
+def test_receipt_survives_native_firewall_enrichment_failure(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard import mcp_tool_call_evidence
+    from codex_plugin_scanner.guard.native_mcp_runtime_evidence import NativeMcpRuntimeEvidenceError
+    from codex_plugin_scanner.guard.native_mcp_tool_evidence import NativeMcpToolEvidenceError
+
+    def fail(_artifact: object) -> object:
+        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_resident_unavailable")
+
+    monkeypatch.setattr(mcp_tool_call_evidence, "enrich_artifact_with_mcp_skill_firewall", fail)
+    _failing_native(monkeypatch, NativeMcpRuntimeEvidenceError("native_mcp_runtime_evidence_unavailable"))
+    store = _make_store(tmp_path)
+    receipt = allow_tool_call(
+        store=store,
+        artifact=_make_artifact(),
+        artifact_hash="sha256:allowed",
+        decision_source="policy-allow",
+        now="2026-07-18T00:00:00+00:00",
+        signals=(),
+        remember=False,
+        arguments={"command": "git status"},
+    )
+
+    assert receipt.policy_decision == "allow"
+    assert [item["receipt_id"] for item in store.list_receipts(limit=10)] == [receipt.receipt_id]
+    assert any(event["event_name"] == "runtime_tool_call_allowed" for event in store.list_events(limit=10))
+    assert receipt.scanner_evidence[0]["firewallEvidence"] == "native_unavailable"
+
+
+def test_receipt_reuses_firewall_already_on_the_artifact(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard import mcp_tool_call_evidence
+
+    def forbidden(_artifact: object) -> object:
+        raise AssertionError("must not request firewall evidence a second time")
+
+    monkeypatch.setattr(mcp_tool_call_evidence, "enrich_artifact_with_mcp_skill_firewall", forbidden)
+    monkeypatch.setattr(mcp_tool_call_evidence, "native_receipt_evidence", lambda **_: (None, None))
+    artifact = _make_artifact()
+    artifact = dataclasses.replace(artifact, metadata={**artifact.metadata, "mcpSkillFirewall": {"v": 1}})
+    receipt = allow_tool_call(
+        store=_make_store(tmp_path),
+        artifact=artifact,
+        artifact_hash="sha256:allowed",
+        decision_source="policy-allow",
+        now="2026-07-18T00:00:00+00:00",
+        signals=(),
+        remember=False,
+    )
+
+    assert receipt.scanner_evidence[0]["mcpSkillFirewall"] == {"v": 1}
 
 
 def test_native_evidence_uses_the_store_guard_home(tmp_path: Path, monkeypatch) -> None:

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .models import GuardArtifact
 from .native_mcp_runtime_evidence import NativeMcpRuntimeEvidenceError, argument_entries, native_receipt_evidence
+from .native_mcp_tool_evidence import NativeMcpToolEvidenceError
 from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 
 _LOGGER = logging.getLogger(__name__)
@@ -26,8 +27,15 @@ def receipt_evidence_for_mcp_tool_call(
     guard_home: Path,
 ) -> tuple[str | None, dict[str, object]]:
     """Return ``(raw_command_text, scanner_evidence)`` using one resident round trip."""
-    enriched = enrich_artifact_with_mcp_skill_firewall(artifact)
     evidence: dict[str, object] = {}
+    enriched = artifact
+    if not isinstance(artifact.metadata.get("mcpSkillFirewall"), dict):
+        # build_tool_call_artifact already enriched; only recompute when absent.
+        try:
+            enriched = enrich_artifact_with_mcp_skill_firewall(artifact)
+        except NativeMcpToolEvidenceError:
+            _LOGGER.warning("native MCP firewall evidence unavailable; recording receipt without it", exc_info=True)
+            evidence["firewallEvidence"] = "native_unavailable"
     firewall = enriched.metadata.get("mcpSkillFirewall")
     if isinstance(firewall, dict):
         evidence["mcpSkillFirewall"] = firewall
