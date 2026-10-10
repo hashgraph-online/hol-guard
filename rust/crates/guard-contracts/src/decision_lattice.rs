@@ -122,14 +122,8 @@ fn json_type_name(value: &Value) -> &'static str {
     match value {
         Value::Null => "NoneType",
         Value::Bool(_) => "bool",
-        Value::Number(number) => {
-            // Mirror `type(value).__name__`: integers record as `int`.
-            if number.is_i64() || number.is_u64() {
-                "int"
-            } else {
-                "float"
-            }
-        }
+        Value::Number(n) if n.is_i64() || n.is_u64() => "int",
+        Value::Number(_) => "float",
         Value::String(_) => "str",
         Value::Array(_) => "list",
         Value::Object(_) => "dict",
@@ -538,7 +532,7 @@ mod tests {
         assert_eq!(x.reason_code, Some("guard_action_unknown"));
         assert_eq!(x.original_action, None);
         assert_eq!(x.original_type, "int");
-        let f = normalize_guard_action_result(&json!(1.5), GuardAction::Review);
+        let f = normalize_guard_action_result(&json!(5.5), GuardAction::Review);
         assert_eq!(f.original_type, "float");
     }
 

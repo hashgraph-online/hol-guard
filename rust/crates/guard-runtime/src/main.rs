@@ -52,6 +52,8 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod hardening;
+mod hook_artifact_compose_op;
+mod hook_artifact_compose_reuse;
 mod hook_decision_compose;
 mod hook_decision_directive;
 mod hook_decision_finalize;

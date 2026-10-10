@@ -264,4 +264,7 @@ def _decision_from_native_payload(payload: object) -> ApprovalReuseDecision:
         original_saved_action=_native_str(payload, "original_saved_action"),
         original_current_type=original_current_type,
         original_saved_type=_native_str(payload, "original_saved_type"),
+        saved_artifact_hash_is_context_token=(
+            flag if isinstance(flag := payload.get("saved_artifact_hash_is_context_token"), bool) else None
+        ),
     )
