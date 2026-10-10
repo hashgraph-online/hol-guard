@@ -121,6 +121,7 @@ from ..directory_path_authority import (
 )
 from ..fork_safety import forget_in_child
 from ..harness_disconnect_gate import require_harness_disconnect_gate
+from ..harness_posture import harness_is_recording_only
 from ..insights_share import publish_insights_share
 from ..json_transport import escape_json_for_html
 from ..local_dashboard_session import (
@@ -187,7 +188,6 @@ from ..project_folder_picker import (
     ProjectFolderPickerUnavailableError,
     choose_project_folder,
 )
-from ..protection_posture import protection_is_off
 from ..receipts.manager import build_receipt
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
@@ -6682,7 +6682,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if guard_home is None
                 else load_guard_config(guard_home, workspace=workspace_path, require_canonical_workspace=True)
             )
-            observe_mode = loaded is not None and protection_is_off(posture=loaded.protection_posture, mode=loaded.mode)
+            observe_mode = harness_is_recording_only(loaded, harness)
         except (OSError, RuntimeError, TypeError, ValueError):
             observe_mode = False
         if observe_mode and not native_authoritative:
@@ -6713,7 +6713,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             home_dir=home_path,
             guard_home=guard_home,
             recording_only=(
-                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None))
+                recording_only_from_acked_snapshot(getattr(daemon_server, "store", None), harness)
                 if native_authoritative
                 else observe_mode
             ),
