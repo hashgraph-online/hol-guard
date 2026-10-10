@@ -76,7 +76,7 @@ def try_native_hook_authority(
             workspace=workspace,
             home_dir=home_dir,
             guard_home=guard_home,
-            recording_only=recording_only_from_acked_snapshot(store),
+            recording_only=recording_only_from_acked_snapshot(store, harness),
         )
     finally:
         if worker is not None:
@@ -186,7 +186,7 @@ def route_native_hook(
                 workspace=runtime_workspace,
                 home_dir=context.home_dir,
                 guard_home=context.guard_home,
-                recording_only=recording_only_from_acked_snapshot(store),
+                recording_only=recording_only_from_acked_snapshot(store, args.harness),
             )
         # Availability responses are already harness wire documents. A hook
         # caller need not pass --json to receive a parseable deny response.
@@ -204,7 +204,7 @@ def route_native_hook(
             workspace=runtime_workspace,
             home_dir=context.home_dir,
             guard_home=context.guard_home,
-            recording_only=recording_only_from_acked_snapshot(store),
+            recording_only=recording_only_from_acked_snapshot(store, args.harness),
         )
         _emit("hook", response, True)
         return _native_unavailable_exit_code(args, response, runtime_hook_event_name(payload))

@@ -24,6 +24,7 @@ import type {
 import { useGuardUpdate } from "./guard-update-panel";
 import { updateSettings } from "./guard-api";
 import { WatchProtectionBanner } from "./watch-protection-banner";
+import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
 
 const McpPolicyRequestPanel = lazyWorkspace("mcp-policy-request-panel", () =>
   import("./mcp-policy-request-panel").then((m) => ({ default: m.McpPolicyRequestPanel })),
@@ -104,17 +105,22 @@ type LayoutProps = {
   onGuardReconnected?: () => void;
 };
 
-function InboxWatchBanner(props: { onRestored?: () => void; onOpenSettings: () => void }) {
+function InboxWatchBanner(props: {
+  snapshot: GuardRuntimeSnapshot;
+  onRestored?: () => void;
+  onOpenSettings: () => void;
+}) {
+  const { snapshot } = props;
   const handleTurnOn = useCallback(() => {
-    void updateSettings({ protection_posture: "protected" })
+    void updateSettings(turnProtectionOnUpdate(snapshot))
       .then(() => {
         props.onRestored?.();
       })
       .catch(() => {
         props.onOpenSettings();
       });
-  }, [props.onOpenSettings, props.onRestored]);
-  return <WatchProtectionBanner onTurnProtectionOn={handleTurnOn} />;
+  }, [props.onOpenSettings, props.onRestored, snapshot]);
+  return <WatchProtectionBanner model={watchBannerModel(snapshot)} onTurnProtectionOn={handleTurnOn} />;
 }
 
 function renderInboxContent(props: LayoutProps): ReactNode {
@@ -315,9 +321,10 @@ export function ApprovalCenterLayout(props: LayoutProps) {
           <div className="guard-shell-workspace" data-view={props.view}>
             {props.view === "inbox"
               && props.runtime.kind === "ready"
-              && props.runtime.snapshot.protection_posture === "watch" ? (
+              && watchBannerModel(props.runtime.snapshot) !== null ? (
               <div className="mb-4">
                 <InboxWatchBanner
+                  snapshot={props.runtime.snapshot}
                   onRestored={props.onGuardReconnected}
                   onOpenSettings={handleOpenSettings}
                 />

@@ -159,9 +159,15 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         )
 
     if settings_command == "protection":
-        from ..protection_posture import coerce_protection_posture
+        from ..harness_posture import protection_settings_payload
 
-        return persist_settings({"protection_posture": coerce_protection_posture(args.protection_posture)})
+        return persist_settings(
+            protection_settings_payload(
+                getattr(args, "protection_posture", None),
+                harness=getattr(args, "harness", None),
+                inherit=bool(getattr(args, "inherit", False)),
+            )
+        )
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
         if args.security_level in _NAMED_SECURITY_LEVELS:
