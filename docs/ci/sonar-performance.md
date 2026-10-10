@@ -96,3 +96,28 @@ for coverage, 106 seconds in the scanner and 13 seconds in its quality gate.
 The Python sensor took 36.567 seconds. The log confirms the 6 GiB JVM setting.
 These PR measurements are not a controlled comparison with the full main scan.
 The native-cache change was not yet present in that revision.
+
+## Fresh native coverage and consumer ingestion
+
+The required Rust validation job performs one full instrumented nextest execution
+with the pinned toolchain, opt-level 1, debug assertions and overflow checks, two
+workers, no retries, and the unchanged effective test inventory. Its successful
+same-run artifact supplies Sonar; Sonar does not rerun the Rust workspace.
+
+Python coverage shards use separately built instrumented native consumers while
+release packaging, size checks and untraced timing lanes retain release binaries.
+A compiled default profile destination preserves the native environment
+sanitizers. Each binary is exported against only its own LLVM module signature;
+Python-only shards retain zero-hit native mappings rather than inventing hits.
+
+Sonar accepts all current-attempt successful shard artifacts plus the full Rust
+report only after repository, source, toolchain, binary/tool hashes and reported
+source bytes match. The merger retains uncovered functions, lines and branches,
+rejects cross-record function counters, and rechecks the source tree before
+publishing LCOV. No report is reused from another run or failed execution.
+
+Local changed-source proof is not hosted acceptance: 1,626 tests and five normal
+skips passed, and actual native execution exported without mismatched counters.
+The 80% coverage gate and the under-300-second main/PR objective still require
+fresh exact-head hosted evidence.
+

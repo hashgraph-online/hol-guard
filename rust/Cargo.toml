@@ -24,6 +24,11 @@ opt-level = "s"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
 
+# Keep workspace tests at their checked opt-level=1. Optimizing only external
+# dependencies avoids multiplying their cryptographic/parser cost under LLVM.
+[profile.test.package."*"]
+opt-level = 3
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"

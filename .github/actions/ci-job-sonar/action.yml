@@ -51,17 +51,55 @@ runs:
     shell: bash
     run: bash scripts/ci/setup_sonar_rust.sh
     if: inputs.has-token == 'true'
-  - name: Cache Rust analysis dependencies
-    uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
-    with:
-      workspaces: rust
-      shared-key: sonar
-      save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-    if: inputs.has-token == 'true'
-  - name: Generate current-checkout Rust coverage
+  - name: Select successful current-attempt full Rust coverage
+    id: rust-coverage-selection
     shell: bash
-    run: bash scripts/ci/prepare_sonar_rust_coverage.sh
+    run: uv run --no-sync python -m scripts.ci.rust_coverage_report select
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
     if: inputs.has-token == 'true'
+  - name: Download verified full Rust coverage execution
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      artifact-ids: ${{ steps.rust-coverage-selection.outputs.artifact-id }}
+      path: rust-coverage
+      merge-multiple: true
+    if: inputs.has-token == 'true'
+  - name: Select successful native consumer producer metadata
+    id: native-consumer-metadata-selection
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.native_consumer_coverage select-metadata
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    if: inputs.has-token == 'true'
+  - name: Download matching native consumer producer metadata
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      artifact-ids: ${{ steps.native-consumer-metadata-selection.outputs.artifact-id }}
+      path: native-consumer-metadata
+      merge-multiple: true
+    if: inputs.has-token == 'true'
+  - name: Select every successful current-attempt native coverage shard
+    id: rust-consumer-selection
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.rust_coverage_report select-shards
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    if: inputs.has-token == 'true'
+  - name: Download exact native execution coverage shards
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      artifact-ids: ${{ steps.rust-consumer-selection.outputs.artifact-ids }}
+      path: rust-consumer-coverage
+      merge-multiple: false
+    if: inputs.has-token == 'true'
+  - name: Verify and merge full Rust plus actual native consumer coverage
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.rust_coverage_report merge
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    if: inputs.has-token == 'true'
+
   - name: Wait for successful current-attempt strict Clippy report
     id: clippy-selection
     shell: bash

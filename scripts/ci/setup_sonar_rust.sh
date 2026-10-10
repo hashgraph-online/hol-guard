@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-toolchain="$(python -c 'import tomllib; print(tomllib.load(open("rust/rust-toolchain.toml", "rb"))["toolchain"]["channel"])')"
-rustup toolchain install "$toolchain" --profile minimal --component clippy
+toolchain="$(python -c 'from pathlib import Path; from scripts.ci.rust_coverage_report import toolchain_channel; print(toolchain_channel(Path.cwd()))')"
+rustup toolchain install "$toolchain" --profile minimal
 rustup default "$toolchain"

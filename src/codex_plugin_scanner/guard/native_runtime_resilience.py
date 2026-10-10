@@ -97,8 +97,7 @@ def _evict_if_needed() -> None:
             break
 
 
-def _state(identity_sha256: str, guard_home: Path) -> _MutableNativeRuntimeHealth:
-    key = _privacy_safe_key(identity_sha256, guard_home)
+def _state(key: str) -> _MutableNativeRuntimeHealth:
     state = _STATES.get(key)
     if state is None:
         state = _MutableNativeRuntimeHealth()
@@ -138,8 +137,9 @@ def _record_failure(
 
 
 def native_record_starting(identity_sha256: str, guard_home: Path) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         if state.permanently_quarantined:
             return
         state.starts += 1
@@ -148,8 +148,9 @@ def native_record_starting(identity_sha256: str, guard_home: Path) -> None:
 
 
 def native_record_restart(identity_sha256: str, guard_home: Path) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         if state.permanently_quarantined:
             return
         state.restarts += 1
@@ -158,8 +159,9 @@ def native_record_restart(identity_sha256: str, guard_home: Path) -> None:
 
 
 def native_record_resident_success(identity_sha256: str, guard_home: Path) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         if state.permanently_quarantined:
             return
         state.state = "healthy"
@@ -174,8 +176,9 @@ def native_record_resident_failure(
     *,
     reason: str,
 ) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         state.resident_failures += 1
         _record_failure(
             state,
@@ -186,8 +189,9 @@ def native_record_resident_failure(
 
 
 def native_record_oneshot_success(identity_sha256: str, guard_home: Path) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         if state.permanently_quarantined:
             return
         state.state = "degraded"
@@ -202,8 +206,9 @@ def native_record_oneshot_failure(
     *,
     reason: str,
 ) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         state.oneshot_failures += 1
         _record_failure(
             state,
@@ -214,8 +219,9 @@ def native_record_oneshot_failure(
 
 
 def native_record_overload(identity_sha256: str, guard_home: Path) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         if state.permanently_quarantined:
             return
         state.overloads += 1
@@ -229,8 +235,9 @@ def native_record_integrity_failure(
     *,
     reason: str,
 ) -> None:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         state.state = "quarantined"
         state.reason = _public_reason(reason, "native_integrity_failed")
         state.permanently_quarantined = True
@@ -245,8 +252,9 @@ def native_runtime_health_snapshot(
     identity_sha256: str,
     guard_home: Path,
 ) -> NativeRuntimeHealthSnapshot:
+    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         now = time.monotonic()
         _refresh_circuit(state, now)
         circuit_open = state.permanently_quarantined or state.circuit_until > now
@@ -276,7 +284,7 @@ def native_oneshot_lease(
     acquired_key = False
     key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
-        state = _state(identity_sha256, guard_home)
+        state = _state(key)
         now = time.monotonic()
         _refresh_circuit(state, now)
         circuit_open = state.permanently_quarantined or state.circuit_until > now
