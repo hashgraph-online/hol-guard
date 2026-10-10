@@ -78,6 +78,7 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_guard_policy_integrity.py::"
         "test_trust_backend_check_uses_spawn_from_concurrent_threads",
         "tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store",
+
         "tests/test_guard_headless_daemon_api.py::test_supply_chain_audit_scans_workspace_manifests",
         "tests/test_guard_update_artifact.py::"
         "test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat",

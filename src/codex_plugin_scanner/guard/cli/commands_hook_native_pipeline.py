@@ -209,7 +209,9 @@ def run_native_hook_pipeline(
     )
     if result is not None:
         return result
-    data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+    data_flow_signals = _runtime_action_data_flow_signals(
+        action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
@@ -352,7 +354,9 @@ def _fresh_native_artifact_evaluation(
         workspace=runtime_workspace,
         guard_home=context.guard_home,
     )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
+    fresh_data_flow_signals = _runtime_action_data_flow_signals(
+        fresh_action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
