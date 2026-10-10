@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from .store_review_event_outbox_binding import normalized_delivery_binding
-from .store_review_event_outbox_writes import recover_review_snapshot_sequences as recover_in_transaction
-
 # pyright: reportAttributeAccessIssue=false
+from .store_review_event_outbox_binding import normalized_delivery_binding
+
+_BINDING_ORDER = ("oauth_subject_hash", "workspace_id", "machine_id", "machine_installation_id")
+_BINDING_KEYS = frozenset(_BINDING_ORDER)
 
 
 class StoreReviewEventSequenceRecoveryMixin:
@@ -18,12 +19,7 @@ class StoreReviewEventSequenceRecoveryMixin:
     ) -> dict[int, int]:
         """Atomically rebase only authenticated snapshot collision events."""
 
-        if type(binding) is not dict or set(binding) != {
-            "oauth_subject_hash",
-            "workspace_id",
-            "machine_id",
-            "machine_installation_id",
-        }:
+        if type(binding) is not dict or set(binding) != _BINDING_KEYS:
             return {}
         try:
             normalized_binding = normalized_delivery_binding(
@@ -34,12 +30,18 @@ class StoreReviewEventSequenceRecoveryMixin:
             )
         except (AttributeError, TypeError, ValueError):
             return {}
-        # The canonical connection context owns commit, rollback, and close for every return path.
-        with self._connect() as connection:
-            return recover_in_transaction(
-                connection,
-                source=self._guard_source,
-                collisions=collisions,
-                acknowledged_through=acknowledged_through,
-                binding=normalized_binding,
-            )
+        if (
+            type(collisions) is not dict
+            or type(acknowledged_through) is not int
+            or any(type(key) is not int or type(value) is not str for key, value in collisions.items())
+        ):
+            return {}
+        pairs = self._native_store_call(
+            "recover_review_snapshot_sequences",
+            {
+                "collisions": [[sequence, event_id] for sequence, event_id in collisions.items()],
+                "acknowledged_through": acknowledged_through,
+                "binding": dict(zip(_BINDING_ORDER, normalized_binding, strict=True)),
+            },
+        )
+        return {int(old): int(new) for old, new in pairs}

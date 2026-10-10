@@ -26,6 +26,11 @@ runs:
       enable-cache: true
       cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       save-cache: false
+  - name: Enforce native approval contract before release
+    # Stable publication runs this gate with --require-release-root against the release source,
+    # so a violation merged to main can only be fixed by a newer release. Catch it on the PR.
+    run: python scripts/ci/native_approval_contract_gate.py --root .
+    shell: bash
   - run: uv sync --frozen --extra dev --python 3.12
     shell: bash
   - name: Publish exact test-body duplicate candidates

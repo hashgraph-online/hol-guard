@@ -3409,7 +3409,7 @@ def _refresh_guard_oauth_access_token_once(
                 if _invalid_grant_oauth_payload(payload):
                     raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message()) from error
                 refresh_error_message = _oauth_refresh_error_message(error)
-                raise GuardSyncAuthorizationExpiredError(
+                raise _GuardOAuthRefreshRejectedError(
                     f"{_guard_oauth_reauthorization_message()} {refresh_error_message}"
                 ) from error
             refresh_error_message = _oauth_refresh_error_message(error)
@@ -3472,11 +3472,17 @@ class _GuardOAuthRefreshRateLimitedError(RuntimeError):
         super().__init__(f"Guard OAuth token refresh was rate limited. Retry after {retry_after_seconds} seconds.")
 
 
+class _GuardOAuthRefreshRejectedError(GuardSyncAuthorizationExpiredError):
+    """The token endpoint rejected the refresh request with an error other than invalid_grant."""
+
+
 _OAUTH_REFRESH_CIRCUIT_STATE_KEY = "guard_oauth_refresh_circuit"
 _OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_BASE_BACKOFF_SECONDS"
 _OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_ENV = "GUARD_OAUTH_REFRESH_CIRCUIT_MAX_BACKOFF_SECONDS"
 _OAUTH_REFRESH_CIRCUIT_DEFAULT_BASE_BACKOFF_SECONDS = 30.0
 _OAUTH_REFRESH_CIRCUIT_DEFAULT_MAX_BACKOFF_SECONDS = 300.0
+_OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED = "revoked"
+_OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED = "rejected"
 _OAUTH_REFRESH_CIRCUIT_MAX_RATE_LIMIT_SECONDS = 3600.0
 
 
@@ -3570,6 +3576,8 @@ def _oauth_refresh_circuit_check(
     if next_allowed is None or next_allowed <= now:
         return
     if bool(state.get("needs_reauthorization")):
+        if state.get("failure_kind") == _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED:
+            raise GuardSyncAuthorizationExpiredError(_guard_oauth_reauthorization_message())
         raise GuardSyncAuthorizationExpiredError(_guard_oauth_reconnect_after_revoked_message())
     raise _GuardOAuthRefreshRateLimitedError(max(1, int((next_allowed - now).total_seconds())))
 
@@ -3580,12 +3588,17 @@ def _oauth_refresh_circuit_record_dead_grant(
     refresh_token: str,
     issuer: str,
     now: datetime,
+    failure_kind: str = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED,
 ) -> None:
     """Mark the grant permanently invalid and schedule the next probe.
 
     A propagated failure already consumed the bounded invalid_grant retry, so
     one record flips the binding into needs-reauthorization and fires the
     single user-visible notice; later failures only extend the probe backoff.
+    Other rejections (for example invalid_request) record the `rejected` kind
+    so the fast-fail keeps their reauthorization error instead of the revoked
+    one, which would let sign-in cleanup wipe credentials after one bad 400.
+    A rejection sends the notice only once the next probe is rejected too.
     """
     fingerprint = _oauth_refresh_circuit_fingerprint(refresh_token, _oauth_refresh_circuit_salt(store))
     state = _load_oauth_refresh_circuit(store)
@@ -3609,7 +3622,7 @@ def _oauth_refresh_circuit_record_dead_grant(
         )
     )
     notice_sent = bool(state.get("notice_sent"))
-    if not notice_sent:
+    if not notice_sent and (failure_kind != _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED or failures > 1):
         notice_sent = _notify_oauth_reauthorization_required(issuer=issuer, fingerprint=fingerprint)
     _save_oauth_refresh_circuit(
         store,
@@ -3617,6 +3630,7 @@ def _oauth_refresh_circuit_record_dead_grant(
             "refresh_token_fingerprint": fingerprint,
             "consecutive_failures": failures,
             "needs_reauthorization": True,
+            "failure_kind": failure_kind,
             "notice_sent": notice_sent,
             "backoff_seconds": backoff,
             "next_refresh_allowed_at": (now + timedelta(seconds=backoff)).isoformat(),
@@ -3652,6 +3666,7 @@ def _oauth_refresh_circuit_record_rate_limit(
             if isinstance(state.get("consecutive_failures"), int)
             else 0,
             "needs_reauthorization": bool(state.get("needs_reauthorization")),
+            **({"failure_kind": state["failure_kind"]} if isinstance(state.get("failure_kind"), str) else {}),
             "notice_sent": bool(state.get("notice_sent")),
             "backoff_seconds": bounded_retry_after,
             "next_refresh_allowed_at": (now + timedelta(seconds=bounded_retry_after)).isoformat(),
@@ -3946,15 +3961,21 @@ def _resolve_guard_sync_auth_context_from_oauth_credentials(
         raise
     except GuardSyncAuthorizationExpiredError as error:
         if str(error) == _guard_oauth_reconnect_after_revoked_message():
-            failed_refresh_token = (
-                _optional_string(effective_credentials_ref["value"].get("refresh_token")) or refresh_token
-            )
-            _oauth_refresh_circuit_record_dead_grant(
-                store=store,
-                refresh_token=failed_refresh_token,
-                issuer=issuer,
-                now=datetime.now(timezone.utc),
-            )
+            failure_kind = _OAUTH_REFRESH_CIRCUIT_FAILURE_REVOKED
+        elif isinstance(error, _GuardOAuthRefreshRejectedError):
+            failure_kind = _OAUTH_REFRESH_CIRCUIT_FAILURE_REJECTED
+        else:
+            raise
+        failed_refresh_token = (
+            _optional_string(effective_credentials_ref["value"].get("refresh_token")) or refresh_token
+        )
+        _oauth_refresh_circuit_record_dead_grant(
+            store=store,
+            refresh_token=failed_refresh_token,
+            issuer=issuer,
+            now=datetime.now(timezone.utc),
+            failure_kind=failure_kind,
+        )
         raise
     _oauth_refresh_circuit_clear(store)
     effective_credentials = effective_credentials_ref["value"]

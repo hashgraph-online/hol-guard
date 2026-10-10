@@ -51,6 +51,22 @@ mod git_execution_safety_repo_tests;
 mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
+mod guard_store_args;
+mod guard_store_db;
+mod guard_store_json;
+mod guard_store_op;
+mod guard_store_outbox_append;
+mod guard_store_outbox_binding;
+mod guard_store_outbox_decode;
+mod guard_store_outbox_identity;
+mod guard_store_outbox_queries;
+mod guard_store_outbox_reads;
+#[cfg(test)]
+mod guard_store_outbox_reads_tests;
+mod guard_store_outbox_recover;
+mod guard_store_outbox_requeue;
+#[cfg(test)]
+mod guard_store_vectors_tests;
 mod hardening;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;

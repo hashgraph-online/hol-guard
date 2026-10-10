@@ -67,8 +67,11 @@ pub(crate) fn evaluate_resident_bytes(
     {
         crate::oneshot::validate_request_policy_snapshot(&value)?;
     }
+    // The frame parsed as strict JSON but names no request shape this runtime
+    // supports. A client of another runtime version is told apart from a
+    // transient failure by this code alone.
     let request: ResidentRequestV1 = crate::strict_json::from_value(value)
-        .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
+        .map_err(|_| "native_request_schema_unsupported".to_owned())?;
     if let (Some(policy_store), ResidentRequestV1::Operation(operation)) = (policy_store, &request)
     {
         if let Some(guard_home) = operation_guard_home(operation) {
@@ -214,6 +217,9 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
+            }
+            ResidentOperationV1::GuardStore(request) => {
+                crate::guard_store_op::evaluate_guard_store_request(&request)
             }
             ResidentOperationV1::ApprovalGate(request) => {
                 crate::approval_gate_op::evaluate_approval_gate_request(&request)
@@ -386,6 +392,7 @@ pub(crate) fn evaluate_resident_bytes(
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
+        ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),
         ResidentOperationV1::ApprovalGate(request) => Some(&request.guard_home),
         ResidentOperationV1::SupplyChainEval(request) => Some(&request.guard_home),
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.guard_home),
@@ -419,6 +426,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
 fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.store_path),
+        ResidentOperationV1::GuardStore(request) => Some(&request.store_path),
         ResidentOperationV1::SupplyChainEval(request) => Some(&request.store_path),
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.store_path),
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
