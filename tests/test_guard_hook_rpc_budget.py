@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.guard_daemon_acceptance_fixtures import WorkloadSpec, run_workload
+from tests.guard_daemon_acceptance_fixtures import WorkloadSpec, _mark_resident_request_log, run_workload
 
 # Native round trips each pi PostToolUse hook may spend: route facts, hook edge
 # review and hook adapter. A new port must fold its work into these or memoize
@@ -21,15 +21,32 @@ def _pi_workload(requests: int) -> WorkloadSpec:
     }  # type: ignore[return-value]
 
 
+def _measured_resident_requests(log_path: Path) -> int:
+    assert log_path.is_file(), "no resident request was recorded"
+    lines = log_path.read_bytes().splitlines()
+    assert b"W" in lines, "resident request log has no post-warmup marker"
+    measured = [line for line in lines[lines.index(b"W") + 1 :] if line != b"W"]
+    assert measured, "no resident request was recorded after warmup"
+    return len(measured)
+
+
 def _round_trips(monkeypatch: pytest.MonkeyPatch, root: Path, requests: int) -> int:
     log_path = root / "resident-requests.log"
     monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
     result = run_workload(_pi_workload(requests), root=root)
     assert result.requests == requests
-    assert log_path.is_file(), "no resident request was recorded"
-    recorded = len(log_path.read_bytes().splitlines())
-    assert recorded > 0
-    return recorded
+    return _measured_resident_requests(log_path)
+
+
+def test_measured_resident_requests_ignore_warmup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    log_path = tmp_path / "resident-requests.log"
+    log_path.write_bytes(b"1\n1\n")
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
+    _mark_resident_request_log()
+    with log_path.open("ab") as handle:
+        handle.write(b"1\n")
+    assert log_path.read_bytes() == b"1\n1\nW\n1\n"
+    assert _measured_resident_requests(log_path) == 1
 
 
 @pytest.mark.usefixtures("native_hook_force")

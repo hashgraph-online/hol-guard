@@ -161,6 +161,19 @@ def _run_client_reviews(
             future.result(timeout=timeout_seconds)
 
 
+def _mark_resident_request_log() -> None:
+    """Separate warmup resident calls from the measured workload."""
+
+    path = os.environ.get("HOL_GUARD_RESIDENT_REQUEST_LOG")
+    if not path:
+        return
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(descriptor, b"W\n")
+    finally:
+        os.close(descriptor)
+
+
 def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     """Run a bounded workload through authenticated production hook endpoints."""
 
@@ -224,6 +237,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         time.sleep(0.1)
     else:
         raise RuntimeError("native policy did not become ready")
+    _mark_resident_request_log()
     initial_pid = os.getpid()
     initial_workers = threading.active_count()
     initial_rss = _rss_bytes()
