@@ -19,6 +19,8 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
+from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 HOOK_DECISION_FEATURE = "hook-decision-v1"
 _REQUEST_SCHEMA = "guard-hook-decision-request.v1"
@@ -109,6 +111,23 @@ def _action(value: object) -> str:
     return value
 
 
+def _record_resident(guard_home: Path, *, success: bool, reason: str = "") -> None:
+    """Record resident health only once a reply has passed binding and validation.
+
+    The shared transport would otherwise reset the failure streak on every
+    reply that parses, so a resident that keeps sending unusable replies would
+    never open the circuit.
+    """
+
+    status = native_runtime_status()
+    if status.identity is None:
+        return
+    if success:
+        native_record_resident_success(status.identity.sha256, guard_home)
+    else:
+        native_record_resident_failure(status.identity.sha256, guard_home, reason=reason)
+
+
 def _decide(query: Mapping[str, object], guard_home: Path | None) -> dict[str, Any]:
     try:
         home = _resolve_digest_home(guard_home)
@@ -132,22 +151,28 @@ def _decide(query: Mapping[str, object], guard_home: Path | None) -> dict[str, A
         timeout_seconds=_TIMEOUT_SECONDS,
         required_feature=HOOK_DECISION_FEATURE,
         response_schema=_RESULT_SCHEMA,
+        record_success=False,
     )
+    if response is None:
+        raise NativeHookDecisionError(_UNAVAILABLE)
     if (
-        response is None
-        or response.get("schema") != _RESULT_SCHEMA
+        response.get("schema") != _RESULT_SCHEMA
         or response.get("request_id") != request["request_id"]
         or response.get("request_sha256") != digest
     ):
+        _record_resident(home, success=False, reason="native_hook_decision_unbound")
         raise NativeHookDecisionError(_UNAVAILABLE)
     status, code = response.get("status"), response.get("code")
     if status == "error":
+        _record_resident(home, success=True)
         raise NativeHookDecisionError(
             code if isinstance(code, str) and _RESIDENT_CODE.fullmatch(code) else _UNAVAILABLE
         )
     payload = response.get("payload")
     if status != "ok" or code != "ok" or not isinstance(payload, dict) or payload.get("kind") != query.get("kind"):
+        _record_resident(home, success=False, reason="native_hook_decision_bad_status")
         raise NativeHookDecisionError(_UNAVAILABLE)
+    _record_resident(home, success=True)
     return payload
 
 
