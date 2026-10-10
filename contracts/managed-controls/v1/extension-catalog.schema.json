@@ -24,7 +24,7 @@
       "properties": {
         "maxExtensions": { "const": 512 },
         "maxPermissionsPerExtension": { "const": 512 },
-        "maxPayloadBytes": { "const": 8000000 },
+        "maxPayloadBytes": { "const": 1000000 },
         "maxStringLength": { "const": 8192 }
       }
     },

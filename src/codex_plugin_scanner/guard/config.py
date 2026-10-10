@@ -120,8 +120,6 @@ MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 # operators can explicitly disable it for emergency rollback.
 # These are read from os.environ at call time so tests/daemon can toggle without restart.
 HOOK_FAST_PATH_ENV = "HOL_GUARD_HOOK_FAST_PATH"
-HOOK_SOURCE_REF_ENV = "HOL_GUARD_HOOK_SOURCE_REF"
-HOOK_FAST_PATH_SHADOW_ENV = "HOL_GUARD_HOOK_FAST_PATH_SHADOW"
 
 
 def hook_fast_path_enabled() -> bool:
@@ -129,20 +127,6 @@ def hook_fast_path_enabled() -> bool:
     import os
 
     return os.environ.get(HOOK_FAST_PATH_ENV, "1") == "1"
-
-
-def hook_source_ref_enabled() -> bool:
-    """Whether the Pi managed extension should generate guard_source_ref."""
-    import os
-
-    return os.environ.get(HOOK_SOURCE_REF_ENV, "0") == "1"
-
-
-def hook_fast_path_shadow_enabled() -> bool:
-    """Whether to evaluate fast path but return legacy behavior (shadow mode)."""
-    import os
-
-    return os.environ.get(HOOK_FAST_PATH_SHADOW_ENV, "0") == "1"
 
 
 VALID_GUARD_ACTIONS = frozenset(GUARD_ACTION_VALUES)

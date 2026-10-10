@@ -1567,18 +1567,6 @@ def attach_primary_approval_link(
 _UNPROVEN_HOOK_REASONS = frozenset({"guard_cursor_cli_attestation_unavailable"})
 
 
-def _recorded_hook_verification(value: object) -> bool | None:
-    """Return proven hook state, or None when current proof is still unavailable."""
-
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, Mapping):
-        return None
-    if value.get("reason") in _UNPROVEN_HOOK_REASONS or value.get("integrity_status") == "attestation-unavailable":
-        return None
-    return value.get("protection_active") is True
-
-
 def _live_hook_verification(
     managed_installs: Sequence[Mapping[str, object]],
     store: GuardStore,

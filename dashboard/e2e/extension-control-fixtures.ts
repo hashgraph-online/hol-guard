@@ -92,7 +92,7 @@ export function catalog() {
     control_schema_version: "1.0.0",
     catalog_digest: DIGEST,
     extensions: [extension(), extension("command.filesystem", ""), extension("command.cloud.aws", "")],
-    limits: { max_body_bytes: 1_000_000, max_controls: 4096, max_observations: 2048 },
+    limits: { max_body_bytes: 8_000_000, max_controls: 4096, max_observations: 2048 },
   };
 }
 

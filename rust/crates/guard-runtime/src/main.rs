@@ -40,6 +40,7 @@ mod oauth_refresh;
 mod oauth_secret_authority;
 mod oneshot;
 mod package_authority_op;
+mod package_evaluation_compose_op;
 mod policy_decision_lookup_op;
 mod policy_enforcement;
 mod policy_integrity_resolver;

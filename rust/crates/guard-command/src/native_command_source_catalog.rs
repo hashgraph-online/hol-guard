@@ -2,6 +2,10 @@
 
 use super::{contract::*, matcher::SourceGraph, *};
 
+/// Bound on the compiled catalog array. The packaged artifact envelope around it has its own
+/// budget, checked by the build script. Tested against `contracts/catalog-delivery/limits.json`.
+pub(super) const MAX_NATIVE_CATALOG_PROJECTION_BYTES: usize = 8_000_000;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TrustMap {
@@ -314,9 +318,7 @@ pub(super) fn lower_catalog(
     let catalog = Value::Array(catalog);
     let catalog_bytes =
         serde_json::to_vec(&catalog).map_err(|_| "command_source_encoding_failed")?;
-    // Mirrors `max_catalog_payload_bytes` in contracts/managed-controls/v1/limits.json, which
-    // also bounds the Python catalog loader and the daemon catalog response.
-    if catalog_bytes.len() > 8_000_000 {
+    if catalog_bytes.len() > MAX_NATIVE_CATALOG_PROJECTION_BYTES {
         return Err("command_source_catalog_projection_exceeded");
     }
     let nodes = graph.finish()?;
@@ -475,6 +477,18 @@ mod tests {
         assert_eq!(
             output.catalog_projection_kind,
             "addition-only-not-release-catalog"
+        );
+    }
+
+    #[test]
+    fn catalog_projection_budget_matches_delivery_manifest() {
+        let manifest: Value = serde_json::from_str(include_str!(
+            "../../../../contracts/catalog-delivery/limits.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            manifest["max_native_catalog_projection_bytes"].as_u64(),
+            Some(MAX_NATIVE_CATALOG_PROJECTION_BYTES as u64)
         );
     }
 }

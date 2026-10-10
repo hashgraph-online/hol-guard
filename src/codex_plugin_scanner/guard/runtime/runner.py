@@ -5182,16 +5182,6 @@ def _urlopen_with_timeout_retry(
     )
 
 
-def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return "*" if allow_wildcard else None
-
-
-def _remote_workspace(item: dict[str, object]) -> str | None:
-    return _optional_string(item.get("workspace")) or _optional_string(item.get("workspacePath"))
-
-
 def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value

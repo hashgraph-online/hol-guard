@@ -1528,14 +1528,6 @@ class StoreConnectionSchemaMixin:
         connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
 
     @staticmethod
-    def _ensure_evidence_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
-        rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table guard_evidence add column {column_name} {column_type}")
-
-    @staticmethod
     def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:
         connection.execute(
             """
