@@ -174,6 +174,9 @@ def test_batch_prompt_has_no_conflicting_sequential_suffix():
         if scenario.oracle == "mixed-read-batch":
             assert "Wait for each real tool result before choosing the next call" not in prompt
             assert "one response" in prompt
+        elif scenario.oracle == "native-tools":
+            # Ordinary first-contact requests keep the user's own wording, without fixture scheduling.
+            assert "Wait for each real tool result before choosing the next call" not in prompt
         else:
             assert "Wait for each real tool result before choosing the next call" in prompt
 

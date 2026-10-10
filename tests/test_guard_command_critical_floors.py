@@ -123,6 +123,10 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("hol-guard capability consume --capability-id x --replay-sequence 2", "block"),
     ("hol-guard capability --verbose consume --capability-id x", "block"),
     ("hol-guard uninstall --all", "block"),
+    ("hol-guard hooks remove --all", "block"),
+    ("hol-guard hooks remove --stop-daemon", "block"),
+    ("xargs hol-guard hooks remove --all", "block"),
+    ("sh -c 'hol-guard hooks remove --all'", "block"),
     ("hol-guard policy disable", "block"),
     ("hol-guard clear --all", "block"),
     ("xargs hol-guard uninstall --all", "block"),
@@ -183,6 +187,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("getfacl workspace/service", "review"),
     ("systemctl status service", "review"),
     ("hol-guard uninstall --help --installation-id fixture", "review"),
+    ("hol-guard hooks remove --help", "review"),
     ("hol-guard help uninstall", "review"),
     (
         "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"

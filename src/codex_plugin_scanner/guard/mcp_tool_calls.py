@@ -20,7 +20,6 @@ from .native_context import (
     context_mcp_tool_approval_hash,
     context_opaque_digest,
 )
-from .native_mcp_runtime_evidence import argument_entries, native_command_text
 from .native_mcp_tool_evidence import native_tool_risk_evidence
 from .receipts import build_receipt
 from .runtime.approval_context import (
@@ -99,16 +98,6 @@ def resolve_tool_call_policy_action(
     if normalized == "review" and stale_prior_authority:
         return "require-reapproval"
     return normalized
-
-
-def extract_mcp_command_text(
-    artifact: GuardArtifact,
-    arguments: object,
-    *,
-    guard_home: Path | None = None,
-) -> str | None:
-    """Return the native-owned display text for an MCP tool call (command or path)."""
-    return native_command_text(artifact.name, argument_entries(arguments, mapping_type=Mapping), guard_home=guard_home)
 
 
 def build_tool_call_artifact(
@@ -265,11 +254,6 @@ def evaluate_tool_call(
         claim_saved_approval=claim_saved_approval,
         fresh_authority_provider=fresh_authority_provider,
     )
-
-
-def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    """Return Rust-owned human-readable risk signals for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[1]
 
 
 def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:

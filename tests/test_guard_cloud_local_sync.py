@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
     payload_hash_for_policy_bundle,
 )
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import runner_native_sync
 from codex_plugin_scanner.guard.shims import install_package_shims
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
@@ -1085,7 +1086,7 @@ def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
     monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "25")
 
     cohort = [
-        guard_runner_module._canonical_policy_enforcement_enabled(
+        runner_native_sync.canonical_policy_enforcement_enabled(
             device_id=f"device-{index}",
             workspace_id="workspace-alpha",
         )
@@ -1095,7 +1096,7 @@ def test_local_runtime_session_applies_stable_policy_rollout_cohorts(
     assert any(cohort)
     assert not all(cohort)
     assert cohort == [
-        guard_runner_module._canonical_policy_enforcement_enabled(
+        runner_native_sync.canonical_policy_enforcement_enabled(
             device_id=f"device-{index}",
             workspace_id="workspace-alpha",
         )

@@ -184,12 +184,6 @@ def _is_guard_package_shim_dir(part: str) -> bool:
     return posix.endswith("/package-shims/bin") or "/.hol-guard/package-shims/" in posix
 
 
-def package_source_token(command: str, args: tuple[str, ...]) -> str:
-    """Use the native identity authority for canonical source classification."""
-
-    return build_mcp_server_identity(config_path="", command=command, args=args, transport="stdio").package_source
-
-
 def _split_package_token(value: str) -> tuple[str | None, str | None]:
     pip_style_name, pip_style_version = _split_pip_style_specifier(value)
     if pip_style_name is not None:

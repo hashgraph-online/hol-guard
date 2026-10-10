@@ -9,7 +9,6 @@ import queue
 import select
 import subprocess
 import threading
-import time
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
@@ -17,50 +16,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 from uuid import uuid4
 
-from ..action_lattice import most_restrictive_guard_action
 from ..approvals import (
-    approval_delivery_payload,
     approval_prompt_flow,
     build_approval_browser_url,
-    first_approval_url,
-    queue_blocked_approvals,
 )
-from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
 from ..browser_opener import open_browser_url
-from ..config import GuardConfig, resolve_risk_action
-from ..consumer import artifact_hash
+from ..config import GuardConfig
 from ..daemon.manager import load_guard_daemon_auth_token
-from ..harness_posture import config_for_harness, harness_posture_override
-from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_execution import (
     _native_session_feature_available,
     mcp_stdio_session_close_native,
     mcp_stdio_session_open_native,
 )
-from ..receipts import build_receipt
 from ..runtime.approval_context import (
-    approval_context_tokens_validation_reason,
-    build_approval_context_token,
     build_configured_environment_hash,
     build_runtime_launch_identity,
     resolved_runtime_launch_executable,
     runtime_launch_identity_matches,
 )
-from ..runtime.approval_context import (
-    saved_allow_context_validation_reason as _sensitive_read_saved_allow_validation_reason,
-)
-from ..runtime.approval_reuse import (
-    APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_NO_SAVED_DECISION,
-    ApprovalReuseDecision,
-    ApprovalReuseValidationFailure,
-    approval_reuse_authority_unavailable,
-    evaluate_approval_reuse,
-)
-from ..runtime.secret_file_requests import build_file_read_request_artifact, extract_sensitive_file_read_request
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore
 from ._env import _build_scrubbed_env
+from .stdio_sensitive_read import evaluate_sensitive_read
 
 if TYPE_CHECKING:
     from .runtime_mcp import _NativeChildProcess
@@ -68,113 +45,6 @@ if TYPE_CHECKING:
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
 _GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
-# Bump when sensitive-read classification or action-composition semantics change.
-_STDIO_SENSITIVE_READ_EVALUATOR_POLICY_VERSION = "stdio-sensitive-read-evaluation-v1"
-_APPROVAL_REUSE_CONFIG_REFRESH_FAILED = "approval_reuse_current_config_refresh_failed"
-_APPROVAL_REUSE_DEADLINE_SECONDS = 2.0
-
-
-def _sensitive_read_current_action(
-    config: object,
-    *,
-    artifact: GuardArtifact,
-    harness: str,
-) -> GuardAction:
-    if not isinstance(config, GuardConfig):
-        return "require-reapproval"
-    # Evaluate as this app sees the config, matching the posture bound into
-    # the approval hash.
-    config = config_for_harness(config, harness)
-    configured_override = config.resolve_action_override(
-        harness,
-        artifact.artifact_id,
-        artifact.publisher,
-    )
-    current_config_action = configured_override if configured_override is not None else config.default_action
-    risk_action = resolve_risk_action(config, "local_secret_read", harness=harness) or "require-reapproval"
-    return most_restrictive_guard_action(risk_action, current_config_action)
-
-
-def build_sensitive_read_approval_hash(
-    artifact: GuardArtifact,
-    *,
-    config: object,
-    cwd: Path | None,
-    current_action: GuardAction,
-    server_launch_identity: Mapping[str, object] | None = None,
-    configured_env_values_hash: str | None = None,
-) -> str:
-    """Bind a file-read approval to exact runtime, policy, and sandbox context."""
-
-    effective_cwd = cwd or Path.cwd()
-    try:
-        normalized_cwd = str(effective_cwd.expanduser().resolve(strict=False))
-    except (OSError, RuntimeError):
-        normalized_cwd = str(effective_cwd.expanduser().absolute())
-    if isinstance(config, GuardConfig):
-        configured_override = config.resolve_action_override(
-            artifact.harness,
-            artifact.artifact_id,
-            artifact.publisher,
-        )
-        policy_context: dict[str, object] = {
-            "artifact_override": configured_override,
-            "default_action": config.default_action,
-            "effective_action": current_action,
-            "evaluator_policy_version": _STDIO_SENSITIVE_READ_EVALUATOR_POLICY_VERSION,
-            "managed_locked_settings": list(config.managed_locked_settings),
-            "managed_policy_hash": config.managed_policy_hash,
-            "managed_policy_status": config.managed_policy_status,
-            "mode": config.mode,
-            **(
-                {
-                    "protection_posture": config.protection_posture,
-                    "protection_posture_explicit": True,
-                }
-                if config.protection_posture_explicit
-                else {}
-            ),
-            "security_level": config.security_level,
-            **(
-                {"harness_posture": harness_posture}
-                if (harness_posture := harness_posture_override(config, artifact.harness)) is not None
-                else {}
-            ),
-        }
-        sandbox_context: dict[str, object] = {"analysis": config.sandbox_analysis}
-    else:
-        policy_context = {
-            "config_valid": False,
-            "effective_action": current_action,
-            "evaluator_policy_version": _STDIO_SENSITIVE_READ_EVALUATOR_POLICY_VERSION,
-        }
-        sandbox_context = {"analysis": "unknown"}
-    return build_approval_context_token(
-        identity={
-            "artifact_id": artifact.artifact_id,
-            "config_path": artifact.config_path,
-            "harness": artifact.harness,
-            "publisher": artifact.publisher,
-            "source_scope": artifact.source_scope,
-            "server_launch_identity": dict(server_launch_identity or {}),
-            "configured_env_values_hash": configured_env_values_hash,
-            "workspace": normalized_cwd,
-        },
-        content=artifact_hash(artifact),
-        capabilities={
-            "artifact_type": artifact.artifact_type,
-            "path_class": artifact.metadata.get("path_class"),
-            "tool_name": artifact.metadata.get("tool_name"),
-        },
-        policy=policy_context,
-        sandbox=sandbox_context,
-    )
-
-
-def _approval_reuse_evidence(reuse: ApprovalReuseDecision) -> tuple[dict[str, object], ...]:
-    if reuse.reason_code == APPROVAL_REUSE_NO_SAVED_DECISION:
-        return ()
-    return ({"source": "approval_reuse", **reuse.to_evidence()},)
 
 
 def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: dict[str, object]) -> str:
@@ -228,42 +98,6 @@ def _blocked_tool_response(
     if data:
         payload["error"]["data"] = data
     return payload
-
-
-def _sensitive_read_non_forward_message(
-    policy_action: GuardAction,
-    *,
-    tool_name: str,
-    path_class: str,
-) -> str:
-    if policy_action == "review":
-        return f"Guard paused sensitive local file access for {tool_name} pending review: {path_class}."
-    if policy_action == "require-reapproval":
-        return (
-            f"Guard paused sensitive local file access for {tool_name} until fresh approval is granted: {path_class}."
-        )
-    if policy_action == "sandbox-required":
-        return (
-            f"Guard requires an enforceable sandbox before sensitive local file access for {tool_name}: {path_class}."
-        )
-    if policy_action == "block":
-        return f"Guard blocked sensitive local file access for {tool_name}: {path_class}."
-    raise ValueError(f"Sensitive-read non-forward response cannot represent action {policy_action!r}.")
-
-
-def _sensitive_read_review_hint(
-    policy_action: GuardAction,
-    *,
-    approval_summary: object,
-    review_url: str,
-) -> str:
-    if policy_action == "review":
-        instruction = "review the waiting request"
-    elif policy_action == "require-reapproval":
-        instruction = "grant or deny fresh approval"
-    else:
-        raise ValueError(f"Sensitive-read approval hint cannot represent action {policy_action!r}.")
-    return f"{approval_summary} Open {review_url} to {instruction}."
 
 
 def _timeout_response(
@@ -402,15 +236,15 @@ class StdioGuardProxy:
         self._active_launch_identity: dict[str, object] | None = None
         self._active_env_values_hash: str | None = None
         if guard_store is not None:
-            from ..native_context import bind_context_digest_home
+            from ..native_context import bound_context_digest_home
             from ..native_policy_snapshot_publisher import ensure_native_launch_resident_verifier
 
-            bind_context_digest_home(getattr(guard_store, "guard_home", None))
             # A standalone stdio proxy never starts the snapshot publisher, so
             # it owns the same one-time verifier prerequisite before the
             # resident will serve `mcp_stdio_session_*`. A failure here must
             # raise: there is no Python fallback for the resident session.
-            ensure_native_launch_resident_verifier(guard_store)
+            with bound_context_digest_home(getattr(guard_store, "guard_home", None)):
+                ensure_native_launch_resident_verifier(guard_store)
 
     def _response_timeout_seconds(self) -> float:
         configured = getattr(self.guard_config, "approval_wait_timeout_seconds", None)
@@ -673,395 +507,12 @@ class StdioGuardProxy:
             responses.append(response)
             return response
         if method == "tools/call" and tool_name is not None:
-            sensitive_request = extract_sensitive_file_read_request(
-                tool_name,
-                params.get("arguments") if isinstance(params, dict) else None,
-                cwd=self.cwd,
-            )
-            if sensitive_request is not None:
-                runtime_artifact = build_file_read_request_artifact(
-                    harness=self.harness,
-                    request=sensitive_request,
-                    config_path=str(self._policy_path()),
-                    source_scope="project" if self.cwd is not None else "global",
-                )
-                current_action = _sensitive_read_current_action(
-                    self.guard_config,
-                    artifact=runtime_artifact,
-                    harness=self.harness,
-                )
-                runtime_artifact_hash = build_sensitive_read_approval_hash(
-                    runtime_artifact,
-                    config=self.guard_config,
-                    cwd=self.cwd,
-                    current_action=current_action,
-                    server_launch_identity=self._session_launch_identity(),
-                    configured_env_values_hash=self._session_env_values_hash(),
-                )
-                policy_lookup = (
-                    self.guard_store.resolve_policy_decision_lookup(
-                        self.harness,
-                        runtime_artifact.artifact_id,
-                        artifact_hash=runtime_artifact_hash,
-                        workspace=str(self.cwd) if self.cwd is not None else None,
-                        publisher=runtime_artifact.publisher,
-                        consume_one_shot=False,
-                    )
-                    if self.guard_store is not None
-                    else None
-                )
-                saved_decision = policy_lookup["decision"] if policy_lookup is not None else None
-                ignored_integrity = policy_lookup["ignored_local_integrity"] if policy_lookup is not None else None
-                diagnosed_reason: ApprovalReuseValidationFailure | None = None
-                if saved_decision is None and ignored_integrity is None and self.guard_store is not None:
-                    raw_diagnosed_reason = self.guard_store.approval_reuse_validation_reason(
-                        self.harness,
-                        runtime_artifact.artifact_id,
-                        runtime_artifact_hash,
-                        str(self.cwd) if self.cwd is not None else None,
-                        runtime_artifact.publisher,
-                    )
-                    if raw_diagnosed_reason is not None:
-                        diagnosed_reason = cast(ApprovalReuseValidationFailure, raw_diagnosed_reason)
-                saved_action = (
-                    saved_decision.get("action")
-                    if saved_decision is not None
-                    else (
-                        "require-reapproval"
-                        if ignored_integrity is not None
-                        else ("allow" if diagnosed_reason is not None else None)
-                    )
-                )
-                validation_reason: ApprovalReuseValidationFailure | None = (
-                    "approval_reuse_integrity_failure"
-                    if ignored_integrity is not None
-                    else (
-                        cast(
-                            ApprovalReuseValidationFailure,
-                            _sensitive_read_saved_allow_validation_reason(
-                                saved_decision,
-                                artifact_hash=runtime_artifact_hash,
-                            ),
-                        )
-                        if saved_decision is not None
-                        else diagnosed_reason
-                    )
-                )
-                reuse_deadline_monotonic = time.monotonic() + _APPROVAL_REUSE_DEADLINE_SECONDS
-                reuse_native = evaluate_approval_reuse(
-                    current_action,
-                    saved_action,
-                    saved_decision_present=(
-                        saved_decision is not None or ignored_integrity is not None or diagnosed_reason is not None
-                    ),
-                    validation_reason=validation_reason,
-                    deadline_monotonic=reuse_deadline_monotonic,
-                )
-                reuse = (
-                    reuse_native
-                    if reuse_native is not None
-                    # Resident unreachable: preserve the recomputed action
-                    # unchanged; no saved approval may be claimed.
-                    else approval_reuse_authority_unavailable(current_action)
-                )
-                claimed_allow_hash: str | None = None
-                config_refresh_failed = False
-                if reuse.should_claim and saved_decision is not None and self.guard_store is not None:
-                    if not self.guard_store.claim_approval_reuse_decision(saved_decision):
-                        claim_failed_native = evaluate_approval_reuse(
-                            current_action,
-                            saved_action,
-                            saved_decision_present=True,
-                            validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
-                            deadline_monotonic=reuse_deadline_monotonic,
-                        )
-                        reuse = (
-                            claim_failed_native
-                            if claim_failed_native is not None
-                            else approval_reuse_authority_unavailable(current_action)
-                        )
-                    else:
-                        claimed_allow_hash = runtime_artifact_hash
-                if claimed_allow_hash is not None:
-                    # The atomic claim is authority only for the exact context it
-                    # consumed. Rebuild every policy and launch-bound input after
-                    # the claim so a concurrent policy/identity change cannot use
-                    # the stale pre-claim allow to reach the child process.
-                    assert self.guard_store is not None
-                    provider = self._current_config_provider
-                    try:
-                        fresh_config = provider() if provider is not None else None
-                    except Exception:
-                        fresh_config = None
-                    if not isinstance(fresh_config, GuardConfig):
-                        config_refresh_failed = True
-                        refresh_reuse = evaluate_approval_reuse(
-                            "require-reapproval",
-                            "allow",
-                            saved_decision_present=True,
-                            deadline_monotonic=reuse_deadline_monotonic,
-                        )
-                        reuse = (
-                            refresh_reuse
-                            if refresh_reuse is not None
-                            else approval_reuse_authority_unavailable("require-reapproval")
-                        )
-                    else:
-                        self.guard_config = fresh_config
-                        fresh_artifact = build_file_read_request_artifact(
-                            harness=self.harness,
-                            request=sensitive_request,
-                            config_path=str(self._policy_path()),
-                            source_scope="project" if self.cwd is not None else "global",
-                        )
-                        fresh_current_action = _sensitive_read_current_action(
-                            fresh_config,
-                            artifact=fresh_artifact,
-                            harness=self.harness,
-                        )
-                        fresh_artifact_hash = build_sensitive_read_approval_hash(
-                            fresh_artifact,
-                            config=fresh_config,
-                            cwd=self.cwd,
-                            current_action=fresh_current_action,
-                            server_launch_identity=self._session_launch_identity(),
-                            configured_env_values_hash=self._session_env_values_hash(),
-                        )
-                        fresh_lookup = self.guard_store.resolve_policy_decision_lookup(
-                            self.harness,
-                            fresh_artifact.artifact_id,
-                            artifact_hash=fresh_artifact_hash,
-                            workspace=str(self.cwd) if self.cwd is not None else None,
-                            publisher=fresh_artifact.publisher,
-                            consume_one_shot=False,
-                        )
-                        fresh_saved_decision = fresh_lookup["decision"]
-                        fresh_ignored_integrity = fresh_lookup["ignored_local_integrity"]
-                        if fresh_ignored_integrity is not None:
-                            postclaim_saved_action = (
-                                fresh_saved_decision.get("action")
-                                if fresh_saved_decision is not None
-                                else "require-reapproval"
-                            )
-                            postclaim_validation_reason: ApprovalReuseValidationFailure | None = (
-                                "approval_reuse_integrity_failure"
-                            )
-                        elif fresh_saved_decision is not None and fresh_saved_decision.get("action") != "allow":
-                            postclaim_saved_action = fresh_saved_decision.get("action")
-                            postclaim_validation_reason = None
-                        else:
-                            postclaim_saved_action = "allow"
-                            postclaim_validation_reason = cast(
-                                ApprovalReuseValidationFailure,
-                                approval_context_tokens_validation_reason(
-                                    claimed_allow_hash,
-                                    fresh_artifact_hash,
-                                ),
-                            )
-                        postclaim_reuse = evaluate_approval_reuse(
-                            fresh_current_action,
-                            postclaim_saved_action,
-                            saved_decision_present=True,
-                            validation_reason=postclaim_validation_reason,
-                            deadline_monotonic=reuse_deadline_monotonic,
-                        )
-                        reuse = (
-                            postclaim_reuse
-                            if postclaim_reuse is not None
-                            else approval_reuse_authority_unavailable(fresh_current_action)
-                        )
-                        runtime_artifact = fresh_artifact
-                        runtime_artifact_hash = fresh_artifact_hash
-                        current_action = fresh_current_action
-                policy_action = (
-                    "require-reapproval"
-                    if reuse.action == "review" and reuse.reason_code != APPROVAL_REUSE_NO_SAVED_DECISION
-                    else reuse.action
-                )
-                reuse_evidence = _approval_reuse_evidence(reuse)
-                if config_refresh_failed:
-                    reuse_evidence = (
-                        *reuse_evidence,
-                        {
-                            "source": "approval_reuse",
-                            "status": "rejected",
-                            "reason_code": _APPROVAL_REUSE_CONFIG_REFRESH_FAILED,
-                            "effective_action": "require-reapproval",
-                        },
-                    )
-                terminal_saved_block = reuse.action == "block" and reuse.saved_action == "block"
-                terminal_policy_action = policy_action in {"block", "sandbox-required"}
-                event["artifact_id"] = runtime_artifact.artifact_id
-                event["artifact_type"] = runtime_artifact.artifact_type
-                event["path_summary"] = sensitive_request.path_match.normalized_path
-                event["risk_summary"] = runtime_artifact.metadata.get("runtime_request_summary")
-                event["approval_reuse_status"] = reuse.status
-                event["approval_reuse_reason_code"] = (
-                    _APPROVAL_REUSE_CONFIG_REFRESH_FAILED if config_refresh_failed else reuse.reason_code
-                )
-                if terminal_saved_block:
-                    event["terminal_saved_block"] = True
-                if self.guard_store is not None:
-                    self.guard_store.add_receipt(
-                        build_receipt(
-                            harness=self.harness,
-                            artifact_id=runtime_artifact.artifact_id,
-                            artifact_hash=runtime_artifact_hash,
-                            policy_decision=policy_action,
-                            capabilities_summary=f"file read request • {sensitive_request.tool_name}",
-                            changed_capabilities=["file_read_request"],
-                            provenance_summary=f"runtime MCP tool request evaluated from {self._policy_path()}",
-                            artifact_name=runtime_artifact.name,
-                            source_scope=runtime_artifact.source_scope,
-                            approval_source=(
-                                "approval_center"
-                                if policy_action == "require-reapproval"
-                                and self.approval_center_url is not None
-                                and asks_for_approval(self.guard_config)
-                                else "policy"
-                            ),
-                            scanner_evidence=reuse_evidence,
-                        )
-                    )
-                forwarded = policy_action in {"allow", "warn"}
-                event["decision"] = policy_action
-                event["policy_action"] = policy_action
-                event["transport_outcome"] = "forwarded" if forwarded else "not-forwarded"
-                if policy_action in {"block", "review", "sandbox-required", "require-reapproval"}:
-                    non_forward_message = _sensitive_read_non_forward_message(
-                        policy_action,
-                        tool_name=tool_name,
-                        path_class=sensitive_request.path_match.path_class,
-                    )
-                    response_data: dict[str, Any] = {
-                        "guardPolicyAction": policy_action,
-                        "transportOutcome": "not-forwarded",
-                    }
-                    if not asks_for_approval(self.guard_config):
-                        non_forward_message = safe_alternative_reason(
-                            _sensitive_read_non_forward_message(
-                                "block",
-                                tool_name=tool_name,
-                                path_class=sensitive_request.path_match.path_class,
-                            )
-                        )
-                        response_data["guardPolicyAction"] = "block"
-                        if (
-                            self.guard_store is not None
-                            and not terminal_policy_action
-                            and policy_action in {"review", "require-reapproval"}
-                        ):
-                            from ..approvals import record_unprompted_review
-
-                            record_unprompted_review(
-                                detection=HarnessDetection(
-                                    harness=self.harness,
-                                    installed=True,
-                                    command_available=True,
-                                    config_paths=(runtime_artifact.config_path,),
-                                    artifacts=(runtime_artifact,),
-                                ),
-                                evaluation={
-                                    "artifacts": [
-                                        {
-                                            "artifact_id": runtime_artifact.artifact_id,
-                                            "artifact_name": runtime_artifact.name,
-                                            "artifact_hash": runtime_artifact_hash,
-                                            "policy_action": policy_action,
-                                            "changed_fields": ["file_read_request"],
-                                            "artifact_type": runtime_artifact.artifact_type,
-                                            "source_scope": runtime_artifact.source_scope,
-                                            "config_path": runtime_artifact.config_path,
-                                            "launch_target": runtime_artifact.metadata.get("request_summary"),
-                                            "scanner_evidence": list(reuse_evidence),
-                                        }
-                                    ]
-                                },
-                                store=self.guard_store,
-                                approval_center_url=self.approval_center_url,
-                                redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
-                            )
-                    if (
-                        self.guard_store is not None
-                        and self.approval_center_url is not None
-                        and not terminal_policy_action
-                        and asks_for_approval(self.guard_config)
-                    ):
-                        event["approval_requests"] = queue_blocked_approvals(
-                            redaction_level=getattr(self.guard_config, "receipt_redaction_level", "full"),
-                            detection=HarnessDetection(
-                                harness=self.harness,
-                                installed=True,
-                                command_available=True,
-                                config_paths=(runtime_artifact.config_path,),
-                                artifacts=(runtime_artifact,),
-                            ),
-                            evaluation={
-                                "artifacts": [
-                                    {
-                                        "artifact_id": runtime_artifact.artifact_id,
-                                        "artifact_name": runtime_artifact.name,
-                                        "artifact_hash": runtime_artifact_hash,
-                                        "policy_action": policy_action,
-                                        "changed_fields": ["file_read_request"],
-                                        "artifact_type": runtime_artifact.artifact_type,
-                                        "source_scope": runtime_artifact.source_scope,
-                                        "config_path": runtime_artifact.config_path,
-                                        "launch_target": runtime_artifact.metadata.get("request_summary"),
-                                        "scanner_evidence": list(reuse_evidence),
-                                    }
-                                ]
-                            },
-                            store=self.guard_store,
-                            approval_center_url=self.approval_center_url,
-                        )
-                        managed_install = self.guard_store.get_managed_install(self.harness)
-                        approval_flow = approval_prompt_flow(
-                            self.harness,
-                            managed_install=managed_install,
-                        )
-                        event["approval_center_url"] = self.approval_center_url
-                        event["approval_delivery"] = approval_delivery_payload(approval_flow)
-                        review_url = (
-                            first_approval_url(
-                                event["approval_requests"],
-                                approval_center_url=self.approval_center_url,
-                            )
-                            or self.approval_center_url
-                        )
-                        request_id = next(
-                            (
-                                str(item["request_id"])
-                                for item in event["approval_requests"]
-                                if isinstance(item, dict) and isinstance(item.get("request_id"), str)
-                            ),
-                            "waiting-request",
-                        )
-                        self._maybe_open_approval_center(review_url=review_url, open_key=request_id)
-                        event["review_hint"] = _sensitive_read_review_hint(
-                            policy_action,
-                            approval_summary=approval_flow["summary"],
-                            review_url=review_url,
-                        )
-                        non_forward_message = f"{non_forward_message} {event['review_hint']}"
-                        response_data.update(
-                            {
-                                "approvalCenterUrl": self.approval_center_url,
-                                "approvalRequests": event["approval_requests"],
-                                "approvalDelivery": event["approval_delivery"],
-                                "reviewHint": event["review_hint"],
-                                "reviewUrl": review_url,
-                            }
-                        )
-                    response = _blocked_tool_response(
-                        message.get("id"),
-                        tool_name,
-                        non_forward_message,
-                        response_data,
-                    )
-                    events.append(event)
-                    responses.append(response)
-                    return response
+            not_forwarded = evaluate_sensitive_read(self, tool_name=tool_name, params=params, event=event)
+            if not_forwarded is not None:
+                response = _blocked_tool_response(message.get("id"), tool_name, *not_forwarded)
+                events.append(event)
+                responses.append(response)
+                return response
 
         process.stdin.write(json.dumps(message) + "\n")
         process.stdin.flush()

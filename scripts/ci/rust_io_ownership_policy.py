@@ -46,6 +46,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
+        # Per-request status reuse. stat() only rechecks the validated binary.
+        "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
         # Extracted binary identity validation; no command or policy semantics.
         "src/codex_plugin_scanner/guard/native_binary_identity.py",
         "src/codex_plugin_scanner/guard/native_context.py",
@@ -56,6 +58,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/daemon/manager.py",
         # Interpreter bootstrap identity only; no policy or command decisions.
         "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
+        # Resident request transport; the observed git path is a fact, never a verdict.
+        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
     }
 )
@@ -74,10 +78,13 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Same correlation-only digest for the store-policy claim and diagnostic ops.
+        "src/codex_plugin_scanner/guard/native_store_policy.py",
         # Same correlation-only digest for the generic-hook decision resident op.
         "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Same correlation-only digest for the daemon route/auth policy op.
         "src/codex_plugin_scanner/guard/native_daemon_route.py",
+        "src/codex_plugin_scanner/guard/native_daemon_handler.py",
         # Shared request lifecycle for the hook and route resident ops; digest
         # correlation only.
         "src/codex_plugin_scanner/guard/native_resident_decision.py",
@@ -94,6 +101,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
+        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
         # reattachment integrity but never authorize or evaluate an action.
         "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -127,12 +136,16 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident approval-proof response; the answer is
         # strictly validated and never reinterpreted into a decision.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Decodes the bounded resident claim and diagnostic replies; the answer
+        # is strictly bound to the request and never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_store_policy.py",
         # Decodes the bounded resident generic-hook decision response; the
         # answer is strictly validated and never reinterpreted into a decision.
         "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Decodes the bounded resident daemon route policy response; strictly
         # bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_daemon_route.py",
+        "src/codex_plugin_scanner/guard/native_daemon_handler.py",
         # Shared strict reply validation for the hook and route resident ops;
         # the answer is bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_resident_decision.py",
@@ -150,9 +163,12 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
+        "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+        # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
+        "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.
@@ -267,7 +283,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/cli/commands_hook_native_prepare.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_apply_patch_policy.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_commands.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_git.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_git_config.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
         "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",

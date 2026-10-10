@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
     evaluate_tool_call,
-    tool_call_risk_signals,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.risk import (
@@ -4835,21 +4834,6 @@ def test_incident_context_describes_runtime_tool_action_requests():
     assert incident["source_label"] == "Copilot CLI runtime tool call"
     assert incident["trigger_summary"].startswith("HOL Guard paused the native tool action")
     assert incident["why_now"].startswith("HOL Guard paused this native tool action")
-
-
-def test_tool_call_risk_signals_do_not_treat_format_name_as_destructive():
-    artifact = build_tool_call_artifact(
-        harness="copilot",
-        server_name="workspace_tools",
-        tool_name="format_component",
-        source_scope="project",
-        config_path="/workspace/.mcp.json",
-        transport="stdio",
-    )
-
-    signals = tool_call_risk_signals(artifact, {"path": "app/button.tsx"})
-
-    assert "tool name implies destructive file or system changes" not in signals
 
 
 def test_prompt_mode_keeps_destructive_tool_calls_on_review_path(tmp_path):

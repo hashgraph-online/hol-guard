@@ -80,6 +80,10 @@ _LAUNCH_INTEGRITY_REASON = (
     "HOL Guard could not authenticate its managed Codex hook launcher. "
     "Run `hol-guard install codex` from a terminal, then retry."
 )
+_DAEMON_DEAD_REASON = (
+    "HOL Guard's local daemon is not running and could not be restarted. "
+    "Run `hol-guard repair` in a terminal, then retry."
+)
 _OVERLOAD_REASON = (
     "HOL Guard is temporarily saturated and kept this action blocked. No approval was requested; retry the action."
 )
@@ -432,6 +436,10 @@ def main(
                     response = _launcher_integrity_response(event_name, data)
             else:
                 failure_reason = _OVERLOAD_REASON if daemon_overloaded else _FAIL_CLOSED_REASON
+                if any(
+                    isinstance(cause, dict) and cause.get("stage") == "daemon_dead_fast" for cause in failure_causes
+                ):
+                    failure_reason = _DAEMON_DEAD_REASON
                 response = _unavailable_response(event_name, failure_reason, data)
         _write_transition_observation(data, response)
         sys.stdout.write(

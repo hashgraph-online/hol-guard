@@ -465,7 +465,7 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
     from codex_plugin_scanner.guard import aibom_cli
     from codex_plugin_scanner.guard.aibom_content_upload import empty_content_upload_summary
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     generated = "2026-09-11T00:00:00Z"
     local = GuardAgentInventorySnapshot("paseo:local", "paseo:agent", "paseo", generated)
@@ -495,7 +495,7 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
 
     monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", collect)
     monkeypatch.setattr(aibom_cli, "upload_primary_content_sources", upload)
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", request)
     monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {"accepted": 1, "rejected": 0})
     summary = aibom_cli.sync_aibom_snapshots(

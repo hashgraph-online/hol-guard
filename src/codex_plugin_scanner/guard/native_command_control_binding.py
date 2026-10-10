@@ -33,7 +33,6 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 NATIVE_COMMAND_CONTROL_BINDING_SCHEMA = "guard.native-command-control-binding.v1"
-NATIVE_COMMAND_PROGRAM_CAPABILITY = "native-command-program-v1"
 _PROGRAM_SCHEMA = "guard.native-command-program.v1"
 _PROGRAM_SEMANTIC_PROFILE = "cpython-3.12-ucd15"
 _PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"

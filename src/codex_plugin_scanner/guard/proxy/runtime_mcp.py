@@ -19,9 +19,6 @@ from pathlib import Path
 from typing import IO, Any, Literal, TextIO, cast
 from uuid import uuid4
 
-from ..action_lattice import (
-    normalize_guard_action,
-)
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateError
 from ..approval_scope_support import package_request_runtime_workspace_scope
@@ -97,11 +94,6 @@ from .stdio import (
     _readline_with_timeout,
     _timeout_response,
 )
-
-
-def _guard_action(value: object) -> GuardAction:
-    return normalize_guard_action(value)
-
 
 _SHELL_COMMAND_ARGUMENT_KEYS = frozenset({"cmd", "command", "shellCommand", "shell_command"})
 
@@ -256,14 +248,6 @@ def _safe_mcp_arguments(value: object) -> object:
 
 def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
     return cast(dict[str, object], _safe_mcp_arguments(params))
-
-
-def _mcp_arguments_digest(arguments: object) -> str:
-    """sha256 over the canonical JSON encoding of the RAW arguments."""
-    from ..native_context import context_mcp_arguments_projection
-
-    _safe, _launch, digest = context_mcp_arguments_projection("", arguments)
-    return digest
 
 
 def _browser_intent_payload(
@@ -601,9 +585,8 @@ class RuntimeMcpGuardProxy:
         self.command = command
         self.context = context
         self.store = store
-        from ..native_context import bind_context_digest_home
+        from ..native_context import bound_context_digest_home
 
-        bind_context_digest_home(context.guard_home)
         self.config = config_for_harness(config, harness)
         self.source_scope = source_scope
         self.config_path = config_path
@@ -611,16 +594,17 @@ class RuntimeMcpGuardProxy:
         self.server_id = server_id
         self._current_config_provider = current_config_provider
         self.server_env_keys = tuple(dict.fromkeys(key.strip() for key in server_env_keys if key.strip()))
-        _ensure_native_launch_resident_verifier(self.store)
-        initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
-        self.server_identity = server_identity or build_mcp_server_identity(
-            config_path=self.config_path,
-            command=self.command[0] if self.command else "",
-            args=tuple(self.command[1:]),
-            transport=self.transport,
-            env=_configured_server_environment(initial_launch_env, self.server_env_keys),
-            env_keys=self.server_env_keys,
-        )
+        with bound_context_digest_home(context.guard_home):
+            _ensure_native_launch_resident_verifier(self.store)
+            initial_launch_env = _configured_server_launch_environment(self.server_env_keys)
+            self.server_identity = server_identity or build_mcp_server_identity(
+                config_path=self.config_path,
+                command=self.command[0] if self.command else "",
+                args=tuple(self.command[1:]),
+                transport=self.transport,
+                env=_configured_server_environment(initial_launch_env, self.server_env_keys),
+                env_keys=self.server_env_keys,
+            )
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}

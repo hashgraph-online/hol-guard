@@ -215,6 +215,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
+            ResidentOperationV1::ApprovalReuseDiagnostic(request) => {
+                crate::approval_reuse_diagnostic_op::evaluate_approval_reuse_diagnostic_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
             }
@@ -247,6 +252,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::CodexToolOutput(request) => {
+                crate::codex_tool_output_op::evaluate_codex_tool_output_request(&request)
+            }
             ResidentOperationV1::PolicyBundleAuthority(request) => {
                 crate::policy_bundle_op::evaluate_policy_bundle_authority_request(&request)
             }
@@ -264,6 +272,9 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
+            }
+            ResidentOperationV1::DaemonHandler(request) => {
+                crate::daemon_handler_op::evaluate_daemon_handler_request(&request)
             }
             ResidentOperationV1::DaemonRoute(request) => {
                 crate::daemon_route_op::evaluate_daemon_route_request(&request)
@@ -400,6 +411,7 @@ pub(crate) fn evaluate_resident_bytes(
 /// The Guard home an operation acts on, for operations that open per-home state.
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
+        ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.guard_home),
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
         ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),
         ResidentOperationV1::ApprovalGate(request) => Some(&request.guard_home),
@@ -434,6 +446,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
 /// The store an operation opens, for operations that carry an explicit path.
 fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
+        ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.store_path),
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.store_path),
         ResidentOperationV1::GuardStore(request) => Some(&request.store_path),
         ResidentOperationV1::SupplyChainEval(request) => Some(&request.store_path),

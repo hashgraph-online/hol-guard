@@ -10,6 +10,10 @@ mod approval_gate_state;
 mod approval_gate_verify;
 mod approval_proof_op;
 mod approval_reuse;
+mod approval_reuse_diagnostic_op;
+mod approval_reuse_diagnostic_probes;
+#[cfg(test)]
+mod approval_reuse_diagnostic_vectors_tests;
 mod archive_inspect;
 mod archive_inspect_containment;
 #[cfg(test)]
@@ -18,6 +22,15 @@ mod business_document_compile;
 mod business_source_codec;
 mod claim_approval_reuse_op;
 mod claim_reuse;
+mod claim_reuse_binding;
+#[cfg(test)]
+mod claim_reuse_binding_tests;
+#[cfg(test)]
+mod claim_reuse_vectors_tests;
+mod codex_tool_output_git;
+mod codex_tool_output_op;
+#[cfg(all(test, unix))]
+mod codex_tool_output_vectors_tests;
 mod command_effect;
 mod compound_git_args;
 mod compound_git_chain;
@@ -37,6 +50,12 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
+mod daemon_handler_digits;
+mod daemon_handler_fields;
+mod daemon_handler_headless;
+mod daemon_handler_op;
+mod daemon_handler_policy;
+mod daemon_handler_requests;
 mod daemon_policy_authority;
 mod daemon_route_op;
 mod daemon_route_paths;
@@ -101,6 +120,9 @@ mod mcp_proxy_package;
 mod mcp_proxy_postclaim;
 mod mcp_proxy_route;
 mod mcp_runtime_evidence_op;
+mod mcp_sensitive_read;
+#[cfg(test)]
+mod mcp_sensitive_read_vectors_tests;
 mod mcp_stdio_session_op;
 mod mcp_tool_evidence_op;
 mod mcp_tool_policy_composio;
@@ -170,6 +192,9 @@ mod runner_authority_detector;
 mod runner_authority_evaluation;
 mod runner_authority_op;
 mod runner_authority_signature;
+mod runner_sync_policy;
+mod runner_sync_signals;
+mod runner_sync_url;
 mod runtime_cli;
 mod shim_op;
 #[cfg(unix)]
@@ -184,6 +209,8 @@ mod skill_identity_inspect;
 mod skill_identity_walk;
 #[cfg(unix)]
 mod state_directory_lock;
+#[cfg(test)]
+mod store_vectors_support_tests;
 mod strict_json;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;

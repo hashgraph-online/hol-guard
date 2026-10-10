@@ -288,7 +288,16 @@ def test_gate_executes_only_trusted_default_branch_verification_code() -> None:
 def test_pull_request_validation_is_separate_from_privileged_triggers() -> None:
     """Unmerged bundles are validated only under the ordinary read-only pull_request event."""
     workflow = yaml.safe_load((ROOT / ".github/workflows/mcpb-validation.yml").read_text())
-    assert workflow[True] == {"pull_request": {"branches": ["main", "release/3.0"]}}
+    assert workflow[True] == {
+        "pull_request": {
+            "branches": ["main", "release/3.0"],
+            "paths": [
+                "distributions/mcpb/**",
+                ".github/tools/mcpb-cli/**",
+                ".github/workflows/mcpb-validation.yml",
+            ],
+        }
+    }
     assert workflow["permissions"] == {"contents": "read"}
     job = workflow["jobs"]["validate"]
     assert "permissions" not in job

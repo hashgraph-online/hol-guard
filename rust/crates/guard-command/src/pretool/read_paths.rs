@@ -1,6 +1,9 @@
 #[path = "read_path_allowances.rs"]
 mod allowances;
-use allowances::{agent_skill_document, execution_output_log, guard_safety_doc};
+use allowances::{
+    agent_skill_document, codex_notes_document, execution_output_log, guard_safety_doc,
+    project_skill_document,
+};
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
     let Some(normalized) = lexical_read_path(argument) else {
@@ -409,7 +412,10 @@ fn resolved_path_allowed_for_operation(
         || guard_secure_fs::credential_named_path(canonical)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || guard_safety_doc(canonical, home_dir)
-            || (read_only && agent_skill_document(canonical, home_dir))
+            || (read_only
+                && (agent_skill_document(canonical, home_dir)
+                    || project_skill_document(canonical, home_dir, cwd)
+                    || codex_notes_document(canonical, home_dir)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

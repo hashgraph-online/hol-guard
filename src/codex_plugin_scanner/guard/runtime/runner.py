@@ -74,8 +74,6 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
-    POLICY_BUNDLE_RULE_MATCHER_FAMILIES,
-    computed_policy_bundle_hash,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -105,6 +103,7 @@ from ..store import GuardStore
 from ..synced_policy import cached_policy_bundle_validation, validated_synced_policy_bundle
 from ..types import PromptRequest
 from . import runner_native_authority as _authority
+from . import runner_native_sync as _sync
 from .actions import GuardActionEnvelope, redacted_workspace_label
 from .approval_context import (
     build_runtime_launch_identity,
@@ -164,7 +163,8 @@ _POLICY_DOCUMENT_VERSIONS = ("guard.hashgraphonline.com/v1alpha1",)
 _POLICY_BUNDLE_VERSIONS = ("guard-policy-bundle.v1", "guard-policy-bundle.v2")
 _POLICY_CONTRACTS = ("guard-policy-bundle/v1", "guard-policy-bundle/v2")
 _POLICY_YAML_IMPORT_ENV = "HOL_GUARD_POLICY_YAML_IMPORT"
-_POLICY_CANONICAL_ENFORCEMENT_ENV = "HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT"
+# Re-exported for the supply-chain services; the resident derives the endpoint.
+_normalized_receipts_sync_url = _sync.normalized_receipts_sync_url
 
 
 def _hol_guard_runtime_source_sha256(package_root: Path | None = None) -> str:
@@ -193,34 +193,6 @@ def _hol_guard_runtime_package_identity() -> tuple[str | None, str] | None:
 
 
 _LOADED_HOL_GUARD_RUNTIME_PACKAGE_IDENTITY = _hol_guard_runtime_package_identity()
-
-
-def _canonical_policy_rollout_percentage() -> int:
-    raw = os.environ.get(_POLICY_CANONICAL_ENFORCEMENT_ENV, "").strip().lower()
-    if raw in {"", "0", "false", "off", "legacy"}:
-        return 0
-    if raw in {"1", "true", "on", "canonical"}:
-        return 100
-    try:
-        percentage = int(raw)
-    except ValueError:
-        return 0
-    return percentage if 1 <= percentage <= 100 else 0
-
-
-def _canonical_policy_enforcement_enabled(
-    *,
-    device_id: str,
-    workspace_id: str | None,
-) -> bool:
-    percentage = _canonical_policy_rollout_percentage()
-    if percentage in {0, 100}:
-        return percentage == 100
-    cohort_key = f"{workspace_id or 'local'}:{device_id}".encode()
-    # This is an in-memory rollout bucket for opaque installation IDs, not a password verifier.
-    # codeql[py/weak-sensitive-data-hashing]
-    cohort = int.from_bytes(hashlib.sha256(cohort_key).digest()[:8], "big") % 100
-    return cohort < percentage
 
 
 def detect_harness(harness: str, context: HarnessContext) -> HarnessDetection:
@@ -268,10 +240,6 @@ def get_adapter(harness: str) -> HarnessAdapter:
     from ..adapters import get_adapter as _get_adapter
 
     return _get_adapter(harness)
-
-
-def _computed_policy_bundle_hash(policy_bundle: dict[str, object]) -> str:
-    return computed_policy_bundle_hash(policy_bundle)
 
 
 _APPROVAL_METADATA_KEYS = (
@@ -1447,19 +1415,6 @@ def _policy_bundle_is_version_downgrade(
     return policy_bundle_is_version_downgrade(existing_bundle, next_bundle)
 
 
-def _policy_bundle_utc_datetime(value: str) -> datetime:
-    normalized = value[:-1] + "+00:00" if value.endswith(("Z", "z")) else value
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
-
-
-def _policy_bundle_numeric_version(value: str) -> tuple[int, ...] | None:
-    tokens = tuple(int(token) for token in re.findall(r"\d+", value))
-    return tokens or None
-
-
 def _policy_bundle_acceptance_checkpoint(policy_bundle: Mapping[str, object]) -> dict[str, object]:
     return policy_bundle_acceptance_checkpoint(dict(policy_bundle))
 
@@ -1468,37 +1423,14 @@ def _policy_bundle_downgrade_reference(
     store: GuardStore,
     existing_bundle: dict[str, object] | None,
 ) -> dict[str, object] | None:
-    checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
-    workspace_id = store.get_cloud_workspace_id()
-    candidates = [
-        item
-        for item in (
-            checkpoint,
+    return _sync.policy_bundle_downgrade_reference(
+        (
+            store.get_sync_payload("policy_bundle_acceptance_checkpoint"),
             existing_bundle,
             store.get_sync_payload("policy_bundle_last_good"),
-        )
-        if isinstance(item, dict) and non_empty_string(item.get("issuedAt")) is not None
-        if (workspace_id is None or non_empty_string(item.get("workspaceId")) in {None, workspace_id})
-    ]
-    if not candidates:
-        return None
-
-    def _sort_key(item: dict[str, object]) -> tuple[datetime, tuple[int, ...], str, bool]:
-        issued_at = non_empty_string(item.get("issuedAt"))
-        assert issued_at is not None
-        try:
-            timestamp = _policy_bundle_utc_datetime(issued_at)
-        except ValueError:
-            timestamp = datetime.max.replace(tzinfo=timezone.utc)
-        version = non_empty_string(item.get("bundleVersion")) or ""
-        return (
-            timestamp,
-            _policy_bundle_numeric_version(version) or (),
-            version,
-            non_empty_string(item.get("payloadHash")) is not None,
-        )
-
-    return max(candidates, key=_sort_key)
+        ),
+        store.get_cloud_workspace_id(),
+    )
 
 
 def _validate_cached_policy_bundle(
@@ -1601,24 +1533,7 @@ def _build_policy_bundle_decisions(
     )
 
 
-def _parse_policy_simulation_timestamp(value: object) -> datetime | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    normalized = value.replace("Z", "+00:00")
-    try:
-        return datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-
-
-def _receipt_policy_bundle_matcher_family(receipt: dict[str, object]) -> str | None:
-    artifact_id = non_empty_string(receipt.get("artifact_id"))
-    if artifact_id is None:
-        return None
-    for family in POLICY_BUNDLE_RULE_MATCHER_FAMILIES:
-        if f":{family}:" in artifact_id:
-            return family
-    return None
+_SIMULATION_RECEIPT_KEYS = ("receipt_id", "artifact_id", "harness", "policy_decision", "timestamp")
 
 
 def simulate_policy_bundle_receipts(
@@ -1631,68 +1546,21 @@ def simulate_policy_bundle_receipts(
     receipts = store.list_receipts(limit=limit)
     device_id, device_name = _guard_device_metadata(store)
     decisions = _build_policy_bundle_decisions(policy_bundle, device_id=device_id, device_name=device_name)
-    generated_at = now or _now()
-    generated_at_dt = _parse_policy_simulation_timestamp(generated_at)
-    latest_receipt_at: str | None = None
-    oldest_receipt_at: str | None = None
-    latest_dt: datetime | None = None
-    oldest_dt: datetime | None = None
-    matches: list[dict[str, object]] = []
-    summary = {"allow": 0, "block": 0, "review": 0, "ignore": 0, "matched": 0, "unchanged": 0}
-    for receipt in receipts:
-        receipt_dt = _parse_policy_simulation_timestamp(receipt.get("timestamp"))
-        if receipt_dt is not None and (latest_dt is None or receipt_dt > latest_dt):
-            latest_dt = receipt_dt
-            latest_receipt_at = str(receipt.get("timestamp"))
-        if receipt_dt is not None and (oldest_dt is None or receipt_dt < oldest_dt):
-            oldest_dt = receipt_dt
-            oldest_receipt_at = str(receipt.get("timestamp"))
-        family = _receipt_policy_bundle_matcher_family(receipt)
-        if family is None:
-            continue
-        harness = non_empty_string(receipt.get("harness")) or "*"
-        matched = next(
-            (item for item in decisions if item.artifact_id == f"family:{family}" and item.harness in {harness, "*"}),
-            None,
-        )
-        simulated_action = matched.action if matched is not None else str(receipt.get("policy_decision") or "review")
-        if simulated_action not in {"allow", "block", "review", "ignore"}:
-            simulated_action = "review"
-        summary[simulated_action] = summary.get(simulated_action, 0) + 1
-        if matched is not None:
-            summary["matched"] += 1
-        else:
-            summary["unchanged"] += 1
-        matches.append(
+    return _sync.policy_simulation(
+        [{key: receipt.get(key) for key in _SIMULATION_RECEIPT_KEYS} for receipt in receipts],
+        [
             {
-                "receipt_id": receipt.get("receipt_id"),
-                "artifact_id": receipt.get("artifact_id"),
-                "harness": harness,
-                "matcher_family": family,
-                "observed_action": receipt.get("policy_decision"),
-                "simulated_action": simulated_action,
-                "matched_rule_id": matched.owner if matched is not None else None,
-                "policy_version": non_empty_string(policy_bundle.get("bundleHash")),
-                "timestamp": receipt.get("timestamp"),
+                "artifact_id": decision.artifact_id,
+                "harness": decision.harness,
+                "action": decision.action,
+                "owner": decision.owner,
             }
-        )
-    stale = False
-    if generated_at_dt is not None and latest_dt is not None:
-        stale = (generated_at_dt - latest_dt).total_seconds() > 24 * 60 * 60
-    return {
-        "generated_at": generated_at,
-        "policy_bundle_version": non_empty_string(policy_bundle.get("bundleVersion")),
-        "policy_version": non_empty_string(policy_bundle.get("bundleHash")),
-        "receipt_count": len(receipts),
-        "summary": summary,
-        "matches": matches,
-        "event_freshness": {
-            "latest_receipt_at": latest_receipt_at,
-            "oldest_receipt_at": oldest_receipt_at,
-            "sampled_receipts": len(receipts),
-            "stale": stale,
-        },
-    }
+            for decision in decisions
+        ],
+        bundle_version=policy_bundle.get("bundleVersion"),
+        bundle_hash=policy_bundle.get("bundleHash"),
+        now=now or _now(),
+    )
 
 
 def sync_receipts(
@@ -1710,7 +1578,9 @@ def sync_receipts(
     """Push local receipts to the configured sync endpoint."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_receipts_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
+    sync_url = _sync.normalized_receipts_sync_url(
+        _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
+    )
     local_guard_online_at = _now()
     redaction_level = _resolve_cloud_receipt_redaction_level(store)
     _ensure_cloud_review_privacy_projection(store, level=redaction_level, synced_at=local_guard_online_at)
@@ -1777,7 +1647,7 @@ def sync_receipts(
                 if auth_context is None and not auth_refresh_retried:
                     auth_refresh_retried = True
                     resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
-                    sync_url = _normalized_receipts_sync_url(
+                    sync_url = _sync.normalized_receipts_sync_url(
                         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
                     )
                     request = _guard_sync_request(
@@ -1899,7 +1769,7 @@ def sync_receipts(
     if deduped_advisories:
         advisories_stored = store.cache_advisories(deduped_advisories, now)
     cloud_workspace_id = store.get_cloud_workspace_id()
-    canonical_enforcement = _canonical_policy_enforcement_enabled(
+    canonical_enforcement = _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=cloud_workspace_id,
     )
@@ -2338,8 +2208,7 @@ def sync_receipts(
             pain_signals_uploaded = 0
         else:
             raise
-    value_metrics = _build_value_metrics(store)
-    weekly_digest = _build_weekly_firewall_digest(metrics=value_metrics, now=now)
+    value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=5000), now)
     summary: dict[str, object] = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
@@ -2445,38 +2314,6 @@ def _fetch_supply_chain_bundle_payload(request: urllib.request.Request) -> dict[
         raise RuntimeError(_sync_url_error_message(error)) from error
 
 
-def _normalized_supply_chain_bundle_index_url(bundle_url: str) -> str:
-    parsed = urllib.parse.urlsplit(bundle_url)
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path.rstrip("/") + "/index",
-            parsed.query,
-            "",
-        )
-    )
-
-
-def _supply_chain_partition_bundle_url(bundle_url: str, *, ecosystem: str, partition: int) -> str:
-    parsed = urllib.parse.urlsplit(bundle_url)
-    query_pairs = [
-        (key, value)
-        for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        if key not in {"ecosystem", "partition"}
-    ]
-    query_pairs.extend((("ecosystem", ecosystem), ("partition", str(partition))))
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path,
-            urllib.parse.urlencode(query_pairs),
-            "",
-        )
-    )
-
-
 def _sync_supply_chain_bundle_incremental(
     *,
     bundle_url: str,
@@ -2488,7 +2325,7 @@ def _sync_supply_chain_bundle_incremental(
 ) -> dict[str, object] | None:
     index_request = _guard_sync_request(
         auth_context,
-        request_url=_normalized_supply_chain_bundle_index_url(bundle_url),
+        request_url=_sync.normalized_supply_chain_bundle_index_url(bundle_url),
         method="GET",
         data=None,
         extra_headers={"Accept-Encoding": "identity"},
@@ -2537,7 +2374,7 @@ def _sync_supply_chain_bundle_incremental(
             try:
                 partition_request = _guard_sync_request(
                     auth_context,
-                    request_url=_supply_chain_partition_bundle_url(
+                    request_url=_sync.supply_chain_partition_bundle_url(
                         bundle_url, ecosystem=ecosystem, partition=partition
                     ),
                     method="GET",
@@ -2586,7 +2423,7 @@ def sync_supply_chain_bundle(
     workspace_id = store.get_cloud_workspace_id()
     if workspace_id is None:
         raise GuardSyncNotConfiguredError("Guard Cloud workspace is not connected.")
-    bundle_url = _normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
+    bundle_url = _sync.normalized_supply_chain_bundle_url(str(resolved_auth_context["sync_url"]), workspace_id)
     cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
     cached_bundle_version = None
     if isinstance(cached_bundle, dict):
@@ -2714,7 +2551,7 @@ def sync_guard_events(
     """Push pending GuardEventV1 envelopes to Guard Cloud."""
 
     resolved_auth_context = auth_context if auth_context is not None else _resolve_guard_sync_auth_context(store)
-    sync_url = _guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
+    sync_url = _sync.guard_events_sync_url(_validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context)))
     previous_summary = store.get_sync_payload("guard_events_v1_summary")
     total_events = 0
     total_accepted = 0
@@ -2806,7 +2643,7 @@ def sync_guard_events(
                 message=message,
             )
             raise RuntimeError(_redact_sync_text(message)) from error
-        completed_ids = _completed_guard_event_ids(payload)
+        completed_ids = _sync.completed_guard_event_ids(payload)
         synced_at = _sync_timestamp(payload)
         uploaded = store.mark_guard_events_v1_uploaded(completed_ids, synced_at)
         total_events += len(pending_events)
@@ -2905,7 +2742,7 @@ def sync_runtime_session(
     """Publish the active Guard runtime session so the dashboard can show the machine immediately."""
 
     resolved_auth_context = auth_context or _resolve_guard_sync_auth_context(store)
-    sync_url = _normalized_runtime_sessions_sync_url(
+    sync_url = _sync.normalized_runtime_sessions_sync_url(
         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
     )
     session_payload = _cloud_runtime_session_payload(store, session)
@@ -3013,7 +2850,7 @@ def _local_guard_runtime_session(
         "policy_contracts": list(_POLICY_CONTRACTS),
         "yaml_import": os.environ.get(_POLICY_YAML_IMPORT_ENV) == "1",
     }
-    if _canonical_policy_enforcement_enabled(
+    if _sync.canonical_policy_enforcement_enabled(
         device_id=device_id,
         workspace_id=workspace_id,
     ):
@@ -3091,7 +2928,7 @@ def sync_pain_signals(
         raise
     except GuardSyncNotConfiguredError:
         return 0
-    normalized_sync_url = _normalized_receipts_sync_url(
+    normalized_sync_url = _sync.normalized_receipts_sync_url(
         _validate_guard_sync_url(_auth_context_sync_url(resolved_auth_context))
     )
     cursor_payload = store.get_sync_payload("pain_signal_cursor")
@@ -3108,21 +2945,11 @@ def sync_pain_signals(
         if not candidates:
             break
         last_processed_event_id = _int_value(candidates[-1].get("event_id")) or current_event_id
-        signal_items: list[dict[str, object]] = []
-        for item in candidates:
-            event_name = _optional_string(item.get("event_name"))
-            payload = item.get("payload")
-            if event_name == "install_time_warn" and isinstance(payload, dict):
-                warn_key = _warning_occurrence_key(payload)
-                if warn_key is not None:
-                    warn_occurrences[warn_key] = warn_occurrences.get(warn_key, 0) + 1
-            pain_signal = _pain_signal_item(item, warn_occurrences=warn_occurrences)
-            if pain_signal is not None:
-                signal_items.append(pain_signal)
+        signal_items, warn_occurrences = _sync.pain_signal_batch(candidates, warn_occurrences)
         if signal_items:
             request = _guard_sync_request(
                 resolved_auth_context,
-                request_url=_pain_signal_sync_url(normalized_sync_url),
+                request_url=_sync.pain_signal_sync_url(normalized_sync_url),
                 method="POST",
                 data=json.dumps({"items": signal_items}).encode("utf-8"),
                 extra_headers=None,
@@ -3151,24 +2978,6 @@ def sync_pain_signals(
         if len(candidates) < 500:
             break
     return uploaded_count
-
-
-def _persist_cloud_exceptions(
-    store: GuardStore,
-    *,
-    device_id: str | None = None,
-    sync_exceptions: list[dict[str, object]] | None = None,
-    policy_bundle: dict[str, object] | None = None,
-    now: str,
-) -> list[dict[str, object]]:
-    serialized = _policy_bundle_cloud_exception_items(
-        store,
-        device_id=device_id,
-        sync_exceptions=sync_exceptions,
-        policy_bundle=policy_bundle,
-    )
-    store.set_cloud_exceptions(serialized, now)
-    return serialized
 
 
 def _policy_bundle_cloud_exception_items(
@@ -3629,7 +3438,6 @@ def _oauth_dpop_key_material(credentials: dict[str, object]) -> GuardDpopKeyMate
 _OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS = 60
 _OAUTH_INVALID_GRANT_MAX_ATTEMPTS = 2
 _OAUTH_INVALID_GRANT_RETRY_DELAY_SECONDS = 0.75
-_oauth_binding_metadata_from_access_token = oauth_binding_from_credentials
 
 
 class _GuardOAuthRefreshRateLimitedError(RuntimeError):
@@ -4706,13 +4514,6 @@ def _auth_context_sync_url(auth_context: dict[str, object]) -> str:
     return sync_url
 
 
-def _metric_count(metrics: dict[str, dict[str, object]], key: str) -> int:
-    metric = metrics.get(key)
-    if not isinstance(metric, dict):
-        return 0
-    return _int_value(metric.get("value")) or 0
-
-
 def _normalized_timestamp_string(value: object) -> str | None:
     raw_value = _optional_string(value)
     if raw_value is None:
@@ -4728,333 +4529,6 @@ def _last_uploaded_event_id(payload: dict[str, object] | list[object] | None) ->
         return 0
     event_id = payload.get("event_id")
     return event_id if isinstance(event_id, int) and event_id > 0 else 0
-
-
-def _pain_signal_item(
-    event: dict[str, object],
-    *,
-    warn_occurrences: dict[tuple[str, str], int] | None = None,
-) -> dict[str, object] | None:
-    event_name = _optional_string(event.get("event_name"))
-    payload = event.get("payload")
-    occurred_at = _optional_string(event.get("occurred_at"))
-    if event_name is None or not isinstance(payload, dict) or occurred_at is None:
-        return None
-    artifact_id, artifact_name = _pain_signal_artifact_identity(event_name, payload)
-    if artifact_id is None or artifact_name is None:
-        return None
-    if not _should_emit_pain_signal(
-        event_name=event_name,
-        payload=payload,
-        warn_occurrences=warn_occurrences,
-    ):
-        return None
-    harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor")) or "unknown"
-    artifact_type = _artifact_type_for_signal(payload, artifact_id)
-    latest_summary = _pain_signal_summary(event_name, payload)
-    return {
-        "signalId": f"{event_name}:{harness}:{artifact_id}",
-        "signalName": event_name,
-        "artifactId": artifact_id,
-        "artifactName": artifact_name,
-        "artifactType": artifact_type,
-        "harness": harness,
-        "latestSummary": latest_summary,
-        "occurredAt": occurred_at,
-        "source": "scanner",
-        "publisher": _optional_string(payload.get("publisher")),
-    }
-
-
-def _artifact_type_for_signal(payload: dict[str, object], artifact_id: str) -> str:
-    artifact_type = _optional_string(payload.get("artifact_type"))
-    if artifact_type in {"plugin", "skill"}:
-        return artifact_type
-    if artifact_id.startswith("skill:"):
-        return "skill"
-    return "plugin"
-
-
-def _pain_signal_summary(event_name: str, payload: dict[str, object]) -> str:
-    reason = _optional_string(payload.get("reason"))
-    if reason is not None:
-        return reason
-    changed_fields = payload.get("changed_fields")
-    if event_name == "changed_artifact_caught" and isinstance(changed_fields, list):
-        changed_labels = [str(item) for item in changed_fields if isinstance(item, str)]
-        if changed_labels:
-            return f"Artifact changed across: {', '.join(changed_labels)}."
-    risk_signals = payload.get("risk_signals")
-    if isinstance(risk_signals, list):
-        labels = [str(item) for item in risk_signals if isinstance(item, str)]
-        if labels:
-            return f"Guard flagged install-time risk: {', '.join(labels)}."
-    expires_at = _optional_string(payload.get("expires_at"))
-    if event_name == "exception_expiring" and expires_at is not None:
-        return f"Guard exception expires at {expires_at}."
-    return f"Guard recorded {event_name.replace('_', ' ')} for this artifact."
-
-
-def _build_value_metrics(store: GuardStore) -> dict[str, dict[str, object]]:
-    events = store.list_events(limit=5000)
-    installs_stopped = 0
-    scripts_prevented = 0
-    tokens_protected = 0
-    for event in events:
-        event_name = _optional_string(event.get("event_name")) or ""
-        payload = event.get("payload")
-        if not isinstance(payload, dict):
-            continue
-        if event_name in _INSTALL_TIME_STOP_EVENTS:
-            installs_stopped += 1
-            install_kind = (_optional_string(payload.get("install_kind")) or "").lower()
-            risk_signals = payload.get("risk_signals")
-            script_signal = isinstance(risk_signals, list) and any(
-                "script" in str(signal).lower() for signal in risk_signals
-            )
-            if "script" in install_kind or script_signal:
-                scripts_prevented += 1
-        if event_name == "changed_artifact_caught":
-            changed_fields = payload.get("changed_fields")
-            risk_signals = payload.get("risk_signals")
-            touched_launch_surface = isinstance(changed_fields, list) and any(
-                str(item) in {"command", "args"} for item in changed_fields
-            )
-            secret_signal = isinstance(risk_signals, list) and any(
-                any(token in str(signal).lower() for token in ("token", "secret", ".env", "credential"))
-                for signal in risk_signals
-            )
-            if touched_launch_surface and secret_signal:
-                tokens_protected += 1
-    return {
-        "installs_stopped_before_execution": {
-            "value": installs_stopped,
-            "source": "guard_events:install_time_block|review|require-reapproval|sandbox-required",
-        },
-        "scripts_prevented": {
-            "value": scripts_prevented,
-            "source": "guard_events:risk_signals|install_kind",
-        },
-        "tokens_protected": {
-            "value": tokens_protected,
-            "source": "guard_events:changed_artifact_caught",
-        },
-    }
-
-
-def _build_weekly_firewall_digest(*, metrics: dict[str, dict[str, object]], now: str) -> dict[str, object]:
-    installs_stopped = _metric_count(metrics, "installs_stopped_before_execution")
-    scripts_prevented = _metric_count(metrics, "scripts_prevented")
-    tokens_protected = _metric_count(metrics, "tokens_protected")
-    headline = (
-        "Package firewall summary: "
-        f"{installs_stopped} installs stopped before execution, "
-        f"{scripts_prevented} scripts prevented, "
-        f"{tokens_protected} token-protection incidents."
-    )
-    return {
-        "subject": "HOL Guard weekly package firewall summary",
-        "generated_at": now,
-        "period_days": 7,
-        "headline": headline,
-        "body_preview": (
-            "HOL Guard weekly digest\n"
-            f"{headline}\n"
-            "Review the approval queue and sync health to keep package protection current."
-        ),
-    }
-
-
-def _pain_signal_artifact_identity(event_name: str, payload: dict[str, object]) -> tuple[str | None, str | None]:
-    artifact_id = _optional_string(payload.get("artifact_id"))
-    artifact_name = _optional_string(payload.get("artifact_name"))
-    if artifact_id is not None and artifact_name is not None:
-        return (artifact_id, artifact_name)
-    if event_name == "supply_chain_bundle_refresh_requested":
-        fallback_id = artifact_id or "guard:supply-chain:feed"
-        return (fallback_id, artifact_name or fallback_id)
-    if event_name == "approval_gate/remote_policy_sync_blocked":
-        return ("guard:policy:disable", "remote policy sync disabled")
-    return (None, None)
-
-
-def _warning_occurrence_key(payload: dict[str, object]) -> tuple[str, str] | None:
-    artifact_id = _optional_string(payload.get("artifact_id"))
-    harness = _optional_string(payload.get("harness")) or _optional_string(payload.get("executor"))
-    if artifact_id is None or harness is None:
-        return None
-    return (harness, artifact_id)
-
-
-def _should_emit_pain_signal(
-    *,
-    event_name: str,
-    payload: dict[str, object],
-    warn_occurrences: dict[tuple[str, str], int] | None,
-) -> bool:
-    if event_name in _INSTALL_TIME_STOP_EVENTS:
-        return True
-    if event_name == "install_time_warn":
-        warn_key = _warning_occurrence_key(payload)
-        if warn_key is None:
-            return False
-        if warn_occurrences is None:
-            return False
-        return warn_occurrences.get(warn_key, 0) >= 2
-    if event_name == "changed_artifact_caught":
-        policy_action = _optional_string(payload.get("policy_action"))
-        return policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    if event_name == "supply_chain_bundle_refresh_requested":
-        reason = _optional_string(payload.get("reason"))
-        return reason == "feed_stale"
-    return event_name == "approval_gate/remote_policy_sync_blocked"
-
-
-def _pain_signal_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
-    path = parsed.path.rstrip("/")
-    segments = [segment for segment in path.split("/") if segment]
-    if len(segments) >= 2 and segments[-2:] in (["receipts", "sync"], ["inventory", "sync"]):
-        next_segments = [*segments[:-2], "signals", "pain"]
-    elif segments and segments[-1] in {"receipts", "inventory"}:
-        next_segments = [*segments[:-1], "signals", "pain"]
-    else:
-        next_segments = [*segments, "signals", "pain"]
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            "/" + "/".join(next_segments),
-            parsed.query,
-            parsed.fragment,
-        )
-    )
-
-
-def _normalized_receipts_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(sync_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/registry/api/v1/guard/receipts/sync",
-                parsed.query,
-                "",
-            )
-        )
-    return sync_url
-
-
-def _normalized_runtime_sessions_sync_url(sync_url: str) -> str:
-    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
-    parsed = urllib.parse.urlsplit(normalized_receipts_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/registry/api/v1/guard/runtime/sessions/sync",
-                parsed.query,
-                "",
-            )
-        )
-    if parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/api/guard/runtime/sessions/sync",
-                parsed.query,
-                "",
-            )
-        )
-    if parsed.path.rstrip("/") == "/guard/receipts/sync":
-        return urllib.parse.urlunsplit(
-            (
-                parsed.scheme,
-                parsed.netloc,
-                "/guard/runtime/sessions/sync",
-                parsed.query,
-                "",
-            )
-        )
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            parsed.path.rstrip("/") + "/runtime/sessions/sync",
-            parsed.query,
-            "",
-        )
-    )
-
-
-def _normalized_supply_chain_bundle_url(sync_url: str, workspace_id: str) -> str:
-    normalized_receipts_url = _normalized_receipts_sync_url(sync_url)
-    parsed = urllib.parse.urlsplit(normalized_receipts_url)
-    if parsed.path.rstrip("/") == "/registry/api/v1/guard/receipts/sync":
-        next_path = "/registry/api/v1/guard/supply-chain/bundle"
-    elif parsed.path.rstrip("/") == "/api/guard/receipts/sync":
-        next_path = "/api/guard/supply-chain/bundle"
-    elif parsed.path.rstrip("/") == "/guard/receipts/sync":
-        next_path = "/guard/supply-chain/bundle"
-    else:
-        next_path = parsed.path.rstrip("/") + "/supply-chain/bundle"
-    query_pairs = [
-        (key, value)
-        for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
-        if key != "workspaceId"
-    ]
-    query_pairs.append(("workspaceId", workspace_id))
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            next_path,
-            urllib.parse.urlencode(query_pairs),
-            "",
-        )
-    )
-
-
-def _guard_events_sync_url(sync_url: str) -> str:
-    parsed = urllib.parse.urlsplit(_normalized_receipts_sync_url(sync_url))
-    if parsed.path.rstrip("/").endswith("/api/v1/guard/events"):
-        return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), parsed.query, ""))
-    path = parsed.path.rstrip("/")
-    for suffix in (
-        "/registry/api/v1/guard/receipts/sync",
-        "/api/guard/receipts/sync",
-        "/guard/receipts/sync",
-    ):
-        if path.endswith(suffix):
-            path = path[: -len(suffix)]
-            break
-    return urllib.parse.urlunsplit(
-        (
-            parsed.scheme,
-            parsed.netloc,
-            path.rstrip("/") + "/api/v1/guard/events",
-            parsed.query,
-            "",
-        )
-    )
-
-
-def _completed_guard_event_ids(payload: dict[str, object]) -> list[str]:
-    statuses = payload.get("statuses")
-    if not isinstance(statuses, list):
-        return []
-    completed: list[str] = []
-    for item in statuses:
-        if not isinstance(item, dict):
-            continue
-        status = str(item.get("status") or "")
-        event_id = item.get("eventId")
-        if status in {"accepted", "duplicate", "rejected"} and isinstance(event_id, str):
-            completed.append(event_id)
-    return completed
 
 
 def _cloud_sync_receipts_payload(

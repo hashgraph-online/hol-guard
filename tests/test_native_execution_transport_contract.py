@@ -127,57 +127,6 @@ def test_prompt_reply_requires_the_exact_versioned_envelope(transport, tmp_path,
     transport.succeeded.assert_not_called()
 
 
-@pytest.mark.parametrize("result", [{"decision": "block"}, {}, [], False, None])
-def test_generic_contained_execution_delegates_request_and_policy_to_rust(transport, tmp_path, result):
-    transport.client.return_value = json.dumps({"status": "ok", "result": result}).encode()
-    request = {"argv": ["node", "--version"]}
-    policy = {"network": "denied"}
-    actual = bridge.contained_execute_native(
-        request, policy, guard_home=tmp_path, run_id="test-run", timeout_seconds=9.5
-    )
-    assert actual == (result if isinstance(result, dict) else None)
-    envelope = json.loads(transport.client.call_args.kwargs["payload"])
-    native_request = envelope["request"]
-    assert envelope["operation"] == "contained_execute"
-    assert native_request["schema"] == "guard-contained-execute-request.v1"
-    assert native_request["request_id"].startswith("contained_execute-")
-    assert native_request["request"] == request
-    assert native_request["policy"] == policy
-    assert native_request["guard_home"] == str(tmp_path)
-    assert native_request["run_id"] == "test-run"
-    assert transport.client.call_args.kwargs["timeout_seconds"] == 9.5
-
-
-@pytest.mark.parametrize("result", [{"decision": "block"}, {}, [], False, None])
-def test_contained_test_hook_delegates_workspace_and_command_to_rust(transport, tmp_path, result):
-    transport.client.return_value = json.dumps({"status": "ok", "result": result}).encode()
-    workspace = tmp_path / "workspace"
-    actual = bridge.contained_test_hook_native(workspace, "node --version", guard_home=tmp_path, timeout_seconds=8.5)
-    assert actual == (result if isinstance(result, dict) else None)
-    envelope = json.loads(transport.client.call_args.kwargs["payload"])
-    native_request = envelope["request"]
-    assert envelope["operation"] == "contained_test_hook"
-    assert native_request["schema"] == "guard-contained-test-hook-request.v1"
-    assert native_request["request_id"].startswith("contained_test_hook-")
-    assert native_request["workspace"] == str(workspace)
-    assert native_request["command_text"] == "node --version"
-    assert native_request["guard_home"] == str(tmp_path)
-    assert transport.client.call_args.kwargs["timeout_seconds"] == 8.5
-
-
-@pytest.mark.parametrize("operation", ["execute", "test-hook"])
-def test_contained_adapters_report_missing_authority_without_fabricating_results(transport, tmp_path, operation):
-    transport.client.return_value = None
-    if operation == "execute":
-        result = bridge.contained_execute_native({}, {}, guard_home=tmp_path, run_id="test-run")
-    else:
-        result = bridge.contained_test_hook_native(tmp_path, "node --version", guard_home=tmp_path)
-    assert result is None
-    transport.client.assert_called_once()
-    transport.failed.assert_called_once()
-    transport.succeeded.assert_not_called()
-
-
 @pytest.mark.parametrize(
     "operation,feature,schema,status",
     [

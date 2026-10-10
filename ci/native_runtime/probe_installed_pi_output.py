@@ -814,7 +814,9 @@ def _close_startup_resource(resource: Any | None) -> BaseException | None:
     return None
 
 
-def _start_installed_daemon(*, guard_home: Path, home: Path, workspace: Path, identity: Any) -> Any:
+def _start_installed_daemon(
+    *, guard_home: Path, home: Path, workspace: Path, identity: Any, register_workspace_policy: bool = True
+) -> Any:
     """Start the installed Guard daemon that the generated extension will use."""
     from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
     from codex_plugin_scanner.guard.store import GuardStore
@@ -842,7 +844,8 @@ def _start_installed_daemon(*, guard_home: Path, home: Path, workspace: Path, id
             "register_workspace",
             None,
         )
-        if callable(register_workspace):
+        # First-contact scenarios skip this on purpose: a freshly installed Guard has no bound policy.
+        if register_workspace_policy and callable(register_workspace):
             _ = register_workspace(workspace)
         daemon.start()
     except BaseException as startup_error:

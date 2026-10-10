@@ -32,7 +32,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_payload_for_catalog_id, mcp_tool_state
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
@@ -296,17 +295,6 @@ def test_lockdown_suppresses_read_allow_defaults(tool: str) -> None:
     assert (
         apply_local_mcp_extension_decision(_AuthorityStore((_layer(lockdown=True),)), _artifact(tool), "review") is None
     )
-
-
-@pytest.mark.parametrize(
-    "tool",
-    ["get_message", "get_messages", "move_message", "move_messages", "send_email", "save_attachment", "future_tool"],
-)
-def test_unreviewed_authority_is_not_allowlisted(tool: str) -> None:
-    payload = mcp_payload_for_catalog_id(_CATALOG_ID)
-    assert payload is not None
-    assert mcp_tool_state(payload, tool) == "inherit"
-    assert apply_local_mcp_extension_decision(_AuthorityStore((_layer(),)), _artifact(tool), "review") is None
 
 
 def test_package_identity_matches_versions_but_not_server_display_names() -> None:

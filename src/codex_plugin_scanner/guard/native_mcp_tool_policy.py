@@ -27,6 +27,7 @@ from .native_context import (
     _resolve_digest_home,
     bind_context_digest_home,
     ensure_resident_prerequisite,
+    reset_context_digest_home,
 )
 from .native_execution import _resident_request
 from .native_mcp_tool_evidence import _arguments_dto
@@ -373,8 +374,11 @@ def native_evaluate_tool_call(
                 # The claim is committed. Refresh authority without a storage
                 # lease, then read policy again in a new scope.
                 effects.close()
-                bind_context_digest_home(getattr(store, "guard_home", None))
-                provided = _fresh_authority(initial_authority, fresh_authority_provider)
+                home_token = bind_context_digest_home(getattr(store, "guard_home", None))
+                try:
+                    provided = _fresh_authority(initial_authority, fresh_authority_provider)
+                finally:
+                    reset_context_digest_home(home_token)
                 result: object = {"status": "failed"}
                 authority = initial_authority
                 if provided is not None:

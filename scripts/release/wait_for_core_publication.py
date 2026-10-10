@@ -97,7 +97,9 @@ def publication_ready(repo: str, run_id: str, source_sha: str) -> bool:
             "gh",
             "api",
             "--paginate",
-            f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100",
+            # Publish jobs run only on attempt 1; a later rerun of an unrelated
+            # failed job reports them as skipped in the latest attempt.
+            f"repos/{repo}/actions/runs/{run_id}/attempts/1/jobs?per_page=100",
             "--jq",
             '.jobs[] | select(.name == "Publish main release to PyPI") | .conclusion',
         ],
