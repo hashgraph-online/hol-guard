@@ -7,6 +7,10 @@ from typing import Any
 PERSISTENT_SCOPES = frozenset({"workspace", "harness", "global", "publisher", "artifact"})
 
 
+def _mapping(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
 def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
     """Return redacted-by-construction facts for rows added during the run.
 
@@ -21,10 +25,17 @@ def approval_rows(store: Any, known_ids: set[str]) -> list[dict[str, Any]]:
             continue
         contract = request_scope_contract(row)
         scopes = [str(scope) for scope in contract.allow_scopes]
+        envelope = _mapping(row.get("action_envelope_json"))
+        decision = _mapping(row.get("decision_v2_json"))
         rows.append(
             {
-                "tool_name": str(row.get("tool_name") or ""),
-                "reason_code": str(row.get("reason_code") or row.get("policy_reason") or ""),
+                "tool_name": str(envelope.get("tool_name") or row.get("tool_name") or ""),
+                "reason_code": str(
+                    _mapping(envelope.get("native_origin_receipt")).get("reason_code")
+                    or decision.get("reason_code")
+                    or row.get("reason_code")
+                    or ""
+                ),
                 "exact_action_persistence_eligible": contract.exact_action_persistence_eligible is True,
                 "allow_scopes": scopes,
                 "always_available": contract.exact_action_persistence_eligible is True

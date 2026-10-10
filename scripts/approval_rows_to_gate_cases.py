@@ -25,8 +25,12 @@ FAMILY = {"read": "read", "Read": "read", "glob": "glob", "Glob": "glob", "grep"
 FAMILY |= {"write": "write", "Write": "write", "eval": "eval", "task": "task", "wait": "wait"}
 FAMILY |= {"todo": "todo", "todo_write": "todo_write", "ls": "ls"}
 _HOME = re.compile(r"(?:/Users|/home)/[^/\s'\"]+|C:\\Users\\[^\\\s'\"]+")
-# Any non-hidden folder under home is treated as a project checkout.
-_PROJECT = re.compile(r"\$\{HOME\}/[A-Za-z][^/\s'\"]*/[^\s'\"]+")
+# Any non-hidden folder under home is treated as a project checkout; the path inside it is kept.
+_PROJECT = re.compile(r"\$\{HOME\}/[A-Za-z][^/\s'\"]*(?=/|$|[\s'\"])")
+# GitHub owner/repository pairs are replaced even when no --owner is given.
+_GITHUB_REPO = re.compile(
+    r"(github\.com[/:]|\brepos/|--repo[= ]|-R )[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?(?=\.git\b|[/\s'\"]|$)"
+)
 _TEMP = re.compile(r"(?:/private)?/tmp/[A-Za-z0-9._-]+")
 
 
@@ -35,6 +39,7 @@ def scrub(text: str, owners: list[str]) -> str:
     text = _HOME.sub("${HOME}", text)
     text = _PROJECT.sub("${WORKTREE}", text)
     text = _TEMP.sub("${PRIVATE_TMP}", text)
+    text = _GITHUB_REPO.sub(r"\1o/r", text)
     for owner in owners:
         text = re.sub(re.escape(owner) + r"/[A-Za-z0-9._-]+", "o/r", text, flags=re.IGNORECASE)
         text = re.sub(re.escape(owner), "o", text, flags=re.IGNORECASE)
@@ -64,7 +69,7 @@ def to_case(row: dict[str, Any], owners: list[str]) -> dict[str, Any] | None:
     tool = str(row.get("tool_name") or "")
     tool_input = row.get("tool_input")
     if tool in SHELL_TOOLS:
-        command = row.get("command") or (tool_input or {}).get("command" if isinstance(tool_input, dict) else "")
+        command = row.get("command") or (tool_input.get("command") if isinstance(tool_input, dict) else None)
         if not isinstance(command, str) or not command:
             return None
         kind, payload = "shell", {"command": command}
@@ -86,7 +91,7 @@ def to_case(row: dict[str, Any], owners: list[str]) -> dict[str, Any] | None:
         "tool_input": payload,
         "cwd": "worktree",
         "expect": "allow",
-        "observed_reason_code": str(row.get("reason_code") or ""),
+        "observed_reason_code": scrub(str(row.get("reason_code") or ""), owners),
     }
 
 

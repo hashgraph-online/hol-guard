@@ -20,6 +20,7 @@ from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from tests.benign_fp_gate_fixture import BenignFixture
 from tests.test_guard_benign_false_positive_gate import (
     GateCase,
+    _assert_pending,
     _describe,
     _quiet_allow,
     _review,
@@ -76,11 +77,10 @@ def test_read_only_benign_corpus_seed_is_not_reviewed(
     fixture, worker = gate_environment
     case = _case(seed_id, command)
     result, approvals = _review(case, fixture, worker)
-    passed = _quiet_allow(result, approvals)
     if seed_id in PENDING:
-        assert not passed, f"stale pending marker: {seed_id} now allows quietly ({PENDING[seed_id]})"
+        _assert_pending(seed_id, PENDING[seed_id], result, approvals, _describe(case, result, approvals))
         return
-    assert passed, f"benign corpus seed was reviewed: {_describe(case, result, approvals)}"
+    assert _quiet_allow(result, approvals), f"benign corpus seed was reviewed: {_describe(case, result, approvals)}"
 
 
 def test_read_only_seed_selection_is_not_empty_and_pending_names_real_seeds() -> None:

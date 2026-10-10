@@ -202,7 +202,11 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
     if any("://" in str(call["args"].get("path", call["args"].get("file_path", ""))) for call in calls):
         return "not-exercised", "virtual URI operations are outside the disposable task scope"
     if scenario.oracle == "native-tools":
-        scope_error = native_tools_scope_error(scenario, calls, case)
+        # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
+        guard_stopped = case["approval_delta"] != 0 or (
+            any(call["is_error"] is True for call in calls) and any(g.get("decision") == "deny" for g in guards)
+        )
+        scope_error = native_tools_scope_error(scenario, calls, case, guard_denied=guard_stopped)
         if scope_error:
             return "not-exercised", scope_error
     elif scenario.commands and scenario.oracle != "home-copy-task":

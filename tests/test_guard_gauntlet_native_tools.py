@@ -109,9 +109,59 @@ def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
     assert native_tools_scope_error(git, ok[:1], {}) is not None
     assert native_tools_scope_error(git, [*ok, _call("bash", command="rm -rf x")], {}) is not None
     temp = _scenario("omp-native-private-temp-write-then-overwrite")
-    mk = _call("bash", command="mktemp -d")
-    assert native_tools_scope_error(temp, [mk, _call("write", path="/tmp/tmp.ab/x.txt")], {}) is None
-    assert native_tools_scope_error(temp, [mk, _call("write", path="/home/u/x.txt")], {}) is not None
+    mk = {**_call("bash", command="mktemp -d"), "result": {"content": [{"type": "text", "text": "/tmp/tmp.ab\n"}]}}
+    scratch = _call("write", path="/tmp/tmp.ab/scratch-notes.txt")
+    assert native_tools_scope_error(temp, [mk, scratch, scratch], {}) is None
+    # One write is not an overwrite; shared /tmp, traversal and other directories are out of scope.
+    assert native_tools_scope_error(temp, [mk, scratch], {}) is not None
+    for path in (
+        "/tmp/scratch-notes.txt",
+        "/tmp/tmp.ab/../../home/u/scratch-notes.txt",
+        "/tmp/tmp.cd/scratch-notes.txt",
+    ):
+        assert native_tools_scope_error(temp, [mk, scratch, _call("write", path=path)], {}) is not None
+    assert native_tools_scope_error(temp, [_call("bash", command="mktemp -d"), scratch, scratch], {}) is not None
+
+
+def test_scope_judge_lets_a_guard_denial_surface_as_a_false_positive() -> None:
+    from ci.gauntlet.native_tools import native_tools_scope_error
+
+    temp = _scenario("omp-native-private-temp-write-then-overwrite")
+    denied = {**_call("bash", command="mktemp -d"), "is_error": True}
+    assert native_tools_scope_error(temp, [denied], {}) is not None
+    assert native_tools_scope_error(temp, [denied], {}, guard_denied=True) is None
+    # A denial never excuses a call outside the scenario.
+    stray = _call("bash", command="rm -rf x")
+    assert native_tools_scope_error(temp, [denied, stray], {}, guard_denied=True) is not None
+
+
+def test_private_temp_cleanup_removes_only_the_directory_mktemp_created(tmp_path, monkeypatch) -> None:
+    from ci.gauntlet.native_tools import cleanup_private_temp
+
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+    created, existing = tmp_path / "tmp.created", tmp_path / "tmp.existing"
+    for directory in (created, existing):
+        directory.mkdir(mode=0o700)
+        (directory / "scratch-notes.txt").write_text("second draft", encoding="utf-8")
+
+    def events(directory, command="mktemp -d"):
+        return [
+            {"type": "tool_execution_start", "toolCallId": "a", "toolName": "bash", "args": {"command": command}},
+            {
+                "type": "tool_execution_end",
+                "toolCallId": "a",
+                "toolName": "bash",
+                "result": {"content": [{"type": "text", "text": f"{directory}\n"}]},
+            },
+        ]
+
+    cleanup_private_temp(events(existing, command="echo"))
+    cleanup_private_temp(
+        [{"type": "tool_execution_start", "toolName": "write", "args": {"path": str(existing / "scratch-notes.txt")}}]
+    )
+    assert existing.exists()
+    cleanup_private_temp(events(created))
+    assert not created.exists() and existing.exists()
 
 
 def test_approval_row_without_always_is_named_as_a_false_positive() -> None:
@@ -121,4 +171,22 @@ def test_approval_row_without_always_is_named_as_a_false_positive() -> None:
         {"tool_name": "bash", "always_available": True},
         {"tool_name": "read", "always_available": False},
     ]
+    assert always_gap(rows) == ["read"]
+
+
+def test_approval_rows_name_the_tool_from_the_stored_action_envelope(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from ci.gauntlet.approval_rows import always_gap, approval_rows
+    from codex_plugin_scanner.guard import approval_scope_support
+
+    contract = SimpleNamespace(allow_scopes=["once"], exact_action_persistence_eligible=False)
+    monkeypatch.setattr(approval_scope_support, "request_scope_contract", lambda row: contract)
+    stored = {
+        "request_id": "r1",
+        "action_envelope_json": {"tool_name": "read", "native_origin_receipt": {"reason_code": "native_x_review"}},
+    }
+    store = SimpleNamespace(list_approval_requests=lambda **_: [stored])
+    rows = approval_rows(store, set())
+    assert rows[0]["tool_name"] == "read" and rows[0]["reason_code"] == "native_x_review"
     assert always_gap(rows) == ["read"]

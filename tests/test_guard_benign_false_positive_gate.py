@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.approval_rows import always_gap, approval_rows
+from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
@@ -54,7 +56,9 @@ _FIXED_TOOLS = {
 _ALLOWED_PR = {"#3958", "#3959", "#3960", "#3961", "#3973", "unassigned"}
 # Pending entries are recorded against the Linux CI host. Git helper context and
 # temp-directory proofs differ on other hosts, so only CI fails a stale entry.
-_ENFORCE_STALE_PENDING = bool(os.environ.get("CI"))
+# Pending markers record the Linux CI result. macOS sends some Oh My Pi and Z Code reads
+# through protected read-only execution, so local macOS runs do not judge marker staleness.
+_ENFORCE_STALE_PENDING = bool(os.environ.get("CI")) and sys.platform != "darwin"
 _PENDING_PR: dict[str, str] = _DOCUMENT["pending_pr"]
 _PENDING_ALWAYS: dict[str, str] = _DOCUMENT["pending_always"]
 
@@ -108,20 +112,8 @@ def _tool_name(case: GateCase) -> str:
     return _FIXED_TOOLS[case.tool]
 
 
-def _substitute(value: object, tokens: dict[str, str]) -> object:
-    if isinstance(value, str):
-        for token, replacement in tokens.items():
-            value = value.replace(token, replacement)
-        return value
-    if isinstance(value, list):
-        return [_substitute(item, tokens) for item in value]
-    if isinstance(value, dict):
-        return {key: _substitute(item, tokens) for key, item in value.items()}
-    return value
-
-
 def _tool_input(case: GateCase, fixture: BenignFixture) -> dict[str, object]:
-    resolved = _substitute(case.tool_input, fixture.tokens())
+    resolved = redact_value(case.tool_input, fixture.tokens())
     assert isinstance(resolved, dict)
     if case.harness == "zcode" and case.tool == "shell":
         resolved = {**resolved, "description": "Synthetic benign probe"}
@@ -208,6 +200,32 @@ def _quiet_allow(result: dict[str, object], approvals: int) -> bool:
     )
 
 
+def _hard_denied(result: dict[str, object], approvals: int) -> bool:
+    """A deny with no approval row and no review reason is a hard block or fail-safe denial."""
+    reason = _reason(result)
+    return (
+        _decision(result) == "deny"
+        and approvals == 0
+        and "_review" not in reason
+        and "reapproval" not in reason
+        and not reason.endswith("_containment_required")
+    )
+
+
+def _assert_pending(case_id: str, recorded: str, result: dict[str, object], approvals: int, description: str) -> None:
+    """Fail a stale marker on CI, and fail a pending case that turned into a hard denial anywhere.
+
+    A pending case may still warn or ask for review; it must not quietly allow or hard-block.
+    """
+    if _quiet_allow(result, approvals):
+        if not _ENFORCE_STALE_PENDING:
+            pytest.skip(f"pending {case_id} allows on this host; CI decides staleness")
+        pytest.fail(f"stale pending marker: {case_id} now allows quietly; remove it ({recorded})")
+    assert not _hard_denied(result, approvals), f"pending case became a hard denial: {description}"
+    if _ENFORCE_STALE_PENDING:
+        assert _reason(result) == recorded, f"pending case changed reason (recorded {recorded}): {description}"
+
+
 def _describe(case: GateCase, result: dict[str, object], approvals: int) -> str:
     return (
         f"{case.case_id} [{case.fix_area}] decision={_decision(result)} reason={_reason(result)} approvals={approvals}"
@@ -223,21 +241,20 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
     description = _describe(case, result, approvals)
     if case.expect == "not_allow":
         assert case.case_id not in _PENDING_FIX, "negative controls cannot be pending_fix"
-        assert not _quiet_allow(result, approvals), f"negative control was allowed: {description}"
+        # A warning or notice on an allowed call is still an allow, so check the effective decision.
+        assert _decision(result) != "allow" or approvals > 0, f"negative control was allowed: {description}"
         return
-    passed = _quiet_allow(result, approvals)
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
     if case.case_id in _PENDING_FIX:
-        if passed and not _ENFORCE_STALE_PENDING:
-            pytest.skip(f"pending_fix {case.case_id} allows on this host; CI decides staleness")
-        assert not passed, (
-            f"stale pending_fix: {case.case_id} now allows quietly; remove it from pending_fix "
-            f"({_PENDING_FIX[case.case_id]})"
-        )
+        _assert_pending(case.case_id, _PENDING_FIX[case.case_id], result, approvals, description)
     else:
-        assert passed, f"benign work was reviewed: {description}"
-    if gap and case.case_id in _PENDING_ALWAYS:
-        pytest.xfail(f"{_PENDING_ALWAYS[case.case_id]}: review row without Always: {description}")
+        assert _quiet_allow(result, approvals), f"benign work was reviewed: {description}"
+    if case.case_id in _PENDING_ALWAYS:
+        if gap:
+            pytest.xfail(f"{_PENDING_ALWAYS[case.case_id]}: review row without Always: {description}")
+        if not _ENFORCE_STALE_PENDING:
+            pytest.skip(f"pending_always {case.case_id} offers Always on this host; CI decides staleness")
+        pytest.fail(f"stale pending_always: {case.case_id} now offers Always; remove it ({description})")
     assert not gap, f"review row for read-only work offers no Always allow: {description}"
 
 
@@ -257,7 +274,7 @@ def test_pending_entries_are_consistent_and_name_their_fix() -> None:
     assert set(_PENDING_PR) == set(_PENDING_FIX)
     assert set(_PENDING_PR.values()) <= _ALLOWED_PR, sorted(set(_PENDING_PR.values()) - _ALLOWED_PR)
     assert set(_PENDING_ALWAYS) <= set(_PENDING_FIX)
-    assert set(_PENDING_ALWAYS.values()) == {"#3961"}
+    assert set(_PENDING_ALWAYS.values()) <= {"#3961"}
 
 
 def test_every_confirmed_false_positive_class_has_a_gate_case() -> None:
