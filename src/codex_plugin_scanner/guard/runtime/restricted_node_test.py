@@ -40,6 +40,21 @@ def _node_runtime_args(command: Sequence[str]) -> tuple[str, ...]:
     return tuple(runtime_args)
 
 
+def nearest_project_root(cwd: Path, workspace: Path, relative: str) -> Path:
+    """The closest directory holding `relative`, from cwd up to the workspace root.
+
+    Mirrors Node and package-manager lookup, so a run in a package subdirectory
+    still finds dependencies hoisted to the approved workspace root.
+    """
+    root = workspace.resolve(strict=True)
+    directory = cwd.resolve(strict=True)
+    if not _path_is_within(directory, root):
+        return root
+    while directory != root and not os.path.lexists(directory / relative):
+        directory = directory.parent
+    return directory
+
+
 def _approved_node(executable: Path, workspace: Path) -> bool:
     metadata = executable.stat()
     if metadata.st_uid not in {0, os.getuid()}:

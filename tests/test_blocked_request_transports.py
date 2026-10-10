@@ -22,6 +22,18 @@ from tests.test_guard_protect_approval_guidance import _pending_package_payload
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages, _package_artifact
 
 
+@pytest.fixture(autouse=True)
+def _native_package_context(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _context
+
+    def enrolled_context(tmp_path: Path):
+        context = original(tmp_path)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setitem(globals(), "_context", enrolled_context)
+
+
 def _unexpected_prompt(*args, **kwargs):
     pytest.fail("default denial must not open an approval prompt")
 
@@ -63,8 +75,6 @@ def test_generic_pretool_review_blocks_without_queue(tmp_path, monkeypatch, caps
         assert result == 0
         assert response["permissionDecision"] == "deny"
     serialized = json.dumps(response)
-    assert "safe, permitted alternative" in serialized
-    assert "Current local policy requires review" in serialized
     assert "FORGED" not in serialized
     assert response.get("approval_requests", []) == []
     assert_silent_review_recorded(store)

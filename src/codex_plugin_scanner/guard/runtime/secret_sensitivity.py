@@ -287,11 +287,6 @@ def classify_secret_path(
     return None
 
 
-def classify_secret_path_families(text: str) -> set[str]:
-    lowered = text.lower()
-    return {family for marker, family in SECRET_PATH_TEXT_MARKERS if marker in lowered}
-
-
 def classify_legacy_secret_path_families(text: str) -> set[str]:
     lowered = text.lower()
     return {family for marker, family in LEGACY_SECRET_PATH_TEXT_MARKERS if marker in lowered}

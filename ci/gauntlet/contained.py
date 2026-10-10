@@ -10,7 +10,6 @@ import shlex
 import shutil
 import stat
 import subprocess
-import tempfile
 import threading
 import time
 from datetime import datetime, timezone
@@ -31,7 +30,7 @@ from .contained_judge import (
     assess_contained_execution,
 )
 from .evidence import public_events, read_events
-from .fixtures import create_fixture, digest_file
+from .fixtures import create_fixture, create_run_root, digest_file
 from .host_process import clean_environment, run_process
 from .input_evidence import fixture_path_aliases, public_observations, redact_value
 from .provider import InferenceRelay, LoopbackCollector
@@ -159,7 +158,7 @@ def run_contained_profile(
     started_at = datetime.now(timezone.utc).isoformat()
     parent = (work_root or output.parent).resolve()
     parent.mkdir(parents=True, exist_ok=True)
-    root = Path(tempfile.mkdtemp(prefix="guard-gauntlet-contained-", dir=parent)).resolve()
+    root = create_run_root(parent)
     fixture = create_fixture(root / "fixture")
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
@@ -427,10 +426,7 @@ def run_contained_profile(
                 "",
                 "| Case | Outcome | Actual tools |",
                 "| --- | --- | ---: |",
-                *[
-                    f"| {case['id']} | {case['outcome']} | {case['tool_calls']} |"
-                    for case in report["cases"]
-                ],
+                *[f"| {case['id']} | {case['outcome']} | {case['tool_calls']} |" for case in report["cases"]],
             ]
         )
         + "\n",

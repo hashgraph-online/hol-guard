@@ -14,6 +14,30 @@ fn status(fixture: &Fixture, request_id: &str) -> serde_json::Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
+fn seed_retained(fixture: &Fixture, count: usize) {
+    let directory = fixture.root.join(DIRECTORY);
+    crate::resident_state::ensure_private_directory(&directory, true).unwrap();
+    // These cases exercise capacity admission, not repeated claim creation.
+    // Keep the real private persistence path and canonical record format;
+    // the boundary claim still validates every retained record itself.
+    for index in 0..count {
+        let record = Record {
+            schema: "guard.private-business-attempt.v1".into(),
+            version: 1,
+            request_id: format!("retained-{index}"),
+            input_binding: "a".repeat(64),
+            status: Status::Claimed,
+            acknowledgement_binding: None,
+        };
+        persist(
+            &directory.join(format!("{}.json", record.request_id)),
+            &fixture.root,
+            &encode(&record).unwrap(),
+        )
+        .unwrap();
+    }
+}
+
 #[test]
 fn retained_progress_cannot_recreate_an_attempt_and_records_no_provider_body() {
     let fixture = Fixture::new("business-journal-outcome");
@@ -68,6 +92,12 @@ fn changed_record_invalid_ack_and_wrong_store_refuse_transitions() {
         &serde_json::json!({"changed":true}),
     );
     assert!(journal.start(&fixture.store).is_err());
+    assert_eq!(
+        Journal::claimed(&fixture.store, "business-after-corruption", &"a".repeat(64))
+            .err()
+            .as_deref(),
+        Some(INVALID)
+    );
     // Corrupt retained evidence intentionally refuses new claims in that
     // store. Exercise independent invalid-ack cases in an intact store.
     let fixture = Fixture::new("business-journal-invalid-ack");
@@ -110,16 +140,13 @@ fn concurrent_claim_journals_cannot_replace_one_another() {
 fn capacity_and_failed_persistence_refuse_without_returning_a_handle() {
     let fixture = Fixture::new("business-journal-capacity");
     let directory = fixture.root.join(DIRECTORY);
-    crate::resident_state::ensure_private_directory(&directory, true).unwrap();
-    for index in 0..CAPACITY {
-        Journal::claimed(
-            &fixture.store,
-            &format!("retained-{index}"),
-            &"a".repeat(64),
-        )
-        .unwrap();
-    }
-    assert!(Journal::claimed(&fixture.store, "business-full", &"a".repeat(64)).is_err());
+    seed_retained(&fixture, CAPACITY);
+    assert_eq!(
+        Journal::claimed(&fixture.store, "business-full", &"a".repeat(64))
+            .err()
+            .as_deref(),
+        Some("native_business_attempt_capacity")
+    );
     assert!(!directory.join("business-full.json").exists());
     let other = Fixture::new("business-journal-persistence-refusal");
     let directory = other.root.join(DIRECTORY);
@@ -134,14 +161,7 @@ fn capacity_and_failed_persistence_refuse_without_returning_a_handle() {
 #[test]
 fn crash_temporary_does_not_consume_the_last_retained_slot() {
     let fixture = Fixture::new("business-journal-temp-capacity");
-    for index in 0..CAPACITY - 1 {
-        Journal::claimed(
-            &fixture.store,
-            &format!("retained-{index}"),
-            &"a".repeat(64),
-        )
-        .unwrap();
-    }
+    seed_retained(&fixture, CAPACITY - 1);
     let path = fixture
         .root
         .join(DIRECTORY)
@@ -149,7 +169,12 @@ fn crash_temporary_does_not_consume_the_last_retained_slot() {
     persist(&path, &fixture.root, b"{}").unwrap();
     Journal::claimed(&fixture.store, "business-last", &"a".repeat(64)).unwrap();
     assert!(path.exists());
-    assert!(Journal::claimed(&fixture.store, "business-full", &"a".repeat(64)).is_err());
+    assert_eq!(
+        Journal::claimed(&fixture.store, "business-full", &"a".repeat(64))
+            .err()
+            .as_deref(),
+        Some("native_business_attempt_capacity")
+    );
     assert!(!persistence_temporary(".unrecognized.tmp"));
     assert!(!persistence_temporary(".business-id.json.pid.123.tmp"));
 }

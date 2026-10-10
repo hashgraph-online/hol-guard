@@ -16,6 +16,13 @@ import {
   isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
+import {
+  oneTimeRetryWindowMinutes,
+  receiptDescribesRequest,
+  retryCannotReuseApproval,
+  retryCannotReuseApprovalHint,
+} from "./approval-retry-guidance";
+import { approvalGateRefreshNeeded, resolvedStateForItem, useShownRequestCheck } from "./review-decision-state";
 import { GuardRequestResolutionError } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
@@ -51,6 +58,8 @@ import {
 } from "./review-scope-controls";
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
+import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -70,6 +79,9 @@ export function approvalGateRefreshFailureMessage(message: string): string {
 
 export function ReviewDecisionCard(props: {
   detail: ReviewViewModel | null;
+  detailError?: string | null;
+  detailLoading?: boolean;
+  onRetryDetail?: () => void;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onGoHome: () => void;
   approvalGate: GuardApprovalGatePublicConfig | null;
@@ -80,7 +92,15 @@ export function ReviewDecisionCard(props: {
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
-  const [resolved, setResolved] = useState<{ action: "allow" | "block"; persistedExactAction: boolean } | null>(null);
+  // Keyed by request id: the parent may show the next request before onResolve settles.
+  const [resolvedState, setResolved] = useState<{
+    requestId: string;
+    action: "allow" | "block";
+    persistedExactAction: boolean;
+    message?: string;
+  } | null>(null);
+  const resolved = resolvedStateForItem(resolvedState, item);
+  const isStillShown = useShownRequestCheck(item?.request_id ?? null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
@@ -89,6 +109,7 @@ export function ReviewDecisionCard(props: {
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [extensionDialogActive, setExtensionDialogActive] = useState(false);
   const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
   const [rememberExactAction, setRememberExactAction] = useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = useState(props.approvalGate);
@@ -157,6 +178,7 @@ export function ReviewDecisionCard(props: {
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
       if (!item || resolutionBlockReason !== null) return;
+      const requestId = item.request_id;
       const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
       const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
@@ -197,20 +219,19 @@ export function ReviewDecisionCard(props: {
           ...proof,
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
-        setResolved({ action, persistedExactAction: persistExactAction });
+        // The next request may already be on screen; never reset its form for this decision.
+        if (!isStillShown(requestId)) return;
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
       } catch (err) {
+        if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
-        if (
-          err instanceof GuardRequestResolutionError &&
-          err.status === 423 &&
-          err.payload?.["error"] === "approval_gate_locked"
-        ) {
+        if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
             const refreshedGate = await fetchResolvedApprovalGate();
@@ -220,11 +241,12 @@ export function ReviewDecisionCard(props: {
           }
         }
       } finally {
-        setSubmitting(null);
+        if (isStillShown(requestId)) setSubmitting(null);
       }
     },
     [
       item,
+      isStillShown,
       allowScope,
       blockScope,
       watchOnlyObservation,
@@ -283,6 +305,8 @@ export function ReviewDecisionCard(props: {
           void handleResolve(action);
           return;
         }
+        // The dialog renders from this state; keep the fresh gate so it asks for a code.
+        if (fresh) setEffectiveApprovalGate(fresh);
         setPendingAction(action);
         setPendingContractKey(decisionContractKey);
       })();
@@ -308,7 +332,15 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
+      if (
+        submitting !== null ||
+        pendingAction !== null ||
+        extensionDialogActive ||
+        resolved !== null ||
+        resolutionBlockReason !== null
+      ) {
+        return;
+      }
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -328,7 +360,15 @@ export function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
+  }, [
+    availableScopeChoices,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    submitting,
+  ]);
 
   const handleModalSubmit = useCallback(() => {
     if (pendingAction === null || submitting !== null) {
@@ -371,11 +411,34 @@ export function ReviewDecisionCard(props: {
     setApprovalTotpCode(event.target.value);
   }, []);
 
+  const reviewedRequestId = item?.request_id ?? null;
+  const handleExtensionApproved = useCallback(
+    (message: string) => {
+      if (reviewedRequestId === null) return;
+      setResolved({ requestId: reviewedRequestId, action: "allow", persistedExactAction: false, message });
+    },
+    [reviewedRequestId],
+  );
+
   const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setUseCooldown(event.target.checked);
   }, []);
 
   if (!detail || !item) {
+    if (props.detailError) {
+      return <section role="alert" className="rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] p-5">
+        <h3 className="text-lg font-semibold text-brand-dark">Request details are unavailable</h3>
+        <p className="mt-2 text-sm leading-relaxed text-brand-dark/80">{props.detailError}</p>
+        {props.onRetryDetail && <ActionButton className="mt-4" variant="outline" onClick={props.onRetryDetail}>
+          Refresh request
+        </ActionButton>}
+      </section>;
+    }
+    if (props.detailLoading) {
+      return <div aria-busy="true" aria-live="polite" className="p-5 text-sm text-brand-dark/80">
+        Loading request details…
+      </div>;
+    }
     return (
       <EmptyState
         title="Select an action"
@@ -385,12 +448,22 @@ export function ReviewDecisionCard(props: {
     );
   }
 
-  const plainTitle = plainEnglishRequestTitle(item);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
-  const whatWouldHappen = buildWhatWouldHappen(item);
-  const topAlertItems = buildTopAlertItems(item);
-  const evidenceItems = buildEvidenceItems(item);
+  const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
+  const topAlertItems = nativeDisplayOnly ? [] : buildTopAlertItems(item);
+  const evidenceItems = nativeDisplayOnly ? [] : buildEvidenceItems(item);
   const actionPresentation = guardActionPresentation(item.policy_action);
+  let sectionLabel = "Paused action";
+  let badgeLabel = actionPresentation.label;
+  if (nativeDisplayOnly) {
+    sectionLabel = "Saved request";
+    badgeLabel = "Read-only";
+  } else if (watchOnlyObservation) {
+    sectionLabel = "Watch-only finding";
+    badgeLabel = "Would have stopped";
+  }
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
   let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
@@ -404,7 +477,7 @@ export function ReviewDecisionCard(props: {
     resolvedBlockButtonLabel = "Stop this next time";
   }
   return (
-    <div className="space-y-5">
+    <div className="min-w-0 space-y-5">
       {resolved && (
         <div
           className={`guard-fade-in flex items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
@@ -420,7 +493,7 @@ export function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
+            {resolved.message ?? resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
           </p>
         </div>
       )}
@@ -428,18 +501,24 @@ export function ReviewDecisionCard(props: {
       <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <SectionLabel>{watchOnlyObservation ? "Watch-only finding" : "Paused action"}</SectionLabel>
-            <h2 className="mt-2 text-lg font-semibold text-brand-dark">{plainTitle}</h2>
+            {!nativeDisplayOnly && <SectionLabel>{sectionLabel}</SectionLabel>}
+            <h2 className={`${nativeDisplayOnly ? "" : "mt-2 "}text-lg font-semibold text-brand-dark`}>{plainTitle}</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               From {harnessName}
             </p>
           </div>
-          <Badge tone={watchOnlyObservation ? "info" : actionPresentation.tone}>
-            {watchOnlyObservation ? "Would have stopped" : actionPresentation.label}
+          <Badge tone={item.native_business_review_display_only || watchOnlyObservation ? "info" : actionPresentation.tone}>
+            {badgeLabel}
           </Badge>
         </div>
 
-        <PrimaryActionCard item={item} />
+        {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
+        {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
+        {resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? (
+          <p className="mt-4 text-sm leading-6 text-brand-dark">
+            {retryCannotReuseApprovalHint(item, harnessName)}
+          </p>
+        ) : null}
         {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
@@ -454,7 +533,9 @@ export function ReviewDecisionCard(props: {
                 aria-hidden="true"
               />
               <div>
-                <p className="text-sm font-semibold text-brand-attention">This decision cannot be overridden</p>
+                <p className="text-sm font-semibold text-brand-attention">
+                  {item.native_business_review_display_only ? "Review is not connected yet" : "This decision cannot be overridden"}
+                </p>
                 <p className="mt-1 text-sm text-brand-dark">{resolutionBlockReason}</p>
                 {item.superseded_by_request_id ? (
                   <a className="mt-3 inline-flex min-h-11 items-center font-semibold text-brand-blue underline"
@@ -497,6 +578,19 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionRecommendationCard
+            key={item.request_id}
+            item={item}
+            approvalGate={approvalGate}
+            allowScope={allowScope}
+            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            onResolve={props.onResolve}
+            onApproved={handleExtensionApproved}
+            onDialogActiveChange={setExtensionDialogActive}
+          />
+        )}
+
         {resolutionBlockReason === null && resolved === null && (
           <ReviewScopeControls
             commonScopeOptions={commonScopeOptions}
@@ -507,6 +601,8 @@ export function ReviewDecisionCard(props: {
             taskCapabilityCopy={taskCapabilityCopy}
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
             rememberExactAction={rememberExactAction}
+            oneTimeRetryBlocked={retryCannotReuseApproval(item)}
+            retryWindowMinutes={oneTimeRetryWindowMinutes(item)}
             allowScope={allowScope}
             blockScope={blockScope}
             onAllowScopeChange={setAllowScope}
@@ -595,7 +691,7 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {detail.receipt && (
+      {detail.receipt && receiptDescribesRequest(item, detail.receipt) && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>Last time</SectionLabel>
           <p className="mt-2 text-sm text-muted-foreground">

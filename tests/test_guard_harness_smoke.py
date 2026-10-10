@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.native_data_flow import detect_data_flow_exfiltration
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SafeDecodeDetector, SecretPathDetector
 from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
 
@@ -65,6 +65,7 @@ class TestCodexCliSmoke:
         assert real_aws_key_re.search(source) is None, "Canary fixture must not contain real-looking AWS access keys"
         assert real_npm_token_re.search(source) is None, "Canary fixture must not contain real-looking npm tokens"
 
+    @pytest.mark.usefixtures("native_data_flow_runtime")
     def test_canary_exfil_script_triggers_exfil_detection(self) -> None:
         """Verify canary exfil patterns trigger data-flow detection via a simulated shell action."""
         source = _fixture_text(CANARY_SCRIPT)

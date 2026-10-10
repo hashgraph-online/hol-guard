@@ -40,6 +40,8 @@ def test_generated_tool_call_awaits_exact_approval_without_replanning(
     script = f"""
 const harness = {json.dumps(harness)};
 const GUARD_CONFIG_PATH = '/fixture/settings.json';
+let approvalContinuationGeneration = 0;
+const GUARD_TIMEOUT_MS = 4250, GUARD_DEADLINE_RESERVE_MS = 250;
 const openedApprovalUrls = new Set();
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 let activeScenario;
@@ -132,6 +134,7 @@ async function runGuard(payload) {{
   )];
 }}
 async function ensureGuardWorkspaceReady() {{ return {{ ready: true }}; }}
+async function toolWorkspaceReadiness() {{ return {{ ready: true }}; }}
 function readinessFailureReason(readiness) {{ return `readiness-${{readiness.reasonCode}}`; }}
 
 {handler}

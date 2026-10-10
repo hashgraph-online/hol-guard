@@ -28,6 +28,7 @@ export type LocalCliCommand = {
   parent_id: string | null;
   state: LocalCliCommandState;
   classification?: McpClassification;
+  suggested_state?: LocalCliCommandState;
 };
 
 export type LocalMcpCatalog = {
@@ -60,6 +61,7 @@ export type LocalCliItem = {
   help_status: "ok" | "empty" | "failed" | null;
   surface: LocalCliSurface;
   server_identity_hash: string | null;
+  shares_enrolled_server?: boolean;
   source_label: string | null;
   state: LocalCliState;
   stale: boolean;
@@ -79,6 +81,11 @@ export type LocalCliItem = {
     account_binding: "unverified";
   };
   permission_scope?: "configured-connection" | "host-namespace" | "legacy-device";
+  profile_id?: string;
+  brand?: string;
+  display_name?: string;
+  seeded?: boolean;
+  installed?: boolean;
 };
 
 export type LocalCliListResponse = {
@@ -92,6 +99,7 @@ export type LocalCliListResponse = {
     generation?: number;
   };
   items: LocalCliItem[];
+  seeded_items: LocalCliItem[];
   cloud: {
     sync_local_only: boolean;
     continuity_enabled?: boolean;
@@ -134,10 +142,16 @@ export function customExtensionNeedsReview(item: LocalCliItem): boolean {
     || Boolean(item.mcp_catalog?.changes?.changed.length);
 }
 
-export function connectorWorkspaceItems(items: readonly LocalCliItem[], query = ""): LocalCliItem[] {
+export function connectorWorkspaceItems(
+  items: readonly LocalCliItem[], query = "", seeded: readonly LocalCliItem[] = [],
+): LocalCliItem[] {
   const needle = query.trim().toLowerCase();
-  return items.filter((item) => item.state !== "unset" || (item.surface === "mcp" && item.suggestable))
-    .filter((item) => !needle || [item.name, item.source_label, item.surface,
+  const known = new Set(items.map((item) => item.cli_id));
+  const seededRows = seeded.filter((item) => item.seeded === true && !known.has(item.cli_id));
+  return [...items, ...seededRows]
+    .filter((item) => item.state !== "unset" || (item.suggestable && (item.surface === "mcp" || item.surface === "cli"))
+      || item.seeded === true)
+    .filter((item) => !needle || [item.name, item.display_name, item.source_label, item.surface,
       ...item.commands.flatMap((command) => [command.name, command.usage, command.description])]
       .some((value) => value?.toLowerCase().includes(needle)))
     .sort((a, b) => Number(customExtensionNeedsReview(b)) - Number(customExtensionNeedsReview(a))
@@ -337,7 +351,7 @@ function suggestionMatchesQuery(item: LocalCliItem, needle: string): boolean {
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
 
-async function readJson(response: Response): Promise<unknown> {
+export async function readJson(response: Response): Promise<unknown> {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const record = isRecord(payload) ? payload : {};

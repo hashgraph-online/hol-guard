@@ -36,17 +36,28 @@ pub(super) fn git_helpers_proven_inert(
     let Some(environment) = execution_environment else {
         return false;
     };
-    model.segments.iter().all(|segment| {
+    model.segments.iter().enumerate().all(|(index, segment)| {
         segment.executable.as_deref().is_none_or(|executable| {
             executable_basename(executable) != "git"
                 || (segment.environment_names.is_empty()
+                    && super::directory_targets::drive_targets_quoted(segment)
                     && git_config::execution_free(
                         executable,
                         &segment.arguments,
                         context,
                         deadline,
                         Some(environment),
+                        stdout_piped(model, index),
                     ) == Some(true))
         })
     })
+}
+
+/// Git starts a pager only when its standard output is a terminal. The parser
+/// rejects stdout redirection, so a following pipeline stage proves a pipe.
+pub(super) fn stdout_piped(model: &CanonicalCommandV1, index: usize) -> bool {
+    match (model.segments.get(index), model.segments.get(index + 1)) {
+        (Some(segment), Some(next)) => next.pipeline_index == segment.pipeline_index + 1,
+        _ => false,
+    }
 }

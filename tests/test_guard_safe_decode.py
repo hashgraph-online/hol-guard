@@ -11,7 +11,6 @@ import codex_plugin_scanner.guard.runtime.safe_decode as safe_decode_module
 from codex_plugin_scanner.guard.runtime.safe_decode import (
     DecodedLayer,
     DecodeResult,
-    clear_decode_cache,
     decode_layers,
 )
 
@@ -192,8 +191,13 @@ def test_timeout_preserves_signals_from_materialized_layers(monkeypatch: pytest.
     assert result.timed_out and result.eval_signals
 
 
+def _fresh_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE", {})
+    monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_ORDER", [])
+
+
 def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_decode_cache()
+    _fresh_decode_cache(monkeypatch)
     payload = _b64("exec('cached payload')")
     calls = 0
     original = safe_decode_module._find_encoded_candidate
@@ -217,7 +221,7 @@ def test_repeated_payloads_use_versioned_decode_cache(monkeypatch: pytest.Monkey
 
 
 def test_decode_cache_access_marks_entry_recent(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_decode_cache()
+    _fresh_decode_cache(monkeypatch)
     monkeypatch.setattr(safe_decode_module, "_DECODE_CACHE_LIMIT", 2)
     first = _b64("exec('first')")
     second = _b64("exec('second')")

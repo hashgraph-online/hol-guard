@@ -227,28 +227,6 @@ def _guard_cloud_exception_sync_request(
     return response
 
 
-def submit_command_policy_exception_request(
-    store: GuardStore,
-    payload: dict[str, object],
-    *,
-    auth_context: dict[str, object] | None = None,
-) -> dict[str, object]:
-    """Submit a command-policy exception request to Guard Cloud.
-
-    Uses the same Cloud sync auth as the resource-exception path.
-    The Cloud re-fetches the bound pending command server-side using
-    the correlation identifiers — no raw command is transmitted.
-    """
-    normalized = validate_command_policy_exception_payload(payload)
-    return _guard_cloud_exception_sync_request(
-        store,
-        auth_context=auth_context,
-        method="POST",
-        data=json.dumps(normalized).encode("utf-8"),
-        invalid_response_message="Guard Cloud command-policy request returned an invalid response.",
-    )
-
-
 def submit_cloud_exception_request(
     store: GuardStore,
     payload: dict[str, object],

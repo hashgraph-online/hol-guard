@@ -69,6 +69,13 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/hook_execution_environment.py",
         "src/codex_plugin_scanner/guard/native_hook_edge.py",
         "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
+        # The request digest correlates resident framing; it never owns a
+        # semantic approval, policy, or context identity or decision.
+        "src/codex_plugin_scanner/guard/native_approval_reuse.py",
+        # Same correlation-only digest for the approval-proof resident op.
+        "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        "src/codex_plugin_scanner/guard/native_github_cli.py",
+        "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
         # reattachment integrity but never authorize or evaluate an action.
         "src/codex_plugin_scanner/guard/retry_lineage.py",
@@ -90,6 +97,20 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_execution.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
+        # Bounded response decoding for resident package-verdict composition patches.
+        "src/codex_plugin_scanner/guard/native_package_evaluation_compose.py",
+        # Decodes the bounded resident approval-reuse response envelope.
+        "src/codex_plugin_scanner/guard/native_approval_reuse.py",
+        # Decodes the bounded resident approval-proof response; the answer is
+        # strictly validated and never reinterpreted into a decision.
+        "src/codex_plugin_scanner/guard/native_approval_proof.py",
+        # Decodes the bounded resident GitHub CLI classification envelope.
+        "src/codex_plugin_scanner/guard/native_github_cli.py",
+        "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
+        # Decodes the bounded resident MCP runtime-evidence response envelope.
+        "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
+        # Decodes the bounded resident MCP tool-evidence response envelope.
+        "src/codex_plugin_scanner/guard/native_mcp_tool_evidence.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         "src/codex_plugin_scanner/guard/native_context.py",
     }
@@ -234,6 +255,7 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/local_cli_commands.py",
         "src/codex_plugin_scanner/guard/runtime/local_cli_compound.py",
         "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
+        "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
         "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/lockfile_evaluation_support.py",
         "src/codex_plugin_scanner/guard/runtime/lockfile_parse_result.py",

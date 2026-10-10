@@ -65,7 +65,7 @@ def test_pending_native_build_waits_for_complete_successful_coverage(status: str
     complete = dict(pending, status="completed", conclusion="success")
     calls, logs = _run([[pending], [complete, *_jobs()]])
     assert len(calls) == 3
-    assert logs[-1].startswith("All 128 Python coverage shards succeeded")
+    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python coverage shards succeeded")
 
 
 def test_successful_native_build_cannot_replace_a_missing_shard() -> None:
@@ -79,7 +79,7 @@ def test_unrelated_failed_job_does_not_supply_or_invalidate_coverage() -> None:
     """Ignore failures outside the coverage producer dependency chain."""
     other = dict(_job(1000), name="unrelated-job", conclusion="failure")
     _, logs = _run([[other, *_jobs()]])
-    assert logs[-1].startswith("All 128 Python coverage shards succeeded")
+    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python coverage shards succeeded")
 
 
 def test_duplicate_native_build_is_rejected() -> None:
@@ -152,4 +152,4 @@ def test_native_prerequisite_alone_does_not_require_an_expanded_coverage_matrix(
     complete_plan = dict(_job(1200), name="coverage-plan")
     calls, logs = _run([early, [complete_native, complete_plan, *_jobs()]])
     assert len(calls) == (4 if position == "previous-page" else 3)
-    assert logs[-1].startswith("All 128 Python coverage shards succeeded")
+    assert logs[-1].startswith(f"All {barrier.SHARD_COUNT} Python coverage shards succeeded")

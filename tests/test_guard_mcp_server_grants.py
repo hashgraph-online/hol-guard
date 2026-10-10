@@ -34,6 +34,8 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def _identity():
     return build_mcp_server_identity(
@@ -85,8 +87,9 @@ class _AuthorityStore:
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
 
-    def read_local_mcp_grant(self, *_args: object, **_kwargs: object) -> None:
-        return None
+    def has_local_cli_grant_rules(self) -> bool:
+        """No device grant rows exist, so an unavailable resident cannot hide one."""
+        return False
 
     def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
         digest = getattr(registry, "catalog_digest", "0" * 64)

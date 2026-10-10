@@ -1,7 +1,8 @@
+pub(super) use super::directory_targets::verified_cwd_target;
 pub(super) use super::read_paths::{
     bounded_file_read_target, bounded_omp_directory_read_target, bounded_omp_file_read_target,
     bounded_omp_selector_requires_review, bounded_read_target, safe_read_target,
-    verified_cwd_target, verified_path_context,
+    verified_path_context,
 };
 pub(super) use super::safe_scalar::{safe_date_arguments, safe_sleep_arguments};
 pub(super) use super::safe_writes::{

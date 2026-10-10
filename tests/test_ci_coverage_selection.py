@@ -9,6 +9,8 @@ import yaml
 
 from scripts.ci import select_pytest_coverage as selection
 
+SHARDS = selection.barrier.SHARD_COUNT
+
 REPOSITORY = "owner/repo"
 RUN = 123456
 SHA = "a" * 40
@@ -31,7 +33,7 @@ def job(name, number, *, attempt=1):
 
 
 def fixture():
-    old = [job(f"coverage (3.12, {i})", i + 1) for i in range(128)]
+    old = [job(f"coverage (3.12, {i})", i + 1) for i in range(SHARDS)]
     prerequisites = [job("coverage-plan", 1000), job("native-command-evaluators", 1001)]
     for item in prerequisites:
         item["started_at"] = "2026-10-03T11:59:00Z"
@@ -43,7 +45,7 @@ def fixture():
         item.update(id=item["id"] + 2000, run_attempt=2, created_at="2026-10-03T13:00:00Z")
     current[51].update(started_at="2026-10-03T13:00:10Z", completed_at="2026-10-03T13:01:00Z")
     artifacts = []
-    for i in range(128):
+    for i in range(SHARDS):
         attempt = 2 if i == 51 else 1
         artifacts.append(
             {
@@ -93,15 +95,15 @@ def select(data):
     return selection.select_coverage(REPOSITORY, RUN, 2, fetch=fetch)
 
 
-def test_partial_retry_selects_127_original_successes_and_the_one_reexecuted_shard():
+def test_partial_retry_selects_prior_successes_and_the_one_reexecuted_shard():
     data = fixture()
     # A failed first-attempt artifact must not replace the successful retried one.
     stale = deepcopy(data[3][51])
     stale.update(id=9999, name="pytest-coverage-1-51", created_at="2026-10-03T12:00:20Z")
     data[3].append(stale)
     result = select(data)
-    assert len(result["shards"]) == 128
-    assert sum(s["attempt"] == 1 for s in result["shards"]) == 127
+    assert len(result["shards"]) == SHARDS
+    assert sum(s["attempt"] == 1 for s in result["shards"]) == SHARDS - 1
     assert result["shards"][51] == {
         "shard": 51,
         "attempt": 2,
@@ -110,7 +112,7 @@ def test_partial_retry_selects_127_original_successes_and_the_one_reexecuted_sha
         "name": "pytest-coverage-2-51",
         "digest": "sha256:" + "b" * 64,
     }
-    assert result["shards"][127]["job_id"] == 128
+    assert result["shards"][SHARDS - 1]["job_id"] == SHARDS
 
 
 @pytest.mark.parametrize(
@@ -256,7 +258,7 @@ def test_workflow_downloads_only_proven_ids_and_checks_files_before_combine():
     assert "pattern" not in download["with"] and "run-id" not in download["with"]
     prepare = (root / "scripts/ci/prepare_sonar_analysis.sh").read_text()
     assert prepare.index("--verify-downloads") < prepare.index("parallel_coverage_combine.py")
-    assert '"${#reports[@]}" -eq 128' in prepare
+    assert '"${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in prepare
 
 
 def test_retry_budget_applies_only_to_read_consistency(monkeypatch):
@@ -326,7 +328,7 @@ def test_cli_publishes_only_the_selected_numeric_artifact_ids(tmp_path, monkeypa
         action_output.read_text()
         == "artifact-ids=" + ",".join(str(s["artifact_id"]) for s in expected["shards"]) + "\n"
     )
-    assert "reused 127" in capsys.readouterr().out
+    assert f"reused {SHARDS - 1}" in capsys.readouterr().out
 
 @pytest.mark.parametrize("event,expected", [("pull_request", False), ("push", True), ("merge_group", True)])
 def test_cli_marks_change_planner_skippable_only_off_pull_request(tmp_path, monkeypatch, event, expected):
@@ -392,7 +394,7 @@ def test_decreasing_page_count_retries_the_whole_inventory(inventory):
         return result
 
     result = selection.select_with_retries(REPOSITORY, RUN, 2, fetch=changing, sleep=delays.append)
-    assert len(result["shards"]) == 128
+    assert len(result["shards"]) == SHARDS
     assert delays == [1.0]
     assert len(truncated) == 1
     assert calls.count(BASE + inventory + "?per_page=100&page=1") == 2

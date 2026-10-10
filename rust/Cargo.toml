@@ -18,6 +18,7 @@ members = [
 resolver = "2"
 
 [profile.release]
+opt-level = "s"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
 

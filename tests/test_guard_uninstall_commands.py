@@ -154,7 +154,7 @@ def test_self_uninstall_stops_before_package_when_managed_cleanup_fails(
 
     assert exit_code == 1
     assert payload["status"] == "failed"
-    assert payload["message"] == "HOL Guard removal stopped before the package uninstall command ran."
+    assert str(payload["message"]).startswith("HOL Guard removal stopped at harness codex")
     assert payload["error"] == "hook cleanup failed"
     assert called["installer"] is False
     assert context.guard_home.exists()
@@ -239,5 +239,5 @@ def test_self_uninstall_catches_managed_install_context_resolution_errors(
 
     assert exit_code == 1
     assert payload["status"] == "failed"
-    assert payload["message"] == "HOL Guard removal stopped before the package uninstall command ran."
+    assert str(payload["message"]).startswith("HOL Guard removal stopped at harness codex")
     assert payload["error"] == "bad workspace"

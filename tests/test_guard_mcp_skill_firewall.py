@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard import native_context
 from codex_plugin_scanner.guard.adapters.opencode_artifacts import append_artifact
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity, build_mcp_tool_identity
+from codex_plugin_scanner.guard.native_mcp_tool_evidence import NativeMcpToolEvidenceError
+from codex_plugin_scanner.guard.runtime import mcp_skill_firewall
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.runtime.mcp_skill_firewall import (
     enrich_artifact_with_mcp_skill_firewall,
-    portal_mcp_server_identity,
-    portal_mcp_tool_identity,
     portal_skill_identity,
     skill_identity_metadata,
 )
@@ -21,34 +20,49 @@ from codex_plugin_scanner.guard.runtime.skill_protection import build_skill_iden
 pytestmark = pytest.mark.usefixtures("native_context_digest")
 
 
-@pytest.mark.parametrize("kind", ("mcp_server_descriptor", "mcp_tool_descriptor"))
-def test_cached_mcp_identity_cannot_synthesize_descriptor_without_native_authority(
+@pytest.mark.parametrize("artifact_type", ("mcp_server", "tool_call"))
+def test_firewall_enrichment_fails_closed_without_native_authority(
     monkeypatch: pytest.MonkeyPatch,
-    kind: str,
+    artifact_type: str,
 ) -> None:
-    server = build_mcp_server_identity(
+    def unavailable(_artifact):
+        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unavailable")
+
+    monkeypatch.setattr(mcp_skill_firewall, "native_firewall_metadata_patch", unavailable)
+    artifact = GuardArtifact(
+        artifact_id="codex:project:filesystem",
+        name="filesystem",
+        harness="codex",
+        artifact_type=artifact_type,
+        source_scope="project",
         config_path=".mcp.json",
         command="npx",
-        args=("demo@1.2.3",),
         transport="stdio",
-        env={},
+        metadata={},
     )
-    tool = build_mcp_tool_identity(
-        server_hash=server.identity_hash,
-        tool_name="read",
-        schema={"type": "object"},
-    )
-    real_digest = native_context.native_context_digest
+    with pytest.raises(NativeMcpToolEvidenceError, match=r"^native_mcp_tool_evidence_unavailable$"):
+        enrich_artifact_with_mcp_skill_firewall(artifact)
 
-    def unavailable(request_kind, payload, **kwargs):
-        return None if request_kind == kind else real_digest(request_kind, payload, **kwargs)
 
-    monkeypatch.setattr(native_context, "native_context_digest", unavailable)
-    with pytest.raises(ValueError, match="^native_mcp_descriptor_unavailable$"):
-        if kind == "mcp_server_descriptor":
-            portal_mcp_server_identity(server, config_path=".mcp.json")
-        else:
-            portal_mcp_tool_identity(tool, schema={"type": "object"})
+def test_command_less_mcp_server_never_needs_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(_artifact):
+        raise AssertionError("command-less servers have no firewall and need no resident round trip")
+
+    monkeypatch.setattr(mcp_skill_firewall, "native_firewall_metadata_patch", forbidden)
+    for command in (None, "", "   "):
+        artifact = GuardArtifact(
+            artifact_id="cursor:project:remote",
+            name="remote",
+            harness="cursor",
+            artifact_type="mcp_server",
+            source_scope="project",
+            config_path=".cursor/mcp.json",
+            command=command,
+            url="https://example.com/mcp",
+            transport="http",
+            metadata={},
+        )
+        assert enrich_artifact_with_mcp_skill_firewall(artifact) is artifact
 
 
 def test_mcp_server_artifact_emits_mcp_skill_firewall_bundle() -> None:
@@ -215,3 +229,18 @@ def test_append_artifact_enriches_mcp_server_metadata() -> None:
 
     assert len(artifacts) == 1
     assert "mcpSkillFirewall" in artifacts[0].metadata
+
+
+def test_descriptor_digest_failure_names_the_native_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mcp_skill_firewall, "context_sha256_digest", lambda *_a, **_k: "guard-context-unbound:x:y")
+    monkeypatch.setattr(mcp_skill_firewall, "is_unbound_context_digest", lambda _digest: True)
+    monkeypatch.setattr(
+        mcp_skill_firewall, "native_context_failure_reason", lambda: "native_resident_runtime_identity_mismatch"
+    )
+    with pytest.raises(
+        ValueError, match=r"^native_mcp_descriptor_digest_unavailable:native_resident_runtime_identity_mismatch$"
+    ):
+        mcp_skill_firewall._descriptor_digest({"a": 1})
+    monkeypatch.setattr(mcp_skill_firewall, "native_context_failure_reason", lambda: None)
+    with pytest.raises(ValueError, match=r"^native_mcp_descriptor_digest_unavailable$"):
+        mcp_skill_firewall._descriptor_digest({"a": 1})

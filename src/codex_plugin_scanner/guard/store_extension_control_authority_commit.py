@@ -99,7 +99,9 @@ class ExtensionControlAuthorityCommitMixin:
         self._validate_serialized_layers(layers_json)
         with self._extension_control_authority_lock():
             self._invalidate_native_extension_control_policy()
-            current = self._read_extension_control_authority_locked(catalog_digest)
+            # Do not roll back an abandoned transition yet: a retry of the same
+            # request must still find and resume its prepared row below.
+            current = self._read_extension_control_authority_locked(catalog_digest, _healed=True)
             key = self._authority_key(required=True)
             assert key is not None
             actor_hash = _private_hash(actor_id, key=key, purpose="actor")
@@ -180,6 +182,10 @@ class ExtensionControlAuthorityCommitMixin:
                         )
                         proof_already_consumed = True
                     current = self._read_extension_control_authority_locked(catalog_digest)
+            if current.health is AuthorityHealth.RECOVERY_REQUIRED:
+                # A different request abandoned its prepared transition before
+                # anchoring it; roll that back so this request can proceed.
+                current = self._read_extension_control_authority_locked(catalog_digest)
             if current.health is not AuthorityHealth.PROTECTED:
                 raise ExtensionControlAuthorityError("extension control authority unavailable")
             with self._connect() as connection:

@@ -61,6 +61,7 @@ def try_execute_contained_typescript(
     intent = parse_package_intent(
         _shell_join(("npx", *argv)),
         workspace=canonical_workspace,
+        guard_home=guard_home,
     )
     if intent is None or len(intent.local_executions) != 1:
         return None

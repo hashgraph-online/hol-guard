@@ -23,9 +23,6 @@ from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
-from codex_plugin_scanner.guard.daemon.hook_launcher_recovery import (
-    hook_action_is_launcher_recovery_safe,
-)
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.local_temp_paths import trusted_temporary_root_for_path
 from codex_plugin_scanner.guard.store import GuardStore
@@ -248,61 +245,6 @@ def test_launcher_integrity_failure_denies_permission_request(
     response = json.loads(capsys.readouterr().out)
     assert response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     assert response["hookSpecificOutput"]["decision"]["message"] == bridge._LAUNCH_INTEGRITY_REASON
-
-
-def test_launcher_repair_covers_every_managed_harness() -> None:
-    from codex_plugin_scanner.guard.adapters import list_adapters
-
-    for adapter in list_adapters():
-        payload = {
-            "hook_event_name": "PreToolUse",
-            "tool_name": "Bash",
-            "tool_input": {"command": f"hol-guard install {adapter.harness}"},
-        }
-        assert hook_action_is_launcher_recovery_safe(payload) is True
-
-
-def test_unauthenticated_payload_reference_is_not_a_repair() -> None:
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": "hol-guard install cursor"},
-        "guard_payload_ref": {"version": 1},
-    }
-    assert hook_action_is_launcher_recovery_safe(payload) is False
-
-
-@pytest.mark.parametrize(
-    ("command", "allowed"),
-    [
-        ("hol-guard install codex", True),
-        ("hol-guard install cursor", True),
-        ("hol-guard install claude-code", True),
-        ("bin/hol-guard install codex --json --dry-run", False),
-        ("./hol-guard update", False),
-        ("./plugin-guard daemon repair", False),
-        ("hol-guard install not-a-harness", False),
-        ("hol-guard install codex cursor", False),
-        ("hol-guard update", True),
-        ("hol-guard update --force-pypi-reinstall", True),
-        ("hol-guard daemon repair", True),
-        ("hol-guard daemon status --json", True),
-        ("hol-guard status", True),
-        ("hol-guard install codex && true", False),
-        ("hol-guard update --wheel evil.whl", False),
-        ("hol-guard uninstall", False),
-        ("hol-guard install --all", False),
-        ("hol-guard daemon stop", False),
-        ("git push", False),
-    ],
-)
-def test_launcher_recovery_allowlist_is_exact(command: str, allowed: bool) -> None:
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": command},
-    }
-    assert hook_action_is_launcher_recovery_safe(payload) is allowed
 
 
 def test_codex_post_tool_response_excludes_daemon_metadata() -> None:

@@ -28,7 +28,12 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
 /// launcher that created them, instead of making the supervisor its own
 /// lifetime owner after that launcher exits.
 pub(crate) fn parent_process_id() -> Option<u32> {
-    let pid = Pid::from_u32(std::process::id());
+    process_parent_id(std::process::id())
+}
+
+/// Return the current parent of any process, if it is still running.
+fn process_parent_id(process_id: u32) -> Option<u32> {
+    let pid = Pid::from_u32(process_id);
     let mut system = System::new();
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
@@ -142,7 +147,7 @@ pub(crate) fn validate_runtime_process_identity(
     validate_process_start_marker(process_id, expected_start_marker)
 }
 
-fn validate_process_start_marker(
+pub(crate) fn validate_process_start_marker(
     process_id: u32,
     expected_start_marker: &str,
 ) -> Result<(), String> {

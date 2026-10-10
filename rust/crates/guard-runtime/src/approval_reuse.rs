@@ -14,6 +14,26 @@ use guard_policy_snapshot::digest_bytes;
 
 use super::context_digest_json::write_canonical_json_with_limit;
 
+/// Lookup has already enforced exact identity, expiry, and signature validity.
+/// Only locally approved artifact-context grants may satisfy reapproval.
+pub(crate) fn exact_artifact_approval_qualification(
+    row: &serde_json::Value,
+    source: &str,
+    integrity_valid: bool,
+) -> (bool, bool) {
+    let local_once = source == "approval-gate-once";
+    let exact = integrity_valid
+        && (local_once || source == "approval-gate")
+        && row.get("action").and_then(serde_json::Value::as_str) == Some("allow")
+        && (local_once || row.get("scope").and_then(serde_json::Value::as_str) == Some("artifact"))
+        && crate::context_digest::parse_context_token(
+            row.get("artifact_hash").unwrap_or(&serde_json::Value::Null),
+        )
+        .is_some();
+    let expiring = local_once || row.get("expires_at").is_some_and(|value| !value.is_null());
+    (exact && expiring, exact && !expiring)
+}
+
 fn request_digest(request: &ApprovalReuseRequestV1) -> Result<String, &'static str> {
     let material = serde_json::to_value(request).map_err(|_| "native_approval_reuse_invalid")?;
     let mut bytes = Vec::new();

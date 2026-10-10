@@ -395,21 +395,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         return _shell_command(command)
 
     @staticmethod
-    def _daemon_hook_command(context: HarnessContext) -> str:
-        command = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
-        return _shell_command(command)
-
-    @staticmethod
-    def _session_start_command(context: HarnessContext) -> str:
-        command = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
-        return _shell_command(command)
-
-    @staticmethod
-    def _hook_http_url(context: HarnessContext) -> str:
-        daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
-        return _hook_argv.hook_http_url(context, daemon_url=daemon_url)
-
-    @staticmethod
     def _daemon_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         fallback_daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
         return _hook_argv.daemon_hook_command_parts(context, fallback_daemon_url=fallback_daemon_url)

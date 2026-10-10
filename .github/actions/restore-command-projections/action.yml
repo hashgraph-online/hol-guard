@@ -1,0 +1,13 @@
+name: Restore current native command projections
+description: Replace legacy descriptor copies with the verified outputs from this run.
+runs:
+  using: composite
+  steps:
+    - name: Remove legacy descriptor copies before restoring derived resources
+      shell: bash
+      run: python -c 'import shutil; shutil.rmtree("contributions/extensions")'
+    - name: Download matching native command projections
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: pytest-native-command-projections
+        path: .

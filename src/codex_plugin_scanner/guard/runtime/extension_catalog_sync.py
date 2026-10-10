@@ -10,21 +10,25 @@ from datetime import datetime
 from typing import Protocol, TypedDict
 
 from .extension_control_limits import (
+    CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CATALOG_EXTENSIONS,
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_INPUT_TEXT_LENGTH,
     MAX_PERMISSIONS_PER_EXTENSION,
 )
+from .managed_controls_posture_wire import (
+    EXTENSION_CONTROL_WIRE_SCHEMA_VERSION as EXTENSION_CONTROL_WIRE_SCHEMA_VERSION,
+)
+from .managed_controls_posture_wire import (
+    MANAGED_CONTROLS_RUNTIME_CAPABILITIES as MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
+)
+from .managed_controls_posture_wire import (
+    ManagedControlsRuntimePostureWire as ManagedControlsRuntimePostureWire,
+)
+from .managed_controls_posture_wire import (
+    build_managed_controls_runtime_posture as build_managed_controls_runtime_posture,
+)
 
 EXTENSION_CATALOG_SCHEMA_VERSION = "guard.extension-catalog.v1"
-EXTENSION_CONTROL_WIRE_SCHEMA_VERSION = "guard.extension-controls.v1"
-MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
-    "extension-catalog.v1",
-    "extension-control-layer.v1",
-    "policy-extension-targets.v1",
-    "managed-controls-atomic-apply.v1",
-    "custom-extension-continuity.v2",
-)
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _WIRE_SHA256 = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -49,6 +53,10 @@ _FORBIDDEN_WIRE_KEYS = frozenset(
         "workingdirectory",
     }
 )
+
+
+class ExtensionCatalogLimitError(ValueError):
+    """A catalog exceeds a Cloud v1 count or byte limit."""
 
 
 class ExtensionCatalogPermissionWire(TypedDict):
@@ -82,14 +90,6 @@ class ExtensionCatalogWire(TypedDict):
     generatedAt: str
     limits: dict[str, int]
     extensions: list[ExtensionCatalogEntryWire]
-
-
-class ManagedControlsRuntimePostureWire(TypedDict):
-    extensionCatalogDigest: str
-    extensionControlSchemaVersions: list[str]
-    extensionAuthorityRevision: int | None
-    effectiveProjectionDigest: str | None
-    managedControlsCapabilities: list[str]
 
 
 class PermissionLike(Protocol):
@@ -168,7 +168,7 @@ def _extension_wire(extension: ExtensionLike) -> ExtensionCatalogEntryWire:
         key=lambda permission: permission["id"],
     )
     if len(permissions) > MAX_PERMISSIONS_PER_EXTENSION:
-        raise ValueError("Extension catalog permission limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog permission limit exceeded")
     return {
         "id": extension.extension_id,
         "version": extension.version,
@@ -229,8 +229,8 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
     """Execute the shared catalog's bounded shape, privacy, identity, and digest contract."""
 
     encoded = _canonical_json(payload).encode("utf-8")
-    if len(encoded) > MAX_CATALOG_PAYLOAD_BYTES:
-        raise ValueError("Extension catalog payload limit exceeded")
+    if len(encoded) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
+        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
     if not isinstance(payload, dict):
         raise ValueError("Extension catalog must be an object")
     expected_top_level = {
@@ -259,7 +259,7 @@ def validate_extension_catalog_wire(payload: object) -> ExtensionCatalogWire:
     expected_limits = {
         "maxExtensions": MAX_CATALOG_EXTENSIONS,
         "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-        "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+        "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
         "maxStringLength": 8_192,
     }
     if payload.get("limits") != expected_limits:
@@ -434,7 +434,7 @@ def build_extension_catalog_wire(
         key=lambda extension: extension["id"],
     )
     if len(extensions) > MAX_CATALOG_EXTENSIONS:
-        raise ValueError("Extension catalog limit exceeded")
+        raise ExtensionCatalogLimitError("Extension catalog limit exceeded")
     payload: ExtensionCatalogWire = {
         "schemaVersion": EXTENSION_CATALOG_SCHEMA_VERSION,
         "catalogDigest": catalog_digest_for_extensions(extensions),
@@ -444,14 +444,14 @@ def build_extension_catalog_wire(
         "limits": {
             "maxExtensions": MAX_CATALOG_EXTENSIONS,
             "maxPermissionsPerExtension": MAX_PERMISSIONS_PER_EXTENSION,
-            "maxPayloadBytes": MAX_CATALOG_PAYLOAD_BYTES,
+            "maxPayloadBytes": CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES,
             "maxStringLength": 8_192,
         },
         "extensions": extensions,
     }
     _reject_private_wire_keys(payload)
-    if len(_canonical_json(payload).encode("utf-8")) > MAX_CATALOG_PAYLOAD_BYTES:
-        raise ValueError("Extension catalog payload limit exceeded")
+    if len(_canonical_json(payload).encode("utf-8")) > CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES:
+        raise ExtensionCatalogLimitError("Extension catalog payload limit exceeded")
     return validate_extension_catalog_wire(payload)
 
 
@@ -469,30 +469,3 @@ def build_builtin_extension_catalog_wire(
         guard_version=guard_version,
         generated_at=generated_at,
     )
-
-
-def build_managed_controls_runtime_posture(
-    *,
-    catalog_digest: str,
-    extension_authority_revision: int | None = None,
-    effective_projection_digest: str | None = None,
-    capabilities: Iterable[str] = MANAGED_CONTROLS_RUNTIME_CAPABILITIES,
-) -> ManagedControlsRuntimePostureWire:
-    """Build bounded runtime posture for the existing runtime-session sync channel."""
-
-    if _SHA256.fullmatch(catalog_digest) is None:
-        raise ValueError("catalog_digest must be a lowercase SHA-256 digest")
-    if extension_authority_revision is not None and extension_authority_revision < 0:
-        raise ValueError("extension_authority_revision cannot be negative")
-    if effective_projection_digest is not None and _WIRE_SHA256.fullmatch(effective_projection_digest) is None:
-        raise ValueError("effective_projection_digest must be a sha256-prefixed lowercase digest")
-    requested = frozenset(capabilities)
-    return {
-        "extensionCatalogDigest": catalog_digest,
-        "extensionControlSchemaVersions": [EXTENSION_CONTROL_WIRE_SCHEMA_VERSION],
-        "extensionAuthorityRevision": extension_authority_revision,
-        "effectiveProjectionDigest": effective_projection_digest,
-        "managedControlsCapabilities": [
-            capability for capability in MANAGED_CONTROLS_RUNTIME_CAPABILITIES if capability in requested
-        ],
-    }

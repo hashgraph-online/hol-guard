@@ -1,11 +1,12 @@
-"""Phase 25 — immediate decision propagation: browser approve/block writes
-decision before harness retry resumes (T722-T724).
-"""
+"""Authenticated approvals permit exact retries without lowering stronger policy."""
 
 from __future__ import annotations
 
 import sys
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -15,6 +16,11 @@ from codex_plugin_scanner.guard.models import (
     HarnessDetection,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+@pytest.fixture(autouse=True)
+def _enroll_native_context(tmp_path: Path, native_mcp_probe) -> None:
+    native_mcp_probe(tmp_path / "guard")
 
 
 def _make_artifact(
@@ -50,10 +56,10 @@ def _make_detection(artifact: GuardArtifact) -> HarnessDetection:
 
 
 class TestImmediateApproveDecisionPropagation:
-    """T722-T723: Browser decisions propagate without bypassing current policy."""
+    """Browser approval grants compose with current stronger policy."""
 
-    def test_approve_decision_is_visible_but_cannot_lower_current_reapproval(self, tmp_path: Path) -> None:
-        """T723: A propagated approval remains evidence, not stronger policy authority."""
+    def test_fresh_approval_satisfies_reapproval_but_cannot_lower_block(self, tmp_path: Path) -> None:
+        """An exact authenticated approval permits retry, not a later terminal block."""
         guard_home = tmp_path / "guard"
         store = GuardStore(guard_home)
         artifact = _make_artifact(name="sync_tool", config_path=str(tmp_path / "ws/.codex/config.toml"))
@@ -82,51 +88,20 @@ class TestImmediateApproveDecisionPropagation:
         )
 
         retry_eval = evaluate_detection(detection, store, config, persist=False)
-        assert retry_eval.get("blocked") is True
+        assert retry_eval.get("blocked") is False
         artifact_result = (retry_eval.get("artifacts") or [{}])[0]
-        assert artifact_result.get("policy_action") == "require-reapproval"
-        assert artifact_result.get("approval_reuse_status") == "rejected"
-        assert artifact_result.get("approval_reuse_reason_code") == "approval_reuse_reapproval_required"
-        assert artifact_result.get("policy_composition", {}).get("saved_action") == "allow"
+        assert artifact_result.get("policy_action") == "allow"
+        assert artifact_result.get("approval_reuse_status") == "accepted"
 
-    def test_approve_propagation_occurs_before_request_resolution_response(self, tmp_path: Path) -> None:
-        """T722: apply_approval_resolution writes the policy before marking the
-        request resolved. Re-evaluation can observe it immediately, while the
-        current reapproval result remains authoritative.
-        """
-        guard_home = tmp_path / "guard"
-        store = GuardStore(guard_home)
-        artifact = _make_artifact(name="ordered_tool", config_path=str(tmp_path / "ws/.codex/config.toml"))
-        config = GuardConfig(guard_home=guard_home, workspace=None)
-        detection = _make_detection(artifact)
-
-        eval_before = evaluate_detection(detection, store, config, persist=True)
-        approvals = queue_blocked_approvals(
-            detection=detection,
-            evaluation=eval_before,
-            store=store,
-            approval_center_url="http://127.0.0.1:6174",
+        strict_config = replace(
+            config,
+            default_action="block",
+            changed_hash_action="block",
+            risk_actions={level: "block" for level in ("low", "medium", "high", "critical")},
         )
-        request_id = str(approvals[0]["request_id"])
-
-        apply_approval_resolution(
-            store=store,
-            request_id=request_id,
-            action="allow",
-            scope="artifact",
-            workspace=None,
-            reason=None,
-        )
-
-        resolved = store.get_approval_request(request_id)
-        assert resolved is not None
-        assert resolved["status"] == "resolved", "Request must be marked resolved after approval"
-
-        immediate_eval = evaluate_detection(detection, store, config, persist=False)
-        artifact_result = (immediate_eval.get("artifacts") or [{}])[0]
-        assert immediate_eval.get("blocked") is True
-        assert artifact_result.get("policy_composition", {}).get("saved_action") == "allow"
-        assert artifact_result.get("approval_reuse_reason_code") == "approval_reuse_reapproval_required"
+        strict_eval = evaluate_detection(detection, store, strict_config, persist=False)
+        assert strict_eval.get("blocked") is True
+        assert strict_eval["artifacts"][0]["policy_action"] == "block"
 
 
 def test_unknown_evaluation_action_queues_conservative_reapproval(tmp_path: Path) -> None:

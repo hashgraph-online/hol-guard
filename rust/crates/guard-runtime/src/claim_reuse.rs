@@ -18,13 +18,7 @@ use guard_policy_snapshot::policy_integrity::{
     is_remote_policy_source, PolicyIntegrityVerification,
 };
 
-use crate::local_once_store::{
-    claim_local_once_approval_by_id_locked, local_once_approval_is_reusable,
-};
-
-/// `_APPROVAL_GATE_POLICY_SOURCE` (`store_base.py:235`) — the only policy
-/// source atomically deleted on a successful claim.
-const APPROVAL_GATE_POLICY_SOURCE: &str = "approval-gate";
+use crate::local_once_store::claim_local_once_approval_by_id_locked;
 
 /// Policy sources that must never be consumed by a reuse claim
 /// (`_claim_approval_reuse_decision_locked` rejects them outright).
@@ -35,42 +29,8 @@ const NON_REUSABLE_REMOTE_SOURCES: [&str; 2] = ["cloud-sync", "team-policy"];
 /// `None` = not claimable. `"retained"` = stays authoritative. `"consumed"` =
 /// one-shot row deleted by the claim.
 pub fn approval_reuse_claim_disposition(decision: &Value) -> Option<&'static str> {
-    if decision.get("action").and_then(Value::as_str) != Some("allow") {
-        return None;
-    }
-    let approval_id = decision.get("approval_id");
-    if let Some(aid) = approval_id.and_then(Value::as_str) {
-        if aid.is_empty() {
-            return None;
-        }
-        let artifact_id = decision.get("artifact_id").and_then(Value::as_str);
-        match artifact_id {
-            Some(a) if !a.is_empty() => {
-                return Some(if local_once_approval_is_reusable(a) {
-                    "retained"
-                } else {
-                    "consumed"
-                });
-            }
-            _ => return None,
-        }
-    }
-    let decision_id = decision.get("decision_id");
-    // `not isinstance(decision_id, int) or isinstance(decision_id, bool)` →
-    // reject bool + non-int.
-    let is_int = match decision_id {
-        Some(Value::Number(n)) => n.as_i64().is_some() && !n.is_f64(),
-        _ => false,
-    };
-    if !is_int {
-        return None;
-    }
-    if decision.get("source").and_then(Value::as_str) == Some(APPROVAL_GATE_POLICY_SOURCE)
-        && !decision.get("expires_at").is_none_or(Value::is_null)
-    {
-        return Some("consumed");
-    }
-    Some("retained")
+    // One implementation: the approval-proof op owns the lattice.
+    crate::approval_proof_op::claim_disposition(decision.as_object()?).map(|d| d.as_str())
 }
 
 /// `_approval_authority_revision` (:593-599) — the singleton revision used to
@@ -166,6 +126,13 @@ pub(crate) fn policy_row_payload(
         "updated_at": row.get("updated_at").and_then(Value::as_str).unwrap_or(""),
         "workspace": row.get("workspace").cloned().unwrap_or(Value::Null),
     });
+    let (fresh, durable) = crate::approval_reuse::exact_artifact_approval_qualification(
+        row,
+        source,
+        integrity_result.is_some_and(|result| result.status == "valid"),
+    );
+    payload["fresh_local_approval"] = Value::Bool(fresh);
+    payload["durable_exact_approval"] = Value::Bool(durable);
     if integrity_result.is_some() && !is_remote_policy_source(Some(source)) {
         let res = integrity_result.unwrap();
         payload["integrity_status"] = Value::from(res.status);

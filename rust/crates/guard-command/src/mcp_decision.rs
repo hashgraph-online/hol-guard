@@ -93,7 +93,7 @@ fn is_python_space(ch: char) -> bool {
     )
 }
 
-fn python_strip(text: &str) -> &str {
+pub(crate) fn python_strip(text: &str) -> &str {
     text.trim_matches(is_python_space)
 }
 
@@ -115,10 +115,6 @@ fn py_rpartition<'a>(value: &'a str, sep: &str) -> (&'a str, bool, &'a str) {
 
 /// `_PACKAGE_LAUNCHERS` (:40).
 const PACKAGE_LAUNCHERS: &[&str] = &["bunx", "npm", "npx", "pnpm", "uvx", "yarn", "pipx"];
-
-/// `_PACKAGE_SOURCE_FLAGS` (:201-206).
-const PACKAGE_SOURCE_FLAGS: &[&str] =
-    &["--registry", "--index-url", "--extra-index-url", "--index"];
 
 /// `build_mcp_server_identity` (:41-87) — stable server identity with
 /// secret-safe configured env binding.
@@ -413,13 +409,25 @@ pub fn package_launcher_name(command: &str) -> Option<String> {
 /// `resolved_package_launcher_executable` (:161-185) — resolve a package
 /// launcher to a real executable, or `None` if unknown.
 pub fn resolved_package_launcher_executable(command: &str) -> Option<PathBuf> {
+    let path_value = std::env::var("PATH").unwrap_or_default();
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    resolved_package_launcher_executable_in(command, &path_value, home.as_deref())
+}
+
+/// Same resolution against a caller-supplied `PATH` and home directory, for a
+/// resident that must resolve launchers as the calling process would.
+pub fn resolved_package_launcher_executable_in(
+    command: &str,
+    path_value: &str,
+    home: Option<&Path>,
+) -> Option<PathBuf> {
     let launcher = package_launcher_name(command)?;
-    let candidate = expand_user(command);
+    let candidate = expand_user_in(command, home);
     let resolved = if candidate.is_absolute() {
         std::fs::canonicalize(&candidate).ok()?
     } else {
-        let found =
-            which_package_launcher(command).or_else(|| which_package_launcher(&launcher))?;
+        let found = which_package_launcher(command, path_value, home)
+            .or_else(|| which_package_launcher(&launcher, path_value, home))?;
         std::fs::canonicalize(Path::new(&found)).ok()?
     };
     if !resolved.is_file() {
@@ -430,11 +438,10 @@ pub fn resolved_package_launcher_executable(command: &str) -> Option<PathBuf> {
 
 /// `_which_package_launcher` (:186-195) — resolve a launcher on PATH,
 /// skipping Guard package shims.
-fn which_package_launcher(launcher: &str) -> Option<String> {
-    let path_value = std::env::var("PATH").unwrap_or_default();
-    let parts: Vec<&str> = path_value
-        .split(':')
-        .filter(|part| !part.is_empty() && !is_guard_package_shim_dir(part))
+fn which_package_launcher(launcher: &str, path_value: &str, home: Option<&Path>) -> Option<String> {
+    // Platform separator (`;` on Windows, `:` elsewhere), like `os.pathsep`.
+    let parts: Vec<PathBuf> = std::env::split_paths(path_value)
+        .filter(|part| !part.as_os_str().is_empty() && !is_guard_package_shim_dir(part, home))
         .collect();
     if parts.is_empty() {
         return None;
@@ -443,23 +450,12 @@ fn which_package_launcher(launcher: &str) -> Option<String> {
 }
 
 /// `shutil.which` over explicit PATH entries: first executable file wins.
-fn which_in(launcher: &str, parts: &[&str]) -> Option<String> {
+fn which_in(launcher: &str, parts: &[PathBuf]) -> Option<String> {
+    let names = launcher_file_names(launcher);
     for dir in parts {
-        let candidate = Path::new(dir).join(launcher);
-        if candidate.is_file() {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                if candidate
-                    .metadata()
-                    .map(|meta| meta.permissions().mode() & 0o111 != 0)
-                    .unwrap_or(false)
-                {
-                    return Some(candidate.to_string_lossy().into_owned());
-                }
-            }
-            #[cfg(not(unix))]
-            {
+        for name in &names {
+            let candidate = dir.join(name);
+            if is_executable_file(&candidate) {
                 return Some(candidate.to_string_lossy().into_owned());
             }
         }
@@ -467,10 +463,63 @@ fn which_in(launcher: &str, parts: &[&str]) -> Option<String> {
     None
 }
 
+/// File names tried per directory. Windows applies `PATHEXT` the way
+/// `shutil.which` does: a name already carrying a listed extension is tried
+/// as-is, otherwise each extension is appended.
+fn launcher_file_names(launcher: &str) -> Vec<String> {
+    if !cfg!(windows) {
+        return vec![launcher.to_owned()];
+    }
+    let pathext = std::env::var("PATHEXT").unwrap_or_default();
+    let pathext = if pathext.is_empty() {
+        ".COM;.EXE;.BAT;.CMD".to_owned()
+    } else {
+        pathext
+    };
+    windows_launcher_file_names(launcher, &pathext)
+}
+
+fn windows_launcher_file_names(launcher: &str, pathext: &str) -> Vec<String> {
+    let extensions: Vec<&str> = pathext.split(';').filter(|ext| !ext.is_empty()).collect();
+    let lowered = launcher.to_lowercase();
+    if extensions
+        .iter()
+        .any(|ext| lowered.ends_with(&ext.to_lowercase()))
+    {
+        return vec![launcher.to_owned()];
+    }
+    extensions
+        .iter()
+        .map(|ext| format!("{launcher}{ext}"))
+        .collect()
+}
+
+fn is_executable_file(candidate: &Path) -> bool {
+    if !candidate.is_file() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        candidate
+            .metadata()
+            .map(|meta| meta.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        true
+    }
+}
+
 /// `_is_guard_package_shim_dir` (:196-208).
-fn is_guard_package_shim_dir(part: &str) -> bool {
-    let expanded = expand_user(part);
+fn is_guard_package_shim_dir(part: &Path, home: Option<&Path>) -> bool {
+    let expanded = expand_user_in(&part.to_string_lossy(), home);
+    // `Path.as_posix()`: Windows separators compare as `/`.
     let mut posix = expanded.to_string_lossy().into_owned();
+    if cfg!(windows) {
+        posix = posix.replace('\\', "/");
+    }
     while posix.ends_with('/') {
         posix.pop();
     }
@@ -478,51 +527,21 @@ fn is_guard_package_shim_dir(part: &str) -> bool {
 }
 
 /// `Path.expanduser` — only `~`/`~user` at the head expand.
-fn expand_user(value: &str) -> PathBuf {
+fn expand_user_in(value: &str, home: Option<&Path>) -> PathBuf {
     if let Some(rest) = value.strip_prefix('~') {
-        if rest.is_empty() || rest.starts_with('/') {
-            if let Some(home) = std::env::var_os("HOME") {
-                return PathBuf::from(home).join(rest.trim_start_matches('/'));
+        let separator = |c: char| c == '/' || (cfg!(windows) && c == '\\');
+        if rest.is_empty() || rest.starts_with(separator) {
+            if let Some(home) = home {
+                return home.join(rest.trim_start_matches(separator));
             }
         }
     }
     PathBuf::from(value)
 }
 
-/// `package_source_token` (:209-233) — canonical package-source token, or
-/// `"default"` when none is set.
+/// Canonical package-source token, including launcher configuration indirection.
 pub fn package_source_token(command: &str, args: &[String]) -> String {
-    let _ = command;
-    let mut sources: Vec<String> = Vec::new();
-    let mut index = 0usize;
-    while index < args.len() {
-        let value = python_strip(&args[index]).to_owned();
-        let mut matched = false;
-        for flag in PACKAGE_SOURCE_FLAGS {
-            let equals = format!("{flag}=");
-            if value == *flag && index + 1 < args.len() {
-                sources.push(format!("{}={}", flag, python_strip(&args[index + 1])));
-                index += 2;
-                matched = true;
-                break;
-            }
-            if value.starts_with(&equals) {
-                let (_, _, after) = py_partition(&value, "=");
-                sources.push(format!("{}={}", flag, python_strip(after)));
-                index += 1;
-                matched = true;
-                break;
-            }
-        }
-        if !matched {
-            index += 1;
-        }
-    }
-    if sources.is_empty() {
-        "default".to_owned()
-    } else {
-        sources.join("|")
-    }
+    crate::mcp_package_sources::package_source_token(command, args)
 }
 
 /// `_package_identity` (:234-243) — `(name, version)` for launcher-backed
@@ -769,7 +788,8 @@ fn option_takes_value(command_name: &str, option: &str) -> bool {
     if option_name.starts_with("--") && option_name.contains('=') {
         return false;
     }
-    value_options_for_command(command_name).contains(option_name)
+    crate::mcp_package_sources::source_option_name(command_name, option_name).is_some()
+        || value_options_for_command(command_name).contains(option_name)
 }
 
 /// `_launcher_subcommands` (:393-402) — package-launcher subcommand prefixes.
@@ -909,7 +929,7 @@ fn looks_like_runtime_path(value: &str) -> bool {
 }
 
 /// Canonical JSON SHA-256 for native MCP identity and descriptor material.
-fn stable_digest(value: &Value) -> String {
+pub(super) fn stable_digest(value: &Value) -> String {
     context_sha256_digest_local(value, None)
 }
 
@@ -1371,3 +1391,7 @@ fn evaluate_tool_call_inner(
         claim_disposition,
     ))
 }
+
+#[cfg(test)]
+#[path = "mcp_decision_launcher_tests.rs"]
+mod launcher_tests;

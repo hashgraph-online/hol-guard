@@ -87,10 +87,10 @@ For a runnable source addition, use the checked-in synthetic source, the
 separately reviewed trust map, and the compiler's packaged baseline:
 
 ```sh
-rust/target/release/guard-command-source export-trust > contracts/extensions/trust-class-map.v1.json
+rust/target/release/guard-command-source export-trust > contracts/extensions/build-trust-class-map.v1.json
 jq -n \
   --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
-  --slurpfile trust contracts/extensions/trust-class-map.v1.json \
+  --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
   '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
   > source-build.json
 
@@ -269,7 +269,7 @@ Keep `schemaVersion`, `discoveryDigest`, all operation IDs, and every other
 entry intact. The example URL describes the synthetic fixture; a real review
 must cite the actual upstream reference. CLI states are `review` or `block`;
 safe invocations use `safeArgv` on a reviewed `review` entry, excluding the
-executable. MCP states are `inherit`, `allow`, or `block` and do not use
+executable. MCP states are `inherit`, `allow`, `review`, or `block` and do not use
 `safeArgv`. These profile choices still operate within Guard's host policy and
 authenticated controls.
 

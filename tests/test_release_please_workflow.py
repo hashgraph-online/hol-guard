@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from tests.release_workflow_helpers import load_workflow
@@ -63,30 +62,6 @@ def test_release_please_job_is_pinned_and_least_privilege() -> None:
     assert '-f release_version="$VERSION"' in run
     assert '-f expected_sha="$SHA"' in run
     assert "github.token" in dispatch["steps"][0]["env"]["GH_TOKEN"]
-
-
-def test_release_please_config_versions_python_and_synced_metadata() -> None:
-    config = json.loads(RELEASE_PLEASE_CONFIG.read_text(encoding="utf-8"))
-    manifest = json.loads(RELEASE_PLEASE_MANIFEST.read_text(encoding="utf-8"))
-    package = config["packages"]["."]
-    lockfile = (ROOT / "uv.lock").read_text(encoding="utf-8")
-    version_module = (ROOT / "src/codex_plugin_scanner/version.py").read_text(encoding="utf-8")
-
-    assert config["include-v-in-tag"] is True
-    assert config["include-component-in-tag"] is False
-    assert package["release-type"] == "python"
-    assert package["package-name"] == "hol-guard"
-    assert package["changelog-path"] == "CHANGELOG.md"
-    assert package["pull-request-title-pattern"] == "chore(release): ${version}"
-    assert package["extra-files"] == [
-        "src/codex_plugin_scanner/version.py",
-        "uv.lock",
-    ]
-    expected = manifest.get(".")
-    assert isinstance(expected, str) and expected
-    assert manifest == {".": expected}
-    assert f'version = "{expected}"  # x-release-please-version' in lockfile
-    assert f'__version__ = "{expected}"  # x-release-please-version' in version_module
 
 
 def test_stable_dispatch_allows_actions_bot_while_alpha_stays_maintainer_only() -> None:

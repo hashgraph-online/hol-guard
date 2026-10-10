@@ -36,7 +36,19 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluat
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 
-pytestmark = pytest.mark.usefixtures("bundle_first_cloud")
+pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixtures("package_intent_native")]
+
+
+@pytest.fixture(autouse=True)
+def _native_saved_block_context(package_intent_native, native_mcp_probe, monkeypatch) -> None:
+    original = _context
+
+    def enrolled_context(tmp_path: Path) -> HarnessContext:
+        context = original(tmp_path)
+        native_mcp_probe(context.guard_home)
+        return context
+
+    monkeypatch.setattr(sys.modules[__name__], "_context", enrolled_context)
 
 
 def _context(tmp_path: Path) -> HarnessContext:
@@ -49,7 +61,8 @@ def _context(tmp_path: Path) -> HarnessContext:
     return HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=guard_home)
 
 
-def test_complete_proxy_catalog_binds_advertised_tool_definition(tmp_path: Path,
+def test_complete_proxy_catalog_binds_advertised_tool_definition(
+    tmp_path: Path,
     native_context_digest: Path,
 ) -> None:
     context = _context(tmp_path)

@@ -3,6 +3,8 @@
 use std::io::{Read, Write};
 use std::path::Path;
 
+use crate::resident_diagnostics::{observe, Phase};
+
 const FRAME_HEADER_BYTES: usize = 4;
 
 pub(super) fn read_frame(input: &mut impl Read) -> Result<Option<Vec<u8>>, String> {
@@ -41,7 +43,7 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
     // Hold the client lease for the stream lifetime so idle holders keep the
     // resident alive. Still wait for a request before answering, so a lease
     // failure is framed instead of exiting with an empty stdout.
-    let client_lease = super::lease::acquire(state_base);
+    let client_lease = observe(Phase::StreamLease, || super::lease::acquire(state_base));
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     let mut input = stdin.lock();
@@ -53,14 +55,18 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
         let timeout = super::client_timeout(&payload);
         let response = match client_lease.as_ref() {
             Ok(lease) => {
-                match super::client_request_with_lease(state_base, &payload, timeout, lease) {
+                match observe(Phase::StreamDispatch, || {
+                    super::client_request_with_lease(state_base, &payload, timeout, lease)
+                }) {
                     Ok(response) => response,
                     Err(error) => {
                         let should_exit = error == "native_resident_update_in_progress"
                             || error == "native_resident_runtime_identity_mismatch";
                         let response = crate::resident_protocol::safe_error_response(&error, false);
                         if should_exit {
-                            write_frame(&mut output, &response)?;
+                            observe(Phase::StreamResponseWrite, || {
+                                write_frame(&mut output, &response)
+                            })?;
                             return Ok(());
                         }
                         response
@@ -69,6 +75,8 @@ pub(super) fn run(state_base: &Path) -> Result<(), String> {
             }
             Err(error) => crate::resident_protocol::safe_error_response(error, false),
         };
-        write_frame(&mut output, &response)?;
+        observe(Phase::StreamResponseWrite, || {
+            write_frame(&mut output, &response)
+        })?;
     }
 }

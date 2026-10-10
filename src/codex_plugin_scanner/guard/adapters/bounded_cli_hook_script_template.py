@@ -19,6 +19,7 @@ _HOOK_STARTED_MONOTONIC = time.monotonic()
 
 import json
 import os
+import re
 import stat
 import sys
 import urllib.error
@@ -79,8 +80,7 @@ _APPROVAL_KEYS = (
 _FAILURE_REASON = "HOL Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
 _AUTHORITY_MARKER = "native command extension policy"
 _AUTHORITY_REMEDIATION = (
-    " Run `hol-guard command controls acknowledge-degraded` after reviewing the "
-    "degradation, or `hol-guard command controls recover-authority`, to restore the "
+    " Run `hol-guard command controls recover-authority` in a terminal to restore the "
     "protected control floor."
 )
 _GIT_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -127,9 +127,11 @@ def _stamp_hook_input(text: str) -> str:
     if payload is None:
         return text
     active = {key: value for key, value in os.environ.items() if value}
+    # Git pages through `less` by default; flags taking a file argument are excluded.
+    pager_ok = re.compile(r"(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?").fullmatch
     payload["guard_execution_environment"] = {
         "path": os.environ.get("PATH", ""),
-        "environment_names": sorted(active),
+        "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
         "environment_digest": hashlib.sha256(
             json.dumps(active, sort_keys=True, separators=(",", ":")).encode()
         ).hexdigest(),
@@ -138,10 +140,11 @@ def _stamp_hook_input(text: str) -> str:
             os.environ.get("GIT_CONFIG_NOSYSTEM")
         ),
         "home": os.environ.get("HOME"),
-        "git_pager_disabled": os.environ.get("GIT_PAGER") in ("", "cat"),
-        "pager_disabled": os.environ.get("PAGER") in ("", "cat"),
+        "git_pager_disabled": pager_ok(os.environ.get("GIT_PAGER", "-")) is not None,
+        "pager_disabled": pager_ok(os.environ.get("PAGER", "-")) is not None,
     }
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    stamped = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    return stamped if len(stamped) <= 1_000_000 else text
 
 
 def _compact(event_name: str) -> str:
@@ -439,7 +442,7 @@ def _post_hook(input_text: str) -> tuple[str, str, int] | None:
         return None
     host, port, token = auth
     url = _loopback_url(host, port, f"/v1/hooks/{HARNESS}")
-    transport_cap = 10.0 if HARNESS == "grok" and _event_name(input_text) == "UserPromptSubmit" else 5.0
+    transport_cap = 10.0 if _event_name(input_text) == "UserPromptSubmit" else 5.0
     timeout = min(float(TIMEOUT_SECONDS) * 0.5, transport_cap, _HOOK_DEADLINE_MONOTONIC - time.monotonic())
     if HARNESS == "grok" and _compact(_event_name(input_text)) in _GROK_OBSERVE_EVENTS:
         # Keep the daemon request within 1s of Grok's 15s outer hook lifetime.

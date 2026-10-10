@@ -40,7 +40,7 @@ def test_resident_fingerprint_mismatch_enters_bounded_retry_backoff(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(
         publisher_module,
@@ -84,7 +84,7 @@ def test_run_loop_backs_off_after_resident_mismatch_at_expired_deadline(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     monkeypatch.setattr(publisher_module, "_publish_snapshot_v3", lambda **_kwargs: ({}, 2))
@@ -145,7 +145,7 @@ def test_run_loop_preserves_failed_retry_backoff_across_stable_database_writes(
     policy = {"mode": "enforce", "blocked_capabilities": ["network"]}
     publisher._input_fingerprint = baseline
     monkeypatch.setattr(publisher, "_current_input_fingerprint", lambda: next(changed_inputs))
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: policy)
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: policy)
     attempts: list[float | None] = []
     request_count = 0
     original_request_publish = publisher.request_publish
@@ -204,7 +204,7 @@ def test_stable_database_heartbeat_does_not_reset_failed_retry_backoff(
     )
     policy = {"mode": "enforce", "blocked_capabilities": ["network"]}
     database_change = {str(publisher.guard_home / "guard.db-wal")}
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: policy)
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: policy)
     try:
         assert publisher._policy_input_changed(database_change)
         publisher._record_error("native_policy_snapshot_resident_changed")
@@ -230,7 +230,7 @@ def test_non_database_policy_change_records_observation_before_failed_retry(
     database_change = {str(publisher.guard_home / "guard.db-wal")}
     external_change = {str(publisher.guard_home / "managed-policy-cache.json")}
     policies = iter((enforce_policy, observe_policy, observe_policy))
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: next(policies))
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: next(policies))
     try:
         assert publisher._policy_input_changed(database_change)
         assert publisher._policy_input_changed(external_change)
@@ -258,7 +258,7 @@ def test_non_database_policy_change_revokes_readiness_before_compilation(
     publisher._snapshot = {"expires_at_ms": int(clock.wall * 1_000) + 60_000, "generation": 1}
     publisher._acked = True
 
-    def compile_policy() -> dict[str, object]:
+    def compile_policy(**_: object) -> dict[str, object]:
         assert not publisher.is_ready()
         assert publisher.current_snapshot_binding() is None
         return {"mode": "enforce", "blocked_capabilities": ["network"]}
@@ -291,7 +291,7 @@ def test_config_change_revokes_readiness_before_compilation_and_preserves_retry(
     config_change = {str(publisher.guard_home / "config.toml")}
     policies = iter((enforce_policy, config_policy, config_policy))
 
-    def compile_policy() -> dict[str, object]:
+    def compile_policy(**_: object) -> dict[str, object]:
         policy = next(policies)
         if policy is config_policy:
             assert not publisher.is_ready()
@@ -334,7 +334,7 @@ def test_invalid_policy_observation_then_valid_recovery_rearms_publication(
     database_change = {str(publisher.guard_home / "guard.db-wal")}
     observations: list[object] = [OSError("invalid policy"), OSError("invalid policy"), policy, policy]
 
-    def observe_policy() -> dict[str, object]:
+    def observe_policy(**_: object) -> dict[str, object]:
         observation = observations.pop(0)
         if isinstance(observation, BaseException):
             raise observation
@@ -348,7 +348,7 @@ def test_invalid_policy_observation_then_valid_recovery_rearms_publication(
         assert not publisher._policy_input_changed(database_change)
 
         mode_only_policy = {**policy, "mode": "observe"}
-        monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: mode_only_policy)
+        monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: mode_only_policy)
         assert publisher._policy_input_changed(database_change)
         assert not publisher._policy_input_changed(database_change)
     finally:

@@ -141,22 +141,6 @@ _WORLD_WRITABLE_OPTIONS: Final = frozenset(
 # ---------------------------------------------------------------------------
 
 
-class OCICapability(str, Enum):
-    """Atomic capability an OCI bundle declares."""
-
-    CAPABILITY = "capability"
-    SECCOMP = "seccomp"
-    LSM = "lsm"
-    CGROUP = "cgroup"
-    NAMESPACE = "namespace"
-    ROOTFS = "rootfs"
-    MOUNT = "mount"
-    NETWORK = "network"
-    USER = "user"
-    BINARY = "binary"
-    BUNDLE_VERSION = "bundle_version"
-
-
 class OCISeccompProfile(str, Enum):
     """Seccomp profile kind."""
 

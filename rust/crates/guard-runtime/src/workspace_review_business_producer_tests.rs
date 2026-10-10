@@ -2,6 +2,190 @@ use super::super::tests::{input, Fixture};
 use super::*;
 use guard_policy_snapshot::{integrity_mac, policy_digest};
 
+#[path = "workspace_review_business_core_transport_tests.rs"]
+mod core_transport_tests;
+#[path = "workspace_review_business_queue_tests.rs"]
+mod queue_tests;
+
+fn local_queue(fixture: &Fixture) -> Result<Value, String> {
+    let request = json!({"operation":"workspace_review_local_queue","request":{}});
+    let response = crate::resident_ops::evaluate_resident_bytes(
+        &canonical_json_bytes(&request).unwrap(),
+        Some(&fixture.store),
+    )?;
+    serde_json::from_slice(&response).map_err(|_| "test_invalid_queue_response".into())
+}
+
+#[test]
+fn local_queue_discovers_producer_saved_ids_without_sql_or_private_content() {
+    let fixture = Fixture::new("business-producer-local-queue");
+    assert_eq!(local_queue(&fixture).unwrap()["items"], json!([]));
+    let prepared = prepare(input(b"QUEUE_PRIVATE_BODY_CANARY", &[])).unwrap();
+    // Deliberately unrelated to the production ID prefix: provenance comes
+    // from the saved native origin and frozen input, never from a naming rule.
+    persist_prepared_review(&fixture.store, "opaque-selector", &prepared, || true).unwrap();
+    let queue = local_queue(&fixture).unwrap();
+    assert_eq!(
+        queue["schema"],
+        "guard-native-local-business-review-queue.v1"
+    );
+    assert_eq!(queue["items"].as_array().unwrap().len(), 1);
+    assert_eq!(queue["items"][0]["request_id"], "opaque-selector");
+    assert_eq!(
+        queue["items"][0]["prepared_input_binding"],
+        prepared.binding()
+    );
+    assert_eq!(queue["items"][0]["execution_state"], "not_checked");
+    assert!(!queue.to_string().contains("QUEUE_PRIVATE_BODY_CANARY"));
+    assert!(!queue.to_string().contains("example.test"));
+    assert!(!fixture
+        .root
+        .join("workspace-review-business-attempts")
+        .exists());
+}
+
+#[test]
+fn local_queue_refuses_tampered_native_origin_and_caller_supplied_selectors() {
+    let fixture = Fixture::new("business-producer-local-queue-invalid");
+    let prepared = prepare(input(b"PRIVATE_QUEUE_BODY", &[])).unwrap();
+    persist_prepared_review(&fixture.store, "opaque-selector", &prepared, || true).unwrap();
+    let request = json!({"operation":"workspace_review_local_queue",
+        "request":{"request_id":"opaque-selector"}});
+    assert!(crate::resident_ops::evaluate_resident_bytes(
+        &canonical_json_bytes(&request).unwrap(),
+        Some(&fixture.store),
+    )
+    .is_err());
+    let path = fixture
+        .root
+        .join("workspace-review-requests/opaque-selector.json");
+    let mut state: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    state["action"]["action_envelope"]["native_origin_receipt"]["request_id"] = json!("forged");
+    super::super::tests::write(&fixture.root, &path, &state);
+    assert!(local_queue(&fixture).is_err());
+}
+
+#[test]
+fn local_queue_is_read_only_and_rejects_corrupt_records_instead_of_hiding_them() {
+    let fixture = Fixture::new("business-producer-local-queue-read-only");
+    let prepared = prepare(input(b"PRIVATE_QUEUE_BODY", &[])).unwrap();
+    persist_prepared_review(&fixture.store, "opaque-selector", &prepared, || true).unwrap();
+    let result =
+        super::super::super::approval_enrollment::with_transition_lock(&fixture.root, || {
+            Ok(local_queue(&fixture))
+        })
+        .unwrap();
+    assert!(result.is_ok());
+    let path = fixture
+        .root
+        .join("workspace-review-business-queue/corrupt.json");
+    super::super::tests::write(&fixture.root, &path, &json!({"request_id":"corrupt"}));
+    assert_eq!(
+        local_queue(&fixture).unwrap_err(),
+        "native_local_business_queue_unavailable"
+    );
+}
+
+#[test]
+fn local_queue_refuses_truncation_at_business_item_and_directory_limits() {
+    let fixture = Fixture::new("business-producer-local-queue-item-bound");
+    let prepared = prepare(input(b"PRIVATE_QUEUE_BODY", &[])).unwrap();
+    for index in 0..128 {
+        persist_prepared_review(
+            &fixture.store,
+            &format!("opaque-{index:03}"),
+            &prepared,
+            || true,
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        local_queue(&fixture).unwrap()["items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        128
+    );
+    persist_prepared_review(&fixture.store, "opaque-overflow", &prepared, || true).unwrap();
+    assert_eq!(
+        local_queue(&fixture).unwrap_err(),
+        "native_local_business_queue_unavailable"
+    );
+
+    let fixture = Fixture::new("business-producer-local-queue-directory-bound");
+    let directory = fixture.root.join("workspace-review-business-queue");
+    crate::resident_state::ensure_private_directory(&directory, true).unwrap();
+    // Even unrelated entries consume the scan bound; none can trigger private
+    // input loading or be accepted as an authenticated business request.
+    for index in 0..4097 {
+        std::fs::write(directory.join(format!("unrelated-{index}")), b"").unwrap();
+    }
+    assert_eq!(
+        local_queue(&fixture).unwrap_err(),
+        "native_local_business_queue_unavailable"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn local_queue_rechecks_private_permissions_and_refuses_symlink_requests() {
+    use std::os::unix::fs::{symlink, PermissionsExt};
+    let fixture = Fixture::new("business-producer-local-queue-private");
+    let prepared = prepare(input(b"PRIVATE_QUEUE_BODY", &[])).unwrap();
+    persist_prepared_review(&fixture.store, "opaque-selector", &prepared, || true).unwrap();
+    assert!(local_queue(&fixture).is_ok());
+    let directory = fixture.root.join("workspace-review-requests");
+    let path = directory.join("opaque-selector.json");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+    assert!(local_queue(&fixture).is_err());
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    assert!(local_queue(&fixture).is_ok());
+    symlink(
+        &path,
+        fixture
+            .root
+            .join("workspace-review-business-queue/symlink.json"),
+    )
+    .unwrap();
+    assert!(local_queue(&fixture).is_err());
+}
+
+#[test]
+fn rollback_between_verification_and_claim_callback_spends_without_callback() {
+    let fixture = Fixture::new("business-claim-callback-rollback");
+    let prepared = prepare(input(b"private-worker-body", &[])).unwrap();
+    persist_prepared_review(&fixture.store, "business-test", &prepared, || true).unwrap();
+    let value = super::super::tests::owned_input_tests::owned_decision(&fixture);
+    let now = value["issued_at_ms"].as_u64().unwrap();
+    let bytes = canonical_json_bytes(&value).unwrap();
+    let mut times = [now, now + 1, now, now].into_iter();
+    let callbacks = std::cell::Cell::new(0);
+    let result =
+        super::super::super::workspace_review_decision::claim_owned_business_request_with_clock(
+            &fixture.store,
+            "business-test",
+            &bytes,
+            || times.next().ok_or_else(|| "test_clock_exhausted".into()),
+            |_, _| {
+                callbacks.set(callbacks.get() + 1);
+                Ok(())
+            },
+        );
+    assert_eq!(
+        result.err().unwrap(),
+        "native_workspace_review_clock_rollback"
+    );
+    assert_eq!(callbacks.get(), 0);
+    assert!(
+        super::super::super::workspace_review_decision::claim_owned_business_request(
+            &fixture.store,
+            "business-test",
+            &bytes
+        )
+        .is_err()
+    );
+}
+
 #[test]
 fn expiry_and_clock_rollback_during_journal_persistence_spend_without_release() {
     for rollback in [false, true] {
@@ -23,7 +207,7 @@ fn expiry_and_clock_rollback_during_journal_persistence_spend_without_release() 
                 "business-test",
                 &bytes,
                 || times.next().ok_or_else(|| "test_clock_exhausted".into()),
-                |owned| {
+                |owned, _| {
                     journal::Journal::claimed_unlocked(
                         &fixture.store,
                         "business-test",

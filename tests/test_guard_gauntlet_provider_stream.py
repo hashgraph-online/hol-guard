@@ -127,3 +127,169 @@ def test_evidence_waits_for_terminal_event_without_qualifying_pending_stream():
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_stream_usage_keeps_only_the_five_integer_counters():
+    """Provider usage is informational evidence: drop anything else the chunk carried."""
+    from ci.gauntlet.provider import stream_usage
+
+    assert stream_usage(
+        {
+            "prompt_tokens": 150,
+            "completion_tokens": 20,
+            "total_tokens": 170,
+            "prompt_tokens_details": {"cached_tokens": 40, "extra": "dropped"},
+            "completion_tokens_details": {"reasoning_tokens": 5},
+            "other": "dropped",
+        }
+    ) == {
+        "prompt_tokens": 150,
+        "completion_tokens": 20,
+        "total_tokens": 170,
+        "cached_tokens": 40,
+        "reasoning_tokens": 5,
+    }
+    assert stream_usage({"prompt_tokens": True, "total_tokens": -1}) == {}
+    assert stream_usage({"completion_tokens": 3.5}) == {}
+
+
+def test_relay_records_the_last_streamed_usage_counters():
+    """A usage chunk on the finish event lands on the round as normalized integers."""
+    payload = (
+        b'data: {"model":"unit-transport-only","choices":[],"usage":{"prompt_tokens":1,'
+        b'"completion_tokens":1,"total_tokens":2}}\n\n'
+        b'data: {"model":"unit-transport-only","choices":[{"finish_reason":"stop"}],'
+        b'"usage":{"prompt_tokens":10,"completion_tokens":4,"total_tokens":14,'
+        b'"prompt_tokens_details":{"cached_tokens":3},"completion_tokens_details":'
+        b'{"reasoning_tokens":2},"ignored":"yes"}}\n\n'
+        b"data: [DONE]\n\n"
+    )
+
+    class Upstream(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            self.wfile.write(payload)
+            self.wfile.flush()
+            self.close_connection = True
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with InferenceRelay(
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            model="unit-transport-only",
+            api_key="test-only-key",
+            canary="synthetic-test-canary",
+            identity="unit-transport-only",
+            allow_loopback=True,
+        ) as relay:
+            request = urllib.request.Request(
+                relay.base_url + "/chat/completions",
+                data=json.dumps({"messages": []}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=5) as response:
+                response.read()
+            row = relay.evidence()["live_rounds"][0]
+            assert row["status"] == "completed"
+            assert row["usage"] == {
+                "prompt_tokens": 10,
+                "completion_tokens": 4,
+                "total_tokens": 14,
+                "cached_tokens": 3,
+                "reasoning_tokens": 2,
+            }
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("delivered", [True, False])
+def test_agent_close_is_excused_only_after_the_finish_event_was_delivered(delivered):
+    """A close after the whole finish event waits for DONE; an earlier close is an error."""
+    import socket
+    import struct
+    import time
+
+    gates = [threading.Event(), threading.Event()]
+    first = b'data: {"model":"unit-transport-only","choices":[{"delta":{"content":"a"}}]}\n\n'
+    finish = b'data: {"model":"unit-transport-only","choices":[{"finish_reason":"stop"}]}\n\n'
+    tail = [b'data: {"model":"unit-transport-only","choices":[],"usage":{}}\n\n', b"data: [DONE]\n\n"]
+
+    class Upstream(BaseHTTPRequestHandler):
+        def log_message(self, *_args):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for chunk, gate in [(first, gates[0]), (finish, gates[1])]:
+                self.wfile.write(chunk)
+                self.wfile.flush()
+                gate.wait(timeout=5)
+            for chunk in tail:
+                time.sleep(0.05)
+                self.wfile.write(chunk)
+                self.wfile.flush()
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+    server.daemon_threads = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with InferenceRelay(
+            base_url=f"http://127.0.0.1:{server.server_port}/v1",
+            model="unit-transport-only",
+            api_key="test-only-key",
+            canary="synthetic-test-canary",
+            identity="unit-transport-only",
+            allow_loopback=True,
+        ) as relay:
+            body = json.dumps({"messages": []}).encode()
+            agent = socket.create_connection(("127.0.0.1", relay.server.server_port), timeout=3)
+            agent.sendall(
+                b"POST /v1/chat/completions HTTP/1.1\r\nHost: relay\r\nContent-Type: application/json\r\n"
+                + f"Content-Length: {len(body)}\r\n\r\n".encode()
+                + body
+            )
+            received = b""
+            if delivered:
+                gates[0].set()
+            target = finish if delivered else first
+            while not received.endswith(target):
+                data = agent.recv(4096)
+                assert data
+                received += data
+            # Reset rather than close, so the relay's next write fails at once.
+            agent.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            agent.close()
+            time.sleep(0.2)
+            for gate in gates:
+                gate.set()
+            row = relay.evidence(wait_seconds=3)["live_rounds"][0]
+            if delivered:
+                assert row["status"] == "completed"
+                assert row["agent_closed_after_finish"] is True
+            else:
+                assert row["status"] == "provider-error"
+                assert row["error_phase"] == "agent-write"
+    finally:
+        for gate in gates:
+            gate.set()
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
