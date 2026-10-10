@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 import uuid
 from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
@@ -36,10 +38,16 @@ def _request(version: str) -> GuardApprovalRequest:
     )
 
 
-def test_deduplicated_request_preserves_first_and_updates_last_guard_version() -> None:
+def _memory_connection() -> sqlite3.Connection:
     connection = sqlite3.connect(":memory:")
     connection.row_factory = sqlite3.Row
+    bind_connection_guard_home(connection, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
     connection.execute(approval_schema_statement())
+    return connection
+
+
+def test_deduplicated_request_preserves_first_and_updates_last_guard_version() -> None:
+    connection = _memory_connection()
 
     first_id = add_approval_request(connection, _request("2.2.0a129"), "2026-08-02T00:00:00Z")
     second_id = add_approval_request(connection, _request("2.2.0a130"), "2026-08-02T00:01:00Z")
@@ -52,9 +60,7 @@ def test_deduplicated_request_preserves_first_and_updates_last_guard_version() -
 
 
 def test_deduplicated_legacy_request_records_its_first_observed_guard_version() -> None:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.execute(approval_schema_statement())
+    connection = _memory_connection()
     request = _request("2.2.0a130")
     request_id = add_approval_request(connection, request, "2026-08-02T00:00:00Z")
     connection.execute(
@@ -75,9 +81,7 @@ def test_deduplicated_legacy_request_records_its_first_observed_guard_version() 
 
 
 def test_cloud_review_event_sends_guard_version_metadata(tmp_path: Path) -> None:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    connection.execute(approval_schema_statement())
+    connection = _memory_connection()
     request = _request("2.2.0a129")
     request_id = add_approval_request(connection, request, "2026-08-02T00:00:00Z")
     updated = _request("2.2.0a130")
