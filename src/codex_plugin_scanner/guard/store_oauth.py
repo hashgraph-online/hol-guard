@@ -156,6 +156,28 @@ class StoreOAuthConnectMixin:
                 }
             ]
         )
+        review_sync_key = "guard_cloud_review_sync_state"
+        if self.guard_source != "default":
+            review_sync_key += f":{self.guard_source}"
+        review_sync = self.get_sync_payload(review_sync_key)
+        if isinstance(review_sync, dict) and review_sync.get("state") == "error":
+            error = review_sync.get("last_error")
+            if review_sync.get("last_error_code") in {"cloud_auth_expired", "cloud_connect_required"} or (
+                review_sync.get("last_error_code") is None
+                and isinstance(error, str)
+                and error.startswith(
+                    (
+                        "Guard authorization expired.",
+                        "Guard Cloud sign-in on this device is no longer valid.",
+                        "HTTP Error 401:",
+                    )
+                )
+            ):
+                self.set_sync_payload(
+                    review_sync_key,
+                    {**review_sync, "state": "idle", "last_error": None, "last_error_code": None},
+                    now or _now(),
+                )
 
     def _set_oauth_local_credentials_unlocked(
         self,

@@ -63,77 +63,6 @@ pub(super) fn package_has_incomplete_lockfile(
         .any(|r| !r.complete)
 }
 
-// `block_package_from_offline` — builds a block result from the offline bundle evaluation.
-#[allow(dead_code)]
-pub(super) fn block_package_from_offline(
-    offline: &Map<String, Value>,
-    bundle_response: &SupplyChainBundleResponse,
-    package_match: &Map<String, Value>,
-    resolved_version: Option<&str>,
-) -> Map<String, Value> {
-    let mut r = offline.clone();
-    if let Some(v) = resolved_version {
-        r.insert("resolvedVersion".to_string(), Value::String(v.to_string()));
-    }
-    let _ = (bundle_response, package_match);
-    r
-}
-
-// `_bundle_package_result` — build a package result from a bundle package match.
-#[allow(dead_code)]
-pub(super) fn bundle_package_result(
-    deps: &SupplyChainEvalDeps<'_>,
-    target: &Map<String, Value>,
-    package_match: &Map<String, Value>,
-    bundle_response: &SupplyChainBundleResponse,
-    resolved_version: Option<&str>,
-    _now_timestamp: Option<f64>,
-) -> Option<Map<String, Value>> {
-    let action = optional_string_map(package_match, "defaultAction")
-        .unwrap_or_else(|| "monitor".to_string());
-    let decision = match action.as_str() {
-        "block" | "deny" => "block",
-        "ask" => "ask",
-        "warn" => "warn",
-        _ => "monitor",
-    };
-    let mut reason = Map::new();
-    reason.insert("code".to_string(), Value::String("bundle_package".into()));
-    reason.insert(
-        "message".to_string(),
-        Value::String(format!(
-            "Bundle {} signals {} for {}.",
-            bundle_response.payload_hash,
-            decision,
-            bundle_package_label(package_match)
-        )),
-    );
-    reason.insert("severity".to_string(), Value::String("medium".into()));
-    let mut pkg = package_target_result(target, decision, vec![reason], None);
-    for (key, src) in [
-        ("sourceIdentity", "source_identity"),
-        ("sourceRepository", "source_repository"),
-        ("sourceRevisionKind", "source_revision_kind"),
-    ] {
-        pkg.insert(
-            key.to_string(),
-            optional_string(target.get(src))
-                .map(Value::String)
-                .unwrap_or(Value::Null),
-        );
-    }
-    if let Some(fix) = optional_string_map(package_match, "recommendedFixVersion") {
-        if !fix.is_empty() {
-            pkg.insert("recommendedFixVersion".to_string(), Value::String(fix));
-        }
-    }
-    if let Some(v) = resolved_version {
-        pkg.insert("resolvedVersion".to_string(), Value::String(v.to_string()));
-    }
-    let _ = deps;
-    Some(pkg)
-}
-
 // `_incomplete_lockfile_fallback_target`
 #[allow(dead_code)]
 pub(super) fn incomplete_lockfile_fallback_target(
@@ -294,38 +223,4 @@ pub(super) fn cloud_fallback_reason(code: &str, message: &str) -> Map<String, Va
     reason.insert("severity".into(), Value::String("unknown".into()));
     reason.insert("source".into(), Value::String("guard-cloud".into()));
     reason
-}
-
-/// `_bundle_reason_message` (:5166-5186) — human-readable message for a bundle
-/// package decision reason.
-// supply_chain_package_eval.py:5166-5186
-#[allow(dead_code)]
-pub(super) fn bundle_reason_message(
-    package: &Map<String, Value>,
-    decision: &str,
-    reason: &str,
-    stale: bool,
-) -> String {
-    let package_label = bundle_package_label(package);
-    if stale {
-        return match decision {
-            "block" => format!(
-                "Cached bundle is stale, but Guard still blocked {package_label} from advisory intelligence."
-            ),
-            "ask" => format!(
-                "Cached bundle is stale, so Guard still requires approval for {package_label}."
-            ),
-            "warn" => format!("Cached bundle is stale, so Guard still warns on {package_label}."),
-            _ => format!("Cached bundle is stale, so Guard kept {package_label} in monitor mode."),
-        };
-    }
-    match reason {
-        "known_malware_or_kev" => {
-            format!("Cached bundle flagged {package_label} from advisory intelligence.")
-        }
-        "maintainer_compromise" => {
-            format!("Cached bundle flagged {package_label} for probable maintainer compromise.")
-        }
-        _ => format!("Cached bundle matched {package_label}."),
-    }
 }

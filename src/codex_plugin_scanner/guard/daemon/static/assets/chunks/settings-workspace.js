@@ -1,4 +1,4 @@
-import { ag as PROTECTION_POSTURE_COPY, ah as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ai as getDefaultExportFromCjs, aj as React, M as useFocusTrap, ak as HiMiniKey, S as SectionLabel, A as ActionButton, w as HiMiniShieldCheck, al as HiMiniLockClosed, am as HiMiniBellAlert, an as HiMiniAdjustmentsHorizontal, ao as HiMiniCircleStack, ap as TabBar, c as HiMiniChevronRight, aq as fetchCloudReviewSettings, K as HiMiniCloud, ar as HiMiniArrowPath, C as HiMiniXMark, as as ApprovalProofFieldInputs, at as isApprovalProofSubmitDisabled, au as buildApprovalProofCredentials, av as changeCloudReviewSettings, aw as resolveProtectionLevelCopy, ax as fetchSettings, ay as fetchRuntimeSnapshot, e as updateSettings, az as clearPolicy, aA as clearReviewQueue, aB as revokeApprovalGateCooldown, aC as disableApprovalGateTotp, aD as importSettings, aE as resetSettings, aF as enrollApprovalGateTotp, aG as verifyApprovalGateTotp, aH as clearEvidence, aI as exportDiagnostics, aJ as repairApprovalCenter, aK as exportSettings, aL as setupDesktopNotifications, n as EmptyState, aM as WorkspacePageHeader, W as WatchProtectionBanner, aN as HiMiniMagnifyingGlass, I as HiMiniChevronDown, s as HiMiniCheckCircle, P as HiMiniExclamationTriangle, aO as humanizeList, aP as isProtectionPosture, aQ as deriveProtectionPosture, aR as Tag, aS as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { ai as PROTECTION_POSTURE_COPY, aj as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ak as harnessPostureRows, al as selectHarnessPosture, am as restartHarnessWatch, an as harnessPostureSummary, ao as harnessWatchPrompt, ap as harnessPostureOptions, aq as canRestartHarnessWatch, ar as getDefaultExportFromCjs, as as React, P as useFocusTrap, at as HiMiniKey, S as SectionLabel, A as ActionButton, y as HiMiniShieldCheck, au as HiMiniLockClosed, av as HiMiniBellAlert, aw as HiMiniAdjustmentsHorizontal, ax as HiMiniCircleStack, ay as TabBar, c as HiMiniChevronRight, az as fetchCloudReviewSettings, M as HiMiniCloud, aA as HiMiniArrowPath, I as HiMiniXMark, aB as ApprovalProofFieldInputs, aC as isApprovalProofSubmitDisabled, aD as buildApprovalProofCredentials, aE as changeCloudReviewSettings, aF as resolveProtectionLevelCopy, aG as fetchSettings, aH as fetchRuntimeSnapshot, aI as clearHarnessWatchOverrides, aJ as withHarnessPosturePatch, e as updateSettings, aK as clearPolicy, aL as clearReviewQueue, aM as revokeApprovalGateCooldown, aN as disableApprovalGateTotp, aO as importSettings, aP as resetSettings, aQ as enrollApprovalGateTotp, aR as verifyApprovalGateTotp, aS as clearEvidence, aT as exportDiagnostics, aU as repairApprovalCenter, aV as exportSettings, aW as setupDesktopNotifications, n as EmptyState, aX as settingsWatchBannerModel, aY as WorkspacePageHeader, W as WatchProtectionBanner, aZ as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, a_ as humanizeList, a$ as isProtectionPosture, b0 as deriveProtectionPosture, b1 as Tag, b2 as normalizeHarnessPostures, b3 as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
@@ -77,6 +77,153 @@ function OutcomeColumn(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.16em] text-slate-400", children: props.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-slate-600", children: props.body })
   ] });
+}
+function HarnessPostureSection(props) {
+  const [pendingWatch, setPendingWatch] = reactExports.useState(null);
+  const rows = harnessPostureRows(props.settings, props.capabilities);
+  const locked = props.settings.harness_postures_locked === true;
+  const { settings, onSettingsChange } = props;
+  const handleChoice = reactExports.useCallback((harness, choice) => {
+    if (choice === "watch") {
+      setPendingWatch(harness);
+      return;
+    }
+    setPendingWatch(null);
+    onSettingsChange(selectHarnessPosture(settings, harness, choice));
+  }, [onSettingsChange, settings]);
+  const handleConfirmWatch = reactExports.useCallback(() => {
+    if (pendingWatch === null) return;
+    onSettingsChange(selectHarnessPosture(settings, pendingWatch, "watch"));
+    setPendingWatch(null);
+  }, [onSettingsChange, pendingWatch, settings]);
+  const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
+  const handleRestartWatch = reactExports.useCallback((harness) => {
+    onSettingsChange(restartHarnessWatch(settings, harness));
+  }, [onSettingsChange, settings]);
+  if (rows.length === 0) return null;
+  const pendingRow = rows.find((row) => row.harness === pendingWatch);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", "data-testid": "harness-posture-section", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", "data-testid": "harness-posture-summary", children: harnessPostureSummary(rows) }),
+    locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white", children: rows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      HarnessPostureRowView,
+      {
+        row,
+        settings,
+        locked,
+        onChoose: handleChoice,
+        onRestartWatch: handleRestartWatch
+      },
+      row.harness
+    )) }),
+    pendingRow !== void 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        className: "flex flex-col gap-3 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+        role: "alertdialog",
+        "aria-label": `Switch ${pendingRow.displayName} to Watch`,
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: harnessWatchPrompt(rows, pendingRow.harness) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleConfirmWatch,
+                className: "inline-flex min-h-11 items-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+                children: "Switch to Watch"
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "button",
+              {
+                type: "button",
+                onClick: handleCancelWatch,
+                className: "inline-flex min-h-11 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+                children: "Keep protection on"
+              }
+            )
+          ] })
+        ]
+      }
+    ) : null
+  ] });
+}
+function HarnessPostureRowView(props) {
+  const options = harnessPostureOptions(props.settings, props.row.harness);
+  const groupName = `harness-posture-${props.row.harness}`;
+  const { onRestartWatch } = props;
+  const harness = props.row.harness;
+  const handleRestart = reactExports.useCallback(() => onRestartWatch(harness), [harness, onRestartWatch]);
+  const restartPending = props.settings.harness_watch_restart?.includes(harness) === true;
+  const canRestart = !props.locked && canRestartHarnessWatch(props.settings, harness);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.row.displayName }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: rowCaption(props.row) }),
+      canRestart && restartPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Watch timer restarts when you save." }) : null,
+      canRestart && !restartPending ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleRestart,
+          className: "mt-1 min-h-11 text-xs font-semibold text-brand-blue underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue sm:min-h-0",
+          children: "Restart Watch timer"
+        }
+      ) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "border-0 p-0", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: `Protection for ${props.row.displayName}` }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex gap-1 rounded-xl bg-slate-50 p-1", children: options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        HarnessPostureChoiceView,
+        {
+          groupName,
+          choice: option.choice,
+          label: option.label,
+          selected: props.row.selected === option.choice,
+          disabled: props.locked,
+          harness: props.row.harness,
+          onChoose: props.onChoose
+        },
+        option.choice
+      )) })
+    ] })
+  ] });
+}
+function rowCaption(row) {
+  if (!row.hasOverride) return "Follows the machine setting";
+  return row.effective === "watch" ? "Only recording" : "Set for this app";
+}
+function HarnessPostureChoiceView(props) {
+  const handleChange = reactExports.useCallback(() => {
+    if (props.disabled) return;
+    props.onChoose(props.harness, props.choice);
+  }, [props.choice, props.disabled, props.harness, props.onChoose]);
+  let choiceClass = "cursor-pointer text-slate-600 hover:text-brand-dark";
+  if (props.disabled && props.selected) choiceClass = "cursor-not-allowed bg-white text-slate-500 shadow-sm";
+  else if (props.disabled) choiceClass = "cursor-not-allowed text-slate-400";
+  else if (props.selected) choiceClass = "cursor-pointer bg-white text-brand-dark shadow-sm";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "label",
+    {
+      className: `flex min-h-11 min-w-24 items-center justify-center rounded-lg px-3 py-2 text-sm font-semibold transition-colors focus-within:ring-2 focus-within:ring-brand-blue ${choiceClass}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "radio",
+            name: props.groupName,
+            value: props.choice,
+            checked: props.selected,
+            disabled: props.disabled,
+            onChange: handleChange,
+            className: "sr-only"
+          }
+        ),
+        props.label
+      ]
+    }
+  );
 }
 var propTypes$2 = { exports: {} };
 var ReactPropTypesSecret_1;
@@ -2536,6 +2683,7 @@ function cloudReviewConfirmationError(message) {
 }
 function cloudReviewStatusCopy(status) {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
+  if (status.reconnect_required) return "Guard Cloud sign-in needs repair. Reconnect to resume uploads and cloud decisions; local review is still available.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
@@ -2543,6 +2691,20 @@ function cloudReviewStatusCopy(status) {
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
+}
+function cloudReviewConnectionLabel(status) {
+  if (status.reconnect_required) return "Reconnect needed";
+  return status.connected ? "Connected" : "Not connected";
+}
+function cloudReviewDecisionLabel(status) {
+  if (status.reconnect_required) return "Paused until sign-in";
+  return status.enabled ? "Enabled" : "Confirmation needed";
+}
+function cloudReviewRecoveryAction(status) {
+  if (!status.connected || status.reconnect_required) return "connect";
+  if (!status.enabled) return "authorize";
+  if (status.activation_error || status.held_events > 0) return "restore";
+  return "none";
 }
 function CloudReviewSettings() {
   const [status, setStatus] = reactExports.useState(null);
@@ -2634,7 +2796,7 @@ function CloudReviewSettings() {
       setPending(false);
     }
   }
-  const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
+  const recoveryAction = status ? cloudReviewRecoveryAction(status) : "none";
   const requireFreshTotp = status?.approval_gate.totp_enabled === true;
   const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
@@ -2674,11 +2836,11 @@ function CloudReviewSettings() {
     status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud connection" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.connected ? "Connected" : "Not connected" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: cloudReviewConnectionLabel(status) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Cloud decisions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: status.enabled ? "Enabled" : "Confirmation needed" })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 font-medium text-brand-dark", children: cloudReviewDecisionLabel(status) })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs text-slate-600", children: "Last activity delivered" }),
@@ -2690,15 +2852,25 @@ function CloudReviewSettings() {
         }) }) : "Not recorded yet" })
       ] })
     ] }) : null,
-    status?.connected ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
-      !status.enabled || needsRecovery ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+    status ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-start gap-2", children: [
+      recoveryAction === "connect" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ConnectGuardCloudButton,
+        {
+          label: status.reconnect_required ? "Reconnect Guard Cloud" : "Connect Guard Cloud",
+          variant: status.reconnect_required ? "primary" : "secondary",
+          onConnected: () => {
+            void refresh(false);
+          }
+        }
+      ) : null,
+      recoveryAction === "authorize" || recoveryAction === "restore" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         "button",
         {
           type: "button",
           disabled: loading || pending,
           onClick: () => openConfirmation("enable"),
           className: "min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50",
-          children: status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"
+          children: recoveryAction === "restore" ? "Restore Cloud Review" : "Enable Cloud Review"
         }
       ) : null,
       status.enabled ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -2712,7 +2884,6 @@ function CloudReviewSettings() {
         }
       ) : null
     ] }) : null,
-    status && !status.connected ? /* @__PURE__ */ jsxRuntimeExports.jsx(ConnectGuardCloudButton, { className: "mt-3" }) : null,
     action && status ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       "div",
       {
@@ -3167,7 +3338,8 @@ function normalizeGuardSettings(settings) {
     security_level: securityLevel,
     risk_actions: effectiveRiskActions,
     risk_action_overrides: explicitOverrides,
-    harness_risk_actions: settings.harness_risk_actions ?? {}
+    harness_risk_actions: settings.harness_risk_actions ?? {},
+    harness_postures: normalizeHarnessPostures(settings.harness_postures)
   };
 }
 function applyProtectionPosture(settings, posture) {
@@ -3440,6 +3612,10 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     setDraft((value) => value === null ? value : applyProtectionPosture(value, posture));
     setSaveError(null);
   }, []);
+  const setDraftSettings = reactExports.useCallback((settings) => {
+    setDraft(settings);
+    setSaveError(null);
+  }, []);
   const handleProtectionPostureChange = reactExports.useCallback((posture) => {
     if (posture === "watch") {
       setPendingPosture(posture);
@@ -3448,8 +3624,13 @@ function SettingsWorkspace({ onApprovalGateChange }) {
     applyDraftPosture(posture);
   }, [applyDraftPosture]);
   const handleTurnProtectionOn = reactExports.useCallback(() => {
-    applyDraftPosture("protected");
-  }, [applyDraftPosture]);
+    setDraft((value) => {
+      if (value === null) return value;
+      const cleared = clearHarnessWatchOverrides(value);
+      return currentProtectionPosture(cleared) === "watch" ? applyProtectionPosture(cleared, "protected") : cleared;
+    });
+    setSaveError(null);
+  }, []);
   const handleWatchAutoRevertToggle = reactExports.useCallback((checked) => {
     setDraft((value) => value === null ? value : { ...value, watch_auto_revert_hours: checked ? 24 : 0 });
     setSaveError(null);
@@ -3618,7 +3799,11 @@ function SettingsWorkspace({ onApprovalGateChange }) {
           settingsToSave = presentationOnlyPayload;
         } else {
           settingsToSave = {
-            ...buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+            ...withHarnessPosturePatch(
+              buildSettingsUpdatePayload(draft, savedSettingsRef.current),
+              draft,
+              savedSettingsRef.current
+            ),
             risk_actions: draft.security_level === "custom" ? draft.risk_actions : draft.risk_action_overrides,
             approval_gate: approvalGateUpdate
           };
@@ -4137,6 +4322,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
   const selectedPosture = currentProtectionPosture(draft);
   const resolvedPresentation = resolveSettingsPresentation(draft);
   const protectionCapabilities = state.kind === "ready" ? state.payload.protection_capabilities ?? [] : [];
+  const watchBanner = settingsWatchBannerModel(draft, protectionCapabilities);
   const searchMatches = filterSettingsBySearch(searchQuery);
   const hasSearch = searchQuery.trim().length > 0;
   const riskSearchMatches = searchMatches.filter((m) => m.section === "risk");
@@ -4150,7 +4336,7 @@ function SettingsWorkspace({ onApprovalGateChange }) {
         description: "Guard stops dangerous actions automatically. Choose how blocked requests are handled in Approval gate."
       }
     ),
-    selectedPosture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
+    watchBanner !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { model: watchBanner, onTurnProtectionOn: handleTurnProtectionOn }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400", "aria-hidden": "true" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4221,6 +4407,21 @@ function SettingsWorkspace({ onApprovalGateChange }) {
                 )
               }
             ),
+            protectionCapabilities.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SettingsFormSection,
+              {
+                title: "Protection by app",
+                description: "Apps follow the setting above unless you choose otherwise. Use Watch for one app while you debug it.",
+                children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  HarnessPostureSection,
+                  {
+                    settings: draft,
+                    capabilities: protectionCapabilities,
+                    onSettingsChange: setDraftSettings
+                  }
+                )
+              }
+            ) : null,
             /* @__PURE__ */ jsxRuntimeExports.jsx(SettingsFormSection, { title: "Timing and features", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4 py-3", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(
                 SettingsSelectRow,

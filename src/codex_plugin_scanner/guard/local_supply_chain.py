@@ -312,16 +312,15 @@ def evaluate_package_request_artifact(
     external_archive_network_authorized: bool = False,
     retain_external_archive_blob: bool = False,
 ):
-    """Evaluate a package request; the resident owns every locally-decidable verdict.
+    """Evaluate a package request; the resident owns every verdict it can reach.
 
-    The resident answers (or the request is blocked) for workspaces without a
-    Guard Cloud workspace. Two paths still run the Python evaluator because
-    their Rust ports are not complete: requests for a Cloud-connected workspace
-    (signed bundle, policy rules and the Cloud service call) and the
-    second-phase external-archive acquisition that must hand a live retained
-    blob to the caller (RTM-029/030).
+    The resident answers (or the request is blocked) for every workspace,
+    including Cloud-connected ones: signed bundle, synced policy rules, the
+    Cloud service call and the fail-closed ladder are all decided in Rust. Only
+    the second-phase external-archive acquisition that must hand a live
+    retained blob to the caller (RTM-029/030) still runs the Python evaluator.
     """
-    if retain_external_archive_blob or store.get_cloud_workspace_id() is not None:
+    if retain_external_archive_blob:
         return _supply_chain_package_eval_module().evaluate_package_request_artifact(
             artifact=artifact,
             store=store,

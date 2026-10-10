@@ -59,6 +59,7 @@ def _resident_request(
     timeout_seconds: float,
     deadline_monotonic: float | None = None,
     required_features: tuple[str, ...] = (_PACKAGE_AUTHORITY_FEATURE,),
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
 ) -> dict[str, object] | None:
     """Transport shared by package-authority operations; callers own failure handling."""
     if deadline_monotonic is not None:
@@ -85,7 +86,7 @@ def _resident_request(
         payload = json.dumps(envelope).encode("utf-8")
     except (TypeError, ValueError):
         return None
-    if len(payload) > _MAX_REQUEST_BYTES:
+    if len(payload) > max_request_bytes:
         return None
     environment = _isolated_environment()
     response = native_resident_client_request(

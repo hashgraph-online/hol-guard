@@ -80,11 +80,13 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
         previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
         previous_test_mode = os.environ.get("HOL_GUARD_TEST_MODE")
         previous_diagnostic = os.environ.get("HOL_GUARD_NATIVE_DIAGNOSTIC")
+        previous_seams = os.environ.get("HOL_GUARD_RESIDENT_TEST_SEAMS")
         os.environ["HOL_GUARD_NATIVE"] = "force"
         os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
         # The resident pool captures its environment when the prewarm starts.
         os.environ["HOL_GUARD_TEST_MODE"] = "1"
         os.environ["HOL_GUARD_NATIVE_DIAGNOSTIC"] = "1"
+        os.environ["HOL_GUARD_RESIDENT_TEST_SEAMS"] = "1"
         try:
             native_context.native_context_digest(
                 "launch_argv_digest",
@@ -108,6 +110,10 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
                 os.environ.pop("HOL_GUARD_NATIVE_DIAGNOSTIC", None)
             else:
                 os.environ["HOL_GUARD_NATIVE_DIAGNOSTIC"] = previous_diagnostic
+            if previous_seams is None:
+                os.environ.pop("HOL_GUARD_RESIDENT_TEST_SEAMS", None)
+            else:
+                os.environ["HOL_GUARD_RESIDENT_TEST_SEAMS"] = previous_seams
     yield guard_home
     close_native_residents(guard_home)
 
@@ -446,3 +452,44 @@ def native_data_flow_runtime(
         lambda guard_home: guard_home if guard_home is not None else _native_context_home,
     )
     return _native_context_home
+
+
+@pytest.fixture
+def native_route_policy_with_hooks_off(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Keep daemon route/origin policy native while hook handling stays ``off``.
+
+    The daemon's route and origin policy is owned by the resident and has no
+    Python answer, so a test that sets ``HOL_GUARD_NATIVE=off`` to exercise
+    the Python hook fallback would otherwise see every request fail closed.
+    Only the route-policy transport call runs with the runtime pinned; hook
+    handling in the same test still observes ``off``.
+    """
+
+    from codex_plugin_scanner.guard import native_daemon_route, native_runtime
+
+    runtime = _resolve_native_hook_runtime()
+    real_request = native_daemon_route._resident_request
+    real_mode = native_runtime.native_mode
+    pinned = threading.local()
+
+    def pinned_mode():
+        # Only the thread currently inside a route request sees ``force``;
+        # concurrent hook workers keep reading the configured mode.
+        return "force" if getattr(pinned, "active", False) else real_mode()
+
+    def pinned_request(**kwargs):
+        # The caller resolved its status before the pin applied; resolve it again
+        # inside the pin so the request sees the pinned runtime.
+        kwargs.pop("status", None)
+        pinned.active = True
+        try:
+            return real_request(**kwargs)
+        finally:
+            pinned.active = False
+
+    # The runtime path is only honoured for shadow/force, so naming it is
+    # inert for hook handling that observes ``off``.
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+    monkeypatch.setattr(native_runtime, "native_mode", pinned_mode)
+    monkeypatch.setattr(native_daemon_route, "_resident_request", pinned_request)
+    return runtime

@@ -1,4 +1,4 @@
-import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, q as queueErrorIsUnauthorizedSession, u as useReceiptAnalytics, e as updateSettings, i as harnessDisplayName, k as isConnectableAppHarness, l as useProtectionPresentationState, p as protectionHealthFor, m as unavailableProtectionHealth, n as EmptyState, A as ActionButton, W as WatchProtectionBanner, o as EvidenceInsightsShareModal, s as HiMiniCheckCircle, t as GuardHero, O as OperatorHealthCard, v as formatNumber, w as HiMiniShieldCheck, D as DeviceProofCard, x as guardActionDisposition, y as formatRelativeTime, z as guardActionActivityCopy, B as HiMiniSparkles, C as HiMiniXMark, F as HiMiniChevronUp, I as HiMiniChevronDown, J as resolveCloudIntelCopy, K as HiMiniCloud, L as HiMiniQuestionMarkCircle, M as useFocusTrap, N as approvalProofRequiresPassword, P as HiMiniExclamationTriangle, Q as HiMiniBolt, R as Badge, T as HiMiniMinusCircle } from "../guard-dashboard.js";
+import { g as getHeatmapLevel, j as jsxRuntimeExports, S as SectionLabel, E as EvidenceInsightsShareButton, G as GuardStatMetric, H as HomeInsightsMetrics, a as EvidenceActivityHeatmapMini, r as reactExports, h as homeCommandActivityModel, b as HiMiniCommandLine, c as HiMiniChevronRight, d as createCommandActivityClient, f as fetchCommandActivityApi, q as queueErrorIsUnauthorizedSession, u as useReceiptAnalytics, e as updateSettings, t as turnProtectionOnUpdate, i as harnessDisplayName, k as isConnectableAppHarness, l as useProtectionPresentationState, p as protectionHealthFor, m as unavailableProtectionHealth, n as EmptyState, A as ActionButton, w as watchBannerModel, W as WatchProtectionBanner, o as EvidenceInsightsShareModal, s as HiMiniCheckCircle, v as GuardHero, O as OperatorHealthCard, x as formatNumber, y as HiMiniShieldCheck, D as DeviceProofCard, z as guardActionDisposition, B as formatRelativeTime, C as guardActionActivityCopy, F as HiMiniSparkles, I as HiMiniXMark, J as HiMiniChevronUp, K as HiMiniChevronDown, L as resolveCloudIntelCopy, M as HiMiniCloud, N as HiMiniQuestionMarkCircle, P as useFocusTrap, Q as approvalProofRequiresPassword, R as HiMiniExclamationTriangle, T as HiMiniBolt, U as Badge, V as HiMiniMinusCircle } from "../guard-dashboard.js";
 import { H as HomeProtectionModule } from "./home-protection-module.js";
 function HomeInsightsSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
@@ -209,7 +209,8 @@ function HomeWorkspace(props) {
     props.onClearPolicies(scope);
   }, [props.onClearPolicies]);
   const handleTurnProtectionOn = reactExports.useCallback(() => {
-    void updateSettings({ protection_posture: "protected" }).then(async () => {
+    const current = props.runtime.kind === "ready" ? props.runtime.snapshot : null;
+    void updateSettings(current === null ? { protection_posture: "protected" } : turnProtectionOnUpdate(current)).then(async () => {
       await props.onRefreshRuntime?.();
       props.onOpenSettings();
     }).catch((error) => {
@@ -217,7 +218,7 @@ function HomeWorkspace(props) {
       showToast(message);
       props.onOpenSettings();
     });
-  }, [props.onOpenSettings, props.onRefreshRuntime, showToast]);
+  }, [props.onOpenSettings, props.onRefreshRuntime, props.runtime, showToast]);
   const handleClearPasswordChange = reactExports.useCallback((event) => {
     setClearPassword(event.target.value);
     setClearError(null);
@@ -323,8 +324,9 @@ function HomeWorkspace(props) {
     );
   }
   if (!snapshot) return null;
+  const watchBanner = watchBannerModel(snapshot);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
-    snapshot.protection_posture === "watch" ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { onTurnProtectionOn: handleTurnProtectionOn }) : null,
+    watchBanner !== null ? /* @__PURE__ */ jsxRuntimeExports.jsx(WatchProtectionBanner, { model: watchBanner, onTurnProtectionOn: handleTurnProtectionOn }) : null,
     shareOpen && analyticsState.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       EvidenceInsightsShareModal,
       {

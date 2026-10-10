@@ -1,3 +1,4 @@
+use super::evaluation::{cached_eval_has_reason_code, cached_supply_chain_eval_is_reusable};
 use super::*;
 
 // ---------------------------------------------------------------------------
@@ -9,9 +10,8 @@ use super::*;
 /// `_evaluate_package_request_artifact_uncached` (:337-795).
 ///
 /// Faithful port of the Python orchestration function. Returns
-/// `(Option<PackageEvalResult>, Option<String>)` where the second element is a
-/// human-readable note when the result was served from the early-exit paths
-/// (parity with the Python early-return tuple shape).
+/// `(Option<PackageEvalResult>, Option<EvalError>)`: the second element is set
+/// only when the evaluation cannot finish without caller-hydrated input.
 #[allow(clippy::too_many_arguments)]
 #[allow(dead_code)]
 pub(super) fn evaluate_package_request_artifact_uncached(
@@ -22,7 +22,7 @@ pub(super) fn evaluate_package_request_artifact_uncached(
     now: Option<&str>,
     external_archive_network_authorized: bool,
     retain_external_archive_blob: bool,
-) -> (Option<PackageEvalResult>, Option<String>) {
+) -> (Option<PackageEvalResult>, Option<EvalError>) {
     let now_value = now
         .map(str::to_string)
         .unwrap_or_else(|| crate::local_supply_chain::Timestamp::now_utc().isoformat());
@@ -95,6 +95,57 @@ pub(super) fn evaluate_package_request_artifact_uncached(
         .map(|id| workspace_fingerprint(deps, id, workspace_dir, artifact, bundle_meta.as_ref()));
     let workspace_fingerprint = workspace_fingerprint.as_deref();
 
+    // Reusable cached evaluation for this bundle and workspace (:543-580). A cached
+    // cloud-validation error is reused only while a saved block policy covers it.
+    if let (Some(id), Some(meta)) = (workspace_id.as_deref(), bundle_meta.as_ref()) {
+        let meta_value = |key: &str| meta.get(key).map(String::as_str).unwrap_or_default();
+        let cached = deps.store_extras.get_cached_supply_chain_evaluation(
+            id,
+            &package_intent_hash,
+            meta_value("feed_snapshot_hash"),
+            meta_value("policy_hash"),
+            meta_value("scoring_version"),
+            meta_value("bundle_version"),
+        );
+        if let Some(cached) = cached {
+            let cached_fingerprint = optional_string(cached.get("workspace_fingerprint"));
+            if cached_fingerprint.as_deref() == workspace_fingerprint
+                && cached_supply_chain_eval_is_reusable(&cached, now_timestamp)
+            {
+                let cached_result = PackageEvalResult::from_cache_dict(
+                    &cached,
+                    &package_intent_hash,
+                    meta_value("policy_hash"),
+                    Some(meta_value("bundle_version")),
+                    workspace_fingerprint,
+                );
+                let reuse = if cached_eval_has_reason_code(&cached, "cloud_validation_error") {
+                    match saved_policy_keeps_cached_error(deps, store, artifact, workspace_dir) {
+                        SavedPolicyOutcome::Keep => true,
+                        SavedPolicyOutcome::Retry => false,
+                        SavedPolicyOutcome::Probe => {
+                            return (
+                                None,
+                                Some(EvalError::SavedPolicyProbeRequired(Box::new(
+                                    match cached_result.to_dict() {
+                                        Value::Object(payload) => payload,
+                                        _ => Map::new(),
+                                    },
+                                ))),
+                            );
+                        }
+                    }
+                } else {
+                    true
+                };
+                if reuse {
+                    persist_evidence(deps, store, artifact, &cached_result, &now_value);
+                    return (Some(cached_result), None);
+                }
+            }
+        }
+    }
+
     // Bundle evaluation (:526-536).
     let bundle_evaluation = bundle_response.as_ref().and_then(|response| {
         evaluate_with_bundle(
@@ -149,11 +200,12 @@ pub(super) fn evaluate_package_request_artifact_uncached(
         bundle_meta.as_ref(),
         bundle_defer_eligible,
         bundle_decision,
-        bundle_evaluation.as_ref(),
     );
     if let Some(ref cloud) = cloud_result {
         if let Some(ref bundle_draft) = bundle_evaluation {
-            if cloud_result_should_defer_to_bundle(&evaluation_to_draft(cloud), bundle_draft) {
+            if bundle_defer_eligible
+                && cloud_result_should_defer_to_bundle(&evaluation_to_draft(cloud), bundle_draft)
+            {
                 if cloud_fallback_reason.is_none() {
                     cloud_fallback_reason = cloud.reasons.first().cloned();
                 }

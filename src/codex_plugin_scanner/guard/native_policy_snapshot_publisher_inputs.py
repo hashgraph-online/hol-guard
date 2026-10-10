@@ -236,7 +236,11 @@ class NativePolicySnapshotPublisherInputs:
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
         policy = _merge_effective_native_policies(
-            tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
+            tuple(
+                effective_native_policy_v3(config)
+                | {"mode": config.mode, "harness_postures": dict(getattr(config, "harness_postures", None) or {})}
+                for config in configs
+            )
         )
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
@@ -354,6 +358,8 @@ class NativePolicySnapshotPublisherInputs:
             # and continuously revoke the ACKed snapshot.
             policy_for_digest = dict(effective_policy)
             policy_for_digest.pop("mode", None)
+            # Per-harness postures ride the ACK side channel, not the digest.
+            policy_for_digest.pop("harness_postures", None)
             source = self._compiled_business_source()
             current_fingerprint = (
                 cast(str, _digest_v3(policy_for_digest)),
