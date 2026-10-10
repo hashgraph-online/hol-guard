@@ -31,17 +31,31 @@ on:
   pull_request:
     branches: [main, release/3.0, release/3.2]
     types: [opened, synchronize, reopened, labeled]
-    # Build + Verify only reads what ships in the wheel; skip pull requests that
-    # touch nothing but tests, docs or unrelated workflows.
+    # Skip pull requests that touch nothing the wheel, sdist or installed canary
+    # reads: tests, docs and unrelated workflows. Later entries re-include
+    # shipped Markdown and the test modules the installed canary imports.
     paths:
       - "**"
       - "!tests/**"
       - "!docs/**"
       - "!fuzzers/**"
       - "!**/*.md"
-      - "README.md"
       - "!.github/workflows/**"
       - ".github/workflows/publish.yml"
+      - "README.md"
+      - "src/**"
+      - "scripts/**"
+      - "rust/**"
+      - "contracts/**"
+      - "contributions/**"
+      - "docs/guard/contracts/guard-cloud-review.md"
+      - "tests/__init__.py"
+      - "tests/guard_command_corpus*.py"
+      - "tests/harness_attribution_env.py"
+      - "tests/native_command_test_support.py"
+      - "tests/native_github_offline.py"
+      - "tests/fixtures/guard-command-corpus/**"
+      - "tests/dockerlabs/**"
 
 permissions:
   contents: read
