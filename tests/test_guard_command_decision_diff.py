@@ -188,6 +188,7 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
         assert completed.returncode == 0, completed.stderr
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     """Verify report is exactly reproducible and source bound."""
     report = _fixture()
@@ -251,6 +252,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
     assert {source_binding_id(path) for path in critical_paths} <= sources.keys()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_report_gates_native_parity_and_preserves_every_original_oracle_difference() -> None:
     report = _fixture()
     manifest = load_seed_manifest()
@@ -318,6 +320,7 @@ def _group_signatures(value: object) -> dict[str, tuple[int, str]]:
     return result
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     """Verify report contains only privacy safe deterministic evidence."""
     report = _fixture()
@@ -333,6 +336,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
+@pytest.mark.usefixtures("native_hook_force")
 @pytest.mark.parametrize(
     ("hash_seed", "timezone", "locale"),
     [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],
