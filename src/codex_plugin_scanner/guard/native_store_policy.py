@@ -18,6 +18,8 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256
 from .native_execution import _resident_request
+from .native_runtime import native_runtime_status
+from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 CLAIM_APPROVAL_REUSE_FEATURE = "claim-approval-reuse-v1"
 APPROVAL_REUSE_DIAGNOSTIC_FEATURE = "approval-reuse-diagnostic-v1"
@@ -84,22 +86,43 @@ def claim_evidence_binding(
     if not bundle:
         return binding
     binding["sync_state_sha256"] = {key: _state_digest(connection, key) for key in BUNDLE_STATE_KEYS}
-    binding["cloud_workspace_id"] = cloud_workspace_id
+    # Absent values are omitted, not sent as null: the resident re-serializes the
+    # request without its unset options, and the reply digest must match.
+    if cloud_workspace_id is not None:
+        binding["cloud_workspace_id"] = cloud_workspace_id
     device = connection.execute(
         "select installation_id, device_label from guard_devices where device_key = ?",
         (_LOCAL_DEVICE_KEY,),
     ).fetchone()
-    binding["device"] = (
-        {"installation_id": str(device[0]), "device_label": str(device[1])} if device is not None else None
-    )
+    if device is not None:
+        binding["device"] = {"installation_id": str(device[0]), "device_label": str(device[1])}
     return binding
 
 
-def _payload(response: dict[str, object] | None, request: dict[str, object]) -> dict[str, object] | None:
-    """The ``ok`` payload of a reply bound to ``request``, else ``None``."""
+def _payload(
+    response: dict[str, object] | None, request: dict[str, object], guard_home: Path
+) -> dict[str, object] | None:
+    """The ``ok`` payload of a reply bound to ``request``, else ``None``.
+
+    ``_resident_request`` is called with ``record_success=False``, so resident
+    health is recorded here: a reply that binds to the request and carries an
+    ``ok`` payload counts as a success, any other reply the resident sent counts
+    as a failure.
+    """
 
     if response is None:
         return None
+    payload = _bound_payload(response, request)
+    identity = native_runtime_status().identity
+    if identity is not None:
+        if payload is None:
+            native_record_resident_failure(identity.sha256, guard_home, reason="native_store_policy_binding")
+        else:
+            native_record_resident_success(identity.sha256, guard_home)
+    return payload
+
+
+def _bound_payload(response: dict[str, object], request: dict[str, object]) -> dict[str, object] | None:
     try:
         digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
@@ -147,7 +170,7 @@ def native_claim_approval_reuse_decisions(
         )
     except (TypeError, ValueError):
         return False
-    payload = _payload(response, request)
+    payload = _payload(response, request, Path(guard_home))
     return payload is not None and payload.get("claimed") is True
 
 
@@ -195,7 +218,7 @@ def native_approval_reuse_diagnostic(
             )
         except (TypeError, ValueError):
             break
-        payload = _payload(response, request)
+        payload = _payload(response, request, Path(guard_home))
         if payload is None:
             break
         if payload.get("need") == "integrity_evidence" and "evidence" not in request:

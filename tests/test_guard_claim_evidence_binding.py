@@ -162,6 +162,71 @@ def test_claim_refuses_bundle_evidence_shipped_without_a_binding(
     assert _claim_events(store) == 0
 
 
+def test_claim_without_a_workspace_or_device_row_matches_the_resident_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unset binding options are omitted, so the resident's reply digest matches."""
+
+    store, selected = _bundle_store(tmp_path)
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("delete from guard_devices")
+    sent: list[dict[str, object]] = []
+    real = native_store_policy._resident_request
+
+    def spy(**kwargs: object) -> dict[str, object] | None:
+        sent.append(dict(kwargs["request"]))  # type: ignore[arg-type]
+        return real(**kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(native_store_policy, "_resident_request", spy)
+    monkeypatch.setattr(store, "_cloud_workspace_id_from_connection", lambda _connection: None)
+
+    store.claim_approval_reuse_decision(selected, now=_CLAIM)
+
+    binding = sent[-1]["evidence_binding"]  # type: ignore[index]
+    assert "cloud_workspace_id" not in binding
+    assert "device" not in binding
+    assert set(binding["sync_state_sha256"]) == set(_BUNDLE_SYNC_KEYS)
+
+
+def test_binding_with_no_workspace_or_device_omits_both_keys(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    with sqlite3.connect(store.path) as connection:
+        connection.execute("delete from guard_devices")
+        binding = native_store_policy.claim_evidence_binding(connection, bundle=True)
+
+    assert "cloud_workspace_id" not in binding
+    assert "device" not in binding
+
+
+def test_valid_replies_record_resident_success_and_bad_replies_record_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store, selected = _local_store(tmp_path)
+    recorded: list[str] = []
+    monkeypatch.setattr(
+        native_store_policy, "native_record_resident_success", lambda *_args, **_kwargs: recorded.append("success")
+    )
+    monkeypatch.setattr(
+        native_store_policy, "native_record_resident_failure", lambda *_args, **_kwargs: recorded.append("failure")
+    )
+    real = native_store_policy._resident_request
+
+    assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is True
+    assert recorded == ["success"]
+
+    store, selected = _local_store(tmp_path / "second")
+    recorded.clear()
+
+    def forged(**kwargs: object) -> dict[str, object] | None:
+        response = real(**kwargs)  # type: ignore[arg-type]
+        return None if response is None else {**response, "request_sha256": "sha256:forged"}
+
+    monkeypatch.setattr(native_store_policy, "_resident_request", forged)
+
+    assert store.claim_approval_reuse_decision(selected, now=_CLAIM) is False
+    assert recorded == ["failure"]
+
+
 def test_unchanged_local_evidence_still_claims(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     store, selected = _local_store(tmp_path)
     _race(monkeypatch, None)
