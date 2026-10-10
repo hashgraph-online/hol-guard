@@ -169,10 +169,13 @@ pub(super) fn expand_user(path: &str) -> PathBuf {
     PathBuf::from(path)
 }
 
+// `PATH` list separator; Windows drive letters contain `:`.
+pub(super) const PATH_LIST_SEPARATOR: char = if cfg!(windows) { ';' } else { ':' };
+
 // package_intent_parser.py `_path_for_resolution`
 pub(super) fn path_for_resolution(path_value: &str, effective_cwd: Option<&Path>) -> String {
     let mut rendered: Vec<String> = Vec::new();
-    for entry in path_value.split(':') {
+    for entry in path_value.split(PATH_LIST_SEPARATOR) {
         let mut rendered_entry = entry.to_owned();
         if rendered_entry.is_empty() {
             rendered_entry = ".".to_owned();
@@ -185,7 +188,7 @@ pub(super) fn path_for_resolution(path_value: &str, effective_cwd: Option<&Path>
         }
         rendered.push(path.to_string_lossy().into_owned());
     }
-    rendered.join(":")
+    rendered.join(&PATH_LIST_SEPARATOR.to_string())
 }
 
 // package_intent_parser.py `_command_builtin_is_lookup`

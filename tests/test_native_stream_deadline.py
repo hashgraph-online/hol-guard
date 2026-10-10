@@ -1,9 +1,11 @@
 """Native stream cleanup spends one budget and retains unfinished ownership."""
 
+import os
 import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from types import SimpleNamespace
 
 import pytest
@@ -37,13 +39,9 @@ def test_package_intent_capacity_wait_uses_the_earlier_deadline(
 ):
     home = tmp_path / "guard-home"
     runtime = tmp_path / "runtime"
-    pool = pools._PersistentNativeClientPool(
-        executable=runtime, state_dir=home / "native-runtime", environment={}
-    )
+    pool = pools._PersistentNativeClientPool(executable=runtime, state_dir=home / "native-runtime", environment={})
     pool._clients = {
-        streams._PersistentNativeClient(
-            executable=runtime, state_dir=home / "native-runtime", environment={}
-        )
+        streams._PersistentNativeClient(executable=runtime, state_dir=home / "native-runtime", environment={})
         for _ in range(pools._MAX_PERSISTENT_CLIENTS)
     }
     status = SimpleNamespace(
@@ -350,3 +348,70 @@ def test_fallback_without_owner_starts_no_writer(monkeypatch):
             raise AssertionError("unowned fallback writer started")
 
     assert not transport.write_frame(Stream(), b"fixture", deadline_monotonic=time.monotonic() + 1)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor ownership and permissions")
+@pytest.mark.parametrize("unsafe", ["file_mode", "directory_mode", "symlink", "hardlink", "fifo", "oversized"])
+def test_timeout_diagnostics_reject_unsafe_shared_files(tmp_path, monkeypatch, caplog, unsafe):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    path = state / "managed-resident-phases.v1.log"
+    row = b"native_resident_phase phase=resident_evaluate status=start elapsed_ms=0\n"
+    target = tmp_path / "target"
+    if unsafe == "symlink":
+        target.write_bytes(row)
+        target.chmod(0o600)
+        path.symlink_to(target)
+    elif unsafe == "fifo":
+        os.mkfifo(path, mode=0o600)
+    else:
+        path.write_bytes(row if unsafe != "oversized" else row + b"x" * 65536)
+        path.chmod(0o644 if unsafe == "file_mode" else 0o600)
+        if unsafe == "hardlink":
+            os.link(path, target)
+        elif unsafe == "directory_mode":
+            state.chmod(0o755)
+    client = streams._PersistentNativeClient(executable=tmp_path / "runtime", state_dir=state, environment={})
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    client._record_phase_failure("native_client_timed_out", "response_wait")
+    assert caplog.messages == ["native_client_timed_out phase=response_wait"]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX private file setup")
+def test_timeout_diagnostics_filter_raw_shared_content_after_helper_retirement(tmp_path, monkeypatch, caplog):
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    path = state / "managed-resident-phases.v1.log"
+    row = "native_resident_phase phase=resident_evaluate status=start elapsed_ms=0"
+    path.write_text(f"private payload\n{row}\nnative_resident_phase phase=private_payload status=start elapsed_ms=0\n")
+    path.chmod(0o600)
+    client = streams._PersistentNativeClient(executable=tmp_path / "runtime", state_dir=state, environment={})
+    client._close_diagnostic_output()
+    monkeypatch.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+    client._record_phase_failure("native_client_timed_out", "response_wait")
+    assert caplog.messages == ["native_client_timed_out phase=response_wait", row]
+
+
+@pytest.mark.parametrize("count", [0, 10000])
+def test_real_diagnostic_pipe_bounds_burst_history_and_discards_fragmented_private_lines(count):
+    script = (
+        "import sys\n"
+        "sys.stderr.write('x' * 193 + 'native_resident_phase phase=resident_evaluate status=error elapsed_ms=99\\n')\n"
+        f"for index in range({count}):\n"
+        " sys.stderr.write(f'native_resident_phase phase=stream_dispatch status=ok elapsed_ms={index}\\n')\n"
+    )
+    process = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    lines = deque(maxlen=64)
+    try:
+        streams._PersistentNativeClient._read_diagnostics(process, lines, threading.Lock())
+        assert process.wait(timeout=5) == 0
+        assert list(lines) == [
+            f"native_resident_phase phase=stream_dispatch status=ok elapsed_ms={index}".encode()
+            for index in range(max(0, count - 64), count)
+        ]
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
+        if process.stderr is not None:
+            process.stderr.close()

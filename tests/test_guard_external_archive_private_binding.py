@@ -19,6 +19,8 @@ from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
 from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
+    PackageIntent,
+    PackageIntentTarget,
     build_package_request_artifact,
     parse_package_intent,
 )
@@ -138,6 +140,30 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
     )
 
     assert scanned_sources == [source_url]
+
+
+@pytest.mark.parametrize("missing_or_mutated_field", [None, "raw_spec", "source_url"])
+def test_redacted_intent_cannot_launder_unapproved_signed_source(
+    missing_or_mutated_field: str | None,
+) -> None:
+    source_url = "https://packages.example.com/demo.whl?token=APPROVED_ARCHIVE_TOKEN"
+    intent = PackageIntent(
+        package_manager="pip",
+        intent_kind="install",
+        command_tokens=("pip", "install", source_url),
+        redacted_command="pip install https://packages.example.com/demo.whl",
+        targets=(PackageIntentTarget("pypi", "demo", source_url, None, source_url=source_url),),
+    )
+    private_metadata = None
+    if missing_or_mutated_field is not None:
+        private_target = intent.targets[0].to_execution_dict()
+        private_target[missing_or_mutated_field] = source_url.replace(
+            "APPROVED_ARCHIVE_TOKEN", "DIFFERENT_ARCHIVE_TOKEN"
+        )
+        private_metadata = {"package_targets": [private_target]}
+
+    with pytest.raises(ValueError):
+        PackageIntent.from_dict(intent.to_dict(), runtime_private_metadata=private_metadata)
 
 
 def test_external_archive_private_source_mutation_fails_closed_before_scan(

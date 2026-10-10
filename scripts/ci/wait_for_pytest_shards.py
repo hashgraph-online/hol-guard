@@ -17,7 +17,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from datetime import datetime
 
-SHARD_COUNT = 128
+SHARD_COUNT = int(os.environ.get("CI_PYTEST_COVERAGE_SHARDS", "128"))
 # coverage-plan (5 min) + coverage (15 min) + one minute of polling slack
 _DEFAULT_TIMEOUT_SECONDS = 1260.0
 REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
@@ -194,7 +194,12 @@ def _snapshot(
                 # The change planner only runs on pull_request events; on push it
                 # is legitimately skipped, which is not a coverage blocker. On a
                 # pull_request a non-success plan still fails the barrier.
-                if plan_skippable and name == "plan" and job.get("status") == "completed" and job.get("conclusion") == "skipped":
+                if (
+                    plan_skippable
+                    and name == "plan"
+                    and job.get("status") == "completed"
+                    and job.get("conclusion") == "skipped"
+                ):
                     continue
                 _job_state(job, _PREREQUISITE_LABELS[name])
             if not name.startswith("coverage (3.12,"):

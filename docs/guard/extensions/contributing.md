@@ -36,7 +36,10 @@ uv run --no-sync python scripts/prepare_extension_contribution.py \
 ```
 
 The command validates the exact source/fixture binding through native evaluation with zero target
-command execution and synchronizes the checked-in projections. Follow it with the handoff check:
+command execution and generates that extension's public JSON record. Include this record in the
+same contribution PR: it preserves the public metadata, publisher links, and contribution evidence.
+Runtime projections go to ignored build directories; this command does not update the shared
+directory catalogs or unrelated public descriptors. Follow it with the handoff check:
 
 ```sh
 uv run --no-sync hol-guard extensions handoff --repo . \
@@ -51,6 +54,12 @@ Use `--check` with the preparation command to verify an already prepared change.
 credit, upstream, and claim-readiness metadata belongs in
 `contributions/extension-listings/command.<name>.json`; it is documented in
 [publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+
+Required CI verifies public descriptors against the committed source before generating runtime
+files, so a missing or stale record fails the original contribution PR. After merges, the existing
+publication workflow builds an immutable directory snapshot automatically; no follow-up publication
+PR is needed. `--publish-directory` is reserved for a complete publication preview in CI or a
+maintainer workspace.
 
 When a ready-for-review PR has a mechanical source, fixture, schema, or generated-projection
 problem, Gitar can apply the deterministic repair. It does not choose matcher semantics, trust
@@ -103,7 +112,7 @@ review kit with [Extension Builder](../extension-builder/README.md).
 | `contributions/command-sources/command.<name>.json` | Authoritative metadata, permissions, rules, safe variants, and typed native matcher trees |
 | `tests/fixtures/command-source-<slug>.v1.json` | Portable command cases, synthetic controls, expected actions, and rule/segment observations |
 | `contracts/extensions/trust/command.<name>.v1.json` | Separately reviewed per-extension trust binding; community contributions are external |
-| `contracts/extensions/trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; never committed or edited by hand |
+| `contracts/extensions/build-trust-class-map.v1.json` | Ignored package projection of `contracts/extensions/trust/`; never committed or edited by hand |
 | `contributions/extensions/command.<name>.json` | Maintainer-generated v2 descriptor, including source identity |
 | `contracts/extensions/native-command-program.v1.json` and `command-catalog.v1.json` | Maintainer-generated native program and catalog; the build also updates package resource copies |
 | `contributions/extension-listings/<contribution-id>.json` | Optional public presentation and reviewed numeric GitHub claimant IDs |

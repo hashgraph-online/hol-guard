@@ -184,6 +184,16 @@ fn uninspectable_lease_path_retains_the_resident() {
 }
 
 #[test]
+fn removed_state_base_releases_the_resident() {
+    let home = test_directory("removed-state-base");
+    let state_base = home.join("native-runtime");
+    lease_directory(&state_base).expect("lease directory should be available");
+    fs::remove_dir_all(&home).expect("test directory should be removable");
+
+    assert!(!any_live_for_home(&state_base));
+}
+
+#[test]
 fn initial_lease_lock_retries_until_the_current_holder_releases() {
     let directory = test_directory("eventual");
     let held = acquire_directory_lock(&directory, &directory)

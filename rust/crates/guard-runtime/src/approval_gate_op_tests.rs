@@ -29,6 +29,7 @@ fn base_request(method: ApprovalGateMethodV1, home: &Path) -> ApprovalGateReques
         now: None,
         duration_seconds: None,
         device_label: None,
+        session_signals: vec!["sid=test".to_owned()],
     }
 }
 

@@ -22,7 +22,7 @@ type SupplyChainRecoveryProps = {
 };
 
 function recoverySummary(issueCount: number): string {
-  return `Fix ${issueCount} open issue${issueCount === 1 ? "" : "s"} in one guided pass. Guard repairs package tools and turns on routing. Safety intelligence refreshes when Guard Cloud is connected.`;
+  return `${issueCount} issue${issueCount === 1 ? "" : "s"} to resolve. Check Cloud access, approve device changes once, then restore package protection.`;
 }
 
 export function SupplyChainRecovery({
@@ -38,6 +38,7 @@ export function SupplyChainRecovery({
   const pending = supplyChainFixAllIsPending(state.phase);
   const showResult = state.message !== null;
   const remainingSteps = state.remainingSteps ?? [];
+  const failures = [...new Set(state.failedSteps)].filter((message) => message !== state.message);
   const needsCloudConnect = supplyChainFixAllNeedsCloudConnect(state);
   const isHardFailure =
     state.phase === "error" || (state.phase === "incomplete" && state.failedSteps.length > 0);
@@ -97,12 +98,17 @@ export function SupplyChainRecovery({
               ) : null}
               {state.message}
             </p>
-            {state.failedSteps.length > 0 ? (
+            {failures.length > 0 ? (
               <ul className="mt-2 space-y-1 text-xs text-red-600">
-                {state.failedSteps.map((failure, index) => (
+                {failures.map((failure, index) => (
                   <li key={`failed:${index}:${failure}`}>{failure}</li>
                 ))}
               </ul>
+            ) : null}
+            {state.phase === "access_required" ? (
+              <a className="mt-2 inline-block text-sm font-medium text-brand-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2" href="https://hol.org/guard/pricing" target="_blank" rel="noopener noreferrer">
+                Review Cloud plan
+              </a>
             ) : null}
             {remainingSteps.length > 0 ? (
               <ul className="mt-2 space-y-1 text-xs font-medium text-brand-primary">

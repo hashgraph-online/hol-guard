@@ -90,7 +90,9 @@ def post_tool_secret_block_without_native_edge(
 
     if recording_only:
         return None
-    data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+    data_flow_signals = _runtime_action_data_flow_signals(
+        action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     runtime_artifact = hook_runtime_artifact_for_store(
         store,
         harness=args.harness,
@@ -155,7 +157,9 @@ def fresh_native_artifact_evaluation(
         workspace=runtime_workspace,
         guard_home=context.guard_home,
     )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
+    fresh_data_flow_signals = _runtime_action_data_flow_signals(
+        fresh_action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     fresh_runtime_artifact = hook_runtime_artifact_for_store(
         store,
         harness=args.harness,

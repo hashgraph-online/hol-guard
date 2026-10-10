@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..store import GuardStore
 from .cloud_review_event_delivery import CLOUD_REVIEW_EVENT_PROTOCOL_VERSION
 from .native_cloud_review_observation_recovery import native_observation_recovery_status
@@ -73,20 +74,23 @@ def cloud_review_sync_status(store: GuardStore) -> dict[str, object]:
     state = _load_sync_state(store)
     profile = store.get_cloud_sync_profile()
     workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
-    binding = store.get_review_event_oauth_binding()
-    if binding is not None:
-        outbox = store.review_event_outbox_status(
-            now=_now(),
-            oauth_subject_hash=binding["oauth_subject_hash"],
-            workspace_id=binding["workspace_id"],
-            machine_id=binding["machine_id"],
-            machine_installation_id=binding["machine_installation_id"],
-        )
-    else:
-        outbox = store.review_event_outbox_status(
-            now=_now(),
-            workspace_id=workspace_id,
-        )
+    try:
+        binding = store.get_review_event_oauth_binding()
+        if binding is not None:
+            outbox = store.review_event_outbox_status(
+                now=_now(),
+                oauth_subject_hash=binding["oauth_subject_hash"],
+                workspace_id=binding["workspace_id"],
+                machine_id=binding["machine_id"],
+                machine_installation_id=binding["machine_installation_id"],
+            )
+        else:
+            outbox = store.review_event_outbox_status(
+                now=_now(),
+                workspace_id=workspace_id,
+            )
+    except NativeGuardStoreUnavailable as error:
+        outbox = unavailable_outbox_status(error)
     sync_configured = isinstance(profile, dict) and bool(profile.get("workspace_id")) and bool(profile.get("sync_url"))
     return {
         "state": state.get("state") or "not_configured",

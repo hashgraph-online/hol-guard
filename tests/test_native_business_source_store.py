@@ -106,6 +106,46 @@ def test_exact_approved_source_database_and_retained_marker_agree(tmp_path: Path
     assert owner.read_installed_business_source(store, _key(store)) == newer.source
 
 
+def test_installation_survives_slow_native_process_start(tmp_path: Path, native_mcp_probe, monkeypatch):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import native_business_source_bridge as bridge
+    from codex_plugin_scanner.guard import native_runtime
+
+    store = GuardStore(tmp_path / "slow-start-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document(0)
+    grant = _grant(store, candidate)
+    skew = [0.0]
+    run_native_process = native_runtime._run_native_process
+
+    def slow_start(*args, **kwargs):
+        skew[0] += 1.5
+        return run_native_process(*args, **kwargs)
+
+    monkeypatch.setattr(bridge, "time", SimpleNamespace(monotonic=lambda: time.monotonic() + skew[0]))
+    monkeypatch.setattr(native_runtime, "_run_native_process", slow_start)
+    installed = _install(store, candidate, grant)
+    assert skew[0] > bridge.OPERATION_BUDGET_SECONDS
+    monkeypatch.setattr(bridge, "time", time)
+    monkeypatch.setattr(native_runtime, "_run_native_process", run_native_process)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_installation_deadline_never_outlives_its_approval(tmp_path: Path):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.approval_gate_state import iso_from_epoch
+
+    grant = SimpleNamespace(expires_at=iso_from_epoch(time.time() + 10))
+    deadline = owner._mutation_deadline(None, grant)
+    assert deadline <= time.monotonic() + 10
+    expired = SimpleNamespace(expires_at=iso_from_epoch(time.time() - 1))
+    assert owner._mutation_deadline(None, expired) > time.monotonic() + 10
+
+
 def test_sql_rollback_leaves_closed_marker_and_no_source_admission(tmp_path: Path, native_mcp_probe):
     store = GuardStore(tmp_path / "rollback-home")
     native_mcp_probe(store.guard_home)

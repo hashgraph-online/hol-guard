@@ -1,4 +1,4 @@
-use crate::{parse_command, CanonicalCommandV1, CommandModelRequestV1};
+use crate::{parse_command, powershell_floors as ps, CanonicalCommandV1, CommandModelRequestV1};
 use guard_secure_fs::sensitive_path_family;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -8,8 +8,10 @@ use std::path::Path;
 pub struct PathContext<'a> {
     pub home_dir: Option<&'a str>,
     pub cwd: Option<&'a str>,
+    pub cdpath_unset: bool,
 }
 
+mod contained_wrapper;
 pub(crate) mod directory_targets;
 pub(crate) use directory_targets::safe_directory_target;
 mod git_config;
@@ -18,6 +20,7 @@ mod git_probe;
 mod git_routes;
 mod git_worktree;
 pub(crate) use git_routes::git_route_within_workspace;
+mod apply_patch_writes;
 mod pure_expression;
 mod read_paths;
 mod restricted_tests;
@@ -34,6 +37,7 @@ mod shell_script;
 mod stdin_filters;
 mod worktree_add;
 mod worktree_writes;
+mod wrangler_reads;
 
 pub mod generic;
 
@@ -176,6 +180,10 @@ fn safe_git_arguments(
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
+    if subcommand == "worktree" {
+        return matches!(&arguments[1..], [list] if list == "list")
+            || matches!(&arguments[1..], [list, flag] if list == "list" && flag == "--porcelain");
+    }
     if !matches!(
         subcommand,
         "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
@@ -277,6 +285,9 @@ fn exact_safe_command_with_context(
     {
         return false;
     }
+    if !safe_scalar::bounded_total_sleep(model) {
+        return false;
+    }
     if segment_proof::exact_safe_cwd_compound(model, context) {
         return true;
     }
@@ -355,7 +366,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = crate::pretool::PathContext { home_dir, cwd };
+    let context = PathContext::for_session(home_dir, cwd, execution_environment);
     if shell_script::contains_credential_post(&model, context) {
         return Ok(pretool_decision(
             model,
@@ -395,7 +406,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
                 .any(|arg| arg == "--force")
             && !segment.arguments.iter().any(|arg| matches!(arg.as_str(), "--help" | "-h"))
     });
-    if destructive_command(normalized) || destructive_remote_sync {
+    if destructive_remote_sync || ps::destructive(&model, destructive_command) {
         return Ok(pretool_decision(
             model,
             "block",
@@ -403,7 +414,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard blocked a destructive command before execution.",
         ));
     }
-    if sensitive_command(normalized) && exfiltration_command(normalized) {
+    if ps::sensitive_exfiltration(&model, sensitive_command, exfiltration_command) {
         return Ok(pretool_decision(
             model,
             "block",
@@ -486,3 +497,5 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_benign_probes;

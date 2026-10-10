@@ -13,9 +13,6 @@ from .runtime.network_policy_contract import NETWORK_POLICY_SCHEMA_VERSION
 POLICY_API_VERSION = "guard.hashgraphonline.com/v1alpha1"
 POLICY_KIND = "GuardPolicy"
 NETWORK_POLICY_SPEC_FIELD = "networkPolicy"
-POLICY_RULE_EFFECTS = ("allow", "block", "review", "ignore")
-POLICY_MODES = ("observe", "prompt", "enforce")
-POLICY_LIFETIME_MODES = ("once", "session", "project", "machine", "workspace", "team", "permanent", "until")
 POLICY_MATCH_FIELDS = (
     "operations",
     "actors",

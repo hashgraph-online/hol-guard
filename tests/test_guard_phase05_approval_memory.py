@@ -171,6 +171,7 @@ def test_gr101_gr103_action_identity_reuses_same_action_and_splits_changed_comma
     assert changed_group != same_group_a
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 def test_gr104_gr105_read_only_listing_and_maileroo_search_are_not_exfiltration(tmp_path: Path) -> None:
     context = _detector_context(tmp_path)
     suppressor = FalsePositiveSuppressorDetector()
@@ -187,6 +188,7 @@ def test_gr104_gr105_read_only_listing_and_maileroo_search_are_not_exfiltration(
     assert any(signal.signal_id == "data-flow:secret-pipe-http" for signal in real_exfil)
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 def test_read_only_node_fetch_page_probe_downgrades_review_without_hiding_exfil(tmp_path: Path) -> None:
     context = _detector_context(tmp_path)
     suppressor = FalsePositiveSuppressorDetector()

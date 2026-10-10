@@ -33,6 +33,7 @@ from .store_extension_control_authority import StoreExtensionControlAuthorityMix
 from .store_managed_controls_status import StoreManagedControlsStatusMixin
 from .store_managed_installs import StoreManagedInstallsMixin
 from .store_local_cli import StoreLocalCliMixin
+from .store_local_cli_retention import StoreLocalCliRetentionMixin
 from .store_local_mcp import StoreLocalMcpMixin
 from .store_evidence_facade import StoreEvidenceMixin
 from .store_exact_cloud_review import StoreExactCloudReviewMixin
@@ -75,6 +76,7 @@ class GuardStore(
     StoreExtensionControlAuthorityMixin,
     StoreCustomExtensionContinuityMixin,
     StoreLocalCliMixin,
+    StoreLocalCliRetentionMixin,
     StoreLocalMcpMixin,
     StoreCommandActivityMixin,
     StoreCommandActivityApiMixin,

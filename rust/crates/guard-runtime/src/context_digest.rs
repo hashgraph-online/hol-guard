@@ -22,6 +22,8 @@ use guard_contracts::{
 };
 use guard_policy_snapshot::digest_bytes;
 
+use crate::resident_diagnostics::{observe, observe_value, Phase};
+
 const TOKEN_VERSION: u64 = 1;
 const TOKEN_DOMAIN: &str = "hol.guard.approval-context";
 const CONFIGURED_ENV_HASH_DOMAIN: &[u8] = b"hol.guard.configured-environment:v1\0";
@@ -304,7 +306,7 @@ fn is_python_space(ch: char) -> bool {
     )
 }
 
-fn python_strip(text: &str) -> &str {
+pub(crate) fn python_strip(text: &str) -> &str {
     text.trim_matches(|ch: char| is_python_space(ch))
 }
 
@@ -646,6 +648,10 @@ fn evaluate_request(
                 request,
             )?);
         }
+        ContextDigestKindV1::LocalCliIdentity { source } => {
+            result.local_cli_identity =
+                super::context_digest_local_cli::local_cli_identity(source)?;
+        }
         ContextDigestKindV1::PackageLauncherToken { command_name, args } => {
             result.package_launcher = Some(guard_contracts::PackageLauncherResultV1 {
                 package: guard_command::mcp_decision::package_token(command_name, args),
@@ -658,15 +664,18 @@ fn evaluate_request(
             home_dir,
             require_executable,
         } => {
-            result.runtime_identity = Some(
-                guard_command::launch_identity::build_runtime_executable_identity(
-                    command.as_ref().unwrap_or(&Value::Null),
-                    search_path.as_deref(),
-                    cwd.as_deref().map(Path::new),
-                    home_dir.as_deref().map(Path::new),
-                    *require_executable,
-                ),
-            );
+            result.runtime_identity = Some(observe_value(
+                Phase::ContextRuntimeExecutableIdentity,
+                || {
+                    guard_command::launch_identity::build_runtime_executable_identity(
+                        command.as_ref().unwrap_or(&Value::Null),
+                        search_path.as_deref(),
+                        cwd.as_deref().map(Path::new),
+                        home_dir.as_deref().map(Path::new),
+                        *require_executable,
+                    )
+                },
+            ));
         }
         ContextDigestKindV1::RuntimeLaunchIdentity {
             command,
@@ -685,18 +694,19 @@ fn evaluate_request(
                         .collect(),
                 )
             });
-            result.runtime_identity = Some(
-                guard_command::launch_identity::build_runtime_launch_identity(
-                    command.as_ref().unwrap_or(&Value::Null),
-                    args,
-                    *structured_command,
-                    *direct_executable,
-                    search_path.as_deref(),
-                    cwd.as_deref().map(Path::new),
-                    home_dir.as_deref().map(Path::new),
-                    launch_env_value.as_ref(),
-                ),
-            );
+            result.runtime_identity =
+                Some(observe_value(Phase::ContextRuntimeLaunchIdentity, || {
+                    guard_command::launch_identity::build_runtime_launch_identity(
+                        command.as_ref().unwrap_or(&Value::Null),
+                        args,
+                        *structured_command,
+                        *direct_executable,
+                        search_path.as_deref(),
+                        cwd.as_deref().map(Path::new),
+                        home_dir.as_deref().map(Path::new),
+                        launch_env_value.as_ref(),
+                    )
+                }));
         }
         ContextDigestKindV1::RuntimeLaunchIdentityMatches {
             expected_identity,
@@ -715,18 +725,21 @@ fn evaluate_request(
                         .collect(),
                 )
             });
-            result.runtime_identity_match = Some(
-                guard_command::launch_identity::runtime_launch_identity_matches(
-                    expected_identity,
-                    command.as_ref().unwrap_or(&Value::Null),
-                    args,
-                    *structured_command,
-                    *direct_executable,
-                    search_path.as_deref(),
-                    cwd.as_deref().map(Path::new),
-                    launch_env_value.as_ref(),
-                ),
-            );
+            result.runtime_identity_match = Some(observe_value(
+                Phase::ContextRuntimeLaunchIdentityMatches,
+                || {
+                    guard_command::launch_identity::runtime_launch_identity_matches(
+                        expected_identity,
+                        command.as_ref().unwrap_or(&Value::Null),
+                        args,
+                        *structured_command,
+                        *direct_executable,
+                        search_path.as_deref(),
+                        cwd.as_deref().map(Path::new),
+                        launch_env_value.as_ref(),
+                    )
+                },
+            ));
         }
         ContextDigestKindV1::RuntimeLaunchIdentityProjection { identity, args } => {
             result.runtime_identity_reusable =
@@ -782,6 +795,14 @@ fn request_digest(request: &ContextDigestRequestV1) -> Result<String, &'static s
 pub(crate) fn evaluate_context_digest_request(
     request: &ContextDigestRequestV1,
 ) -> Result<Vec<u8>, String> {
+    observe(Phase::ContextDigest, || {
+        evaluate_context_digest_request_inner(request)
+    })
+}
+
+fn evaluate_context_digest_request_inner(
+    request: &ContextDigestRequestV1,
+) -> Result<Vec<u8>, String> {
     if request.schema != CONTEXT_DIGEST_REQUEST_SCHEMA {
         return Err("native_context_digest_schema_mismatch".to_owned());
     }
@@ -814,6 +835,7 @@ pub(crate) fn evaluate_context_digest_request(
         runtime_resolved_executable: None,
         runtime_resolved_argv: None,
         tool_catalog: None,
+        local_cli_identity: None,
     };
     if let Err(code) = evaluate_request(request, &mut result) {
         result.status = "error".to_owned();

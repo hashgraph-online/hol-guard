@@ -151,7 +151,6 @@ from ..runtime.cisco_preflight import (
     scan_action_for_cisco_evidence,
 )
 from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
-from ..runtime.data_flow_rules import detect_data_flow_exfiltration
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
@@ -203,7 +202,12 @@ from ..runtime.secret_sensitivity import (
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
-from ..shims import activate_package_shims, package_shim_status, uninstall_package_shims
+from ..shims import (
+    activate_package_shims,
+    package_shim_status,
+    probe_package_shim_intercepts,
+    uninstall_package_shims,
+)
 from ..store import GuardStore
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
 from .connect_flow import (

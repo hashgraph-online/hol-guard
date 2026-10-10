@@ -40,7 +40,6 @@ from codex_plugin_scanner.guard.runtime.approval_reuse import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_policy import (
     _bounded_local_approval_reuse_diagnostic_rows,
-    _bounded_non_consuming_policy_rows,
     _bounded_policy_approval_reuse_diagnostic_rows,
 )
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
@@ -144,7 +143,7 @@ def _approval_context_token(
 @pytest.mark.parametrize("current_action", GUARD_ACTION_VALUES)
 def test_no_saved_approval_preserves_recomputed_current_action(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action)
 
@@ -155,7 +154,7 @@ def test_no_saved_approval_preserves_recomputed_current_action(
 
 
 @pytest.mark.parametrize("field", ("current_action", "saved_action"))
-def test_non_json_action_cannot_become_allow(field: str, native_approval_reuse_runtime: Path) -> None:
+def test_non_json_action_cannot_become_allow(field: str, native_context_digest: Path) -> None:
     from codex_plugin_scanner.guard.runtime.approval_reuse import ApprovalReuseMalformedResultError
 
     class LooksLikeAllow:
@@ -168,7 +167,7 @@ def test_non_json_action_cannot_become_allow(field: str, native_approval_reuse_r
         evaluate_approval_reuse(**actions)
 
 
-def test_exact_saved_allow_can_satisfy_only_current_review(native_approval_reuse_runtime: Path) -> None:
+def test_exact_saved_allow_can_satisfy_only_current_review(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse("review", "allow")
 
     assert result.action == "allow"
@@ -177,7 +176,7 @@ def test_exact_saved_allow_can_satisfy_only_current_review(native_approval_reuse
     assert result.should_claim is True
 
 
-def test_fresh_local_allow_satisfies_current_reapproval_once(native_approval_reuse_runtime: Path) -> None:
+def test_fresh_local_allow_satisfies_current_reapproval_once(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -190,7 +189,7 @@ def test_fresh_local_allow_satisfies_current_reapproval_once(native_approval_reu
     assert result.should_claim is True
 
 
-def test_durable_exact_allow_satisfies_identical_current_reapproval(native_approval_reuse_runtime: Path) -> None:
+def test_durable_exact_allow_satisfies_identical_current_reapproval(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -203,7 +202,7 @@ def test_durable_exact_allow_satisfies_identical_current_reapproval(native_appro
     assert result.should_claim is True
 
 
-def test_changed_durable_exact_allow_cannot_satisfy_reapproval(native_approval_reuse_runtime: Path) -> None:
+def test_changed_durable_exact_allow_cannot_satisfy_reapproval(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -219,7 +218,7 @@ def test_changed_durable_exact_allow_cannot_satisfy_reapproval(native_approval_r
 @pytest.mark.parametrize("current_action", ("sandbox-required", "block"))
 def test_durable_exact_allow_never_lowers_terminal_enforcement(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         current_action,
@@ -235,7 +234,7 @@ def test_durable_exact_allow_never_lowers_terminal_enforcement(
 @pytest.mark.parametrize("current_action", ("sandbox-required", "block"))
 def test_fresh_local_allow_never_lowers_enforcement(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         current_action,
@@ -248,7 +247,7 @@ def test_fresh_local_allow_never_lowers_enforcement(
     assert result.should_claim is False
 
 
-def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_approval_reuse_runtime: Path) -> None:
+def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse(
         "require-reapproval",
         "allow",
@@ -273,7 +272,7 @@ def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_approval_reu
 def test_saved_allow_never_lowers_stronger_current_action(
     current_action: str,
     expected_reason: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action, "allow")
 
@@ -286,7 +285,7 @@ def test_saved_allow_never_lowers_stronger_current_action(
 @pytest.mark.parametrize("current_action", ("allow", "warn"))
 def test_saved_allow_is_not_consumed_when_current_action_needs_no_review(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action, "allow")
 
@@ -297,7 +296,7 @@ def test_saved_allow_is_not_consumed_when_current_action_needs_no_review(
 
 
 def test_integrity_invalid_authority_requires_reapproval_even_when_current_action_allows(
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         "allow",
@@ -314,7 +313,7 @@ def test_integrity_invalid_authority_requires_reapproval_even_when_current_actio
 @pytest.mark.parametrize("current_action", GUARD_ACTION_VALUES)
 def test_saved_block_remains_block_for_every_current_action(
     current_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(current_action, "block")
 
@@ -324,7 +323,7 @@ def test_saved_block_remains_block_for_every_current_action(
     assert result.should_claim is False
 
 
-def test_non_allow_saved_action_cannot_satisfy_review(native_approval_reuse_runtime: Path) -> None:
+def test_non_allow_saved_action_cannot_satisfy_review(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse("review", "warn")
 
     assert result.action == "review"
@@ -347,7 +346,7 @@ def test_non_allow_saved_action_cannot_satisfy_review(native_approval_reuse_runt
 def test_invalidated_saved_allow_is_rejected_with_stable_reason(
     validation_reason: ApprovalReuseValidationFailure,
     expected_action: str,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         "review",
@@ -361,7 +360,7 @@ def test_invalidated_saved_allow_is_rejected_with_stable_reason(
     assert result.should_claim is False
 
 
-def test_unknown_current_action_fails_closed_with_diagnostics(native_approval_reuse_runtime: Path) -> None:
+def test_unknown_current_action_fails_closed_with_diagnostics(native_context_digest: Path) -> None:
     result = evaluate_approval_reuse("future-permissive-action", "allow")
 
     assert result.action == "block"
@@ -372,7 +371,7 @@ def test_unknown_current_action_fails_closed_with_diagnostics(native_approval_re
 
 
 def test_present_malformed_saved_action_requires_reapproval_with_diagnostics(
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse("review", None, saved_decision_present=True)
 
@@ -384,7 +383,7 @@ def test_present_malformed_saved_action_requires_reapproval_with_diagnostics(
 
 
 def test_claim_failure_reason_takes_precedence_and_preserves_normalization_diagnostics(
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     result = evaluate_approval_reuse(
         "review",
@@ -400,7 +399,7 @@ def test_claim_failure_reason_takes_precedence_and_preserves_normalization_diagn
 
 def test_malformed_native_payload_raises_instead_of_granting_reuse(
     monkeypatch: pytest.MonkeyPatch,
-    native_approval_reuse_runtime: Path,
+    native_context_digest: Path,
 ) -> None:
     """A well-formed envelope with an invalid decision payload is a contract
     violation, not a successful no-decision: it raises and never claims."""
@@ -448,7 +447,7 @@ def test_malformed_native_payload_raises_instead_of_granting_reuse(
 
 @pytest.mark.parametrize("corruption", ("json", "schema", "request_id", "request_sha256", "status", "code", "payload"))
 def test_invalid_resident_envelope_cannot_grant_reuse(
-    corruption: str, monkeypatch: pytest.MonkeyPatch, native_approval_reuse_runtime: Path
+    corruption: str, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     import hashlib
     import json
@@ -1425,258 +1424,6 @@ def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_
     assert reason == "approval_reuse_content_changed"
 
 
-def test_non_consuming_policy_lookup_is_bounded_and_fails_closed_on_match_overflow(
-    tmp_path, native_context_digest: Path
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    store.replace_remote_policies(
-        [
-            PolicyDecision(
-                harness="codex",
-                scope="harness",
-                action="allow",
-                artifact_id=None,
-                artifact_hash=None,
-                reason=f"broad allow {index}",
-                source="team-policy",
-            )
-            for index in range(300)
-        ],
-        "2026-07-17T12:00:00+00:00",
-        remote_write_authorized=True,
-    )
-
-    lookup = store.resolve_policy_decision_lookup(
-        "codex",
-        "codex:project:tool-action:bounded",
-        artifact_hash=_approval_context_token(content="sha256:bounded"),
-        now="2026-07-17T12:01:00+00:00",
-        consume_one_shot=False,
-    )
-
-    assert lookup["decision"] is not None
-    assert lookup["decision"]["action"] == "block"
-    assert lookup["decision"]["source"] == "guard-policy-match-cap"
-    assert lookup["decision"]["_approval_authority_revision"] == lookup["authority_revision"]
-    overflow_events = store.list_events(event_name="approval.policy_lookup_overflow")
-    assert len(overflow_events) == 1
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        query_plan = _bounded_non_consuming_policy_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:bounded",
-            artifact_hash=_approval_context_token(content="sha256:bounded"),
-            runtime_exact_match_key=None,
-            global_runtime_exact_match_key=None,
-            workspace_key=None,
-            workspace=None,
-            publisher=None,
-            action_family_key=None,
-            current_time="2026-07-17T12:01:00+00:00",
-            _explain=True,
-        )
-    query_plan_details = [str(row[3]) for row in query_plan]
-    assert not any(detail == "SCAN policy_decisions" for detail in query_plan_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in query_plan_details)
-    assert {
-        "idx_policy_decisions_lookup_artifact",
-        "idx_policy_decisions_lookup_harness",
-        "idx_policy_decisions_lookup_global",
-    }.issubset({index for detail in query_plan_details for index in detail.split()})
-
-
-def test_non_consuming_policy_lookup_miss_uses_only_fully_constrained_scope_probes(
-    tmp_path, native_context_digest: Path
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    current_hash = _approval_context_token(content="sha256:current")
-    with sqlite3.connect(store.path) as connection:
-        connection.executemany(
-            """
-            insert into policy_decisions (
-              harness, scope, artifact_id, artifact_hash, workspace, publisher, action, source, updated_at
-            ) values ('codex', ?, ?, ?, ?, ?, 'allow', 'team-policy', '2026-07-17T12:00:00+00:00')
-            """,
-            (
-                (
-                    scope,
-                    artifact_id,
-                    f"guard-approval-context:v1:irrelevant-{index:04d}",
-                    workspace,
-                    publisher,
-                )
-                for index in range(1_000)
-                for scope, artifact_id, workspace, publisher in (
-                    ("artifact", f"codex:project:tool-action:unrelated-{index:04d}", None, None),
-                    ("workspace", None, f"workspace:sha256:unrelated-{index:04d}", None),
-                    ("publisher", None, None, f"publisher-{index:04d}"),
-                    ("harness", "family:file-read", None, None),
-                    ("global", "family:file-read", None, None),
-                )
-            ),
-        )
-
-    lookup = store.resolve_policy_decision_lookup(
-        "codex",
-        "codex:project:tool-action:bounded-miss",
-        artifact_hash=current_hash,
-        workspace="/workspace/current",
-        publisher="publisher-current",
-        now="2026-07-17T12:01:00+00:00",
-        consume_one_shot=False,
-    )
-
-    assert lookup["decision"] is None
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        query_plan = _bounded_non_consuming_policy_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:bounded-miss",
-            artifact_hash=current_hash,
-            runtime_exact_match_key="runtime-exact:current",
-            global_runtime_exact_match_key="runtime-global-exact:current",
-            workspace_key="workspace:sha256:current",
-            workspace="/workspace/current",
-            publisher="publisher-current",
-            action_family_key="family:tool-action",
-            current_time="2026-07-17T12:01:00+00:00",
-            _explain=True,
-        )
-    plan_details = [str(row[3]) for row in query_plan]
-    assert plan_details
-    assert all(detail.startswith("SEARCH policy_decisions USING INDEX") for detail in plan_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in plan_details)
-    assert not any(
-        "lookup_harness" in detail and "harness=? AND artifact_id=?" not in detail for detail in plan_details
-    )
-    assert not any("lookup_global" in detail and "harness=? AND artifact_id=?" not in detail for detail in plan_details)
-    assert not any(
-        "lookup_publisher" in detail and "publisher=? AND harness=?" not in detail for detail in plan_details
-    )
-    assert {
-        "idx_policy_decisions_lookup_artifact",
-        "idx_policy_decisions_lookup_workspace",
-        "idx_policy_decisions_lookup_publisher",
-        "idx_policy_decisions_lookup_publisher_legacy",
-        "idx_policy_decisions_lookup_harness",
-        "idx_policy_decisions_lookup_harness_legacy",
-        "idx_policy_decisions_lookup_global",
-        "idx_policy_decisions_lookup_global_legacy",
-    }.issubset({index for detail in plan_details for index in detail.split()})
-
-
-def test_non_consuming_policy_probe_partitions_preserve_every_scope_selector(
-    tmp_path, native_context_digest: Path
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    artifact_id = "codex:project:tool-action:selector-matrix"
-    context_hash = _approval_context_token(content="sha256:selector-matrix")
-    runtime_hash = "runtime-exact:selector-matrix"
-    matching_rows = (
-        ("artifact-null", "codex", "artifact", artifact_id, None, None, None),
-        ("artifact-context", "codex", "artifact", artifact_id, context_hash, None, None),
-        ("artifact-runtime", "*", "artifact", artifact_id, runtime_hash, None, None),
-        (
-            "workspace-broad",
-            "codex",
-            "workspace",
-            None,
-            "guard-approval-context:v1:other",
-            "workspace:sha256:current",
-            None,
-        ),
-        ("workspace-null", "codex", "workspace", artifact_id, None, "/workspace/current", None),
-        (
-            "workspace-context",
-            "*",
-            "workspace",
-            artifact_id,
-            context_hash,
-            "workspace:sha256:current",
-            None,
-        ),
-        ("publisher-null", "codex", "publisher", None, None, None, "publisher-current"),
-        ("publisher-context", "codex", "publisher", None, context_hash, None, "publisher-current"),
-        ("publisher-legacy", "*", "publisher", None, "sha256:legacy", None, "publisher-current"),
-        ("harness-broad", "codex", "harness", None, None, None, None),
-        ("harness-context", "codex", "harness", "family:tool-action", context_hash, None, None),
-        ("harness-runtime", "*", "harness", "family:tool-action", runtime_hash, None, None),
-        ("harness-legacy", "codex", "harness", "family:tool-action", "sha256:legacy", None, None),
-        ("global-broad", "codex", "global", None, None, None, None),
-        ("global-artifact", "codex", "global", artifact_id, context_hash, None, None),
-        ("global-family", "*", "global", "family:tool-action", runtime_hash, None, None),
-        ("global-legacy", "codex", "global", "family:tool-action", "sha256:legacy", None, None),
-    )
-    ignored_rows = (
-        ("artifact-other-context", "codex", "artifact", artifact_id, "guard-approval-context:v1:other", None, None),
-        (
-            "workspace-runtime",
-            "codex",
-            "workspace",
-            artifact_id,
-            runtime_hash,
-            "workspace:sha256:current",
-            None,
-        ),
-        (
-            "publisher-other-context",
-            "codex",
-            "publisher",
-            None,
-            "guard-approval-context:v1:other",
-            None,
-            "publisher-current",
-        ),
-        (
-            "harness-other-family",
-            "codex",
-            "harness",
-            "family:file-read",
-            "sha256:legacy",
-            None,
-            None,
-        ),
-        (
-            "global-other-context",
-            "codex",
-            "global",
-            "family:tool-action",
-            "guard-approval-context:v1:other",
-            None,
-            None,
-        ),
-        ("other-harness", "cursor", "global", None, None, None, None),
-    )
-    with sqlite3.connect(store.path) as connection:
-        connection.executemany(
-            """
-            insert into policy_decisions (
-              reason, harness, scope, artifact_id, artifact_hash, workspace, publisher,
-              action, source, updated_at
-            ) values (?, ?, ?, ?, ?, ?, ?, 'allow', 'team-policy', '2026-07-17T12:00:00+00:00')
-            """,
-            (*matching_rows, *ignored_rows),
-        )
-        connection.row_factory = sqlite3.Row
-        rows = _bounded_non_consuming_policy_rows(
-            connection,
-            harness="codex",
-            artifact_id=artifact_id,
-            artifact_hash=context_hash,
-            runtime_exact_match_key=runtime_hash,
-            global_runtime_exact_match_key=runtime_hash,
-            workspace_key="workspace:sha256:current",
-            workspace="/workspace/current",
-            publisher="publisher-current",
-            action_family_key="family:tool-action",
-            current_time="2026-07-17T12:01:00+00:00",
-        )
-
-    assert {str(row["reason"]) for row in rows} == {row[0] for row in matching_rows}
-
-
 def test_approval_reuse_diagnostic_live_probes_are_index_ordered_without_temp_sort(tmp_path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     with sqlite3.connect(store.path) as connection:
@@ -2003,7 +1750,7 @@ def test_runtime_saved_artifact_allow_requires_matching_v1_context_token(native_
 
 
 def test_shared_deadline_expiry_cannot_grant_another_reuse(
-    monkeypatch: pytest.MonkeyPatch, native_approval_reuse_runtime: Path
+    monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     import time
     from types import SimpleNamespace
@@ -2085,13 +1832,16 @@ def test_approval_reuse_discovery_and_serialization_cannot_restart_budget(
         pytest.fail("budget exhausted before resident dispatch")
 
     monkeypatch.setattr(native_approval_reuse, "native_resident_client_request", forbidden_transport)
-    assert native_approval_reuse.approval_reuse_decide_native(
-        "review",
-        "allow",
-        saved_decision_present=True,
-        validation_reason=None,
-        fresh_local_approval=False,
-        durable_exact_approval=False,
-        guard_home=tmp_path,
-        deadline_monotonic=caller_deadline,
-    ) is None
+    assert (
+        native_approval_reuse.approval_reuse_decide_native(
+            "review",
+            "allow",
+            saved_decision_present=True,
+            validation_reason=None,
+            fresh_local_approval=False,
+            durable_exact_approval=False,
+            guard_home=tmp_path,
+            deadline_monotonic=caller_deadline,
+        )
+        is None
+    )

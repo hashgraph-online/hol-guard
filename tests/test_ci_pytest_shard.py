@@ -60,7 +60,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     plan_action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     plan_steps = plan_action["runs"]["steps"]
     collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
-    assert "cancel-in-progress: true" in workflow
+    # Main queues its runs; PRs still cancel stale in-flight runs.
+    assert "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}" in workflow
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
     assert "actions: read" in workflow
     assert "**/pyproject.toml" not in workflow
@@ -100,7 +101,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "if" not in native_steps[upload_index]
 
     for planner, executor, version, env_name, count, width in (
-        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 128, 3),
+        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 256, 3),
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
@@ -178,7 +179,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
-    assert 'test "${#reports[@]}" -eq 128' in sonar_setup
+    assert 'test "${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in sonar_setup
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     gate = jobs["ci-python-312"]
     assert gate["name"] == "ci (3.12)"

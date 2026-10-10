@@ -169,16 +169,6 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
     )
 
 
-def all_setup_contracts() -> tuple[HarnessSetupContract, ...]:
-    """Return guided setup metadata for all supported harnesses."""
-
-    return tuple(
-        setup_contract
-        for contract in HARNESS_CONTRACTS
-        if (setup_contract := setup_contract_for(contract.harness)) is not None
-    )
-
-
 def harness_contracts_table() -> str:
     """Return a Markdown table summarising all harness contracts."""
     return render_harness_contracts(HARNESS_CONTRACTS)

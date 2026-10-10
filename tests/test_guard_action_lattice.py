@@ -26,7 +26,7 @@ from codex_plugin_scanner.guard.mdm.policy import _merge_strongest_actions, _str
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.policy.engine import decide_action
 from codex_plugin_scanner.guard.policy.engine import guard_action_severity as policy_engine_action_severity
-from codex_plugin_scanner.guard.proxy.runtime_mcp import _guard_action, _most_restrictive_package_policy_action
+from codex_plugin_scanner.guard.proxy.runtime_mcp import _guard_action
 from codex_plugin_scanner.guard.receipts.manager import _resolve_policy_decision
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
@@ -72,8 +72,6 @@ def test_most_restrictive_composition_is_idempotent_and_associative() -> None:
 
 @pytest.mark.parametrize("weaker", ("allow", "warn", "review", "require-reapproval"))
 def test_sandbox_required_cannot_be_downgraded_by_package_or_managed_composition(weaker: GuardAction) -> None:
-    assert _most_restrictive_package_policy_action("sandbox-required", weaker) == "sandbox-required"
-    assert _most_restrictive_package_policy_action(weaker, "sandbox-required") == "sandbox-required"
     assert _merge_strongest_actions("sandbox-required", weaker) == "sandbox-required"
     assert _strongest_security_value(weaker, "sandbox-required") == "sandbox-required"
 
@@ -103,8 +101,6 @@ def test_legacy_product_ask_alias_normalizes_to_exact_review_without_contract_er
 def test_unknown_action_never_loses_to_allow_or_warn() -> None:
     assert most_restrictive_guard_action("future-action", "allow") == "review"
     assert most_restrictive_guard_action("warn", "future-action") == "review"
-    assert _most_restrictive_package_policy_action("allow", "future-action") == "review"
-    assert _most_restrictive_package_policy_action("future-action", "warn") == "review"
     assert _merge_strongest_actions("sandbox-required", "future-action") == "block"
     assert _merge_strongest_actions(None, "future-action") == "block"
 

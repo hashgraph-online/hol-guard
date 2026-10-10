@@ -170,6 +170,15 @@ fn authenticate_enable(home: &Path, factors: ConsentFactors) -> Result<(), Strin
     if gate.get("totp_enabled") == Some(&Value::Bool(true)) && factors.totp_code.is_none() {
         return Err("approval_gate_totp_required".into());
     }
+    // A TOTP grant records password_verified false: the password stage does not
+    // run on that path. Consent still has to check the password itself.
+    crate::approval_gate_verify::verify_password_stage(
+        home,
+        &mut gate,
+        factors.password.as_deref(),
+        None,
+    )
+    .map_err(|error| error.code)?;
     let input = crate::approval_gate_verify::ApprovalGateInputV1 {
         password: factors.password,
         totp_code: factors.totp_code,
@@ -189,8 +198,7 @@ fn authenticate_enable(home: &Path, factors: ConsentFactors) -> Result<(), Strin
         None,
     )
     .map_err(|error| error.code)?;
-    if !grant.password_verified
-        || grant.used_cooldown
+    if grant.used_cooldown
         || (gate.get("totp_enabled") == Some(&Value::Bool(true)) && !grant.totp_verified)
     {
         return Err("native_cloud_review_consent_factor_invalid".into());

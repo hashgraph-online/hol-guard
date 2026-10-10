@@ -80,4 +80,5 @@ source-build.json
 source-compiled.json
 contracts/extensions/build-descriptors/
 contracts/extensions/build-trust-class-map.v1.json
+contracts/extensions/trust-class-map.v1.json
 src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json

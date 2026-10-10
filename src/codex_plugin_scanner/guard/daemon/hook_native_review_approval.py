@@ -20,6 +20,7 @@ from ..runtime.native_cloud_review_origin import (
     frozen_native_approval_origin,
     native_approval_origins_match,
 )
+from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
     native_review_matching_allow,
@@ -35,7 +36,12 @@ from .hook_native_review_origin import (
     _native_review_action_envelope,
 )
 from .hook_native_review_wait import _bind_live_codex_hook_wait, _live_codex_wait
-from .hook_request_parsing import pre_tool_command
+from .hook_native_saved_approval import (
+    EXACT_ACTION_CONTEXT_TOKEN_KEY,
+    native_exact_action_token,
+    native_saved_review_response,
+)
+from .hook_request_parsing import pre_tool_command, pre_tool_input
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
@@ -85,6 +91,32 @@ def pause_native_pre_tool_for_approval(
         native_receipt,
         workspace,
     )
+    # Custom-extension and saved exact-action blocks win over any allow or pending once approval.
+    custom = native_local_cli_grant_response(
+        store,
+        harness=harness,
+        payload=payload,
+        native_result=native_result,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if custom is not None and custom[0]:
+        return custom[1]
+    saved = native_saved_review_response(
+        store,
+        harness=harness,
+        tool_name=tool_name,
+        artifact_id=_native_review_artifact_id(harness, tool_name),
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if saved is not None:
+        return saved
+    if custom is not None:
+        return custom[1]
     if claimed_saved_allow_hash is not None and native_review_claimed_allow(
         store,
         harness=harness,
@@ -309,6 +341,17 @@ def queue_native_pre_tool_review(
         action_envelope["nativeApprovalChallenge"] = deepcopy(native_origin["challenge"])
     elif native_origin_unavailable is not None:
         action_envelope[NATIVE_CLOUD_REVIEW_ORIGIN_UNAVAILABLE_FIELD] = native_origin_unavailable
+    exact_token = native_exact_action_token(
+        harness=harness,
+        tool_name=tool_name,
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )
+    if exact_token is not None:
+        action_envelope[EXACT_ACTION_CONTEXT_TOKEN_KEY] = exact_token
     request = GuardApprovalRequest(
         request_id=request_id,
         harness=harness,
@@ -416,8 +459,8 @@ def _native_review_launch_target(payload: Mapping[str, object]) -> str:
     command = pre_tool_command(payload)
     if command is not None:
         return command
-    tool_input = payload.get("tool_input")
-    if isinstance(tool_input, Mapping):
+    tool_input = pre_tool_input(payload)
+    if tool_input is not None:
         for key in ("url", "path", "file_path", "target"):
             value = tool_input.get(key)
             if isinstance(value, str) and value.strip():

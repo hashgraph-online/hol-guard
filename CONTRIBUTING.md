@@ -45,7 +45,7 @@ not copy their registration pattern to add an extension.
    which enables automatic repair for mechanical schema, binding, and generated-projection issues.
 
 The canonical source, portable fixture, and per-extension trust binding are contributor-owned inputs.
-The shared `contracts/extensions/trust-class-map.v1.json` is ignored build output. Rust builds
+The shared `contracts/extensions/build-trust-class-map.v1.json` is ignored build output. Rust builds
 derive it from the bindings; package builds generate and verify the shipped aggregate. Never
 commit the aggregate or hand-merge it when adding an extension.
 The command catalog, native program, descriptors and public directory remain maintainer-published

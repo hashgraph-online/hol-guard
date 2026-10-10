@@ -12,6 +12,31 @@ from pathlib import Path
 
 from .evidence import TRANSCRIPT_LIMIT
 
+# Set by a ``--jobs`` case worker so its parent can reap agent sessions that the
+# worker could not reap itself (for example after a forced kill).
+group_ledger: Path | None = None
+
+
+def _record_group(event: str, pgid: int) -> None:
+    if group_ledger is not None:
+        with group_ledger.open("a", encoding="utf-8") as ledger:
+            ledger.write(f"{event} {pgid}\n")
+
+
+def live_ledger_groups(ledger: Path) -> list[int]:
+    """Process groups a worker started and did not record as reaped."""
+    live: dict[int, None] = {}
+    with suppress(OSError):
+        for line in ledger.read_text(encoding="utf-8").splitlines():
+            event, _, value = line.partition(" ")
+            if not value.isdigit():
+                continue
+            if event == "start":
+                live[int(value)] = None
+            elif event == "end":
+                live.pop(int(value), None)
+    return list(live)
+
 
 def clean_environment(home: Path, agent_dir: Path, canary: str) -> dict[str, str]:
     """The model/host receives no inherited provider, cloud or GitHub credential."""
@@ -79,6 +104,7 @@ def run_process(
     with output.open("wb") as out, error_output.open("wb") as err:
         process = subprocess.Popen(command, cwd=cwd, env=env, stdout=out, stderr=err, start_new_session=True)
         try:
+            _record_group("start", process.pid)
             timed_out = _await_bounded(
                 process, started=started, output=output, error_output=error_output, timeout=timeout
             )
@@ -97,6 +123,7 @@ def run_process(
                     with suppress(ProcessLookupError):
                         os.killpg(process.pid, signal.SIGKILL)
                     process.wait(timeout=5)
+                    _record_group("end", process.pid)
             finally:
                 signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
     return process.returncode, timed_out

@@ -73,6 +73,13 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
     assert all("scripts/prepare_extension_contribution.py" not in command for command in calls)
     projections = [command for command in calls if "scripts/build_native_command_program.py" in command]
     assert projections == [
+        [
+            refresh.sys.executable,
+            "scripts/build_native_command_program.py",
+            "--compiler",
+            str(refresh.COMPILER),
+            "--check-public-descriptors",
+        ],
         [refresh.sys.executable, "scripts/build_native_command_program.py", "--compiler", str(refresh.COMPILER)],
         [
             refresh.sys.executable,

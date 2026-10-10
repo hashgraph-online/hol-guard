@@ -49,6 +49,8 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -71,6 +73,15 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
         run: uv run --no-sync python scripts/extension_artifact_bundle.py --source-sha "$SOURCE_SHA" --output extension-snapshot
+      - name: Attest the immutable snapshot
+        id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: extension-snapshot/*
+      - name: Retain release provenance
+        env:
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: cp "$PROVENANCE_BUNDLE" extension-snapshot/extension-artifacts.intoto.jsonl
       - name: Retain verified snapshot evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

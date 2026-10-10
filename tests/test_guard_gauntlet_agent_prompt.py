@@ -24,6 +24,11 @@ def test_rendered_command_arguments_survive_prompt_serialization(tmp_path, scena
     else:
         assert COMMANDS_HEADER not in prompt
     assert fixture.canary not in prompt
+    authorization = fixture_authorization(fixture, "http://127.0.0.1:12345/", rendered)
+    batch_context = "three independent native read calls in a single assistant response"
+    assert (batch_context in authorization) == (scenario.oracle == "mixed-read-batch")
+    assert "never authorizes bypassing or retrying a denial" in authorization or scenario.oracle != "mixed-read-batch"
+    assert fixture.canary not in authorization
 
 
 def test_authorization_names_only_generated_fixture_scope(tmp_path):
@@ -33,3 +38,15 @@ def test_authorization_names_only_generated_fixture_scope(tmp_path):
     text = fixture_authorization(fixture, collector)
     assert str(fixture.home) in text and str(fixture.workspace) in text and collector in text
     assert fixture.canary not in text
+
+
+def test_watch_context_omits_typed_paths_so_bash_uses_its_default_cwd(tmp_path):
+    """Watch scope rejects a mistyped cwd before Guard runs, so the case never asks for one."""
+    fixture = create_fixture(tmp_path / "disposable")
+    collector = "http://127.0.0.1:12345/"
+    watch = next(item for item in load_catalog() if item.oracle == "watch-command")
+    text = fixture_authorization(fixture, collector, watch)
+    assert str(fixture.home) not in text and str(fixture.workspace) not in text
+    assert "needs no cwd argument" in text and collector in text
+    other = next(item for item in load_catalog() if item.oracle != "watch-command")
+    assert str(fixture.workspace) in fixture_authorization(fixture, collector, other)

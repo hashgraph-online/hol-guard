@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,12 @@ from tests.shim_execution_helpers import (
     protect_evaluator_evidence,
     write_fake_manager_script,
 )
-from tests.test_guard_headless_daemon_api import _dashboard_token_for, _read_json_response, _request
+from tests.test_guard_headless_daemon_api import (
+    PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
+    _dashboard_token_for,
+    _read_json_response,
+    _request,
+)
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -251,14 +257,18 @@ def test_package_shim_intercept_skips_tampered_shim(tmp_path: Path, monkeypatch:
     ]
 
 
-def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
+def _run_daemon_package_shim_install_and_test(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> None:
+    *,
+    rewrite_profile: Callable[[str], str] | None,
+) -> tuple[int, dict[str, object], dict[str, object]]:
     home_dir = tmp_path / "home"
     home_dir.mkdir()
     monkeypatch.setenv("HOME", str(home_dir))
     monkeypatch.setenv("SHELL", "/bin/zsh")
+    monkeypatch.setenv("PATH", "/usr/local/bin:/usr/bin:/bin")
+    monkeypatch.setattr(shims_module, "_is_transient_path", lambda _path: False)
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
     store.set_sync_payload(
@@ -278,6 +288,14 @@ def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
                 payload={"managers": ["npm"]},
             ),
         )
+        assert install_status == 200
+        if rewrite_profile is not None:
+            for profile in home_dir.iterdir():
+                if profile.is_file():
+                    profile.write_text(rewrite_profile(profile.read_text(encoding="utf-8")), encoding="utf-8")
+        _cards_status, cards_payload = _read_json_response(
+            _request(daemon.port, "/v1/supply-chain/package-shims", method="GET", token=token),
+        )
         test_status, test_payload = _read_json_response(
             _request(
                 daemon.port,
@@ -285,12 +303,53 @@ def test_daemon_package_shim_test_reports_path_inactive_without_evaluator(
                 token=token,
                 payload={"managers": ["npm"]},
             ),
+            timeout=PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
         )
     finally:
         daemon.stop()
+    return test_status, test_payload, cards_payload
 
-    assert install_status == 200
+
+def test_daemon_package_shim_test_uses_projected_shell_profile_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The daemon PATH never contains the shim dir; Test must agree with the Protected cards."""
+
+    test_status, test_payload, cards_payload = _run_daemon_package_shim_install_and_test(
+        tmp_path,
+        monkeypatch,
+        rewrite_profile=None,
+    )
+
+    assert cards_payload["package_shims"]["protected_managers"] == ["npm"]
+    assert test_status == 200
+    result = test_payload["result"]
+    assert result["path_repair_required"] == []
+    assert result["manager_results"][0]["manager"] == "npm"
+    assert "skipped_reason" not in result["manager_results"][0]
+    assert result["manager_results"][0]["evaluator_invoked"] is True
+    assert result["intercept_proved"] is True
+
+
+def _comment_out(content: str) -> str:
+    return "".join(f"# {line}" for line in content.splitlines(keepends=True))
+
+
+@pytest.mark.parametrize("rewrite_profile", [lambda _content: "", _comment_out], ids=["removed", "commented"])
+def test_daemon_package_shim_test_reports_path_inactive_without_profile_block(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    rewrite_profile: Callable[[str], str],
+) -> None:
+    test_status, test_payload, _cards_payload = _run_daemon_package_shim_install_and_test(
+        tmp_path,
+        monkeypatch,
+        rewrite_profile=rewrite_profile,
+    )
+
     assert test_status == 200
     assert test_payload["result"]["intercept_proved"] is False
+    assert test_payload["result"]["path_repair_required"] == ["npm"]
     assert test_payload["result"]["manager_results"][0]["skipped_reason"] == "path_inactive"
     assert test_payload["result"]["manager_results"][0]["evaluator_invoked"] is False

@@ -1131,6 +1131,10 @@
     max-height: calc(var(--spacing) * 48);
   }
 
+  .max-h-72 {
+    max-height: calc(var(--spacing) * 72);
+  }
+
   .max-h-80 {
     max-height: calc(var(--spacing) * 80);
   }
@@ -1565,6 +1569,10 @@
 
   .shrink-0 {
     flex-shrink: 0;
+  }
+
+  .basis-full {
+    flex-basis: 100%;
   }
 
   .border-collapse {
@@ -5048,6 +5056,10 @@
 
   .underline {
     text-decoration-line: underline;
+  }
+
+  .underline-offset-2 {
+    text-underline-offset: 2px;
   }
 
   .underline-offset-4 {

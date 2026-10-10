@@ -25,6 +25,7 @@ from typing_extensions import Unpack
 from ...version import __version__
 from ..browser_opener import open_browser_url
 from ..mdm.network import managed_urlopen
+from ..native_guard_store import NativeGuardStoreUnavailable, unavailable_outbox_status
 from ..oauth_token_claims import decode_oauth_access_token_claims as _decode_access_token_claims
 from ..oauth_token_claims import oauth_device_id
 from ..package_firewall_defaults import extract_cloud_user_profile as _extract_cloud_user_profile
@@ -63,8 +64,6 @@ CI_SAFE_GUARD_DEVICE_SCOPES = (
 CONNECT_COMMAND = "hol-guard connect"
 CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
-DISCONNECT_COMMAND = "hol-guard disconnect"
-HEADLESS_CONNECT_COMMAND = "hol-guard connect --headless"
 CONNECT_SYNC_AUTH_CONTEXT_KEY = "_guard_sync_auth_context"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
@@ -172,11 +171,6 @@ class GuardOAuthBrowserSession:
 
 def _base64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
-
-
-def _base64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(f"{data}{padding}")
 
 
 def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
@@ -622,11 +616,6 @@ def _load_error_payload(error: urllib.error.HTTPError) -> dict[str, object] | No
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def device_authorization_endpoint_from_connect_url(connect_url: str) -> str:
-    _, allowed_origin = resolve_connect_url(connect_url)
-    return resolve_guard_oauth_client_config(allowed_origin).device_authorization_endpoint
 
 
 def request_device_authorization(url: str, body: str) -> dict[str, object]:
@@ -1283,15 +1272,21 @@ def build_connect_status_payload(
     connect_url: str,
     action: str = "status",
 ) -> dict[str, object]:
-    review_event_binding = store.get_review_event_oauth_binding()
-    review_event_status = store.review_event_outbox_status(
-        now=datetime.now(timezone.utc).isoformat(),
-        **(
-            {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
-            if review_event_binding is not None
-            else {}
-        ),
-    )
+    review_event_binding: dict[str, str] | None
+    review_event_status: dict[str, object]
+    try:
+        review_event_binding = store.get_review_event_oauth_binding()
+        review_event_status = store.review_event_outbox_status(
+            now=datetime.now(timezone.utc).isoformat(),
+            **(
+                {key: value for key, value in review_event_binding.items() if key != "oauth_source"}
+                if review_event_binding is not None
+                else {}
+            ),
+        )
+    except NativeGuardStoreUnavailable as error:
+        review_event_binding = None
+        review_event_status = unavailable_outbox_status(error)
     latest_state = store.get_effective_guard_connect_state(now=datetime.now(timezone.utc).isoformat())
     cloud_profile = store.get_cloud_sync_profile()
     oauth_storage_health = store.get_oauth_local_credential_health()

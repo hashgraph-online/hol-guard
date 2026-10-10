@@ -206,12 +206,16 @@ def test_healthz_details_require_compatible_same_release_peer() -> None:
     compatible = {
         "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
         "package_version": __version__,
+        "source_root": "/peer-install",
         "runtime_fingerprint": "desktop-sidecar-fingerprint",
     }
     incompatible = dict(compatible)
     incompatible["compatibility_version"] = "not-current"
+    legacy = dict(compatible)
+    del legacy["source_root"]
     assert daemon_manager_module._daemon_healthz_details_match_current_runtime(compatible)
     assert not daemon_manager_module._daemon_healthz_details_match_current_runtime(incompatible)
+    assert not daemon_manager_module._daemon_healthz_details_match_current_runtime(legacy)
 
 
 def test_load_guard_daemon_url_rejects_older_package_version(
@@ -279,12 +283,18 @@ def test_load_guard_daemon_url_accepts_same_release_peer_fingerprint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    daemon_manager_module.write_guard_daemon_state(
-        guard_home,
-        5530,
-        "token-123",
-        pid=12345,
-    )
+    with monkeypatch.context() as peer_install:
+        peer_install.setattr(
+            daemon_manager_module,
+            "_current_guard_daemon_source_root",
+            lambda: str(tmp_path / "peer-install"),
+        )
+        daemon_manager_module.write_guard_daemon_state(
+            guard_home,
+            5530,
+            "token-123",
+            pid=12345,
+        )
     monkeypatch.setattr(
         daemon_manager_module,
         "_current_guard_daemon_runtime_fingerprint",

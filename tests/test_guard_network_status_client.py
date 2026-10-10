@@ -227,3 +227,18 @@ def test_network_status_retry_timeout_stays_timeout(monkeypatch: pytest.MonkeyPa
 def test_network_status_client_types_invalid_json_object(raw_payload: str) -> None:
     with pytest.raises(GuardDaemonResponseSchemaError):
         GuardSurfaceDaemonClient._decode_json_response(raw_payload)
+
+
+def test_catalog_read_uses_catalog_cap_while_other_reads_stay_bounded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GuardSurfaceDaemonClient("http://127.0.0.1:1", "token")
+    body = b'{"padding":"' + b"x" * 1_100_000 + b'"}'
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda _request, *, timeout: _RawResponse(payload=body),
+    )
+    assert len(client.extension_control_catalog()["padding"]) == 1_100_000
+    with pytest.raises(GuardDaemonResponseSchemaError, match="size limit"):
+        client.network_status()

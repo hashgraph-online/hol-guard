@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Literal, cast
 
+from .approval_scope_native_retry import native_retry_cannot_reuse_approval
 from .models import DECISION_SCOPE_VALUES, DecisionScope
 from .package_execution_context import (
     PACKAGE_EXECUTION_CONTEXT_EVIDENCE_KIND,
@@ -170,6 +171,8 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
             block_scopes.append("publisher")
         block_scopes.extend(("harness", "global"))
     restrictions = ["reusable_allow_is_action_bound"]
+    if native_retry_cannot_reuse_approval(request):
+        restrictions.append("retry_cannot_reuse_approval")
     if _unverified_provider_execution(request):
         restrictions.append("provider_account_unverified_once_only")
     restrictions.append(
@@ -281,6 +284,24 @@ def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, o
     return payload
 
 
+def tool_call_exact_context_token(request: Mapping[str, object]) -> str | None:
+    """Return the exact-action token bound to a tool-call approval row.
+
+    Generic hook rows carry the token as their artifact hash. Daemon native
+    rows keep the once-only native binding there and carry the persistent
+    token in their action envelope.
+    """
+
+    artifact_hash = _string_or_none(request.get("artifact_hash"))
+    if parse_approval_context_token(artifact_hash) is not None:
+        return artifact_hash
+    envelope = request.get("action_envelope_json")
+    if not isinstance(envelope, Mapping):
+        return None
+    token = _string_or_none(cast(Mapping[str, object], envelope).get("exact_context_token"))
+    return token if parse_approval_context_token(token) is not None else None
+
+
 def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bool:
     """Return whether an artifact allow can be saved as one exact action."""
 
@@ -294,7 +315,7 @@ def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bo
     if artifact_type == "tool_call":
         return bool(
             artifact_id
-            and parse_approval_context_token(artifact_hash) is not None
+            and tool_call_exact_context_token(request) is not None
             and _string_or_none(request.get("raw_command_text"))
         )
     if artifact_type != "tool_action_request":

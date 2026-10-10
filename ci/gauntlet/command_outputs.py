@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import PurePosixPath
 from typing import Any
 
+from .business_policy import BUSINESS_ORDINARY_READ
 from .catalog import Scenario
 from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
 
@@ -113,6 +114,8 @@ def _od(text: str | None) -> bool:
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """A successful host status cannot replace the required read, search or transformation."""
+    if scenario.id == BUSINESS_ORDINARY_READ:
+        return len(calls) == 1 and _text(calls[0]) == SOURCE
     if scenario.id not in OUTPUT_SCENARIOS:
         return True
     if len(calls) != len(scenario.commands):
