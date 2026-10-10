@@ -93,9 +93,10 @@ pub(in crate::pretool) fn agent_skill_document(
         let Ok(skills) = std::fs::canonicalize(home.join(root)) else {
             continue;
         };
-        // Retain the existing managed .agents root-link support. New roots
-        // must not turn a broader hidden application directory into skills.
-        if !matches!(root, ".agents/skills" | ".agent/skills") && skills != home.join(root) {
+        // Retain the existing managed .agents root-link support. New roots,
+        // including the singular .agent spelling, must resolve to themselves
+        // so a link cannot turn hidden application state into skills.
+        if root != ".agents/skills" && skills != home.join(root) {
             continue;
         }
         let Ok(relative) = canonical.strip_prefix(skills) else {

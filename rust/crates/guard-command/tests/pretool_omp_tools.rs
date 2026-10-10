@@ -451,3 +451,89 @@ fn eval_requires_js_language_exact_tool_and_clean_envelope() {
     );
     assert!(!allowed(&conflicting));
 }
+
+#[test]
+fn skill_root_link_into_hidden_state_is_reviewed() {
+    let f = fixture();
+    let skills = f.home.join(".agent/skills");
+    std::fs::remove_dir_all(&skills).unwrap();
+    write(f.home.join(".codex/sessions/visible/log.md"), "synthetic\n");
+    std::os::unix::fs::symlink(f.home.join(".codex/sessions"), &skills).unwrap();
+    for path in [
+        "~/.agent/skills/visible/log.md",
+        "~/.codex/sessions/visible/log.md",
+    ] {
+        assert!(!allowed(&omp(&f, "read", json!({"path": path}))), "{path}");
+    }
+    assert!(!allowed(&eval_code(
+        &f,
+        "display(await tool.read({path:'~/.agent/skills/visible/log.md'}))"
+    )));
+}
+
+#[test]
+fn grep_inspects_git_metadata_for_secrets() {
+    let f = fixture();
+    write(f.home.join("repo/a.txt"), "synthetic\n");
+    assert!(allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "~/repo"})
+    )));
+    write(f.home.join("repo/.git/credentials.json"), "synthetic\n");
+    assert!(!allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "~/repo"})
+    )));
+}
+
+#[test]
+fn unmodeled_scalar_options_are_reviewed() {
+    let f = fixture();
+    for tool in ["ls", "glob", "find"] {
+        for input in [
+            json!({"path": "~/clean", "follow": true}),
+            json!({"path": "~/clean", "depth": 3}),
+            json!({"path": "~/clean", "limit": -1}),
+            json!({"path": "~/clean", "limit": 1000000}),
+        ] {
+            assert!(!allowed(&omp(&f, tool, input.clone())), "{tool} {input}");
+        }
+    }
+    for input in [
+        json!({"pattern": "x", "path": "~/clean", "hidden": true}),
+        json!({"pattern": "x", "path": "~/clean", "maxdepth": 9}),
+    ] {
+        assert!(!allowed(&omp(&f, "grep", input.clone())), "{input}");
+    }
+    // The host schemas' own options stay allowed.
+    assert!(allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "~/clean", "case": true, "gitignore": false, "skip": null})
+    )));
+    assert!(allowed(&omp(
+        &f,
+        "grep",
+        json!({"pattern": "x", "path": "~/clean", "skip": 20})
+    )));
+    for tool in ["ls", "glob", "find"] {
+        let input = json!({"path": "~/clean", "hidden": true, "gitignore": true, "limit": 50});
+        assert!(allowed(&omp(&f, tool, input.clone())), "{tool} {input}");
+    }
+}
+
+#[test]
+fn eval_scalar_options_are_preserved_or_reviewed() {
+    let f = fixture();
+    for code in [
+        "display(await tool.read({path:'calc.py', follow: true}))",
+        "display(await tool.glob({path:'.', depth: 3}))",
+        "display(await tool.read({path:'calc.py', limit: 1000000}))",
+        "display(await tool.read({path:'calc.py', limit: 1.5}))",
+        "display(await tool.bash({command:'cat calc.py', timeout: 5}))",
+    ] {
+        assert!(!allowed(&eval_code(&f, code)), "{code}");
+    }
+}

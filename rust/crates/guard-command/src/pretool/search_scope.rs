@@ -268,7 +268,9 @@ fn walk_scope(
             let path = entry.path();
             let name = entry.file_name();
             let name = name.to_str().ok_or(ScopeUnproven)?;
-            if name == ".git" {
+            // The Claude walk models ripgrep and skips .git. The host-neutral
+            // walk has no such model, so it must inspect repository metadata.
+            if name == ".git" && honor_ignores {
                 continue;
             }
             // Metadata only: never follow links or open a candidate secret.

@@ -26,7 +26,7 @@ const MAX_DEPTH: usize = 12;
 enum Token {
     Ident(String),
     Str(String),
-    Num,
+    Num(Value),
     Punct(char),
 }
 
@@ -71,9 +71,11 @@ fn tokenize(code: &str) -> Option<Vec<Token>> {
             tokens.push(Token::Ident(ident));
         } else if c.is_ascii_digit() {
             let mut seen_dot = false;
+            let mut digits = String::new();
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_digit() || (c == '.' && !seen_dot) {
                     seen_dot |= c == '.';
+                    digits.push(c);
                     chars.next();
                 } else {
                     break;
@@ -85,7 +87,10 @@ fn tokenize(code: &str) -> Option<Vec<Token>> {
             {
                 return None;
             }
-            tokens.push(Token::Num);
+            // Fractions and unparsable literals become a non-integer, which
+            // no modeled option accepts, so they are reviewed.
+            let number = digits.parse::<u64>().map_or(json!(-1), |n| json!(n));
+            tokens.push(Token::Num(number));
         } else if matches!(c, '\'' | '"' | '`') {
             chars.next();
             let mut value = String::new();
@@ -280,7 +285,7 @@ impl Parser {
                 name if self.declared.contains(name) => {}
                 _ => return None,
             },
-            Token::Str(_) | Token::Num => {}
+            Token::Str(_) | Token::Num(_) => {}
             Token::Punct('(') => {
                 self.value(depth + 1)?;
                 self.eat(')')?;
@@ -370,7 +375,7 @@ impl Parser {
             self.eat(':')?;
             let lit = match self.next()? {
                 Token::Str(text) => Lit::Str(text),
-                Token::Num => Lit::Scalar(json!(0)),
+                Token::Num(number) => Lit::Scalar(number),
                 Token::Ident(word) if word == "true" => Lit::Scalar(json!(true)),
                 Token::Ident(word) if word == "false" => Lit::Scalar(json!(false)),
                 _ => return None,
@@ -430,8 +435,12 @@ fn standalone_payload(call: &Call) -> Option<Value> {
                 input.insert(key.clone(), Value::String(text.clone()));
             }
             Lit::Str(_) => return None,
-            // Numeric and boolean options tune output size or matching only.
-            Lit::Scalar(_) => {}
+            // Only modeled options on read-only tools survive; the shell and
+            // unknown options are reviewed rather than silently dropped.
+            Lit::Scalar(value) if super::modeled_scalar(&call.tool, key, value) => {
+                input.insert(key.clone(), value.clone());
+            }
+            Lit::Scalar(_) => return None,
         }
     }
     let required = match call.tool.as_str() {

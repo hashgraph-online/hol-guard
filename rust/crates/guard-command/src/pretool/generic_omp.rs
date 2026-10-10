@@ -113,11 +113,30 @@ fn contained_selector(value: &str) -> bool {
         && value.as_bytes().get(1) != Some(&b':')
 }
 
-/// Scalar keys carry no path or command; strings are limited to `string_keys`.
-fn scalar_keys(input: &Map<String, Value>, string_keys: &[&str]) -> bool {
+/// Modeled non-string options from the host tool schemas: grep takes
+/// `case`, `gitignore` and a `skip` offset; glob/ls/find take `hidden`,
+/// `gitignore` and a `limit`; read takes line paging. Anything else may change what
+/// the host touches, so it goes to review.
+pub(super) fn modeled_scalar(tool: &str, key: &str, value: &Value) -> bool {
+    let bounded = |value: &Value| value.as_u64().is_some_and(|count| count <= 100_000);
+    match (tool, key, value) {
+        ("grep", "case" | "gitignore", Value::Bool(_)) => true,
+        ("grep", "skip", Value::Null) => true,
+        ("grep", "skip", number @ Value::Number(_)) => bounded(number),
+        ("ls" | "glob" | "find", "hidden" | "gitignore", Value::Bool(_)) => true,
+        ("ls" | "glob" | "find", "limit", number @ Value::Number(_)) => bounded(number),
+        // Older read schemas paged by line; the current one ignores them.
+        ("read", "limit" | "offset", number @ Value::Number(_)) => bounded(number),
+        _ => false,
+    }
+}
+
+/// Scalar keys carry no path or command; strings are limited to `string_keys`
+/// and other values to the tool's modeled options.
+fn scalar_keys(tool: &str, input: &Map<String, Value>, string_keys: &[&str]) -> bool {
     input.iter().all(|(key, value)| match value {
-        Value::Bool(_) | Value::Number(_) => true,
         Value::String(_) => string_keys.contains(&key.as_str()),
+        Value::Bool(_) | Value::Number(_) | Value::Null => modeled_scalar(tool, key, value),
         _ => false,
     })
 }
@@ -144,7 +163,7 @@ fn listing(
     context: &OmpContext<'_>,
 ) -> Option<PreToolResultV1> {
     let input = strict_tool_input(payload)?;
-    if !scalar_keys(input, &["path", "pattern"]) {
+    if !scalar_keys("glob", input, &["path", "pattern"]) {
         return None;
     }
     if let Some(pattern) = input.get("pattern") {
@@ -173,7 +192,7 @@ fn grep_scope(
     context: &OmpContext<'_>,
 ) -> Option<PreToolResultV1> {
     let input = strict_tool_input(payload)?;
-    if !scalar_keys(input, &["path", "pattern", "glob", "type"]) {
+    if !scalar_keys("grep", input, &["path", "pattern", "glob", "type"]) {
         return None;
     }
     let pattern = input.get("pattern")?.as_str()?;

@@ -19,6 +19,7 @@ def _envelope(harness: str, tool_name: str, tool_input: dict[str, object]):
         ("eval", {"code": "display(1)", "language": "js"}, "shell_command"),
         ("todo_write", {"todos": []}, "harness_start"),
         ("ls", {"path": "."}, "file_read"),
+        ("find", {"path": "."}, "file_read"),
     ],
 )
 def test_omp_tool_action_types(tool_name: str, tool_input: dict[str, object], expected: str) -> None:

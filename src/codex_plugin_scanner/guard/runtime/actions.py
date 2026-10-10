@@ -62,6 +62,7 @@ _OMP_TOOL_ACTION_TYPES: dict[str, GuardActionType] = {
     "todo": "harness_start",
     "todo_write": "harness_start",
     "ls": "file_read",
+    "find": "file_read",
 }
 _GROK_SUBAGENT_TOOL_NAMES = frozenset({"task", "spawn_subagent"})
 _GROK_LIFECYCLE_ENVELOPE_EVENTS = frozenset({"SessionStart", "SubagentStart"})
