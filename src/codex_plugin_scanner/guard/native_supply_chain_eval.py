@@ -229,14 +229,15 @@ def native_supply_chain_eval_payload(
         for round_index in range(_MAX_ROUNDS + 1):
             answered_ok = response.get("status") == "ok"
             needs_egress = answered_ok and response.get("code") == EGRESS_REQUIRED_CODE
-            needs_probe = (
-                answered_ok
+            probe_lookup = (
+                saved_policy_lookup
+                if answered_ok
                 and response.get("code") == _PROBE_REQUIRED_CODE
-                and saved_policy_lookup is not None
                 and isinstance(response.get("payload"), dict)
                 and not probed
+                else None
             )
-            if not (needs_egress or needs_probe):
+            if not needs_egress and probe_lookup is None:
                 break
             if round_index == _MAX_ROUNDS:
                 _record_unbound_answer(guard_home)
@@ -258,11 +259,13 @@ def native_supply_chain_eval_payload(
                     "egress_supplied": list(exchanger.supplied),
                     "egress_spool_dir": str(exchanger.spool_dir),
                 }
-            else:
+            elif probe_lookup is not None:
                 probed = True
-                decision = saved_policy_lookup(response["payload"])
+                decision = probe_lookup(response["payload"])
                 probe: dict[str, object] = {} if decision is None else {"decision": decision}
                 request = {**request, "request_id": _request_id(), "now": fixed_now, "saved_policy_probe": probe}
+            else:  # pragma: no cover - unreachable: the loop broke above when neither was needed
+                raise NativeSupplyChainEvalError("Native package evaluation did not settle")
             response = _send_eval_request(request, guard_home)
     if response.get("status") != "ok" or response.get("code") != "ok":
         raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
