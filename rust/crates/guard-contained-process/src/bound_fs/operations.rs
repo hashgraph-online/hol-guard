@@ -216,6 +216,9 @@ impl Directory {
     /// Transactional publication validates the displaced target. An exchange
     /// failure may briefly expose output bytes; raced user objects are retained
     /// in a private recovery directory, never removed by recursive cleanup.
+    /// Retention is best-effort on Unix against a same-user writer that renames
+    /// an object onto a recovery name between its identity check and the
+    /// unlink, because POSIX cannot unlink by identity.
     pub fn atomic_replace(
         &self,
         path: &Path,

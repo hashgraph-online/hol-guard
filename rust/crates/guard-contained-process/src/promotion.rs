@@ -21,6 +21,16 @@ fn matches(file: &ReadFile, expected: (&Identity, &str)) -> bool {
 /// swap: a failed exchange can briefly expose the new bytes. Never attest that
 /// exchange unless the displaced object matches. Recovery names containing
 /// raced user objects are deliberately retained, never recursively cleaned.
+///
+/// The recovery directory is created mode 0700, so only the same user can
+/// reach its names. POSIX has no unlink that checks identity, so on Unix the
+/// final discard of a staged or displaced name is a check followed by an
+/// unlink: a same-user writer that renames its own object onto that name in
+/// the window between the two is removed with it. The "retain raced objects"
+/// guarantee therefore holds against races before the check, and is
+/// best-effort against a same-user writer that targets the check-to-unlink
+/// window. It never widens authority: the unlink only ever acts inside the
+/// private recovery directory, never on the published target.
 pub(super) fn replace(
     root: &Directory,
     path: &Path,
