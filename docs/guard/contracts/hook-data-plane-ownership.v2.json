@@ -361,6 +361,7 @@
     "src/codex_plugin_scanner/guard/native_false_positive_rules.py",
     "src/codex_plugin_scanner/guard/native_approval_proof.py",
     "src/codex_plugin_scanner/guard/native_github_cli.py",
+    "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
     "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
     "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
     "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",

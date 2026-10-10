@@ -366,26 +366,37 @@ def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
-    "projection",
+    "reply",
     [
-        None,
-        {"action": "future-action", "source": "policy", "summary_code": "risk", "risk_categories": []},
-        {"action": "allow", "source": "future-source", "summary_code": "no_risk", "risk_categories": []},
-        {
-            "action": "allow",
-            "source": "policy",
-            "summary_code": "risk",
-            "risk_categories": ["secret_access", "secret_access"],
-        },
+        "unavailable",
+        "unbound_digest",
+        {"status": "ok", "code": "ok", "payload": {"action": "future-action"}},
+        {"status": "ok", "code": "ok", "payload": None},
+        {"status": "need", "code": "need", "payload": {"kind": "future_effect"}},
+        {"status": "error", "code": "native_mcp_tool_policy_decide_observation_invalid", "payload": None},
     ],
 )
 def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
     tmp_path,
     monkeypatch,
-    projection,
+    reply,
 ) -> None:
-    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard import native_mcp_tool_policy
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 
+    def fake_resident(*, request, **_kwargs):
+        if reply == "unavailable":
+            return None
+        digest = "sha256:" + ("0" * 64 if reply == "unbound_digest" else _canonical_request_sha256(request))
+        body = {"status": "ok", "code": "ok", "payload": None} if reply == "unbound_digest" else reply
+        return {
+            "schema": "guard-mcp-tool-policy-decide-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": digest,
+            **body,
+        }
+
+    monkeypatch.setattr(native_mcp_tool_policy, "_resident_request", fake_resident)
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -394,14 +405,6 @@ def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
         config_path=".mcp.json",
         transport="stdio",
     )
-    native_digest = native_context.native_context_digest
-
-    def reject_policy(operation, *args, **kwargs):
-        if operation == "mcp_tool_policy":
-            return None if projection is None else {"status": "ok", "mcp_tool_policy": projection}
-        return native_digest(operation, *args, **kwargs)
-
-    monkeypatch.setattr(native_context, "native_context_digest", reject_policy)
     with pytest.raises(ValueError, match="native_mcp_tool_policy_unavailable"):
         evaluate_tool_call(
             store=GuardStore(tmp_path / "guard-home"),

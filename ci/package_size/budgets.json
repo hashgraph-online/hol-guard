@@ -1,7 +1,7 @@
 {
   "any": {"download": 7340032, "unpacked": 31457280, "runtime": 0, "compiler": 0},
-  "macosx_11_0_arm64": {"download": 17825792, "unpacked": 57671680, "runtime": 24117248, "compiler": 10485760},
-  "macosx_13_0_x86_64": {"download": 18874368, "unpacked": 59768832, "runtime": 26214400, "compiler": 11534336},
-  "manylinux_2_17_x86_64": {"download": 19922944, "unpacked": 60817408, "runtime": 27262976, "compiler": 11534336},
-  "win_amd64": {"download": 18874368, "unpacked": 58720256, "runtime": 25165824, "compiler": 11534336}
+  "macosx_11_0_arm64": {"download": 18874368, "unpacked": 61865984, "runtime": 26214400, "compiler": 10485760},
+  "macosx_13_0_x86_64": {"download": 19922944, "unpacked": 63963136, "runtime": 28311552, "compiler": 11534336},
+  "manylinux_2_17_x86_64": {"download": 20971520, "unpacked": 65011712, "runtime": 29360128, "compiler": 11534336},
+  "win_amd64": {"download": 19922944, "unpacked": 62914560, "runtime": 27262976, "compiler": 11534336}
 }
