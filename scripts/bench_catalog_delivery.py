@@ -97,6 +97,13 @@ class _Meter:
             CatalogV2Client._request = original  # type: ignore[method-assign]
 
 
+def _require_v2(meter: _Meter, row: str) -> None:
+    """Fail the run when a CLI read fell back to v1 instead of the v2 client."""
+
+    if meter.requests <= 0:
+        raise RuntimeError(f"{row} made no v2 requests; the CLI fell back to v1")
+
+
 def _process_rss() -> list[dict[str, object]]:
     """RSS of every descendant process, named, so resident memory is attributable."""
 
@@ -138,6 +145,7 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     samples, listing = _timed(lambda: reads.catalog_list(client), iterations)
     with _Meter().measuring() as meter:
         reads.catalog_list(client)
+    _require_v2(meter, "cli_list_v2")
     results["cli_list_v2"] = {"requests": meter.requests, "bytes": meter.bytes, **_summary(samples)}
 
     extensions = listing["extensions"]  # type: ignore[index]
@@ -145,6 +153,7 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     samples, _ = _timed(lambda: reads.catalog_show(client, largest), iterations)
     with _Meter().measuring() as meter:
         reads.catalog_show(client, largest)
+    _require_v2(meter, "cli_show_largest_v2")
     results["cli_show_largest_v2"] = {
         "extension_id": largest,
         "requests": meter.requests,
@@ -155,10 +164,12 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     samples, _ = _timed(lambda: reads.pattern_extensions(client, None), max(3, iterations // 4))
     with _Meter().measuring() as meter:
         reads.pattern_extensions(client, None)
+    _require_v2(meter, "cli_patterns_all_v2")
     results["cli_patterns_all_v2"] = {"requests": meter.requests, "bytes": meter.bytes, **_summary(samples)}
     samples, _ = _timed(lambda: reads.pattern_extensions(client, None, "git push"), iterations)
     with _Meter().measuring() as meter:
         reads.pattern_extensions(client, None, "git push")
+    _require_v2(meter, "cli_patterns_query_git_push_v2")
     results["cli_patterns_query_git_push_v2"] = {"requests": meter.requests, "bytes": meter.bytes, **_summary(samples)}
 
     def export() -> list[dict[str, object]]:
@@ -168,6 +179,7 @@ def workflows(client: GuardSurfaceDaemonClient, iterations: int) -> dict[str, An
     samples, exported = _timed(export, max(3, iterations // 4))
     with _Meter().measuring() as meter:
         export()
+    _require_v2(meter, "full_export_v2_cold_cache")
     results["full_export_v2_cold_cache"] = {
         "extensions": len(exported),  # type: ignore[arg-type]
         "requests": meter.requests,

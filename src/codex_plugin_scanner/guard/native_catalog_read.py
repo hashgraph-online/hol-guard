@@ -17,7 +17,6 @@ from pathlib import Path
 
 from .native_resident_client import native_resident_client_request
 from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
-from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 from .strict_json_pairs import unique_json_object
 
 CATALOG_READ_FEATURE = "catalog-read-model-v1"
@@ -145,20 +144,17 @@ def native_catalog_read(
         timeout_seconds=max(0.001, deadline - time.monotonic()),
         deadline_monotonic=deadline,
     )
+    # Catalog reads stay out of the shared resident health that gates hook
+    # execution: a catalog-op contract fault or dashboard polling under load
+    # must not open (or reset) the hook circuit. The caller still sees 503 or
+    # a v1 fallback for every failure.
     if response is None:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_catalog_read_transport")
         return NativeCatalogReadResult(status=503, error_code=CATALOG_READ_TRANSPORT_FAILED)
     try:
         decoded = json.loads(response.decode("utf-8"), object_pairs_hook=unique_json_object)
     except (UnicodeDecodeError, ValueError):
-        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_catalog_read_malformed")
         return None
-    result = _validated_result(decoded)
-    if result is None:
-        native_record_resident_failure(status.identity.sha256, guard_home, reason="native_catalog_read_schema")
-        return None
-    native_record_resident_success(status.identity.sha256, guard_home)
-    return result
+    return _validated_result(decoded)
 
 
 __all__ = [

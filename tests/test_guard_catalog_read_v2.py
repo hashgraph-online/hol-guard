@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard import native_catalog_read as transport
+from codex_plugin_scanner.guard import native_runtime_resilience as resilience
 from codex_plugin_scanner.guard.daemon import catalog_read_v2
 from codex_plugin_scanner.guard.daemon import server as server_module
 from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_token
@@ -110,9 +111,9 @@ class _Resident:
         monkeypatch.setattr(transport, "_isolated_environment", dict)
         monkeypatch.setattr(transport, "native_resident_client_request", self.request)
         monkeypatch.setattr(
-            transport, "native_record_resident_failure", lambda *args, reason: self.failures.append(reason)
+            resilience, "native_record_resident_failure", lambda *args, reason: self.failures.append(reason)
         )
-        monkeypatch.setattr(transport, "native_record_resident_success", lambda *args: self.record_success())
+        monkeypatch.setattr(resilience, "native_record_resident_success", lambda *args: self.record_success())
 
     def record_success(self) -> None:
         self.successes += 1
@@ -153,7 +154,8 @@ def test_transport_forwards_raw_request_and_returns_body_bytes(tmp_path: Path, m
         "if_none_match": ETAG,
         "expected_catalog_digest": DIGEST,
     }
-    assert resident.successes == 1 and resident.failures == []
+    # Catalog reads never touch the shared hook circuit health.
+    assert resident.successes == 0 and resident.failures == []
     # One status probe per read, bounded by the same deadline as the resident call.
     assert len(resident.status_probes) == 1 and resident.status_probes[0] is not None
 
@@ -164,24 +166,24 @@ def test_busy_resident_is_a_retryable_fault_not_protocol_absence(
     resident = _Resident(None)
     resident.install(monkeypatch)
     assert _read(tmp_path) == NativeCatalogReadResult(status=503, error_code=transport.CATALOG_READ_TRANSPORT_FAILED)
-    assert resident.failures == ["native_catalog_read_transport"]
+    assert resident.failures == []
 
 
 @pytest.mark.parametrize(
     ("response", "reason"),
     [
-        (b"\xff", "native_catalog_read_malformed"),
-        (b'{"schema":"a","schema":"b"}', "native_catalog_read_malformed"),
-        (json.dumps(_frame(http_status=201)).encode(), "native_catalog_read_schema"),
+        (b"\xff", "malformed"),
+        (b'{"schema":"a","schema":"b"}', "duplicate-key"),
+        (json.dumps(_frame(http_status=201)).encode(), "schema"),
     ],
 )
-def test_transport_failures_are_unavailable_and_recorded(
+def test_transport_failures_are_unavailable_without_tripping_hook_circuit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, response: bytes | None, reason: str
 ) -> None:
     resident = _Resident(response)
     resident.install(monkeypatch)
-    assert _read(tmp_path) is None
-    assert resident.failures == [reason]
+    assert _read(tmp_path) is None, reason
+    assert resident.failures == [] and resident.successes == 0
 
 
 def test_transport_bounds_requests_before_native_dispatch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
