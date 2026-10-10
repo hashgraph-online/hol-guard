@@ -88,15 +88,21 @@ fn composition(has_command_text: bool, c: &Composed) -> HookCompositionV1 {
     let own = |item: Option<&guard_contracts::GuardActionNormalization>| {
         item.map(|entry| entry.action.as_str().to_owned())
     };
+    let eligibility_needed = c.event_name.as_deref() == Some("PreToolUse") && has_command_text;
+    // A grant only lowers the action where a lookup is permitted and an
+    // eligibility exists; otherwise the grant cannot apply.
+    let granted_action = if c.grant_lookups_allowed && eligibility_needed {
+        guard_contracts::GuardAction::Allow
+    } else {
+        c.composed
+    };
     HookCompositionV1 {
         event_name: c.event_name.clone(),
         effective_event_name: c.effective_event.clone(),
         composed_action: c.composed.as_str().to_owned(),
         grant_lookups_allowed: c.grant_lookups_allowed,
-        tool_eligibility_needed: c.event_name.as_deref() == Some("PreToolUse") && has_command_text,
-        action_with_tool_grant: after(guard_contracts::GuardAction::Allow)
-            .as_str()
-            .to_owned(),
+        tool_eligibility_needed: eligibility_needed,
+        action_with_tool_grant: after(granted_action).as_str().to_owned(),
         action_without_tool_grant: after(c.composed).as_str().to_owned(),
         permission_decision_reason: c.permission_reason.clone(),
         daemon_failure_reason: c.daemon_failure_reason.clone(),

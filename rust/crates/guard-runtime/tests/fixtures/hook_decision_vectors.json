@@ -1,6 +1,6 @@
 {
  "schema": "hook-decision-vectors.v1",
- "description": "Language-neutral vectors for HookDecide. `expect` is a recursive subset of the decoded payload (objects match by listed keys, arrays and scalars exactly); `error` is the resident error code.",
+ "description": "Language-neutral vectors for HookDecide. `expect` was captured by driving the pre-change Python generic-hook decision path (RTM-010 base) with the same inputs; it is a recursive subset of the decoded payload (objects match by listed keys, arrays and scalars exactly); `error` is the resident error code.",
  "vectors": [
   {
    "name": "relax_asks_verified_apply_patch_first",
@@ -30,7 +30,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "verified_apply_patch"
     ],
@@ -68,7 +67,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "benign_native_file_read"
     ],
@@ -106,7 +104,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "benign_tool_action"
     ],
@@ -145,7 +142,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "benign_tool_action"
     ],
@@ -183,13 +179,28 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "warn",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "warn",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "current_config_action": "warn"
+      "current_config_action": "warn",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
-    },
-    "needs_facts": []
+    }
    }
   },
   {
@@ -280,11 +291,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "warn",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
      "action_without_tool_grant": "warn",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "current_config_action": "warn"
+      "current_config_action": "warn",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -318,8 +344,26 @@
    },
    "expect": {
     "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "allow"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "allow",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -352,9 +396,26 @@
    },
    "expect": {
     "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "review",
-     "grant_lookups_allowed": false
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -386,8 +447,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "require-reapproval"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "require-reapproval",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "require-reapproval",
+     "action_without_tool_grant": "require-reapproval",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "require-reapproval",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -422,8 +502,24 @@
     "needs_facts": [],
     "event_name": "UserPromptSubmit",
     "composition": {
+     "event_name": "UserPromptSubmit",
+     "effective_event_name": "UserPromptSubmit",
      "composed_action": "review",
-     "tool_eligibility_needed": false
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": false,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -455,7 +551,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "prompt_clean"
     ],
@@ -493,8 +588,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "UserPromptSubmit",
     "composition": {
-     "composed_action": "warn"
+     "event_name": "UserPromptSubmit",
+     "effective_event_name": "UserPromptSubmit",
+     "composed_action": "warn",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": false,
+     "action_with_tool_grant": "warn",
+     "action_without_tool_grant": "warn",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "warn",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -528,8 +642,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "UserPromptSubmit",
     "composition": {
-     "composed_action": "review"
+     "event_name": "UserPromptSubmit",
+     "effective_event_name": "UserPromptSubmit",
+     "composed_action": "review",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": false,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -561,7 +694,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "post_tool_read_only_inspection"
     ],
@@ -597,7 +729,28 @@
     }
    },
    "expect": {
-    "event_name": "PreToolUse"
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "allow",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
+    }
    }
   },
   {
@@ -626,10 +779,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": null,
     "composition": {
      "event_name": null,
      "effective_event_name": "PreToolUse",
-     "tool_eligibility_needed": false
+     "composed_action": "allow",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": false,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -665,10 +835,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "block",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
      "action_with_tool_grant": "block",
-     "action_without_tool_grant": "block"
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -704,9 +891,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "allow",
-     "action_with_tool_grant": "allow"
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -742,9 +947,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "sandbox-required",
-     "action_with_tool_grant": "allow"
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "sandbox-required",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -780,8 +1003,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "block"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "block",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -817,8 +1059,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "block"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "block",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -854,9 +1115,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PostToolUse",
     "composition": {
+     "event_name": "PostToolUse",
+     "effective_event_name": "PostToolUse",
      "composed_action": "require-reapproval",
-     "action_with_tool_grant": "allow"
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": false,
+     "action_with_tool_grant": "require-reapproval",
+     "action_without_tool_grant": "require-reapproval",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -892,8 +1171,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "block"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "block",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -925,14 +1223,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "block",
      "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
      "permission_decision_reason": "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action.",
      "daemon_failure_reason": "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action.",
      "token": {
+      "current_config_action": "allow",
       "daemon_hint_disposition": "tightened_to_block",
-      "daemon_hint_reason_code": "untrusted_daemon_strict_hint_tightened_to_block"
+      "daemon_hint_reason_code": "untrusted_daemon_strict_hint_tightened_to_block",
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -965,9 +1275,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "block",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action.",
+     "daemon_failure_reason": "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action.",
      "token": {
-      "daemon_hint_disposition": "preserved_current_block"
+      "current_config_action": "block",
+      "daemon_hint_disposition": "preserved_current_block",
+      "daemon_hint_reason_code": "untrusted_daemon_strict_hint_tightened_to_block",
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1000,13 +1327,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "allow",
      "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
      "permission_decision_reason": "HOL Guard received an unauthenticated hint that the daemon was unreachable in permissive mode; the current local policy action was preserved.",
+     "daemon_failure_reason": "HOL Guard received an unauthenticated hint that the daemon was unreachable in permissive mode; the current local policy action was preserved.",
      "token": {
+      "current_config_action": "allow",
       "daemon_hint_disposition": "preserved_current_action",
-      "daemon_hint_reason_code": "untrusted_daemon_permissive_hint_preserved_current_action"
+      "daemon_hint_reason_code": "untrusted_daemon_permissive_hint_preserved_current_action",
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1039,9 +1379,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "review",
-     "permission_decision_reason": "upstream said no"
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": "upstream said no",
+     "daemon_failure_reason": "upstream said no",
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": "preserved_current_action",
+      "daemon_hint_reason_code": "untrusted_daemon_permissive_hint_preserved_current_action",
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -1073,8 +1431,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "permission_decision_reason": "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": "HOL Guard daemon was unreachable; preserving the existing deny decision for this action.",
+     "daemon_failure_reason": "HOL Guard daemon was unreachable; preserving the existing deny decision for this action.",
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": "preserved_current_action",
+      "daemon_hint_reason_code": "untrusted_daemon_permissive_hint_preserved_current_action",
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -1106,11 +1483,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "allow",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
      "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "daemon_hint_disposition": null
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1143,10 +1535,190 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "allow",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "daemon_hint_disposition": null
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
+    }
+   }
+  },
+  {
+   "name": "payload_permission_reason_untouched_without_daemon_hint",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "allow",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {},
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": "why"
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "allow",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
+    }
+   }
+  },
+  {
+   "name": "grant_cannot_lower_action_when_lookups_not_allowed",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "review",
+     "has_configured_override": false,
+     "has_narrow_override": true,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {
+      "verified_apply_patch": false,
+      "benign_native_file_read": false,
+      "benign_tool_action": false
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "review",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
+     }
+    }
+   }
+  },
+  {
+   "name": "edge_block_beats_tool_grant",
+   "query": {
+    "kind": "compose_current",
+    "inputs": {
+     "harness": "codex",
+     "canonical_harness": "codex",
+     "event_fields": {
+      "hook_event_name": "PreToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "allow",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {},
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": {
+      "policy_action": "block",
+      "minimum_action": null,
+      "decision": null
+     },
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null
+    }
+   },
+   "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
+    "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "block",
+     "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1179,11 +1751,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "block",
      "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "trusted_cli_action": "block"
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": "block",
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1216,10 +1803,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "review",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "trusted_cli_action": "allow"
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": "allow",
+      "untrusted_payload_action": null,
+      "untrusted_payload_action_disposition": null,
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1252,12 +1855,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "review",
      "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "review",
+     "action_without_tool_grant": "review",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
+      "current_config_action": "review",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
       "untrusted_payload_action": "allow",
-      "untrusted_payload_action_disposition": "applied"
+      "untrusted_payload_action_disposition": "applied",
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1290,8 +1907,27 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "block"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "block",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": "block",
+      "untrusted_payload_action_disposition": "applied",
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -1323,10 +1959,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "require-reapproval",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "require-reapproval",
+     "action_without_tool_grant": "require-reapproval",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "untrusted_payload_action": "require-reapproval"
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": "require-reapproval",
+      "untrusted_payload_action_disposition": "applied",
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1359,7 +2011,6 @@
     }
    },
    "expect": {
-    "kind": "compose_current",
     "needs_facts": [
      "benign_tool_action"
     ],
@@ -1397,10 +2048,23 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "allow",
      "grant_lookups_allowed": true,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "allow",
+     "action_without_tool_grant": "allow",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
       "untrusted_payload_action": "block",
       "untrusted_payload_action_disposition": "ignored",
       "untrusted_payload_action_reason": "untrusted_hook_payload_hint_ignored_guard_verified_benign"
@@ -1438,10 +2102,26 @@
     }
    },
    "expect": {
+    "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
      "composed_action": "block",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "block",
+     "action_without_tool_grant": "block",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
      "token": {
-      "untrusted_payload_action_disposition": "applied"
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": "block",
+      "untrusted_payload_action_disposition": "applied",
+      "untrusted_payload_action_reason": null
      }
     }
    }
@@ -1475,8 +2155,26 @@
    },
    "expect": {
     "needs_facts": [],
+    "event_name": "PreToolUse",
     "composition": {
-     "composed_action": "require-reapproval"
+     "event_name": "PreToolUse",
+     "effective_event_name": "PreToolUse",
+     "composed_action": "require-reapproval",
+     "grant_lookups_allowed": false,
+     "tool_eligibility_needed": true,
+     "action_with_tool_grant": "require-reapproval",
+     "action_without_tool_grant": "require-reapproval",
+     "permission_decision_reason": null,
+     "daemon_failure_reason": null,
+     "token": {
+      "current_config_action": "allow",
+      "daemon_hint_disposition": null,
+      "daemon_hint_reason_code": null,
+      "trusted_cli_action": null,
+      "untrusted_payload_action": "require-reapproval",
+      "untrusted_payload_action_disposition": "applied",
+      "untrusted_payload_action_reason": null
+     }
     }
    }
   },
@@ -1495,7 +2193,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "allow",
     "validation_reason": null
    }
@@ -1515,7 +2212,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "review",
     "validation_reason": null
    }
@@ -1535,7 +2231,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "block",
     "validation_reason": null
    }
@@ -1555,7 +2250,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "require-reapproval",
     "validation_reason": "approval_reuse_context_changed_after_claim"
    }
@@ -1575,7 +2269,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "require-reapproval",
     "validation_reason": "approval_reuse_context_changed_after_claim"
    }
@@ -1595,7 +2288,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "require-reapproval",
     "validation_reason": "approval_reuse_integrity_failure"
    }
@@ -1615,7 +2307,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "require-reapproval",
     "validation_reason": "approval_reuse_claim_failed"
    }
@@ -1635,7 +2326,6 @@
     }
    },
    "expect": {
-    "kind": "post_claim_reuse",
     "current_action": "block",
     "validation_reason": "approval_reuse_claim_failed"
    }
@@ -1709,9 +2399,26 @@
    "expect": {
     "policy_action": "allow",
     "observed_policy_action": "review",
-    "silent_review": null,
-    "record_receipt": true,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
     "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
      "authoritative_action": "allow",
      "observed_policy_action": "review"
     },
@@ -1722,9 +2429,25 @@
       "authoritative_action": "allow"
      }
     ],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
     "directive": {
+     "route": "render",
      "queue_observe_request": true,
-     "queue_approval_request": false
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -1780,7 +2503,51 @@
    },
    "expect": {
     "policy_action": "warn",
-    "observed_policy_action": null
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "warn",
+     "configured_policy_action": "warn",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "warn",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "warn",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": false,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -1835,19 +2602,53 @@
    },
    "expect": {
     "policy_action": "block",
-    "record_receipt": true,
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
     "silent_review": {
      "action": "review",
      "reason": "Current local policy requires review for this action."
     },
+    "record_receipt": true,
     "activity": {
      "phase": "pre",
      "reuse_status": "not-applicable",
      "prompted": false
     },
     "directive": {
+     "route": "render",
+     "queue_observe_request": false,
      "queue_approval_request": false,
-     "envelope_decision": "block"
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -1902,9 +2703,54 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
     "silent_review": {
      "action": "review",
      "reason": "A saved approval does not cover this action under current protection."
+    },
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "rejected",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -1959,9 +2805,54 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "require-reapproval",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
     "silent_review": {
      "action": "require-reapproval",
      "reason": "No applicable policy or valid saved approval allows this action."
+    },
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2016,9 +2907,54 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": "review",
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
     "silent_review": {
      "action": "review",
      "reason": "The trusted hook invocation requires review for this action."
+    },
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2074,18 +3010,50 @@
    },
    "expect": {
     "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
     "silent_review": null,
+    "record_receipt": true,
     "activity": {
      "phase": "pre",
      "reuse_status": "not-applicable",
      "prompted": true
     },
     "directive": {
-     "queue_approval_request": true,
      "route": "render",
-     "after_json": "native_response",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
      "exit_code": 0,
-     "include_remediation": true
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2140,8 +3108,51 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
-     "queue_approval_request": false
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2197,14 +3208,50 @@
    },
    "expect": {
     "policy_action": "allow",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
     "approval_reuse_source": "saved_policy_decision",
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": "allow",
+     "approval_reuse_source": "saved_policy_decision",
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": false,
     "activity": {
+     "phase": "pre",
      "reuse_status": "accepted",
      "prompted": false
     },
-    "policy_composition": {
-     "saved_policy_action": "allow",
-     "approval_reuse_source": "saved_policy_decision"
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2259,8 +3306,51 @@
     }
    },
    "expect": {
+    "policy_action": "allow",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": false,
     "activity": {
-     "reuse_status": "not-applicable"
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2315,7 +3405,52 @@
     }
    },
    "expect": {
-    "approval_reuse_source": "claimed_saved_policy_decision"
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": "claimed_saved_policy_decision",
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": "claimed_saved_policy_decision",
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -2369,7 +3504,52 @@
     }
    },
    "expect": {
-    "approval_reuse_source": "saved_policy_decision"
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": "saved_policy_decision",
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": "saved_policy_decision",
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -2423,7 +3603,52 @@
     }
    },
    "expect": {
-    "approval_reuse_source": "saved_policy_integrity"
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": "saved_policy_integrity",
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": "saved_policy_integrity",
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -2477,7 +3702,52 @@
     }
    },
    "expect": {
-    "approval_reuse_source": "invalidated_saved_policy"
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": "invalidated_saved_policy",
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": "invalidated_saved_policy",
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -2531,7 +3801,52 @@
     }
    },
    "expect": {
-    "approval_reuse_source": null
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -2586,7 +3901,51 @@
    },
    "expect": {
     "policy_action": "allow",
-    "record_receipt": false
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": false,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -2640,7 +3999,51 @@
     }
    },
    "expect": {
-    "record_receipt": true
+    "policy_action": "allow",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "codex_native_reason": "never",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
+     "envelope_decision": "allow"
+    }
    }
   },
   {
@@ -2694,11 +4097,42 @@
     }
    },
    "expect": {
+    "policy_action": "allow",
+    "observed_policy_action": null,
+    "effective_event_name": "PostToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
     "activity": {
      "phase": "post"
     },
     "directive": {
-     "route": "silent_exit"
+     "route": "silent_exit",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0
     }
    }
   },
@@ -2753,10 +4187,47 @@
     }
    },
    "expect": {
+    "policy_action": "allow",
+    "observed_policy_action": null,
+    "effective_event_name": "PostToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "post"
+    },
     "directive": {
      "route": "render",
-     "after_json": "post_tool_envelope",
-     "try_json_document": true
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": true,
+     "after_json": "post_tool_envelope"
     }
    }
   },
@@ -2771,7 +4242,7 @@
       "hook_event_name": "PostToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "allow",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -2812,10 +4283,48 @@
    },
    "expect": {
     "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PostToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "post"
+    },
     "directive": {
      "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 1,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
      "after_json": "native_response",
-     "exit_code": 1
+     "system_message": "none"
     }
    }
   },
@@ -2830,7 +4339,7 @@
       "hook_event_name": "PostToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "allow",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -2870,8 +4379,46 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PostToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "post"
+    },
     "directive": {
      "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 2,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
      "after_json": "post_tool_envelope"
     }
    }
@@ -2927,8 +4474,49 @@
     }
    },
    "expect": {
+    "policy_action": "allow",
+    "observed_policy_action": null,
+    "effective_event_name": "Notification",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
     "activity": {
      "phase": "none"
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": false,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -2943,7 +4531,7 @@
       "hook_name": "preToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "allow",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -2983,11 +4571,44 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "copilot",
-     "exit_code": 0,
      "queue_observe_request": false,
-     "queue_approval_request": false
+     "queue_approval_request": false,
+     "exit_code": 0
     }
    }
   },
@@ -3002,7 +4623,7 @@
       "hook_name": "preToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "allow",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3042,11 +4663,50 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
      "try_json_document": true,
      "after_json": "fallback_envelope",
-     "exit_code": 0
+     "envelope_decision": "block"
     }
    }
   },
@@ -3061,7 +4721,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3101,10 +4761,47 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "exit_block",
-     "emitter": "grok",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
      "exit_code": null,
+     "emitter": "grok",
+     "codex_native_reason": "never",
+     "include_remediation": true,
      "stderr_only_on_nonzero_exit": true
     }
    }
@@ -3120,7 +4817,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3160,9 +4857,48 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "exit_block",
-     "emitter": "grok"
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": null,
+     "emitter": "grok",
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "stderr_only_on_nonzero_exit": true
     }
    }
   },
@@ -3217,11 +4953,51 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "render",
-     "emitter": "zcode",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
      "exit_code": 0,
-     "after_json": "native_response"
+     "emitter": "zcode",
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -3236,7 +5012,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3276,10 +5052,48 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "exit_block",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 2,
      "emitter": "zcode",
-     "exit_code": 2
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "stderr_only_on_nonzero_exit": false
     }
    }
   },
@@ -3294,7 +5108,7 @@
       "hook_event_name": "PostToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3334,9 +5148,49 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PostToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "post"
+    },
     "directive": {
      "route": "render",
-     "exit_code": 2
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 2,
+     "emitter": "zcode",
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
     }
    }
   },
@@ -3351,7 +5205,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3391,10 +5245,47 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "exit_block",
-     "emitter": "default",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
      "exit_code": 2,
+     "emitter": "default",
+     "codex_native_reason": "never",
+     "include_remediation": true,
      "stderr_only_on_nonzero_exit": false
     }
    }
@@ -3450,9 +5341,48 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "exit_block",
-     "exit_code": 2
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 2,
+     "emitter": "default",
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "stderr_only_on_nonzero_exit": false
     }
    }
   },
@@ -3467,7 +5397,7 @@
       "hook_event_name": "UserPromptSubmit"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3507,10 +5437,46 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "UserPromptSubmit",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "none"
+    },
     "directive": {
      "route": "exit_block",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
      "emitter": "pi",
-     "exit_code": 0
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "stderr_only_on_nonzero_exit": false
     }
    }
   },
@@ -3525,7 +5491,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3565,10 +5531,48 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "exit_block",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 2,
      "emitter": "devin",
-     "exit_code": 2
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "stderr_only_on_nonzero_exit": false
     }
    }
   },
@@ -3583,7 +5587,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3623,10 +5627,49 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
      "route": "render",
-     "after_json": "fallback_envelope",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
      "exit_code": 2,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
      "envelope_decision": "block"
     }
    }
@@ -3642,7 +5685,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3682,8 +5725,50 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
-     "exit_code": 1
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 1,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
+     "envelope_decision": "block"
     }
    }
   },
@@ -3698,7 +5783,7 @@
       "hook_event_name": "PreToolUse"
      },
      "tool_name_text": "Bash",
-     "configured_action": "review",
+     "configured_action": "block",
      "has_configured_override": false,
      "has_narrow_override": false,
      "runtime_artifact_checked": false,
@@ -3738,8 +5823,50 @@
     }
    },
    "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
-     "exit_code": 1
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 1,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
+     "envelope_decision": "block"
     }
    }
   },
@@ -3766,8 +5893,8 @@
       "benign_tool_action": false
      },
      "cli_action": null,
-     "has_payload_action": false,
-     "payload_action": null,
+     "has_payload_action": true,
+     "payload_action": "block",
      "native_edge": null,
      "daemon_status": null,
      "fail_mode": null,
@@ -3795,9 +5922,48 @@
    },
    "expect": {
     "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": "block",
+     "untrusted_hook_payload_hint_disposition": "applied",
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
-     "after_json": "fallback_envelope",
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
      "exit_code": 0,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
      "envelope_decision": "block"
     }
    }
@@ -3854,8 +6020,52 @@
    },
    "expect": {
     "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": {
+     "action": "review",
+     "reason": "Current local policy requires review for this action."
+    },
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
     "directive": {
-     "exit_code": 0
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
+     "envelope_decision": "block"
     }
    }
   },
@@ -3910,11 +6120,51 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "never",
+     "include_remediation": true,
      "terminal_notice": true,
-     "system_message": "claude_punctuated",
+     "try_json_document": false,
      "after_json": "native_response",
-     "exit_code": 0
+     "system_message": "claude_punctuated"
     }
    }
   },
@@ -3969,9 +6219,50 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": true,
      "try_json_document": true,
-     "after_json": "fallback_envelope"
+     "after_json": "fallback_envelope",
+     "envelope_decision": "block"
     }
    }
   },
@@ -4026,9 +6317,51 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": true,
      "try_json_document": false,
-     "after_json": "native_response"
+     "after_json": "native_response",
+     "system_message": "claude_punctuated"
     }
    }
   },
@@ -4083,8 +6416,48 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "UserPromptSubmit",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "none"
+    },
     "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0,
+     "emitter": "default",
      "codex_native_reason": "always",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
      "system_message": "codex_prompt"
     }
    }
@@ -4140,8 +6513,50 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
      "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
      "system_message": "none"
     }
    }
@@ -4197,13 +6612,152 @@
     }
    },
    "expect": {
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
     "directive": {
-     "codex_native_reason": "never"
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 2,
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "fallback_envelope",
+     "envelope_decision": "block"
     }
    }
   },
   {
-   "name": "evidence_tail_orders_grant_ignored_relaxed_daemon_observe",
+   "name": "pi_post_tool_block_emits_through_pi_adapter",
+   "query": {
+    "kind": "finalize",
+    "inputs": {
+     "harness": "pi",
+     "canonical_harness": "pi",
+     "event_fields": {
+      "hook_event_name": "PostToolUse"
+     },
+     "tool_name_text": "Bash",
+     "configured_action": "block",
+     "has_configured_override": false,
+     "has_narrow_override": false,
+     "runtime_artifact_checked": false,
+     "prompt_nonblank": false,
+     "has_command_text": true,
+     "facts": {
+      "verified_apply_patch": false,
+      "benign_native_file_read": false,
+      "benign_tool_action": false
+     },
+     "cli_action": null,
+     "has_payload_action": false,
+     "payload_action": null,
+     "native_edge": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "permission_decision_reason": null
+    },
+    "settled": {
+     "current_policy_action": "block",
+     "tool_grant_applied": false,
+     "tool_grant_identity": null,
+     "reuse_action": "block",
+     "reuse_status": "not-applicable",
+     "has_stored_decision": false,
+     "has_ignored_integrity": false,
+     "saved_decision_present": false,
+     "stored_policy_action": null,
+     "claimed_context": false,
+     "asks_for_approval": true,
+     "observe_mode": false,
+     "has_approval_requests_list": false,
+     "json_requested": false,
+     "output_stream_present": false,
+     "replay_artifact_id": false,
+     "payload_action_is_string": false
+    }
+   },
+   "expect": {
+    "policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PostToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "block",
+     "configured_policy_action": "block",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "block",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "block",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "post"
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 1,
+     "emitter": "pi",
+     "codex_native_reason": "never",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
+   }
+  },
+  {
+   "name": "evidence_tail_orders_grant_ignored_relaxed_daemon",
    "query": {
     "kind": "finalize",
     "inputs": {
@@ -4229,7 +6783,7 @@
      "payload_action": "block",
      "native_edge": null,
      "daemon_status": "error",
-     "fail_mode": "strict",
+     "fail_mode": "permissive",
      "permission_decision_reason": null
     },
     "settled": {
@@ -4239,7 +6793,7 @@
       "tool_identity_hash": "h1",
       "capability": "cap"
      },
-     "reuse_action": "block",
+     "reuse_action": "allow",
      "reuse_status": "not-applicable",
      "has_stored_decision": false,
      "has_ignored_integrity": false,
@@ -4247,7 +6801,7 @@
      "stored_policy_action": null,
      "claimed_context": false,
      "asks_for_approval": true,
-     "observe_mode": true,
+     "observe_mode": false,
      "has_approval_requests_list": false,
      "json_requested": false,
      "output_stream_present": false,
@@ -4257,7 +6811,30 @@
    },
    "expect": {
     "policy_action": "allow",
-    "observed_policy_action": "block",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "warn",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "relaxed_verified_benign",
+     "configured_default_disposition_reason_code": "configured_default_relaxed_guard_verified_benign",
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": "block",
+     "untrusted_hook_payload_hint_disposition": "ignored",
+     "untrusted_hook_payload_hint_reason_code": "untrusted_hook_payload_hint_ignored_guard_verified_benign",
+     "daemon_hint_disposition": "preserved_current_action",
+     "daemon_hint_reason_code": "untrusted_daemon_permissive_hint_preserved_current_action",
+     "daemon_hint_trust": "untrusted_hook_payload",
+     "daemon_status": "error",
+     "fail_mode": "permissive",
+     "current_composed_action": "allow",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": true,
+     "authoritative_action": "allow",
+     "observed_policy_action": null
+    },
     "evidence_tail": [
      {
       "source": "trusted_local_tool_grant",
@@ -4283,23 +6860,22 @@
       "source": "daemon_hint_trust",
       "input_source": "untrusted_hook_payload",
       "status": "monotonic-only",
-      "disposition": "tightened_to_block",
-      "reason_code": "untrusted_daemon_strict_hint_tightened_to_block"
-     },
-     {
-      "source": "observe_mode",
-      "observed_policy_action": "block",
-      "authoritative_action": "allow"
+      "disposition": "preserved_current_action",
+      "reason_code": "untrusted_daemon_permissive_hint_preserved_current_action"
      }
     ],
-    "policy_composition": {
-     "configured_default_disposition": "relaxed_verified_benign",
-     "configured_default_disposition_reason_code": "configured_default_relaxed_guard_verified_benign",
-     "daemon_hint_trust": "untrusted_hook_payload",
-     "local_tool_grant": true,
-     "current_composed_action": "allow",
-     "current_config_action": "warn",
-     "configured_policy_action": "review"
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": false
+    },
+    "directive": {
+     "route": "copilot",
+     "queue_observe_request": false,
+     "queue_approval_request": false,
+     "exit_code": 0
     }
    }
   },
@@ -4354,7 +6930,52 @@
     }
    },
    "expect": {
-    "evidence_tail": []
+    "policy_action": "review",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "review",
+     "configured_policy_action": "review",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": null,
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "review",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "review",
+     "observed_policy_action": null
+    },
+    "evidence_tail": [],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
@@ -4408,6 +7029,31 @@
     }
    },
    "expect": {
+    "policy_action": "require-reapproval",
+    "observed_policy_action": null,
+    "effective_event_name": "PreToolUse",
+    "approval_reuse_source": null,
+    "policy_composition": {
+     "current_config_action": "allow",
+     "configured_policy_action": "allow",
+     "configured_default_disposition": "applied",
+     "configured_default_disposition_reason_code": null,
+     "trusted_cli_override": "require-reapproval",
+     "untrusted_hook_payload_hint": null,
+     "untrusted_hook_payload_hint_disposition": null,
+     "untrusted_hook_payload_hint_reason_code": null,
+     "daemon_hint_disposition": null,
+     "daemon_hint_reason_code": null,
+     "daemon_hint_trust": null,
+     "daemon_status": null,
+     "fail_mode": null,
+     "current_composed_action": "require-reapproval",
+     "saved_policy_action": null,
+     "approval_reuse_source": null,
+     "local_tool_grant": false,
+     "authoritative_action": "require-reapproval",
+     "observed_policy_action": null
+    },
     "evidence_tail": [
      {
       "source": "guard_action_normalizer",
@@ -4417,7 +7063,27 @@
       "original_type": "str",
       "normalized_action": "require-reapproval"
      }
-    ]
+    ],
+    "silent_review": null,
+    "record_receipt": true,
+    "activity": {
+     "phase": "pre",
+     "reuse_status": "not-applicable",
+     "prompted": true
+    },
+    "directive": {
+     "route": "render",
+     "queue_observe_request": false,
+     "queue_approval_request": true,
+     "exit_code": 0,
+     "emitter": "default",
+     "codex_native_reason": "with_approval_context",
+     "include_remediation": true,
+     "terminal_notice": false,
+     "try_json_document": false,
+     "after_json": "native_response",
+     "system_message": "none"
+    }
    }
   },
   {
