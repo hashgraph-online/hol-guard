@@ -1,0 +1,503 @@
+{
+  "schema": "hol-guard.runtime-majority-scope.v1",
+  "metric": {
+    "name": "runtime_majority_share",
+    "formula": "rust_runtime_loc / (rust_runtime_loc + python_runtime_loc)",
+    "target_share": 0.7,
+    "loc_definition": "Physical lines with at least one non-comment token; blank lines and comments excluded. Python docstrings count as code lines. Rust doc and block comments do not.",
+    "runtime_scope": "Production functions/modules synchronously used from request admission through decision, authorization/consume, process/tool dispatch, response enforcement and owned cleanup, for the product runtime roots: hook HTTP/CLI events, guard-run, direct command/runtime evaluation, package shims/protect/launch, MCP proxy/surface/tool calls and supported direct/frozen routes.",
+    "global_exclusions": "Tests, fixture constructors, benchmarks, generated catalogs/programs, vendored code, comments/blank lines, offline compiler/authoring-only code, frontend assets, and genuinely asynchronous control/persistence code off the request path."
+  },
+  "python": {
+    "package_root": "src/codex_plugin_scanner",
+    "import_policy": "static ast closure over eager and lazy imports (TYPE_CHECKING blocks ignored, literal importlib.import_module followed); module granularity",
+    "roots": [
+      {
+        "module": "codex_plugin_scanner.cli",
+        "surface": "process_entry"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.frozen_codex_runtime",
+        "surface": "process_entry"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.frozen_daemon_runtime",
+        "surface": "process_entry"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.frozen_runtime_commands",
+        "surface": "process_entry"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.cli.commands_hook",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.daemon.server",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.daemon.hook_worker",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.daemon.hook_process_entrypoint",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.daemon.hook_process_runner",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.daemon.runtime_hook_scheduler",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.bounded_hook_http",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.claude_frozen_hook",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.cursor_hook_config",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.claude_daemon_hook_bridge",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.adapters.desktop_hook_proxy",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.native_hook_edge",
+        "surface": "hook_http_and_cli_events"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.native_runtime",
+        "surface": "native_resident_transport"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.native_resident_client",
+        "surface": "native_resident_transport"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.native_execution",
+        "surface": "native_resident_transport"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.runtime.runner",
+        "surface": "guard_run_and_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.launcher",
+        "surface": "guard_run_and_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.durable_harness_launcher",
+        "surface": "guard_run_and_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.cli.commands_dispatch_proxy",
+        "surface": "guard_run_and_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.runtime.command_evaluation",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.runtime.native_command_evaluation",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.runtime.command_inspection",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.cli.commands_dispatch_local",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.cli.commands_verified_read",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.cli.commands_contained_write",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.cli.commands_preflight",
+        "surface": "direct_command_runtime_evaluation"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.shims",
+        "surface": "package_shims_protect_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.package_shim_frozen",
+        "surface": "package_shims_protect_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.package_shim_gate",
+        "surface": "package_shims_protect_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.protect",
+        "surface": "package_shims_protect_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.native_package_authority",
+        "surface": "package_shims_protect_launch"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.proxy.runtime_mcp",
+        "surface": "mcp_proxy_surface_tool_calls"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.proxy.stdio",
+        "surface": "mcp_proxy_surface_tool_calls"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.proxy.remote",
+        "surface": "mcp_proxy_surface_tool_calls"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.runtime.surface_server",
+        "surface": "mcp_proxy_surface_tool_calls"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.mcp_tool_call_evaluation",
+        "surface": "mcp_proxy_surface_tool_calls"
+      },
+      {
+        "module": "codex_plugin_scanner.guard.mcp_tool_calls",
+        "surface": "mcp_proxy_surface_tool_calls"
+      }
+    ],
+    "exclusions": [
+      {
+        "id": "scanner-product",
+        "category": "offline_scanner_product",
+        "reason": "Plugin-scanner product (offline scan, scoring, reporting); reached from the package __init__/CLI hub or AIBOM inventory but never invoked on a request-admission-to-enforcement route.",
+        "path": [
+          "src/codex_plugin_scanner/scanner.py",
+          "src/codex_plugin_scanner/scanner_support.py",
+          "src/codex_plugin_scanner/checks/*",
+          "src/codex_plugin_scanner/ecosystems/*",
+          "src/codex_plugin_scanner/_scanner_commands.py",
+          "src/codex_plugin_scanner/verification.py",
+          "src/codex_plugin_scanner/reporting.py",
+          "src/codex_plugin_scanner/trust_*.py",
+          "src/codex_plugin_scanner/lint_fixes.py",
+          "src/codex_plugin_scanner/quality_artifact.py",
+          "src/codex_plugin_scanner/suppressions.py",
+          "src/codex_plugin_scanner/contributor_review.py",
+          "src/codex_plugin_scanner/policy.py",
+          "src/codex_plugin_scanner/rules/*",
+          "src/codex_plugin_scanner/repo_detect.py",
+          "src/codex_plugin_scanner/deepseek_harness_support.py",
+          "src/codex_plugin_scanner/markdown_support.py",
+          "src/codex_plugin_scanner/pinned_https.py",
+          "src/codex_plugin_scanner/cli_ui.py",
+          "src/codex_plugin_scanner/install_integrity.py"
+        ]
+      },
+      {
+        "id": "aibom-inventory",
+        "category": "offline_reporting",
+        "reason": "AIBOM inventory/export and trust-metadata reporting; control-plane reads for dashboards/cloud sync, not on the enforcement path. aibom_detection and the inventory_contract fingerprint/model modules stay in scope: adapter detect() and hashing run synchronously during launch.",
+        "path": [
+          "src/codex_plugin_scanner/guard/inventory_cisco.py",
+          "src/codex_plugin_scanner/guard/aibom_cli.py",
+          "src/codex_plugin_scanner/guard/aibom_cloud_contract.py",
+          "src/codex_plugin_scanner/guard/aibom_collection.py",
+          "src/codex_plugin_scanner/guard/aibom_commands.py",
+          "src/codex_plugin_scanner/guard/aibom_content_upload.py",
+          "src/codex_plugin_scanner/guard/aibom_models.py",
+          "src/codex_plugin_scanner/guard/aibom_reporting.py",
+          "src/codex_plugin_scanner/guard/aibom_symlink.py",
+          "src/codex_plugin_scanner/guard/aibom_sync.py",
+          "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
+          "src/codex_plugin_scanner/guard/local_risk_report.py",
+          "src/codex_plugin_scanner/guard/insights_share.py",
+          "src/codex_plugin_scanner/guard/access_graph_events.py",
+          "src/codex_plugin_scanner/guard/daemon/aibom_inventory_persist.py",
+          "src/codex_plugin_scanner/guard/runtime/trust_attestation.py"
+        ]
+      },
+      {
+        "id": "cloud-review-async",
+        "category": "async_control_plane",
+        "reason": "Wake-driven/background Cloud Review sync, replay and outbox delivery; asynchronous persistence and network delivery outside the synchronous request path.",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/cloud_review_*.py",
+          "src/codex_plugin_scanner/guard/runtime/review_event_delivery.py",
+          "src/codex_plugin_scanner/guard/runtime/review_event_display.py",
+          "src/codex_plugin_scanner/guard/runtime/review_policy_memory_executor.py",
+          "src/codex_plugin_scanner/guard/runtime/native_workspace_review_replay*.py",
+          "src/codex_plugin_scanner/guard/runtime/native_workspace_review_enrollment.py",
+          "src/codex_plugin_scanner/guard/runtime/native_workspace_review_queue.py",
+          "src/codex_plugin_scanner/guard/runtime/native_business_review_*.py",
+          "src/codex_plugin_scanner/guard/store_review_event_acknowledgment.py",
+          "src/codex_plugin_scanner/guard/store_review_event_sequence_recovery.py",
+          "src/codex_plugin_scanner/guard/sqlite_cloud_review_recovery.py",
+          "src/codex_plugin_scanner/guard/cloud_exception_requests.py",
+          "src/codex_plugin_scanner/guard/daemon/cloud_review_settings*.py",
+          "src/codex_plugin_scanner/guard/daemon/first_cloud_sync.py",
+          "src/codex_plugin_scanner/guard/daemon/business_review_*.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud_review.py"
+        ]
+      },
+      {
+        "id": "cloud-command-queue",
+        "category": "async_control_plane",
+        "reason": "Guard Cloud command-queue worker and executors; remote job processing, not request-path enforcement.",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/command_queue*.py",
+          "src/codex_plugin_scanner/guard/runtime/command_executors.py",
+          "src/codex_plugin_scanner/guard/daemon/command_queue_worker.py"
+        ]
+      },
+      {
+        "id": "extension-authoring",
+        "category": "offline_authoring",
+        "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane). Modules the hook evaluation calls synchronously (package_json_scripts, custom_extension_suggestion, mcp_server_contribution, extension_contribution) stay in scope; only continuity sync, catalog sync/handshake and builder/control surfaces are excluded.",
+        "path": [
+          "src/codex_plugin_scanner/guard/extension_builder/*",
+          "src/codex_plugin_scanner/guard/cli/extension_builder_commands.py",
+          "src/codex_plugin_scanner/guard/cli/extension_catalog_reads.py",
+          "src/codex_plugin_scanner/guard/runtime/custom_extension_continuity*.py",
+          "src/codex_plugin_scanner/guard/cli/extension_controls_commands.py",
+          "src/codex_plugin_scanner/guard/runtime/local_cli_help.py",
+          "src/codex_plugin_scanner/guard/runtime/local_mcp_probe.py",
+          "src/codex_plugin_scanner/guard/runtime/extension_catalog_sync.py",
+          "src/codex_plugin_scanner/guard/runtime/extension_catalog_handshake.py",
+          "src/codex_plugin_scanner/guard/daemon/extension_control_*.py",
+          "src/codex_plugin_scanner/guard/daemon/local_cli_profiles_api.py",
+          "src/codex_plugin_scanner/guard/daemon/mcp_discovery_jobs.py",
+          "src/codex_plugin_scanner/guard/daemon/mcp_policy_decisions.py",
+          "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
+          "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py"
+        ]
+      },
+      {
+        "id": "harness-setup",
+        "category": "install_config",
+        "reason": "Codex/MCP setup, host inventory and registry browsing; configuration management, not enforcement.",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/codex_config_rpc.py",
+          "src/codex_plugin_scanner/guard/runtime/codex_host_inventory.py",
+          "src/codex_plugin_scanner/guard/runtime/codex_mcp_setup.py",
+          "src/codex_plugin_scanner/guard/runtime/mcp_registry.py",
+          "src/codex_plugin_scanner/guard/runtime/mcp_registry_setup.py",
+          "src/codex_plugin_scanner/guard/daemon/mcp_registry_undo.py",
+          "src/codex_plugin_scanner/guard/daemon/local_cli_registry_setup.py",
+          "src/codex_plugin_scanner/guard/runtime/network_status*.py"
+        ]
+      },
+      {
+        "id": "self-update",
+        "category": "install_config",
+        "reason": "Guard self-update orchestration (release download, staging, desktop apply, repair); CLI/daemon lifecycle, not request path.",
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/update_*.py",
+          "src/codex_plugin_scanner/guard/update_staging.py",
+          "src/codex_plugin_scanner/guard/daemon/dashboard_update*.py",
+          "src/codex_plugin_scanner/guard/daemon/update_refresh_program.py",
+          "src/codex_plugin_scanner/guard/onefile_extraction.py"
+        ]
+      },
+      {
+        "id": "install-uninstall-doctor",
+        "category": "install_config",
+        "reason": "Install/uninstall/doctor/connect/pairing/OAuth/desktop-bootstrap CLI flows and repair/inverse lifecycle.",
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/install_*.py",
+          "src/codex_plugin_scanner/guard/cli/uninstall_commands.py",
+          "src/codex_plugin_scanner/guard/cli/managed_install_*.py",
+          "src/codex_plugin_scanner/guard/cli/native_install_checks.py",
+          "src/codex_plugin_scanner/guard/cli/doctor_*.py",
+          "src/codex_plugin_scanner/guard/cli/desktop_*.py",
+          "src/codex_plugin_scanner/guard/cli/daemon_serve.py",
+          "src/codex_plugin_scanner/guard/cli/connect_flow.py",
+          "src/codex_plugin_scanner/guard/cli/connect_sync_result.py",
+          "src/codex_plugin_scanner/guard/cli/remote_pair_flow.py",
+          "src/codex_plugin_scanner/guard/cli/oauth_*.py",
+          "src/codex_plugin_scanner/guard/cli/trust_install_surface.py",
+          "src/codex_plugin_scanner/guard/cli/grok_hook_validation.py",
+          "src/codex_plugin_scanner/guard/cli/codex_authority_repair.py",
+          "src/codex_plugin_scanner/guard/cli/network_status_command.py",
+          "src/codex_plugin_scanner/guard/codex_hook_repair*.py",
+          "src/codex_plugin_scanner/guard/codex_publication_inverse*.py",
+          "src/codex_plugin_scanner/guard/cursor_hook_rebind.py",
+          "src/codex_plugin_scanner/guard/runtime_artifact_reconciliation.py",
+          "src/codex_plugin_scanner/guard/shim_refresh.py",
+          "src/codex_plugin_scanner/guard/project_folder_picker.py",
+          "src/codex_plugin_scanner/guard/dashboard_launcher.py"
+        ]
+      },
+      {
+        "id": "cli-presentation-and-parsing",
+        "category": "cli_only",
+        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded.",
+        "path": [
+          "src/codex_plugin_scanner/guard/cli/commands_parser*.py",
+          "src/codex_plugin_scanner/guard/cli/product.py",
+          "src/codex_plugin_scanner/guard/cli/docs.py",
+          "src/codex_plugin_scanner/guard/cli/progress.py",
+          "src/codex_plugin_scanner/guard/cli/commands_isolation.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_admin.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_cloud.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_desktop.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_mdm.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_document.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_records.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_risk_report.py",
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py",
+          "src/codex_plugin_scanner/guard/cli/render_*.py"
+        ]
+      },
+      {
+        "id": "mdm-health",
+        "category": "async_control_plane",
+        "reason": "Managed-device health-lease reporting, lifecycle and removal authorization; cadence-driven machine reporting independent of harness activity. Managed-policy loading (mdm.policy, contracts, network, file locks, device-key and integrity helpers) stays in scope because config loading and the daemon invoke it synchronously during hook handling.",
+        "path": [
+          "src/codex_plugin_scanner/guard/mdm/adapter_conformance.py",
+          "src/codex_plugin_scanner/guard/mdm/cloud_control.py",
+          "src/codex_plugin_scanner/guard/mdm/health_key_registration.py",
+          "src/codex_plugin_scanner/guard/mdm/health_lease.py",
+          "src/codex_plugin_scanner/guard/mdm/health_lease_ack.py",
+          "src/codex_plugin_scanner/guard/mdm/health_lease_contract.py",
+          "src/codex_plugin_scanner/guard/mdm/health_reporter.py",
+          "src/codex_plugin_scanner/guard/mdm/health_snapshot_validation.py",
+          "src/codex_plugin_scanner/guard/mdm/health_transport.py",
+          "src/codex_plugin_scanner/guard/mdm/lifecycle.py",
+          "src/codex_plugin_scanner/guard/mdm/protection_lease_contract.py",
+          "src/codex_plugin_scanner/guard/mdm/removal.py",
+          "src/codex_plugin_scanner/guard/mdm/user_health.py"
+        ]
+      },
+      {
+        "id": "dashboard-control-api",
+        "category": "control_plane",
+        "reason": "Approval-center/dashboard daemon APIs and daemon lifecycle plumbing (local CLI grants API, command-activity API, diagnostics, reapers); control plane served beside, not inside, the hook route.",
+        "path": [
+          "src/codex_plugin_scanner/guard/daemon/local_cli_api*.py",
+          "src/codex_plugin_scanner/guard/daemon/local_cli_continuity_api.py",
+          "src/codex_plugin_scanner/guard/daemon/command_activity_api.py",
+          "src/codex_plugin_scanner/guard/daemon/managed_controls_api.py",
+          "src/codex_plugin_scanner/guard/daemon/managed_policy_delivery.py",
+          "src/codex_plugin_scanner/guard/daemon/policy_authority_api.py",
+          "src/codex_plugin_scanner/guard/daemon/dashboard_reconnect.py",
+          "src/codex_plugin_scanner/guard/daemon/diagnostics.py",
+          "src/codex_plugin_scanner/guard/daemon/orphaned_daemon_workers.py",
+          "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py"
+        ]
+      },
+      {
+        "id": "runtime-transition-lifecycle",
+        "category": "control_plane",
+        "reason": "Core-owned runtime transition coordination, qualification and capture; one-shot activation lifecycle rather than per-request enforcement.",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime_transition_coordinator.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_daemon.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_prepare.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_codex_observer.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_native_capture.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_owned_qualification.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_admission.py",
+          "src/codex_plugin_scanner/guard/runtime_transition_legacy_receipt.py"
+        ]
+      },
+      {
+        "id": "secrets-cli",
+        "category": "separate_product_cli",
+        "reason": "hol-guard-secrets repository/staged/pre-commit scanner CLI; separate product entry point, not a Guard runtime route.",
+        "path": [
+          "src/codex_plugin_scanner/guard/secrets/cli.py",
+          "src/codex_plugin_scanner/guard/secrets/precommit.py",
+          "src/codex_plugin_scanner/guard/secrets/secret_repository_scanner.py",
+          "src/codex_plugin_scanner/guard/secrets/secret_staged_scanner.py",
+          "src/codex_plugin_scanner/guard/secrets/public_rule_catalog.py"
+        ]
+      },
+      {
+        "id": "embedded-hook-templates",
+        "category": "generated_asset",
+        "reason": "Python string templates that emit TypeScript/JS/shell harness hook assets at install time; generated artifacts, not Python executed on the request path.",
+        "path": [
+          "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
+          "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
+          "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
+        ]
+      }
+    ],
+    "reviewed_runtime": [
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/daemon/hook_*.py",
+          "src/codex_plugin_scanner/guard/daemon/runtime_hook_*.py",
+          "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
+          "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
+          "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+          "src/codex_plugin_scanner/guard/native_*.py",
+          "src/codex_plugin_scanner/guard/proxy/*",
+          "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
+          "src/codex_plugin_scanner/guard/runtime/verified_*.py",
+          "src/codex_plugin_scanner/guard/runtime/supply_chain*.py",
+          "src/codex_plugin_scanner/guard/runtime/command_*.py",
+          "src/codex_plugin_scanner/guard/runtime/shell_*.py",
+          "src/codex_plugin_scanner/guard/runtime/secret_file_request*",
+          "src/codex_plugin_scanner/guard/contained_*.py",
+          "src/codex_plugin_scanner/guard/containment_*.py",
+          "src/codex_plugin_scanner/guard/shims.py",
+          "src/codex_plugin_scanner/guard/package_shim_*.py",
+          "src/codex_plugin_scanner/guard/protect.py",
+          "src/codex_plugin_scanner/guard/runtime/runner.py"
+        ],
+        "reason": "Reviewed: module is a decision, parser/scanner, transport, process-dispatch or containment component invoked by a runtime route."
+      }
+    ],
+    "tests": {
+      "path": [
+        "tests/*.py",
+        "tests/**/*.py"
+      ],
+      "note": "repository-level Python tests, not part of the package"
+    },
+    "generated": {
+      "path": [
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
+        "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
+        "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
+      ]
+    },
+    "adapters": {
+      "path": [
+        "src/codex_plugin_scanner/guard/adapters/*.py"
+      ]
+    },
+    "vendored": {
+      "path": []
+    }
+  },
+  "rust": {
+    "workspace": "rust",
+    "binary_crate": "hol-guard-runtime",
+    "dependency_policy": "normal and target-specific path dependencies of the runtime binary crate; dev/build dependencies and separate binary targets are not linked",
+    "exclude_paths": []
+  }
+}

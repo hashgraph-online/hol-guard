@@ -4,10 +4,10 @@
 //! actions for a whole connector namespace; a denied action blocks every
 //! execution path that could carry it, including malformed or opaque batches.
 
+use caseless::default_case_fold_str as casefold;
 use serde_json::{Map, Value};
 
 use crate::context_digest::python_strip;
-use crate::skill_identity_canon::casefold;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Role {
