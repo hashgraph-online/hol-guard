@@ -7932,12 +7932,15 @@ class GuardDaemonServer:
             return
         self._thread = None
         self._begin_service()
+        generation = self._active_start_generation
         serve_thread_started = False
         try:
             start_serve_thread(self)
             serve_thread_started = True
             if not self._serve_loop_started.wait(timeout=_DAEMON_SERVE_THREAD_START_TIMEOUT_SECONDS):
                 raise RuntimeError("Guard daemon serve thread did not become ready")
+            if not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
         except BaseException as error:
             contain_failed_service_start(
                 self,
@@ -7954,8 +7957,11 @@ class GuardDaemonServer:
             if str(error) == "Guard daemon stopped during startup":
                 return
             raise
+        generation = self._active_start_generation
         serve_thread = self._thread
         try:
+            if not startup_generation_is_current(self, generation):
+                raise RuntimeError("Guard daemon stopped during startup")
             if serve_thread is None:
                 self._serve_forever()
                 return
