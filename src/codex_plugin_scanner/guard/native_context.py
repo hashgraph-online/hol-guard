@@ -1148,18 +1148,6 @@ def context_mcp_identity(kind: str, request: dict[str, Any]) -> dict[str, Any] |
     return identity if isinstance(identity, dict) else None
 
 
-def context_mcp_descriptor(kind: str, request: dict[str, Any]) -> dict[str, Any]:
-    """Project native MCP descriptor semantics, without local synthesis."""
-    result = native_context_digest(
-        kind,
-        {"request": request},
-        guard_home=_resolve_digest_home(None),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        raise _unavailable("native_mcp_descriptor_unavailable")
-    return result["mcp_descriptor"]
-
-
 _MCP_RISK_CATEGORIES = frozenset(
     {
         "filesystem_access",
@@ -1181,20 +1169,6 @@ _MCP_RISK_CATEGORIES = frozenset(
 )
 
 
-def context_mcp_tool_risk(artifact: dict[str, Any], arguments: object) -> tuple[str, ...]:
-    """Transport argument representations; native categories remain authoritative."""
-    fields = json.loads(json.dumps({"artifact": artifact, "arguments": arguments}, default=str))
-    result = native_context_digest("mcp_tool_risk", fields, guard_home=_resolve_digest_home(None))
-    categories = result.get("mcp_tool_risk") if isinstance(result, dict) and result.get("status") == "ok" else None
-    if (
-        not isinstance(categories, list)
-        or any(not isinstance(category, str) or category not in _MCP_RISK_CATEGORIES for category in categories)
-        or len(categories) != len(set(categories))
-    ):
-        raise _unavailable("native_mcp_tool_risk_unavailable")
-    return tuple(categories)
-
-
 def _valid_mcp_tool_policy(policy: object) -> bool:
     if not isinstance(policy, dict) or set(policy) != {"action", "source", "summary_code", "risk_categories"}:
         return False
@@ -1212,15 +1186,6 @@ def _valid_mcp_tool_policy(policy: object) -> bool:
     )
 
 
-def context_mcp_tool_policy(request: dict[str, Any]) -> dict[str, Any]:
-    fields = json.loads(json.dumps({"request": request}, default=str))
-    result = native_context_digest("mcp_tool_policy", fields, guard_home=_resolve_digest_home(None))
-    policy = result.get("mcp_tool_policy") if isinstance(result, dict) and result.get("status") == "ok" else None
-    if not isinstance(policy, dict) or not _valid_mcp_tool_policy(policy):
-        raise _unavailable("native_mcp_tool_policy_unavailable")
-    return policy
-
-
 def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
     """Project native browser semantics; native absence is not a negative match."""
     result = native_context_digest(
@@ -1236,24 +1201,6 @@ def context_browser_mcp(request: dict[str, Any]) -> dict[str, Any]:
     ):
         raise _unavailable("native_browser_mcp_intent_unavailable")
     return browser
-
-
-def context_package_launcher_token(command_name: str, args: Sequence[str]) -> str | None:
-    """Project native launcher selection; absence is distinct from native failure."""
-    result = native_context_digest(
-        "package_launcher_token",
-        {"command_name": command_name, "args": list(args)},
-        guard_home=_resolve_digest_home(None),
-    )
-    if not isinstance(result, dict) or result.get("status") != "ok":
-        raise _unavailable("native_package_launcher_token_unavailable")
-    launcher = result.get("package_launcher")
-    if not isinstance(launcher, dict):
-        raise _unavailable("native_package_launcher_token_unavailable")
-    package = launcher.get("package")
-    if package is not None and not isinstance(package, str):
-        raise _unavailable("native_package_launcher_token_unavailable")
-    return package
 
 
 def context_mcp_tool_approval_hash(request: dict[str, Any], *, expect_token: bool) -> tuple[str, tuple[str, ...]]:
@@ -1343,17 +1290,13 @@ __all__ = [
     "context_browser_mcp",
     "context_digest_guard_home",
     "context_mcp_arguments_projection",
-    "context_mcp_descriptor",
     "context_mcp_identity",
     "context_mcp_redact_json",
     "context_mcp_tool_approval_hash",
     "context_mcp_tool_catalog_fingerprint",
-    "context_mcp_tool_policy",
-    "context_mcp_tool_risk",
     "context_opaque_digest",
     "context_package_environment_values",
     "context_package_evidence",
-    "context_package_launcher_token",
     "context_runtime_executable_identity",
     "context_runtime_launch_identity",
     "context_runtime_launch_identity_matches",
