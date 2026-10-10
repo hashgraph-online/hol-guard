@@ -243,6 +243,19 @@ def _resolve_digest_home(guard_home: Path | None) -> Path:
     return _context_digest_guard_home(str(Path.home()))
 
 
+def _resolve_existing_digest_home(guard_home: Path | None) -> Path:
+    """Like :func:`_resolve_digest_home`, but never names a home that is not on disk.
+
+    Pure resident verdicts must not create a guard home, or start a resident
+    for one, just to be asked a question; a missing home resolves to the
+    context home instead.
+    """
+
+    if guard_home is not None and os.path.isdir(guard_home):
+        return guard_home
+    return _resolve_digest_home(None)
+
+
 def ensure_resident_prerequisite(guard_home: Path) -> bool:
     """Establish the resident's on-disk prerequisite for ``guard_home``.
 

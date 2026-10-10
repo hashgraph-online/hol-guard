@@ -48,6 +48,32 @@ def _assert_windows_process_stopped(pid: object) -> None:
         time.sleep(0.1)
 
 
+def _diagnostics(env: dict[str, str]) -> str:
+    guard_home = Path(env["HOL_GUARD_HOME"])
+    lines = []
+    journal = guard_home / "daemon-lifecycle"
+    if journal.is_dir():
+        for entry in sorted(journal.iterdir()):
+            try:
+                event = json.loads(entry.read_text())
+                lines.append(f"{event.get('event')}:{event.get('pid')}:{event.get('reason', '')}")
+            except (OSError, ValueError):
+                lines.append("unreadable")
+    logs = guard_home / "logs"
+    if logs.is_dir():
+        for entry in sorted(logs.rglob("*"))[-6:]:
+            if entry.is_file():
+                lines.append(f"{entry.name}={_safe_read(entry)[-300:]!r}")
+    return " | ".join(lines)
+
+
+def _safe_read(path: Path) -> str:
+    try:
+        return path.read_text(errors="replace")
+    except OSError as error:
+        return f"<{error!r}>"
+
+
 def _stop_and_assert_process_stopped(
     executable: Path,
     stop_args: list[str],
@@ -57,7 +83,7 @@ def _stop_and_assert_process_stopped(
 ) -> dict[str, object]:
     stopped = _json_result(_run_core(executable, stop_args, env=env))
     assert stopped["running"] is False, stopped
-    assert stopped["stopped"] is True, stopped
+    assert stopped["stopped"] is True, (stopped, _diagnostics(env))
     assert stopped["pid"] == pid, stopped
     _assert_windows_process_stopped(pid)
     return stopped
@@ -89,6 +115,10 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
             "LOCALAPPDATA": str(local_appdata),
             "HOL_GUARD_HOME": str(guard_home),
             "HOL_GUARD_DESKTOP": "1",
+            # The guard home lives under pytest's tmp path, which opts the daemon into
+            # a 5 s idle shutdown. Each packaged CLI step here takes longer than that
+            # on a cold runner, so keep the daemon up between steps.
+            "GUARD_DAEMON_IDLE_TIMEOUT_SECONDS": "600",
         }
     )
 
