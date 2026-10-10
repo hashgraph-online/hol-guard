@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
 from codex_plugin_scanner.guard.cli.commands_lifecycle_gate import lifecycle_gate_requirement
 from codex_plugin_scanner.guard.codex_config import dump_toml, tomllib
+from codex_plugin_scanner.guard.harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from codex_plugin_scanner.guard.hook_removal import remove_all_guard_hooks
 from codex_plugin_scanner.guard.hook_removal_presence import CONFIRMATION_PHRASE, require_typed_presence
 from codex_plugin_scanner.guard.hook_removal_sweep import (
@@ -65,6 +66,21 @@ def test_prune_removes_only_guard_handlers_and_empty_events() -> None:
     assert len(remaining) == 1
     assert remaining[0]["hooks"][0]["command"] == USER_COMMAND
     assert pruned["model"] == "opus"
+
+
+def test_prune_matches_claude_exec_form_args() -> None:
+    exec_handler = {
+        "type": "command",
+        "command": "/opt/python/bin/python3",
+        "args": ["-m", "codex_plugin_scanner.cli", "guard", "hook", "--harness", "claude-code"],
+    }
+    user_handler = {"type": "command", "command": "/usr/bin/python3", "args": ["-m", "my_audit"]}
+    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [exec_handler, user_handler]}]}}
+    pruned, removed = prune_guard_hooks(settings)
+    assert removed == ["PreToolUse"]
+    hooks = pruned["hooks"]
+    assert isinstance(hooks, dict)
+    assert hooks["PreToolUse"][0]["hooks"] == [user_handler]
 
 
 def test_sweep_dry_run_does_not_write_and_json_rewrite_preserves_other_keys(tmp_path: Path) -> None:
@@ -212,6 +228,8 @@ def test_lifecycle_gate_requires_step_up_for_hooks_remove_but_not_dry_run() -> N
     live = argparse.Namespace(guard_command="hooks", hooks_command="remove", dry_run=False)
     requirement = lifecycle_gate_requirement(live)
     assert requirement is not None and requirement.action == "hooks.remove"
+    # A recently verified authenticator code must not carry over to removing protection.
+    assert disconnect_requires_fresh_authenticator(requirement.action)
     dry = argparse.Namespace(guard_command="hooks", hooks_command="remove", dry_run=True)
     assert lifecycle_gate_requirement(dry) is None
     repair = argparse.Namespace(guard_command="repair", dry_run=False)

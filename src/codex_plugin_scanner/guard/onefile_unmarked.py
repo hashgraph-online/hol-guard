@@ -12,19 +12,18 @@ Signatures, checked in order, all relative to the extraction dir:
     so its presence means extraction finished.
 ``partial``
     No sentinel, but the extraction was clearly Guard's and was cut short:
-    a real top-level ``codex_plugin_scanner/`` directory exists, or a top-level
-    mypyc runtime module (``<hash>__mypyc*.so`` / ``.pyd``) sits next to a
-    bundled ``Python.framework`` / ``libpython*`` runtime.
+    a real top-level ``codex_plugin_scanner/`` directory exists.
 
 Anything else (empty dirs, other PyInstaller apps, dirs killed before any
-Guard file landed) is not identified and is never reclaimed.
+Guard file landed) is not identified and is never reclaimed. A mypyc runtime
+next to a bundled ``libpython`` is deliberately not a signature: any onefile
+app built with mypyc-compiled dependencies has the same layout.
 
 Stdlib-only.
 """
 
 from __future__ import annotations
 
-import os
 import stat
 from datetime import timedelta
 from pathlib import Path
@@ -53,13 +52,5 @@ def classify_unmarked_extraction(extraction_dir: Path) -> str | None:
     if extraction_dir.joinpath(*LEGACY_BUNDLE_SENTINEL).is_file():
         return BUNDLE
     if _is_real_dir(extraction_dir / PACKAGE_DIR_NAME):
-        return PARTIAL
-    try:
-        names = os.listdir(extraction_dir)
-    except OSError:
-        return None
-    has_mypyc = any("__mypyc" in name and name.endswith((".so", ".pyd")) for name in names)
-    has_runtime = any(name == "Python.framework" or name.startswith("libpython") for name in names)
-    if has_mypyc and has_runtime:
         return PARTIAL
     return None

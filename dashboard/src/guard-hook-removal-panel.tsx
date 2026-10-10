@@ -50,6 +50,30 @@ function AffectedList({ items, label }: { items: GuardHookRemovalHarness[]; labe
   );
 }
 
+export function remainingHooksMessage(report: GuardHookRemovalReport): string {
+  const remaining = report.post_state?.remaining_harnesses ?? [];
+  if (remaining.length === 0) return "Check: no Guard hooks remain in any app.";
+  return `Still has Guard hooks: ${remaining.map((item) => item.harness).join(", ")}.`;
+}
+
+function RemovalResult({ report }: { report: GuardHookRemovalReport }) {
+  const outcome = <p className="text-sm font-medium text-brand-dark">{removalOutcomeMessage(report)}</p>;
+  if (report.status === "nothing_to_remove") {
+    return <div className="space-y-2">{outcome}</div>;
+  }
+  return (
+    <div className="space-y-2">
+      {outcome}
+      <AffectedList items={report.harnesses} label="Apps changed" />
+      <p className="text-xs text-slate-500">{remainingHooksMessage(report)}</p>
+      {report.backup_dir ? <p className="break-all text-xs text-slate-500">Backups: {report.backup_dir}</p> : null}
+      <p className="text-xs text-slate-500">
+        Reinstall with <code className="font-mono">{report.reinstall_command}</code>.
+      </p>
+    </div>
+  );
+}
+
 export function GuardHookRemovalPanel() {
   const [phase, setPhase] = useState<RemovalPhase>({ kind: "idle" });
 
@@ -104,7 +128,6 @@ export function GuardHookRemovalPanel() {
 
   const gateMissing =
     (phase.kind === "review" || phase.kind === "proof" || phase.kind === "removing") && !phase.gate?.enabled;
-  const remaining = phase.kind === "done" ? (phase.report.post_state?.remaining_harnesses ?? []) : [];
   return (
     <div className="space-y-3">
       <div>
@@ -151,27 +174,7 @@ export function GuardHookRemovalPanel() {
         </div>
       ) : null}
       <div aria-live="polite">
-        {phase.kind === "done" ? (
-          <div className="space-y-2">
-            <p className="text-sm font-medium text-brand-dark">{removalOutcomeMessage(phase.report)}</p>
-            {phase.report.status !== "nothing_to_remove" ? (
-              <>
-                <AffectedList items={phase.report.harnesses} label="Apps changed" />
-                <p className="text-xs text-slate-500">
-                  {remaining.length === 0
-                    ? "Check: no Guard hooks remain in any app."
-                    : `Still has Guard hooks: ${remaining.map((item) => item.harness).join(", ")}.`}
-                </p>
-                {phase.report.backup_dir ? (
-                  <p className="break-all text-xs text-slate-500">Backups: {phase.report.backup_dir}</p>
-                ) : null}
-                <p className="text-xs text-slate-500">
-                  Reinstall with <code className="font-mono">{phase.report.reinstall_command}</code>.
-                </p>
-              </>
-            ) : null}
-          </div>
-        ) : null}
+        {phase.kind === "done" ? <RemovalResult report={phase.report} /> : null}
         {phase.kind === "error" ? (
           <p role="alert" className="text-sm text-brand-attention">{phase.message}</p>
         ) : null}

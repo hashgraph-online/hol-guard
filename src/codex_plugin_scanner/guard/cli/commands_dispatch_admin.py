@@ -374,6 +374,7 @@ def _run_guard_doctor_command(
             context=context,
             store=store,
             skip_steps=frozenset({"package_shims", "command_queue"}),
+            harness=args.harness or None,
         )
     with nullcontext() if args.harness else without_command_probes():
         availability = doctor_native_availability()

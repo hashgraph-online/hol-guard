@@ -85,11 +85,21 @@ def _require_proof(guard_home: Path, payload: Mapping[str, object], *, action: s
     return True
 
 
-def _context(guard_home: Path) -> HarnessContext:
-    return HarnessContext(home_dir=Path.home().resolve(), workspace_dir=None, guard_home=guard_home)
+def _context(guard_home: Path, home_dir: Path | None, workspace_dir: Path | None) -> HarnessContext:
+    return HarnessContext(
+        home_dir=home_dir if home_dir is not None else Path.home().resolve(),
+        workspace_dir=workspace_dir,
+        guard_home=guard_home,
+    )
 
 
-def repair_request(store: GuardStore, payload: Mapping[str, object]) -> dict[str, object]:
+def repair_request(
+    store: GuardStore,
+    payload: Mapping[str, object],
+    *,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
     """Run the full repair from the daemon. The daemon never restarts itself."""
 
     dry_run = payload.get("dry_run") is True
@@ -98,7 +108,7 @@ def repair_request(store: GuardStore, payload: Mapping[str, object]) -> dict[str
         _require_proof(guard_home, payload, action=REPAIR_ACTION, required=False)
     return run_repair(
         guard_home=guard_home,
-        context=_context(guard_home),
+        context=_context(guard_home, home_dir, workspace_dir),
         store=store,
         dry_run=dry_run,
         include_daemon=False,
@@ -109,11 +119,21 @@ def _harness_rows(plans: list[HarnessPlan]) -> list[dict[str, object]]:
     return [plan.to_dict() for plan in plans]
 
 
-def removal_request(store: GuardStore, payload: Mapping[str, object]) -> dict[str, object]:
-    """List (``dry_run``) or perform removal of every Guard hook from every app."""
+def removal_request(
+    store: GuardStore,
+    payload: Mapping[str, object],
+    *,
+    home_dir: Path | None = None,
+    workspace_dir: Path | None = None,
+) -> dict[str, object]:
+    """List (``dry_run``) or perform removal of every Guard hook from every app.
+
+    The daemon passes the workspace it was started for so workspace-scoped
+    hook files are swept exactly as ``hol-guard hooks remove`` run there would.
+    """
 
     guard_home = store.guard_home
-    context = _context(guard_home)
+    context = _context(guard_home, home_dir, workspace_dir)
     if payload.get("dry_run") is True:
         return remove_all_guard_hooks(context=context, store=store, dry_run=True)
     if payload.get("confirm") != REMOVE_CONFIRMATION:

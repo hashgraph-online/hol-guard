@@ -147,9 +147,9 @@ def repair_onefile_leaks(
     detail: dict[str, object] = {
         "reclaimed_count": result.reclaimed_count,
         "reclaimed_bytes": result.reclaimed_bytes,
-        "unmarked_remaining": result.unmarked_count - result.unmarked_reclaimed_count
-        if dry_run
-        else result.unmarked_count,
+        # Reclaimed (or, in a dry run, would-be reclaimed) dirs are never
+        # counted in ``unmarked_count``, so it already is the remainder.
+        "unmarked_remaining": result.unmarked_count,
         "unmarked_scan": result.unmarked_scan,
         "budget_exhausted": result.unmarked_budget_exhausted,
         "error_count": len(result.errors),
@@ -198,11 +198,15 @@ def broken_hook_harnesses(context: HarnessContext, store: GuardStore) -> list[di
     return broken
 
 
-def repair_hooks(context: HarnessContext, store: GuardStore, *, dry_run: bool) -> dict[str, object]:
+def repair_hooks(
+    context: HarnessContext, store: GuardStore, *, dry_run: bool, harness: str | None = None
+) -> dict[str, object]:
     try:
         broken = broken_hook_harnesses(context, store)
     except Exception as error:
         return _error_step("hooks", error)
+    if harness is not None:
+        broken = [item for item in broken if item.get("harness") == harness]
     if not broken:
         return _step("hooks", "ok", "Managed harness hooks look intact.", repaired=[], failed=[])
     names = [str(item["harness"]) for item in broken]
@@ -285,21 +289,26 @@ def run_repair(
     dry_run: bool = False,
     include_daemon: bool = True,
     skip_steps: frozenset[str] = frozenset(),
+    harness: str | None = None,
 ) -> dict[str, object]:
     """Run every repair step and return the per-step report.
 
     ``skip_steps`` lets a caller that already ran a step (``doctor --repair``
-    regenerates shims and the queue itself) avoid repeating it.
+    regenerates shims and the queue itself) avoid repeating it. ``harness``
+    scopes the run to that app's hooks: the step-up grant covered only that
+    app, so every other step is left out.
     """
 
     plan: list[tuple[str, Callable[[], dict[str, object]]]] = [
         ("daemon", lambda: repair_daemon(guard_home, home_dir=context.home_dir, dry_run=dry_run)),
         ("native_runtime", lambda: repair_native_runtime(guard_home, dry_run=dry_run)),
         ("onefile_leaks", lambda: repair_onefile_leaks(dry_run=dry_run, guard_home=guard_home)),
-        ("hooks", lambda: repair_hooks(context, store, dry_run=dry_run)),
+        ("hooks", lambda: repair_hooks(context, store, dry_run=dry_run, harness=harness)),
         ("package_shims", lambda: repair_package_shims(context, dry_run=dry_run)),
         ("command_queue", lambda: repair_command_queue(store, dry_run=dry_run)),
     ]
+    if harness is not None:
+        skip_steps = skip_steps | frozenset(name for name, _run in plan if name != "hooks")
     steps = [run() for name, run in plan if name not in skip_steps and (include_daemon or name != "daemon")]
     return build_report(steps, dry_run=dry_run)
 

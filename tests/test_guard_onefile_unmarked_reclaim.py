@@ -74,7 +74,8 @@ def test_classify_signatures(tmp_path: Path) -> None:
     mypyc = tmp_path / "_MEImypyc1"
     (mypyc / "Python.framework").mkdir(parents=True)
     (mypyc / "abc123__mypyc.cpython-312-darwin.so").write_bytes(b"x")
-    assert classify_unmarked_extraction(mypyc) == PARTIAL
+    # Other onefile apps with mypyc-compiled dependencies share this layout.
+    assert classify_unmarked_extraction(mypyc) is None
 
     mypyc_only = tmp_path / "_MEImypyc2"
     mypyc_only.mkdir()
@@ -251,7 +252,7 @@ def test_lsof_scan_extracts_extraction_names_and_ignores_other_paths(tmp_path: P
 
     def runner(argv, **kwargs):
         seen.append(argv)
-        return _completed(output, returncode=1)
+        return _completed(output)
 
     found = scan_open_extraction_dirs(tmp_path, runner=runner, lsof_path="/fake/lsof", platform="darwin")
     assert found == frozenset({"_MEIaaaa11", "_MEIbbbb22", "_MEIshort"})
@@ -278,6 +279,12 @@ def test_lsof_scan_fails_closed(tmp_path: Path) -> None:
     assert (
         scan_open_extraction_dirs(
             tmp_path, runner=lambda argv, **kw: _completed(b"n/x\n", 2), lsof_path="/fake/lsof", platform="darwin"
+        )
+        is None
+    )
+    assert (
+        scan_open_extraction_dirs(
+            tmp_path, runner=lambda argv, **kw: _completed(b"n/x\n", 1), lsof_path="/fake/lsof", platform="darwin"
         )
         is None
     )

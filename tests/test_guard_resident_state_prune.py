@@ -213,6 +213,22 @@ def test_repair_prunes_stale_state_for_custom_home(tmp_path: Path) -> None:
     assert again["status"] == "healthy"
 
 
+def test_harness_scoped_repair_only_touches_that_harness(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import repair_engine
+
+    context = _context(tmp_path)
+    store = GuardStore(context.guard_home)
+    stale = _resident(context.guard_home, "f" * 16, pids=(2**22 + 11, 2**22 + 13), mtime=time.time() - 3 * 3600)
+    broken = [{"harness": "codex", "status": "broken"}, {"harness": "cursor", "status": "broken"}]
+    monkeypatch.setattr(repair_engine, "broken_hook_harnesses", lambda _context, _store: broken)
+    report = run_repair(guard_home=context.guard_home, context=context, store=store, dry_run=True, harness="cursor")
+    steps = report["steps"]
+    assert isinstance(steps, list)
+    assert [item["step"] for item in steps] == ["hooks"]
+    assert steps[0]["broken"] == [{"harness": "cursor", "status": "broken"}]
+    assert stale.exists()
+
+
 def test_repair_onefile_step_uses_injected_root_and_fails_closed(tmp_path: Path) -> None:
     from datetime import datetime, timezone
 
@@ -230,6 +246,7 @@ def test_repair_onefile_step_uses_injected_root_and_fails_closed(tmp_path: Path)
     assert in_use["status"] == "ok" and leaked.exists()
     planned = repair_onefile_leaks(dry_run=True, temp_root=tmp_path, now=moment, scanner=lambda _root: frozenset())
     assert planned["status"] == "planned" and leaked.exists()
+    assert planned["unmarked_remaining"] == 0
     done = repair_onefile_leaks(dry_run=False, temp_root=tmp_path, now=moment, scanner=lambda _root: frozenset())
     assert done["status"] == "changed" and not leaked.exists()
 

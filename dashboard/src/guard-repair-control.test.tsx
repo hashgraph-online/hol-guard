@@ -11,6 +11,7 @@ import {
 import {
   describeAffectedHarness,
   GuardHookRemovalPanel,
+  remainingHooksMessage,
   removalOutcomeMessage,
 } from "./guard-hook-removal-panel";
 import { normalizeHookRemovalReport, normalizeRepairReport } from "./guard-repair-api";
@@ -59,6 +60,14 @@ assert.equal(describeAffectedHarness(removal.harnesses[1]), "cursor");
 assert.equal(removal.reinstall_command, "hol-guard install --all");
 assert.match(removalOutcomeMessage(removal), /removed/);
 assert.match(removalOutcomeMessage({ ...removal, status: "partial" }), /could not be removed/);
+assert.equal(remainingHooksMessage(removal), "Check: no Guard hooks remain in any app.");
+assert.equal(
+  remainingHooksMessage({
+    ...removal,
+    post_state: { clean: false, remaining_harnesses: [{ harness: "codex" }, { harness: "cursor" }] },
+  }),
+  "Still has Guard hooks: codex, cursor.",
+);
 assert.throws(() => normalizeHookRemovalReport(null));
 
 const idleRemoval = renderToStaticMarkup(<GuardHookRemovalPanel />);

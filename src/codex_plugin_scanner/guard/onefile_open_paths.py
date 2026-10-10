@@ -66,10 +66,10 @@ def _scan_with_lsof(
         )
     except (OSError, subprocess.SubprocessError):
         return None
-    # lsof exits 1 when it could not stat some unrelated entry; anything higher
-    # (or no output at all, which would mean not even this process was seen) is
-    # treated as an unusable scan.
-    if completed.returncode not in (0, 1) or not completed.stdout:
+    # Exit 1 means lsof skipped something it could not inspect, which may be the
+    # very process holding an extraction dir open, so only a clean exit counts.
+    # No output at all would mean not even this process was seen.
+    if completed.returncode != 0 or not completed.stdout:
         return None
     if len(completed.stdout) > _LSOF_MAX_OUTPUT_BYTES:
         return None

@@ -7,7 +7,13 @@ import threading
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.audit_persistence import FAILED_EVENT, AuditPersistence
+from codex_plugin_scanner.guard.daemon.audit_persistence import (
+    FAILED_EVENT,
+    NOT_PERSISTED,
+    QUEUED,
+    WRITTEN,
+    AuditPersistence,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -50,9 +56,10 @@ def _persistence(store: object, diagnostics: _Diagnostics, **kwargs: object) -> 
 def test_success_writes_inline_without_logging(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     diagnostics = _Diagnostics()
-    persistence = _persistence(store, diagnostics)
+    # A loaded CI host can take longer than the 0.25s default for a first write.
+    persistence = _persistence(store, diagnostics, attempt_timeout_seconds=5.0)
 
-    assert persistence.persist("daemon.auth.unauthorized", {"path": "/x"}, "2026-01-01T00:00:00+00:00")
+    assert persistence.persist("daemon.auth.unauthorized", {"path": "/x"}, "2026-01-01T00:00:00+00:00") == WRITTEN
 
     assert len(store.list_events(event_name="daemon.auth.unauthorized")) == 1
     assert diagnostics.events == []
@@ -64,7 +71,7 @@ def test_lock_contention_returns_immediately_and_persists_on_retry() -> None:
     persistence = _persistence(store, diagnostics)
 
     started = time.monotonic()
-    assert persistence.persist("daemon.auth.unauthorized", {}, "now") is True
+    assert persistence.persist("daemon.auth.unauthorized", {}, "now") == QUEUED
     assert time.monotonic() - started < 1.0
 
     assert store.written.wait(timeout=5)
@@ -111,7 +118,7 @@ def test_full_queue_drops_instead_of_blocking() -> None:
     results = [persistence.persist("e", {}, "now") for _ in range(4)]
     release.set()
 
-    assert results.count(False) >= 1
+    assert results.count(NOT_PERSISTED) >= 1
     assert any(event == "auth_audit_persistence_dropped" for event, _ in diagnostics.events)
 
 
@@ -120,7 +127,7 @@ def test_non_contention_error_is_not_retried() -> None:
     diagnostics = _Diagnostics()
     persistence = _persistence(store, diagnostics)
 
-    assert persistence.persist("e", {}, "now") is False
+    assert persistence.persist("e", {}, "now") == NOT_PERSISTED
 
     assert store.calls == 1
     assert [event for event, _ in diagnostics.events] == [FAILED_EVENT]
@@ -147,7 +154,7 @@ def test_worker_rechecks_queue_before_exiting() -> None:
     late_queue = _LateArrivalQueue()
     persistence._queue = late_queue
 
-    assert persistence.persist("daemon.auth.unauthorized", {}, "now") is True
+    assert persistence.persist("daemon.auth.unauthorized", {}, "now") == QUEUED
 
     assert store.written.wait(timeout=5)
     assert late_queue.raced
@@ -158,7 +165,7 @@ def test_new_worker_starts_after_previous_one_exits() -> None:
     store = _FlakyStore(failures=1)
     persistence = _persistence(store, _Diagnostics())
 
-    assert persistence.persist("first", {}, "now") is True
+    assert persistence.persist("first", {}, "now") == QUEUED
     assert store.written.wait(timeout=5)
     deadline = time.monotonic() + 5
     while persistence._worker is not None and time.monotonic() < deadline:
@@ -167,6 +174,39 @@ def test_new_worker_starts_after_previous_one_exits() -> None:
 
     store.failures = store.calls + 1
     store.written.clear()
-    assert persistence.persist("second", {}, "now") is True
+    assert persistence.persist("second", {}, "now") == QUEUED
     assert store.written.wait(timeout=5)
     assert store.rows == ["first", "second"]
+
+
+def test_close_waits_for_queued_retry_within_bound() -> None:
+    store = _FlakyStore(failures=1)
+    release = threading.Event()
+    persistence = AuditPersistence(
+        store,  # type: ignore[arg-type]
+        _Diagnostics(),  # type: ignore[arg-type]
+        retry_delays=(0.0,),
+        wait=lambda _seconds: release.wait(timeout=0.2),
+    )
+
+    assert persistence.persist("e", {}, "now") == QUEUED
+    persistence.close(timeout_seconds=5.0)
+
+    assert store.rows == ["e"]
+
+
+def test_close_is_bounded_when_retry_is_stuck() -> None:
+    store = _FlakyStore(failures=1)
+    release = threading.Event()
+    persistence = AuditPersistence(
+        store,  # type: ignore[arg-type]
+        _Diagnostics(),  # type: ignore[arg-type]
+        retry_delays=(0.0,),
+        wait=lambda _seconds: release.wait(timeout=10),
+    )
+
+    assert persistence.persist("e", {}, "now") == QUEUED
+    started = time.monotonic()
+    persistence.close(timeout_seconds=0.1)
+    assert time.monotonic() - started < 2.0
+    release.set()

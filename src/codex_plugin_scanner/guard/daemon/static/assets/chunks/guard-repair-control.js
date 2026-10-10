@@ -1,4 +1,4 @@
-import { aV as isGuardDemoMode, aW as fetchWithGuardAuth, r as reactExports, ag as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, ah as ApprovalProofModal, ai as Tag } from "../guard-dashboard.js";
+import { aV as isGuardDemoMode, aW as isRecord, aX as fetchWithGuardAuth, r as reactExports, ag as fetchResolvedApprovalGate, j as jsxRuntimeExports, A as ActionButton, ah as ApprovalProofModal, ai as Tag } from "../guard-dashboard.js";
 const SUPPORTED_APP_SLUGS = [
   "codex",
   "claude-code",
@@ -146,9 +146,6 @@ class GuardRepairRequestError extends Error {
     this.status = status;
     this.code = code;
   }
-}
-function isRecord(value) {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 const STEP_STATUSES = /* @__PURE__ */ new Set(["ok", "changed", "planned", "skipped", "error"]);
 function normalizeRepairReport(payload) {

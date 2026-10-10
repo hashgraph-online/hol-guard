@@ -11,7 +11,8 @@ Bounds:
 * the synchronous attempt waits at most ``attempt_timeout_seconds``;
 * at most ``capacity`` events wait for retry; extra events are counted, not kept;
 * each event gets at most ``len(retry_delays) + 1`` attempts in total;
-* failures are logged once per ``log_window_seconds`` with a suppressed count.
+* failures are logged once per ``log_window_seconds`` with a suppressed count;
+* ``close`` gives queued retries at most ``close_timeout_seconds`` to finish.
 
 Only transient lock contention is retried. Other database errors are logged and
 not retried. Losing an audit row never changes the security decision.
@@ -39,6 +40,11 @@ DEFAULT_ATTEMPT_TIMEOUT_SECONDS: Final = 0.25
 DEFAULT_RETRY_DELAYS: Final = (0.2, 0.5, 1.0, 2.0)
 DEFAULT_CAPACITY: Final = 32
 DEFAULT_LOG_WINDOW_SECONDS: Final = 60.0
+DEFAULT_CLOSE_TIMEOUT_SECONDS: Final = 2.0
+
+WRITTEN: Final = "written"
+QUEUED: Final = "queued"
+NOT_PERSISTED: Final = "not_persisted"
 
 
 def is_lock_contention(error: BaseException) -> bool:
@@ -78,19 +84,29 @@ class AuditPersistence:
         self._worker: threading.Thread | None = None
         self.persisted_after_retry = 0
 
-    def persist(self, event_name: str, payload: dict[str, object], now: str) -> bool:
-        """Write now if possible; queue retries on contention. True when written or queued."""
+    def persist(self, event_name: str, payload: dict[str, object], now: str) -> str:
+        """Write now if possible; queue retries on contention.
+
+        Returns ``WRITTEN`` when the row is stored, ``QUEUED`` when it awaits a
+        background retry that may still fail, and ``NOT_PERSISTED`` otherwise.
+        """
 
         try:
             self._write(event_name, payload, now)
         except Exception as error:
             if not is_lock_contention(error):
                 self._log(FAILED_EVENT)
-                return False
-            return self._enqueue(event_name, payload, now)
-        return True
+                return NOT_PERSISTED
+            return QUEUED if self._enqueue(event_name, payload, now) else NOT_PERSISTED
+        return WRITTEN
 
-    def close(self) -> None:
+    def close(self, timeout_seconds: float = DEFAULT_CLOSE_TIMEOUT_SECONDS) -> None:
+        """Let queued retries finish for at most ``timeout_seconds``, then stop."""
+
+        with self._worker_lock:
+            worker = self._worker
+        if worker is not None and worker is not threading.current_thread():
+            worker.join(timeout=max(0.0, timeout_seconds))
         self._stop.set()
 
     def _write(self, event_name: str, payload: dict[str, object], now: str) -> None:
@@ -164,4 +180,4 @@ class AuditPersistence:
         self._diagnostics.record_exception(event, detail=detail)
 
 
-__all__ = ["AuditPersistence", "is_lock_contention"]
+__all__ = ["NOT_PERSISTED", "QUEUED", "WRITTEN", "AuditPersistence", "is_lock_contention"]

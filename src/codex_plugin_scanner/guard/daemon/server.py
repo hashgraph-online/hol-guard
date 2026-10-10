@@ -265,6 +265,8 @@ from ..supply_chain_repair import (
 )
 from . import repair_api, repair_self_check
 from .aibom_inventory_persist import persist_aibom_inventory_context
+from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
+from .audit_persistence import WRITTEN as AUDIT_WRITTEN
 from .audit_persistence import AuditPersistence
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
@@ -602,6 +604,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def server_close(self) -> None:
         _ = self._stop_request_executors()
+        audit_persistence = getattr(self, "audit_persistence", None)
+        if audit_persistence is not None:
+            audit_persistence.close()
         hook_worker = getattr(self, "hook_worker", None)
         if hook_worker is not None:
             with suppress(Exception):
@@ -5425,12 +5430,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
 
     def _handle_repair_api(self, path: str, payload: dict[str, object]) -> None:
-        store = self.server.store  # type: ignore[attr-defined]
+        server = self._daemon_server()
+        handler = repair_api.repair_request if path == "/v1/repair" else repair_api.removal_request
         try:
-            if path == "/v1/repair":
-                result = repair_api.repair_request(store, payload)
-            else:
-                result = repair_api.removal_request(store, payload)
+            result = handler(server.store, payload, home_dir=server.home_dir, workspace_dir=server.workspace_dir)
         except ApprovalGateError as error:
             self._write_approval_gate_error(error)
             return
@@ -7309,19 +7312,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "persisted": False,
             }
             daemon_server.auth_audit_windows[key] = window
-        if not daemon_server.audit_persistence.persist("daemon.auth.unauthorized", payload, _now()):
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["suppressed_count"] += 1
-        else:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["persisted"] = True
-                    window["suppressed_count"] -= reported_suppressed_count
+        outcome = daemon_server.audit_persistence.persist("daemon.auth.unauthorized", payload, _now())
+        with daemon_server.auth_audit_lock:
+            if daemon_server.auth_audit_windows.get(key) is not window:
+                return
+            window["pending"] = False
+            if outcome == AUDIT_NOT_PERSISTED:
+                window["suppressed_count"] += 1
+                return
+            # A queued row carries the suppressed count, but its retry can still
+            # fail, so only a confirmed write lets the window coalesce later events.
+            window["suppressed_count"] -= reported_suppressed_count
+            window["persisted"] = outcome == AUDIT_WRITTEN
 
     def _record_query_token_rejection(self) -> None:
         self._record_bounded_denial_event(

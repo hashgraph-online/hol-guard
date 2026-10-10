@@ -1,5 +1,6 @@
 import { fetchWithGuardAuth } from "./guard-api";
 import { isGuardDemoMode } from "./guard-demo";
+import { isRecord } from "./supply-chain-audit-result";
 
 export type GuardRepairCredentials = {
   approval_password?: string;
@@ -52,10 +53,6 @@ export class GuardRepairRequestError extends Error {
     this.status = status;
     this.code = code;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 const STEP_STATUSES = new Set(["ok", "changed", "planned", "skipped", "error"]);

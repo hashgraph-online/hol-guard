@@ -102,7 +102,16 @@ def is_guard_hook_command(command: object) -> bool:
 
 
 def _handler_is_guard(handler: Mapping[str, object]) -> bool:
-    return any(is_guard_hook_command(handler.get(key)) for key in _COMMAND_KEYS)
+    if any(is_guard_hook_command(handler.get(key)) for key in _COMMAND_KEYS):
+        return True
+    # Claude's exec form splits the argv into ``command`` plus an ``args`` list.
+    command = handler.get("command")
+    args = handler.get("args")
+    if not isinstance(command, str) or not isinstance(args, list):
+        return False
+    if not all(isinstance(arg, str) for arg in args):
+        return False
+    return is_guard_hook_command(shlex.join([command, *args]))
 
 
 def _is_handler_dict(node: object) -> bool:

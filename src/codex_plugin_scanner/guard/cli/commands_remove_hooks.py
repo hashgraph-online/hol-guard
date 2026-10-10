@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, TextIO
 from ..approval_gate import ApprovalGateError
 from ..hook_removal import format_removal_summary, plan_hook_removal, remove_all_guard_hooks
 from ..hook_removal_presence import removal_gate_enabled, require_typed_presence
-from .approval_gate_prompt import approval_gate_cli_payload
+from .approval_gate_prompt import print_approval_gate_error
 from .commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
 from .commands_parser_helpers import _add_guard_common_args
 
@@ -47,14 +47,6 @@ def configure_guard_hooks_parser(
     remove_parser.add_argument("--json", action="store_true")
 
 
-def _print_gate_error(error: ApprovalGateError, *, as_json: bool, output_stream: TextIO | None) -> int:
-    if as_json:
-        print(json.dumps(approval_gate_cli_payload(error), sort_keys=True), file=output_stream or sys.stdout)
-    else:
-        print(f"Error: {error}", file=sys.stderr)
-    return 4
-
-
 def run_hook_removal(
     args: argparse.Namespace,
     *,
@@ -84,7 +76,7 @@ def run_hook_removal(
             try:
                 require_typed_presence(affected=affected)
             except ApprovalGateError as error:
-                return _print_gate_error(error, as_json=as_json, output_stream=output_stream)
+                return print_approval_gate_error(error, as_json=as_json, output_stream=output_stream)
     report = remove_all_guard_hooks(context=context, store=store, dry_run=dry_run)
     if bool(getattr(args, "stop_daemon", False)) and not dry_run:
         from ..daemon_stop import stop_guard_daemon
