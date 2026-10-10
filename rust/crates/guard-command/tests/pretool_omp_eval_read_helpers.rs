@@ -55,6 +55,7 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         "display(await read(`README.md`))",
         "display(await read('notes:1'))",
         "display(await tool.read({path:'notes:1'}))",
+        "const result = await tool.read({i:'Reading skill document', path:'README.md'}); display(result);",
     ] {
         let result = evaluate(code);
         assert_eq!(
@@ -65,6 +66,7 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
     }
     for code in [
         secret_read.as_str(),
+        "display(await tool.read({i:{command:'ignored'}, path:'README.md'}))",
         "display(await read('linked.md'))",
         "display(await read('~/.ssh/id_rsa'))",
         "display(await read('~/.agent/skills/x/SKILL.md'))",

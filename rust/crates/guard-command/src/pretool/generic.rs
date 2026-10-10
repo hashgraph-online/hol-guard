@@ -160,7 +160,10 @@ fn evaluate_envelope(
     let context =
         super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
     let super::PathContext { home_dir, cwd, .. } = context;
-    let mut signals = match extract_generic_signals(payload) {
+    let yield_payload = (harness == "omp")
+        .then(|| omp::yield_signal_payload(payload))
+        .flatten();
+    let mut signals = match extract_generic_signals(yield_payload.as_ref().unwrap_or(payload)) {
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };

@@ -1,16 +1,17 @@
-//! Recheck a bounded read-only eval input after its output has been scanned.
+//! Recheck bounded OMP eval reads and result reports after output scanning.
 use guard_contracts::{NativeHookRequestV1, PreToolActionTypeV1};
 use serde_json::Value;
 
-pub(super) fn bounded_read_output(request: &NativeHookRequestV1) -> bool {
+pub(super) fn bounded_output_action(request: &NativeHookRequestV1) -> Option<PreToolActionTypeV1> {
     if request.harness != "omp" {
-        return false;
+        return None;
     }
-    let Some(root) = request.payload.as_object() else {
-        return false;
-    };
-    if root.get("tool_name").and_then(Value::as_str) != Some("eval") {
-        return false;
+    let root = request.payload.as_object()?;
+    if !matches!(
+        root.get("tool_name").and_then(Value::as_str),
+        Some("eval" | "yield")
+    ) {
+        return None;
     }
     let input = Value::Object(
         root.iter()
@@ -32,8 +33,18 @@ pub(super) fn bounded_read_output(request: &NativeHookRequestV1) -> bool {
         Some(&request.home_dir),
         request.cwd.as_deref(),
     );
-    proof.minimum_action == "allow"
-        && !proof.action.sensitive_target
-        && proof.action.action_type == PreToolActionTypeV1::FileRead
-        && proof.reason_code == "native_omp_eval_bounded_tools"
+    let proof =
+        crate::omp_yield_input_scan::scan(&input, request.deadline_budget_ms, proof).ok()?;
+    if proof.minimum_action != "allow" || proof.action.sensitive_target {
+        return None;
+    }
+    match (proof.reason_code.as_str(), proof.action.action_type) {
+        ("native_omp_eval_bounded_tools", PreToolActionTypeV1::FileRead) => {
+            Some(PreToolActionTypeV1::FileRead)
+        }
+        ("native_omp_yield_metadata", PreToolActionTypeV1::Harness) => {
+            Some(PreToolActionTypeV1::Harness)
+        }
+        _ => None,
+    }
 }

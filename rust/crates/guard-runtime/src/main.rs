@@ -138,6 +138,7 @@ mod native_runtime_admission;
 mod native_runtime_resilience;
 mod oauth_refresh;
 mod oauth_secret_authority;
+mod omp_yield_input_scan;
 mod oneshot;
 mod package_authority_config;
 mod package_authority_op;

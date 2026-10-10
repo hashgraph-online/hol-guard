@@ -1,6 +1,55 @@
 use super::*;
 
 #[test]
+fn yield_report_output_preserves_intrinsic_and_installed_blocks() {
+    let mut request = post_request(json!({
+        "tool_name":"yield", "tool_input":{"type":"result", "data":{"summary":"Read complete", "report":"synthetic reference", "files":[]}},
+        "tool_response":{"content":[{"type":"text", "text":"synthetic reference"}]}
+    }));
+    request.harness = "omp".into();
+    assert_eq!(
+        super::super::eval_output::bounded_output_action(&request),
+        Some(PreToolActionTypeV1::Harness)
+    );
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "block".into());
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        guard_hook_core::review_post_tool(&request),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow", "{}", result.reason_code);
+    for floor in ["intrinsic", "default", "harness"] {
+        let mut blocked = effective.clone();
+        if floor == "default" {
+            blocked.default_action = "block".into();
+        }
+        if floor == "harness" {
+            blocked.harness_actions.insert("omp".into(), "block".into());
+        }
+        let scanned = if floor == "intrinsic" {
+            HookReviewResponseV1::deny("source_secret_match", "sensitive output")
+        } else {
+            HookReviewResponseV1::allow("output_scan_allow")
+        };
+        let result = apply_post_tool_policy(
+            &snapshot(blocked),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            scanned,
+        )
+        .unwrap();
+        assert_eq!(result.decision, "deny", "{floor}");
+    }
+    request.payload["tool_input"]["data"]["command"] = json!("extra operation");
+    assert!(super::super::eval_output::bounded_output_action(&request).is_none());
+}
+
+#[test]
 fn read_only_eval_output_preserves_scans_and_installed_policy_floors() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/omp-eval-output-tests")
@@ -69,11 +118,9 @@ fn read_only_eval_output_preserves_scans_and_installed_policy_floors() {
     ] {
         let mut unsafe_request = request.clone();
         unsafe_request.payload["tool_input"]["code"] = json!(code);
-        assert!(!super::super::eval_output::bounded_read_output(
-            &unsafe_request
-        ));
+        assert!(super::super::eval_output::bounded_output_action(&unsafe_request).is_none());
     }
     request.harness = "codex".into();
-    assert!(!super::super::eval_output::bounded_read_output(&request));
+    assert!(super::super::eval_output::bounded_output_action(&request).is_none());
     std::fs::remove_dir_all(root).unwrap();
 }

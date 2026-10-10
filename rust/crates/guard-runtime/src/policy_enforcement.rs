@@ -356,15 +356,16 @@ pub(crate) fn apply_post_tool_policy(
     }
     let task_metadata = payload_kind == GuardHookPayloadKindV2::Inline
         && guard_command::pretool::bounded_task_metadata_output(&request.payload, &request.harness);
-    let eval_read =
-        payload_kind == GuardHookPayloadKindV2::Inline && eval_output::bounded_read_output(request);
+    let omp_output_action = (payload_kind == GuardHookPayloadKindV2::Inline)
+        .then(|| eval_output::bounded_output_action(request))
+        .flatten();
     let classified_action = post_action_type(request, payload_kind)?;
     let action_type = if task_metadata {
         PreToolActionTypeV1::Harness
-    } else if eval_read {
-        // The complete input was re-proved as allowed file reads. The output
+    } else if let Some(action) = omp_output_action {
+        // The complete input was re-proved as reads or a report. The output
         // scan result and every applicable installed policy floor still join below.
-        PreToolActionTypeV1::FileRead
+        action
     } else {
         classified_action
     };
@@ -397,7 +398,8 @@ pub(crate) fn apply_post_tool_policy(
         action_type,
         &FloorInput {
             facts: &facts,
-            reason_code: if task_metadata
+            reason_code: if (task_metadata
+                || omp_output_action == Some(PreToolActionTypeV1::Harness))
                 && matches!(
                     response.reason_code.as_str(),
                     "output_scan_allow" | "source_full_scan_allow"

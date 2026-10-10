@@ -12,7 +12,9 @@ from ci.gauntlet.evidence import reconcile
 
 def test_eval_lane_uses_the_supported_javascript_session_bridge(tmp_path: Path) -> None:
     write_agent_configuration(
-        tmp_path / "agent", SimpleNamespace(base_url="http://127.0.0.1:1234", reasoning_effort=None)
+        tmp_path / "agent",
+        SimpleNamespace(base_url="http://127.0.0.1:1234", reasoning_effort=None),
+        wait_for_tasks=True,
     )
     config = json.loads((tmp_path / "agent" / "config.yml").read_text())
     assert config["eval"] == {"js": True, "py": False}
@@ -20,6 +22,14 @@ def test_eval_lane_uses_the_supported_javascript_session_bridge(tmp_path: Path) 
     # Print mode exits after the primary turn; wait for actual delegated
     # results instead of abandoning background agents at process shutdown.
     assert config["async"] == {"enabled": False}
+
+
+def test_async_wait_lane_retains_background_tasks(tmp_path: Path) -> None:
+    write_agent_configuration(
+        tmp_path / "agent", SimpleNamespace(base_url="http://127.0.0.1:1234", reasoning_effort=None)
+    )
+    config = json.loads((tmp_path / "agent" / "config.yml").read_text())
+    assert config["async"] == {"enabled": True}
 
 
 def test_eval_bridge_has_the_catalog_read_dependency_available() -> None:

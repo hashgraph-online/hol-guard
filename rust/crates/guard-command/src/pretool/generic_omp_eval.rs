@@ -397,6 +397,10 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
             _ => &["command", "cwd"][..],
         };
         match lit {
+            // OMP's session-tool wrapper accepts a literal intent label.
+            Lit::Str(text) if key == "i" => {
+                input.insert(key.clone(), Value::String(text.clone()));
+            }
             Lit::Str(text) if allowed_string.contains(&key.as_str()) => {
                 if call.sdk_read_helper && text.contains(':') {
                     let path = std::path::Path::new(text);
