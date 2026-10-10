@@ -105,6 +105,7 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
 mod guard_store_args;
+mod guard_store_clients;
 mod guard_store_cmd_activity;
 mod guard_store_cmd_api;
 mod guard_store_cmd_feedback;
@@ -119,6 +120,7 @@ mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
 mod guard_store_db;
 mod guard_store_json;
+mod guard_store_lineage;
 mod guard_store_op;
 mod guard_store_outbox_append;
 mod guard_store_outbox_binding;
@@ -130,6 +132,9 @@ mod guard_store_outbox_reads;
 mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
+mod guard_store_sessions;
+#[cfg(test)]
+mod guard_store_sessions_vectors_tests;
 #[cfg(test)]
 mod guard_store_vectors_tests;
 mod hardening;
