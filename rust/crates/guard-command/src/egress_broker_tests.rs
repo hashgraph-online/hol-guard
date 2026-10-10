@@ -185,6 +185,7 @@ fn archive_outcomes_map_to_the_exchange_result() {
             sha256: "ab".repeat(32),
             size: 7,
             final_url: url.to_owned(),
+            inspection: None,
         })],
         None,
     )
@@ -330,4 +331,41 @@ fn spool_symlink_is_not_followed() {
     .unwrap();
     assert!(exchange(EgressClass::Registry, &request, 1.0, 0, 1024).is_err());
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn archive_need_asks_for_inspection_and_the_reported_verdict_is_kept() {
+    let url = "https://example.com/a.tgz";
+    let scope = EgressScope::enter(&[], None).unwrap();
+    assert!(matches!(
+        exchange_archive(url, 10, 3, 5.0),
+        ArchiveExchange::Unavailable(_)
+    ));
+    let needs = scope.finish();
+    let spec = needs[0].inspect.as_ref().expect("archive need inspects");
+    assert_eq!(spec.max_files, 500);
+    assert!(spec.timeout_seconds > 0.0);
+    let verdict = ArchiveVerdictV1 {
+        status: "clean".to_owned(),
+        code: "ok".to_owned(),
+        message: "clean".to_owned(),
+        severity: "low".to_owned(),
+    };
+    let sha = "cd".repeat(32);
+    let _scope = EgressScope::enter(
+        &[supplied_archive(
+            url,
+            EgressOutcomeV1::Archive {
+                sha256: sha.clone(),
+                size: 7,
+                final_url: url.to_owned(),
+                inspection: Some(verdict.clone()),
+            },
+        )],
+        None,
+    )
+    .unwrap();
+    assert!(supplied_inspection(&sha).is_none());
+    exchange_archive(url, 10, 3, 5.0);
+    assert_eq!(supplied_inspection(&sha), Some(verdict));
 }

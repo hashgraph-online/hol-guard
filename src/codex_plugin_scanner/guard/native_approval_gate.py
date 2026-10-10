@@ -223,8 +223,7 @@ def approval_gate_native(
     global _request_counter
     status = native_runtime_status()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None

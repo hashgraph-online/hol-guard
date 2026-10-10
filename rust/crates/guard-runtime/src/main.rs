@@ -9,6 +9,7 @@ mod approval_gate_settings;
 mod approval_gate_state;
 mod approval_gate_verify;
 mod approval_proof_op;
+mod approval_resolution_plan_op;
 mod approval_reuse;
 mod approval_reuse_diagnostic_op;
 mod approval_reuse_diagnostic_probes;
@@ -16,6 +17,7 @@ mod approval_reuse_diagnostic_probes;
 mod approval_reuse_diagnostic_vectors_tests;
 mod archive_inspect;
 mod archive_inspect_containment;
+mod archive_verdict_seam;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;

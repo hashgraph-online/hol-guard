@@ -311,9 +311,6 @@ class NativePolicySnapshotPublicationMixin:
         status = status_provider()
         with publisher._condition:
             publisher._last_runtime_status = status
-        if getattr(status, "mode", None) not in {"auto", "force", "shadow"}:
-            publisher._record_error("native_policy_snapshot_native_disabled")
-            return None
         identity = getattr(status, "identity", None)
         capabilities = getattr(status, "capabilities", None)
         if (

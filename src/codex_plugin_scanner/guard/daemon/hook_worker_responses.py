@@ -12,27 +12,6 @@ from .hook_availability_policy import availability_harness_response, hook_action
 from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
 
 
-def post_tool_unavailable_response(
-    payload: dict[str, object],
-    *,
-    harness: str,
-    reason_code: str,
-    workspace: Path | None,
-    home_dir: Path,
-    guard_home: Path,
-) -> dict[str, object]:
-    return availability_harness_response(
-        payload,
-        harness=harness,
-        event_name="PostToolUse",
-        reason_code=reason_code,
-        reason="HOL Guard could not complete the native local hook review safely.",
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-    )
-
-
 def prepare_native_hook_policy(
     handler: Any,
     daemon_server: Any,
@@ -65,7 +44,6 @@ def prepare_native_hook_policy(
             default_harness=default_harness,
             reason=_native_policy_not_ready_reason(daemon_server),
             reason_code="native_policy_not_ready",
-            native_authoritative=True,
         )
     )
     return False
@@ -76,7 +54,6 @@ def _write_unmanaged_harness_passthrough(
     payload: dict[str, object],
     harness: str,
 ) -> None:
-    from .hook_availability_policy import availability_harness_response
     from .hook_request_parsing import runtime_hook_event_name
 
     event_name = runtime_hook_event_name(payload)
@@ -412,37 +389,11 @@ def observe_lifecycle_fail_safe_response(
     }
 
 
-def harness_json_from_review_response(
-    harness: str,
-    event_name: str,
-    response: object,
-) -> dict[str, object]:
-    to_harness_json = getattr(response, "to_harness_json", None)
-    payload = to_harness_json() if callable(to_harness_json) else {}
-    if not isinstance(payload, dict):
-        payload = {}
-    if event_name != "PostToolUse":
-        return payload
-    if _canonical_hook_harness(harness) in {"pi", "omp"}:
-        return payload
-    decision = str(payload.get("decision") or "")
-    model_output_action = str(payload.get("model_output_action") or "")
-    if decision == "allow" and model_output_action == "allow_original":
-        return {
-            "policy_action": "allow",
-            "hookSpecificOutput": {"hookEventName": event_name},
-        }
-    reason = str(payload.get("reason") or "HOL Guard blocked this tool output because it could not be proven safe.")
-    reason_code = str(payload.get("reason_code") or "fast_path_block")
-    return post_tool_native_block_response(reason=reason, reason_code=reason_code)
-
-
 __all__ = [
     "harness_json_from_native_post_tool",
     "harness_json_from_native_pre_tool",
     "harness_json_from_native_pre_tool_review",
     "harness_json_from_native_prompt",
-    "harness_json_from_review_response",
     "integrity_fail_closed_pre_tool_response",
     "observe_lifecycle_fail_safe_response",
     "permission_unavailable_response",

@@ -493,7 +493,7 @@ def test_managed_daemon_launch_disables_idle_shutdown(
 
 @pytest.mark.parametrize(
     ("mode", "forwarded"),
-    [("force", True), ("shadow", True), ("auto", False), ("off", False)],
+    [("force", True), ("shadow", False), ("auto", False), ("off", False)],
 )
 def test_daemon_launch_forwards_only_a_pinned_native_runtime_override(
     tmp_path: Path,

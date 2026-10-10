@@ -17,8 +17,9 @@ from typing import cast
 import pytest
 
 from codex_plugin_scanner.guard.approval_scope_support import request_scope_contract
-from codex_plugin_scanner.guard.approvals import _artifact_scope_runtime_exact_match_key, apply_approval_resolution
+from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_resolution import native_approval_resolution_plan
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.runtime.github_capability_interaction import GITHUB_MAINTENANCE_ACTION_CLASS
@@ -196,10 +197,24 @@ def test_approval_resolution_issues_from_guard_owned_operation_lineage(tmp_path:
     )
 
     assert resolved["resolution_action"] == "allow"
+    planned = native_approval_resolution_plan(
+        request,
+        guard_home=store.guard_home,
+        action="allow",
+        scope="artifact",
+        persist_policy=None,
+        temporary_mcp=False,
+        local_tool=False,
+        resolve_scope_matches=True,
+        requires_local_once=False,
+        resolved_workspace=None,
+        native_exact_token=None,
+        resolved_at=format_utc_timestamp(_ISSUED),
+    )
     lookup = store.resolve_policy_decision_lookup(
         "codex",
         "codex:project:tool-action:github",
-        artifact_hash=_artifact_scope_runtime_exact_match_key(request, "artifact"),
+        artifact_hash=cast(Mapping[str, object], planned["decision"])["artifact_hash"],
         now=format_utc_timestamp(_ISSUED),
         consume_one_shot=False,
     )

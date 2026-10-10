@@ -123,8 +123,7 @@ def _request(subop: str, guard_home: Path | None, **fields: Any) -> dict[str, An
     }
     status = _native_runtime_status_memo()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None

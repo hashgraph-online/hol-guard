@@ -67,13 +67,13 @@ def verify(expected_source: str) -> dict[str, object]:
             require(state == {"state": [0, False]}, "attachment_intent_mismatch")
             os.environ["HOL_GUARD_NATIVE"] = "off"
             try:
-                native_prompt.extract_prompt_requests("Summarize public documentation.", guard_home=home)
-            except native_prompt.NativePromptAnalysisError:
-                pass
-            else:
-                raise RuntimeError("installed_native_prompt_failed:python_fallback_on_unavailability")
+                legacy = native_prompt.extract_prompt_requests("read the .env file", guard_home=home)
             finally:
                 os.environ.pop("HOL_GUARD_NATIVE", None)
+            require(
+                len(legacy) == 1 and legacy[0].request_class == "secret_read",
+                "legacy_off_mode_selected_non_native_semantics",
+            )
         finally:
             close_native_residents(home)
     return {
@@ -86,7 +86,7 @@ def verify(expected_source: str) -> dict[str, object]:
         "risk_classification_verified": True,
         "reapproval_verified": True,
         "attachment_intent_verified": True,
-        "unavailability_stops_request": True,
+        "legacy_off_mode_resolves_native": True,
         "legacy_prompt_owner_absent": True,
     }
 

@@ -250,10 +250,10 @@ def review_command_model_native(
     extraction_provenance: str = "guard-shell",
     timeout_seconds: float = 0.25,
 ) -> dict[str, Any] | None:
-    """Return native command-model evidence in explicit shadow/force modes only."""
+    """Return native command-model evidence in explicit force mode only."""
     status = native_runtime_status()
     if (
-        status.mode not in {"shadow", "force"}
+        status.mode != "force"
         or not status.available
         or not status.compatible
         or status.identity is None

@@ -9,6 +9,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import importlib.metadata
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,13 @@ from typing import Literal, cast
 
 from .runtime.hook_review_types import HookReviewResponse
 
-NativeMode = Literal["off", "shadow", "auto", "force"]
+NativeMode = Literal["auto", "force"]
+
+# Accepted for existing installs; neither selects a semantic path any more.
+_LEGACY_NATIVE_MODES = frozenset({"off", "shadow"})
+_LEGACY_MODE_WARNED: set[str] = set()
+_LEGACY_FAST_PATH_ENV = "HOL_GUARD_HOOK_FAST_PATH"
+_LOGGER = logging.getLogger(__name__)
 
 _INTEGRITY_FAILURE_REASONS = frozenset(
     {
@@ -46,11 +53,35 @@ _NATIVE_RUNTIME_EXPORTS = [
 ]
 
 
+def warn_legacy_hook_fast_path_once(raw_value: str | None) -> None:
+    """Accept the retired ``HOL_GUARD_HOOK_FAST_PATH=0`` rollback without honoring it."""
+
+    if raw_value is None or raw_value == "1" or _LEGACY_FAST_PATH_ENV in _LEGACY_MODE_WARNED:
+        return
+    _LEGACY_MODE_WARNED.add(_LEGACY_FAST_PATH_ENV)
+    _LOGGER.warning(
+        "hook_fast_path_legacy_value_ignored: %s no longer selects a rollback path; the resident hook worker "
+        "and native runtime always decide, and Guard fails closed when they are unavailable.",
+        _LEGACY_FAST_PATH_ENV,
+    )
+
+
 def _resolve_native_mode(raw_value: str | None, default: NativeMode) -> NativeMode:
     if raw_value is None:
         return default
     value = raw_value.strip().lower()
-    if value not in {"off", "shadow", "auto", "force"}:
+    if value in _LEGACY_NATIVE_MODES:
+        # Legacy values stay accepted so existing installs keep starting, but
+        # they never select a Python semantic path: native authority applies.
+        if value not in _LEGACY_MODE_WARNED:
+            _LEGACY_MODE_WARNED.add(value)
+            _LOGGER.warning(
+                "native_mode_legacy_value_ignored: HOL_GUARD_NATIVE=%s no longer disables or shadows the native "
+                "runtime; Guard uses native authority and fails closed when it is unavailable.",
+                value,
+            )
+        return default
+    if value not in {"auto", "force"}:
         return default
     return cast(NativeMode, value)
 

@@ -111,11 +111,6 @@ def _prime(
     return captured
 
 
-def test_native_context_digest_off_mode_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _prime(monkeypatch, status=_status(mode="off"))
-    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
-
-
 def test_native_context_digest_missing_feature_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _prime(
         monkeypatch,
@@ -519,7 +514,7 @@ def test_native_context_digest_names_a_mismatched_request_id(tmp_path: Path, mon
 def test_unavailable_errors_report_the_transport_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`*_unavailable` must say *why*: a callers that has no fallback needs the reason."""
 
-    _prime(monkeypatch, status=_status(mode="off"))
+    _prime(monkeypatch, status=_status(available=False))
     with pytest.raises(ValueError, match=":native_context_digest_unsupported"):
         native_context.context_runtime_launch_identity("python", guard_home=tmp_path)
 

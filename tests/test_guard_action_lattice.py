@@ -26,7 +26,7 @@ from codex_plugin_scanner.guard.mdm.policy import _merge_strongest_actions, _str
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.policy.engine import decide_action
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation
 
 EXPECTED_LATTICE: tuple[GuardAction, ...] = (
     "allow",

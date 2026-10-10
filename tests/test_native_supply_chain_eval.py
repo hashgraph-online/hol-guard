@@ -79,10 +79,8 @@ def _evaluate(tmp_path: Path):
 
 def test_request_is_bound_non_retaining_and_requires_feature(monkeypatch, tmp_path: Path) -> None:
     captured = _bind(monkeypatch)
-    from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
-
     persisted: list[object] = []
-    monkeypatch.setattr(evaluator, "_persist_evidence", lambda **kwargs: persisted.append(kwargs["evaluation"]))
+    monkeypatch.setattr(transport, "_persist_evidence", lambda **kwargs: persisted.append(kwargs["evaluation"]))
     result = _evaluate(tmp_path)
     assert result.decision == "allow"
     assert persisted == [result]

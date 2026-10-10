@@ -210,10 +210,12 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             "cwd": str(workspace),
             "source_scope": "project",
         }
-        # A bundled runtime can initialize a fresh home's policy. Exercise an
-        # explicit fail-safe outage rather than relying on source-only absence.
+        # A bundled runtime can initialize a fresh home's policy, and no
+        # environment value disables it. Exercise a real fail-safe outage by
+        # occupying the resident's state directory with a regular file.
+        (guard_home / "native-runtime").write_text("outage", encoding="utf-8")
         hook_env = _child_python_environment()
-        hook_env["HOL_GUARD_NATIVE"] = "off"
+        hook_env.pop("HOL_GUARD_NATIVE", None)
         hook_env["PYTHONPATH"] = ""
         hook_env.pop("HOL_GUARD_PYTHON_ORACLE", None)
         hook_env.pop("HOL_GUARD_NATIVE_DIAGNOSTIC", None)
@@ -255,30 +257,40 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
         hook_output = response.get("hookSpecificOutput") if isinstance(response, dict) else None
         if (
             not isinstance(response, dict)
-            or response.get("reason_code") != "native_hook_disabled"
             or response.get("policy_action") != "block"
             or not isinstance(hook_output, dict)
             or hook_output.get("permissionDecision") != "deny"
         ):
-            raise InstalledCanaryError("No-post-proof harness did not deny explicitly disabled native review")
+            raise InstalledCanaryError("No-post-proof harness did not deny an unavailable native review")
         store = GuardStore(guard_home, prime_policy_integrity=False)
         with closing(sqlite3.connect(store.path)) as connection:
-            persisted = cast(
+            row = cast(
                 tuple[object, ...] | None,
-                connection.execute("select activity_id from command_activity").fetchone(),
+                connection.execute(
+                    """
+                    select harness, hook_phase, execution_status, proof_level,
+                           policy_action, decision_reason_code, match_count
+                    from command_activity
+                    """
+                ).fetchone(),
             )
-        # The store authority is the native runtime. With it explicitly
-        # disabled the hook must deny and must not persist unverified evidence.
-        if persisted is not None:
+        expected = (harness, "pre", "prevented", "pre_hook", "block", "policy", 0)
+        # Evidence is best effort for a fail-safe outage; the denial above is
+        # the authority. A persisted row must describe a prevention. A missing
+        # row is reported as missing, not as the expected constants.
+        observed = tuple(row) if row is not None else None
+        if observed is not None and observed != expected:
             raise InstalledCanaryError(
-                "Installed no-post-proof hook persisted activity evidence without the native store authority"
+                f"Installed no-post-proof hook persisted unexpected activity evidence: {observed!r}"
             )
         return {
             "harness": harness,
             "post_execution_surface": False,
-            "policy_action": "block",
-            "reason_code": "native_hook_disabled",
-            "activity_evidence_persisted": False,
+            "evidence_persisted": observed is not None,
+            "execution_status": str(observed[2]) if observed is not None else None,
+            "proof_level": str(observed[3]) if observed is not None else None,
+            "policy_action": str(observed[4]) if observed is not None else None,
+            "decision_reason_code": str(observed[5]) if observed is not None else None,
         }
 
 

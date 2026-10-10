@@ -56,8 +56,7 @@ def github_cli_classify_native(
         return None
     status = native_runtime_status(deadline_monotonic=effective_deadline)
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None
