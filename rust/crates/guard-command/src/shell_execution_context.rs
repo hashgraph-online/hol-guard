@@ -9,6 +9,8 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::shell_execution_context_support::*;
+pub use crate::shell_execution_context_support::{ShellPathIdentity, ShellPathProof};
+pub use crate::shell_model_limits::{ShellModelLimit, ShellModelLimits};
 
 fn shell_directory_command_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -107,6 +109,24 @@ pub fn model_shell_execution_context(
     workspace_root: Option<&Path>,
     home_dir: Option<&Path>,
 ) -> ShellExecutionContext {
+    model_shell_execution_context_bounded(
+        command_text,
+        cwd,
+        workspace_root,
+        home_dir,
+        &ShellModelLimits::unbounded(),
+    )
+    .unwrap_or_else(|_| unreachable!("unbounded modeling has no limit to exceed"))
+}
+
+/// The same model, refusing once a segment, proof or time limit is crossed.
+pub fn model_shell_execution_context_bounded(
+    command_text: &str,
+    cwd: Option<&Path>,
+    workspace_root: Option<&Path>,
+    home_dir: Option<&Path>,
+    limits: &ShellModelLimits,
+) -> Result<ShellExecutionContext, ShellModelLimit> {
     let directory_change_present = shell_directory_command_re().is_match(command_text);
     let initial_input = cwd
         .map(Path::to_path_buf)
@@ -147,7 +167,7 @@ pub fn model_shell_execution_context(
     let tokens = match split_shell_tokens(command_text) {
         Ok(t) => t,
         Err(_) => {
-            return ShellExecutionContext {
+            return Ok(ShellExecutionContext {
                 complete: !directory_change_present,
                 reason_code: if directory_change_present {
                     Some(SHELL_CWD_UNRESOLVED_SYNTAX.to_owned())
@@ -155,11 +175,12 @@ pub fn model_shell_execution_context(
                     None
                 },
                 ..ctx_empty(reason_code.clone())
-            };
+            });
         }
     };
 
     let (raw_segments, trailing_controls) = ordered_segments(&tokens);
+    limits.admit_segments(raw_segments.len())?;
     let parent_shell_reason = parent_shell_cwd_construct_reason(&raw_segments, &trailing_controls);
     let mut directory_change_present = directory_change_present;
     if let Some(psr) = parent_shell_reason {
@@ -169,7 +190,7 @@ pub fn model_shell_execution_context(
         directory_change_present = true;
     }
     if raw_segments.is_empty() {
-        return ctx_empty(reason_code);
+        return Ok(ctx_empty(reason_code));
     }
 
     let mut state = ShellState {
@@ -195,8 +216,10 @@ pub fn model_shell_execution_context(
     let mut group_states: Vec<(String, Option<ShellState>)> = Vec::new();
     let mut segments: Vec<ShellExecutionSegment> = Vec::new();
     let mut first_reason = reason_code.clone();
+    let mut proof_total = 0usize;
 
     for index in 0..raw_segments.len() {
+        limits.check_deadline()?;
         let (segment_tokens, controls_before) = &raw_segments[index];
         let controls_after: &[String] = if index + 1 < raw_segments.len() {
             &raw_segments[index + 1].1
@@ -206,6 +229,13 @@ pub fn model_shell_execution_context(
         let (new_state, boundary_reason) =
             apply_group_boundaries_before_segment(state, controls_before, &mut group_states);
         state = new_state;
+        let held_proofs = state.cwd_path_proofs.len()
+            + state
+                .stack
+                .iter()
+                .map(|entry| entry.cwd_path_proofs.len())
+                .sum::<usize>();
+        limits.admit_proofs(&mut proof_total, held_proofs)?;
         let mut segment_reason = state
             .reason_code
             .clone()
@@ -288,7 +318,7 @@ pub fn model_shell_execution_context(
         }
         complete = false;
     }
-    ShellExecutionContext {
+    Ok(ShellExecutionContext {
         command_text: command_text.to_owned(),
         initial_cwd,
         workspace_root: root,
@@ -297,7 +327,7 @@ pub fn model_shell_execution_context(
         complete,
         reason_code: first_reason,
         directory_change_present,
-    }
+    })
 }
 
 /// `validate_shell_execution_segment` (:252-274).
@@ -305,8 +335,20 @@ pub fn validate_shell_execution_segment(
     context: &ShellExecutionContext,
     segment: &ShellExecutionSegment,
 ) -> (Option<PathBuf>, Option<String>) {
+    validate_shell_execution_segment_bounded(context, segment, &ShellModelLimits::unbounded())
+        .unwrap_or_else(|_| unreachable!("unbounded validation has no limit to exceed"))
+}
+
+/// Revalidation that stops between filesystem proof checks once the deadline
+/// passes.
+pub fn validate_shell_execution_segment_bounded(
+    context: &ShellExecutionContext,
+    segment: &ShellExecutionSegment,
+    limits: &ShellModelLimits,
+) -> Result<(Option<PathBuf>, Option<String>), ShellModelLimit> {
+    limits.check_deadline()?;
     if !segment.complete || segment.effective_cwd.is_none() || segment.cwd_identity.is_none() {
-        return (
+        return Ok((
             None,
             Some(
                 segment
@@ -315,10 +357,10 @@ pub fn validate_shell_execution_segment(
                     .or_else(|| context.reason_code.clone())
                     .unwrap_or_else(|| SHELL_CWD_PATH_CHANGED.to_owned()),
             ),
-        );
+        ));
     }
     if context.workspace_root.is_none() || context.workspace_identity.is_none() {
-        return (
+        return Ok((
             None,
             Some(
                 context
@@ -326,34 +368,35 @@ pub fn validate_shell_execution_segment(
                     .clone()
                     .unwrap_or_else(|| SHELL_CWD_PATH_CHANGED.to_owned()),
             ),
-        );
+        ));
     }
     let (root, root_identity, root_reason) =
         existing_directory(context.workspace_root.as_ref().unwrap());
     if root_reason.is_some() || root_identity != context.workspace_identity {
-        return (None, Some(SHELL_CWD_PATH_CHANGED.to_owned()));
+        return Ok((None, Some(SHELL_CWD_PATH_CHANGED.to_owned())));
     }
     let (current, current_identity, current_reason) =
         existing_directory(segment.effective_cwd.as_ref().unwrap());
     if current_reason.is_some() || current_identity != segment.cwd_identity {
-        return (None, Some(SHELL_CWD_PATH_CHANGED.to_owned()));
+        return Ok((None, Some(SHELL_CWD_PATH_CHANGED.to_owned())));
     }
     if root.is_none()
         || current.is_none()
         || !is_within(current.as_ref().unwrap(), root.as_ref().unwrap())
     {
-        return (None, Some(SHELL_CWD_WORKSPACE_ESCAPE.to_owned()));
+        return Ok((None, Some(SHELL_CWD_WORKSPACE_ESCAPE.to_owned())));
     }
     for proof in &segment.cwd_path_proofs {
+        limits.check_deadline()?;
         let (proof_current, proof_identity, proof_reason) = existing_directory(&proof.lexical_path);
         if proof_reason.is_some()
             || proof_current.as_deref() != Some(proof.resolved_path.as_path())
             || proof_identity.as_ref() != Some(&proof.identity)
         {
-            return (None, Some(SHELL_CWD_PATH_CHANGED.to_owned()));
+            return Ok((None, Some(SHELL_CWD_PATH_CHANGED.to_owned())));
         }
     }
-    (current, None)
+    Ok((current, None))
 }
 
 /// `shell_execution_segment_hash` (:277-290).
