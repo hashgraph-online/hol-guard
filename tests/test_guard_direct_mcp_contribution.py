@@ -17,6 +17,8 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     validate_mcp_contribution,
 )
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 _ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -201,28 +203,27 @@ def test_direct_defaults_require_local_enable_and_preserve_stronger_floors(monke
 
 
 @pytest.mark.parametrize("state,expected", [("allow", "allow"), ("block", "block"), ("review", "review")])
-def test_this_device_grant_precedes_direct_catalog_default(monkeypatch, state, expected):
+def test_this_device_grant_precedes_direct_catalog_default(monkeypatch, tmp_path, state, expected):
     from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision
     from codex_plugin_scanner.guard.runtime.local_cli_commands import LocalCliCommand
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    from .test_guard_local_mcp_grants import _enroll
 
     tool = artifact()
-    identity = tool.metadata["mcp_server_identity"]
-
-    class Store:
-        def read_local_mcp_grant(self, identity_hash, **kwargs):
-            assert identity_hash == identity["identity_hash"]
-            assert kwargs["command"] == "fixture-mcp"
-            assert kwargs["args_hash"] == identity["args_hash"]
-            return {
-                "state": "allowed",
-                "commands": [LocalCliCommand("write_file", "Write", "write_file", "Write")],
-                "command_states": {"write_file": state},
-            }
+    identity = build_mcp_server_identity(config_path="", command="fixture-mcp", args=(), transport="stdio")
+    store = GuardStore(tmp_path / "guard-home")
+    _enroll(
+        store,
+        identity,
+        states={"write_file": state},
+        commands=(LocalCliCommand("write_file", "Write", "write_file", "Write"),),
+    )
 
     def unexpected_catalog_read():
         pytest.fail("A matched device grant must take precedence over catalog defaults")
 
     monkeypatch.setattr(grants, "load_mcp_contribution_payloads", unexpected_catalog_read)
-    decision = apply_local_mcp_extension_decision(Store(), tool, "review")
+    decision = apply_local_mcp_extension_decision(store, tool, "review")
     assert decision[0] == expected
     assert decision[1] == "local-mcp-extension"

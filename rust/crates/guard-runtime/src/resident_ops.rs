@@ -239,6 +239,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::LocalCliGrantDecide(request) => {
                 crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
             }
+            ResidentOperationV1::LocalMcpGrantDecide(request) => {
+                crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
+            }
             #[cfg(unix)]
             ResidentOperationV1::SkillDirectoryIdentity(request) => {
                 crate::skill_directory_identity_op::evaluate_skill_directory_identity_request(
@@ -356,6 +359,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
         _ => None,
     }
@@ -371,6 +375,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.store_path),
         _ => None,
     }
 }
