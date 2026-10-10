@@ -45,6 +45,8 @@ mod skill_directory_identity;
 pub use skill_directory_identity::*;
 mod browser_mcp_intent;
 pub use browser_mcp_intent::*;
+mod false_positive_rules;
+pub use false_positive_rules::*;
 mod mcp_runtime_evidence;
 pub use mcp_runtime_evidence::*;
 mod mcp_tool_evidence;
