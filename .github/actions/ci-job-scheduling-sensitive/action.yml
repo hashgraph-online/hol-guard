@@ -73,6 +73,7 @@ runs:
         if (( i % slice_count == slice_index )); then
           selected+=("${nodes[$i]}")
         fi
+      done
       uv run --no-sync pytest "${selected[@]}" --tb=short --reruns 1 --reruns-delay 2
     shell: bash
   - name: Run extended reconnect soak without tracing
