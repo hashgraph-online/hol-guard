@@ -10,7 +10,7 @@ import pytest
 from scripts.ci import runtime_majority_report as report_module
 from scripts.ci.runtime_majority_python import build_graph, closure, count_python_loc
 from scripts.ci.runtime_majority_report import DEFAULT_SCOPE, ScopeError, build_report, load_scope, main
-from scripts.ci.runtime_majority_rust import analyze_source, measure_rust
+from scripts.ci.runtime_majority_rust import analyze_source, measure_rust, walk_module_tree
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -46,6 +46,11 @@ def test_rust_inner_cfg_test_attribute_strips_whole_file() -> None:
 def test_python_loc_skips_comments_and_blank_lines_but_counts_docstrings() -> None:
     source = '"""doc\nstring"""\n\n# comment\nx = 1  # trailing\n\n\ndef f():\n    return x\n'
     assert count_python_loc(source) == 5
+
+
+@pytest.fixture(scope="module")
+def shipped_report() -> dict:
+    return build_report(REPO_ROOT, REPO_ROOT / DEFAULT_SCOPE)
 
 
 def _write(path: Path, text: str = "x = 1\n") -> None:
@@ -183,12 +188,12 @@ def test_min_share_exit_code(tmp_path: Path, capsys: pytest.CaptureFixture[str])
     assert json.loads(capsys.readouterr().out.rsplit("runtime-majority:", 1)[0])["schema"] == report_module.SCHEMA
 
 
-def test_shipped_scope_is_valid_and_has_no_stale_entries() -> None:
+def test_shipped_scope_is_valid_and_has_no_stale_entries(shipped_report: dict) -> None:
     scope = load_scope(REPO_ROOT / DEFAULT_SCOPE)
     assert scope["metric"]["target_share"] == 0.7
     ids = [entry["id"] for entry in scope["python"]["exclusions"]]
     assert len(ids) == len(set(ids))
-    result = build_report(REPO_ROOT, REPO_ROOT / DEFAULT_SCOPE)
+    result = shipped_report
     assert [item["id"] for item in result["exclusion_summary"] if item["matches_nothing_in_closure"]] == []
     assert result["metric"]["rust_runtime_loc"] > 0
     assert 0 < result["metric"]["share"] < 1
@@ -342,9 +347,67 @@ def test_dirty_indicator_covers_untracked_scanned_files(tmp_path: Path) -> None:
     assert "rust/crates/bin/src/extra.rs" in build_report(repo, scope_path)["git_dirty_paths"]
 
 
-def test_shipped_scope_keeps_managed_policy_loading_in_scope() -> None:
-    result = build_report(REPO_ROOT, REPO_ROOT / DEFAULT_SCOPE)
+def test_shipped_scope_keeps_managed_policy_loading_in_scope(shipped_report: dict) -> None:
+    result = shipped_report
     in_scope = {item["path"] for item in result["python"]["files"]}
     assert "src/codex_plugin_scanner/guard/mdm/policy.py" in in_scope
     assert "src/codex_plugin_scanner/guard/mdm/contracts.py" in in_scope
     assert any(item["path"].endswith("native_package_evaluation_compose.py") for item in result["python"]["files"])
+
+
+def test_walk_module_tree_follows_only_live_include_sites(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    main = src / "main.rs"
+    _write(
+        main,
+        '// include!("commented.rs");\n'
+        "#[cfg(test)]\n"
+        'mod t {\n    include!("test_only.rs");\n}\n'
+        'const S: &str = "include!(\\"in_string.rs\\")";\n'
+        'include!("real.rs");\n'
+        "fn main() {}\n",
+    )
+    for name in ("commented", "test_only", "in_string", "real"):
+        _write(src / f"{name}.rs", "fn f() {}\n")
+    reached, _unresolved = walk_module_tree(main)
+    assert {path.name for path in reached} == {"main.rs", "real.rs"}
+
+
+def test_eager_audit_considers_every_in_scope_importer(tmp_path: Path) -> None:
+    pkg = tmp_path / "src" / "pkg"
+    _write(pkg / "__init__.py", "")
+    _write(pkg / "root.py", "from pkg import a\nfrom pkg import b\n")
+    _write(pkg / "a.py", "def f():\n    from pkg import skipped\n")
+    _write(pkg / "b.py", "from pkg import skipped\n")
+    _write(pkg / "skipped.py", "x = 1\n")
+    _rust_workspace(tmp_path)
+    scope_path = tmp_path / DEFAULT_SCOPE
+    scope = _scope()
+    scope["python"]["roots"] = [{"module": "pkg.root", "surface": "test"}]
+    _write(scope_path, json.dumps(scope))
+    result = build_report(tmp_path, scope_path)
+    [record] = [item for item in result["exclusions"] if item["path"] == "src/pkg/skipped.py"]
+    assert record["in_scope_importers"] == ["src/pkg/a.py", "src/pkg/b.py"]
+    assert record["imported_at_import_time_by_in_scope"] is True
+    [summary] = [item for item in result["exclusion_summary"] if item["id"] == "skip"]
+    assert summary["eager_imported_direct_modules"] == ["src/pkg/skipped.py"]
+
+
+def test_shipped_scope_keeps_synchronous_hook_path_modules_in_scope(shipped_report: dict) -> None:
+    result = shipped_report
+    in_scope = {item["path"] for item in result["python"]["files"]}
+    guard = "src/codex_plugin_scanner/guard/"
+    required = [
+        "runtime/package_json_scripts.py",
+        "runtime/custom_extension_suggestion.py",
+        "runtime/mcp_server_contribution.py",
+        "cli/render.py",
+        "aibom_detection.py",
+        "inventory_contract.py",
+        "evaluation_json.py",
+        "store_command_activity_rollups.py",
+        "store_receipt_rollups.py",
+        "store_review_event_outbox_writes.py",
+        "store_storage_maintenance.py",
+    ]
+    assert [name for name in required if guard + name not in in_scope] == []

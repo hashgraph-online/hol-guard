@@ -216,10 +216,19 @@
       {
         "id": "aibom-inventory",
         "category": "offline_reporting",
-        "reason": "AIBOM inventory/export and trust-metadata reporting; control-plane reads for dashboards/cloud sync, not on the enforcement path.",
+        "reason": "AIBOM inventory/export and trust-metadata reporting; control-plane reads for dashboards/cloud sync, not on the enforcement path. aibom_detection and the inventory_contract fingerprint/model modules stay in scope: adapter detect() and hashing run synchronously during launch.",
         "path": [
-          "src/codex_plugin_scanner/guard/aibom_*.py",
-          "src/codex_plugin_scanner/guard/inventory_*.py",
+          "src/codex_plugin_scanner/guard/inventory_cisco.py",
+          "src/codex_plugin_scanner/guard/aibom_cli.py",
+          "src/codex_plugin_scanner/guard/aibom_cloud_contract.py",
+          "src/codex_plugin_scanner/guard/aibom_collection.py",
+          "src/codex_plugin_scanner/guard/aibom_commands.py",
+          "src/codex_plugin_scanner/guard/aibom_content_upload.py",
+          "src/codex_plugin_scanner/guard/aibom_models.py",
+          "src/codex_plugin_scanner/guard/aibom_reporting.py",
+          "src/codex_plugin_scanner/guard/aibom_symlink.py",
+          "src/codex_plugin_scanner/guard/aibom_sync.py",
+          "src/codex_plugin_scanner/guard/aibom_trust_metadata.py",
           "src/codex_plugin_scanner/guard/local_risk_report.py",
           "src/codex_plugin_scanner/guard/insights_share.py",
           "src/codex_plugin_scanner/guard/access_graph_events.py",
@@ -236,15 +245,12 @@
           "src/codex_plugin_scanner/guard/runtime/review_event_delivery.py",
           "src/codex_plugin_scanner/guard/runtime/review_event_display.py",
           "src/codex_plugin_scanner/guard/runtime/review_policy_memory_executor.py",
-          "src/codex_plugin_scanner/guard/runtime/provider_recovery.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_replay*.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_enrollment.py",
           "src/codex_plugin_scanner/guard/runtime/native_workspace_review_queue.py",
           "src/codex_plugin_scanner/guard/runtime/native_business_review_*.py",
-          "src/codex_plugin_scanner/guard/store_review_event_outbox*.py",
           "src/codex_plugin_scanner/guard/store_review_event_acknowledgment.py",
           "src/codex_plugin_scanner/guard/store_review_event_sequence_recovery.py",
-          "src/codex_plugin_scanner/guard/store_review_event_wake_schema.py",
           "src/codex_plugin_scanner/guard/sqlite_cloud_review_recovery.py",
           "src/codex_plugin_scanner/guard/cloud_exception_requests.py",
           "src/codex_plugin_scanner/guard/daemon/cloud_review_settings*.py",
@@ -264,32 +270,17 @@
         ]
       },
       {
-        "id": "storage-maintenance",
-        "category": "async_persistence",
-        "reason": "Retention, rollup and maintenance persistence code run by background maintenance, not per request.",
-        "path": [
-          "src/codex_plugin_scanner/guard/store_storage_maintenance.py",
-          "src/codex_plugin_scanner/guard/store_command_activity_maintenance*.py",
-          "src/codex_plugin_scanner/guard/store_command_activity_rollups.py",
-          "src/codex_plugin_scanner/guard/store_receipt_rollups.py"
-        ]
-      },
-      {
         "id": "extension-authoring",
         "category": "offline_authoring",
-        "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane).",
+        "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane). Modules the hook evaluation calls synchronously (package_json_scripts, custom_extension_suggestion, mcp_server_contribution, extension_contribution) stay in scope; only continuity sync, catalog sync/handshake and builder/control surfaces are excluded.",
         "path": [
           "src/codex_plugin_scanner/guard/extension_builder/*",
           "src/codex_plugin_scanner/guard/cli/extension_builder_commands.py",
           "src/codex_plugin_scanner/guard/cli/extension_catalog_reads.py",
+          "src/codex_plugin_scanner/guard/runtime/custom_extension_continuity*.py",
           "src/codex_plugin_scanner/guard/cli/extension_controls_commands.py",
-          "src/codex_plugin_scanner/guard/runtime/custom_extension_*.py",
-          "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",
-          "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
           "src/codex_plugin_scanner/guard/runtime/local_cli_help.py",
           "src/codex_plugin_scanner/guard/runtime/local_mcp_probe.py",
-          "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
-          "src/codex_plugin_scanner/guard/runtime/package_json_script_memory.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_sync.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_handshake.py",
           "src/codex_plugin_scanner/guard/daemon/extension_control_*.py",
@@ -359,10 +350,9 @@
       {
         "id": "cli-presentation-and-parsing",
         "category": "cli_only",
-        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes.",
+        "reason": "Argparse construction, Rich rendering and onboarding/status presentation for CLI subcommands that are not runtime routes. cli/render.py stays in scope because hook responses are redacted and emitted through it; only the doctor/uninstall renderers are excluded.",
         "path": [
           "src/codex_plugin_scanner/guard/cli/commands_parser*.py",
-          "src/codex_plugin_scanner/guard/cli/render*.py",
           "src/codex_plugin_scanner/guard/cli/product.py",
           "src/codex_plugin_scanner/guard/cli/docs.py",
           "src/codex_plugin_scanner/guard/cli/progress.py",
@@ -374,7 +364,8 @@
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_policy_document.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_records.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_risk_report.py",
-          "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py"
+          "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py",
+          "src/codex_plugin_scanner/guard/cli/render_*.py"
         ]
       },
       {
@@ -439,14 +430,6 @@
           "src/codex_plugin_scanner/guard/secrets/secret_repository_scanner.py",
           "src/codex_plugin_scanner/guard/secrets/secret_staged_scanner.py",
           "src/codex_plugin_scanner/guard/secrets/public_rule_catalog.py"
-        ]
-      },
-      {
-        "id": "evaluation-harness",
-        "category": "offline_authoring",
-        "reason": "hol-guard-eval evaluation harness and cleanup tooling; offline qualification, not a product runtime route.",
-        "path": [
-          "src/codex_plugin_scanner/guard/evaluation_*.py"
         ]
       },
       {

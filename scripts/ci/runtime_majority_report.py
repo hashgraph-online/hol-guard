@@ -84,6 +84,13 @@ def _first_entry(path: str, entries: list[dict[str, Any]]) -> dict[str, Any] | N
     return next((entry for entry in entries if path_matches(path, entry)), None)
 
 
+def _in_scope_importers(graph: ImportGraph, in_scope: dict[str, str], name: str) -> tuple[list[str], list[str]]:
+    """Paths of every in-scope module importing ``name``: ``(all importers, import-time importers)``."""
+    every = [m for m in sorted(in_scope) if name in graph.eager.get(m, set()) | graph.lazy.get(m, set())]
+    eager = [m for m in every if name in graph.eager.get(m, set())]
+    return [graph.modules[m].path for m in every], [graph.modules[m].path for m in eager]
+
+
 def _python_exclusions(
     graph: ImportGraph,
     unpruned_parent: dict[str, str],
@@ -97,6 +104,7 @@ def _python_exclusions(
         entry = _first_entry(module.path, entries)
         if entry is not None:
             via = direct_hits.get(name, {}).get("via") or unpruned_parent.get(name, "")
+            importers, eager_importers = _in_scope_importers(graph, in_scope, name)
             records.append(
                 {
                     "language": "python",
@@ -107,7 +115,8 @@ def _python_exclusions(
                     "category": entry["category"],
                     "reason": entry["reason"],
                     "imported_by": graph.modules[via].path if via in graph.modules else "",
-                    "imported_at_import_time_by_in_scope": name in graph.eager.get(via, set()) and via in in_scope,
+                    "in_scope_importers": importers,
+                    "imported_at_import_time_by_in_scope": bool(eager_importers),
                 }
             )
             continue
@@ -129,6 +138,7 @@ def _python_exclusions(
                     else "reachable only through an excluded module"
                 ),
                 "imported_by": graph.modules[unpruned_parent[name]].path if unpruned_parent.get(name) else "",
+                "in_scope_importers": [],
                 "imported_at_import_time_by_in_scope": False,
             }
         )

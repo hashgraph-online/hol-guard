@@ -394,8 +394,10 @@ def walk_module_tree(root_file: Path) -> tuple[list[Path], list[str]]:
                 unresolved.append(f"{current}:{name}")
             else:
                 stack.append(found.resolve())
-        for included in _INCLUDE.findall(source):
-            target = directory / included
+        for match in _INCLUDE.finditer(source):
+            if flags[match.start()] != 1:  # comment, string literal, or cfg(test) region
+                continue
+            target = directory / match.group(1)
             if target.is_file():
                 stack.append(target.resolve())
     return sorted(seen), unresolved
