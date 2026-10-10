@@ -38,6 +38,7 @@ def public_events(events: list[dict[str, Any]], replacements: dict[str, str]) ->
                 {
                     "type": kind,
                     "parentToolCallId": event.get("parentToolCallId"),
+                    "parentToolCallIds": event.get("parentToolCallIds"),
                     "event": {key: raw[key] for key in keys if key in raw},
                 }
             )

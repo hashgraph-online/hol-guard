@@ -37,6 +37,7 @@ def test_eval_bridge_requires_complete_hooks_inside_actual_model_eval() -> None:
     start = {
         "type": "eval_bridge_start",
         "parentToolCallId": "eval",
+        "parentToolCallIds": ["eval"],
         "event": {
             "type": "tool_call",
             "toolCallId": "js-read-123",
@@ -47,6 +48,7 @@ def test_eval_bridge_requires_complete_hooks_inside_actual_model_eval() -> None:
     end = {
         "type": "eval_bridge_end",
         "parentToolCallId": "eval",
+        "parentToolCallIds": ["eval"],
         "event": {
             "type": "tool_result",
             "toolCallId": "js-read-123",
@@ -72,6 +74,9 @@ def test_eval_bridge_requires_complete_hooks_inside_actual_model_eval() -> None:
     altered = deepcopy(events)
     altered[3]["event"]["input"]["path"] = ".env"
     assert reconcile(altered)[1]
+    ambiguous = deepcopy(events)
+    ambiguous[2]["parentToolCallIds"] = ["eval", "other"]
+    assert reconcile(ambiguous)[1]
 
 
 def test_child_calls_keep_model_start_completion_and_parent_agreement(tmp_path: Path) -> None:
