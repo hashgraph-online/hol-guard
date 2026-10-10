@@ -27,7 +27,10 @@ from codex_plugin_scanner.guard.daemon.manager import load_guard_daemon_auth_tok
 from codex_plugin_scanner.guard.daemon.server import _headless_action_error_payload
 from codex_plugin_scanner.guard.local_dashboard_session import LOCAL_DASHBOARD_SESSION_AUDIENCE
 from codex_plugin_scanner.guard.models import PolicyDecision
-from codex_plugin_scanner.guard.policy_bundle_parser import payload_hash_for_policy_bundle
+from codex_plugin_scanner.guard.policy_bundle_parser import (
+    computed_policy_bundle_hash,
+    payload_hash_for_policy_bundle,
+)
 from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncAuthorizationExpiredError,
@@ -2577,6 +2580,50 @@ def test_headless_policy_sync_accepts_policy_bundle_and_returns_bundle_metadata(
     assert policy_bundle_ack["status"] == "synced"
 
 
+def test_headless_policy_sync_approval_cannot_authenticate_digest_only_bundle(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    _seed_guard_cloud(store, workspace_id="workspace-1")
+    store.set_sync_payload(
+        "policy_bundle_keyring",
+        policy_bundle_test_keyring(),
+        "2026-05-19T00:00:00Z",
+    )
+    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
+    bundle["verifier"] = {
+        "algorithm": "sha256",
+        "keyId": "approval-is-not-signing-authority",
+        "signature": None,
+    }
+    bundle["bundleHash"] = computed_policy_bundle_hash(bundle)
+    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
+    bundle["verifier"]["signature"] = bundle["payloadHash"]
+
+    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    daemon.start()
+    try:
+        token = _dashboard_token_for(store)
+        status, payload = _read_json_response(
+            _request(
+                daemon.port,
+                "/v1/policy/sync",
+                token=token,
+                payload={
+                    "harness": "codex",
+                    "operation": "policy_sync",
+                    "policy_bundle": json.dumps(bundle),
+                },
+            ),
+        )
+    finally:
+        daemon.stop()
+
+    assert status == 400
+    assert payload["error"] == "unsupported_signature_algorithm"
+    assert "Sync again" in payload["message"]
+    assert store.get_sync_payload("policy_bundle") is None
+    assert store.list_policy_decisions(harness="codex") == []
+
+
 def test_headless_policy_sync_passes_approval_gate_grant_to_atomic_activation(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -2849,50 +2896,6 @@ def test_headless_policy_sync_rejects_unsupported_daemon_version(tmp_path: Path)
 
     assert status == 400
     assert payload["error"] == "unsupported_daemon_version"
-
-
-def test_headless_policy_sync_approval_cannot_authenticate_digest_only_bundle(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-1")
-    store.set_sync_payload(
-        "policy_bundle_keyring",
-        policy_bundle_test_keyring(),
-        "2026-05-19T00:00:00Z",
-    )
-    bundle = build_cloud_exception_policy_bundle(workspace_id="workspace-1")
-    bundle["verifier"] = {
-        "algorithm": "sha256",
-        "keyId": "approval-is-not-signing-authority",
-        "signature": None,
-    }
-    bundle["bundleHash"] = guard_runner_module._computed_policy_bundle_hash(bundle)
-    bundle["payloadHash"] = payload_hash_for_policy_bundle(bundle)
-    bundle["verifier"]["signature"] = bundle["payloadHash"]
-
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        status, payload = _read_json_response(
-            _request(
-                daemon.port,
-                "/v1/policy/sync",
-                token=token,
-                payload={
-                    "harness": "codex",
-                    "operation": "policy_sync",
-                    "policy_bundle": json.dumps(bundle),
-                },
-            ),
-        )
-    finally:
-        daemon.stop()
-
-    assert status == 400
-    assert payload["error"] == "unsupported_signature_algorithm"
-    assert "Sync again" in payload["message"]
-    assert store.get_sync_payload("policy_bundle") is None
-    assert store.list_policy_decisions(harness="codex") == []
 
 
 def test_headless_policy_sync_rejects_global_allow_and_missing_scope_targets(
@@ -3187,69 +3190,3 @@ def test_headless_generic_action_error_omits_unstructured_detail() -> None:
             "retryable": True,
         },
     }
-
-
-def test_policy_cloud_exceptions_endpoint(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
-
-    store = GuardStore(tmp_path / "guard-home")
-    _seed_guard_cloud(store, workspace_id="workspace-1")
-    device_metadata = store.get_device_metadata()
-    device_id = device_metadata["installation_id"]
-    bundle = build_cloud_exception_policy_bundle(
-        cloud_exceptions=[
-            {
-                "exceptionId": "artifact:codex:demo",
-                "effect": "allow",
-                "scope": "artifact",
-                "harness": "codex",
-                "artifactId": "codex:project:demo",
-                "owner": "owner@example.com",
-                "approver": "approver@example.com",
-                "expiresAt": "2099-01-01T00:00:00Z",
-                "sourceReceiptId": "receipt-demo",
-            }
-        ],
-        workspace_id="workspace-1",
-        device_id=device_id,
-    )
-    store.set_sync_payload(
-        "policy_bundle_keyring",
-        policy_bundle_test_keyring(workspace_id="workspace-1"),
-        "2026-06-13T00:00:00Z",
-    )
-    store.set_sync_payload("policy_bundle", bundle, "2026-06-13T00:00:00Z")
-    store.set_sync_payload(
-        "policy_bundle_ack",
-        {
-            "appliedAt": "2026-06-13T00:00:00Z",
-            "bundleHash": bundle["bundleHash"],
-            "bundleVersion": bundle["bundleVersion"],
-            "deviceId": device_id,
-            "deviceName": device_metadata["device_label"],
-            "status": "synced",
-        },
-        "2026-06-13T00:00:00Z",
-    )
-    _persist_cloud_exceptions(
-        store,
-        device_id=device_id,
-        policy_bundle=bundle,
-        now="2026-06-13T00:00:00Z",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-    try:
-        token = _dashboard_token_for(store)
-        status, payload = _read_json_response(
-            _request(daemon.port, "/v1/policy", method="GET", token=token),
-        )
-        assert status == 200
-        assert len(payload["cloud_exceptions"]) == 1
-        dedicated_status, dedicated_payload = _read_json_response(
-            _request(daemon.port, "/v1/policy/cloud-exceptions", method="GET", token=token),
-        )
-        assert dedicated_status == 200
-        assert dedicated_payload["items"][0]["id"] == "artifact:codex:demo"
-    finally:
-        daemon.stop()

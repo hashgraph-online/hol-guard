@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+from ..native_codex_tool_output import codex_tool_output_native
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.direct_vitest import (
@@ -29,16 +30,11 @@ from ..runtime.shell_execution_context import (
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import (
-    _codex_command_parts_may_read_local_content,
-    _codex_command_reads_environment_pipeline,
     _codex_local_secret_source_label,
-    _codex_pipeline_segment_may_read_local_content,
     _codex_post_tool_command_is_read_only_source_inspection,
     _codex_post_tool_command_texts,
-    _codex_shell_split,
     _codex_source_inspection_can_skip_secret_output,
 )
-from .commands_support_codex_git import _codex_git_diff_selection_identity
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _CODEX_TOOL_RESPONSE_MAX_DEPTH,
@@ -48,7 +44,6 @@ from .commands_support_codex_paths import (
     _with_codex_prompt_display_metadata,
 )
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
-from .commands_support_codex_reads import _split_codex_safe_read_only_pipeline
 from .commands_support_codex_tool_output import (
     _codex_command_captures_combined_shell_output,
     _codex_command_is_focused_pytest_verification,
@@ -822,44 +817,9 @@ def _runtime_data_flow_artifact(
 _CODEX_PROMPT_SECRET_KEY_MARKERS = ("TOKEN", "SECRET", "PASSWORD", "PASS", "API_KEY", "API-KEY", "AUTH", "CREDENTIAL")
 
 
-def _direct_codex_git_pathspec_identity(command_text: str, *, cwd: Path | None) -> str | None:
-    pipeline = _split_codex_safe_read_only_pipeline(command_text)
-    git_segment = pipeline[0] if pipeline else command_text
-    try:
-        parts = shlex.split(git_segment)
-    except ValueError:
-        return None
-    if not parts or Path(parts[0]).name != "git":
-        return None
-    return _codex_git_diff_selection_identity(parts[1:], cwd=cwd)
-
-
 def _codex_git_pathspec_identity_for_command(command_text: str, *, cwd: Path | None) -> str | None:
-    execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
-    if not execution_context.directory_change_present:
-        return _direct_codex_git_pathspec_identity(command_text, cwd=cwd)
-    if not execution_context.complete:
-        return None
-    identities: list[tuple[int, str]] = []
-    for segment in execution_context.segments:
-        if segment.directory_operation is not None:
-            continue
-        segment_cwd, reason = validate_shell_execution_segment(execution_context, segment)
-        if segment_cwd is None or reason is not None:
-            return None
-        identity = _direct_codex_git_pathspec_identity(segment.command_text, cwd=segment_cwd)
-        if identity is not None:
-            identities.append((segment.segment_index, identity))
-    if not identities:
-        return None
-    if len(identities) == 1:
-        return identities[0][1]
-    canonical = json.dumps(
-        {"schema": "codex-git-pathspec-context-v1", "identities": identities},
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    answer = codex_tool_output_native("git_pathspec_identity", command=command_text, cwd=cwd)
+    return None if answer.error_code is not None else answer.value
 
 
 def _codex_post_tool_output_artifact(
@@ -1065,21 +1025,8 @@ def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None
         return False
     if _codex_command_references_sensitive_local_source(command_text, cwd=cwd):
         return True
-    if _codex_command_reads_environment_pipeline(command_text):
-        return True
-    if any(marker in command_text for marker in ("$(", "${", "`")):
-        return True
-    pipeline_segments = _split_codex_safe_read_only_pipeline(command_text)
-    if pipeline_segments is not None:
-        return any(
-            _codex_pipeline_segment_may_read_local_content(segment, index=index, cwd=cwd)
-            for index, segment in enumerate(pipeline_segments)
-        )
-    try:
-        parts = _codex_shell_split(command_text)
-    except ValueError:
-        return True
-    return _codex_command_parts_may_read_local_content(parts, cwd=cwd)
+    answer = codex_tool_output_native("local_content_tail", command=command_text, cwd=cwd)
+    return answer.error_code is not None or answer.allowed
 
 
 __all__ = [

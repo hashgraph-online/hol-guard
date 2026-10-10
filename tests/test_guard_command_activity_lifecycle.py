@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
 from codex_plugin_scanner.guard.runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
     build_correlated_post_activity,
-    build_correlated_post_evidence,
     build_pre_hook_evidence,
     build_unpaired_post_evidence,
 )
@@ -197,34 +196,6 @@ def test_parser_uncertainty_is_bounded_without_storing_parser_input() -> None:
     assert "generated-output" not in repr(evidence)
 
 
-def test_correlated_success_and_failure_preserve_pre_hook_facts() -> None:
-    request = _correlation()
-    pre = build_pre_hook_evidence(
-        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
-        _decision(),
-        activity_id="activity:paired",
-        occurred_at=NOW,
-        harness="codex",
-        request_correlation=request,
-    )
-
-    for succeeded, phase, status in (
-        (True, CommandHookPhase.POST_SUCCESS, CommandExecutionStatus.CONFIRMED_SUCCESS),
-        (False, CommandHookPhase.POST_FAILURE, CommandExecutionStatus.CONFIRMED_FAILURE),
-    ):
-        post = build_correlated_post_evidence(
-            pre,
-            request_correlation=request,
-            succeeded=succeeded,
-            persistence_latency_bucket=ActivityLatencyBucket.LE_5_MS,
-        )
-        assert post.activity.hook_phase is phase
-        assert post.activity.execution_status is status
-        assert post.activity.proof_level is CommandProofLevel.POST_HOOK
-        assert post.matches == pre.matches
-        validate_activity_transition(pre.activity, post.activity)
-
-
 def test_correlated_post_activity_accepts_the_parent_row_returned_by_storage() -> None:
     request = _correlation()
     pre = build_pre_hook_evidence(
@@ -245,37 +216,6 @@ def test_correlated_post_activity_accepts_the_parent_row_returned_by_storage() -
     assert post.execution_status is CommandExecutionStatus.CONFIRMED_SUCCESS
     assert post.activity_id == pre.activity.activity_id
     validate_activity_transition(pre.activity, post)
-
-
-def test_correlated_post_rejects_missing_mismatched_or_prevented_pre_hook() -> None:
-    request = _correlation()
-    allowed = build_pre_hook_evidence(
-        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
-        _decision(),
-        activity_id="activity:paired",
-        occurred_at=NOW,
-        harness="codex",
-        request_correlation=request,
-    )
-    with pytest.raises(ValueError, match="exact pre-hook"):
-        _ = build_correlated_post_evidence(
-            allowed,
-            request_correlation=_correlation(digest="b" * 64),
-            succeeded=True,
-        )
-    without_request = replace(allowed, activity=replace(allowed.activity, request_correlation=None))
-    with pytest.raises(ValueError, match="exact pre-hook"):
-        _ = build_correlated_post_evidence(without_request, request_correlation=request, succeeded=True)
-    prevented = build_pre_hook_evidence(
-        real_native_command_evaluation("rm -rf ./generated-output").evaluation,
-        _decision(action="review", receipt_id="receipt:01"),
-        activity_id="activity:prevented",
-        occurred_at=NOW,
-        harness="codex",
-        request_correlation=request,
-    )
-    with pytest.raises(ValueError, match="allowed-unconfirmed"):
-        _ = build_correlated_post_evidence(prevented, request_correlation=request, succeeded=True)
 
 
 def test_unpaired_post_claims_no_decision_match_receipt_or_request_proof() -> None:

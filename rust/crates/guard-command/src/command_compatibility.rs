@@ -20,8 +20,8 @@ mod github;
 
 pub use catalog::compatibility_rule_ids;
 
-pub(crate) fn github_arguments_are_read_only(arguments: &[String]) -> bool {
-    github::arguments_are_read_only(arguments)
+pub(crate) fn github_arguments_are_read_only(arguments: &[String], text: &str) -> bool {
+    github::arguments_are_read_only(arguments, text)
 }
 
 pub(crate) fn git_inspection_arguments<'a>(

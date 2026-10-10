@@ -14,30 +14,20 @@ from typing import Literal, cast
 NativeApprovalPhase = Literal["validated", "consumed"]
 
 _NATIVE_PROTOCOL_VERSION = 1
-_NATIVE_REQUEST_MAX_BYTES = 6 * 1024 * 1024
-_NATIVE_RESPONSE_MAX_BYTES = 2 * 1024 * 1024
 _NATIVE_APPROVAL_MAX_BYTES = 64 * 1024
 _NATIVE_APPROVAL_MAX_STRING_BYTES = 4 * 1024
 _NATIVE_APPROVAL_MAX_REASON_BYTES = 256
 _NATIVE_APPROVAL_NONCE_HEX_LENGTH = 64
-_NATIVE_APPROVAL_SIGNATURE_HEX_LENGTH = 128
 _NATIVE_APPROVAL_KEY_ID_HEX_LENGTH = 64
 _MAX_HARNESS_BYTES = 64
-_MAX_PATH_BYTES = 32 * 1024
 _MAX_REQUEST_ID_BYTES = 256
 _MAX_DEADLINE_BUDGET_MS = 15 * 60 * 1000
 _MAX_APPROVAL_TTL_MS = 15 * 60 * 1000
 _U64_MAX = (1 << 64) - 1
 
-_CHALLENGE_REQUEST_SCHEMA = "guard-native-approval-challenge-request.v3"
-_VALIDATE_REQUEST_SCHEMA = "guard-native-approval-validate-request.v3"
-_CONSUME_REQUEST_SCHEMA = "guard-native-approval-consume-request.v3"
 _CHALLENGE_SCHEMA = "guard-native-approval-challenge.v3"
-_ARTIFACT_SCHEMA = "guard-native-approval-artifact.v3"
 _RESULT_SCHEMA = "guard-native-approval-result.v3"
 _RECEIPT_SCHEMA = "guard-native-approval-receipt.v3"
-_ENVELOPE_SCHEMA = "guard-hook-envelope.v2"
-_INTEGRITY_ALGORITHM = "ed25519"
 
 _ACTION_TYPES = frozenset(
     [
@@ -100,7 +90,6 @@ _CHALLENGE_KEYS = frozenset(
         "signing_key_id",
     ]
 )
-_ARTIFACT_KEYS = (_CHALLENGE_KEYS - {"signing_key_id"}) | {"approved_action", "integrity"}
 _RESULT_KEYS = frozenset(["schema", "version", "authority", "receipt"])
 _RECEIPT_KEYS = frozenset(
     [
@@ -139,7 +128,6 @@ _RECEIPT_KEYS = frozenset(
         "replay_claimed",
     ]
 )
-_INTEGRITY_KEYS = frozenset(["algorithm", "key_id", "signature"])
 
 _REQUEST_ID_PATTERN = re.compile(r"[a-z0-9._-]{1,256}")
 _OUTPUT_REQUEST_ID_PATTERN = re.compile(r"[a-z0-9._:-]{1,256}")
@@ -161,20 +149,6 @@ def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]
 
 def _reject_json_constant(value: str) -> None:
     raise ValueError(value)
-
-
-def _decode_json_object(payload: bytes, *, maximum: int) -> dict[str, object] | None:
-    if not payload or len(payload) > maximum:
-        return None
-    try:
-        decoded: object = json.loads(
-            payload.decode("utf-8"),
-            object_pairs_hook=_reject_duplicate_keys,
-            parse_constant=_reject_json_constant,
-        )
-    except (RecursionError, UnicodeDecodeError, ValueError, TypeError):
-        return None
-    return decoded if type(decoded) is dict else None
 
 
 def _bounded_text(value: object, *, maximum: int, nonempty: bool = True) -> bool:
@@ -289,21 +263,6 @@ def _challenge_is_valid(payload: dict[str, object]) -> bool:
     )
 
 
-def _artifact_is_valid(payload: dict[str, object]) -> bool:
-    integrity = payload.get("integrity")
-    return (
-        set(payload) == _ARTIFACT_KEYS
-        and payload.get("schema") == _ARTIFACT_SCHEMA
-        and payload.get("version") == 3
-        and _common_fields_valid(payload, artifact=True)
-        and type(integrity) is dict
-        and set(integrity) == _INTEGRITY_KEYS
-        and integrity.get("algorithm") == _INTEGRITY_ALGORITHM
-        and _lower_hex(integrity.get("key_id"), _NATIVE_APPROVAL_KEY_ID_HEX_LENGTH)
-        and _lower_hex(integrity.get("signature"), _NATIVE_APPROVAL_SIGNATURE_HEX_LENGTH)
-    )
-
-
 def _receipt_fields_are_valid(payload: Mapping[str, object], *, phase: NativeApprovalPhase, v4: bool = False) -> bool:
     return all(
         (
@@ -376,15 +335,6 @@ def decode_native_approval_challenge(payload: object) -> dict[str, object] | Non
     return dict(decoded) if _challenge_is_valid(decoded) and _within_approval_bound(decoded) else None
 
 
-def decode_native_approval_artifact(payload: object) -> dict[str, object] | None:
-    """Bound an external artifact; Rust remains the only signature verifier."""
-
-    if type(payload) is not dict:
-        return None
-    decoded = cast(dict[str, object], payload)
-    return dict(decoded) if _artifact_is_valid(decoded) and _within_approval_bound(decoded) else None
-
-
 def decode_native_approval_result(
     payload: object,
     *,
@@ -407,39 +357,3 @@ def decode_native_approval_result(
     ):
         return None
     return dict(decoded)
-
-
-def decode_native_approval_v4_challenge(payload: object) -> dict[str, object] | None:
-    """Bound a Rust V4 challenge; WebAuthn semantics remain in Rust."""
-
-    from .native_approval_v4_protocol import decode_native_approval_v4_challenge as decode
-
-    return decode(payload)
-
-
-def decode_native_approval_v4_artifact(payload: object) -> dict[str, object] | None:
-    """Carry a browser assertion without signing or cryptographic verification."""
-
-    from .native_approval_v4_protocol import decode_native_approval_v4_artifact as decode
-
-    return decode(payload)
-
-
-def decode_native_approval_v4_proof(payload: object) -> dict[str, object] | None:
-    """Bound the Portal proof envelope without interpreting the assertion."""
-
-    from .native_approval_v4_protocol import decode_native_approval_v4_proof as decode
-
-    return decode(payload)
-
-
-def decode_native_approval_v4_result(
-    payload: object,
-    *,
-    phase: NativeApprovalPhase,
-) -> dict[str, object] | None:
-    """Bound a Rust V4 receipt and its exact lifecycle phase."""
-
-    from .native_approval_v4_protocol import decode_native_approval_v4_result as decode
-
-    return decode(payload, phase=phase)

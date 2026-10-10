@@ -263,10 +263,6 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
 )
 
 
-def _is_approval_gate_one_shot_policy(row: sqlite3.Row) -> bool:
-    return str(row["source"]) == _APPROVAL_GATE_POLICY_SOURCE and row["expires_at"] is not None
-
-
 _DEVICE_ROW_KEY = "local-device"
 _MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
@@ -296,7 +292,6 @@ def _normalize_source_name(source: str | None) -> str:
     return normalized
 
 
-_POLICY_INTEGRITY_ENFORCEMENTS = frozenset({"warn", "enforce"})
 _POLICY_INTEGRITY_STATUSES = (
     "valid",
     "missing_integrity",
@@ -331,7 +326,6 @@ _REMOTE_POLICY_SOURCE_PARAMS = tuple(sorted(REMOTE_POLICY_SOURCES))
 _REMOTE_POLICY_SOURCE_PLACEHOLDERS = "(" + ",".join("?" for _ in _REMOTE_POLICY_SOURCE_PARAMS) + ")"
 _POLICY_SCOPES = frozenset({"artifact", "workspace", "publisher", "harness", "global"})
 _SLOW_STORE_WARNING_ENV = "HOL_GUARD_WARN_SLOW_STORE"
-_SQLITE_LOCK_RETRY_ATTEMPTS = 5
 _SQLITE_LOCK_RETRY_DELAY_SECONDS = 0.1
 _SECRET_FINGERPRINT_PREFIX = "scrypt$"
 _LEGACY_SECRET_FINGERPRINT_PREFIX = "pbkdf2-sha256$"

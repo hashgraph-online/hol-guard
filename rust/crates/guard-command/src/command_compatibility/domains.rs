@@ -81,6 +81,104 @@ fn docker(segment: &CommandSegmentV1, index: usize, output: &mut CompatibilityOb
     );
 }
 
+/// `get`/`describe` with only well-known global and display options and a plain
+/// resource list that names no Secret: this form cannot reveal Secret payloads.
+fn plain_non_secret_read(arguments: &[String]) -> bool {
+    const VALUE_OPTIONS: &[&str] = &[
+        "--context",
+        "--cluster",
+        "--namespace",
+        "--request-timeout",
+        "-n",
+        "--chunk-size",
+        "--field-selector",
+        "--label-columns",
+        "--output",
+        "--selector",
+        "--sort-by",
+        "-L",
+        "-l",
+        "-o",
+    ];
+    const FLAGS: &[&str] = &[
+        "--all-namespaces",
+        "--ignore-not-found",
+        "--no-headers",
+        "--show-kind",
+        "--show-labels",
+        "--show-managed-fields",
+        "-A",
+    ];
+    let mut subcommand: Option<&str> = None;
+    let mut resources: Vec<&str> = Vec::new();
+    let mut index = 0;
+    while let Some(argument) = arguments.get(index) {
+        index += 1;
+        if let Some(name) = argument.strip_prefix("--").and(argument.split('=').next()) {
+            let attached = argument.split_once('=').map(|(_, value)| value);
+            if VALUE_OPTIONS.contains(&name) {
+                let value = attached.or_else(|| arguments.get(index).map(String::as_str));
+                if attached.is_none() {
+                    index += 1;
+                }
+                if name == "--output" && !value.is_some_and(output_format_reads_no_file) {
+                    return false;
+                }
+            } else if !FLAGS.contains(&name) || attached.is_some() {
+                return false;
+            }
+        } else if argument.starts_with('-') {
+            if VALUE_OPTIONS.contains(&argument.as_str()) {
+                if argument == "-o"
+                    && !arguments
+                        .get(index)
+                        .is_some_and(|value| output_format_reads_no_file(value))
+                {
+                    return false;
+                }
+                index += 1;
+            } else if !FLAGS.contains(&argument.as_str()) {
+                return false;
+            }
+        } else if subcommand.is_none() {
+            subcommand = Some(argument);
+        } else {
+            // kubectl accepts several TYPE[/NAME] operands; every one must be checked.
+            resources.push(argument);
+        }
+    }
+    if !matches!(subcommand, Some("get" | "describe")) || resources.is_empty() {
+        return false;
+    }
+    resources
+        .iter()
+        .flat_map(|resource| resource.split(','))
+        .all(|part| {
+            let head = part.split('/').next().unwrap_or("").to_ascii_lowercase();
+            !head.is_empty()
+                && head
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                && !head.starts_with("secret")
+                && !head.starts_with("sealedsecret")
+        })
+}
+
+/// Output formats that render the fetched objects only. The `*-file` formats
+/// (`go-template-file`, `jsonpath-file`, `custom-columns-file`, `template-file`)
+/// read a local file and would print it, so they stay on review.
+fn output_format_reads_no_file(value: &str) -> bool {
+    matches!(value, "json" | "yaml" | "name" | "wide")
+        || [
+            "jsonpath=",
+            "jsonpath-as-json=",
+            "go-template=",
+            "custom-columns=",
+        ]
+        .iter()
+        .any(|prefix| value.starts_with(prefix))
+}
+
 fn kubernetes(segment: &CommandSegmentV1, index: usize, output: &mut CompatibilityObservations) {
     let arguments = &segment.arguments;
     if arguments.len() == 1
@@ -89,6 +187,9 @@ fn kubernetes(segment: &CommandSegmentV1, index: usize, output: &mut Compatibili
             "--help" | "version" | "api-resources"
         )
     {
+        return;
+    }
+    if plain_non_secret_read(arguments) {
         return;
     }
     let direct_resource = arguments.get(1).is_some_and(|resource| {

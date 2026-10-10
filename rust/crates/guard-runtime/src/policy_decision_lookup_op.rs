@@ -35,14 +35,14 @@ use guard_policy_snapshot::policy_integrity::{
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
 
-const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
+pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
 const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = 256;
-const POLICY_LOOKUP_COLUMNS: &str = "decision_id, harness, scope, artifact_id, action, \
+pub(crate) const POLICY_LOOKUP_COLUMNS: &str = "decision_id, harness, scope, artifact_id, action, \
      artifact_hash, workspace, publisher, source, reason, owner, expires_at, updated_at, \
      integrity_version, integrity_generation, payload_hash, payload_mac, integrity_key_id, \
      signed_at";
-const LOCAL_ONCE_CLAIM_COLUMNS: &str = "approval_id, request_id, harness, artifact_id, \
+pub(crate) const LOCAL_ONCE_CLAIM_COLUMNS: &str = "approval_id, request_id, harness, artifact_id, \
      artifact_hash, workspace, publisher, action, created_at, expires_at, claimed_at, \
      integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at, \
      authority_kind";
@@ -82,7 +82,7 @@ const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
 /// ids pass through verbatim (already canonical); otherwise the family is
 /// `parts[2]` of `harness:scope:family:…`, lower-cased, gated by the scoped
 /// approval families so unrelated namespaces never collapse to a family key.
-fn artifact_family_key(artifact_id: Option<&str>) -> Option<String> {
+pub(crate) fn artifact_family_key(artifact_id: Option<&str>) -> Option<String> {
     let id = artifact_id?.trim();
     if id.is_empty() {
         return None;
@@ -113,7 +113,7 @@ fn canonical_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
-fn row_value(row: &Value, key: &str) -> Value {
+pub(crate) fn row_value(row: &Value, key: &str) -> Value {
     row.get(key).cloned().unwrap_or(Value::Null)
 }
 
@@ -138,7 +138,7 @@ fn normalized_workspace_path(value: &str) -> String {
 /// `_workspace_policy_key` (`store_base.py`) — `"workspace:" +
 /// sha256(normalized).hexdigest()`, full 64-hex digest. An already-keyed
 /// input (`workspace:<hex>`) is returned unchanged so stored rows match.
-fn workspace_policy_key(workspace: Option<&str>) -> Option<String> {
+pub(crate) fn workspace_policy_key(workspace: Option<&str>) -> Option<String> {
     let ws = workspace?;
     if ws.trim().is_empty() {
         return None;
@@ -465,7 +465,7 @@ fn local_once_integrity_purpose(authority_kind: Option<&str>) -> String {
     }
 }
 
-fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
+pub(crate) fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
     use rusqlite::types::ValueRef;
     match cell {
         ValueRef::Null => Value::Null,
@@ -477,7 +477,7 @@ fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
 }
 
 /// Row → JSON for `POLICY_LOOKUP_COLUMNS` (19 cols).
-fn policy_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+pub(crate) fn policy_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     const COLS: [&str; 19] = [
         "decision_id",
         "harness",
@@ -507,7 +507,7 @@ fn policy_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
 }
 
 /// Row → JSON for `LOCAL_ONCE_CLAIM_COLUMNS` (17 cols).
-fn local_once_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+pub(crate) fn local_once_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     const COLS: [&str; 17] = [
         "approval_id",
         "request_id",
@@ -616,7 +616,7 @@ fn local_once_integrity_failure(row: &Value, result: &LocalAuthorityVerification
 }
 
 /// `verify_local_once_approval` — purpose from `authority_kind`.
-fn verify_local_once(
+pub(crate) fn verify_local_once(
     row: &Value,
     key: Option<&[u8]>,
     key_id: Option<&str>,
@@ -754,7 +754,7 @@ fn claim_local_once_lookup(
 
 /// `_claim_local_once_approval_by_id_locked` — re-select, verify, re-sign with
 /// `claimed_at`, consume.
-fn claim_local_once_by_id(
+pub(crate) fn claim_local_once_by_id(
     conn: &Connection,
     approval_id: &str,
     now: &str,
@@ -852,7 +852,7 @@ fn claim_local_once_by_id(
 // ---------------------------------------------------------------------------
 
 /// `_materialized_policy_bundle_row_identity` — 11-tuple equality probe.
-fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
+pub(crate) fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
     json!([
         row_value(row, "harness"),
         row_value(row, "scope"),
@@ -906,7 +906,7 @@ fn runtime_policy_row_is_eligible(
 }
 
 /// `_policy_integrity_result_for_row` — remote sources short-circuit valid.
-fn policy_integrity_result_for_row(
+pub(crate) fn policy_integrity_result_for_row(
     row: &Value,
     mode: &str,
     key: Option<&[u8]>,
@@ -927,7 +927,7 @@ fn policy_integrity_result_for_row(
 }
 
 /// `_policy_row_payload` — base columns plus integrity overlays.
-fn policy_row_payload(
+pub(crate) fn policy_row_payload(
     row: &Value,
     integrity_result: Option<&PolicyIntegrityVerification>,
     state: Option<&Value>,

@@ -10,7 +10,6 @@ action_identity_mod = pytest.importorskip(
 )
 
 normalize_command_identity = action_identity_mod.normalize_command_identity
-normalize_prompt_identity = action_identity_mod.normalize_prompt_identity
 
 
 class TestCommandIdentityNormalization:
@@ -67,33 +66,6 @@ class TestCommandIdentityNormalization:
 
 class TestPromptIdentityNormalization:
     """T706-T708: Prompt identity normalizer."""
-
-    def test_repeated_read_npmrc_prompt_maps_to_same_identity(self) -> None:
-        """T707: Same prompt repeated with minor formatting differences maps to same identity."""
-        prompt_a = "Read the **`.npmrc`** file and tell me the registry config."
-        prompt_b = "Read the `.npmrc` file and tell me the registry config."
-        assert normalize_prompt_identity(prompt_a) == normalize_prompt_identity(prompt_b)
-
-    def test_npmrc_vs_env_prompt_maps_to_different_identity(self) -> None:
-        """T708: Prompts targeting different secrets must have different identity."""
-        prompt_npmrc = "Read the .npmrc file."
-        prompt_env = "Read the .env file."
-        assert normalize_prompt_identity(prompt_npmrc) != normalize_prompt_identity(prompt_env)
-
-    def test_model_formatting_tokens_removed(self) -> None:
-        """T706: Transient model formatting (bold, markdown etc.) must not affect identity."""
-        prompt_formatted = "**Read** the `.npmrc` file and extract the _auth token_."
-        prompt_plain = "Read the .npmrc file and extract the auth token."
-        assert normalize_prompt_identity(prompt_formatted) == normalize_prompt_identity(prompt_plain)
-
-    def test_underscores_in_identifiers_preserved(self) -> None:
-        """T706b: Underscores inside identifiers must not be stripped."""
-        prompt_key = "Send OPENAI_API_KEY to the server."
-        prompt_file = "Read my_secret_file from disk."
-        normalized_key = normalize_prompt_identity(prompt_key)
-        normalized_file = normalize_prompt_identity(prompt_file)
-        assert "openai_api_key" in normalized_key, "Internal underscores in env var names must be preserved"
-        assert "my_secret_file" in normalized_file, "Internal underscores in file names must be preserved"
 
 
 class TestBrowserMcpIdentityNormalization:

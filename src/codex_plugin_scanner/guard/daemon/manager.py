@@ -1448,21 +1448,6 @@ def _initialize_existing_guard_daemon(guard_home: Path, port: int) -> _ExistingG
     return {"url": url, "auth_token": auth_token, "pid": pid}
 
 
-def _retire_duplicate_guard_daemons(
-    guard_home: Path,
-    *,
-    keep_port: int | None,
-    start_lock_held: bool = False,
-) -> None:
-    if keep_port is None:
-        return
-    if start_lock_held:
-        _retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=keep_port)
-        return
-    with _guard_daemon_start_lock(guard_home):
-        _retire_duplicate_guard_daemons_unlocked(guard_home, keep_port=keep_port)
-
-
 def _schedule_duplicate_guard_daemon_retirement(guard_home: Path) -> None:
     lock_key = str(guard_home.resolve())
     with _DUPLICATE_RETIRE_SCHEDULE_LOCK:
@@ -1736,24 +1721,6 @@ def read_approval_center_locator(guard_home: Path) -> ApprovalCenterLocator | No
     )
 
 
-def _approval_center_daemon_is_healthy(daemon_url: str) -> bool:
-    try:
-        with urllib.request.urlopen(f"{daemon_url}/healthz", timeout=1) as response:
-            if response.status != 200:
-                return False
-            return _healthz_payload_is_current(response.read().decode("utf-8"))
-    except (OSError, ValueError, urllib.error.URLError):
-        return False
-
-
-def _daemon_state_pid_matches_locator(guard_home: Path, locator_pid: int) -> bool:
-    state = _load_state(guard_home)
-    if not isinstance(state, dict):
-        return False
-    state_pid = state.get("pid")
-    return isinstance(state_pid, int) and state_pid == locator_pid
-
-
 def _daemon_identity_matches_locator(
     guard_home: Path,
     *,
@@ -1804,32 +1771,6 @@ def publish_approval_center_locator(
         approval_url_base=daemon_url,
         pid=pid,
         started_at=started_at,
-        state_path=_state_path(guard_home),
-    )
-    write_approval_center_locator(guard_home, locator)
-    return locator
-
-
-def ensure_approval_center(guard_home: Path) -> ApprovalCenterLocator:
-    existing = read_approval_center_locator(guard_home)
-    if (
-        existing is not None
-        and _approval_center_daemon_is_healthy(existing.daemon_url)
-        and _daemon_state_pid_matches_locator(guard_home, existing.pid)
-    ):
-        return existing
-    daemon_url = ensure_guard_daemon(guard_home)
-    now = datetime.now(tz=timezone.utc).isoformat()
-    state = _load_state(guard_home)
-    pid = state.get("pid") if isinstance(state, dict) else None
-    if not isinstance(pid, int) or pid <= 0:
-        pid = os.getpid()
-    locator = ApprovalCenterLocator(
-        guard_home=guard_home,
-        daemon_url=daemon_url,
-        approval_url_base=daemon_url,
-        pid=pid,
-        started_at=now,
         state_path=_state_path(guard_home),
     )
     write_approval_center_locator(guard_home, locator)

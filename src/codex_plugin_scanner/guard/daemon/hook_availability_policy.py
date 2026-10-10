@@ -12,16 +12,6 @@ from .hook_availability_floor import (
 )
 from .hook_request_parsing import runtime_hook_event_name
 
-_CURSOR_UNAVAILABLE_MESSAGE = (
-    "HOL Guard paused this action because native review was unavailable "
-    "and the action is outside the emergency-safe inspection floor."
-)
-_CURSOR_UNAVAILABLE_DENY: dict[str, object] = {
-    "permission": "deny",
-    "user_message": _CURSOR_UNAVAILABLE_MESSAGE,
-    "agent_message": _CURSOR_UNAVAILABLE_MESSAGE,
-}
-
 # Native review covers tool events and supported prompt callbacks. Other
 # lifecycle events remain inventory-only: failing them closed freezes a turn
 # without adding enforcement. Unreviewable prompts pause protected hosts;

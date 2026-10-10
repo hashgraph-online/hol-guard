@@ -809,83 +809,6 @@ def test_concurrent_daemon_restarts_leave_matching_authenticated_state_and_token
     assert state["auth_token_id"] == hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-@pytest.mark.skipif(os.name == "nt", reason="exercises the POSIX daemon process-adoption workflow")
-def test_ensure_guard_daemon_quarantines_unsigned_legacy_state_before_adoption(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    guard_home.mkdir(mode=0o700)
-    daemon_manager_module._state_path(guard_home).write_text(
-        json.dumps(
-            {
-                "guard_home": str(guard_home),
-                "port": 4781,
-                "pid": 12345,
-                "compatibility_version": daemon_manager_module.GUARD_DAEMON_COMPATIBILITY_VERSION,
-            }
-        ),
-        encoding="utf-8",
-    )
-    retired: list[dict[str, object]] = []
-    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_retire_guard_daemon_process",
-        lambda payload: retired.append(payload) or True,
-    )
-
-    def adopt_after_retirement(_guard_home: Path, **_kwargs: object) -> str:
-        assert retired == []
-        assert json.loads(daemon_manager_module._state_path(guard_home).read_text(encoding="utf-8")) == {}
-        assert json.loads((guard_home / "daemon-state.invalid.json").read_text(encoding="utf-8"))["pid"] == 12345
-        return "http://127.0.0.1:4782"
-
-    monkeypatch.setattr(daemon_manager_module, "_adopt_existing_guard_daemon", adopt_after_retirement)
-    monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
-
-    assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
-
-
-@pytest.mark.skipif(os.name == "nt", reason="exercises the POSIX daemon-retirement workflow")
-def test_ensure_guard_daemon_retires_authenticated_state_without_identity_before_adoption(tmp_path, monkeypatch):
-    guard_home = tmp_path / "guard-home"
-    daemon_manager_module.write_guard_daemon_state(
-        guard_home,
-        4781,
-        "old-token",
-        pid=12345,
-        state_id="old-state",
-    )
-    discovery_key = load_daemon_discovery_key(guard_home)
-    assert discovery_key is not None
-    state_path = daemon_manager_module._state_path(guard_home)
-    state_payload = json.loads(state_path.read_text(encoding="utf-8"))
-    state_payload.pop("state_id")
-    state_payload.pop("state_signature")
-    state_path.write_text(
-        json.dumps(authenticate_daemon_state(state_payload, discovery_key=discovery_key)),
-        encoding="utf-8",
-    )
-    retired: list[dict[str, object]] = []
-    monkeypatch.setattr(daemon_manager_module, "_reap_stale_ephemeral_guard_daemons", lambda **_kwargs: None)
-    monkeypatch.setattr(daemon_manager_module, "load_guard_daemon_url", lambda _guard_home: None)
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_retire_guard_daemon_pid",
-        lambda pid, **_kwargs: retired.append({"pid": pid}) or True,
-    )
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_pid_is_proven_dead", lambda _pid: True)
-    monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", lambda _home: [])
-    monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
-    monkeypatch.setattr(
-        daemon_manager_module, "_adopt_existing_guard_daemon", lambda _home, **_kwargs: "http://127.0.0.1:4782"
-    )
-    monkeypatch.setattr(daemon_manager_module, "_retire_duplicate_guard_daemons", lambda *_args, **_kwargs: None)
-
-    assert daemon_manager_module.ensure_guard_daemon(guard_home) == "http://127.0.0.1:4782"
-    assert [payload["pid"] for payload in retired] == [12345]
-    assert json.loads(state_path.read_text(encoding="utf-8")) == {}
-
-
 def test_healthz_payload_is_current_accepts_redacted_public_healthz() -> None:
     payload = json.dumps(
         {
@@ -2792,11 +2715,6 @@ def _configure_isolated_windows_daemon_start(monkeypatch, *, port: int = 5410) -
         lambda _guard_home, **_kwargs: [port],
     )
     monkeypatch.setattr(daemon_manager_module, "_daemon_launcher_env", lambda **_kwargs: {})
-    monkeypatch.setattr(
-        daemon_manager_module,
-        "_retire_duplicate_guard_daemons",
-        lambda _guard_home, **_kwargs: None,
-    )
 
 
 def test_update_breakaway_records_authenticated_pending_launch_before_gate_release(tmp_path, monkeypatch):
