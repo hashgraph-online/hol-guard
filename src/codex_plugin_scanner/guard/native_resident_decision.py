@@ -94,13 +94,8 @@ def resident_decide(
     query: Mapping[str, object],
     guard_home: Path | None,
     validate: Callable[[dict[str, Any]], None],
-    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Ask the resident and return its payload once ``validate`` accepts it.
-
-    ``timeout_seconds`` bounds the resident round trip and defaults to the
-    operation's own deadline. A caller that already spent part of that budget
-    waiting passes the remainder; a remainder that is not positive fails closed.
 
     ``transport`` is the caller's resident request function. Resident health is
     recorded only after binding and payload validation, so a resident that
@@ -108,9 +103,6 @@ def resident_decide(
     of resetting the failure streak on every reply.
     """
 
-    budget = spec.timeout_seconds if timeout_seconds is None else timeout_seconds
-    if budget <= 0:
-        raise spec.fail(spec.unavailable)
     try:
         home = _resolve_digest_home(guard_home)
     except (OSError, RuntimeError, ValueError):
@@ -131,7 +123,7 @@ def resident_decide(
         operation=spec.operation,
         request=request,
         guard_home=home,
-        timeout_seconds=budget,
+        timeout_seconds=spec.timeout_seconds,
         required_feature=spec.feature,
         response_schema=spec.result_schema,
         record_success=False,

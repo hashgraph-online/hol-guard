@@ -139,11 +139,13 @@ _OPERATION = ResidentOperation(
 
 # Every daemon request asks the resident, so a burst would otherwise lease one
 # resident process per concurrent request. The answer takes about a
-# millisecond, so a few in-flight asks are enough. Waiting for a slot and the
-# resident round trip share one monotonic deadline of the operation timeout: a
-# caller never waits longer than that in total, and an ask whose slot wait used
-# the whole budget fails closed instead of spawning a herd or running late.
-_MAX_CONCURRENT_ASKS = 4
+# millisecond, so a handful of in-flight round trips is enough. Only the
+# round trip holds a slot: request preparation and validation stay outside it,
+# so a slot is never held while its owner waits for the interpreter lock.
+# Waiting for a slot and the round trip share one monotonic deadline of the
+# operation timeout: a caller never waits longer than that in total, and an
+# ask with no time left fails closed without reaching the resident.
+_MAX_CONCURRENT_ASKS = 8
 _ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_ASKS)
 
 
@@ -161,15 +163,19 @@ def _decide(
             validate(payload)
 
     deadline = time.monotonic() + _OPERATION.timeout_seconds
-    if not _ASK_SLOTS.acquire(timeout=max(0.0, deadline - time.monotonic())):
-        raise _OPERATION.fail(_OPERATION.unavailable)
-    try:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            raise _OPERATION.fail(_OPERATION.unavailable)
-        return resident_decide(_OPERATION, _resident_request, query, guard_home, check, timeout_seconds=remaining)
-    finally:
-        _ASK_SLOTS.release()
+
+    def bounded_request(*, timeout_seconds: float, **kwargs: Any) -> dict[str, object] | None:
+        if not _ASK_SLOTS.acquire(timeout=max(0.0, deadline - time.monotonic())):
+            return None
+        try:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            return _resident_request(timeout_seconds=min(timeout_seconds, remaining), **kwargs)
+        finally:
+            _ASK_SLOTS.release()
+
+    return resident_decide(_OPERATION, bounded_request, query, guard_home, check)
 
 
 def native_route_facts(method: str, path: str, *, guard_home: Path | None = None) -> RouteFacts:
