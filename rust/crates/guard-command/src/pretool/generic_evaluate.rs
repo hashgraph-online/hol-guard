@@ -279,7 +279,7 @@ pub(super) fn evaluate_signals(
             action,
             "allow",
             "native_exact_safe_file_write",
-            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, or the verified user home and clears sensitive-path checks.",
+            "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, the verified user home, or a private user-owned temporary directory and clears sensitive-path checks.",
         );
     }
     let (reason_code, reason) = review_reason(action_type);
