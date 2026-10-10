@@ -423,3 +423,45 @@ pub struct PackagePolicyResolveRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claim_succeeded: Option<bool>,
 }
+
+// ---------------------------------------------------------------------------
+// PackagePosture — resident op owning the local supply-chain posture: the
+// status, health, bundle and policy projection `local_supply_chain.py` used to
+// derive in Python. The caller hydrates the store payloads, the bound
+// configuration actions and the package-manager shim status; the runtime
+// decides every derived field.
+// ---------------------------------------------------------------------------
+
+/// Capability advertised when the supply-chain posture op exists.
+pub const PACKAGE_POSTURE_FEATURE: &str = "package-posture-v1";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackagePostureRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub guard_home: String,
+    /// Snapshot time; the runtime clock is used when absent or unparsable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub now: Option<String>,
+    /// A Guard Cloud sync profile is stored locally.
+    pub credentials_present: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_id: Option<String>,
+    /// `supply_chain_bundle_summary` sync payload (empty object when unset).
+    pub summary: Value,
+    /// `supply_chain_bundle_entitlement` sync payload (empty object when unset).
+    pub entitlement: Value,
+    /// Validated synced policy payload (empty object when unset).
+    pub remote_policy: Value,
+    /// The cached signed bundle body (empty object when unset).
+    pub bundle_payload: Value,
+    pub security_level: String,
+    /// Configured `cloud_advisory` / `package_script` risk actions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_cloud_advisory_action: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_package_script_action: Option<String>,
+    /// Package-manager shim status; carried through unchanged.
+    pub package_manager_protection: Value,
+}

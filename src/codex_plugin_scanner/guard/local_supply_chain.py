@@ -19,7 +19,7 @@ import urllib.request
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, TypeGuard, cast
 from uuid import uuid4
@@ -31,11 +31,12 @@ from .action_lattice import most_restrictive_guard_action, normalize_guard_actio
 from .adapters.base import HarnessContext
 from .approval_scope_support import package_request_runtime_workspace_scope
 from .cloud_audit_request import build_cloud_workspace_audit_request
-from .config import GuardConfig, resolve_risk_action
+from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
 from .native_package_approval_hash import native_package_approval_hash, native_package_current_action
 from .native_package_policy_resolve import native_resolve_stored_package_policy
+from .native_supply_chain_posture import native_local_supply_chain_posture
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
 from .redaction import redact_local_path, redact_text
 from .runtime.approval_context import (
@@ -84,7 +85,6 @@ from .runtime.package_protect_projection import (
     resolve_local_supply_chain_harness as _resolve_local_supply_chain_harness,
 )
 from .runtime.restricted_archive_download import RestrictedArchiveDownload
-from .runtime.supply_chain_support import ecosystem_support_matrix
 from .runtime.workspace_path_guard import (
     read_bytes_within_workspace,
     read_text_within_workspace,
@@ -173,8 +173,6 @@ _ECOSYSTEM_BY_MANIFEST = {
     "composer.json": "packagist",
     "Gemfile": "rubygems",
 }
-_DEFAULT_BUNDLE_REFRESH_INTERVAL_SECONDS = 15 * 60
-_STALE_REFRESH_GRACE_SECONDS = 5 * 60
 _CLOUD_AUDIT_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_PAGE_SIZE = 500
 _CLOUD_AUDIT_MAX_PAGES = 100
@@ -389,103 +387,12 @@ def build_local_supply_chain_posture(
     *,
     now: str | None = None,
 ) -> dict[str, object]:
-    from .synced_policy import synced_policy_payload
-
-    snapshot_now = _parse_timestamp(now) or datetime.now(timezone.utc)
-    workspace_id = store.get_cloud_workspace_id()
-    cloud_profile = store.get_cloud_sync_profile()
-    summary = _dict_payload(store.get_sync_payload("supply_chain_bundle_summary"))
-    entitlement = _dict_payload(store.get_sync_payload("supply_chain_bundle_entitlement"))
-    remote_policy = _dict_payload(synced_policy_payload(store))
-    # Legacy team-policy siblings are not signed policy-bundle content and
-    # therefore cannot contribute enforcement or managed-policy status.
-    team_policy_pack: dict[str, object] = {}
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id) if workspace_id else None
-    bundle_payload = _dict_payload(cached_bundle.get("bundle")) if isinstance(cached_bundle, dict) else {}
-    expires_at_text = _string_value(bundle_payload.get("expiresAt"))
-    expires_at = _parse_timestamp(expires_at_text)
-    status = _posture_status(
-        credentials_present=cloud_profile is not None,
-        workspace_id=workspace_id,
-        summary=summary,
-        bundle_payload=bundle_payload,
-        expires_at=expires_at,
-        snapshot_now=snapshot_now,
+    return native_local_supply_chain_posture(
+        store,
+        config,
+        now=now,
+        package_manager_protection=_build_package_manager_protection(store),
     )
-    synced_at = _string_value(summary.get("synced_at"))
-    next_refresh_at = _resolve_next_refresh_at(
-        summary=summary,
-        synced_at=synced_at,
-    )
-    health_status = _posture_health_status(
-        status=status,
-        next_refresh_at=next_refresh_at,
-        snapshot_now=snapshot_now,
-    )
-    support = summary.get("ecosystem_support")
-    supported_ecosystems = support if isinstance(support, list) and support else list(ecosystem_support_matrix())
-    bundle_version = (
-        _string_value(summary.get("bundle_version"))
-        or _string_value(entitlement.get("bundle_version"))
-        or _string_value(bundle_payload.get("bundleVersion"))
-    )
-    tier = (
-        _string_value(summary.get("tier"))
-        or _string_value(entitlement.get("tier"))
-        or _string_value(bundle_payload.get("tier"))
-    )
-    remote_package_script_action = _string_value(remote_policy.get("packageScriptAction")) or _string_value(
-        remote_policy.get("package_script_action")
-    )
-    remote_cloud_advisory_action = _string_value(remote_policy.get("cloudAdvisoryAction")) or _string_value(
-        remote_policy.get("cloud_advisory_action")
-    )
-    managed_by_cloud = bool(remote_policy or team_policy_pack)
-    managed_label = _string_value(team_policy_pack.get("name")) or ("Guard Cloud sync" if managed_by_cloud else None)
-    managed_updated_at = _string_value(team_policy_pack.get("updatedAt")) or _string_value(
-        remote_policy.get("updatedAt")
-    )
-    return {
-        "status": status,
-        "health_status": health_status,
-        "detail": _posture_detail(status),
-        "connection": {
-            "logged_in": cloud_profile is not None,
-            "paired": workspace_id is not None,
-            "workspace_id": workspace_id,
-        },
-        "bundle": {
-            "bundle_version": bundle_version,
-            "feed_snapshot_hash": _string_value(summary.get("feed_snapshot_hash"))
-            or _string_value(bundle_payload.get("feedSnapshotHash")),
-            "policy_hash": _string_value(summary.get("policy_hash"))
-            or _string_value(entitlement.get("policy_hash"))
-            or _string_value(bundle_payload.get("policyHash")),
-            "synced_at": synced_at,
-            "next_refresh_at": next_refresh_at,
-            "expires_at": expires_at_text,
-            "tier": tier,
-            "workspace_id": _string_value(summary.get("workspace_id"))
-            or _string_value(entitlement.get("workspace_id"))
-            or workspace_id,
-            "advisory_count": _int_value(summary.get("advisory_count")),
-            "package_count": _int_value(summary.get("package_count")),
-        },
-        "policy": {
-            "security_level": config.security_level,
-            "cloud_advisory_action": remote_cloud_advisory_action
-            or resolve_risk_action(config, "cloud_advisory", harness=None),
-            "package_script_action": remote_package_script_action
-            or resolve_risk_action(config, "package_script", harness=None),
-            "managed_by_cloud": managed_by_cloud,
-            "remote_policy_active": bool(remote_policy),
-            "team_policy_active": bool(team_policy_pack),
-            "managed_label": managed_label,
-            "managed_updated_at": managed_updated_at,
-        },
-        "supported_ecosystems": supported_ecosystems,
-        "package_manager_protection": _build_package_manager_protection(store),
-    }
 
 
 def build_supply_chain_status_payload(
@@ -943,7 +850,7 @@ def _resolve_empty_audit_outcome(
     posture: dict[str, object],
 ) -> tuple[str, str]:
     supply_status = str(posture.get("status") or "")
-    supply_detail = str(posture.get("detail") or _posture_detail(supply_status))
+    supply_detail = str(posture.get("detail") or "")
     if supply_status == "sync_required":
         return (
             "sync_required",
@@ -3697,88 +3604,6 @@ def _redact_command_token(token: str) -> str:
     return redact_text(token).text
 
 
-def _posture_status(
-    *,
-    credentials_present: bool,
-    workspace_id: str | None,
-    summary: dict[str, object],
-    bundle_payload: dict[str, object],
-    expires_at: datetime | None,
-    snapshot_now: datetime,
-) -> str:
-    if not credentials_present:
-        return "not_connected"
-    if workspace_id is None:
-        return "workspace_required"
-    if not summary and not bundle_payload:
-        return "sync_required"
-    if expires_at is not None and expires_at <= snapshot_now:
-        return "expired"
-    summary_status = _string_value(summary.get("status"))
-    if summary_status:
-        return summary_status
-    if bundle_payload:
-        return "synced"
-    return "degraded"
-
-
-def _posture_detail(status: str) -> str:
-    details = {
-        "not_connected": (
-            "Local package protection is active. Guard Cloud is optional and adds live package intelligence, "
-            "synced policy, and cross-device evidence."
-        ),
-        "workspace_required": "Finish Guard Cloud pairing to fetch workspace-specific supply-chain bundles.",
-        "sync_required": "Run `hol-guard supply-chain sync` to fetch the latest signed bundle.",
-        "expired": "The cached signed bundle expired. Run `hol-guard supply-chain sync` before the next install.",
-        "synced": "Signed supply-chain bundle is ready for local install protection.",
-        "degraded": "Supply-chain protection is degraded. Refresh the signed bundle before trusting new installs.",
-    }
-    return details.get(status, "Supply-chain protection status is available.")
-
-
-def _posture_health_status(
-    *,
-    status: str,
-    next_refresh_at: str | None,
-    snapshot_now: datetime,
-) -> str:
-    if status == "expired":
-        return "stale"
-    if status == "not_connected":
-        return "local"
-    if status in {"workspace_required", "sync_required", "degraded"}:
-        return "degraded"
-    next_refresh_timestamp = _parse_timestamp(next_refresh_at)
-    if (
-        status == "synced"
-        and next_refresh_timestamp is not None
-        and next_refresh_timestamp + timedelta(seconds=_STALE_REFRESH_GRACE_SECONDS) <= snapshot_now
-    ):
-        return "stale"
-    if status == "synced":
-        return "protected"
-    return "degraded"
-
-
-def _resolve_next_refresh_at(
-    *,
-    summary: dict[str, object],
-    synced_at: str | None,
-) -> str | None:
-    explicit_next_refresh = _parse_timestamp(_string_value(summary.get("next_refresh_at")))
-    if explicit_next_refresh is not None:
-        return explicit_next_refresh.isoformat()
-    synced_timestamp = _parse_timestamp(synced_at)
-    if synced_timestamp is None:
-        return None
-    return (synced_timestamp + timedelta(seconds=_DEFAULT_BUNDLE_REFRESH_INTERVAL_SECONDS)).isoformat()
-
-
-def _dict_payload(value: object) -> dict[str, object]:
-    return value if isinstance(value, dict) else {}
-
-
 def _dict_items(value: object) -> tuple[dict[str, object], ...]:
     if not isinstance(value, list):
         return ()
@@ -3791,30 +3616,7 @@ def _string_items(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))
 
 
-def _string_value(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return None
-
-
 def _int_value(value: object) -> int | None:
     if isinstance(value, int):
         return value
     return None
-
-
-def _parse_timestamp(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    normalized = value.strip()
-    if not normalized:
-        return None
-    if normalized.endswith("Z"):
-        normalized = normalized[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(normalized)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
