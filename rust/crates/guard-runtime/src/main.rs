@@ -16,6 +16,17 @@ mod business_source_codec;
 mod claim_approval_reuse_op;
 mod claim_reuse;
 mod command_effect;
+mod compound_git_args;
+mod compound_git_chain;
+mod compound_git_facts;
+mod compound_git_inspection_op;
+#[cfg(test)]
+mod compound_git_inspection_op_tests;
+#[cfg(test)]
+mod compound_git_inspection_vectors_tests;
+mod compound_git_paths;
+mod compound_git_segments;
+mod compound_git_shlex;
 #[cfg(unix)]
 mod contained_op;
 mod context_digest;
