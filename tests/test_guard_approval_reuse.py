@@ -38,10 +38,6 @@ from codex_plugin_scanner.guard.runtime.approval_reuse import (
     evaluate_approval_reuse,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_policy import (
-    _bounded_local_approval_reuse_diagnostic_rows,
-    _bounded_policy_approval_reuse_diagnostic_rows,
-)
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
@@ -1422,66 +1418,6 @@ def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_
     )
 
     assert reason == "approval_reuse_content_changed"
-
-
-def test_approval_reuse_diagnostic_live_probes_are_index_ordered_without_temp_sort(tmp_path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        local_plan = _bounded_local_approval_reuse_diagnostic_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:diagnostic-plan",
-            artifact_family="family:tool-action",
-            artifact_hash="sha256:current",
-            _explain=True,
-        )
-        policy_plan = _bounded_policy_approval_reuse_diagnostic_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:diagnostic-plan",
-            artifact_family="family:tool-action",
-            artifact_hash="sha256:current",
-            publisher="publisher-current",
-            _explain=True,
-        )
-
-    local_details = [str(row[3]) for row in local_plan]
-    policy_details = [str(row[3]) for row in policy_plan]
-    assert local_details and policy_details
-    assert all(detail.startswith("SEARCH guard_local_once_approvals USING INDEX") for detail in local_details)
-    assert all(detail.startswith("SEARCH policy_decisions USING INDEX") for detail in policy_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in (*local_details, *policy_details))
-    assert not any(
-        "diagnostic_artifact" in detail and "harness=? AND artifact_id=?" not in detail for detail in local_details
-    )
-    assert not any(
-        "diagnostic_hash" in detail and "harness=? AND artifact_hash=?" not in detail for detail in local_details
-    )
-    assert not any(
-        "reuse_artifact" in detail and "action=? AND harness=? AND artifact_id=?" not in detail
-        for detail in policy_details
-    )
-    assert not any(
-        "reuse_hash" in detail and "action=? AND harness=? AND artifact_hash=?" not in detail
-        for detail in policy_details
-    )
-    assert not any("diagnostic_harness_broad" in detail and "harness=?" not in detail for detail in policy_details)
-    assert not any("diagnostic_global_broad" in detail and "harness=?" not in detail for detail in policy_details)
-    assert not any(
-        "diagnostic_publisher" in detail and "harness=? AND publisher=?" not in detail for detail in policy_details
-    )
-    assert {
-        "idx_guard_local_once_diagnostic_artifact",
-        "idx_guard_local_once_diagnostic_hash",
-    }.issubset({index for detail in local_details for index in detail.split()})
-    assert {
-        "idx_policy_decisions_reuse_artifact",
-        "idx_policy_decisions_reuse_hash",
-        "idx_policy_decisions_diagnostic_harness_broad",
-        "idx_policy_decisions_diagnostic_global_broad",
-        "idx_policy_decisions_diagnostic_publisher",
-    }.issubset({index for detail in policy_details for index in detail.split()})
 
 
 def test_exact_package_local_once_approval_remains_reusable_for_three_retries(

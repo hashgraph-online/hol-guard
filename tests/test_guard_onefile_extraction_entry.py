@@ -139,7 +139,7 @@ def test_entry_records_owner_before_bridge_and_guard_imports() -> None:
     record = main.index("_record_extraction_owner()\n")
     bridge = main.index("_try_codex_daemon_bridge()")
     heavy = main.index("from codex_plugin_scanner.guard.frozen_daemon_runtime import")
-    assert bootstrap < record < bridge < heavy
+    assert record < bootstrap < bridge < heavy
 
 
 def test_entry_marker_literals_match_module_constants() -> None:

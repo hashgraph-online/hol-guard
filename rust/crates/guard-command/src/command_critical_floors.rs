@@ -744,7 +744,8 @@ fn guard_control_floor(arguments: &[String]) -> Option<(GuardAction, &'static st
     if contains_ordered(arguments, "capability", "consume") {
         return Some((GuardAction::Block, "critical.capability-replay"));
     }
-    if arguments.iter().any(|a| a == "uninstall") {
+    if arguments.iter().any(|a| a == "uninstall") || contains_ordered(arguments, "hooks", "remove")
+    {
         return Some((GuardAction::Block, "critical.guard-self-protection"));
     }
     if contains_ordered(arguments, "policy", "disable") {

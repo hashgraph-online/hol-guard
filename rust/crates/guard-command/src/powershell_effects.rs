@@ -123,7 +123,8 @@ pub(crate) fn canonicalize(call: &PsCall) -> Result<Vec<String>, Reason> {
             type_name,
             method,
             args,
-        } => canonicalize_static(type_name, method, args),
+            encoding,
+        } => canonicalize_static(type_name, method, args, *encoding),
     }
 }
 
@@ -271,6 +272,7 @@ fn canonicalize_static(
     type_name: &str,
     method: &str,
     args: &[String],
+    encoding: bool,
 ) -> Result<Vec<String>, Reason> {
     let lowered = type_name.to_ascii_lowercase();
     let short = lowered.strip_prefix("system.").unwrap_or(&lowered);
@@ -290,7 +292,11 @@ fn canonicalize_static(
         "move" => ("mv", None, 2),
         _ => return Err("powershell_static_method_unclassified"),
     };
-    if args.len() != arity {
+    let text_method = matches!(
+        method.as_str(),
+        "readalltext" | "readalllines" | "writealltext" | "writealllines" | "appendalltext"
+    );
+    if args.len() != arity || (encoding && !text_method) {
         return Err(ARGUMENTS);
     }
     let mut paths = if matches!(executable, "tee") {

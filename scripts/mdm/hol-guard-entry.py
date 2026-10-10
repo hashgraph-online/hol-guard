@@ -957,9 +957,11 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
         print(f"{Path(sys.argv[0]).name} {_packaged_version()}")
         raise SystemExit(0)
+    # Stamp the extraction dir first: a launch killed by a harness timeout
+    # during the desktop proxy or bridge would otherwise leak an unmarked dir.
+    _record_extraction_owner()
     if _try_proxy_running_desktop_bootstrap():
         raise SystemExit(0)
-    _record_extraction_owner()
     if _try_codex_daemon_bridge():
         raise SystemExit(0)
 

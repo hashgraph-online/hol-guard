@@ -13,6 +13,13 @@ from typing import Literal, TypedDict
 
 from ..codex_hook_bridge_runtime import TrustedHookLaunch, trusted_hook_launch
 from ..codex_hook_launch_runtime import isolated_hook_environment, run_isolated_hook_process
+from .codex_daemon_dead_fastpath import (
+    DEAD_DAEMON_REASON_CODE,
+    clear_start_failure,
+    daemon_provably_dead,
+    record_start_failure,
+    should_fail_fast,
+)
 from .codex_daemon_hook_auth import _DaemonResponseError
 from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGenerationChangedError
 
@@ -66,13 +73,13 @@ _LAUNCHER_INTEGRITY_REASONS = frozenset(
 
 
 class BridgeFailureCause(TypedDict):
-    stage: Literal["daemon_request", "daemon_retry", "daemon_worker", "launcher_validation"]
+    stage: Literal["daemon_request", "daemon_retry", "daemon_worker", "launcher_validation", "daemon_dead_fast"]
     reason_code: str
 
 
 def _record_failure(
     causes: list[BridgeFailureCause] | None,
-    stage: Literal["daemon_request", "daemon_retry", "daemon_worker", "launcher_validation"],
+    stage: Literal["daemon_request", "daemon_retry", "daemon_worker", "launcher_validation", "daemon_dead_fast"],
     reason_code: str,
 ) -> None:
     # The current flow records one initial failure and at most two retry errors.
@@ -203,6 +210,10 @@ def bridge_review_response(
     except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as error:
         _record_failure(failure_causes, "daemon_request", _daemon_failure_reason(error))
         daemon_overloaded = _authenticated_daemon_overload(error)
+        if not daemon_overloaded and should_fail_fast(state_path):
+            # A launch already failed to start the daemon: deny now, name the fix.
+            _record_failure(failure_causes, "daemon_dead_fast", DEAD_DAEMON_REASON_CODE)
+            return None, False, False
         if _transient_overload(error) is not None:
             try:
                 response = _retry_transient_overload(error, deadline=deadline, request=daemon_request)
@@ -230,6 +241,8 @@ def bridge_review_response(
                 response = daemon_request()
             except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as retry_error:
                 _record_failure(failure_causes, "daemon_retry", _daemon_failure_reason(retry_error))
+    if response is not None:
+        clear_start_failure(state_path)
     if response is not None and _daemon_process_failed(response):
         _record_failure(failure_causes, "daemon_worker", "daemon_worker_failed")
         response = None
@@ -252,6 +265,8 @@ def bridge_review_response(
             data=data,
             deadline=deadline,
         )
+        if response is None and not launch_integrity_failed and daemon_provably_dead(state_path):
+            record_start_failure(state_path)
     return response, daemon_overloaded, launch_integrity_failed
 
 
