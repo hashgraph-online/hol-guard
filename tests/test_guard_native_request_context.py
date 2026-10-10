@@ -6,14 +6,18 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard import native_execution
 from codex_plugin_scanner.guard import native_request_context as client
 from codex_plugin_scanner.guard.native_context import _UNBOUND_PREFIX, _canonical_request_sha256
 from codex_plugin_scanner.guard.runtime import shell_execution_context as shell
 from codex_plugin_scanner.guard.runtime._shell_execution_context_support import ShellPathIdentity
+from codex_plugin_scanner.guard.runtime.command_shell_read_factors import shell_read_floor_factors
+from codex_plugin_scanner.guard.runtime.shell_secret_reads import assess_shell_reads
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "request-context-parity" / "cases.v1.json"
 
@@ -66,6 +70,68 @@ def test_resident_refusal_reason_reaches_the_caller(
 ) -> None:
     _reply(monkeypatch, status="error", code=code)
     assert _build(tmp_path) == client.NativeRequestContextFailure(expected)
+
+
+def test_typed_refusal_survives_the_real_resident_transport(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=SimpleNamespace(path=tmp_path / "runtime", sha256="a" * 64),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", client.REQUEST_CONTEXT_FEATURE)),
+    )
+
+    def refuse(**kwargs: Any) -> bytes:
+        request = json.loads(kwargs["payload"])["request"]
+        return json.dumps(
+            {
+                "schema": "guard-request-context-result.v1",
+                "request_id": request["request_id"],
+                "request_sha256": "sha256:" + _canonical_request_sha256(request),
+                "status": "error",
+                "code": "native_request_context_owner_mismatch",
+                "payload": None,
+            }
+        ).encode()
+
+    monkeypatch.setattr(native_execution, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(native_execution, "native_resident_client_request", refuse)
+    monkeypatch.setattr(native_execution, "native_record_resident_success", lambda *_a, **_k: None)
+    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda _home: True)
+    assert _build(tmp_path) == client.NativeRequestContextFailure("native_request_context_owner_mismatch")
+
+
+def test_relative_paths_are_anchored_to_this_process_before_sending(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen = _reply(monkeypatch, status="error", code="native_request_context_budget_invalid")
+    monkeypatch.chdir(tmp_path)
+    client.native_request_context_build(
+        source="hook", guard_home=tmp_path, script="ls", cwd=Path("."), workspace="ws", home_dir=Path("home")
+    )
+    body = seen[0]["action"]["body"]
+    assert body["cwd"] == str(tmp_path)
+    assert body["workspace"] == str(tmp_path / "ws")
+    assert body["home_dir"] == str(tmp_path / "home")
+    assert all(Path(body[key]).is_absolute() for key in ("cwd", "workspace", "home_dir"))
+
+
+def test_partial_executable_is_sent_with_the_residents_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    seen = _reply(monkeypatch, status="error", code="native_request_context_budget_invalid")
+    client.native_request_context_build(
+        source="hook", guard_home=tmp_path, cwd=tmp_path, executable={"command": "/bin/ls", "args": ["-l"]}
+    )
+    client.native_request_context_build(source="hook", guard_home=tmp_path, cwd=tmp_path, executable={})
+    assert seen[0]["action"]["body"]["executable"] == {
+        "command": "/bin/ls",
+        "args": ["-l"],
+        "structured_command": False,
+        "direct_executable": False,
+        "search_path": None,
+        "launch_env": None,
+    }
+    assert seen[1]["action"]["body"]["executable"]["args"] == []
 
 
 def test_unbound_reply_and_missing_prerequisite_fail_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -127,6 +193,95 @@ def test_unavailable_resident_yields_an_incomplete_context_never_an_allow(
     )
     assert shell.validate_shell_execution_segment(forged, segment) == (None, shell.SHELL_CWD_NATIVE_UNAVAILABLE)
     assert shell.shell_execution_segment_hash(forged, segment).startswith(_UNBOUND_PREFIX)
+
+
+def _valid_shell_report(tmp_path: Path) -> dict[str, Any]:
+    segment = {
+        "tokens": ["ls"],
+        "segment_index": 0,
+        "control_before": [],
+        "control_after": [],
+        "effective_cwd": str(tmp_path),
+        "cwd_identity": {"device": 1, "inode": 2, "mode": 0o040000, "change_time_ns": 3, "creation_time_ns": 4},
+        "cwd_path_proofs": [],
+        "cwd_source": "workspace",
+        "directory_stack": [],
+        "complete": True,
+        "reason_code": None,
+        "directory_operation": None,
+    }
+    wire = {
+        "command_text": "ls",
+        "initial_cwd": str(tmp_path),
+        "workspace_root": str(tmp_path),
+        "workspace_identity": segment["cwd_identity"],
+        "segments": [segment],
+        "complete": True,
+        "reason_code": None,
+        "directory_change_present": False,
+    }
+    digest = "sha256:" + "1" * 64
+    return {"context": wire, "context_hash": digest, "segment_hashes": [digest], "metadata": {}}
+
+
+def _model_with_shell(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, report: dict[str, Any]
+) -> shell.ShellExecutionContext:
+    shell_context = client.NativeRequestContext("sha256:" + "2" * 64, {}, report, None, None)
+    monkeypatch.setattr(shell, "native_request_context_build", lambda **_kwargs: shell_context)
+    return shell.model_shell_execution_context("ls", cwd=tmp_path, workspace_root=tmp_path)
+
+
+def test_well_formed_shell_reply_becomes_a_native_bound_context(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    context = _model_with_shell(monkeypatch, tmp_path, _valid_shell_report(tmp_path))
+    assert context.complete is True
+    assert context.native is not None
+    assert [segment.tokens for segment in context.segments] == [("ls",)]
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        lambda report: report["context"].pop("segments"),
+        lambda report: report["context"]["segments"][0].pop("tokens"),
+        lambda report: report["context"]["segments"][0].update(complete="yes"),
+        lambda report: report["context"]["segments"][0].update(tokens=[1]),
+        lambda report: report["context"]["segments"][0].update(segment_index="0"),
+        lambda report: report["context"].update(complete=None),
+        lambda report: report["context"].update(command_text=None),
+        lambda report: report["context"]["segments"][0].update(cwd_identity={"device": 1}),
+    ],
+)
+def test_malformed_shell_reply_yields_the_incomplete_context_not_an_exception(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, damage: Any
+) -> None:
+    report = _valid_shell_report(tmp_path)
+    damage(report)
+    context = _model_with_shell(monkeypatch, tmp_path, report)
+    assert context.complete is False
+    assert context.reason_code == shell.SHELL_CWD_NATIVE_UNAVAILABLE
+    assert context.segments == ()
+    assert context.native is None
+
+
+@pytest.mark.parametrize("command", ["cat ~/.ssh/id_rsa", "./tool.sh"])
+def test_unavailable_resident_keeps_the_mandatory_read_floors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, command: str
+) -> None:
+    _reply(monkeypatch, prerequisite=False)
+    assessment = assess_shell_reads(command, cwd=tmp_path, home_dir=tmp_path)
+    assert assessment.requires_review is True
+    factors = shell_read_floor_factors(command, "action:test", cwd=tmp_path, home_dir=tmp_path)
+    assert [factor.reason_code for factor in factors] != []
+
+
+def test_unavailable_resident_does_not_invent_a_floor_for_unrelated_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _reply(monkeypatch, prerequisite=False)
+    assert assess_shell_reads("echo hello", cwd=tmp_path, home_dir=tmp_path).requires_review is False
 
 
 def _materialize(root: Path, entries: list[dict[str, str]]) -> None:

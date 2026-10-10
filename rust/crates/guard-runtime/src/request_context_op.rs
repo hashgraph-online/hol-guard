@@ -20,20 +20,24 @@ use serde_json::{json, Value};
 
 use crate::request_context_shell as shell;
 
-const BUDGET_EXCEEDED: &str = "native_request_context_budget_exceeded";
+pub(crate) const BUDGET_EXCEEDED: &str = "native_request_context_budget_exceeded";
 
 /// Remaining-budget clock started when the resident admits the request.
-struct Budget {
+pub(crate) struct Budget {
     started: Instant,
     limit: Duration,
 }
 
 impl Budget {
-    fn check(&self) -> Result<(), &'static str> {
+    pub(crate) fn check(&self) -> Result<(), &'static str> {
         if self.started.elapsed() >= self.limit {
             return Err(BUDGET_EXCEEDED);
         }
         Ok(())
+    }
+
+    pub(crate) fn deadline(&self) -> Instant {
+        self.started + self.limit
     }
 
     fn remaining_ms(&self) -> u64 {
@@ -120,6 +124,10 @@ fn admit_owner(owner_uid: Option<u32>) -> Result<(), &'static str> {
     }
 }
 
+/// The resident keeps no policy state of its own (the hook admission works
+/// the same way): it proves the caller's snapshot agrees with the generation
+/// it claims, and binds that evaluated snapshot into the context digest.
+/// Comparing against the active policy happens where the policy is evaluated.
 fn admit_policy(build: &RequestContextBuildV1) -> Result<Value, &'static str> {
     let Some(policy) = &build.policy else {
         return Ok(Value::Null);
@@ -145,6 +153,16 @@ fn admit_build(build: &RequestContextBuildV1) -> Result<(), &'static str> {
     ];
     if paths.iter().flatten().any(|path| !path_is_admissible(path)) {
         return Err("native_request_context_path_invalid");
+    }
+    // The resident's own working directory is unrelated to the caller's: a
+    // relative path would be modeled and identity-bound against the wrong
+    // directory. Callers send absolute paths.
+    if paths
+        .iter()
+        .flatten()
+        .any(|path| !Path::new(path).is_absolute())
+    {
+        return Err("native_request_context_path_not_absolute");
     }
     if build.script.as_ref().map(String::len).unwrap_or(0) > MAX_REQUEST_CONTEXT_SCRIPT_BYTES {
         return Err("native_request_context_script_too_large");
@@ -198,8 +216,9 @@ fn build(
                 body.fallback_cwd.as_deref(),
                 body.workspace.as_deref(),
                 body.home_dir.as_deref(),
+                budget,
             )?;
-            shell::context_report(&context)
+            shell::context_report(&context, budget)?
         }
     };
     budget.check()?;
@@ -243,11 +262,11 @@ fn decide(request: &RequestContextRequestV1) -> Result<Value, &'static str> {
         RequestContextKindV1::ValidateSegment {
             context,
             segment_index,
-        } => shell::validate_segment(context, *segment_index)?,
+        } => shell::validate_segment(context, *segment_index, &budget)?,
         RequestContextKindV1::Hash {
             context,
             segment_index,
-        } => shell::hash_context(context, *segment_index)?,
+        } => shell::hash_context(context, *segment_index, &budget)?,
     };
     budget.check()?;
     Ok(payload)
@@ -256,3 +275,7 @@ fn decide(request: &RequestContextRequestV1) -> Result<Value, &'static str> {
 #[cfg(test)]
 #[path = "request_context_op_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "request_context_op_bounds_tests.rs"]
+mod bounds_tests;

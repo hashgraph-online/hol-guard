@@ -68,8 +68,36 @@ def _owner_uid() -> int | None:
     return None if sys.platform == "win32" else os.geteuid()
 
 
-def _text(path: Path | str | None) -> str | None:
-    return None if path is None else str(path)
+def _absolute_text(path: Path | str | None) -> str | None:
+    """Anchor a relative path to this process: the resident's cwd is unrelated."""
+
+    return None if path is None else str(Path(path).absolute())
+
+
+_EXECUTABLE_DEFAULTS: Mapping[str, Any] = {
+    "command": None,
+    "args": (),
+    "structured_command": False,
+    "direct_executable": False,
+    "search_path": None,
+    "launch_env": None,
+}
+
+
+def _executable_wire(executable: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    """Spell out every field the resident defaults.
+
+    The request digest is taken over the typed request the resident decodes, so
+    omitted optional fields come back as their defaults and must be sent that
+    way or the reply would not bind to what Python hashed.
+    """
+
+    if executable is None:
+        return None
+    return {
+        **{key: list(value) if key == "args" else value for key, value in _EXECUTABLE_DEFAULTS.items()},
+        **executable,
+    }
 
 
 def _call(
@@ -135,16 +163,19 @@ def native_request_context_build(
 ) -> NativeRequestContext | NativeRequestContextFailure:
     """Admit the request and build its canonical context in one round trip."""
 
-    body: dict[str, Any] = {
-        "policy": dict(policy) if policy is not None else None,
-        "workspace": _text(workspace),
-        "cwd": _text(cwd),
-        "fallback_cwd": _text(_process_cwd()) if cwd is None else None,
-        "home_dir": _text(home_dir),
-        "script": script,
-        "target": target,
-        "executable": dict(executable) if executable is not None else None,
-    }
+    try:
+        body: dict[str, Any] = {
+            "policy": dict(policy) if policy is not None else None,
+            "workspace": _absolute_text(workspace),
+            "cwd": _absolute_text(cwd),
+            "fallback_cwd": _absolute_text(_process_cwd()) if cwd is None else None,
+            "home_dir": _absolute_text(home_dir),
+            "script": script,
+            "target": target,
+            "executable": _executable_wire(executable),
+        }
+    except OSError:
+        return NativeRequestContextFailure("native_request_context_request_invalid")
     payload = _call({"kind": "build", "body": body}, source=source, guard_home=guard_home, budget_ms=budget_ms)
     if isinstance(payload, NativeRequestContextFailure):
         return payload

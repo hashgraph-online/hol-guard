@@ -7,17 +7,38 @@
 use std::path::{Path, PathBuf};
 
 use guard_command::shell_execution_context::{
-    model_shell_execution_context, shell_execution_context_hash, shell_execution_context_metadata,
-    shell_execution_segment_hash, validate_shell_execution_segment, ShellExecutionContext,
-    ShellExecutionSegment, ShellPathIdentity, ShellPathProof,
+    model_shell_execution_context_bounded, shell_execution_context_hash,
+    shell_execution_context_metadata, shell_execution_segment_hash,
+    validate_shell_execution_segment_bounded, ShellExecutionContext, ShellExecutionSegment,
+    ShellModelLimit, ShellModelLimits, ShellPathIdentity, ShellPathProof,
 };
 use guard_contracts::{
     ShellContextV1, ShellPathIdentityV1, ShellPathProofV1, ShellSegmentV1,
     MAX_REQUEST_CONTEXT_PATH_BYTES, MAX_REQUEST_CONTEXT_SEGMENTS,
+    MAX_REQUEST_CONTEXT_SEGMENT_PROOFS, MAX_REQUEST_CONTEXT_TOTAL_PROOFS,
 };
 use serde_json::{json, Value};
 
+use crate::request_context_op::{Budget, BUDGET_EXCEEDED};
+
 const INVALID: &str = "native_request_context_shell_invalid";
+const TOO_LARGE: &str = "native_request_context_shell_too_large";
+
+fn limits(budget: &Budget) -> ShellModelLimits {
+    ShellModelLimits {
+        max_segments: MAX_REQUEST_CONTEXT_SEGMENTS,
+        max_segment_proofs: MAX_REQUEST_CONTEXT_SEGMENT_PROOFS,
+        max_total_proofs: MAX_REQUEST_CONTEXT_TOTAL_PROOFS,
+        deadline: Some(budget.deadline()),
+    }
+}
+
+fn limit_code(limit: ShellModelLimit) -> &'static str {
+    match limit {
+        ShellModelLimit::Deadline => BUDGET_EXCEEDED,
+        ShellModelLimit::Segments | ShellModelLimit::Proofs => TOO_LARGE,
+    }
+}
 
 fn path_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
@@ -128,12 +149,28 @@ fn segment_from_wire(segment: &ShellSegmentV1) -> Result<ShellExecutionSegment, 
     })
 }
 
+/// Bound a caller-supplied context before any of it is converted or touched.
+fn admit_wire_bounds(context: &ShellContextV1) -> Result<(), &'static str> {
+    if context.segments.len() > MAX_REQUEST_CONTEXT_SEGMENTS {
+        return Err(TOO_LARGE);
+    }
+    let mut total = 0usize;
+    for segment in &context.segments {
+        let held = segment.cwd_path_proofs.len();
+        total = total.saturating_add(held);
+        if held > MAX_REQUEST_CONTEXT_SEGMENT_PROOFS || total > MAX_REQUEST_CONTEXT_TOTAL_PROOFS {
+            return Err(TOO_LARGE);
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn context_from_wire(
     context: &ShellContextV1,
+    budget: &Budget,
 ) -> Result<ShellExecutionContext, &'static str> {
-    if context.segments.len() > MAX_REQUEST_CONTEXT_SEGMENTS {
-        return Err(INVALID);
-    }
+    admit_wire_bounds(context)?;
+    budget.check()?;
     Ok(ShellExecutionContext {
         command_text: context.command_text.clone(),
         initial_cwd: optional_path(&context.initial_cwd)?,
@@ -142,7 +179,10 @@ pub(crate) fn context_from_wire(
         segments: context
             .segments
             .iter()
-            .map(segment_from_wire)
+            .map(|segment| {
+                budget.check()?;
+                segment_from_wire(segment)
+            })
             .collect::<Result<Vec<_>, _>>()?,
         complete: context.complete,
         reason_code: context.reason_code.clone(),
@@ -159,6 +199,7 @@ pub(crate) fn build_shell_context(
     fallback_cwd: Option<&str>,
     workspace: Option<&str>,
     home_dir: Option<&str>,
+    budget: &Budget,
 ) -> Result<ShellExecutionContext, &'static str> {
     let declared = optional_path(&cwd.map(str::to_owned))?;
     let effective = match (&declared, fallback_cwd) {
@@ -168,12 +209,14 @@ pub(crate) fn build_shell_context(
     };
     let workspace = optional_path(&workspace.map(str::to_owned))?;
     let home = optional_path(&home_dir.map(str::to_owned))?;
-    let mut context = model_shell_execution_context(
+    let mut context = model_shell_execution_context_bounded(
         script,
         Some(&effective),
         workspace.as_deref(),
         home.as_deref(),
-    );
+        &limits(budget),
+    )
+    .map_err(limit_code)?;
     if declared.is_none() {
         for segment in &mut context.segments {
             if segment.cwd_source == "workspace" {
@@ -185,28 +228,39 @@ pub(crate) fn build_shell_context(
 }
 
 /// Hashes and projections the resident derives for a modeled context.
-pub(crate) fn context_report(context: &ShellExecutionContext) -> Value {
-    json!({
+pub(crate) fn context_report(
+    context: &ShellExecutionContext,
+    budget: &Budget,
+) -> Result<Value, &'static str> {
+    let mut segment_hashes = Vec::with_capacity(context.segments.len());
+    for segment in &context.segments {
+        budget.check()?;
+        segment_hashes.push(shell_execution_segment_hash(context, segment));
+    }
+    budget.check()?;
+    Ok(json!({
         "context": context_to_wire(context),
         "context_hash": shell_execution_context_hash(context),
-        "segment_hashes": context
-            .segments
-            .iter()
-            .map(|segment| shell_execution_segment_hash(context, segment))
-            .collect::<Vec<_>>(),
+        "segment_hashes": segment_hashes,
         "metadata": shell_execution_context_metadata(context),
-    })
+    }))
 }
 
 /// Re-read the filesystem for one modeled segment.
 pub(crate) fn validate_segment(
     context: &ShellContextV1,
     segment_index: u64,
+    budget: &Budget,
 ) -> Result<Value, &'static str> {
-    let native = context_from_wire(context)?;
     let index = usize::try_from(segment_index).map_err(|_| INVALID)?;
+    if index >= context.segments.len() {
+        return Err(INVALID);
+    }
+    let native = context_from_wire(context, budget)?;
     let segment = native.segments.get(index).ok_or(INVALID)?;
-    let (cwd, reason) = validate_shell_execution_segment(&native, segment);
+    let (cwd, reason) = validate_shell_execution_segment_bounded(&native, segment, &limits(budget))
+        .map_err(limit_code)?;
+    budget.check()?;
     Ok(json!({
         "effective_cwd": cwd.as_deref().map(path_text),
         "reason_code": reason,
@@ -218,16 +272,23 @@ pub(crate) fn validate_segment(
 pub(crate) fn hash_context(
     context: &ShellContextV1,
     segment_index: Option<u64>,
+    budget: &Budget,
 ) -> Result<Value, &'static str> {
-    let native = context_from_wire(context)?;
-    let segment_hash = match segment_index {
+    let index = segment_index
+        .map(|index| usize::try_from(index).map_err(|_| INVALID))
+        .transpose()?;
+    if index.is_some_and(|index| index >= context.segments.len()) {
+        return Err(INVALID);
+    }
+    let native = context_from_wire(context, budget)?;
+    let segment_hash = match index {
         None => None,
         Some(index) => {
-            let index = usize::try_from(index).map_err(|_| INVALID)?;
             let segment = native.segments.get(index).ok_or(INVALID)?;
             Some(shell_execution_segment_hash(&native, segment))
         }
     };
+    budget.check()?;
     Ok(json!({
         "context_hash": shell_execution_context_hash(&native),
         "segment_hash": segment_hash,

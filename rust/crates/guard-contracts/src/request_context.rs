@@ -23,6 +23,10 @@ pub const MAX_REQUEST_CONTEXT_PATH_BYTES: usize = 32 * 1024;
 pub const MAX_REQUEST_CONTEXT_SCRIPT_BYTES: usize = 1024 * 1024;
 pub const MAX_REQUEST_CONTEXT_ARGV: usize = 4096;
 pub const MAX_REQUEST_CONTEXT_SEGMENTS: usize = 4096;
+/// Path proofs one modeled segment may carry (its own and its directory stack's).
+pub const MAX_REQUEST_CONTEXT_SEGMENT_PROOFS: usize = 4096;
+/// Path proofs summed over every segment of one context.
+pub const MAX_REQUEST_CONTEXT_TOTAL_PROOFS: usize = 64 * 1024;
 
 /// Entry point that asked for the context.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
