@@ -218,11 +218,53 @@ def test_rejected_row_does_not_stop_later_rows(monkeypatch: pytest.MonkeyPatch, 
 
     complete = backfill_approval_queue_columns(connection, guard_home=home, commit_batches=True)
 
-    assert complete is False
+    assert complete is True
     assert _identity_of(connection, "poison") is None
     assert _identity_of(connection, "good") == "action-good"
     assert _identity_of(connection, "later") == "action-later"
     assert calls[0] > 1
+
+    backfill_queue_identities_once(connection, home)
+    settled_calls = calls[0]
+    backfill_queue_identities_once(connection, home)
+
+    assert calls[0] == settled_calls
+    assert _identity_of(connection, "poison") is None
+
+
+def test_transient_resident_error_does_not_split_or_mark_the_home_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def answer(request: dict[str, object]) -> bytes:
+        return json.dumps(
+            {
+                "schema": _RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": "sha256:" + _canonical_request_sha256(request),
+                "status": "error",
+                "code": "contention",
+                "payload": {},
+            }
+        ).encode()
+
+    calls = _install(monkeypatch, answer)
+    home = _home(tmp_path)
+    connection = _connection(home=home)
+    for index, artifact_id in enumerate(("row-a", "row-b", "row-c")):
+        _insert_legacy(
+            connection,
+            request_id=artifact_id,
+            created_at=f"2026-05-08T10:0{index}:00Z",
+            artifact_id=artifact_id,
+        )
+    connection.commit()
+
+    backfill_queue_identities_once(connection, home)
+    backfill_queue_identities_once(connection, home)
+
+    assert calls[0] == 2
+    assert _identity_of(connection, "row-a") is None
+    assert _identity_of(connection, "row-c") is None
 
 
 def test_unavailable_resident_does_not_split_or_mark_the_home_complete(

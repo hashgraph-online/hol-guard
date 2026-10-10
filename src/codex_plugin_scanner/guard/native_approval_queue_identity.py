@@ -32,10 +32,10 @@ UNAVAILABLE = "native_approval_queue_identity_unavailable"
 class ApprovalQueueIdentityUnavailableError(ValueError):
     """The resident could not identify the request; nothing was recomputed.
 
-    ``reason`` is ``unavailable`` when the resident never answered (no verifier,
-    no transport, or an unusable runtime) and ``rejected`` when a bound reply
-    refused the batch. Callers may split a rejected batch. They must not fan a
-    silent resident out into one retry per row.
+    ``reason`` is ``unavailable`` when the resident never answered or returned a
+    transient error, and ``rejected`` when this batch itself cannot be
+    identified. Callers may split a rejection. They must not fan a silent or
+    busy resident out into one retry per row.
     """
 
     def __init__(self, *, reason: str = "unavailable") -> None:
@@ -147,6 +147,16 @@ def _response_is_bound(response: Mapping[str, object], request: dict[str, object
     return response.get("request_id") == request.get("request_id") and response.get("request_sha256") == digest
 
 
+def _batch_was_rejected(response: Mapping[str, object], request: dict[str, object]) -> bool:
+    """A bound reply rejected this batch, rather than reporting a transient error."""
+
+    if not _response_is_bound(response, request):
+        return False
+    if response.get("status") == "ok":
+        return True
+    return response.get("code") == "rejected"
+
+
 def _verifier_key_present(guard_home: Path) -> bool:
     from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NATIVE_RUNTIME_STATE_DIRECTORY
 
@@ -196,7 +206,7 @@ def native_approval_queue_identities(
     payload = _payload(response, wire, Path(guard_home))
     reply = payload.get("items") if payload is not None else None
     if not isinstance(reply, list) or len(reply) != len(items):
-        reason = "rejected" if _response_is_bound(response, wire) else "unavailable"
+        reason = "rejected" if _batch_was_rejected(response, wire) else "unavailable"
         raise ApprovalQueueIdentityUnavailableError(reason=reason)
     identities: list[QueueIdentity] = []
     for entry in reply:

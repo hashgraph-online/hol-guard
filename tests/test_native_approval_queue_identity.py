@@ -194,3 +194,23 @@ def test_bound_error_reply_is_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path
         native_approval_queue_identities([_item()], guard_home=_home(tmp_path))
 
     assert caught.value.reason == "rejected"
+
+
+def test_bound_transient_error_is_unavailable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    def answer(request: dict[str, object]) -> bytes:
+        return json.dumps(
+            {
+                "schema": _RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": "sha256:" + _canonical_request_sha256(request),
+                "status": "error",
+                "code": "contention",
+                "payload": {},
+            }
+        ).encode()
+
+    _install(monkeypatch, answer)
+    with pytest.raises(ApprovalQueueIdentityUnavailableError) as caught:
+        native_approval_queue_identities([_item()], guard_home=_home(tmp_path))
+
+    assert caught.value.reason == "unavailable"

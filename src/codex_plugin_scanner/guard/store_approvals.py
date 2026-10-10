@@ -907,8 +907,9 @@ def backfill_queue_identities_once(connection: sqlite3.Connection, guard_home: P
     The migration runs inside store initialization, before the home has a
     verifier key. The first write that reaches the resident finishes the job,
     once per home and process, and never inside a caller-owned transaction.
-    The home is remembered only after every selected identity is stored and
-    committed. A sqlite failure rolls back and leaves the home retryable.
+    The home is remembered when the scan finishes without an unavailable
+    resident, including when a row was rejected and left unidentified. An
+    unavailable resident or a sqlite failure leaves the home retryable.
     """
 
     key = str(guard_home)
@@ -1043,12 +1044,15 @@ def backfill_approval_queue_columns(
     guard_home: Path | None = None,
     commit_batches: bool = False,
 ) -> bool:
-    """Fill legacy queue identities. True only when every selected row was identified.
+    """Fill legacy queue identities.
 
-    ``commit_batches`` commits each batch before the next resident call so the
-    write lock is not held across the lookup. Schema migration leaves it false
-    and keeps its own transaction. A row the resident rejects stays unidentified
-    and is skipped for this call; later rows in the same scan still run.
+    Returns True when this scan should not be repeated: every selected row was
+    identified, or the only rows left unidentified were rejected. Returns False
+    when the resident was unavailable or no home could be resolved, so a later
+    write retries. ``commit_batches`` commits each batch before the next
+    resident call so the write lock is not held across the lookup. Schema
+    migration leaves it false and keeps its own transaction. A rejected row
+    stays unidentified and is skipped for this call; later rows still run.
     """
 
     complete = True
@@ -1069,8 +1073,6 @@ def backfill_approval_queue_columns(
                 return False
             found, unavailable = _queue_identities_for_rows(missing, resolved_home)
             identities = found
-            if unavailable or len(found) != len(missing):
-                complete = False
             _apply_backfill_updates(connection, rows, identities)
             _commit_backfill_batch(connection, commit_batches=commit_batches)
             if unavailable:
