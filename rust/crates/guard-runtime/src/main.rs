@@ -24,6 +24,15 @@ mod context_digest_local_cli;
 mod daemon_policy_authority;
 mod edge;
 mod encrypted_secret_store;
+mod git_execution_safety_binary;
+mod git_execution_safety_checks;
+mod git_execution_safety_config;
+mod git_execution_safety_op;
+mod git_execution_safety_probe;
+#[cfg(all(test, unix))]
+mod git_execution_safety_repo_tests;
+#[cfg(test)]
+mod git_execution_safety_tests;
 mod github_workflow_runtime_authorization;
 mod hardening;
 mod hook_process_spawn;

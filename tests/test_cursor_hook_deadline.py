@@ -214,3 +214,26 @@ def test_windows_daemon_liveness_never_sends_a_console_signal(tmp_path, monkeypa
     assert namespace["_daemon_pid_is_alive"](4242) is alive
     # Unproven liveness still falls through to the healthz and HMAC checks.
     assert namespace["_daemon_pid_is_alive"](7) is True
+
+
+def test_daemon_payload_carries_the_agent_execution_environment(tmp_path, monkeypatch):
+    namespace = _hook_namespace(tmp_path)
+    monkeypatch.setenv("GIT_PAGER", "cat")
+    raw = json.dumps({"hook_event_name": "beforeShellExecution", "command": "git -C src status --short"})
+    namespace["_read_hook_input"] = lambda _deadline: raw
+    sent: list[dict] = []
+
+    class _StopError(Exception):
+        pass
+
+    def capture(payload_json, **_kwargs):
+        sent.append(json.loads(payload_json))
+        raise _StopError
+
+    namespace["_daemon_hook_result"] = capture
+    with pytest.raises(_StopError):
+        namespace["_main_inner"]()
+    # Without the stamp the daemon would judge Git configuration against its own environment.
+    environment = sent[0]["guard_execution_environment"]
+    assert environment["git_pager_disabled"] is True
+    assert "GIT_PAGER" in environment["environment_names"]
