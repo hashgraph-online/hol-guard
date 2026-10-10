@@ -33,8 +33,6 @@
     ["AaBsqG9ukSbnfNaazftV", "denylist", "guard/runtime/restricted_archive_destination.py", "<module>"],
     ["AaBsqG9ukSbnfNaazftW", "denylist", "guard/runtime/restricted_archive_destination.py", "<module>"],
     ["AaBsqHRAkSbnfNaazfvy", "store", "guard/store_workflow_capability_secret_control.py", "StoreWorkflowCapabilitySecretControlMixin._load_workflow_capability_control"],
-    ["AaBsqHQvkSbnfNaazfvx", "variadic", "guard/temporary_mcp_approvals.py", "runtime_grant_selectors"],
-    ["AaBsqG9-kSbnfNaazftX", "variadic", "guard/runtime/command_decision_adapter.py", "command_uncertainties"],
     ["AaBsqG8jkSbnfNaazftM", "variadic", "guard/runtime/extension_control_authority.py", "ExtensionControlAuthorityView.layers_for"],
     ["AaBsqHCkkSbnfNaazft9", "variadic", "guard/cli/commands_support_codex_git_config.py", "_git_path_aliases"],
     ["AaBsqHCkkSbnfNaazft-", "variadic", "guard/cli/commands_support_codex_git_config.py", "_git_gitdir_condition_patterns"],

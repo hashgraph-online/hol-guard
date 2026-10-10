@@ -24,9 +24,6 @@ _PORT_FLAG_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-_MARKDOWN_BOLD_ITALIC = re.compile(r"\*{1,3}|(?<!\w)_{1,3}(?=\w)|(?<=\w)_{1,3}(?!\w)")
-
-_BACKTICK_INLINE_CODE = re.compile(r"`([^`]+)`")
 
 _GENERIC_REQUEST_ID_IN_ARGS = re.compile(r"\b[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\b")
 
@@ -44,20 +41,6 @@ def normalize_command_identity(command: str) -> str:
     normalized = _TIMESTAMP_PATTERN.sub("<timestamp>", normalized)
     normalized = _PORT_FLAG_PATTERN.sub("<port-flag>", normalized)
     normalized = re.sub(r"\s+", " ", normalized).strip()
-    return normalized
-
-
-def normalize_prompt_identity(prompt: str) -> str:
-    """Return a stable identity string for a prompt text.
-
-    Strips markdown bold/italic formatting and normalises whitespace,
-    while preserving the requested sensitive targets (file paths, keys,
-    tokens, named secrets).
-    """
-    normalized = _MARKDOWN_BOLD_ITALIC.sub("", prompt)
-    normalized = _BACKTICK_INLINE_CODE.sub(r"\1", normalized)
-    normalized = re.sub(r"\s+", " ", normalized).strip()
-    normalized = normalized.lower()
     return normalized
 
 

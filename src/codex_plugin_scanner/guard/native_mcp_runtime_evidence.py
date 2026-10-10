@@ -223,16 +223,6 @@ def native_runtime_action_record(
     return record
 
 
-def native_command_text(
-    artifact_name: str, arguments: list[list[Any]] | None, *, guard_home: Path | None = None
-) -> str | None:
-    result = _request("command_text", guard_home, artifact_name=artifact_name, arguments=arguments)
-    text = result.get("command_text")
-    if "command_text" not in result or not (text is None or isinstance(text, str)):
-        raise NativeMcpRuntimeEvidenceError(_INVALID_RESULT)
-    return text
-
-
 def native_receipt_evidence(
     *,
     artifact_name: str,

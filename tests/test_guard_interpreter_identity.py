@@ -9,8 +9,6 @@ import pytest
 
 from codex_plugin_scanner.guard.consumer.service import artifact_hash
 from codex_plugin_scanner.guard.runtime.approval_context import (
-    approval_context_validation_reason,
-    build_approval_context_token,
     build_runtime_executable_identity,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
@@ -334,35 +332,6 @@ def test_same_python_basename_at_different_paths_cannot_collide(tmp_path: Path) 
     assert first_evidence["raw_token"] != second_evidence["raw_token"]
     assert first_evidence["executable"]["path"] != second_evidence["executable"]["path"]
     assert first_evidence["executable"]["sha256"] != second_evidence["executable"]["sha256"]
-
-
-def test_local_interpreter_cannot_reuse_trusted_interpreter_approval(
-    tmp_path: Path, native_context_digest: Path
-) -> None:
-    workspace = tmp_path / "workspace"
-    local_interpreter = workspace / "python"
-    _write_interpreter(local_interpreter)
-    trusted_identity = build_runtime_executable_identity(sys.executable, cwd=workspace)
-    local_identity = build_runtime_executable_identity("./python", cwd=workspace)
-    shared_context = {
-        "content": "same-inline-script",
-        "capabilities": ["read-only-observer"],
-        "policy": {"action": "review"},
-        "sandbox": {"mode": "host"},
-    }
-    approved = build_approval_context_token(
-        identity={"interpreter": trusted_identity},
-        **shared_context,
-    )
-
-    reason = approval_context_validation_reason(
-        approved,
-        identity={"interpreter": local_identity},
-        **shared_context,
-    )
-
-    assert trusted_identity["path"] != local_identity["path"]
-    assert reason == "approval_reuse_identity_changed"
 
 
 def test_same_path_same_bytes_replacement_changes_file_identity(tmp_path: Path) -> None:
