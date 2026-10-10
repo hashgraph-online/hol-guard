@@ -349,9 +349,10 @@ def native_policy_snapshot_v3(
     from .native_policy_snapshot_business_bridge import begin_business_deadline, end_business_deadline
 
     if business_policy is not None and deadline_monotonic is None:
-        # One budget for the build and inspect exchanges, so the generation lock
-        # is not held for a fresh native budget per call.
-        deadline_monotonic = time.monotonic() + 2 * BUSINESS_NATIVE_TIMEOUT_SECONDS
+        # One budget for a cold capability probe plus the build and inspect
+        # exchanges, so the generation lock is not held for a fresh native
+        # budget per call.
+        deadline_monotonic = time.monotonic() + 3 * BUSINESS_NATIVE_TIMEOUT_SECONDS
     deadline_token = begin_business_deadline(deadline_monotonic) if business_policy is not None else None
     verifier_key: bytes | None = None
     try:
