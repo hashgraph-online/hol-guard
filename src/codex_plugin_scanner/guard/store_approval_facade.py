@@ -40,6 +40,7 @@ class StoreApprovalsMixin:
                 request,
                 now,
                 oauth_source=self._guard_source,
+                guard_home=self.guard_home,
             )
             bind_review_events_for_request(
                 connection,

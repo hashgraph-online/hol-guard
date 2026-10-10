@@ -12,24 +12,12 @@ from __future__ import annotations
 
 import ast
 import fnmatch
-import io
-import tokenize
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-_SKIP_TOKENS = frozenset(
-    {
-        tokenize.COMMENT,
-        tokenize.NL,
-        tokenize.NEWLINE,
-        tokenize.INDENT,
-        tokenize.DEDENT,
-        tokenize.ENCODING,
-        tokenize.ENDMARKER,
-    }
-)
+from scripts.ci.runtime_majority_functions import ModulePlan, counted_lines
 
 
 @dataclass
@@ -53,18 +41,12 @@ class ImportGraph:
 
 
 def count_python_loc(source: str) -> int:
-    lines: set[int] = set()
-    try:
-        for token in tokenize.generate_tokens(io.StringIO(source).readline):
-            if token.type in _SKIP_TOKENS:
-                continue
-            lines.update(range(token.start[0], token.end[0] + 1))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return sum(1 for line in source.splitlines() if line.strip() and not line.lstrip().startswith("#"))
-    return len(lines)
+    return len(counted_lines(source))
 
 
-def discover_modules(repo: Path, package_root: str) -> dict[str, PythonModule]:
+def discover_modules(
+    repo: Path, package_root: str, plans: dict[str, ModulePlan] | None = None
+) -> dict[str, PythonModule]:
     root = repo / package_root
     top = root.name
     modules: dict[str, PythonModule] = {}
@@ -75,11 +57,14 @@ def discover_modules(repo: Path, package_root: str) -> dict[str, PythonModule]:
         if is_package:
             parts = parts[:-1]
         name = ".".join([top, *parts]) if parts else top
+        relative_path = path.relative_to(repo).as_posix()
+        plan = (plans or {}).get(relative_path)
+        counted = counted_lines(path.read_text(encoding="utf-8"))
         modules[name] = PythonModule(
             name=name,
-            path=path.relative_to(repo).as_posix(),
+            path=relative_path,
             is_package=is_package,
-            loc=count_python_loc(path.read_text(encoding="utf-8")),
+            loc=len(counted - plan.removed_lines) if plan else len(counted),
         )
     return modules
 
@@ -114,14 +99,21 @@ def _absolute_name(name: str, package: str | None) -> str | None:
 
 
 class _ImportCollector(ast.NodeVisitor):
-    def __init__(self, module: PythonModule) -> None:
+    def __init__(self, module: PythonModule, skip_linenos: set[int] | None = None) -> None:
         self.module = module
+        self._skip_linenos = skip_linenos or set()
         self.found: list[tuple[str, str, int, tuple[str, ...]]] = []
         self.dynamic_unresolved = 0
         self._function_depth = 0
 
     def _mode(self) -> str:
         return "lazy" if self._function_depth else "eager"
+
+    def visit(self, node: ast.AST) -> None:
+        """Skip statements removed by a reviewed function-level exclusion."""
+        if isinstance(node, ast.stmt) and node.lineno in self._skip_linenos:
+            return
+        super().visit(node)
 
     def visit_If(self, node: ast.If) -> None:
         if _is_type_checking(node.test):
@@ -193,12 +185,13 @@ def _resolve(module: PythonModule, mode_found: tuple[str, str, int, tuple[str, .
     return mode, targets
 
 
-def build_graph(repo: Path, package_root: str) -> ImportGraph:
-    modules = discover_modules(repo, package_root)
+def build_graph(repo: Path, package_root: str, plans: dict[str, ModulePlan] | None = None) -> ImportGraph:
+    modules = discover_modules(repo, package_root, plans)
     graph = ImportGraph(modules=modules)
     for name, module in modules.items():
         source = (repo / module.path).read_text(encoding="utf-8")
-        collector = _ImportCollector(module)
+        plan = (plans or {}).get(module.path)
+        collector = _ImportCollector(module, plan.skip_linenos if plan else None)
         try:
             collector.visit(ast.parse(source))
         except SyntaxError:

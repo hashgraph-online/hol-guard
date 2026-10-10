@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 from .continuation_snapshot import (
     canonical_continuation_correlation_id,
@@ -13,11 +14,14 @@ from .continuation_snapshot import (
 )
 from .decision_boundaries import CanonicalApprovalSurfaces, canonical_approval_surfaces
 from .models import GuardApprovalRequest
-from .store_approvals import (
-    _begin_immediate,
-    _normalized_identity_key,
-    approval_queue_identity_for_request,
+from .native_approval_queue_identity import (
+    ApprovalQueueIdentityUnavailableError,
+    QueueIdentity,
+    connection_guard_home,
+    native_approval_queue_identities,
+    queue_identity_item,
 )
+from .store_approvals import _begin_immediate, backfill_queue_identities_once
 
 
 def add_approval_request(
@@ -26,6 +30,7 @@ def add_approval_request(
     now: str,
     *,
     oauth_source: str = "default",
+    guard_home: Path | None = None,
 ) -> str:
     canonical_decision = canonical_approval_surfaces(
         request.policy_action,
@@ -33,6 +38,14 @@ def add_approval_request(
         request.action_envelope_json,
         reject_contradiction=True,
     )
+    # Identify the request natively before taking the write lock: the identity
+    # is pure request material, and the resident round trip must not run inside
+    # the transaction. Every lookup and write below still happens under it.
+    home = guard_home or connection_guard_home(connection)
+    if home is None:
+        raise ApprovalQueueIdentityUnavailableError
+    identity = _queue_identity(request, home)
+    backfill_queue_identities_once(connection, home)
     _begin_immediate(connection)
     # Callers may own a larger transaction and catch a failed insert. Keep
     # expired predecessors and their replacement in one atomic unit anyway.
@@ -44,6 +57,7 @@ def add_approval_request(
             now,
             oauth_source=oauth_source,
             canonical_decision=canonical_decision,
+            identity=identity,
         )
     except BaseException:
         connection.execute("rollback to savepoint approval_request_write")
@@ -60,10 +74,10 @@ def _add_approval_request_in_transaction(
     *,
     oauth_source: str,
     canonical_decision: CanonicalApprovalSurfaces,
+    identity: QueueIdentity,
 ) -> str:
     normalized_oauth_source = oauth_source.strip().lower() or "default"
-    identity_key = _normalized_identity_key(request.launch_target)
-    action_identity, queue_group_id = approval_queue_identity_for_request(request)
+    identity_key, action_identity, queue_group_id = identity
     _expire_inconsistent_group_requests(
         connection,
         request_id=request.request_id,
@@ -115,6 +129,24 @@ def _add_approval_request_in_transaction(
         now=now,
     )
     return request.request_id
+
+
+def _queue_identity(request: GuardApprovalRequest, home: Path) -> QueueIdentity:
+    return native_approval_queue_identities(
+        [
+            queue_identity_item(
+                launch_target=request.launch_target,
+                harness=request.harness,
+                workspace=request.workspace,
+                artifact_id=request.artifact_id,
+                envelope=request.action_envelope_json,
+                browser_intent=request.browser_intent,
+                action_identity=request.action_identity,
+                queue_group_id=request.queue_group_id,
+            )
+        ],
+        guard_home=home,
+    )[0]
 
 
 def _expire_inconsistent_group_requests(

@@ -3,6 +3,30 @@ use super::*;
 static EDGE_FIXTURE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 #[test]
+fn yield_report_scan_is_bound_into_the_pre_tool_receipt() {
+    for (text, minimum) in [
+        ("synthetic reference".to_owned(), "allow"),
+        (format!("ghp_{}", "A".repeat(36)), "block"),
+    ] {
+        let mut request = envelope(
+            "PreToolUse",
+            serde_json::json!({
+                "tool_name":"yield", "tool_input":{"data":{"report":text,"files":[]}}
+            }),
+        );
+        request.harness = "omp".into();
+        let bytes = evaluate_isolated(request).unwrap();
+        let edge: GuardHookEdgeResultV2 = serde_json::from_slice(&bytes).unwrap();
+        let result: PreToolResultV1 = serde_json::from_value(edge.result).unwrap();
+        assert_eq!(result.minimum_action, minimum);
+        if minimum == "block" {
+            assert_eq!(result.reason_code, "output_secret_match");
+            assert_eq!(result.decision, "deny");
+        }
+    }
+}
+
+#[test]
 fn execution_environment_binds_identity_without_rejecting_unrelated_hooks() {
     let mut request = envelope(
         "PreToolUse",
