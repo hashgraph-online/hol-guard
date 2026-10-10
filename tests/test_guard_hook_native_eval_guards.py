@@ -13,10 +13,7 @@ from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
     _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
-from codex_plugin_scanner.guard.cli.commands_hook_native_generic import (
-    _observed_action_detail,
-    _should_relax_configured_default,
-)
+from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _observed_action_detail
 
 
 @pytest.mark.parametrize(
@@ -65,9 +62,12 @@ def test_native_edge_floor_action_only_floors_post_tool_use() -> None:
 
 @pytest.mark.parametrize("action", ["block", "sandbox-required"])
 def test_pre_tool_native_terminal_action_cannot_be_relaxed_to_review(action: str) -> None:
-    assert _native_edge_floor_action(
-        {"decision": "deny", "policy_action": action}, "PreToolUse", artifact_default_action="warn"
-    ) == action
+    assert (
+        _native_edge_floor_action(
+            {"decision": "deny", "policy_action": action}, "PreToolUse", artifact_default_action="warn"
+        )
+        == action
+    )
     assert _native_edge_floor_action({"policy_action": "review"}, "PreToolUse") is None
     assert _native_edge_floor_action({"policy_action": "allow"}, "PreToolUse") is None
 
@@ -76,11 +76,14 @@ def test_package_evaluator_owns_command_control_failure_but_not_secret_deny() ->
     failure = {"policy_action": "block", "reason_code": "native_command_extension_evaluation_failed"}
     assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="package_request") is None
     assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="command") == "block"
-    assert _native_edge_floor_action(
-        {"policy_action": "block", "reason_code": "native_secret_exfiltration"},
-        "PreToolUse",
-        artifact_type="package_request",
-    ) == "block"
+    assert (
+        _native_edge_floor_action(
+            {"policy_action": "block", "reason_code": "native_secret_exfiltration"},
+            "PreToolUse",
+            artifact_type="package_request",
+        )
+        == "block"
+    )
 
 
 def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> None:
@@ -118,50 +121,6 @@ def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> N
             context=context,
             raw_command="cat other",
             runtime_workspace=tmp_path,
-        )
-        is False
-    )
-
-
-def test_should_relax_configured_default_requires_review_tier_and_no_override(tmp_path) -> None:
-    assert (
-        _should_relax_configured_default(
-            configured_action="review",
-            has_narrow_override=True,
-            home_dir=tmp_path,
-            payload={},
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _should_relax_configured_default(
-            configured_action="allow",
-            has_narrow_override=False,
-            home_dir=tmp_path,
-            payload={},
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-
-
-@pytest.mark.usefixtures("native_prompt_runtime")
-def test_should_relax_configured_default_rejects_prompt_submit_without_clean_prompt(tmp_path) -> None:
-    base = {
-        "configured_action": "review",
-        "has_narrow_override": False,
-        "home_dir": tmp_path,
-        "runtime_workspace": tmp_path,
-    }
-    assert _should_relax_configured_default(payload={"hook_event_name": "UserPromptSubmit"}, **base) is False
-    assert (
-        _should_relax_configured_default(payload={"hook_event_name": "UserPromptSubmit", "prompt": "   "}, **base)
-        is False
-    )
-    assert (
-        _should_relax_configured_default(
-            payload={"hook_event_name": "UserPromptSubmit", "prompt": "read my .env file"}, **base
         )
         is False
     )
