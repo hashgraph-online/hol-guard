@@ -75,8 +75,14 @@ def _resident_request(
     required_feature: str,
     response_schema: str | None = None,
     max_request_bytes: int = _MAX_REQUEST_BYTES,
+    record_success: bool = True,
 ) -> dict[str, object] | None:
-    """Envelope + transport shared by all contained-execution ops."""
+    """Envelope + transport shared by all contained-execution ops.
+
+    Pass ``record_success=False`` when the caller validates the reply further
+    and records success itself; otherwise a resident that keeps sending
+    unusable replies would reset the failure streak on every call.
+    """
     status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None or status.capabilities is None:
         return None
@@ -138,12 +144,15 @@ def _resident_request(
             "approval_proof_decide",
         }:
             accepted = frozenset({"ok", "error"})
+        elif operation == "mcp_tool_policy_decide":
+            accepted = frozenset({"ok", "need", "error"})
         if accepted is not None:
             if decoded.get("status") not in accepted:
                 return None
         elif decoded.get("status") != "ok":
             return None
-    native_record_resident_success(status.identity.sha256, guard_home)
+    if record_success:
+        native_record_resident_success(status.identity.sha256, guard_home)
     return decoded
 
 

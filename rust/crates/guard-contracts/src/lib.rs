@@ -55,6 +55,8 @@ mod mcp_tool_evidence;
 pub use mcp_tool_evidence::*;
 mod mcp_tool_policy;
 pub use mcp_tool_policy::*;
+mod mcp_tool_policy_decide;
+pub use mcp_tool_policy_decide::*;
 mod mcp_stdio_session;
 pub use mcp_stdio_session::*;
 mod command_effect;

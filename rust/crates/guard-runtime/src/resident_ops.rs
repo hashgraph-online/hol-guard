@@ -259,6 +259,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::McpToolPolicyDecide(request) => {
+                crate::mcp_tool_policy_decide_op::evaluate_mcp_tool_policy_decide_request(&request)
+            }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
             }
