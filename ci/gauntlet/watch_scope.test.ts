@@ -37,6 +37,28 @@ test("Watch scope accepts inert bash defaults without allowing execution overrid
   }
 });
 
+test("Watch scope accepts 18.4.12's inert service-mode defaults but nothing that acts", () => {
+  // The exact live shape: materialized defaults that OMP itself normalizes away.
+  expect(permittedWatchInput("bash", {
+    i: "Run the fixture", command: WATCH_COMMAND, timeout: 120,
+    cwd: "", pty: false, async: false, name: "",
+    ready: { log: "", port: 0, host: "", timeout: 0 },
+  })).toBe(true);
+  expect(permittedWatchInput("bash", { command: WATCH_COMMAND, timeout: 120, name: "", ready: {} })).toBe(true);
+  expect(permittedWatchInput("bash", { command: WATCH_COMMAND, timeout: 120, ready: { log: "", host: "" } })).toBe(true);
+  for (const overrides of [
+    { name: "watcher" }, { name: 0 }, { name: " " },
+    { ready: "ready" }, { ready: [] },
+    { ready: { port: 8080 } }, { ready: { log: "listening" } }, { ready: { host: "127.0.0.1" } },
+    { ready: { timeout: 30 } }, { ready: { extra: "" } },
+    { name: "", ready: { port: 8080 } },
+    { cwd: "/tmp" }, { cwd: " " }, { cwd: 0 },
+    { shell: "/bin/sh" }, { ready2: {} },
+  ]) {
+    expect(permittedWatchInput("bash", { command: WATCH_COMMAND, timeout: 120, ...overrides })).toBe(false);
+  }
+});
+
 test("Watch scope accepts system-root aliases but rejects mutable directory symlinks", () => {
   const root = mkdtempSync(join(tmpdir(), "guard-watch-scope-"));
   try {
