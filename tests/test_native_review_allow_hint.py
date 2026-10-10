@@ -7,6 +7,10 @@ from pathlib import Path
 from codex_plugin_scanner.guard.daemon.native_review_allow_hint import hint_for_reviewed_command
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from tests.native_command_test_support import project_native_review_fixture, real_native_review_fixture
 
 
@@ -87,7 +91,9 @@ class _Store:
 
     def read_extension_control_authority_for_registry(self, _registry, *, read_only: bool) -> object:
         assert read_only is True
-        return object()
+        return ExtensionControlAuthorityView(
+            health=AuthorityHealth.PROTECTED, revision=1, catalog_digest="sha256:test", layers=()
+        )
 
 
 def _queue_hint(monkeypatch, tmp_path: Path, *, tool_input: dict[str, object], deadline: float | None = None):

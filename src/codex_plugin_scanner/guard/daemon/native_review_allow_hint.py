@@ -17,6 +17,7 @@ from pathlib import Path
 
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
+from ..runtime.extension_control_authority import ExtensionControlAuthorityView
 from ..runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from .hook_native_saved_approval import _launch_cwd
@@ -136,9 +137,10 @@ def _native_review_extension_allow_hint(
         or _remaining_budget(deadline) < _MIN_NATIVE_BUDGET_SECONDS
     ):
         return None
-    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
-        reader(BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True)
-    )
+    view = reader(BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True)
+    if not isinstance(view, ExtensionControlAuthorityView):
+        return None
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
     budget = _remaining_budget(deadline)
     if snapshot.authority_failure is not None or budget < _MIN_NATIVE_BUDGET_SECONDS:
         return None
