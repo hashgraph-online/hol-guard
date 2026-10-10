@@ -8,7 +8,7 @@ use crate::guard_store_args::Args;
 use crate::guard_store_db::{
     exec, is_null, placeholders, query_all, query_one, text, StoreError, StoreResult,
 };
-use crate::guard_store_json::{dumps_sorted, Separators};
+use crate::guard_store_json::dumps_sorted;
 use crate::guard_store_outbox_append::append_request_snapshot_event;
 use crate::guard_store_outbox_binding::{
     bind_events_for_request, load_binding, normalized_binding, row_matches,
@@ -286,8 +286,7 @@ pub(crate) fn repair_rejected_correlation(
         return Ok(json!(0));
     }
     snapshot.insert("correlationId".to_owned(), Value::String(expected));
-    let serialized =
-        dumps_sorted(&Value::Object(snapshot), Separators::Compact).ok_or(UNREPRESENTABLE)?;
+    let serialized = dumps_sorted(&Value::Object(snapshot)).ok_or(UNREPRESENTABLE)?;
     exec(
         connection,
         "update approval_requests set continuation_snapshot_json = ? \

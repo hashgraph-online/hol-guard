@@ -7,16 +7,15 @@ use serde_json::{json, Map, Value};
 
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{
-    exec, int, placeholders, query_all, query_one, text, value_error, Row, StoreError, StoreResult,
+    exec, int, placeholders, query_all, query_one, text, value_error, StoreError, StoreResult,
 };
 use crate::guard_store_json::{add_seconds_isoformat, py_prefix};
 use crate::guard_store_outbox_binding::{load_binding, normalized_binding, Binding};
-use crate::guard_store_outbox_decode::decode_stored_event;
 
 const NO_BINDING: &str = "complete Review event OAuth binding is required";
 
 /// Identity filter arguments: either absent or complete.
-fn optional_identity(args: &Args) -> StoreResult<Option<Binding>> {
+pub(crate) fn optional_identity(args: &Args) -> StoreResult<Option<Binding>> {
     let identity = args.identity();
     if identity.iter().all(Option::is_none) {
         return Ok(None);
@@ -68,53 +67,6 @@ fn positive_sequences(args: &Args) -> StoreResult<Vec<i64>> {
     Ok(sequences)
 }
 
-pub(crate) fn list_ready(connection: &Connection, source: &str, args: &Args) -> StoreResult<Value> {
-    let mut query = String::from(
-        "select stream_sequence, event_id, local_request_id, request_sequence, \
-         event_type, event_schema_version, payload_json, payload_hash, \
-         occurred_at, oauth_source, oauth_subject_hash, workspace_id, \
-         machine_id, machine_installation_id, attempt_count \
-         from guard_review_outbox_events \
-         where oauth_source = ? and binding_status = 'ready' and acknowledged_at is null \
-         and (next_attempt_at is null or next_attempt_at <= ?)",
-    );
-    let mut params = vec![Value::from(source), Value::from(args.str("now")?)];
-    if let Some(binding) = optional_identity(args)? {
-        query.push_str(
-            " and oauth_subject_hash = ? and workspace_id = ? \
-             and machine_id = ? and machine_installation_id = ?",
-        );
-        params.extend(binding.values());
-    }
-    query.push_str(" order by stream_sequence asc limit ?");
-    params.push(Value::from(args.int("limit")?.max(1)));
-    let rows = query_all(connection, &query, &params)?;
-    Ok(Value::Array(rows.iter().map(ready_event).collect()))
-}
-
-fn ready_event(row: &Row) -> Value {
-    let null = Value::Null;
-    let field = |name: &str| row.get(name).unwrap_or(&null).clone();
-    json!({
-        "sequence": field("stream_sequence"),
-        "stream_sequence": field("stream_sequence"),
-        "event_id": field("event_id"),
-        "local_request_id": field("local_request_id"),
-        "request_sequence": field("request_sequence"),
-        "event_type": field("event_type"),
-        "event_schema_version": field("event_schema_version"),
-        "payload_json": field("payload_json"),
-        "payload_hash": field("payload_hash"),
-        "changed_at": field("occurred_at"),
-        "oauth_source": field("oauth_source"),
-        "oauth_subject_hash": field("oauth_subject_hash"),
-        "workspace_id": field("workspace_id"),
-        "machine_id": field("machine_id"),
-        "machine_installation_id": field("machine_installation_id"),
-        "attempt_count": field("attempt_count"),
-    })
-}
-
 /// Pending review requests that the established binding owns, bounded.
 pub(crate) fn list_pending_request_ids(
     connection: &Connection,
@@ -152,31 +104,6 @@ pub(crate) fn list_pending_request_ids(
     Ok(Value::Array(
         rows.iter()
             .map(|row| Value::from(text(row, "request_id")))
-            .collect(),
-    ))
-}
-
-/// Decoded, authenticated snapshots of a request, newest first.
-pub(crate) fn list_snapshots(
-    connection: &Connection,
-    source: &str,
-    args: &Args,
-) -> StoreResult<Value> {
-    let rows = query_all(
-        connection,
-        "select stream_sequence, event_id, local_request_id, request_sequence, \
-         event_type, event_schema_version, payload_json, payload_hash, \
-         occurred_at, oauth_source, oauth_subject_hash, workspace_id, \
-         machine_id, machine_installation_id \
-         from guard_review_outbox_events \
-         where local_request_id = ? and oauth_source = ? and binding_status = 'ready' \
-         order by request_sequence desc, stream_sequence desc",
-        &[Value::from(args.str("request_id")?), Value::from(source)],
-    )?;
-    Ok(Value::Array(
-        rows.iter()
-            .filter_map(decode_stored_event)
-            .map(|event| Value::Object(event.snapshot))
             .collect(),
     ))
 }

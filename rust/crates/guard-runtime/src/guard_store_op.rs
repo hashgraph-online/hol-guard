@@ -27,6 +27,7 @@ use crate::guard_store_outbox_binding::{
 };
 use crate::guard_store_outbox_identity::payload_digest;
 use crate::guard_store_outbox_queries as queries;
+use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
 
@@ -225,8 +226,8 @@ fn dispatch(
 ) -> StoreResult<Value> {
     match method {
         "review_event_outbox_status" => queries::status(connection, source, args),
-        "list_ready_review_events" => queries::list_ready(connection, source, args),
-        "list_review_event_snapshots" => queries::list_snapshots(connection, source, args),
+        "list_ready_review_events" => reads::list_ready(connection, source, args),
+        "list_review_event_snapshots" => reads::list_snapshots(connection, source, args),
         "list_pending_review_request_ids" => {
             queries::list_pending_request_ids(connection, source, args)
         }

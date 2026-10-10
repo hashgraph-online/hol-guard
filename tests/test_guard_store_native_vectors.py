@@ -83,6 +83,8 @@ def test_wrappers_send_the_recorded_wire_arguments(
 
     def capture(**kwargs: Any) -> tuple[object, None]:
         captured.append((kwargs["method"], json.loads(json.dumps(kwargs["args"]))))
+        if kwargs["method"] == "list_review_event_snapshots":
+            return {"snapshots": step["result"], "next": None}, None
         return step["result"], None
 
     monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", capture)

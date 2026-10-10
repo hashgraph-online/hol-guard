@@ -155,11 +155,15 @@ fn replays_every_recorded_scenario_against_python_written_state() {
             match step["error"].as_object() {
                 None => {
                     assert_eq!(reply["status"], "ok", "{label}: {reply}");
-                    assert!(
-                        same(&reply["payload"], &step["result"]),
-                        "{label}: {}",
-                        reply["payload"]
-                    );
+                    let payload = if step["method"] == "list_review_event_snapshots" {
+                        // The resident pages this read; the Python original returned the
+                        // whole history, so a recorded history must arrive as one final page.
+                        assert!(reply["payload"]["next"].is_null(), "{label}: paged");
+                        &reply["payload"]["snapshots"]
+                    } else {
+                        &reply["payload"]
+                    };
+                    assert!(same(payload, &step["result"]), "{label}: {payload}");
                 }
                 Some(error) => {
                     assert_eq!(reply["status"], "error", "{label}");

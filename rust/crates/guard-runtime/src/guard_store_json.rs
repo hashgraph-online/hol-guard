@@ -4,85 +4,17 @@
 //! HMACs over those exact bytes, so serialization must match byte for byte:
 //! `ensure_ascii=True`, `sort_keys`, and compact `(",", ":")` separators.
 
+use guard_contracts::write_canonical_json;
 use serde_json::Value;
 
-/// Separator style of `json.dumps`.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Separators {
-    Compact,
-}
-
-/// `json.dumps(value, sort_keys=True, separators=...)` with `ensure_ascii`.
-/// Returns `None` for values Python would format differently (floats).
-pub(crate) fn dumps_sorted(value: &Value, separators: Separators) -> Option<String> {
-    let mut out = String::new();
-    write_value(value, separators, &mut out)?;
-    Some(out)
-}
-
-pub(crate) fn write_string(text: &str, out: &mut String) {
-    out.push('"');
-    for character in text.chars() {
-        match character {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\u{8}' => out.push_str("\\b"),
-            '\u{c}' => out.push_str("\\f"),
-            ' '..='~' => out.push(character),
-            _ => {
-                let mut units = [0u16; 2];
-                for unit in character.encode_utf16(&mut units) {
-                    out.push_str(&format!("\\u{unit:04x}"));
-                }
-            }
-        }
-    }
-    out.push('"');
-}
-
-fn write_value(value: &Value, separators: Separators, out: &mut String) -> Option<()> {
-    let (item, key) = match separators {
-        Separators::Compact => (",", ":"),
-    };
-    match value {
-        Value::Null => out.push_str("null"),
-        Value::Bool(flag) => out.push_str(if *flag { "true" } else { "false" }),
-        Value::Number(number) => {
-            if number.is_f64() {
-                return None;
-            }
-            out.push_str(&number.to_string());
-        }
-        Value::String(text) => write_string(text, out),
-        Value::Array(items) => {
-            out.push('[');
-            for (index, element) in items.iter().enumerate() {
-                if index > 0 {
-                    out.push_str(item);
-                }
-                write_value(element, separators, out)?;
-            }
-            out.push(']');
-        }
-        Value::Object(map) => {
-            out.push('{');
-            // `serde_json::Map` is ordered by key, matching `sort_keys=True`
-            // for ASCII and for Python's code-point ordering of BMP keys.
-            for (index, (name, element)) in map.iter().enumerate() {
-                if index > 0 {
-                    out.push_str(item);
-                }
-                write_string(name, out);
-                out.push_str(key);
-                write_value(element, separators, out)?;
-            }
-            out.push('}');
-        }
-    }
-    Some(())
+/// `json.dumps(value, sort_keys=True, separators=(",", ":"))` with
+/// `ensure_ascii`, delegated to the shared CPython-exact canonical encoder so
+/// escaping and float spelling have a single owner. Returns `None` for values
+/// Python could not encode (non-finite numbers).
+pub(crate) fn dumps_sorted(value: &Value) -> Option<String> {
+    let mut out = Vec::new();
+    write_canonical_json(value, &mut out).ok()?;
+    String::from_utf8(out).ok()
 }
 
 /// `str.strip()` — Unicode whitespace including the C0 separators Python
@@ -265,8 +197,18 @@ mod tests {
     fn dumps_match_python_ensure_ascii() {
         let value = json!({"b": "é\u{1F600}\n", "a": [1, null, true]});
         assert_eq!(
-            dumps_sorted(&value, Separators::Compact).unwrap(),
+            dumps_sorted(&value).unwrap(),
             r#"{"a":[1,null,true],"b":"\u00e9\ud83d\ude00\n"}"#
+        );
+    }
+
+    #[test]
+    fn dumps_floats_like_python_repr() {
+        let parsed: Value =
+            serde_json::from_str(r#"{"a":0.1,"b":1e-7,"c":1.5e300,"d":-0.0,"e":2.0,"f":1e16,"g":123456789012345680.0,"h":[0.0001,0.00001]}"#).unwrap();
+        assert_eq!(
+            dumps_sorted(&parsed).unwrap(),
+            r#"{"a":0.1,"b":1e-07,"c":1.5e+300,"d":-0.0,"e":2.0,"f":1e+16,"g":1.2345678901234568e+17,"h":[0.0001,1e-05]}"#
         );
     }
 

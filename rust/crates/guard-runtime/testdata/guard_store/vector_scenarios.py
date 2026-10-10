@@ -20,7 +20,20 @@ def stamp(seconds: int) -> str:
     return f"2026-09-01T00:{seconds // 60:02d}:{seconds % 60:02d}+00:00"
 
 
-def request(request_id: str) -> GuardApprovalRequest:
+DECIMALS: dict[str, object] = {
+    "action_type": "shell_command",
+    "command": "ls",
+    "tool_name": "Bash",
+    "timeout": 0.1,
+    "tiny": 1e-7,
+    "huge": 1.5e300,
+    "negative_zero": -0.0,
+    "whole": 2.0,
+    "nested": {"ratios": [0.5, 1e16, 123456789.123456789], "count": 3},
+}
+
+
+def request(request_id: str, action_envelope: dict[str, object] | None = None) -> GuardApprovalRequest:
     return GuardApprovalRequest(
         request_id=request_id,
         harness="codex",
@@ -38,7 +51,7 @@ def request(request_id: str) -> GuardApprovalRequest:
         launch_target="cat /workspace/repo/.npmrc",
         review_command=f"hol-guard approvals approve {request_id}",
         approval_url=f"http://127.0.0.1:5474/approvals/{request_id}",
-        action_envelope_json={"action_type": "shell_command", "command": "ls", "tool_name": "Bash"},
+        action_envelope_json=action_envelope or {"action_type": "shell_command", "command": "ls", "tool_name": "Bash"},
     )
 
 
@@ -264,6 +277,26 @@ def scenario_rebinding_identity(ctx: Context) -> list[Step]:
     ]
 
 
+def seed_decimals(ctx: Context) -> None:
+    bind(ctx)
+    ctx.store.add_approval_request(request("d1", DECIMALS), stamp(1))
+    ctx.store.add_approval_request(request("d2"), stamp(2))
+
+
+def scenario_requeue_decimals(ctx: Context) -> list[Step]:
+    snapshot = ctx.store.list_review_event_snapshots("d1")[0]
+    return [
+        ("list_review_event_snapshots", lambda c: {"request_id": "d1"}),
+        (
+            "requeue_pending_review_events",
+            lambda c: {"changed_at": stamp(52), "request_ids": ["d1"], "request_snapshots": {"d1": snapshot}},
+        ),
+        ("requeue_pending_review_events", lambda c: {"changed_at": stamp(53), "request_ids": ["d1"]}),
+        ("list_review_event_snapshots", lambda c: {"request_id": "d1"}),
+        ("list_ready_review_events", lambda c: {"now": stamp(60), "limit": 20, **c.ident()}),
+    ]
+
+
 def scenario_requeue_marker(ctx: Context) -> list[Step]:
     native = {"schema": "guard-cloud-review-native-workspace-review-request.v1", "native_replay": True, "key": "v"}
     plain = {"schema": "other.v1", "note": "caf\u00e9", "n": 3}
@@ -382,6 +415,7 @@ SCENARIOS: list[tuple[str, Callable[[Context], None], Callable[[Context], list[S
     ("unbound_refresh", seed_unbound_refresh, scenario_unbound_refresh),
     ("rebinding_quarantine", seed_rebinding, scenario_rebinding),
     ("requeue", seed_requeue, scenario_requeue),
+    ("requeue_decimals", seed_decimals, scenario_requeue_decimals),
     ("requeue_marker", seed_requeue, scenario_requeue_marker),
     ("requeue_all", seed_requeue, scenario_requeue_all),
     ("requeue_repair", seed_requeue, scenario_requeue_repair),

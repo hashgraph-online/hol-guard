@@ -60,6 +60,9 @@ mod guard_store_outbox_binding;
 mod guard_store_outbox_decode;
 mod guard_store_outbox_identity;
 mod guard_store_outbox_queries;
+mod guard_store_outbox_reads;
+#[cfg(test)]
+mod guard_store_outbox_reads_tests;
 mod guard_store_outbox_recover;
 mod guard_store_outbox_requeue;
 #[cfg(test)]

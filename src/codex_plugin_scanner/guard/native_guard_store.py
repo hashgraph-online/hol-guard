@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, TypeVar
@@ -31,13 +32,14 @@ GUARD_STORE_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _REQUEST_SCHEMA = "guard-store-request.v1"
 _RESULT_SCHEMA = "guard-store-result.v1"
 _ENVELOPE_SLACK_BYTES = 4096
-_TRANSPORT_SLACK_SECONDS = 5.0
 _CODE = re.compile(r"^native_guard_store_[a-z_]{1,48}$")
 _SQLITE_ERROR, _SQLITE_BUSY, _SQLITE_IOERR, _SQLITE_CORRUPT = 1, 5, 10, 11
 
 
 class NativeGuardStoreUnavailable(sqlite3.OperationalError):
     """The resident gave no authoritative answer; the store call did not run."""
+
+    reason: str = "native_guard_store_unavailable"
 
 
 _DatabaseErrorT = TypeVar("_DatabaseErrorT", bound=sqlite3.DatabaseError)
@@ -49,7 +51,25 @@ def _failure(error: _DatabaseErrorT, code: int) -> _DatabaseErrorT:
 
 
 def _unavailable(reason: str) -> NativeGuardStoreUnavailable:
-    return _failure(NativeGuardStoreUnavailable(f"Guard store native runtime unavailable ({reason})."), _SQLITE_ERROR)
+    error = NativeGuardStoreUnavailable(f"Guard store native runtime unavailable ({reason}).")
+    error.reason = reason
+    return _failure(error, _SQLITE_ERROR)
+
+
+def unavailable_outbox_status(error: NativeGuardStoreUnavailable) -> dict[str, object]:
+    """Report the Review outbox as unavailable; never a locally computed answer.
+
+    The outbox lives behind the native resident. When it cannot answer, status
+    surfaces say so explicitly instead of reporting zeroes or a stale snapshot.
+    """
+
+    return {
+        "outbox_available": False,
+        "unavailable_reason": error.reason,
+        "state": "unavailable",
+        "binding_state": "unavailable",
+        "binding_hint": "The native Guard runtime is unavailable, so the Review outbox cannot be read.",
+    }
 
 
 def _raise_for_code(code: object, payload: object) -> None:
@@ -68,6 +88,9 @@ def _raise_for_code(code: object, payload: object) -> None:
     if code == "native_guard_store_sqlite_error":
         raise _failure(sqlite3.OperationalError(text), _SQLITE_ERROR)
     reason = code if isinstance(code, str) and _CODE.fullmatch(code) else "native_guard_store_unavailable"
+    if code == "native_guard_store_invalid" and isinstance(message, str) and _CODE.fullmatch(message):
+        # The resident names the contract violation; keep it for diagnostics.
+        reason = message
     raise _unavailable(reason)
 
 
@@ -78,10 +101,21 @@ def native_guard_store_call(
     source: str,
     method: str,
     args: Mapping[str, object],
-    busy_timeout_seconds: float,
+    deadline_monotonic: float,
 ) -> tuple[Any, int | None]:
-    """Run one store method in the resident; return ``(payload, outbox_generation)``."""
+    """Run one store method in the resident; return ``(payload, outbox_generation)``.
 
+    ``deadline_monotonic`` is the caller's operation deadline, fixed before any
+    storage-gate wait. The remaining budget is recomputed here, after startup
+    work, and bounds both the SQLite busy timeout and the transport wait, so the
+    call never outlasts the caller's deadline.
+    """
+
+    if not ensure_resident_prerequisite(guard_home):
+        raise _unavailable("native_guard_store_prerequisite_unavailable")
+    remaining_seconds = deadline_monotonic - time.monotonic()
+    if remaining_seconds <= 0:
+        raise TimeoutError("Guard storage operation deadline expired.")
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"guard-store-{uuid4().hex}",
@@ -89,20 +123,21 @@ def native_guard_store_call(
         "guard_home": str(guard_home),
         "method": method,
         "source": source,
-        "busy_timeout_ms": max(1, int(busy_timeout_seconds * 1000)),
+        "busy_timeout_ms": max(1, int(remaining_seconds * 1000)),
         "args": dict(args),
     }
     try:
         digest = "sha256:" + _canonical_request_sha256(request)
     except (TypeError, ValueError):
         raise _unavailable("native_guard_store_request_invalid") from None
-    if not ensure_resident_prerequisite(guard_home):
-        raise _unavailable("native_guard_store_prerequisite_unavailable")
+    remaining_seconds = deadline_monotonic - time.monotonic()
+    if remaining_seconds <= 0:
+        raise TimeoutError("Guard storage operation deadline expired.")
     response = _resident_request(
         operation="guard_store",
         request=request,
         guard_home=guard_home,
-        timeout_seconds=busy_timeout_seconds + _TRANSPORT_SLACK_SECONDS,
+        timeout_seconds=remaining_seconds,
         required_feature=GUARD_STORE_FEATURE,
         response_schema=_RESULT_SCHEMA,
         max_request_bytes=GUARD_STORE_MAX_REQUEST_BYTES + _ENVELOPE_SLACK_BYTES,
@@ -132,4 +167,5 @@ __all__ = [
     "GUARD_STORE_FEATURE",
     "NativeGuardStoreUnavailable",
     "native_guard_store_call",
+    "unavailable_outbox_status",
 ]

@@ -4,7 +4,7 @@ use rusqlite::Connection;
 use serde_json::{Map, Value};
 
 use crate::guard_store_db::{exec, int, query_one, value_error, Row, StoreError, StoreResult};
-use crate::guard_store_json::{dumps_sorted, py_strip, Separators};
+use crate::guard_store_json::{dumps_sorted, py_strip};
 use crate::guard_store_outbox_binding::load_binding;
 use crate::guard_store_outbox_decode::{
     EVENT_SCHEMA_NAME, EVENT_SCHEMA_VERSION, SNAPSHOT_COLUMNS, SNAPSHOT_JSON_FIELDS,
@@ -120,7 +120,7 @@ fn payload_json(
     if event_type == "review.request.snapshot_requeued" {
         payload.insert("nativeReplay".into(), Value::Bool(native_replay));
     }
-    dumps_sorted(&Value::Object(payload), Separators::Compact).ok_or(UNREPRESENTABLE)
+    dumps_sorted(&Value::Object(payload)).ok_or(UNREPRESENTABLE)
 }
 
 #[cfg(test)]
@@ -174,8 +174,7 @@ pub(crate) fn append_request_snapshot_event(
             }
             for field in SNAPSHOT_JSON_FIELDS {
                 if matches!(request.get(field), Some(Value::Object(_) | Value::Array(_))) {
-                    let text = dumps_sorted(&request[field], Separators::Compact)
-                        .ok_or(UNREPRESENTABLE)?;
+                    let text = dumps_sorted(&request[field]).ok_or(UNREPRESENTABLE)?;
                     request.insert(field.to_owned(), Value::String(text));
                 }
             }

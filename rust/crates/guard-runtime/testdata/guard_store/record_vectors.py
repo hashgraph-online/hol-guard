@@ -312,9 +312,12 @@ def record_scenario(name: str, seed: Callable[[Context], None], build: Callable[
         seed_ids = {str(row["event_id"]) for row in seed_rows["guard_review_outbox_events"]}
         seen_random: set[str] = set()
         steps_out = []
+        # One monotonic id stream across the steps, as in production: every step
+        # records where its draw starts, and no step reuses an earlier step's ids.
+        _Uuid.counter = STEP_UUID_BASE
         for method, make in build(ctx):
             kwargs = make(ctx)
-            _Uuid.counter = STEP_UUID_BASE
+            uuid_start = _Uuid.counter
             pre_all = all_tables(path)
             try:
                 result: object = native_result(method, call_python(store, method, kwargs))
@@ -333,7 +336,7 @@ def record_scenario(name: str, seed: Callable[[Context], None], build: Callable[
                     "method": method,
                     "kwargs": json.loads(json.dumps(kwargs, default=jsonable)),
                     "wire_args": json.loads(json.dumps(wire(method, kwargs), default=jsonable)),
-                    "uuid_start": STEP_UUID_BASE,
+                    "uuid_start": uuid_start,
                     "result": mask_result(result, seen_random),
                     "error": error,
                     "post_changed": delta,
@@ -360,9 +363,7 @@ def main() -> None:
         "schema_sql": schema,
         "scenarios": scenarios,
     }
-    out.write_text(
-        json.dumps(document, ensure_ascii=True, separators=(",", ":")) + "\n", encoding="utf-8"
-    )
+    out.write_text(json.dumps(document, ensure_ascii=True, separators=(",", ":")) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

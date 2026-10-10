@@ -11,12 +11,14 @@ from __future__ import annotations
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnusedCallResult=false
 import json
 import sqlite3
+import time
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
 
 from . import store_review_event_outbox_schema
 from .native_guard_store import native_guard_store_call
+from .sqlite_errors import sqlite_error_is_busy_locked
 from .store_base import sqlite_connect_timeout_seconds
 
 _SENTINEL = "\u0000requeued\u0000"
@@ -55,10 +57,15 @@ class StoreReviewEventOutboxMixin:
         timeout_seconds = sqlite_connect_timeout_seconds()
         if timeout_seconds <= 0:
             raise TimeoutError("Guard storage operation deadline expired.")
+        # One deadline for the whole call: the gate wait, startup, SQLite busy
+        # wait and transport all draw from it, so none can outlast the caller.
+        deadline = time.monotonic() + timeout_seconds
         failure: sqlite3.DatabaseError | None = None
         generation: int | None = None
         payload: Any = None
+        profiler = self._sqlite_profiler()
         with self._hold_storage_gate(exclusive=False):
+            started = time.monotonic()
             try:
                 payload, generation = native_guard_store_call(
                     store_path=self.path,
@@ -66,10 +73,14 @@ class StoreReviewEventOutboxMixin:
                     source=self._guard_source,
                     method=method,
                     args=args,
-                    busy_timeout_seconds=timeout_seconds,
+                    deadline_monotonic=deadline,
                 )
             except sqlite3.DatabaseError as error:
                 failure = error
+                if sqlite_error_is_busy_locked(error):
+                    profiler.record_busy_locked()
+            finally:
+                profiler.record_transaction((time.monotonic() - started) * 1000)
         self._repair_store_permissions()
         if failure is not None:
             # The operation already ran against the failed store: recover it for
@@ -164,8 +175,26 @@ class StoreReviewEventOutboxMixin:
         return [str(request_id) for request_id in ids]
 
     def list_review_event_snapshots(self, request_id: str) -> list[dict[str, object]]:
-        snapshots = self._native_store_call("list_review_event_snapshots", {"request_id": request_id})
-        return [dict(snapshot) for snapshot in snapshots]
+        """Newest-first snapshot history, read in resident-bounded pages.
+
+        The resident caps each reply, so it returns a byte-bounded page plus a
+        cursor; this method follows the cursor until the history is exhausted.
+        """
+
+        snapshots: list[dict[str, object]] = []
+        cursor: dict[str, object] | None = None
+        while True:
+            page = self._native_store_call(
+                "list_review_event_snapshots",
+                {"request_id": request_id, **({"after": cursor} if cursor is not None else {})},
+            )
+            snapshots.extend(dict(snapshot) for snapshot in page["snapshots"])
+            following = page.get("next")
+            if following is None:
+                return snapshots
+            if following == cursor:
+                raise ValueError("Review snapshot paging made no progress.")
+            cursor = dict(following)
 
     def get_review_event_oauth_binding(self) -> dict[str, str] | None:
         binding = self._native_store_call("get_review_event_oauth_binding", {})
@@ -222,15 +251,31 @@ class StoreReviewEventOutboxMixin:
         newest_first: bool = False,
     ) -> list[dict[str, object]]:
         del newest_first
-        events = self._native_store_call(
-            "list_ready_review_events",
-            {
-                "now": now,
-                "limit": int(limit),
-                **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
-            },
-        )
-        return [dict(event) for event in events]
+        arguments = {
+            "now": now,
+            "limit": int(limit),
+            **_identity(oauth_subject_hash, workspace_id, machine_id, machine_installation_id),
+        }
+        while True:
+            # The resident returns a byte-bounded prefix of the ready rows. A row
+            # too large to cross the resident reply cap by itself arrives alone,
+            # flagged, without its payload: it can never be uploaded, so it is
+            # dead-lettered exactly like an event over the upload byte limit.
+            events = [dict(event) for event in self._native_store_call("list_ready_review_events", arguments)]
+            if not (events and events[0].get("payload_oversized") is True):
+                return events
+            oversized = events[0]
+            changed = self.quarantine_review_event(
+                int(oversized["sequence"]),
+                reason="event_exceeds_upload_limit",
+                error="A Cloud Review event exceeds the negotiated upload byte limit.",
+                oauth_subject_hash=str(oversized["oauth_subject_hash"]),
+                workspace_id=str(oversized["workspace_id"]),
+                machine_id=str(oversized["machine_id"]),
+                machine_installation_id=str(oversized["machine_installation_id"]),
+            )
+            if changed < 1:
+                raise ValueError("An oversized Review event could not be quarantined.")
 
     def acknowledge_review_events(
         self,
