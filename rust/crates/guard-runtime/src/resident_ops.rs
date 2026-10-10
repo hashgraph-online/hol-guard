@@ -275,6 +275,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ApprovalProofDecide(request) => {
                 crate::approval_proof_op::evaluate_approval_proof_request(&request)
             }
+            ResidentOperationV1::CursorObserverProof(request) => {
+                crate::cursor_observer_proof_op::evaluate_cursor_observer_proof_request(&request)
+            }
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
             }
@@ -423,6 +426,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::SupplyChainEval(request) => Some(&request.guard_home),
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::CursorObserverProof(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.guard_home),

@@ -169,17 +169,6 @@ def start_serve_thread(server: GuardDaemonServer, *, already_locked: bool = Fals
         start_locked()
 
 
-def enable_full_capacity_for_generation(server: GuardDaemonServer, generation: int | None) -> None:
-    """Enable workers only while the startup generation still owns the service."""
-
-    with server._finish_service_lock:
-        if not startup_generation_is_current(server, generation):
-            raise RuntimeError("Guard daemon stopped during startup")
-        server._server.hook_process_runner.enable_full_capacity()
-        if not startup_generation_is_current(server, generation):
-            raise RuntimeError("Guard daemon stopped during startup")
-
-
 def contain_failed_service_start(
     server: GuardDaemonServer,
     error: BaseException,
@@ -219,7 +208,6 @@ def contain_failed_service_start(
 __all__ = [
     "begin_service",
     "contain_failed_service_start",
-    "enable_full_capacity_for_generation",
     "start_serve_thread",
     "startup_generation_is_current",
 ]
