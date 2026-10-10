@@ -114,6 +114,15 @@ from .approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
 )
+from .cloud_request_native import (
+    cloud_sync_command_display_part as _cloud_sync_command_display_part,
+)
+from .cloud_request_native import (
+    cloud_sync_sanitize_text as _cloud_sync_sanitize_text,
+)
+from .cloud_request_native import (
+    cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
+)
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .extension_catalog_handshake import (
@@ -140,15 +149,6 @@ from .managed_controls_sync import (
 )
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
-)
-from .receipt_sync_privacy import (
-    cloud_sync_command_display_part as _cloud_sync_command_display_part,
-)
-from .receipt_sync_privacy import (
-    cloud_sync_sanitize_text as _cloud_sync_sanitize_text,
-)
-from .receipt_sync_privacy import (
-    cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
 )
 from .supply_chain_bundle import (
     SupplyChainBundleError,

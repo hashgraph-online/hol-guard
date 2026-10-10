@@ -19,16 +19,13 @@ from ..review_contracts import (
 )
 from ..store import GuardStore
 from ..store_review_event_outbox_schema import REVIEW_EVENT_SCHEMA_VERSION
-from .local_request_snapshots import (
-    _cloud_safe_local_request_payload,  # pyright: ignore[reportPrivateUsage]
-)
+from .cloud_request_native import cloud_review_event_display
 from .native_workspace_review_context import (
     NativeWorkspaceReviewContextProbeState,
     build_native_workspace_review_context,
     native_workspace_review_context_cache_key,
 )
 from .review_event_delivery import StoredReviewEventError, decode_stored_review_event
-from .review_event_display import build_display_command, resolve_display_provenance
 from .time_support import parse_utc_timestamp
 
 _EVENT_TYPE_MAP = {
@@ -181,8 +178,8 @@ def build_cloud_review_event(
             claim = None
     if strip_expired_capability and native_context is not None and claim is not None:
         claim = _strip_expired_replay_capability(claim)
-    display_command, display_summary, raw_command, redacted_command = build_display_command(item, redaction_level)
-    request_payload = _cloud_safe_local_request_payload(item, redaction_level=redaction_level)
+    display = cloud_review_event_display(item, redaction_level=redaction_level)
+    request_payload = display["payload"]
     continuation = frozen_continuation or continuation_offer_payload(store, request_row=item, now=_now(), headless=True)
     created_at = str(item.get("created_at") or _now())
     last_seen_at = str(item.get("last_seen_at") or created_at)
@@ -193,14 +190,11 @@ def build_cloud_review_event(
         "eventType": _EVENT_TYPE_MAP[stored_status],
         "harnessId": str(item.get("harness") or "guard-review"),
         "requestKind": str(item.get("review_kind") or item.get("harness") or "guard-review"),
-        "displayProvenance": resolve_display_provenance(
-            has_command_details=bool(request_payload.get("command_text")),
-            redaction_level=redaction_level,
-        ),
-        "displayCommand": display_command,
-        "displaySummary": display_summary,
-        "rawCommand": raw_command,
-        "redactedCommand": redacted_command,
+        "displayProvenance": display["display_provenance"],
+        "displayCommand": display["display_command"],
+        "displaySummary": display["display_summary"],
+        "rawCommand": display["raw_command"],
+        "redactedCommand": display["redacted_command"],
         "reviewClaim": claim,
         "requestPayload": request_payload,
         "continuationCapability": continuation["capability"],
