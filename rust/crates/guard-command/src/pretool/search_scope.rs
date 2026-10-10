@@ -56,7 +56,46 @@ pub(super) fn claude_grep_directory_scope_proven(
     let Some(root) = verified_directory_root(target, home_dir, cwd) else {
         return false;
     };
-    walk_scope(&root, &filter).is_ok()
+    walk_scope(&root, &filter, true).is_ok()
+}
+
+/// Host-neutral variant for hosts whose search semantics are not modeled
+/// (Oh My Pi `grep`). No filter or ignore file narrows the scope: any
+/// sensitive file reachable below the directory fails the proof, so the
+/// result is at least as strict as the host's real search.
+pub(super) fn unfiltered_directory_scope_proven(
+    target: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(filter) = SearchFilter::from_input(&Map::new()) else {
+        return false;
+    };
+    if !super::safe_reads::bounded_omp_directory_read_target(target, home_dir, cwd) {
+        return false;
+    }
+    let candidate = if Path::new(target).is_absolute() {
+        PathBuf::from(target)
+    } else if let Some(stripped) = target.strip_prefix("~/") {
+        match home_dir {
+            Some(home) => Path::new(home).join(stripped),
+            None => return false,
+        }
+    } else if target == "~" {
+        return false;
+    } else {
+        match cwd {
+            Some(cwd) => Path::new(cwd).join(target),
+            None => return false,
+        }
+    };
+    if guard_secure_fs::contains_symlink_component(&candidate) {
+        return false;
+    }
+    std::fs::canonicalize(candidate)
+        .ok()
+        .filter(|root| root.is_dir())
+        .is_some_and(|root| walk_scope(&root, &filter, false).is_ok())
 }
 
 fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
@@ -181,13 +220,19 @@ struct PendingDirectory {
     tiers: Rc<IgnoreTiers>,
 }
 
-fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
-    let repository = repository_root(root);
+fn walk_scope(
+    root: &Path,
+    filter: &SearchFilter,
+    honor_ignores: bool,
+) -> Result<(), ScopeUnproven> {
+    let repository = repository_root(root).filter(|_| honor_ignores);
     let mut tiers = IgnoreTiers::default();
     if let Some(repository) = &repository {
         tiers.git = ancestor_git_rules(root, repository)?;
     }
-    ancestor_custom_rules(root, &mut tiers)?;
+    if honor_ignores {
+        ancestor_custom_rules(root, &mut tiers)?;
+    }
     let mut pending = vec![PendingDirectory {
         path: root.to_path_buf(),
         depth: 0,
@@ -209,7 +254,9 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
             }
             load_ignore_file(&directory.path.join(".gitignore"), &base, &mut tiers.git)?;
         }
-        load_custom_rules(&directory.path, &mut tiers)?;
+        if honor_ignores {
+            load_custom_rules(&directory.path, &mut tiers)?;
+        }
         let tiers = Rc::new(tiers);
         let entries = std::fs::read_dir(&directory.path).map_err(|_| ScopeUnproven)?;
         for entry in entries {
@@ -248,7 +295,7 @@ fn walk_scope(root: &Path, filter: &SearchFilter) -> Result<(), ScopeUnproven> {
                 Override::Searched => true,
                 Override::Undecided => {
                     let rendered = slash_path(&path).ok_or(ScopeUnproven)?;
-                    if is_ignored(&tiers, &rendered, is_directory)? {
+                    if honor_ignores && is_ignored(&tiers, &rendered, is_directory)? {
                         continue;
                     }
                     is_directory || filter.type_allows(name)

@@ -83,6 +83,8 @@ pub(in crate::pretool) fn agent_skill_document(
     }
     for root in [
         ".agents/skills",
+        // Oh My Pi also discovers user skills from the singular spelling.
+        ".agent/skills",
         ".claude/skills",
         ".codex/skills",
         ".codex/superpowers/skills",
@@ -93,7 +95,7 @@ pub(in crate::pretool) fn agent_skill_document(
         };
         // Retain the existing managed .agents root-link support. New roots
         // must not turn a broader hidden application directory into skills.
-        if root != ".agents/skills" && skills != home.join(root) {
+        if !matches!(root, ".agents/skills" | ".agent/skills") && skills != home.join(root) {
             continue;
         }
         let Ok(relative) = canonical.strip_prefix(skills) else {
@@ -140,4 +142,88 @@ pub(in crate::pretool) fn guard_safety_doc(
     home_dir
         .and_then(|root| std::fs::canonicalize(root).ok())
         .is_some_and(|home| canonical == home.join(".hol-support").join("SAFETY.md"))
+}
+
+fn visible_components(relative: &std::path::Path) -> Option<Vec<&std::ffi::OsStr>> {
+    relative
+        .components()
+        .map(|component| match component {
+            std::path::Component::Normal(part) if !part.to_string_lossy().starts_with('.') => {
+                Some(part)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// Project-level skill documents: `<dir>/.agents|.claude|.codex/skills/<skill>/**/*.md`
+/// below the verified workspace or user home. Every component outside the
+/// single skills marker must be visible, so this never opens other hidden
+/// application state. `canonical` is already fully resolved.
+pub(in crate::pretool) fn project_skill_document(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if canonical
+        .extension()
+        .is_none_or(|extension| extension != "md")
+    {
+        return false;
+    }
+    let inside = [home_dir, cwd]
+        .into_iter()
+        .flatten()
+        .filter_map(|root| std::fs::canonicalize(root).ok())
+        .any(|root| canonical.starts_with(root));
+    if !inside {
+        return false;
+    }
+    let parts: Vec<&std::ffi::OsStr> = canonical
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(part) => Some(part),
+            _ => None,
+        })
+        .collect();
+    let Some(marker) = parts.iter().position(|part| {
+        part.to_str()
+            .is_some_and(|part| matches!(part, ".agents" | ".claude" | ".codex"))
+    }) else {
+        return false;
+    };
+    // Skill directory plus document leaf must follow `skills`.
+    parts.get(marker + 1).is_some_and(|part| *part == "skills")
+        && parts.len() >= marker + 4
+        && parts[..marker]
+            .iter()
+            .all(|part| !part.to_string_lossy().starts_with('.'))
+        && parts[marker + 2..]
+            .iter()
+            .all(|part| !part.to_string_lossy().starts_with('.'))
+}
+
+/// Codex planning and memory notes in the verified user home:
+/// `~/.codex/plans/**/*.md` and `~/.codex/memories/**/*.md`. Auth material,
+/// config and sessions live elsewhere under `.codex` and stay guarded.
+pub(in crate::pretool) fn codex_notes_document(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+) -> bool {
+    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    if canonical
+        .extension()
+        .is_none_or(|extension| extension != "md")
+    {
+        return false;
+    }
+    ["plans", "memories"].iter().any(|name| {
+        let root = home.join(".codex").join(name);
+        std::fs::canonicalize(&root).is_ok_and(|resolved| resolved == root)
+            && canonical.strip_prefix(&root).is_ok_and(|relative| {
+                visible_components(relative).is_some_and(|parts| !parts.is_empty())
+            })
+    })
 }

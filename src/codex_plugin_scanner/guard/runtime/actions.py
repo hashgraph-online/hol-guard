@@ -53,6 +53,16 @@ _FILE_WRITE_TOOL_NAMES = frozenset(
     {"write", "edit", "multiedit", "strreplace", "delete", "delete_file", "write_file", "edit_file", "apply_patch"}
 )
 _GROK_FILE_READ_TOOL_NAMES = frozenset({"grep", "glob", "list_dir", "listdir", "list_directory", "read"})
+# Oh My Pi tools that would otherwise fall back to the generic "config_change"
+# label: `task` launches a delegated prompt, `eval` runs code, `ls` lists names.
+_OMP_TOOL_ACTION_TYPES: dict[str, GuardActionType] = {
+    "task": "prompt",
+    "eval": "shell_command",
+    "wait": "harness_start",
+    "todo": "harness_start",
+    "todo_write": "harness_start",
+    "ls": "file_read",
+}
 _GROK_SUBAGENT_TOOL_NAMES = frozenset({"task", "spawn_subagent"})
 _GROK_LIFECYCLE_ENVELOPE_EVENTS = frozenset({"SessionStart", "SubagentStart"})
 _PATH_KEYS = (
@@ -776,6 +786,7 @@ def _normalize_action_payload(
         command=normalized_command,
         prompt_excerpt=prompt_excerpt,
         mcp_server=mcp_server,
+        harness=harness,
     )
     target_paths = _target_paths(
         tool_name=tool_name,
@@ -1154,12 +1165,16 @@ def _action_type(
     command: str | None,
     prompt_excerpt: str | None,
     mcp_server: str | None,
+    harness: str | None = None,
 ) -> GuardActionType:
     normalized_tool = tool_name.lower() if tool_name is not None else ""
     if event_name == "UserPromptSubmit" and prompt_excerpt is not None:
         return "prompt"
     if mcp_server is not None:
         return "mcp_tool"
+    omp_type = _OMP_TOOL_ACTION_TYPES.get(normalized_tool) if harness == "omp" else None
+    if omp_type is not None and command is None:
+        return omp_type
     if normalized_tool in _FILE_READ_TOOL_NAMES:
         return "file_read"
     if normalized_tool in _FILE_WRITE_TOOL_NAMES:

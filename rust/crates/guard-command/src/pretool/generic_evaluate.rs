@@ -205,6 +205,23 @@ pub(super) fn evaluate_signals(
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
+        && super::omp::host_reference_reason(&signals.path_values[0]).is_some()
+    {
+        return generic_result(
+            action,
+            "allow",
+            super::omp::host_reference_reason(&signals.path_values[0]).unwrap_or_default(),
+            "This Oh My Pi artifact or skill reference names host-held content, not a filesystem path.",
+        );
+    }
+    if action_type == PreToolActionTypeV1::FileRead
+        && event == "PreToolUse"
+        && harness == "omp"
+        && signals.tool_name.as_deref() == Some("read")
+        && !signals.sensitive_target
+        && signals.url_values.is_empty()
+        && signals.command.is_none()
+        && signals.path_values.len() == 1
         && super::super::safe_reads::bounded_omp_file_read_target(
             &signals.path_values[0],
             home_dir,

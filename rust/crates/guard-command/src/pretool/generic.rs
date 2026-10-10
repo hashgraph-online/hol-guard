@@ -2,6 +2,8 @@
 mod evaluate;
 use evaluate::evaluate_signals;
 
+#[path = "generic_omp.rs"]
+mod omp;
 #[path = "generic_command_rewrite.rs"]
 mod command_rewrite;
 #[path = "generic_extract.rs"]
@@ -217,6 +219,18 @@ fn evaluate_envelope(
         && !signals.package_present
         && signals.path_values.is_empty()
         && signals.url_values.is_empty();
+    let omp_result = omp::evaluate(
+        payload,
+        &signals,
+        &omp::OmpContext {
+            harness,
+            event,
+            controls,
+            deadline,
+            path: context,
+            execution_environment,
+        },
+    );
     let command_decision = signals
         .command
         .as_deref()
@@ -272,6 +286,8 @@ fn evaluate_envelope(
             "native_exact_safe_file_write",
             "The Rust authority proved every file this patch adds or updates is an ordinary workspace file that clears sensitive-path checks.",
         )
+    } else if let Some(omp_result) = omp_result {
+        omp_result
     } else if task_metadata {
         generic_result(
             generic_action(harness, event, PreToolActionTypeV1::Harness,
