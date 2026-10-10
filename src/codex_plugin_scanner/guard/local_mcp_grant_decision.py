@@ -63,7 +63,7 @@ def decide_local_mcp_grant(
             None if server_hash is None else _configured_mcp_connection_hash(artifact, server_hash)
         ),
         tool_authority_hash=_tool_authority_hash(artifact),
-        launcher_path=os.environ.get("PATH"),
+        launcher_path=_caller_launcher_path(os.environ.get("PATH")),
         launcher_home=os.path.expanduser("~"),
     )
     if isinstance(native, NativeLocalMcpGrantFailure):
@@ -75,6 +75,21 @@ def decide_local_mcp_grant(
     if state == "allowed" or state == "blocked" or state == "review":
         return state
     return None
+
+
+def _caller_launcher_path(path_value: str | None) -> str | None:
+    """Anchor relative ``PATH`` entries to this process's working directory.
+
+    The resident runs elsewhere, so a relative entry such as
+    ``node_modules/.bin`` would otherwise resolve against its own directory.
+    """
+
+    if path_value is None:
+        return None
+    cwd = os.getcwd()
+    return os.pathsep.join(
+        part if not part or os.path.isabs(part) else os.path.join(cwd, part) for part in path_value.split(os.pathsep)
+    )
 
 
 def _tool_authority_hash(artifact: GuardArtifact) -> str | None:

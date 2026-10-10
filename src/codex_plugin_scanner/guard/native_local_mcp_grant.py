@@ -23,6 +23,12 @@ from .native_execution import _resident_request
 LOCAL_MCP_GRANT_FEATURE = "local-mcp-grant-v1"
 _REQUEST_SCHEMA = "guard-local-mcp-grant-request.v1"
 _RESULT_SCHEMA = "guard-local-mcp-grant-result.v1"
+_STATES: dict[str, NativeMcpGrantState] = {
+    "allowed": "allowed",
+    "blocked": "blocked",
+    "review": "review",
+    "none": "none",
+}
 _PAYLOAD_KEYS = frozenset({"state", "cli_id", "identity_hash"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _RESIDENT_CODE = re.compile(r"^native_local_mcp_grant_[a-z_]{1,64}$")
@@ -113,7 +119,7 @@ def _decode_payload(payload: object) -> NativeLocalMcpGrant | None:
     state = payload["state"]
     cli_id = payload["cli_id"]
     identity_hash = payload["identity_hash"]
-    if state not in {"allowed", "blocked", "review", "none"}:
+    if not isinstance(state, str) or state not in _STATES:
         return None
     if cli_id is not None and not isinstance(cli_id, str):
         return None
@@ -121,7 +127,7 @@ def _decode_payload(payload: object) -> NativeLocalMcpGrant | None:
         return None
     if state != "none" and (cli_id is None or identity_hash is None):
         return None
-    return NativeLocalMcpGrant(state, cli_id, identity_hash)
+    return NativeLocalMcpGrant(_STATES[state], cli_id, identity_hash)
 
 
 __all__ = [

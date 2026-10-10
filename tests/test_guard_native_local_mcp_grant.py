@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -130,3 +131,23 @@ def test_unavailable_resident_without_grants_keeps_baseline(tmp_path: Path, monk
 
     assert local_cli_trust.apply_local_mcp_extension_decision(store, _artifact(identity, "read_file"), "allow") is None
     assert local_cli_trust.apply_local_mcp_extension_decision(store, _artifact(identity, "read_file"), "review") is None
+
+
+@pytest.mark.parametrize("state", [[], {}, 1, None, "maybe"])
+def test_malformed_state_is_an_invalid_payload_not_a_crash(state: object) -> None:
+    payload = {"state": state, "cli_id": None, "identity_hash": None}
+
+    assert client._decode_payload(payload) is None
+
+
+def test_relative_path_entries_are_anchored_to_the_callers_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    absolute = str(tmp_path / "abs")
+    joined = os.pathsep.join(["node_modules/.bin", absolute, ""])
+
+    anchored = local_mcp_grant_decision._caller_launcher_path(joined)
+
+    assert anchored == os.pathsep.join([os.path.join(os.getcwd(), "node_modules/.bin"), absolute, ""])
+    assert local_mcp_grant_decision._caller_launcher_path(None) is None
