@@ -12,7 +12,7 @@ use serde_json::{Map, Value};
 use crate::approval_scope_material::scope_contract_digest;
 use crate::context_digest::parse_context_token;
 use crate::guard_store_json::py_strip;
-use crate::skill_identity_canon::casefold;
+use caseless::default_case_fold_str as casefold;
 
 const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
     "file-read",
