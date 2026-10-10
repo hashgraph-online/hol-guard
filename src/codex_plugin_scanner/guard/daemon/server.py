@@ -25,6 +25,7 @@ import uuid
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
+from functools import partial
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, BinaryIO, ClassVar, TypeAlias, TypedDict, TypeGuard, cast
@@ -148,9 +149,14 @@ from ..native_daemon_handler import (
     HandlerDecision,
     NativeDaemonHandlerError,
     native_body_handler,
+    native_detection_app_statuses,
     native_events_cursor,
     native_harness_action,
+    native_headless_action_error,
+    native_headless_action_state,
+    native_headless_cursor_surface_error,
     native_requests_list,
+    native_supply_chain_error,
 )
 from ..native_daemon_route import (
     NativeDaemonRouteError,
@@ -1397,191 +1403,27 @@ def _headless_safe_failure_reasons() -> dict[str, str]:
     }
 
 
-def _supply_chain_package_action_error_response(
-    *,
-    operation: str,
-    error: Exception,
-) -> tuple[int, dict[str, object]]:
-    if isinstance(error, GuardSyncAuthorizationExpiredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_reconnect_required",
-                "message": str(error).strip() or "Guard Cloud authorization expired.",
-                "operation": operation,
-            },
-        )
-    if isinstance(error, GuardSyncNotConfiguredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_connect_required",
-                "message": str(error).strip() or "Guard Cloud workspace is not connected.",
-                "operation": operation,
-            },
-        )
-    if isinstance(error, GuardSyncNotAvailableError):
-        payload: dict[str, object] = {
-            "error": "supply_chain_sync_unavailable",
-            "message": str(error).strip() or "Supply-chain sync is not available on this device.",
-            "operation": operation,
-        }
-        if error.retryable:
-            payload["retryable"] = True
-        return (503, payload)
-    message = str(error).strip() or "Guard supply-chain bundle sync failed."
-    return (
-        502,
-        {
-            "error": "supply_chain_sync_failed",
-            "message": message,
-            "operation": operation,
-        },
-    )
-
-
-def _headless_detection_status_to_app_status(value: object) -> str:
-    status_map = {
-        "protected": "protected",
-        "found": "observed",
-        "not_found": "inactive",
-    }
-    return status_map.get(str(value), "unknown")
-
-
-def _headless_error_payload(
-    *,
-    code: str,
-    message: str,
-    retryable: bool,
-    detail: str | None = None,
-) -> dict[str, object]:
-    error_payload: dict[str, object] = {
-        "code": code,
-        "message": message,
-        "retryable": retryable,
-    }
-    if detail:
-        error_payload["detail"] = detail
-    payload: dict[str, object] = {
-        "status": "failed",
-        "error": error_payload,
-    }
-    return payload
-
-
-def _headless_action_error_payload(
-    *,
-    operation: str,
-    error_code: str,
-) -> tuple[int, dict[str, object]]:
-    error_details = {
-        "missing_harness": (
-            400,
-            "Choose an app before retrying.",
-            False,
-        ),
-        "unknown_harness": (
-            404,
-            "This app is not supported by local Guard.",
-            False,
-        ),
-        "confirmation_required": (
-            409,
-            "Disconnect needs the local confirmation phrase before Guard removes protection.",
-            False,
-        ),
-        "unsupported_operation": (
-            400,
-            "This version of local Guard cannot run the requested app action.",
-            False,
-        ),
-    }
-    known_error = error_details.get(error_code)
-    if known_error is not None:
-        status, message, retryable = known_error
-        return status, _headless_error_payload(
-            code=error_code,
-            message=message,
-            retryable=retryable,
-        )
-    operation_code = "proof_failed" if operation == "scan" else f"{operation}_failed"
-    operation_label = "connection check" if operation == "scan" else operation
-    return 400, _headless_error_payload(
-        code=operation_code,
-        message=f"Guard could not finish the {operation_label}.",
-        retryable=True,
-    )
-
-
-def _headless_app_status_from_result(*, operation: str, result: dict[str, object]) -> str:
-    if operation in {"install", "repair"}:
-        managed_install = result.get("managed_install")
-        if isinstance(managed_install, dict) and bool(managed_install.get("active")):
-            return "protected"
-        return "unknown"
-    if operation == "remove":
-        managed_install = result.get("managed_install")
-        if isinstance(managed_install, dict) and managed_install.get("active") is False:
-            return "inactive"
-        return "unknown"
-    verification = result.get("verification")
-    if isinstance(verification, dict):
-        if bool(verification.get("installed")):
-            return "protected"
-        if bool(verification.get("command_available")) or bool(verification.get("config_paths")):
-            return "observed"
-        return "inactive"
-    return "unknown"
-
-
-def _headless_action_state_payload(
-    *,
-    harness: str,
-    operation: str,
-    result: dict[str, object],
-    receipt: dict[str, object],
-) -> dict[str, object]:
-    app_status = _headless_app_status_from_result(operation=operation, result=result)
-    if operation == "install":
-        outcome = "app_connected"
-        message = f"{harness} is connected through local Guard."
-        proof_status = "pending"
-    elif operation == "repair":
-        outcome = "app_repaired"
-        message = f"{harness} protection was refreshed."
-        proof_status = "pending"
-    elif operation == "remove":
-        outcome = "app_disconnected"
-        message = f"{harness} protection was removed."
-        proof_status = "not_applicable"
-    elif operation == "scan":
-        proof_passed = app_status == "protected"
-        # Keep protocol values stable for Cloud clients; user-facing copy below avoids jargon.
-        outcome = "proof_passed" if proof_passed else "proof_failed"
-        message = (
-            f"{harness} connection check passed. Guard sees local protection."
-            if proof_passed
-            else f"{harness} connection check finished, but Guard does not see active local protection yet."
-        )
-        proof_status = "passed" if proof_passed else "failed"
-    else:
-        outcome = "status_checked"
-        message = f"{harness} status checked."
-        proof_status = "not_applicable"
+def _receipt_summary(receipt: dict[str, object]) -> dict[str, object]:
     return {
-        "app_status": app_status,
-        "message": message,
-        "outcome": outcome,
-        "proof_status": proof_status,
-        "receipt_summary": {
-            "id": receipt.get("id"),
-            "operation": receipt.get("operation"),
-            "status": receipt.get("status"),
-            "timestamp": receipt.get("timestamp"),
-        },
-        "retryable": operation in {"install", "repair", "scan"},
+        "id": receipt.get("id"),
+        "operation": receipt.get("operation"),
+        "status": receipt.get("status"),
+        "timestamp": receipt.get("timestamp"),
     }
+
+
+_NATIVE_HANDLER_UNAVAILABLE: tuple[int, dict[str, object]] = (503, {"error": "native_handler_policy_unavailable"})
+
+
+def _headless_failure(
+    ask: Callable[[], tuple[int, dict[str, Any]]],
+) -> tuple[int, dict[str, object]]:
+    """A failed headless action as the resident shaped it; fail closed when it cannot answer."""
+
+    try:
+        return ask()
+    except NativeDaemonHandlerError:
+        return _NATIVE_HANDLER_UNAVAILABLE
 
 
 def _run_headless_cloud_sync(
@@ -3751,15 +3593,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
         supported = []
         failure_reasons = _headless_safe_failure_reasons()
-        for item in items:
-            harness = item.get("harness")
-            if not isinstance(harness, str):
-                continue
+        listed = [item for item in items if isinstance(item.get("harness"), str)]
+        try:
+            app_statuses = native_detection_app_statuses(
+                [item.get("status") for item in listed],
+                guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+            )
+        except NativeDaemonHandlerError:
+            self._write_json(_NATIVE_HANDLER_UNAVAILABLE[1], status=_NATIVE_HANDLER_UNAVAILABLE[0])
+            return
+        for item, app_status in zip(listed, app_statuses, strict=True):
+            harness = item["harness"]
             supported.append(
                 {
                     "display_name": item.get("display_name"),
                     "harness": harness,
-                    "status": _headless_detection_status_to_app_status(item.get("status")),
+                    "status": app_status,
                     "command_available": bool(item.get("command_available")),
                     "headless_actions": list(_HEADLESS_OPERATIONS[:-1]),
                     "safe_failure_reasons": failure_reasons,
@@ -3845,40 +3694,33 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         action_path: str,
         payload: dict[str, object],
     ) -> tuple[int, dict[str, object]]:
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+
+        def failure(operation: str, error_code: str) -> tuple[int, dict[str, object]]:
+            return _headless_failure(lambda: native_headless_action_error(operation, error_code, guard_home=guard_home))
+
         try:
             mapping = _HEADLESS_APP_ACTIONS[action_path]
         except KeyError:
-            return _headless_action_error_payload(
-                operation=action_path,
-                error_code="unsupported_operation",
-            )
+            return failure(action_path, "unsupported_operation")
         operation, harness_action = mapping
         harness = self._optional_string(payload.get("harness"))
         if harness is None:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code="missing_harness",
-            )
+            return failure(operation, "missing_harness")
         try:
             adapter = get_adapter(harness)
         except ValueError:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code="unknown_harness",
-            )
+            return failure(operation, "unknown_harness")
         try:
             surface = self._cursor_headless_surface(payload) if adapter.harness == "cursor" else None
         except ValueError:
-            error_payload = _headless_error_payload(
-                code="invalid_cursor_surface",
-                message="Choose Cursor editor or CLI before retrying this local action.",
-                retryable=False,
+            status, error_payload = _headless_failure(
+                lambda: native_headless_cursor_surface_error(guard_home=guard_home)
             )
-            error = error_payload["error"]
-            if isinstance(error, dict):
-                error["app_id"] = "cursor"
+            error = error_payload.get("error")
+            if status == 400 and isinstance(error, dict):
                 error["surface"] = self._optional_string(payload.get("surface")) or ""
-            return 400, error_payload
+            return status, error_payload
         context = self._harness_context(payload)
         try:
             if harness_action == "verify":
@@ -3895,10 +3737,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ApprovalGateError as error:
             return error.status, error.to_payload()
         except ValueError as error:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code=str(error),
-            )
+            return failure(operation, str(error))
+        try:
+            state = native_headless_action_state(adapter.harness, operation, result, guard_home=guard_home)
+        except NativeDaemonHandlerError:
+            return _NATIVE_HANDLER_UNAVAILABLE
         location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
             payload.get("locationId")
         )
@@ -3922,12 +3765,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "operation": operation,
             "result": result,
             "receipt": receipt,
-            "state": _headless_action_state_payload(
-                harness=adapter.harness,
-                operation=operation,
-                result=result,
-                receipt=receipt,
-            ),
+            "state": {**state, "receipt_summary": _receipt_summary(receipt)},
             "reconnect": self._headless_reconnect_payload(
                 cloud_sync=cloud_sync,
                 location_id=location_id,
@@ -4400,9 +4238,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
         except Exception as error:
-            status, error_payload = _supply_chain_package_action_error_response(
-                operation=operation,
-                error=error,
+            status, error_payload = _headless_failure(
+                partial(
+                    native_supply_chain_error,
+                    operation,
+                    error,
+                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+                )
             )
             self._write_json(error_payload, status=status)
             return
