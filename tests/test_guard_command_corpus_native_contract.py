@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import copy
 import json
+import sys
 from dataclasses import replace
 from itertools import chain
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -122,9 +123,11 @@ def test_native_contract_rejects_changed_immutable_source_identity(
 
 @pytest.fixture(scope="module")
 def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
-    from codex_plugin_scanner.guard.runtime import package_protect_projection
+    from codex_plugin_scanner.guard.runtime import github_command_capabilities, package_protect_projection
     from tests.guard_command_corpus_native import evaluate_native_corpus_batch
     from tests.harness_attribution_env import HARNESS_ENV_MARKERS
+    from tests.native_command_test_support import _native_binaries
+    from tests.native_github_offline import _MODULE, install_offline_github_classifier
 
     selected: dict[str, tuple[CommandCorpusCase, OracleRecord]] = {}
     for case, oracle in _pairs():
@@ -138,6 +141,11 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
             attribution.delenv(marker, raising=False)
         attribution.setenv("__CFBundleIdentifier", "com.apple.Terminal")
         attribution.setattr(package_protect_projection, "resolve_parent_process_harness", lambda: None)
+        # GitHub CLI classification is resident-only; answer it from the same Rust classifier
+        # without leaking the stub module or its memoized answers into other tests.
+        attribution.setitem(sys.modules, _MODULE, ModuleType(_MODULE))
+        attribution.setattr(github_command_capabilities, "_NATIVE_CACHE", {})
+        install_offline_github_classifier(_native_binaries()[0])
         evaluated = evaluate_native_corpus_batch(
             [case for case, _ in selected.values()], cwd=contract.ROOT / "workspace", home_dir=contract.ROOT / "home"
         )

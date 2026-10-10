@@ -10,13 +10,12 @@ mismatched result) yields ``None``; callers must treat ``None`` as an
 
 from __future__ import annotations
 
-import hashlib
 import itertools
 import json
 import time
 from dataclasses import dataclass
 
-from .native_context import _resolve_digest_home, ensure_resident_prerequisite
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
@@ -81,14 +80,7 @@ def github_cli_classify_native(
     if remaining_seconds <= 0:
         return None
     try:
-        request_sha256 = (
-            "sha256:"
-            + hashlib.sha256(
-                json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode(
-                    "utf-8"
-                )
-            ).hexdigest()
-        )
+        request_sha256 = "sha256:" + _canonical_request_sha256(request)
         resident = json.dumps(
             {
                 "operation": "github_cli_classify",

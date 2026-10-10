@@ -95,6 +95,10 @@ def evaluate_decision_diff_shards() -> tuple[DecisionDiffShard, ...]:
 
 
 def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
+    from tests.native_command_test_support import _native_binaries
+    from tests.native_github_offline import install_offline_github_classifier
+
+    install_offline_github_classifier(_native_binaries()[0])
     _pin_neutral_attribution()
     configure_native_contract_shard(worker_index, EVALUATION_SHARD_COUNT)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)

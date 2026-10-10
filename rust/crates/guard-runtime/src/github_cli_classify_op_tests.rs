@@ -79,8 +79,42 @@ fn schema_mismatch_is_an_error_without_assessment() {
 #[test]
 fn oversized_arguments_are_rejected() {
     let big = "a".repeat(GITHUB_CLI_CLASSIFY_MAX_BYTES + 1);
-    let result = run(&request(&["pr", &big]));
-    assert_eq!(result.code, "native_github_cli_classify_too_large");
+    assert_eq!(
+        evaluate_github_cli_classify_request(&request(&["pr", &big])).unwrap_err(),
+        "native_github_cli_classify_too_large"
+    );
+}
+
+#[test]
+fn oversized_request_id_is_rejected_before_hashing() {
+    let mut big = request(&["pr", "view", "1"]);
+    big.request_id = "x".repeat(GITHUB_CLI_CLASSIFY_MAX_BYTES + 1);
+    assert_eq!(
+        evaluate_github_cli_classify_request(&big).unwrap_err(),
+        "native_github_cli_classify_too_large"
+    );
+}
+
+#[test]
+fn escaped_characters_count_toward_the_canonical_limit() {
+    // Each control character is one raw byte but six canonical bytes (`\u0001`).
+    let raw = "\u{1}".repeat(GITHUB_CLI_CLASSIFY_MAX_BYTES / 6);
+    assert!(raw.len() < GITHUB_CLI_CLASSIFY_MAX_BYTES / 4);
+    assert_eq!(
+        evaluate_github_cli_classify_request(&request(&["pr", &raw])).unwrap_err(),
+        "native_github_cli_classify_too_large"
+    );
+}
+
+#[test]
+fn unicode_request_digest_matches_the_python_canonical_digest() {
+    // The Python bridge hashes json.dumps(sort_keys, compact, ensure_ascii); the
+    // same vector is asserted in tests/test_native_github_cli_bridge.py.
+    let unicode = request(&["pr", "view", "é☃\u{1}\u{1F600}"]);
+    assert_eq!(
+        run(&unicode).request_sha256,
+        "sha256:6dc5cc1707396312c4de9eb38f15257ec72438090b658bc4fa80a973440204d8"
+    );
 }
 
 #[test]

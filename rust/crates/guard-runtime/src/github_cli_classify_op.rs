@@ -3,28 +3,20 @@
 //! Pure: classifies one GitHub CLI argument vector through
 //! `guard_command::github_command_capabilities::classify_github_cli`. No IO.
 
+use crate::package_authority_op::request_digest_with_limit;
 use guard_contracts::{
     GithubCliAssessmentV1, GithubCliClassifyRequestV1, GithubCliClassifyResultV1,
     GITHUB_CLI_CLASSIFY_MAX_BYTES, GITHUB_CLI_CLASSIFY_REQUEST_SCHEMA,
     GITHUB_CLI_CLASSIFY_RESULT_SCHEMA,
 };
-use guard_policy_snapshot::digest_bytes;
-
-use super::context_digest_json::write_canonical_json_with_limit;
-
-fn request_digest(request: &GithubCliClassifyRequestV1) -> Result<String, &'static str> {
-    let material =
-        serde_json::to_value(request).map_err(|_| "native_github_cli_classify_invalid")?;
-    let mut bytes = Vec::new();
-    write_canonical_json_with_limit(&material, &mut bytes, usize::MAX)
-        .map_err(|_| "native_github_cli_classify_invalid")?;
-    Ok(format!("sha256:{}", digest_bytes(&bytes)))
-}
 
 pub(crate) fn evaluate_github_cli_classify_request(
     request: &GithubCliClassifyRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest(request).map_err(str::to_owned)?;
+    // Bound the complete canonical request (every field, JSON-escaped) before any
+    // hashing or classification work; an oversized request has no digest to bind.
+    let request_sha256 = request_digest_with_limit(request, GITHUB_CLI_CLASSIFY_MAX_BYTES)
+        .map_err(|_| "native_github_cli_classify_too_large".to_owned())?;
     let (status, code, assessment, pr_body_file_operand) = match evaluate(request) {
         Ok((assessment, operand)) => ("ok".to_owned(), "ok".to_owned(), Some(assessment), operand),
         Err(code) => ("error".to_owned(), code, None, None),
@@ -45,10 +37,6 @@ fn evaluate(
 ) -> Result<(GithubCliAssessmentV1, Option<String>), String> {
     if request.schema != GITHUB_CLI_CLASSIFY_REQUEST_SCHEMA {
         return Err("native_github_cli_classify_schema_mismatch".to_owned());
-    }
-    let total: usize = request.args.iter().map(String::len).sum();
-    if total > GITHUB_CLI_CLASSIFY_MAX_BYTES {
-        return Err("native_github_cli_classify_too_large".to_owned());
     }
     let assessment = guard_command::github_command_capabilities::classify_github_cli(&request.args);
     let operand = guard_command::github_command_capabilities::static_markdown_pr_body_file_operand(

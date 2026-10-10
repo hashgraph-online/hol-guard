@@ -60,10 +60,10 @@ def install_offline_github_classifier(compiler: Path) -> None:
                 reason_code=value["reason_code"],
                 detail=value["detail"],
                 capabilities=tuple(value["capabilities"]),
-                pr_body_file_operand=None,
+                pr_body_file_operand=value.get("pr_body_file_operand"),
             )
         return cache[key]
 
     module = types.ModuleType(_MODULE)
-    module.github_cli_classify_native = classify  # type: ignore[attr-defined]
+    module.__dict__["github_cli_classify_native"] = classify
     sys.modules[_MODULE] = module

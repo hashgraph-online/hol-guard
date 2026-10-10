@@ -36,11 +36,14 @@ fn classify_request(request: &Value) -> Result<Value, &'static str> {
         })
         .ok_or("github_classify_input_invalid")?;
     let assessment = guard_command::github_command_capabilities::classify_github_cli(&args);
+    let operand =
+        guard_command::github_command_capabilities::static_markdown_pr_body_file_operand(&args);
     Ok(json!({
         "capability": assessment.capability.as_str(),
         "reason_code": assessment.reason_code,
         "detail": assessment.detail,
         "capabilities": assessment.capabilities.iter().map(|item| item.as_str()).collect::<Vec<_>>(),
+        "pr_body_file_operand": operand,
     }))
 }
 
