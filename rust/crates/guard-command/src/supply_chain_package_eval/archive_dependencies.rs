@@ -60,54 +60,36 @@ pub(super) fn external_tarball_dependency_result(
             None,
         );
     }
-    let _ = request_deadline;
-    match deps.archive.download_restricted_archive(
+    // Inspect the download before its blob is dropped: a non-retaining request
+    // must still yield the scan-derived result (`_scan_external_tarball`).
+    let (scan, retained_download) = super::archive_scanning::scan_external_tarball(
+        deps,
         &source_url,
-        EXTERNAL_ARCHIVE_MAX_AGGREGATE_BYTES,
-        3,
-        EXTERNAL_ARCHIVE_REQUEST_TIMEOUT_SECONDS,
-        Some(guard_home),
-    ) {
-        Ok(RestrictedArchiveDownloadResult::Success(download)) => {
-            if !retain_download {
-                return (None, None);
-            }
-            let mut reason = Map::new();
-            reason.insert(
-                "code".to_string(),
-                Value::String("external_archive_scanned".into()),
-            );
-            reason.insert(
-                "message".to_string(),
-                Value::String(format!(
-                    "External archive {source_url} downloaded for inspection."
-                )),
-            );
-            reason.insert("severity".to_string(), Value::String("info".into()));
-            (
-                Some(package_target_result(target, "monitor", vec![reason], None)),
-                Some(download),
-            )
-        }
-        Ok(RestrictedArchiveDownloadResult::Failure(failure)) => (
+        retain_download,
+        request_deadline,
+        guard_home,
+    );
+    let Some(scan) = scan else {
+        return (
             Some(heuristic_package_result(
                 target,
                 "block",
-                &failure.code,
-                &failure.message,
+                "external_archive_inspection_incomplete",
+                "Guard could not complete restricted download and offline archive inspection.",
                 "high",
             )),
             None,
-        ),
-        Err(_) => (
-            Some(heuristic_package_result(
-                target,
-                "block",
-                "external_archive_download_failed",
-                "External archive download failed.",
-                "high",
-            )),
-            None,
-        ),
-    }
+        );
+    };
+    let text = |key: &str| optional_string(scan.get(key)).unwrap_or_default();
+    (
+        Some(heuristic_package_result(
+            target,
+            &text("decision"),
+            &text("code"),
+            &text("message"),
+            &text("severity"),
+        )),
+        retained_download,
+    )
 }

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from .models import GuardArtifact
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
@@ -33,6 +33,15 @@ _UNAVAILABLE_MESSAGE = (
 )
 _RESULT_KEYS = frozenset({"schema", "request_id", "request_sha256", "status", "code", "payload"})
 _PAYLOAD_DECISIONS = frozenset({"allow", "monitor", "warn", "ask", "block"})
+_PAYLOAD_TEXT_KEYS = (
+    "policy_action",
+    "enforcement",
+    "entitlement_state",
+    "cache_status",
+    "package_intent_hash",
+    "policy_version",
+    "risk_summary",
+)
 
 
 class NativeSupplyChainEvalError(RuntimeError):
@@ -41,6 +50,21 @@ class NativeSupplyChainEvalError(RuntimeError):
 
 def _now_text(now: str | None) -> str:
     return now if isinstance(now, str) else datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _payload_is_complete(payload: object) -> TypeGuard[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("decision") not in _PAYLOAD_DECISIONS:
+        return False
+    if not all(isinstance(payload.get(key), str) for key in _PAYLOAD_TEXT_KEYS):
+        return False
+    if not all(isinstance(payload.get(key), list) for key in ("reasons", "packages")):
+        return False
+    user_copy = payload.get("user_copy")
+    return isinstance(user_copy, dict) and all(
+        isinstance(user_copy.get(key), str) for key in ("title", "summary", "harness_message")
+    )
 
 
 def native_supply_chain_eval_payload(
@@ -60,11 +84,15 @@ def native_supply_chain_eval_payload(
         "store_path": str(store_path),
         "guard_home": str(guard_home),
         "artifact": artifact.to_dict(),
-        "workspace_dir": str(workspace_dir) if workspace_dir is not None else None,
-        "now": now,
         "external_archive_network_authorized": bool(external_archive_network_authorized),
         "retain_external_archive_blob": False,
     }
+    # The resident digests its typed request, which omits absent optional
+    # fields, so an absent value must be omitted here rather than sent as null.
+    if workspace_dir is not None:
+        request["workspace_dir"] = str(workspace_dir)
+    if now is not None:
+        request["now"] = now
     private_metadata = getattr(artifact, "runtime_private_metadata", None)
     if private_metadata:
         request["runtime_private_metadata"] = dict(private_metadata)
@@ -92,7 +120,7 @@ def native_supply_chain_eval_payload(
     ):
         raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
     payload = response.get("payload")
-    if not isinstance(payload, dict) or payload.get("decision") not in _PAYLOAD_DECISIONS:
+    if not _payload_is_complete(payload):
         raise NativeSupplyChainEvalError("Native package evaluation payload invalid")
     return payload
 
@@ -102,7 +130,7 @@ def unavailable_block_evaluation(artifact: GuardArtifact) -> Any:
 
     from .runtime.supply_chain_package_eval import PackageRequestEvaluation, SupplyChainUserCopy
 
-    reason = {
+    reason: dict[str, object] = {
         "code": _UNAVAILABLE_CODE,
         "message": _UNAVAILABLE_MESSAGE,
         "severity": "high",
@@ -111,8 +139,8 @@ def unavailable_block_evaluation(artifact: GuardArtifact) -> Any:
     return PackageRequestEvaluation(
         decision="block",
         policy_action="block",
-        enforcement="cloud_fail_closed",
-        entitlement_state="premium",
+        enforcement="free_local",
+        entitlement_state="free",
         cache_status="miss",
         package_intent_hash=str(artifact.artifact_id),
         policy_version="native-unavailable",

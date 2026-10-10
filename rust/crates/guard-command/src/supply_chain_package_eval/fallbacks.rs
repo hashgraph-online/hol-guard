@@ -30,30 +30,23 @@ pub(super) fn lockfile_parse_warning_result(
     Some(pkg)
 }
 
-#[allow(dead_code)]
-pub(super) fn lockfile_ecosystem(file_name: &str) -> String {
-    let name = std::path::Path::new(file_name)
+/// Ecosystem of a lockfile, given its file name or the parser's format label
+/// (`LockfileParseResult.format`); mirrors `_lockfile_ecosystem`.
+pub(super) fn lockfile_ecosystem(file_name_or_format: &str) -> String {
+    let name = std::path::Path::new(file_name_or_format)
         .file_name()
         .map(|n| n.to_string_lossy().to_lowercase())
         .unwrap_or_default();
-    if name.contains("package-lock")
-        || name.contains("npm-shrinkwrap")
-        || name.contains("pnpm")
-        || name.contains("yarn")
-        || name.contains("bun")
-    {
-        "npm".into()
-    } else if name.contains("cargo") {
-        "cargo".into()
-    } else if name.contains("composer") {
-        "composer".into()
-    } else if name.contains("gemfile") {
-        "gem".into()
-    } else if name.contains("poetry") || name.contains("pipfile") || name.contains("uv") {
-        "pypi".into()
-    } else {
-        "npm".into()
+    match name.as_str() {
+        "poetry.lock" | "uv.lock" | "pipfile.lock" | "poetry-lock" | "uv-lock" | "pipenv-lock" => {
+            "pypi"
+        }
+        "cargo.lock" | "cargo-lock" => "cargo",
+        "composer.lock" | "composer-lock" => "packagist",
+        "gemfile.lock" | "bundler-lock" => "rubygems",
+        _ => "npm",
     }
+    .into()
 }
 
 #[allow(dead_code)]

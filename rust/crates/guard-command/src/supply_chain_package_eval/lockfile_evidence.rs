@@ -103,14 +103,16 @@ pub(super) fn finalize_incomplete_lockfile_evaluation(
     package_intent_hash: &str,
     now: &str,
 ) -> PackageEvalResult {
-    let config = deps
+    // Fail closed: only a successfully loaded, non-strict configuration may
+    // downgrade an incomplete lockfile to an approvable pause. When the
+    // configuration cannot be read (the resident has no config loader), keep
+    // the request blocked rather than weakening it for strict users.
+    let decision = match deps
         .config
         .load_guard_config(store.guard_home(), workspace_dir, false)
-        .unwrap_or_else(|_| GuardConfig::default());
-    let decision = if matches!(config.security_level.as_str(), "strict" | "paranoid") {
-        "block"
-    } else {
-        "ask"
+    {
+        Ok(config) if !matches!(config.security_level.as_str(), "strict" | "paranoid") => "ask",
+        _ => "block",
     };
     let package = incomplete_lockfile_package_result(target, parse_result, decision);
     let reasons = dict_items(package.get("reasons"));

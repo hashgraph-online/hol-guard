@@ -69,6 +69,8 @@ def test_resident_evaluation_matches_vector(case: dict, tmp_path: Path) -> None:
     for field in ("decision", "policy_action", "enforcement", "entitlement_state", "policy_version"):
         assert getattr(evaluation, field) == expect[field], field
     assert [reason["code"] for reason in evaluation.reasons] == expect["reason_codes"]
+    if "summary_contains" in expect:
+        assert expect["summary_contains"] in evaluation.user_copy.summary
     assert [
         [package.get("ecosystem"), package.get("name") or package.get("package_name"), package.get("decision")]
         for package in evaluation.packages

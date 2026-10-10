@@ -176,6 +176,32 @@
    }
   },
   {
+   "name": "external_archive_mixed_request",
+   "targets": [
+    "demo@https://packages.example.com/demo-1.0.0.tgz",
+    "left-pad@1.0.0"
+   ],
+   "lockfile_paths": [],
+   "files": {},
+   "expect": {
+    "decision": "block",
+    "policy_action": "block",
+    "enforcement": "free_local",
+    "entitlement_state": "free",
+    "policy_version": "local:none",
+    "reason_codes": [
+     "external_archive_mixed_request_unsupported"
+    ],
+    "packages": [
+     [
+      "npm",
+      "demo",
+      "block"
+     ]
+    ]
+   }
+  },
+  {
    "name": "git_dependency",
    "targets": [
     "demo@git+https://github.com/org/demo.git"
@@ -270,6 +296,7 @@
     "policy_action": "require-reapproval",
     "enforcement": "free_local",
     "entitlement_state": "free",
+    "summary_contains": "Repair the lockfile, then retry.",
     "policy_version": "local:none",
     "reason_codes": [
      "lockfile_parse_incomplete"

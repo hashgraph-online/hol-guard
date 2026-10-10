@@ -41,6 +41,7 @@ def _payload() -> dict[str, object]:
         "reasons": [],
         "packages": [],
         "risk_summary": "ok",
+        "user_copy": {"title": "Allowed", "summary": "ok", "harness_message": "ok"},
     }
 
 
@@ -104,6 +105,11 @@ def test_request_is_bound_non_retaining_and_requires_feature(monkeypatch, tmp_pa
         lambda r: r.update(extra="field"),
         lambda r: r.update(payload="nope"),
         lambda r: r.update(payload={"decision": "maybe"}),
+        lambda r: r.update(payload={"decision": "allow"}),
+        lambda r: r.update(payload={"decision": "allow", "policy_action": "allow"}),
+        lambda r: r["payload"].pop("user_copy"),
+        lambda r: r["payload"].update(reasons="none"),
+        lambda r: r["payload"].update(policy_version=None),
     ],
 )
 def test_unbound_or_malformed_answer_blocks(monkeypatch, tmp_path: Path, mutate) -> None:
@@ -112,6 +118,21 @@ def test_unbound_or_malformed_answer_blocks(monkeypatch, tmp_path: Path, mutate)
     assert result.decision == "block"
     assert result.policy_action == "block"
     assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
+    assert (result.enforcement, result.entitlement_state) == ("free_local", "free")
+
+
+def test_absent_optional_fields_are_omitted_from_the_bound_request(monkeypatch, tmp_path: Path) -> None:
+    captured = _bind(monkeypatch)
+    result = transport.evaluate_package_request_native(
+        artifact=_Artifact(),
+        store=_store(tmp_path),
+        workspace_dir=None,
+    )
+    request = captured["request"]
+    assert "now" not in request
+    assert "workspace_dir" not in request
+    assert all(value is not None for value in request.values())
+    assert result.decision == "allow"
 
 
 @pytest.mark.parametrize("answer", [None, [], "text"])

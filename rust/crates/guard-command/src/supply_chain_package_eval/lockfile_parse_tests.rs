@@ -85,3 +85,26 @@ fn zero_budget_reports_deadline_exceeded() {
     assert!(!result.complete);
     assert_eq!(result.error_reason.as_deref(), Some("deadline_exceeded"));
 }
+
+#[test]
+fn lockfile_ecosystem_maps_parser_format_labels_and_file_names() {
+    for (input, want) in [
+        ("bundler-lock", "rubygems"),
+        ("Gemfile.lock", "rubygems"),
+        ("pipenv-lock", "pypi"),
+        ("Pipfile.lock", "pypi"),
+        ("poetry-lock", "pypi"),
+        ("uv-lock", "pypi"),
+        ("cargo-lock", "cargo"),
+        ("Cargo.lock", "cargo"),
+        ("composer-lock", "packagist"),
+        ("composer.lock", "packagist"),
+        ("npm-package-lock", "npm"),
+        ("pnpm-lock", "npm"),
+        ("yarn-lock", "npm"),
+        ("bun-lock", "npm"),
+        ("package-lock.json", "npm"),
+    ] {
+        assert_eq!(lockfile_ecosystem(input), want, "{input}");
+    }
+}
