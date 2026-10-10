@@ -158,7 +158,7 @@ def populate_snapshot_claimants(
         if entry.get("claimPolicy") != "provenance" or entry.get("trustClass") != "external":
             continue
         listing_bytes = files.get(f"contributions/extension-listings/{entry['id']}.json")
-        if listing_bytes is not None and "maintainerGithubIds" in json.loads(listing_bytes):
+        if listing_bytes is not None and json.loads(listing_bytes).get("maintainerGithubIds") == []:
             continue
         content = files.get(entry["sourcePath"])
         if content is None or f"sha256:{hashlib.sha256(content).hexdigest()}" != entry["contributionDigest"]:
@@ -167,7 +167,21 @@ def populate_snapshot_claimants(
 
     def resolve(entry: dict[str, Any]) -> tuple[str, IntroducingClaimant | None]:
         try:
-            return entry["id"], resolve_introducing_claimant(client, entry["sourcePath"], source_sha)
+            paths = [entry["sourcePath"]]
+            authored = f"contributions/command-sources/{entry['id']}.json"
+            if entry["id"].startswith("command.") and authored in files:
+                source = json.loads(files[authored])
+                if source.get("schema") != "guard.command-extension-source.v1" or (
+                    source.get("extension", {}).get("extension_id") != entry["id"]
+                ):
+                    raise ClaimProvenanceError("Authored command source identity differs")
+                paths.append(authored)
+            owner = resolve_initial_contribution(client, paths, source_sha)
+            listing = files.get(f"contributions/extension-listings/{entry['id']}.json")
+            if (listing is not None and "maintainerGithubIds" in json.loads(listing)
+                    and owner.github_id not in entry["maintainerGithubIds"]):
+                return entry["id"], None
+            return entry["id"], owner
         except ClaimProvenanceError as error:
             print(f"{entry['id']}: automatic claim authority needs review: {error}")
             return entry["id"], None
@@ -179,7 +193,9 @@ def populate_snapshot_claimants(
             owner = resolved.get(entry["id"])
             if owner is None:
                 continue
-            entry["maintainerGithubIds"] = [owner.github_id]
+            listing = files.get(f"contributions/extension-listings/{entry['id']}.json")
+            if listing is None or "maintainerGithubIds" not in json.loads(listing):
+                entry["maintainerGithubIds"] = [owner.github_id]
             if "contributors" in entry:
                 if len(entry["contributors"]) < 8 and not any(
                     row.get("githubId") == owner.github_id for row in entry["contributors"]
@@ -196,3 +212,30 @@ def populate_snapshot_claimants(
             raise ClaimProvenanceError("Enriched catalog exceeds byte limit")
         files[name] = encoded
     return {extension_id: owner for extension_id, owner in resolved.items() if owner is not None}
+
+
+def resolve_initial_contribution(client: Any, paths: list[str], source_sha: str) -> IntroducingClaimant:
+    """Choose the earliest canonical introduction across authored and descriptor paths.
+
+    A later descriptor publication or source-format migration cannot replace
+    the original author. Identity is verified only on the earliest path.
+    """
+    selected = paths[0]
+    if len(paths) > 1:
+        def get(path: str) -> Any:
+            return client._request(f"{client.base_url}/{path}")
+        selected_history = _history_changes(client, selected, source_sha, get)
+        if not selected_history:
+            raise ClaimProvenanceError("Contribution introduction is unavailable")
+        oldest = selected_history[-1][0]
+        for path in paths[1:]:
+            history = _history_changes(client, path, source_sha, get)
+            if not history:
+                raise ClaimProvenanceError("Contribution introduction is unavailable")
+            other = history[-1][0]
+            relation = client.compare(oldest, other).get("status")
+            if relation == "behind":
+                selected, oldest = path, other
+            elif relation not in {"ahead", "identical"}:
+                raise ClaimProvenanceError("Contribution introductions are ambiguous")
+    return resolve_introducing_claimant(client, selected, source_sha)

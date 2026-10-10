@@ -167,10 +167,17 @@ The post-merge `Extension Claim Notice` workflow runs only after a pull request 
 merged into the repository's default branch and only for native contribution or
 publisher-listing changes. It compares the merged source with the pull request's
 recorded pre-merge base revision, verifies both ancestry and canonical-branch
-membership, reads the accepted sidecar at the merged source SHA, and notifies only
-newly accepted `maintainerGithubIds`. For a newly introduced native contribution,
-all accepted IDs in its merged sidecar are eligible for the notice. Pull-request
-authorship is never substituted for missing authority.
+membership, and revalidates current claim authority. Reviewed explicit
+`maintainerGithubIds` control delegation and revocation. When that optional field
+is absent, verified introducing history establishes the original contributor's
+numeric identity. The earliest canonical authored-source or descriptor introduction
+wins; later publication, source-format migrations, and fix PRs cannot replace it.
+
+Snapshot publication recovers missing invitations, including extensions omitted
+from an existing trusted notice. It refreshes that notice under the same per-PR
+lock rather than posting a duplicate. GitHub API failures stop publication visibly:
+the previous verified snapshot remains available, and the failed run must be
+retried rather than replacing accepted authority with incomplete results.
 
 Rename-affected contributions and publisher listings are never invited
 automatically. After maintainers review the renamed identity and claimant mapping,
@@ -180,6 +187,6 @@ as a new source of authority.
 
 Notices are idempotent on each merged PR and can be backfilled with the workflow's
 manual `pr_number` input. A removed, non-canonical, malformed, or authority-free
-listing produces no claim invitation. The notice is only an onboarding link; the
+contribution produces no claim invitation. The notice is only an onboarding link; the
 publisher profile remains separate from runtime trust, activation, security
 certification, and upstream ownership.

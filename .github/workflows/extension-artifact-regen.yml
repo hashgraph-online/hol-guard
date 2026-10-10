@@ -29,6 +29,7 @@ on:
       - scripts/extension_artifact_bundle.py
       - scripts/publish_extension_snapshot.py
       - scripts/extension_claim_provenance.py
+      - scripts/extension_claim_authority.py
       - scripts/reconcile_extension_claim_notices.py
       - scripts/notify_merged_extension_claimants.py
       - docs/guard/extensions/contributing.md
@@ -52,6 +53,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      pull-requests: read
       id-token: write
       attestations: write
     steps:
@@ -157,4 +159,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ matrix.pr_number }}
-        run: python3 scripts/notify_merged_extension_claimants.py --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER" --source-root "$GITHUB_WORKSPACE"
+        run: python3 scripts/notify_merged_extension_claimants.py --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER" --source-root "$GITHUB_WORKSPACE" --refresh-existing

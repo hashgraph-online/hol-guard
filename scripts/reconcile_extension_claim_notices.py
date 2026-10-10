@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
+import urllib.parse
 import zipfile
 from pathlib import Path
 
@@ -13,7 +15,7 @@ _helper_dir = str(Path(__file__).resolve().parent)
 sys.path.insert(0, _helper_dir)
 try:
     from extension_artifact_bundle import ARCHIVE, verify_bundle
-    from notify_merged_extension_claimants import DEFAULT_STUDIO_URL, GitHubApi, has_trusted_notice, process
+    from notify_merged_extension_claimants import DEFAULT_STUDIO_URL, GitHubApi, process, trusted_notice_comment
 finally:
     sys.path.remove(_helper_dir)
 
@@ -56,12 +58,31 @@ def reconcile(client: GitHubApi, directory: Path, source_sha: str, *, dry_run: b
     failed = 0
     for number in planned_pull_requests(directory, source_sha):
         try:
-            process(client, number, DEFAULT_STUDIO_URL, dry_run=dry_run)
+            process(client, number, DEFAULT_STUDIO_URL, dry_run=dry_run, refresh_existing=True)
         except Exception as error:
             # Finish unrelated notices; a failed run remains visibly retryable.
             print(f"PR #{number}: claim invitation failed: {error}", file=sys.stderr)
             failed += 1
     return 1 if failed else 0
+
+
+def pending_pull_requests(client: GitHubApi, directory: Path, source_sha: str) -> list[int]:
+    numbers = planned_pull_requests(directory, source_sha)
+    with zipfile.ZipFile(directory / ARCHIVE) as archive:
+        entries = json.loads(archive.read(PLAN))["entries"]
+    expected = {number: {row["extensionId"] for row in entries if row["pullRequest"] == number} for number in numbers}
+    pending = []
+    for number in numbers:
+        notice = trusted_notice_comment(client.comments(number))
+        covered: set[str] = set()
+        if notice is not None:
+            for url in re.findall(r"\]\((https://hol\.org/guard/extension-studio\?[^)\s]+)\)", notice.get("body", "")):
+                covered.update(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get("claim", []))
+        if not expected[number].issubset(covered):
+            pending.append(number)
+    if len(pending) > 256:
+        raise ValueError("Missing invitations exceed the GitHub Actions matrix limit")
+    return pending
 
 
 def main() -> int:
@@ -73,10 +94,7 @@ def main() -> int:
     args = parser.parse_args()
     client = GitHubApi(os.environ.get("GH_TOKEN", ""), "hashgraph-online/hol-guard")
     if args.plan:
-        pending = [number for number in planned_pull_requests(args.directory, args.source_sha)
-                   if not has_trusted_notice(client.comments(number))]
-        if len(pending) > 256:
-            raise ValueError("Missing invitations exceed the GitHub Actions matrix limit")
+        pending = pending_pull_requests(client, args.directory, args.source_sha)
         print(json.dumps(pending, separators=(",", ":")))
         return 0
     return reconcile(client, args.directory, args.source_sha, dry_run=args.dry_run)

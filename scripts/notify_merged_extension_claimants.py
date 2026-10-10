@@ -20,7 +20,9 @@ from typing import Any
 _helper_dir = str(Path(__file__).resolve().parent)
 sys.path.insert(0, _helper_dir)
 try:
-    from extension_claim_provenance import ClaimProvenanceError, resolve_introducing_claimant
+    from extension_claim_authority import ClaimProvenanceError as ClaimProvenanceError
+    from extension_claim_authority import accepted_claimant_ids as verified_claimant_ids
+    from extension_claim_authority import external_contribution
 finally:
     sys.path.remove(_helper_dir)
 
@@ -472,42 +474,12 @@ def contribution_exists(client: GitHubApi, extension_id: str, ref: str) -> bool:
     return any(client.file_exists(path, ref) for path in contribution_paths(extension_id))
 
 
-def external_contribution(client: GitHubApi, extension_id: str, ref: str) -> bool:
-    runtime_id = extension_id if extension_id.startswith("command.") else f"command.mcp-{extension_id[4:]}"
-    binding = client.file_json(f"contracts/extensions/trust/{runtime_id}.v1.json", ref, missing_ok=True)
-    return binding == {
-        "schemaVersion": "guard.extension-trust-binding.v1", "extension": runtime_id, "trustClass": "external",
-    }
-
-
 def accepted_claimant_ids(
     client: GitHubApi, extension_id: str, ref: str, listing: dict[str, Any] | None
 ) -> tuple[str, ...]:
-    """Explicit reviewed IDs override automatic introducing-author authority.
-
-    An explicit empty array revokes automatic claims; an absent field needs no
-    extra listing PR. Credit fields alone cannot grant claim authority.
-    """
-    # Revalidate current classification. Older introducing merges may predate
-    # per-extension bindings; they still establish authorship, not current trust.
-    if not SHA_RE.fullmatch(ref) and not external_contribution(client, extension_id, ref):
-        return ()
-    if listing is not None:
-        ids = accepted_github_ids(listing, extension_id)
-        if "maintainerGithubIds" in listing:
-            return ids
-    path = next((path for path in contribution_paths(extension_id) if client.file_exists(path, ref)), None)
-    if path is None:
-        return ()
-    try:
-        sha = ref
-        if not SHA_RE.fullmatch(sha):
-            commit = client._request(f"{client.base_url}/commits/{urllib.parse.quote(ref, safe='')}")
-            sha = commit.get("sha") if isinstance(commit, dict) else None
-        return (resolve_introducing_claimant(client, path, sha).github_id,)
-    except ClaimProvenanceError as error:
-        print(f"{extension_id}: automatic claim authority needs review: {error}")
-        return ()
+    return verified_claimant_ids(
+        client, extension_id, ref, listing, validate_listing=accepted_github_ids, contribution_paths=contribution_paths,
+    )
 
 
 def build_comment(items: list[NoticeItem], studio_url: str) -> str:
@@ -733,6 +705,16 @@ def _plan_notice_items(
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
         merge_ids = accepted_claimant_ids(client, extension_id, merge_sha, current_listing)
+        newly_added = extension_id in contribution_changes and not contribution_exists(client, extension_id, before_sha)
+        if newly_added and not merge_ids and current_listing is not None and (
+            current_listing.get("maintainerGithubIds") == []
+        ):
+            # A historical empty override may have since been removed. Recover
+            # only the original author who is accepted by current authority.
+            initial_ids = accepted_claimant_ids(client, extension_id, merge_sha, None)
+            tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
+            tip_ids = accepted_claimant_ids(client, extension_id, default_branch, tip_listing)
+            merge_ids = tuple(account_id for account_id in initial_ids if account_id in tip_ids)
         if not merge_ids:
             newly_added = extension_id in contribution_changes and not contribution_exists(
                 client, extension_id, before_sha

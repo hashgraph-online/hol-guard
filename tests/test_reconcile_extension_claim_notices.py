@@ -41,7 +41,7 @@ def test_verified_source_bound_plan_selects_only_introducing_pr(
     calls = []
     monkeypatch.setattr(notices, "process", lambda client, number, url, **kwargs: calls.append((number, kwargs)))
     assert notices.reconcile(object(), directory, SHA, dry_run=True) == 0
-    assert calls == [(7, {"dry_run": True})]
+    assert calls == [(7, {"dry_run": True, "refresh_existing": True})]
 
 
 @pytest.mark.parametrize("changes", [
@@ -83,13 +83,34 @@ def test_plan_rejects_project_owned_entry(tmp_path: Path, monkeypatch: pytest.Mo
         notices.planned_pull_requests(directory, SHA)
 
 
-def test_plan_rejects_more_jobs_than_actions_supports(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(notices.sys, "argv", ["reconcile", "--directory", ".", "--source-sha", SHA, "--plan"])
-    monkeypatch.setattr(notices, "planned_pull_requests", lambda *args: list(range(1, 258)))
-    monkeypatch.setattr(notices, "has_trusted_notice", lambda comments: False)
+def test_plan_rejects_more_jobs_than_actions_supports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    entries = [{"extensionId": f"command.example-{number}", "githubId": "100", "pullRequest": number}
+               for number in range(1, 258)]
+    plan = {"schemaVersion": "guard.extension-claim-invitations.v1", "sourceSha": SHA, "entries": entries}
+    catalog = {"entries": [{"id": row["extensionId"], "claimPolicy": "provenance", "trustClass": "external",
+                            "maintainerGithubIds": ["100"]} for row in entries]}
+    with zipfile.ZipFile(tmp_path / notices.ARCHIVE, "w") as archive:
+        archive.writestr(notices.PLAN, json.dumps(plan))
+        archive.writestr("docs/guard/extensions/catalog.v1.json", json.dumps(catalog))
+    monkeypatch.setattr(notices, "verify_bundle", lambda *args: None)
     class Client:
         def comments(self, number):
             return []
-    monkeypatch.setattr(notices, "GitHubApi", lambda *args: Client())
     with pytest.raises(ValueError, match="matrix limit"):
-        notices.main()
+        notices.pending_pull_requests(Client(), tmp_path, SHA)
+
+
+@pytest.mark.parametrize("linked_extension, expected", [
+    ("command.example", []), ("command.other", [7]), (None, [7]),
+])
+def test_existing_notice_must_cover_each_planned_extension(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, linked_extension: str | None, expected: list[int]
+) -> None:
+    directory = fixture(tmp_path, monkeypatch)
+    body = "<!-- hol-extension-claim-notice:v1 -->"
+    if linked_extension:
+        body += f"\n[Claim](https://hol.org/guard/extension-studio?claim={linked_extension}&source_surface=github_claim_notice)"
+    class Client:
+        def comments(self, number):
+            return [{"id": 99, "body": body, "user": {"id": 41898282, "type": "Bot"}}]
+    assert notices.pending_pull_requests(Client(), directory, SHA) == expected
