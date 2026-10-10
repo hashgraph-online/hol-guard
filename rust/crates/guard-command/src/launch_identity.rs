@@ -4,9 +4,8 @@
 //! Every public function returns a `serde_json::Value` object whose keys are
 //! the exact Python dict keys. Digests use the canonical-JSON contract from
 //! `guard-contracts` (`json.dumps(v, sort_keys=True, separators=(",",":"),
-//! ensure_ascii=True)`); opaque digests are `sha256(material.encode("utf-8"))`
-//! or the `guard-context-unbound:<label>:<sha256>` sentinel for strict digests
-//! — the native-resident fallback in Python `native_context.py`.
+//! ensure_ascii=True)`); opaque digests hash raw UTF-8 bytes. Launch verification
+//! hashes canonical JSON bytes and emits no unbound fallback sentinel.
 //!
 //! All host-OS and filesystem semantics are POSIX-only (`shutil.which`
 //! directory search + execute bit, `lstat` chains, shebang extraction).
@@ -15,22 +14,22 @@
 
 use std::collections::HashSet;
 use std::fs::{self, Metadata};
-use std::io::Read;
+use std::io::{Cursor, Read, Write};
 use std::os::unix::fs::MetadataExt;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+use std::time::{Duration, Instant};
 
 use guard_contracts::write_canonical_json;
 use serde_json::{json, Map, Value};
-#[cfg(test)]
-use sha2::{Digest, Sha256};
 
 use crate::command_tokens::executable_name;
 use crate::env_wrapper::parse_env_wrapper;
 use crate::launch_identity_common::{
-    canonical_material_bytes, context_opaque_digest_strict, expand_user, launch_argv_digest,
-    normalized_launch_cwd, runtime_launch_argv, sha256_hex, RuntimeLaunchArgv, UNBOUND_PREFIX,
+    context_opaque_digest_strict, expand_user, launch_argv_digest, normalized_launch_cwd,
+    runtime_launch_argv, sha256_hex, RuntimeLaunchArgv,
 };
 use crate::shell_tokens;
 
@@ -81,23 +80,9 @@ fn token_hex(bytes: usize) -> String {
         "0".repeat(bytes * 2)
     }
 }
-
-// `context_sha256_digest(material, unbound_label=<label>, strict=True)` — same
-// degrade over structured material.
-fn context_sha256_digest_strict(material: &Value, unbound_label: &str) -> String {
-    let material_bytes = canonical_material_bytes(material);
-    format!(
-        "{}{}:{}",
-        UNBOUND_PREFIX,
-        unbound_label,
-        sha256_hex(&material_bytes)
-    )
-}
-
-// `_opaque_identity_digest` (:883-889) — `context_opaque_digest(material,
-// unbound_label="opaque-identity")` (strict).
+// Hash raw UTF-8 identity material.
 fn opaque_identity_digest(material: &str) -> String {
-    context_opaque_digest_strict(material, "opaque-identity")
+    context_opaque_digest_strict(material)
 }
 
 fn is_sha256_hex(value: &Value) -> bool {
@@ -226,7 +211,7 @@ fn executable_path_chain_snapshot(path: &Path) -> Option<Vec<Value>> {
             snapshot.insert(
                 "target_sha256".to_string(),
                 match &target {
-                    Some(t) => Value::String(context_opaque_digest_strict(t, "path-target")),
+                    Some(t) => Value::String(context_opaque_digest_strict(t)),
                     None => Value::Null,
                 },
             );
@@ -240,10 +225,55 @@ fn executable_path_chain_snapshot(path: &Path) -> Option<Vec<Value>> {
     }
 }
 
+// Match the runtime's opt-in sanitized stderr protocol without exposing any
+// executable path, digest, launch environment, or file content.
+static EXECUTABLE_DIGEST_DIAGNOSTIC: LazyLock<bool> = LazyLock::new(|| {
+    std::env::var("HOL_GUARD_NATIVE_DIAGNOSTIC").is_ok_and(|value| {
+        let value = value.trim();
+        value == "1" || value.eq_ignore_ascii_case("true") || value.eq_ignore_ascii_case("yes")
+    })
+});
+
+fn emit_executable_digest_phase(status: &'static str, elapsed: Duration) {
+    let mut line = [0u8; 192];
+    let mut output = Cursor::new(line.as_mut_slice());
+    if writeln!(
+        output,
+        "native_resident_phase phase=executable_digest status={status} elapsed_ms={}",
+        elapsed.as_millis()
+    )
+    .is_ok()
+    {
+        let length = output.position() as usize;
+        let _ = std::io::stderr().lock().write_all(&line[..length]);
+    }
+}
+
 // `_cached_executable_hash` (:1743-1782) — ported uncached; the Python
 // `lru_cache` is a pure optimization (output identical for same stat key).
 // Returns (digest, hash_status, shebang, shebang_status).
 fn cached_executable_hash(
+    path: &Path,
+    expected_stat: StatKey,
+) -> (Option<String>, &'static str, Option<String>, &'static str) {
+    if !*EXECUTABLE_DIGEST_DIAGNOSTIC {
+        return executable_hash_inner(path, expected_stat);
+    }
+    let started = Instant::now();
+    emit_executable_digest_phase("start", Duration::ZERO);
+    let result = executable_hash_inner(path, expected_stat);
+    emit_executable_digest_phase(
+        if result.1 == "verified" {
+            "ok"
+        } else {
+            "error"
+        },
+        started.elapsed(),
+    );
+    result
+}
+
+fn executable_hash_inner(
     path: &Path,
     expected_stat: StatKey,
 ) -> (Option<String>, &'static str, Option<String>, &'static str) {
@@ -561,7 +591,7 @@ pub fn build_runtime_executable_identity(
         }
     }
     if let Some(s) = &shebang {
-        identity["shebang_sha256"] = Value::String(context_opaque_digest_strict(s, "shebang"));
+        identity["shebang_sha256"] = Value::String(context_opaque_digest_strict(s));
     }
     with_launch_cwd(identity, eff_cwd_ref)
 }
@@ -795,10 +825,7 @@ fn runtime_launch_verification_digest(identity: &Value) -> Option<String> {
     if write_canonical_json(&material, &mut bytes).is_err() {
         return None;
     }
-    Some(context_sha256_digest_strict(
-        &material,
-        "launch-verification",
-    ))
+    Some(sha256_hex(&bytes))
 }
 
 // `_verified_identity_path` (:1720-1727).
@@ -1168,7 +1195,7 @@ fn direct_executable_runtime_entrypoint_identity(
         "launcher": launcher_identity,
         "script_args_sha256": launch_argv_digest(launch_args),
         "shebang_args_sha256": launch_argv_digest(&shebang_args),
-        "shebang_sha256": context_opaque_digest_strict(shebang, "shebang"),
+        "shebang_sha256": context_opaque_digest_strict(shebang),
         "status": "verified",
     });
 
@@ -1249,8 +1276,7 @@ fn direct_executable_runtime_entrypoint_identity(
         .and_then(|v| v.get("PATH"))
         .and_then(|v| v.as_str())
         .unwrap_or("");
-    result["search_path_sha256"] =
-        Value::String(context_opaque_digest_strict(search_path, "search-path"));
+    result["search_path_sha256"] = Value::String(context_opaque_digest_strict(search_path));
     let (interpreter, interpreter_args) = match env_command {
         None => {
             result.as_object_mut().unwrap().extend(
@@ -2184,63 +2210,53 @@ mod tests {
     }
 
     #[test]
-    fn launch_argv_digest_matches_python_oracle() {
-        // Oracle:
-        //   python3 -c "import json,hashlib;
-        //   print(hashlib.sha256(json.dumps({'label':'launch-argv','material':
-        //   json.dumps(['git','status'],separators=(',',':'),ensure_ascii=True)},
-        //   separators=(',',':'),sort_keys=True,ensure_ascii=True).encode()).hexdigest())"
-        //
-        // The Python digest is
-        //   context_opaque_digest(json.dumps(['git','status']), unbound_label='launch-argv')
-        // whose strict degrade is
-        //   'guard-context-unbound:launch-argv:' +
-        //   sha256(json.dumps({'label':'launch-argv','material':'["git","status"]'},
-        //                    separators=(',',':'),sort_keys=True,ensure_ascii=True))
-        let expected = concat!(
-            "guard-context-unbound:launch-argv:",
-            "PLACEHOLDER" // replaced by oracle below
+    fn verified_launch_projects_but_rejects_mutated_content_and_arguments() {
+        let (dir, path) = temp_script("#!/bin/sh\necho original\n");
+        let command = Value::String(path.to_string_lossy().into_owned());
+        let args = vec![Value::String("safe".to_string())];
+        let env = json!({"PATH": "/bin:/usr/bin"});
+        let identity = build_runtime_launch_identity(
+            &command,
+            &args,
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            None,
+            Some(&env),
         );
-        let _ = expected;
-        // Compute oracle inline to keep the test self-contained.
-        // Python oracle (verified): canonical_material_bytes('["git","status"]')
-        // = b'"[\\"git\\",\\"status\\"]"' — the argv JSON is itself a
-        // JSON string, so the outer canonical encoding escapes it.
-        let inner = "[\"git\",\"status\"]";
-        let mut canonical = Vec::new();
-        write_canonical_json(&Value::String(inner.to_string()), &mut canonical).unwrap();
-        let oracle = format!(
-            "guard-context-unbound:launch-argv:{}",
-            hex::encode(Sha256::digest(&canonical))
-        );
-        assert_eq!(
-            launch_argv_digest(&["git".to_string(), "status".to_string()]),
-            oracle
-        );
-    }
-
-    #[test]
-    fn deterministic_digests_match_python_oracles() {
-        // Oracle 1 (python3, verified): _launch_argv_digest(("git","status"))
-        // strict degrade = guard-context-unbound:launch-argv:<sha256>.
-        assert_eq!(
-            launch_argv_digest(&["git".to_string(), "status".to_string()]),
-            "guard-context-unbound:launch-argv:8731c2300a49f227285b1c5d205ce9232d4438adafb38cfbb1676b6ca8043c5d"
-        );
-        // Oracle 2: opaque_identity_digest("/bin/sh").
-        assert_eq!(
-            opaque_identity_digest("/bin/sh"),
-            "guard-context-unbound:opaque-identity:ea0135d2021a123a116e4bc76993e130aa037cc0ada7a86924ed9e6037f462ab"
-        );
-        // Oracle 3: context_sha256_digest({"kind":"x","status":"verified"},
-        // unbound_label="launch-verification") strict degrade.
-        assert_eq!(
-            context_sha256_digest_strict(
-                &json!({"kind": "x", "status": "verified"}),
-                "launch-verification"
-            ),
-            "guard-context-unbound:launch-verification:33f54a528b020a160461134ec8cf256d36536c821bd5a3e2538b160f9212a030"
-        );
+        assert!(resolved_runtime_launch_argv(&identity, &["safe".to_string()]).is_some());
+        assert!(runtime_launch_identity_matches(
+            &identity,
+            &command,
+            &args,
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            Some(&env),
+        ));
+        assert!(!runtime_launch_identity_matches(
+            &identity,
+            &command,
+            &[Value::String("changed".to_string())],
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            Some(&env),
+        ));
+        fs::write(&path, "#!/bin/sh\necho changed-content\n").unwrap();
+        assert!(!runtime_launch_identity_matches(
+            &identity,
+            &command,
+            &args,
+            true,
+            true,
+            None,
+            Some(dir.path()),
+            Some(&env),
+        ));
     }
 
     // --- Package launch/advisory material (local_supply_chain.py) ------------

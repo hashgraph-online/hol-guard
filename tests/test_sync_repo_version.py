@@ -249,3 +249,15 @@ def test_sync_repo_version_avoids_partial_writes_when_lockfile_is_invalid(tmp_pa
     assert '__version__ = "2.0.844"' in (tmp_path / "src" / "codex_plugin_scanner" / "version.py").read_text(
         encoding="utf-8"
     )
+
+
+def test_checked_in_version_lines_keep_release_please_markers() -> None:
+    # Release Please bumps extra-files only on lines carrying this marker; `uv lock` drops it.
+    for relative_path in (SYNC_REPO_VERSION.LOCKFILE_RELATIVE_PATH, SYNC_REPO_VERSION.MODULE_RELATIVE_PATH):
+        path = REPO_ROOT / relative_path
+        lines = path.read_text(encoding="utf-8").splitlines()
+        if relative_path == SYNC_REPO_VERSION.LOCKFILE_RELATIVE_PATH:
+            version_line = lines[SYNC_REPO_VERSION._find_lockfile_version_index(lines, path)]
+        else:
+            version_line = next(line for line in lines if line.startswith("__version__"))
+        assert "# x-release-please-version" in version_line, relative_path

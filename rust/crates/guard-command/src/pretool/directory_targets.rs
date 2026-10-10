@@ -34,11 +34,15 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         return None;
     }
     let supplied = std::path::Path::new(value);
-    if !supplied.is_absolute() {
-        return None;
-    }
+    let joined;
+    let supplied = if supplied.is_absolute() {
+        supplied
+    } else {
+        joined = relative_cwd_target(value, context)?;
+        joined.as_path()
+    };
     let canonical = std::fs::canonicalize(supplied).ok()?;
-    // Absolute, non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
+    // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
     if !absolute_path_spelling_matches(supplied, &canonical)
         || !canonical.is_dir()
         || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
@@ -49,6 +53,35 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     #[cfg(windows)]
     let canonical = std::path::PathBuf::from(supplied.to_str()?.replace('/', "\\"));
     canonical.to_str().map(str::to_owned)
+}
+
+/// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
+/// `..`; any other relative operand needs proof that CDPATH is unset. The
+/// lexical join is what a logical `cd` reaches, so the caller's spelling
+/// check rejects symlinked components. `..` is never proved: the shell
+/// resolves it against its logical `$PWD`, which may name a symlinked
+/// parent the reported cwd does not show.
+fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
+    if cfg!(windows) || value.starts_with('~') {
+        return None;
+    }
+    let dotted = value == "." || value.starts_with("./");
+    if !dotted && !context.cdpath_unset {
+        return None;
+    }
+    let base = std::path::Path::new(context.cwd?);
+    if !base.is_absolute() {
+        return None;
+    }
+    let mut joined = std::path::PathBuf::new();
+    for component in base.join(value).components() {
+        match component {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => return None,
+            other => joined.push(other),
+        }
+    }
+    Some(joined)
 }
 
 fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
@@ -152,3 +185,31 @@ mod tests {
         assert!(shell_alters_backslash(r"cd 'C:\a' && echo \x"));
     }
 }
+
+impl<'a> super::PathContext<'a> {
+    /// `cdpath_unset` is set only from a harness-stamped environment that
+    /// declares no CDPATH, so a bare relative `cd` operand cannot be
+    /// redirected by a CDPATH search.
+    pub(crate) fn for_session(
+        home_dir: Option<&'a str>,
+        cwd: Option<&'a str>,
+        execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> Self {
+        let cdpath_unset = execution_environment.is_some_and(|environment| {
+            environment.has_valid_shape()
+                && !environment
+                    .environment_names
+                    .iter()
+                    .any(|name| name == "CDPATH")
+        });
+        Self {
+            home_dir,
+            cwd,
+            cdpath_unset,
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "tests_relative_cd.rs"]
+mod tests_relative_cd;

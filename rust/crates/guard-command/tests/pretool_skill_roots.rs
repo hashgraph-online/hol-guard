@@ -28,6 +28,7 @@ fn zcode_reads_markdown_only_in_supported_skill_locations() {
         ".agents/skills/example",
         ".claude/skills/example",
         ".codex/skills/example",
+        ".codex/skills/.system/example",
         ".codex/superpowers/skills/example",
         ".zcode/cli/plugins/cache/market/example/1.0.0/skills/example",
     ];
@@ -49,6 +50,9 @@ fn zcode_reads_markdown_only_in_supported_skill_locations() {
         ".zcode/cli/plugins/cache/market/example/1.0.0/README.md",
         ".zcode/cli/plugins/cache/market/example/skills/example/SKILL.md",
         ".zcode/cli/plugins/cache/market/example/1.0.0/skills/SKILL.md",
+        ".claude/skills/.system/example/SKILL.md",
+        ".codex/skills/example/.system/SKILL.md",
+        ".codex/skills/.other/example/SKILL.md",
         ".ssh/id_rsa",
     ] {
         let path = root.join(path);
@@ -113,6 +117,9 @@ fn zcode_reads_markdown_only_in_supported_skill_locations() {
         "~/.zcode/cli/plugins/cache/market/example/1.0.0/skills/SKILL.md",
         "~/.ssh/id_rsa",
         "~/.codex/skills/example/../outside.md",
+        "~/.claude/skills/.system/example/SKILL.md",
+        "~/.codex/skills/example/.system/SKILL.md",
+        "~/.codex/skills/.other/example/SKILL.md",
     ] {
         assert_ne!(evaluate(path, "Read").minimum_action, "allow", "{path}");
     }

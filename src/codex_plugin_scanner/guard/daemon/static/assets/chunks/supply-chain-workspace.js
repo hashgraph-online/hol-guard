@@ -1,9 +1,8 @@
-import { r as reactExports, cp as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, n as EmptyState, b9 as HiMiniArrowTopRightOnSquare, aR as Tag, y as formatRelativeTime, R as Badge, P as HiMiniExclamationTriangle, bJ as HiMiniBugAnt, bn as guardActionPresentation, cq as isSupplyChainScannerEvidence, cr as isBlockedGuardAction, ar as HiMiniArrowPath, co as HiMiniDocumentMagnifyingGlass, cs as HiMiniShieldExclamation, ct as HiMiniComputerDesktop, K as HiMiniCloud, s as HiMiniCheckCircle, aa as HiMiniWrenchScrewdriver, A as ActionButton, I as HiMiniChevronDown, Y as HiMiniExclamationCircle, bZ as fetchReceipts, ad as HiMiniXCircle, i as harnessDisplayName, F as HiMiniChevronUp } from "../guard-dashboard.js";
+import { r as reactExports, cL as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, n as EmptyState, bq as HiMiniArrowTopRightOnSquare, aR as Tag, y as formatRelativeTime, R as Badge, P as HiMiniExclamationTriangle, c3 as HiMiniBugAnt, bJ as guardActionPresentation, cM as isSupplyChainScannerEvidence, cN as isBlockedGuardAction, ar as HiMiniArrowPath, cK as HiMiniDocumentMagnifyingGlass, cO as HiMiniShieldExclamation, cP as HiMiniComputerDesktop, K as HiMiniCloud, s as HiMiniCheckCircle, aa as HiMiniWrenchScrewdriver, A as ActionButton, I as HiMiniChevronDown, Y as HiMiniExclamationCircle, cj as fetchReceipts, ad as HiMiniXCircle, i as harnessDisplayName, F as HiMiniChevronUp } from "../guard-dashboard.js";
 import { resolveFeedStaleness } from "./feed-health-workspace.js";
 import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
 import { b as buildSupplyChainStats, r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
 import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel, S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
-import "./approval-proof-modal.js";
 function SeverityBadge({ severity }) {
   const tone = severity === "critical" || severity === "high" ? "destructive" : severity === "medium" ? "attention" : "default";
   return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone, children: severity });
@@ -768,7 +767,7 @@ function SupplyChainWorkspaceHero({ hero, compact = false }) {
   );
 }
 function recoverySummary(issueCount) {
-  return `Fix ${issueCount} open issue${issueCount === 1 ? "" : "s"} in one guided pass. Guard repairs package tools and turns on routing. Safety intelligence refreshes when Guard Cloud is connected.`;
+  return `${issueCount} issue${issueCount === 1 ? "" : "s"} to resolve. Check Cloud access, approve device changes once, then restore package protection.`;
 }
 function SupplyChainRecovery({
   issues,
@@ -783,6 +782,7 @@ function SupplyChainRecovery({
   const pending = supplyChainFixAllIsPending(state.phase);
   const showResult = state.message !== null;
   const remainingSteps = state.remainingSteps ?? [];
+  const failures = [...new Set(state.failedSteps)].filter((message) => message !== state.message);
   const needsCloudConnect = supplyChainFixAllNeedsCloudConnect(state);
   const isHardFailure = state.phase === "error" || state.phase === "incomplete" && state.failedSteps.length > 0;
   const buttonLabel = supplyChainFixAllButtonLabel(
@@ -838,7 +838,8 @@ function SupplyChainRecovery({
               ]
             }
           ),
-          state.failedSteps.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-red-600", children: state.failedSteps.map((failure, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: failure }, `failed:${index}:${failure}`)) }) : null,
+          failures.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs text-red-600", children: failures.map((failure, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: failure }, `failed:${index}:${failure}`)) }) : null,
+          state.phase === "access_required" ? /* @__PURE__ */ jsxRuntimeExports.jsx("a", { className: "mt-2 inline-block text-sm font-medium text-brand-primary underline underline-offset-4 focus-visible:outline focus-visible:outline-2", href: "https://hol.org/guard/pricing", target: "_blank", rel: "noopener noreferrer", children: "Review Cloud plan" }) : null,
           remainingSteps.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1 text-xs font-medium text-brand-primary", children: remainingSteps.map((remaining, index) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: remaining }, `remaining:${index}:${remaining}`)) }) : null
         ] }) : null }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(

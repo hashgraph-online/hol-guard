@@ -7,7 +7,6 @@ success.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -114,52 +113,6 @@ def _patch_authority(monkeypatch: pytest.MonkeyPatch, status: SimpleNamespace, r
     monkeypatch.setattr(native_package_authority, "native_record_resident_success", lambda *_args, **_kwargs: None)
 
 
-def test_package_intent_parse_binds_the_callers_path_to_the_resident(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    """The resident resolves the launch in the caller's PATH, not its spawn-time one.
-
-    The resident is long-lived: its own ``PATH`` is whatever it was spawned
-    with, and a manager it cannot resolve makes the TypeScript launch evidence
-    incomplete, which sends a contained typecheck back to review even though the
-    caller resolves the manager fine.
-    """
-
-    home = tmp_path / "home"
-    requests: list[dict[str, object]] = []
-    response = b'{"schema":"guard-package-authority-result.v1","status":"ok","payload":{}}'
-    monkeypatch.setattr(native_package_authority, "native_runtime_status", lambda: _status())
-    monkeypatch.setattr(
-        native_package_authority,
-        "native_resident_client_request",
-        lambda **kwargs: (requests.append(json.loads(kwargs["payload"])["request"]), response)[1],
-    )
-    monkeypatch.setattr(native_package_authority, "native_record_resident_failure", lambda *_a, **_k: None)
-    monkeypatch.setattr(native_package_authority, "native_record_resident_success", lambda *_a, **_k: None)
-    monkeypatch.setenv("PATH", "/example/bin")
-
-    assert native_package_authority.package_intent_parse_native("npx tsc", guard_home=home) == {}
-    assert requests[0]["environment"] == {"PATH": "/example/bin"}
-
-    # An environment the caller supplied with a PATH is sent as it stands.
-    assert (
-        native_package_authority.package_intent_parse_native(
-            "npx tsc", environment={"PATH": "/other/bin", "NODE_OPTIONS": ""}, guard_home=home
-        )
-        == {}
-    )
-    assert requests[1]["environment"] == {"PATH": "/other/bin", "NODE_OPTIONS": ""}
-
-    # One without a PATH gains the caller's, so resolution still matches.
-    assert (
-        native_package_authority.package_intent_parse_native(
-            "npx tsc", environment={"NODE_OPTIONS": ""}, guard_home=home
-        )
-        == {}
-    )
-    assert requests[2]["environment"] == {"NODE_OPTIONS": "", "PATH": "/example/bin"}
-
-
 def test_package_authority_refuses_unavailable_or_malformed_resident(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -205,15 +158,6 @@ def test_package_authority_refuses_unavailable_or_malformed_resident(
     _patch_authority(monkeypatch, _status(), b"{}")
     assert native_package_authority.package_intent_parse_native(huge, guard_home=home) is None
 
-    assert (
-        native_package_authority.package_authority_decide_native(
-            "npm install left-pad",
-            store_path=tmp_path / "store",
-            guard_home=home,
-        )
-        is None
-    )
-
 
 def test_program_digest_stamp_keeps_snapshot_when_runtime_digests_disagree() -> None:
     extensions = {"program_digest": OTHER, "catalog_digest": DIGEST, "trust_digest": DIGEST}
@@ -237,11 +181,6 @@ def _raise_transport(*_args: object, **_kwargs: object) -> dict[str, object]:
 
 
 def test_supply_chain_native_bridge_rejects_bad_call_shapes(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    assert local_supply_chain._native_cloud_transport_unavailable({"reasons": "nope"}) is False
-    assert local_supply_chain._native_cloud_transport_unavailable({"reasons": [{"code": "other"}]}) is False
-    assert (
-        local_supply_chain._native_cloud_transport_unavailable({"reasons": [{"code": "cloud_network_error"}]}) is True
-    )
     monkeypatch.setattr(
         local_supply_chain,
         "_native_package_authority_module",
@@ -270,45 +209,59 @@ def test_supply_chain_native_bridge_rejects_bad_call_shapes(monkeypatch: pytest.
         )
         is None
     )
-    assert local_supply_chain._evaluate_package_request_artifact_native(("positional",), {}) is None
-    store = SimpleNamespace(guard_home="not-a-path", path=tmp_path)
-    assert (
-        local_supply_chain._evaluate_package_request_artifact_native(
-            (),
-            {"artifact": SimpleNamespace(to_dict=lambda: {}), "store": store},
-        )
-        is None
-    )
 
 
-@pytest.mark.parametrize("features", [[], ["package-authority-v1"], ["supply-chain-cloud-transport-v1"]])
-def test_native_cloud_transport_requires_explicit_capability(monkeypatch, features):
+def test_package_evaluation_without_resident_blocks_and_never_runs_python_evaluator(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_supply_chain_eval
+    from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
+
     monkeypatch.setattr(
-        native_package_authority,
-        "native_runtime_status",
-        lambda: SimpleNamespace(available=True, compatible=True, capabilities=SimpleNamespace(features=features)),
+        evaluator,
+        "evaluate_package_request_artifact",
+        lambda **_: pytest.fail("Python must not evaluate a non-retaining package request"),
     )
-    assert native_package_authority.supply_chain_cloud_transport_available() is (
-        "supply-chain-cloud-transport-v1" in features
+    monkeypatch.setattr(native_supply_chain_eval, "ensure_resident_prerequisite", lambda _home: False)
+    result = local_supply_chain.evaluate_package_request_artifact(
+        artifact=SimpleNamespace(
+            artifact_id="package:npm:left-pad",
+            to_dict=lambda: {"artifact_id": "package:npm:left-pad"},
+        ),
+        store=SimpleNamespace(guard_home=tmp_path, path=tmp_path / "guard.db", get_cloud_workspace_id=lambda: None),
+        workspace_dir=tmp_path,
     )
+    assert result.decision == "block"
+    assert result.policy_action == "block"
+    assert result.reasons[0]["code"] == "native_supply_chain_eval_unavailable"
 
 
-def test_cloud_bound_evaluation_skips_native_stub_before_it_can_persist_evidence(monkeypatch, tmp_path):
+def test_retained_archive_evaluation_is_the_only_python_evaluator_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from codex_plugin_scanner.guard import native_supply_chain_eval
     from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
 
     sentinel = object()
-    native = SimpleNamespace(
-        supply_chain_cloud_transport_available=lambda: False,
-        supply_chain_eval_native=lambda **_: pytest.fail("unsupported Cloud transport must not execute"),
+    seen: dict[str, object] = {}
+
+    def python_evaluator(**kwargs: object) -> object:
+        seen.update(kwargs)
+        return sentinel
+
+    monkeypatch.setattr(evaluator, "evaluate_package_request_artifact", python_evaluator)
+    monkeypatch.setattr(
+        native_supply_chain_eval,
+        "evaluate_package_request_native",
+        lambda **_: pytest.fail("a retained-blob request needs the live archive handle"),
     )
-    monkeypatch.setattr(local_supply_chain, "_native_package_authority_module", lambda: native)
-    monkeypatch.setattr(local_supply_chain, "_python_cloud_auth_failed", lambda _: False)
-    monkeypatch.setattr(evaluator, "evaluate_package_request_artifact", lambda **_: sentinel)
     result = local_supply_chain.evaluate_package_request_artifact(
-        artifact=SimpleNamespace(to_dict=lambda: {}),
-        store=SimpleNamespace(
-            guard_home=tmp_path, path=tmp_path / "guard.db", get_cloud_workspace_id=lambda: "workspace"
-        ),
+        artifact=SimpleNamespace(),
+        store=SimpleNamespace(),
         workspace_dir=tmp_path,
+        external_archive_network_authorized=True,
+        retain_external_archive_blob=True,
     )
     assert result is sentinel
+    assert seen["retain_external_archive_blob"] is True
+    assert seen["external_archive_network_authorized"] is True

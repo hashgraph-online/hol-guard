@@ -11,7 +11,10 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_command_control_binding as binding_module
-from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+from codex_plugin_scanner.guard.native_policy_snapshot import (
+    NativePolicySnapshotPublisher,
+    provision_native_policy_verifier_key,
+)
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
@@ -35,6 +38,19 @@ def _allow_terminal_proof(monkeypatch: pytest.MonkeyPatch) -> None:
         "codex_plugin_scanner.guard.runtime.extension_control_proof._require_local_terminal_confirmation",
         lambda _enrollment: None,
     )
+
+
+@pytest.fixture(autouse=True)
+def _pinned_integrity_material_and_resident_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin one integrity master for every store of the home and key the resident with it.
+
+    The resident-backed gate setup in ``_store`` needs a verifier key on disk before
+    the publisher exists. Deriving that key from the same pinned material the
+    publisher and the control authority use keeps a single key authoritative.
+    """
+
+    monkeypatch.setattr(GuardStore, "_policy_integrity_secret_material", lambda _self, *, create: (b"k" * 32, "test"))
+    provision_native_policy_verifier_key(tmp_path, b"k" * 32)
 
 
 def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client=None) -> NativePolicySnapshotPublisher:

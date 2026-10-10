@@ -216,13 +216,6 @@ def _validate_skill_scanner_import() -> None:
             pass
 
 
-def _safe_import_skill_scanner() -> None:
-    """Validate and import ``skill_scanner`` with shadowing protection."""
-    _validate_skill_scanner_import()
-    __import__("skill_scanner")
-    __import__("skill_scanner.core.scan_policy")
-
-
 _SUBPROCESS_SCAN_SNIPPET = """
 from pathlib import Path
 import json

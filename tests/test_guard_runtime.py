@@ -56,6 +56,7 @@ from codex_plugin_scanner.guard.models import (
     HarnessDetection,
     PolicyDecision,
 )
+from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError
 from codex_plugin_scanner.guard.policy import decide_action, decide_action_with_v2
 from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from codex_plugin_scanner.guard.policy_bundle_parser import (
@@ -10447,6 +10448,7 @@ def test_hook_runtime_artifact_binds_compound_approval_to_effective_cwd(tmp_path
     assert first.artifact_id != second.artifact_id
 
 
+@pytest.mark.usefixtures("native_data_flow_runtime")
 def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_path: Path) -> None:
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -14600,7 +14602,26 @@ def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp
         "tool_input": {"command": "echo scope-matrix"},
         "source_scope": "project",
     }
+    # Warm the native resident for this fresh guard_home before the first real
+    # hook. The direct evaluator's PreToolUse floor has a 0.5s deadline; cold
+    # resident spawn + verifier-key provision (~440ms on py3.14) consumes it
+    # before evaluation, producing a fail-closed block instead of the saved
+    # review. Provisioning + a context_digest primes the resident outside the
+    # asserted hook call. The digest result is intentionally unused: it is a
+    # best-effort warm, and a None (transport/startup failure) must not mask the
+    # real call - which runs next and is what the asserts actually exercise.
+    from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+        provision_native_verifier_key_for_store,
+    )
+    from codex_plugin_scanner.guard.native_context import native_context_digest
 
+    provision_native_verifier_key_for_store(store)
+    native_context_digest(
+        "tool_action_request",
+        {"tool_name": "Bash"},
+        guard_home=home_dir,
+        timeout_seconds=10.0,
+    )
     first = guard_commands_module.evaluate_native_artifact_hook(
         args,
         action_envelope=None,
@@ -14651,6 +14672,10 @@ def test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator(tmp
     assert second.runtime_artifact_hash == token
     assert second.policy_action == "allow"
     assert second.response_payload["approval_reuse"]["status"] == "accepted"
+
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    close_native_residents(home_dir)
 
 
 def test_runtime_hook_browser_exact_override_atomically_claims_one_waiter(tmp_path: Path) -> None:
@@ -15348,7 +15373,9 @@ def test_guard_hook_saved_file_read_allow_does_not_lower_current_reapproval(tmp_
             "--json",
         ]
     )
-    json.loads(capsys.readouterr().out)
+    approval_output = capsys.readouterr()
+    assert approval_rc == 0, approval_output.err
+    json.loads(approval_output.out)
 
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(blocked_event)))
     second_rc = main(
@@ -23355,13 +23382,13 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
     }
 
 
-def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
-    tmp_path,
-    monkeypatch,
-):
+def _prepare_shadow_candidate_sync(tmp_path, monkeypatch, *, canonical=True):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
-    monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
+    if canonical:
+        monkeypatch.setenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", "1")
+    else:
+        monkeypatch.delenv("HOL_GUARD_POLICY_CANONICAL_ENFORCEMENT", raising=False)
     legacy = _signed_test_policy_bundle(
         [
             {
@@ -23463,6 +23490,15 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
         lambda _store, auth_context=None: 0,
     )
 
+    return store, legacy
+
+
+def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
+    tmp_path,
+    monkeypatch,
+):
+    store, legacy = _prepare_shadow_candidate_sync(tmp_path, monkeypatch)
+
     guard_runner_module.sync_receipts(store)
 
     assert store.get_sync_payload("policy_bundle") == legacy
@@ -23476,6 +23512,31 @@ def test_sync_receipts_keeps_legacy_bundle_active_on_canonical_shadow_mismatch(
         "reasonCodes": ["action"],
         "status": "mismatch",
     }
+
+
+def test_sync_receipts_rejects_candidate_when_native_shadow_comparison_is_unavailable(
+    tmp_path,
+    monkeypatch,
+):
+    for canonical in (True, False):
+        store, legacy = _prepare_shadow_candidate_sync(
+            tmp_path / f"canonical-{canonical}", monkeypatch, canonical=canonical
+        )
+
+        def _unavailable(_legacy, _canonical):
+            raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
+
+        monkeypatch.setattr(guard_runner_module._authority, "policy_shadow_mismatch", _unavailable)
+
+        guard_runner_module.sync_receipts(store)
+
+        assert store.get_sync_payload("policy_bundle") == legacy
+        assert store.get_sync_payload("policy_bundle_canonical_last_good") is None
+        assert store.get_sync_payload("policy_bundle_last_error") == {"reason": "native_shadow_unavailable"}
+        assert [decision["action"] for decision in store.list_policy_decisions()] == ["block"]
+        mismatch_events = store.list_events(event_name="policy_bundle/shadow_mismatch")
+        assert mismatch_events[-1]["payload"]["reasonCodes"] == ["native_shadow_unavailable"]
+        assert mismatch_events[-1]["payload"]["status"] == "mismatch"
 
 
 def test_sync_receipts_clears_untrusted_cached_canonical_when_flag_is_disabled(

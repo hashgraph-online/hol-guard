@@ -188,6 +188,7 @@ def test_decision_diff_import_restores_preloaded_package_bindings() -> None:
         assert completed.returncode == 0, completed.stderr
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_report_is_exactly_reproducible_and_source_bound() -> None:
     """Verify report is exactly reproducible and source bound."""
     report = _fixture()
@@ -210,6 +211,10 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "rust/crates/guard-command/src/native_command_source_evaluation_batch.rs",
         "rust/crates/guard-command/src/native_command_source.rs",
         "rust/crates/guard-command/src/bin/guard-command-source.rs",
+        "rust/crates/guard-command/src/command_evaluation_compose.rs",
+        "rust/crates/guard-command/src/command_evaluation_support.rs",
+        "rust/crates/guard-runtime/src/command_effect.rs",
+        "src/codex_plugin_scanner/guard/native_command_effect.py",
         "tests/guard_command_corpus_native.py",
         "tests/guard_command_corpus_native_contract.py",
         "tests/test_guard_command_corpus_native_contract.py",
@@ -222,9 +227,6 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
         "src/codex_plugin_scanner/guard/runtime/command_model.py",
         "src/codex_plugin_scanner/guard/runtime/effect_contract.py",
         "src/codex_plugin_scanner/guard/runtime/extension_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/command_contained_routine_candidates.py",
-        "src/codex_plugin_scanner/guard/runtime/command_verified_read_candidates.py",
-        "src/codex_plugin_scanner/guard/runtime/command_workspace_write_candidates.py",
         "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
         "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/verified_github_reads.py",
@@ -250,6 +252,7 @@ def test_report_is_exactly_reproducible_and_source_bound() -> None:
     assert {source_binding_id(path) for path in critical_paths} <= sources.keys()
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_report_gates_native_parity_and_preserves_every_original_oracle_difference() -> None:
     report = _fixture()
     manifest = load_seed_manifest()
@@ -317,6 +320,7 @@ def _group_signatures(value: object) -> dict[str, tuple[int, str]]:
     return result
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     """Verify report contains only privacy safe deterministic evidence."""
     report = _fixture()
@@ -332,6 +336,7 @@ def test_report_contains_only_privacy_safe_deterministic_evidence() -> None:
     assert not _OPAQUE_ID.search(payload)
 
 
+@pytest.mark.usefixtures("native_hook_force")
 @pytest.mark.parametrize(
     ("hash_seed", "timezone", "locale"),
     [("1", "UTC", "C"), ("8731", "US/Pacific", "C.UTF-8")],
@@ -346,14 +351,18 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     evaluation_budget_seconds = int(str(manifest["evaluation_budget_seconds"]))
     spawn_overhead_seconds = 15
     environ = os.environ.copy()
+    # The test conftest defaults HOL_GUARD_NATIVE to "off" outside regression lanes;
+    # the report runner forces the supplied native binary only when the mode is unset.
+    environ.pop("HOL_GUARD_NATIVE", None)
     environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
     completed = subprocess.run(
         [sys.executable, str(script), "--metrics"],
-        check=True,
+        check=False,
         capture_output=True,
         timeout=evaluation_budget_seconds + spawn_overhead_seconds,
         env=environ,
     )
+    assert completed.returncode == 0, completed.stderr.decode(errors="replace")[-4000:]
     value = cast(object, json.loads(completed.stdout))
     assert isinstance(value, dict)
     metrics = cast(dict[str, object], value)

@@ -26,6 +26,7 @@ _OPERATIONS = {
     "drive_read": "Read a Drive file",
     "drive_edit": "Edit a Drive file",
     "drive_share": "Share a Drive file",
+    "drive_export": "Export a Drive file",
     "calendar_read": "Read a calendar",
     "calendar_invite": "Send a calendar invitation",
 }

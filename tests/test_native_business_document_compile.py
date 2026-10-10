@@ -12,7 +12,10 @@ from codex_plugin_scanner.guard.native_business_document_compile import (
     COMPILE_CAPABILITY,
     compile_business_policy_document,
 )
-from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    BUSINESS_NATIVE_TIMEOUT_SECONDS,
+    NativePolicySnapshotError,
+)
 from codex_plugin_scanner.guard.policy_document import canonical_policy_document_bytes, policy_document_digest
 from codex_plugin_scanner.guard.policy_document_yaml import parse_policy_document_yaml
 
@@ -92,7 +95,7 @@ def test_expired_deadline_never_selects_runtime(monkeypatch: pytest.MonkeyPatch)
 def test_late_native_result_cannot_escape_the_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard import native_business_document_compile as adapter
 
-    ticks = iter([0.0, 0.0, 0.0, 6.0])
+    ticks = iter([0.0, 0.0, 0.0, BUSINESS_NATIVE_TIMEOUT_SECONDS + 1.0])
     monkeypatch.setattr(adapter, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
     status = SimpleNamespace(
         available=True,

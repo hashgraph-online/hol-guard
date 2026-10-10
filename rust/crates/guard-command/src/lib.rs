@@ -7,6 +7,12 @@ pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
 pub mod canonical_command;
+pub mod catalog_read_model;
+#[cfg(test)]
+mod catalog_read_model_tests;
+mod catalog_read_projection;
+mod catalog_read_query;
+pub mod command_action_risk_classes;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
@@ -18,14 +24,19 @@ mod command_critical_floors_tests;
 mod command_database_matchers;
 pub mod command_decision_adapter;
 pub mod command_evaluation;
+pub mod command_evaluation_compose;
+pub mod command_evaluation_controls;
+#[cfg(test)]
+mod command_evaluation_lattice_tests;
+pub(crate) mod command_evaluation_support;
 #[cfg(test)]
 mod command_evaluation_tests;
 mod command_launcher_floors;
 pub mod command_model;
+pub mod command_native_factors;
 mod command_operand_matchers;
 pub mod command_option_parsing;
 mod command_segment_parsing;
-#[cfg(unix)]
 pub mod command_shell_read_factors;
 mod command_specialized_matchers;
 mod command_structure;
@@ -35,6 +46,8 @@ mod command_verified_read_candidates;
 #[cfg(test)]
 mod command_verified_read_candidates_tests;
 mod command_workspace_write_candidates;
+pub mod contributed_mcp_decision;
+mod contributed_mcp_url;
 mod data_flow;
 pub mod effect_decision;
 mod env_wrapper;
@@ -42,11 +55,11 @@ mod executable_flag_contract;
 pub mod extension_control;
 pub mod extension_evidence;
 pub mod extension_trust;
-mod github_capability_contract;
+pub mod github_capability_contract;
 #[cfg(test)]
 mod github_capability_contract_tests;
 mod github_capability_interaction;
-mod github_command_capabilities;
+pub mod github_command_capabilities;
 #[cfg(test)]
 mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
@@ -66,10 +79,13 @@ mod launch_identity_common;
 pub mod launch_identity_environment;
 pub mod mcp_arguments;
 pub mod mcp_launch_environment;
+pub mod mcp_runtime_evidence;
+pub mod mcp_skill_firewall;
 pub mod mcp_tool_approval;
 pub mod mcp_tool_catalog;
 pub mod mcp_tool_policy;
 pub mod mcp_tool_risk;
+pub mod mcp_tool_signals;
 pub mod native_command_catalog;
 pub mod native_command_controls;
 pub mod native_command_extension_evidence;
@@ -85,25 +101,28 @@ pub mod package_manifest_diff;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;
+mod powershell_reads;
 use parser_executables::*;
 use parser_segments::*;
 pub mod pretool;
-#[cfg(unix)]
 mod runtime_read_paths;
 mod shell_command_wrappers;
-mod shell_execution_context;
+pub mod shell_execution_context;
 mod shell_execution_context_support;
+mod shell_model_limits;
 mod shell_read_literal_wrapper;
 mod shell_secret_read_flow;
+#[cfg(test)]
+mod shell_secret_read_script_operand_tests;
 mod shell_secret_read_support;
-#[cfg(unix)]
 pub mod shell_secret_reads;
 mod shell_structure;
 pub mod typescript_launch_evidence;
 
 pub mod package_context_environment;
 
-pub use command_evaluation::{evaluate_command, CompositeCommandEvaluation};
+pub use command_evaluation::CompositeCommandEvaluation;
+pub use command_evaluation_compose::{evaluate_command, CommandEvaluationInput};
 pub use command_model::parse_shell_command;
 
 use serde::{Deserialize, Serialize};
@@ -250,12 +269,24 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
                 Ok(value) => value,
                 Err(reason) => return Ok(uncertain(request, raw, reason)),
             };
-        let executable = tokens.get(executable_index).cloned();
-        let arguments = if executable.is_some() {
+        let mut tokens = tokens;
+        let mut executable = tokens.get(executable_index).cloned();
+        let mut arguments = if executable.is_some() {
             tokens[executable_index + 1..].to_vec()
         } else {
             Vec::new()
         };
+        if executable_index == 0 && powershell_reads::windows_powershell_reads() {
+            if let Some(operands) = executable.as_deref().and_then(|name| {
+                powershell_reads::plain_get_content_operands(name, &arguments, &text)
+            }) {
+                tokens = std::iter::once("cat".to_owned())
+                    .chain(operands.iter().cloned())
+                    .collect();
+                executable = Some("cat".to_owned());
+                arguments = operands;
+            }
+        }
         if executable.as_deref().is_some_and(is_shell_control_keyword) {
             return Ok(uncertain(request, raw, "compound_shell_not_yet_supported"));
         }
@@ -390,6 +421,7 @@ pub mod local_mcp_stdio;
 #[cfg(all(unix, test))]
 mod local_mcp_stdio_tests;
 pub mod mcp_decision;
+mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;

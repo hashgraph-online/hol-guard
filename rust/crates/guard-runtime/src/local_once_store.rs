@@ -136,6 +136,9 @@ fn local_once_approval_payload(row: &Value) -> Value {
         "request_id": row_value(row, "request_id"),
         "scope": "artifact",
         "source": "approval-gate-once",
+        "fresh_local_approval": crate::approval_reuse::exact_artifact_approval_qualification(
+            row, "approval-gate-once", true,
+        ).0,
         "signed_at": row_value(row, "signed_at"),
         "updated_at": row_value(row, "created_at"),
         "workspace": row_value(row, "workspace"),

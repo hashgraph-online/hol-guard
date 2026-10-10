@@ -1,8 +1,8 @@
-import type { ExtensionCatalogItem, ExtensionPermission } from "../../extension-controls-api";
+import type { ExtensionCatalogSummary, ExtensionPermission } from "../../extension-controls-api";
 import { PROTECTION_CENTER_PERFORMANCE_BUDGETS } from "./protection-performance-budgets";
 
 export type CommandPatternMatch = {
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   permission: ExtensionPermission;
   /** Match strength; lower is stronger. 0 names the capability, 2 only mentions it. */
   score: number;
@@ -25,11 +25,11 @@ const RISK_TIER_SEVERITY: Record<string, number> = { critical: 3, high: 2, mediu
 
 // Packaged and organization-pushed catalogs speak with the product's voice;
 // at equal relevance an extension added locally on this device follows them.
-function catalogOriginRank(extension: ExtensionCatalogItem): number {
+function catalogOriginRank(extension: ExtensionCatalogSummary): number {
   return extension.source === "local-admin" ? 1 : 0;
 }
 
-function patternSearchBands(extension: ExtensionCatalogItem, permission: ExtensionPermission): [string, string, string] {
+function patternSearchBands(extension: ExtensionCatalogSummary, permission: ExtensionPermission): [string, string, string] {
   return [
     [permission.label, extension.name, extension.extension_id, ...extension.executables].join(" ").toLowerCase(),
     [permission.example_command ?? "", permission.permission_id].join(" ").toLowerCase(),
@@ -43,26 +43,34 @@ function termBand(term: string, bands: [string, string, string]): number {
   return CONTEXT_MATCH;
 }
 
+/** The bounded query a pattern search sends: trimmed, lowercased, capped. */
+export function commandPatternQuery(rawQuery: string): string {
+  const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
+  return normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap).join(" ");
+}
+
+/**
+ * Rank candidate permissions for a query. Candidates come from the catalog's
+ * permission search; every query term must still occur in a band.
+ */
 export function searchCommandPatterns(
-  extensions: readonly ExtensionCatalogItem[],
+  candidates: readonly { extension: ExtensionCatalogSummary; permission: ExtensionPermission }[],
   rawQuery: string,
   limit = COMMAND_PATTERN_DISPLAY_LIMIT,
 ): CommandPatternMatch[] {
-  const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
-  if (!normalized) return [];
-  const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
+  const query = commandPatternQuery(rawQuery);
+  if (!query) return [];
+  const terms = query.split(" ");
   const matches: CommandPatternMatch[] = [];
-  for (const extension of extensions) {
-    for (const permission of extension.permissions) {
-      const bands = patternSearchBands(extension, permission);
-      const text = bands.join(" ");
-      if (!terms.every((term) => text.includes(term))) continue;
-      // The query is as strong as its weakest term: "github export" against a
-      // permission whose prose carries "github" and whose example carries
-      // "export" scores as a context match.
-      const score = Math.max(...terms.map((term) => termBand(term, bands)));
-      matches.push({ extension, permission, score });
-    }
+  for (const { extension, permission } of candidates) {
+    const bands = patternSearchBands(extension, permission);
+    const text = bands.join(" ");
+    if (!terms.every((term) => text.includes(term))) continue;
+    // The query is as strong as its weakest term: "github export" against a
+    // permission whose prose carries "github" and whose example carries
+    // "export" scores as a context match.
+    const score = Math.max(...terms.map((term) => termBand(term, bands)));
+    matches.push({ extension, permission, score });
   }
   return matches
     .sort((left, right) =>

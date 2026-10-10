@@ -10,6 +10,7 @@ import sys
 import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol, cast
@@ -18,7 +19,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from scripts.ci.pytest_duration_manifest import load_latest_duration_manifest, node_id_digest
-from scripts.ci.pytest_shard import discover_test_nodes
+from scripts.ci.test_inventory import build_inventory, build_suite_metrics, collect_test_items
 
 PLAN_SCHEMA_VERSION = 1
 UNKNOWN_NODE_DURATION_SECONDS = 1.0
@@ -42,11 +43,47 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "test_resolving_one_request_with_100k_rows_stays_under_100ms",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-240-24]",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-480-two-client-24]",
+        "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[pi-960-four-client-8]",
         "tests/test_guard_daemon_acceptance.py::test_packaged_correctness_workloads[mixed-harness-fairness]",
+        "tests/test_guard_daemon_cli.py::TestDaemonStatusCommand::test_status_does_not_wait_for_guard_database_writer",
+        "tests/test_codex_hook_repair_native_binding.py::test_real_configured_hook_native_protection_commits_repair",
+        "tests/test_guard_js_lockfile_resolution_phase11.py::"
+        "test_representative_large_bun_lockfile_completes_within_scaled_budget",
         "tests/test_guard_omp_fast_path_regression.py::test_omp_post_tool_read_burst_uses_resident_scanner",
         "tests/test_guard_cloud_review_runtime_recovery.py::"
         "test_cloud_review_worker_survives_ten_thousand_recurring_disconnects",
         "tests/test_rust_io_ownership_gate.py::test_gate_inventories_reachable_io_and_passes_current_sources",
+        "tests/test_guard_gauntlet_parallel.py::test_interrupt_during_spawn_still_reaps_the_started_worker",
+        "tests/test_guard_gauntlet_parallel.py::test_signal_during_cleanup_grace_still_force_kills",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[artifact]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[workspace]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[publisher]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[harness]",
+        "tests/test_guard_runtime.py::"
+        "test_runtime_hook_saved_v1_allow_matches_every_scope_in_actual_evaluator[global]",
+        "tests/test_guard_runtime.py::test_runtime_hook_integrity_rejection_outranks_valid_exact_one_shot_allow",
+        "tests/test_guard_surface_server.py::TestGuardSurfaceServer::"
+        "test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload",
+        "tests/test_guard_headless_daemon_api.py::"
+        "test_supply_chain_package_firewall_paid_install_and_test_roundtrip",
+        "tests/test_guard_shim_intercept_proofs.py::"
+        "test_daemon_package_shim_test_uses_projected_shell_profile_path",
+        "tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque",
+        "tests/test_guard_command_corpus.py::"
+        "test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences",
+        "tests/test_guard_policy_integrity.py::"
+        "test_trust_backend_check_uses_spawn_from_concurrent_threads",
+        "tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store",
+
+        "tests/test_guard_headless_daemon_api.py::test_supply_chain_audit_scans_workspace_manifests",
+        "tests/test_guard_update_artifact.py::"
+        "test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat",
+        "tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms",
+        "tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection",
     }
 )
 
@@ -143,7 +180,12 @@ def build_affinity_node_shards(
 
     # A timing contract that is deselected during coverage execution must never
     # own an otherwise empty shard or contribute phantom time to its estimate.
-    nodes = [node_id for node_id in node_ids if node_id not in SCHEDULING_ONLY_NODE_IDS]
+    nodes = [
+        node_id
+        for node_id in node_ids
+        if node_id not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+    ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")
     if shard_count > len(nodes):
@@ -248,7 +290,10 @@ def main() -> int:
         args.max_manifest_age_days,
     )
     collection_started = time.monotonic()
-    nodes = discover_test_nodes(root)
+    items = collect_test_items(root, validate_invariants=True)
+    nodes = sorted(item.nodeid for item in items)
+    markers = {item.nodeid: tuple(marker.name for marker in item.iter_markers()) for item in items}
+    inventory = build_inventory(nodes, markers)
     collection_seconds = time.monotonic() - collection_started
     shards, loads = build_affinity_node_shards(nodes, args.shard_count, durations)
     write_shard_plan(
@@ -256,6 +301,10 @@ def main() -> int:
         shards=shards,
         estimated_loads=loads,
         manifest_used=manifest_used,
+    )
+    (args.output_directory / "test-inventory.json").write_text(
+        json.dumps(asdict(build_suite_metrics(root, inventory)), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
     )
     print(
         json.dumps(

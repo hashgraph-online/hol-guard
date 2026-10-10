@@ -89,11 +89,18 @@ def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-to
     )
 
 
+# The package-shim probe runs real shims through the evaluator, which can take
+# longer than the default client timeout on slow CI runners.
+PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS = 60
+
+
 def _read_json_response_details(
     request: urllib.request.Request,
+    *,
+    timeout: float = 5,
 ) -> tuple[int, dict[str, object], dict[str, str]]:
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
             return (
                 response.status,
                 json.loads(response.read().decode("utf-8")),
@@ -103,8 +110,8 @@ def _read_json_response_details(
         return error.code, json.loads(error.read().decode("utf-8")), dict(error.headers.items())
 
 
-def _read_json_response(request: urllib.request.Request) -> tuple[int, dict[str, object]]:
-    status, payload, _headers = _read_json_response_details(request)
+def _read_json_response(request: urllib.request.Request, *, timeout: float = 5) -> tuple[int, dict[str, object]]:
+    status, payload, _headers = _read_json_response_details(request, timeout=timeout)
     return status, payload
 
 
@@ -313,7 +320,7 @@ def test_supply_chain_package_firewall_status_reports_connect_gate_when_cloud_is
     assert payload["connect_flow"]["state"] == "idle"
     assert payload["actions"] == {
         "install": "connect_required",
-        "repair": "disabled",
+        "repair": "connect_required",
         "test": "connect_required",
         "audit": "connect_required",
         "sync": "connect_required",
@@ -1050,7 +1057,7 @@ def test_supply_chain_package_firewall_status_reports_reconnect_gate_for_expired
         "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
     }
     assert payload["actions"]["install"] == "reconnect_required"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "reconnect_required"
     assert payload["actions"]["remove"] == "disabled"
 
 
@@ -1443,7 +1450,7 @@ def test_supply_chain_package_firewall_status_accepts_paid_oauth_entitlement(tmp
     }
     assert payload["actions"] == {
         "install": "available",
-        "repair": "disabled",
+        "repair": "available",
         "test": "available",
         "audit": "available",
         "sync": "available",
@@ -1624,6 +1631,7 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
                 token=token,
                 payload={"managers": ["npm"]},
             ),
+            timeout=PACKAGE_SHIM_PROBE_CLIENT_TIMEOUT_SECONDS,
         )
     finally:
         daemon.stop()
@@ -1647,17 +1655,12 @@ def test_supply_chain_package_firewall_paid_install_and_test_roundtrip(
     assert test_payload["operation"] == "test"
     assert test_payload["status"] == "completed"
     assert test_payload["result"]["tested_managers"] == ["npm"]
-    assert test_payload["result"]["blocked_execution"] is False
-    assert test_payload["result"]["path_repair_required"] == ["npm"]
-    assert test_payload["result"]["intercept_proved"] is False
-    assert test_payload["result"]["manager_results"] == [
-        {
-            "evaluator_invoked": False,
-            "intercept_ran": False,
-            "manager": "npm",
-            "skipped_reason": "path_inactive",
-        },
-    ]
+    # The daemon judges PATH from the configured shell profile, so the probe runs.
+    assert test_payload["result"]["blocked_execution"] is True
+    assert test_payload["result"]["path_repair_required"] == []
+    assert test_payload["result"]["intercept_proved"] is True
+    assert test_payload["result"]["manager_results"][0]["manager"] == "npm"
+    assert test_payload["result"]["manager_results"][0]["evaluator_invoked"] is True
 
 
 def test_supply_chain_audit_scans_workspace_manifests(

@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_git_execution_safety
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import git_execution_safety
 
 
 def _artifact(command: str, *, home: Path) -> GuardArtifact | None:
@@ -164,7 +164,7 @@ def test_compound_push_rejects_symlinked_repository_pre_push_hook(
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(git_execution_safety, "_git_global_config_environment_is_stable", lambda: True)
+    monkeypatch.setattr(native_git_execution_safety, "_account_home_directory", lambda: str(home))
     _ = (home / ".gitconfig").write_text("[core]\n\thooksPath = .git/hooks\n", encoding="utf-8")
     _init_push_repository(workspace)
     payload = home / "payload"

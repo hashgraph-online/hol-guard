@@ -5,12 +5,24 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import sys
 from collections.abc import Mapping
 from importlib import resources
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    if sys.version_info >= (3, 11):
+        from importlib.resources.abc import Traversable
+    else:
+        from importlib.abc import Traversable
 
 from ..native_command_control_binding import _metadata_from_bytes
-from .extension_control_limits import MAX_CATALOG_EXTENSIONS, MAX_CATALOG_PAYLOAD_BYTES, MAX_PERMISSIONS_PER_EXTENSION
+from .extension_control_limits import (
+    MAX_CATALOG_EXTENSIONS,
+    MAX_GENERATED_CATALOG_ARTIFACT_BYTES,
+    MAX_NATIVE_COMMAND_PROGRAM_BYTES,
+    MAX_PERMISSIONS_PER_EXTENSION,
+)
 from .generated_command_catalog import (
     CommandRuleMode,
     GeneratedCommandCatalog,
@@ -319,7 +331,7 @@ def _extension(value: object) -> GeneratedCommandExtension:
 
 
 def load_generated_command_catalog_bytes(catalog_content: bytes, program_content: bytes) -> GeneratedCommandCatalog:
-    raw = _mapping(_decode(catalog_content, maximum=MAX_CATALOG_PAYLOAD_BYTES), _ENVELOPE_FIELDS)
+    raw = _mapping(_decode(catalog_content, maximum=MAX_GENERATED_CATALOG_ARTIFACT_BYTES), _ENVELOPE_FIELDS)
     if raw["schema"] != _CATALOG_SCHEMA:
         raise GeneratedCommandCatalogError("generated_command_catalog_invalid")
     catalog = raw["catalog"]
@@ -360,7 +372,7 @@ def load_generated_command_catalog_bytes(catalog_content: bytes, program_content
             references = permission.dependencies + permission.conflicts + permission.implied_permissions
             if not set(references) <= known_permissions or not set(permission.rule_ids) <= known_rules:
                 raise GeneratedCommandCatalogError("generated_command_catalog_invalid")
-    program_raw = _decode(program_content, maximum=4 * 1024 * 1024)
+    program_raw = _decode(program_content, maximum=MAX_NATIVE_COMMAND_PROGRAM_BYTES)
     if not isinstance(program_raw, dict):
         raise GeneratedCommandCatalogError("generated_command_program_invalid")
     source_digest = _digest(raw["source_digest"])
@@ -426,13 +438,25 @@ def load_generated_command_catalog_bytes(catalog_content: bytes, program_content
     )
 
 
+def _read_bounded_resource(resource: Traversable, maximum: int) -> bytes:
+    """Read at most one byte past the budget so an oversized resource is never loaded whole."""
+
+    with resource.open("rb") as handle:
+        content = handle.read(maximum + 1)
+    if len(content) > maximum:
+        raise GeneratedCommandCatalogError("generated_command_catalog_resource_too_large")
+    return content
+
+
 def load_generated_command_catalog() -> GeneratedCommandCatalog:
     """Load only release-packaged artifacts; invalid or absent resources fail closed."""
 
     try:
         package = resources.files("codex_plugin_scanner.guard")
-        catalog_content = package.joinpath(_CATALOG_RESOURCE).read_bytes()
-        program_content = package.joinpath(_PROGRAM_RESOURCE).read_bytes()
+        catalog_content = _read_bounded_resource(
+            package.joinpath(_CATALOG_RESOURCE), MAX_GENERATED_CATALOG_ARTIFACT_BYTES
+        )
+        program_content = _read_bounded_resource(package.joinpath(_PROGRAM_RESOURCE), MAX_NATIVE_COMMAND_PROGRAM_BYTES)
     except (FileNotFoundError, ModuleNotFoundError, OSError) as error:
         raise GeneratedCommandCatalogError("generated_command_catalog_unavailable") from error
     return load_generated_command_catalog_bytes(catalog_content, program_content)

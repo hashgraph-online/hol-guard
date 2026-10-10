@@ -26,16 +26,42 @@ Operators can still add an unlisted MCP server with **Add custom extension**. Cu
 ## How to contribute
 
 1. Add `contributions/mcp-servers/mcp.<name>.json`.
-2. New catalog ids default to `external` and opt-in. Extension builder CI stages missing entries in the shared trust map before building; contributors do not need to edit that shared list.
+2. Run `python scripts/refresh_extension_artifacts.py --trust-only`. It creates the missing `contracts/extensions/trust/command.mcp-<name>.v1.json` binding as external/opt-in without changing existing classifications. Include that per-extension file in the PR; there is no shared trust list to edit. Run the read-only `python scripts/refresh_extension_artifacts.py --check-trust` to verify ownership before building.
 3. Package the JSON through Hatch force-include. The packaged-contract copy script enumerates `contributions/mcp-servers/` automatically, so no script edit is required. The Builder's reviewed `apply` plan handles any remaining integration edits for generated kits.
-4. Submit the authored MCP input together with the packaging integration edits in step 3. Do not commit generated catalogs or directory files. CI prepares and verifies projections on the PR merge checkout, and maintainer artifact regeneration publishes shared outputs after merge.
+4. Submit the authored MCP input, its trust binding, and the packaging integration edits in step 3 together. Do not commit generated catalogs or directory files. Required CI checks authored trust before preparation can create defaults in its scratch checkout. CI then prepares and verifies projections, and maintainer artifact regeneration publishes shared outputs after merge.
 5. Run `tests/test_guard_mcp_server_contribution.py` and the trust checks using the [validation workflow](extension-builder/VALIDATION.md#source-tree-checks).
 
 Do not declare `trusted-library` or `first-party`. The schema only allows `external`.
 
 The schema is `contracts/mcp-servers/contribution.v1.schema.json`. Required metadata: id, name, description, publisher, icon, launch identity, risk classes, and tool defaults.
 
-Package-launched contributions use `launch.kind: package-launcher`, an allowlisted package command, and a package name. Launch matching uses the MCP package name, not the full argument hash, so user paths and extra flags still match.
+Package-launched contributions use `launch.kind: package-launcher`, an allowlisted
+package command, and a package name. Package-name matching selects tightening
+`review` and `block` defaults without requiring the full argument hash. An `allow`
+default additionally requires a stdio server identity using the declared launcher
+(including its portable executable path or wrapper suffix), an explicit `default`
+package-source token, a registry version/range/tag selector, and a recorded
+environment-key list. Unversioned registry packages are supported. Aliases, Git
+or file selectors, archive basenames, and configured package-manager environment
+variables cannot receive contributed `allow` defaults. This includes case-insensitive
+`npm_config_*`, `YARN_*`, `UV_*`, `PIP_*`, `PIPX_*`, and scoped `*:registry` keys:
+configuration-file overrides can redirect sources without an argv registry flag.
+Different launchers, explicit registry/index overrides, and missing or malformed
+launch identity fields also retain host policy for allow decisions. Native source
+classification includes `--userconfig`, `--globalconfig`, scoped registry options,
+configuration-file and index options, and forwarded pip arguments. Unrecognized
+options before the package also retain host policy; npm options remain launcher
+options until `--`. Newly recognized source/configuration values and unrecognized
+argv are bound by digests without exposing their contents. Existing explicit
+registry/index tokens retain their format. User paths, registry package versions/tags,
+ordinary server environment, recognized neutral launcher switches such as `-y`,
+and server arguments can still vary. Exact command, argument, and environment
+hashes continue to bind saved approvals.
+
+These source checks follow the distinction between registry names and
+[aliases, folders, tarballs, and Git selectors](https://docs.npmjs.com/cli/v11/using-npm/package-spec/).
+The native `default` source token describes argv flags; it does not attest to the
+installed code or the effective contents of package-manager configuration files.
 
 Native servers installed through Homebrew, Cargo, or release archives may use
 `launch: {"kind": "direct-command", "command": "example-mcp"}`. The command is a
@@ -81,7 +107,7 @@ v1 enables the whole contributed server entry. Per-tool catalog permissions are 
 
 ## Review bar
 
-- New catalog ids must resolve to external/opt-in. CI and maintainer regeneration add missing ids conservatively; changes to existing reviewed trust classes still require review.
+- New catalog ids must have a committed external/opt-in binding. The helper creates missing bindings conservatively; CI rejects absent bindings before preparation. Changes to existing reviewed trust classes still require review.
 - Tests must prove the contribution stays inert until a local-admin enable exists.
 - A this-device custom MCP grant must still win over the contribution.
 - Remote HTTP contributions must prove they cannot lower policy through an `allow` state.

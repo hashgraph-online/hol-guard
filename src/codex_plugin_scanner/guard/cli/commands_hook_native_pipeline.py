@@ -14,6 +14,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from ..daemon.hook_request_parsing import runtime_hook_event_name
+from ..native_hook_decision import NativeHookDecisionError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
@@ -37,7 +38,7 @@ from .commands_hook_native_copilot import (
 )
 from .commands_hook_native_eval import evaluate_native_artifact_hook
 from .commands_hook_native_finish import finalize_native_artifact_hook
-from .commands_hook_native_generic import run_native_generic_payload
+from .commands_hook_native_generic import run_native_generic_payload as _run_native_generic_payload
 from .commands_hook_native_prepare import prepare_native_hook_state
 from .commands_hook_native_review import review_native_artifact_hook
 from .commands_hook_native_state import NativeArtifactHookState
@@ -209,7 +210,9 @@ def run_native_hook_pipeline(
     )
     if result is not None:
         return result
-    data_flow_signals = _runtime_action_data_flow_signals(action_envelope, workspace=runtime_workspace)
+    data_flow_signals = _runtime_action_data_flow_signals(
+        action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )
@@ -276,7 +279,23 @@ def run_native_hook_pipeline(
             _claim_saved_approval=_claim_saved_approval,
         )
 
-    def revalidate_generic_after_claim(claimed_artifact_hash: str) -> int:
+    def run_native_generic_payload(*generic_args, **generic_kwargs) -> int:
+        # No resident decision means no verdict: answer with the host outage shape.
+        try:
+            return _run_native_generic_payload(*generic_args, **generic_kwargs)
+        except NativeHookDecisionError as error:
+            return _emit_native_unavailable(
+                args,
+                payload=payload,
+                workspace=runtime_workspace,
+                context=context,
+                event_name=event_name,
+                reason_code=error.code,
+                worker=worker,
+                recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
+            )
+
+    def revalidate_generic_after_claim(claimed_artifact_hash: str, claimed_approval: Mapping[str, object]) -> int:
         fresh_config = overlay_synced_guard_policy(
             load_guard_config(context.guard_home, workspace=runtime_workspace),
             _synced_policy_payload(store),
@@ -301,6 +320,7 @@ def run_native_hook_pipeline(
             native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
             native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
             _claimed_saved_allow_hash=claimed_artifact_hash,
+            _claimed_saved_approval=claimed_approval,
             _claim_saved_approval=False,
         )
 
@@ -351,7 +371,9 @@ def _fresh_native_artifact_evaluation(
         workspace=runtime_workspace,
         guard_home=context.guard_home,
     )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(fresh_action_envelope, workspace=runtime_workspace)
+    fresh_data_flow_signals = _runtime_action_data_flow_signals(
+        fresh_action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    )
     fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
     )

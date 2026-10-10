@@ -17,11 +17,11 @@ use crate::approval_gate_settings::public_config_locked;
 use crate::approval_gate_state::ApprovalGatePublicConfig;
 use crate::approval_gate_state::{
     enabled, epoch, is_future, iso_from_epoch, load_state, optional_int, optional_string,
-    record_failed_attempt, reset_failed_attempts, verifier, verify_password, write_state,
-    ApprovalGateFactor,
+    record_failed_attempt, reset_failed_attempts, write_state, ApprovalGateFactor,
 };
 use crate::approval_gate_verify::{
-    invalidate_active_grants, rotate_authentication_state, token_urlsafe, ApprovalGateInputV1,
+    invalidate_active_grants, raise_if_locked, rotate_authentication_state, token_urlsafe,
+    verify_password_stage, ApprovalGateInputV1,
 };
 use crate::totp::{
     build_otpauth_uri, generate_totp_secret, verify_totp_code, TotpSecretStore,
@@ -38,57 +38,6 @@ fn err(code: &str, message: &str, status: u16) -> ApprovalGateErrorV1 {
 
 fn totp_enabled(state: &Value) -> bool {
     state.get("totp_enabled") == Some(&Value::Bool(true))
-}
-
-/// `_raise_if_locked` (:1144-1147).
-fn raise_if_locked(state: &Value, now_epoch: f64) -> Result<(), ApprovalGateErrorV1> {
-    if is_future(
-        optional_string(state.get("locked_until")).as_deref(),
-        now_epoch,
-    ) {
-        return Err(err(
-            "approval_gate_locked",
-            "Approval gate is temporarily locked.",
-            423,
-        ));
-    }
-    Ok(())
-}
-
-/// `_verify_password_stage` (:1155-1175) — local copy operating on `&mut Value`.
-fn verify_password_stage(
-    guard_home: &Path,
-    state: &mut Value,
-    password: Option<&str>,
-    now: Option<&str>,
-) -> Result<(), ApprovalGateErrorV1> {
-    if verifier(state).is_none() {
-        return Err(err(
-            "approval_gate_recovery_required",
-            "Approval gate is enabled but no verifier is configured.",
-            423,
-        ));
-    }
-    let password = match password {
-        Some(p) => p,
-        None => {
-            let code = if totp_enabled(state) {
-                "approval_gate_password_required"
-            } else {
-                "approval_gate_required"
-            };
-            return Err(err(code, "Approval password is required.", 403));
-        }
-    };
-    if !verify_password(password, verifier(state)) {
-        record_failed_attempt(guard_home, state, ApprovalGateFactor::Password, now);
-        return Err(err(
-            "approval_gate_invalid_password",
-            "Approval password is invalid.",
-            403,
-        ));
-    }
-    Ok(())
 }
 
 /// `_begin_totp_enrollment_locked` (:367-403). Returns `pending`/`manual_key`/
@@ -112,7 +61,7 @@ pub(crate) fn begin_totp_enrollment_locked(
         return Err(err(
             "approval_gate_totp_enabled",
             "TOTP is already enabled.",
-            400,
+            403,
         ));
     }
     let now_epoch = epoch(now);
@@ -206,7 +155,7 @@ pub(crate) fn confirm_totp_enrollment_locked(
         return Err(err(
             "approval_gate_totp_pending_required",
             "No pending TOTP enrollment is available.",
-            400,
+            403,
         ));
     }
     let totp_code = match gate_input.totp_code.as_deref() {

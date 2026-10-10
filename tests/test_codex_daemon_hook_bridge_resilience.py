@@ -253,7 +253,11 @@ def test_main_starts_daemon_once_then_retries_hook(
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(prompt)))
 
     assert bridge.main(**config) == 0
-    assert fallback_calls == [json.dumps(prompt)]
+    assert len(fallback_calls) == 1
+    forwarded = json.loads(fallback_calls[0])
+    # The bridge stamps its own execution environment before any route sees the input.
+    assert isinstance(forwarded.pop("guard_execution_environment"), dict)
+    assert forwarded == prompt
     assert json.loads(capsys.readouterr().out) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 

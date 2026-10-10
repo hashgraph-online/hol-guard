@@ -159,7 +159,7 @@ def test_package_shims_status_reports_reconnect_required_when_cloud_auth_expired
         "upgrade_cta": "Reconnect HOL Guard Cloud to refresh package firewall access.",
     }
     assert payload["actions"]["install"] == "reconnect_required"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "reconnect_required"
     assert payload["actions"]["remove"] == "disabled"
 
 
@@ -451,7 +451,7 @@ def test_package_shims_status_reports_paid_oauth_entitlement(
         "upgrade_cta": None,
     }
     assert payload["actions"]["install"] == "available"
-    assert payload["actions"]["repair"] == "disabled"
+    assert payload["actions"]["repair"] == "available"
     assert payload["actions"]["remove"] == "disabled"
 
 

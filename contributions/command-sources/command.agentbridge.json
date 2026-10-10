@@ -186,6 +186,20 @@
                     ]
                   },
                   "op": "executable.v1"
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["agentbridge", "agentbridge.cmd", "agentbridge.exe"],
+                    "subcommands": ["run"],
+                    "required_flags": ["--tool-registry", "-h"],
+                    "required_flags_in_all_arguments": true,
+                    "options_with_values": [
+                      "--backend", "--framework", "--input", "--manifest", "--session-id", "--tool-registry"
+                    ],
+                    "allow_leading_options": false,
+                    "fail_secure_unknown_options": true
+                  }
                 }
               ],
               "op": "any.v1"
@@ -286,6 +300,18 @@
                     ]
                   },
                   "op": "executable.v1"
+                },
+                {
+                  "op": "executable.v1",
+                  "config": {
+                    "executables": ["agentbridge", "agentbridge.cmd", "agentbridge.exe"],
+                    "subcommands": ["scaffold-plugin"],
+                    "required_flags": ["--force", "-h"],
+                    "required_flags_in_all_arguments": true,
+                    "options_with_values": ["--backend", "--distribution-name", "--package-name"],
+                    "allow_leading_options": false,
+                    "fail_secure_unknown_options": true
+                  }
                 }
               ],
               "op": "any.v1"

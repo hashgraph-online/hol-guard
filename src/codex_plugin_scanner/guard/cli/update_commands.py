@@ -63,6 +63,7 @@ from .update_artifact import (
     recover_local_wheel_original,
     stage_trusted_wheel,
 )
+from .update_bounded_hook_refresh import refresh_bounded_hook_clients
 from .update_desktop_apply import (
     desktop_update_status_state,
     finalize_desktop_update_status,
@@ -73,6 +74,7 @@ from .update_grok_repair import append_grok_repair
 from .update_install_verify import verify_installed_distribution
 from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_pypi_version
+from .update_retirement import retire_with_retry
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -201,10 +203,14 @@ def _retire_native_resident_before_update(guard_home: Path) -> bool:
     """Stop shared native state while the installed runtime is still intact."""
 
     try:
-        return retire_native_resident_for_update(
-            executable=_bundled_runtime_candidate(),
-            guard_home=guard_home,
-            environment=_isolated_environment(),
+        return retire_with_retry(
+            lambda timeout_seconds: retire_native_resident_for_update(
+                executable=_bundled_runtime_candidate(),
+                guard_home=guard_home,
+                environment=_isolated_environment(),
+                timeout_seconds=timeout_seconds,
+            ),
+            sleep=time.sleep,
         )
     except Exception:
         # A failed preflight must leave the current package untouched.
@@ -2602,6 +2608,9 @@ def _repair_supported_harnesses_in_process(
     if cursor_warning is not None:
         repair_notes.append(cursor_warning)
     append_grok_repair(repaired_installs, repair_notes, context=context, store=store, workspace=workspace, now=now)
+    refreshed_clients, refresh_warnings = refresh_bounded_hook_clients(context=context, store=store)
+    repaired_installs.extend(refreshed_clients)
+    repair_notes.extend(refresh_warnings)
     legacy_omp_migration, legacy_omp_warning = _migrate_legacy_omp_install(
         context=context,
         store=store,

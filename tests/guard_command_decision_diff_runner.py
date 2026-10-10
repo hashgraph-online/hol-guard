@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import importlib.util
 import multiprocessing
+import os
 import sys
 from collections import defaultdict
 from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import chain, islice
 from pathlib import Path
@@ -49,8 +51,6 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import (
 )
 from codex_plugin_scanner.guard.runtime.effect_decision import (
     EffectDecision,
-    EffectDecisionRequest,
-    evaluate_effect_decision,
 )
 from codex_plugin_scanner.guard.runtime.native_command_evaluation import NativeCommandEvaluation
 from tests.guard_command_corpus import CommandCorpusCase, iter_adversarial_corpus, iter_benign_corpus
@@ -61,13 +61,18 @@ from tests.guard_command_corpus_native import (
 from tests.guard_command_corpus_native import (
     pin_neutral_attribution as _pin_neutral_attribution,
 )
+from tests.guard_command_corpus_native import (
+    pin_offline_shell_context as _pin_offline_shell_context,
+)
 from tests.guard_command_corpus_native_contract import configure_native_contract_shard, validate_native_case
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 from tests.guard_command_corpus_oracle_types import OracleRecord
-from tests.guard_command_corpus_runner import EVALUATION_SHARD_COUNT, MAX_CONCURRENT_WORKERS, peak_rss_mib
+from tests.guard_command_corpus_runner import EVALUATION_SHARD_COUNT, peak_rss_mib
 
 SYNTHETIC_CWD: Final = REPO_ROOT / "workspace"
 SYNTHETIC_HOME: Final = REPO_ROOT / "home"
+# Bound the aggregate memory of Python workers and their native residents.
+MAX_CONCURRENT_WORKERS = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,12 +95,42 @@ def evaluate_decision_diff_shards() -> tuple[DecisionDiffShard, ...]:
     """Evaluate fixed corpus partitions with bounded process concurrency."""
 
     context = multiprocessing.get_context("spawn")
-    with ProcessPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS, mp_context=context) as executor:
+    with (
+        _resident_authority_environment(),
+        ProcessPoolExecutor(max_workers=MAX_CONCURRENT_WORKERS, mp_context=context) as executor,
+    ):
         return tuple(executor.map(_evaluate_shard, range(EVALUATION_SHARD_COUNT)))
 
 
+@contextmanager
+def _resident_authority_environment() -> Iterator[None]:
+    """Make spawned workers reach the exact resident the caller configured.
+
+    The resident owns every decision this report records, and the exact-binary
+    override (``HOL_GUARD_NATIVE_BINARY``) is honoured only in ``force`` mode.
+    A module-scoped pytest fixture, or this script run directly, executes before
+    any per-test fixture could select that mode, so the workers would otherwise
+    see the default mode, find no bundled runtime and fail closed as unavailable.
+    A caller's explicit mode is preserved.
+    """
+
+    if "HOL_GUARD_NATIVE" in os.environ or not os.environ.get("HOL_GUARD_NATIVE_BINARY"):
+        yield
+        return
+    os.environ["HOL_GUARD_NATIVE"] = "force"
+    try:
+        yield
+    finally:
+        os.environ.pop("HOL_GUARD_NATIVE", None)
+
+
 def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
+    from tests.native_command_test_support import _native_binaries
+    from tests.native_github_offline import install_offline_github_classifier
+
+    install_offline_github_classifier(_native_binaries()[0])
     _pin_neutral_attribution()
+    _pin_offline_shell_context()
     configure_native_contract_shard(worker_index, EVALUATION_SHARD_COUNT)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
     native_floor_ids: defaultdict[str, list[str]] = defaultdict(list)
@@ -190,12 +225,8 @@ def _canonical_native_floor(action: CommandDecisionFloor) -> GuardAction:
 
 
 def _baseline_proposal(evaluation: CompositeCommandEvaluation) -> EffectDecision:
-    return evaluate_effect_decision(
-        EffectDecisionRequest(
-            factors=evaluation.baseline_factors,
-            uncertainties=evaluation.baseline_uncertainties,
-        )
-    )
+    """The resident's decision over the baseline factors alone."""
+    return evaluation.baseline_decision
 
 
 def _reconciliation_category(native_floor: GuardAction, current: GuardAction, oracle: GuardAction) -> str:

@@ -198,29 +198,55 @@ pub(crate) fn serve_managed(
     expected_digest: &str,
 ) -> Result<(), String> {
     MANAGED_SHUTDOWN_REQUESTED.store(false, Ordering::Release);
+    let startup_started = crate::resident_diagnostics::enabled().then(Instant::now);
     if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest {
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
-    let _owner_lock = acquire_managed_owner_lock(state_base)?;
-    let policy_store = std::sync::Arc::new(
-        crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+    let owner_lock = acquire_managed_owner_lock(state_base)?;
+    // Build the immutable catalog read snapshot off the request path so the
+    // first catalog_read does not pay for it; failures surface on that read.
+    thread::spawn(|| {
+        let _ = guard_command::catalog_read_model::packaged_catalog_read_snapshot();
+    });
+    // Initialize before fallible policy startup so every client can see a
+    // resident still starting. This guard drops before owner_lock on all exits.
+    let _diagnostic_lifetime =
+        crate::resident_diagnostics::install_managed_sink(state_base, &owner_lock);
+    crate::resident_diagnostics::start(crate::resident_diagnostics::Phase::ResidentStartup);
+    let startup = (|| -> Result<_, String> {
+        let policy_store = std::sync::Arc::new(
+            crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+                state_base,
+                expected_digest,
+                generation,
+            )?,
+        );
+        let token = crate::read_resident_auth_token()?;
+        let owner_alive = combine_liveness(
             state_base,
+            owner_process_id,
+            owner_start_marker,
             expected_digest,
-            generation,
-        )?,
-    );
-    let token = crate::read_resident_auth_token()?;
-    let owner_alive = combine_liveness(
-        state_base,
-        owner_process_id,
-        owner_start_marker,
-        expected_digest,
-    );
+        );
+        Ok((policy_store, token, owner_alive))
+    })();
+    if let Some(started) = startup_started {
+        crate::resident_diagnostics::finish_since(
+            crate::resident_diagnostics::Phase::ResidentStartup,
+            if startup.is_ok() {
+                crate::resident_diagnostics::Status::Ok
+            } else {
+                crate::resident_diagnostics::Status::Error
+            },
+            started,
+        );
+    }
+    let (policy_store, token, owner_alive) = startup?;
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
-            (&scope, &_owner_lock),
+            (&scope, &owner_lock),
             policy_store,
             generation,
             owner_process_id,
@@ -358,12 +384,26 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
         .ok_or_else(|| "native_resident_owner_process_invalid".to_owned())
 }
 
+/// Upper bound on a caller-supplied deadline. Every operation is capped at nine
+/// seconds except the skill-directory scan, whose bounded tree walk may
+/// legitimately read hundreds of megabytes and is granted a longer ceiling.
+const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
+const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
+
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
-    let budget = crate::strict_json_value(payload)
-        .ok()
+    let value = crate::strict_json_value(payload).ok();
+    let ceiling = match value
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+    {
+        Some("skill_directory_identity") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        _ => CLIENT_TIMEOUT_CEILING_MS,
+    };
+    let budget = value
+        .as_ref()
         .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
         .unwrap_or(750)
-        .clamp(1, 9_000);
+        .clamp(1, ceiling);
     Duration::from_millis(budget)
 }
 

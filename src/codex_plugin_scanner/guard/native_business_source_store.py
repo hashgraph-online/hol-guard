@@ -8,6 +8,7 @@ This is local policy integrity, not provider credential custody or actor proof.
 from __future__ import annotations
 
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -15,6 +16,7 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from .approval_gate import require_high_risk
+from .approval_gate_state import epoch
 from .native_business_document_compile import compile_business_policy_document
 from .native_business_source_anchor_bridge import (
     MAX_ANCHOR_BYTES,
@@ -59,6 +61,11 @@ ANCHOR_FILE_NAME = "business-source-anchor.v1.json"
 INSTALLATION_STATE_KEY = "business_source_installation_v1"
 CURRENT_FENCE_CAPABILITY = "native-business-source-current-fence-v2"
 _UNSPECIFIED_CURRENT = object()
+# An approved installation runs compile, status, build, verify and two anchor
+# builds as separate native processes, plus the caller's SQL transaction. Slow
+# process start (Windows on emulated x64, endpoint scanning) can exceed the
+# single-operation cap in total while every step is individually healthy.
+MUTATION_BUDGET_SECONDS = 30.0
 
 
 def _error(code: str = "native_business_source_installation_incoherent") -> NativePolicySnapshotError:
@@ -78,6 +85,17 @@ def _require_approved(store, binding, approval_gate_grant, now):
         is None
     ):
         raise _error("native_business_source_approval_required")
+
+
+def _mutation_deadline(deadline_monotonic: float | None, approval_gate_grant: ApprovalGateGrant | None) -> float:
+    deadline = _deadline(deadline_monotonic, budget_seconds=MUTATION_BUDGET_SECONDS)
+    if approval_gate_grant is None:
+        return deadline
+    # Approval is rechecked after the caller's SQL commit. Do not let the
+    # installation run past the grant that authorizes it; an already expired
+    # grant is still refused by the approval check, not the deadline.
+    grant_remaining = epoch(approval_gate_grant.expires_at) - time.time()
+    return min(deadline, time.monotonic() + grant_remaining) if grant_remaining > 0 else deadline
 
 
 def _witness(anchor: KeyAuthenticatedBusinessSourceAnchor) -> bytes:
@@ -215,7 +233,7 @@ def approved_business_source_mutation(
     """
     if mode != "replace":
         raise _error("native_business_source_replace_required")
-    deadline = _deadline(deadline_monotonic)
+    deadline = _mutation_deadline(deadline_monotonic, approval_gate_grant)
     candidate = compile_business_policy_document(document, deadline_monotonic=deadline)
     status = _consumer(deadline, anchor=True)
     assert status.capabilities is not None

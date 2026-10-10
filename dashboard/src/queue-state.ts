@@ -387,13 +387,12 @@ const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
 /**
  * Low-risk categories: file reads, docs edits, generated inventory. Everything
  * else that is not blocked is "elevated" (shell, source edits, git, network,
- * packages, deploys, destructive deletes, etc.).
+ * packages, deploys, destructive deletes, uncategorized commands, etc.).
  */
 const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "file_read",
   "docs_edit",
   "generated_inventory_edit",
-  "other",
 ]);
 
 /**
@@ -1073,7 +1072,7 @@ function processControlCommand(command: string): boolean {
 
 function containerOrDeployCommand(command: string): boolean {
   const normalized = command.toLowerCase();
-  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az)\b/.test(normalized);
+  return /\b(?:docker|docker-compose|kubectl|helm|terraform|pulumi|flyctl|vercel|netlify|gcloud|aws|az|wrangler)\b/.test(normalized);
 }
 
 function packageInstallCommand(command: string): boolean {

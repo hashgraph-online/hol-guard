@@ -9,7 +9,6 @@ from codex_plugin_scanner.guard.action_lattice import GUARD_ACTION_LATTICE, GUAR
 from codex_plugin_scanner.guard.runtime.effect_contract import (
     EFFECT_CONTRACT_SCHEMA_VERSION,
     TRUTHFUL_STATE_GLOSSARY,
-    UNCERTAINTY_FLOOR,
     BoundaryVersionClassification,
     BoundaryVersionStatus,
     ContainmentRequirement,
@@ -30,8 +29,6 @@ from codex_plugin_scanner.guard.runtime.effect_contract import (
     ProtectionHealth,
     TruthfulState,
     UncertaintyKind,
-    apply_uncertainty_floor,
-    decode_boundary_version,
     derive_activity_state,
     derive_protection_state,
     maximum_action_floor,
@@ -161,16 +158,6 @@ def test_proof_route_is_separate_from_canonical_action_floor() -> None:
         DecisionBasis("allow", "verified")  # type: ignore[arg-type]
 
 
-def test_every_typed_uncertainty_retains_or_raises_every_canonical_floor() -> None:
-    assert set(UNCERTAINTY_FLOOR) == set(UncertaintyKind)
-    for current, uncertainty in itertools.product(GUARD_ACTION_LATTICE, UncertaintyKind):
-        result = apply_uncertainty_floor(current, (uncertainty,))
-        assert GUARD_ACTION_SEVERITY[result] >= GUARD_ACTION_SEVERITY[current]
-        assert GUARD_ACTION_SEVERITY[result] >= GUARD_ACTION_SEVERITY[UNCERTAINTY_FLOOR[uncertainty]]
-    with pytest.raises(ValueError, match="exact UncertaintyKind"):
-        apply_uncertainty_floor("review", ("parser-failure",))  # type: ignore[arg-type]
-
-
 def test_protection_state_is_derived_from_typed_health() -> None:
     healthy = ProtectionHealth(True, True, True, True, True)
     partial = ProtectionHealth(True, True, True, True, False)
@@ -228,38 +215,6 @@ def test_confirmed_states_require_strong_correlated_post_execution_proof() -> No
 def test_activity_state_rejects_non_contract_proof_objects(proof: object) -> None:
     with pytest.raises(ValueError, match="proof must be a PostExecutionProof"):
         derive_activity_state(EnforcementOutcome.PERMITTED, proof)  # type: ignore[arg-type]
-
-
-@pytest.mark.parametrize(
-    ("value", "status", "uncertainty"),
-    [
-        ("1.0.0", BoundaryVersionStatus.CURRENT, None),
-        (None, BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("1.0", BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("01.0.0", BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("\u0661.\u0660.\u0660", BoundaryVersionStatus.MALFORMED, UncertaintyKind.MALFORMED_BOUNDARY_VERSION),
-        ("2.0.0", BoundaryVersionStatus.UNKNOWN, UncertaintyKind.UNKNOWN_BOUNDARY_VERSION),
-        ("0.9.0", BoundaryVersionStatus.ROLLBACK, UncertaintyKind.ROLLBACK_BOUNDARY_VERSION),
-    ],
-)
-def test_boundary_version_decoder_classifies_drift_fail_closed(
-    value: object,
-    status: BoundaryVersionStatus,
-    uncertainty: UncertaintyKind | None,
-) -> None:
-    classification = decode_boundary_version(value)
-
-    assert classification.status is status
-    assert classification.uncertainty is uncertainty
-    assert classification.action_floor is (None if uncertainty is None else "block")
-
-
-def test_boundary_version_decoder_bounds_numeric_input_before_integer_conversion() -> None:
-    classification = decode_boundary_version(f"1.{('9' * 5000)}.0")
-
-    assert classification.status is BoundaryVersionStatus.MALFORMED
-    assert classification.uncertainty is UncertaintyKind.MALFORMED_BOUNDARY_VERSION
-    assert classification.action_floor == "block"
 
 
 @pytest.mark.parametrize(

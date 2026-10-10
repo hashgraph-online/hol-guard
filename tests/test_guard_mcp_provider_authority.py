@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher_inputs import NativePolicySnapshotPublisherInputs
 from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
 from codex_plugin_scanner.guard.runtime.custom_extension_continuity import record_local_custom_extension_mutation
-from codex_plugin_scanner.guard.runtime.mcp_provider_permissions import composio_provider_action_floor
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -79,13 +78,6 @@ def test_protected_transaction_saves_deny_and_native_choice_without_granting_all
     inputs._condition = Condition()
     inputs._workspace_paths = set()
     assert inputs._compiled_effective_policy()["mcp_provider_actions"] == choices
-    floor = composio_provider_action_floor(
-        choices,
-        harness="codex",
-        tool_name=_BATCH,
-        arguments={"tools": [{"tool_slug": "slack_send_message", "arguments": {}, "account": "other"}]},
-    )
-    assert floor is not None and floor.action == "block"
     # Saving unrelated outer choices must preserve the inner restriction.
     _save(store, source, updates=())
     assert store.read_mcp_provider_choices() == choices

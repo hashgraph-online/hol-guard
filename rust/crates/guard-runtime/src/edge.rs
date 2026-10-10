@@ -17,9 +17,10 @@ use crate::native_hook_receipt::{
 #[path = "edge_identity.rs"]
 mod edge_identity;
 use edge_identity::{
-    canonical_identity_digest, request_id_is_safe, request_payload_identity,
-    stable_policy_identity, MAX_EVENT_BYTES, MAX_HARNESS_BYTES, MAX_PATH_BYTES,
+    canonical_identity_digest, request_id_is_safe, request_payload_identity, MAX_EVENT_BYTES,
+    MAX_HARNESS_BYTES, MAX_PATH_BYTES,
 };
+pub(crate) use edge_identity::{policy_generation_matches, stable_policy_identity};
 
 /// Bind the exact validated tool intent without policy-generation identity.
 /// Policy evaluation remains bound by `request_identity`; this commitment is
@@ -218,12 +219,7 @@ fn validate_envelope_shape(envelope: &GuardHookEnvelopeV2) -> Result<(), String>
     if envelope.policy_generation == 0 {
         return Err("native_hook_policy_generation_invalid".to_owned());
     }
-    if envelope
-        .policy_snapshot
-        .get("generation")
-        .and_then(Value::as_u64)
-        != Some(envelope.policy_generation)
-    {
+    if !policy_generation_matches(&envelope.policy_snapshot, envelope.policy_generation) {
         return Err("native_hook_policy_generation_mismatch".to_owned());
     }
     let encoded = serde_json::to_vec(envelope)
@@ -293,6 +289,7 @@ fn evaluate_validated_envelope(
                 guard_command::pretool::PathContext {
                     home_dir: Some(envelope.source.home_dir.as_str()),
                     cwd: envelope.source.cwd.as_deref(),
+                    cdpath_unset: false,
                 },
                 Some(
                     envelope

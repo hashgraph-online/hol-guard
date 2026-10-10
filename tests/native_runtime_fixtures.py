@@ -78,8 +78,13 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
 
         previous_native = os.environ.get("HOL_GUARD_NATIVE")
         previous_binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
+        previous_test_mode = os.environ.get("HOL_GUARD_TEST_MODE")
+        previous_diagnostic = os.environ.get("HOL_GUARD_NATIVE_DIAGNOSTIC")
         os.environ["HOL_GUARD_NATIVE"] = "force"
         os.environ["HOL_GUARD_NATIVE_BINARY"] = str(binary)
+        # The resident pool captures its environment when the prewarm starts.
+        os.environ["HOL_GUARD_TEST_MODE"] = "1"
+        os.environ["HOL_GUARD_NATIVE_DIAGNOSTIC"] = "1"
         try:
             native_context.native_context_digest(
                 "launch_argv_digest",
@@ -95,6 +100,14 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
                 os.environ.pop("HOL_GUARD_NATIVE_BINARY", None)
             else:
                 os.environ["HOL_GUARD_NATIVE_BINARY"] = previous_binary
+            if previous_test_mode is None:
+                os.environ.pop("HOL_GUARD_TEST_MODE", None)
+            else:
+                os.environ["HOL_GUARD_TEST_MODE"] = previous_test_mode
+            if previous_diagnostic is None:
+                os.environ.pop("HOL_GUARD_NATIVE_DIAGNOSTIC", None)
+            else:
+                os.environ["HOL_GUARD_NATIVE_DIAGNOSTIC"] = previous_diagnostic
     yield guard_home
     close_native_residents(guard_home)
 
@@ -417,3 +430,19 @@ def _close_native_policy_publishers_before_monkeypatch_restore(
             live_publishers.append(f"{publisher.guard_home}:{thread.name}")
     if live_publishers:
         raise AssertionError("native policy publisher thread(s) survived test teardown: " + ", ".join(live_publishers))
+
+
+@pytest.fixture
+def native_data_flow_runtime(
+    native_hook_force: Path, _native_context_home: Path, monkeypatch: pytest.MonkeyPatch
+) -> Path:
+    """Serve data-flow analysis from the real resident; there is no Python fallback."""
+
+    from codex_plugin_scanner.guard import native_data_flow
+
+    monkeypatch.setattr(
+        native_data_flow,
+        "_resolve_digest_home",
+        lambda guard_home: guard_home if guard_home is not None else _native_context_home,
+    )
+    return _native_context_home

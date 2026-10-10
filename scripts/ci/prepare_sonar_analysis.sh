@@ -5,7 +5,7 @@ set -euo pipefail
 shopt -s nullglob
 reports=(coverage-data/*/.coverage)
 echo "Combining ${#reports[@]} shard coverage files"
-test "${#reports[@]}" -eq 128
+test "${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"
 uv run --no-sync python scripts/ci/select_pytest_coverage.py --verify-downloads coverage-data
 uv run --no-sync python scripts/ci/parallel_coverage_combine.py --workers 4 "${reports[@]}"
 uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4

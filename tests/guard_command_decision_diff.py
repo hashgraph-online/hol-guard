@@ -136,6 +136,10 @@ _EVIDENCE_SOURCE_PATHS: Final = (
     REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "native_command_source_evaluation_batch.rs",
     REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "native_command_source.rs",
     REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "bin" / "guard-command-source.rs",
+    REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "command_evaluation_compose.rs",
+    REPO_ROOT / "rust" / "crates" / "guard-command" / "src" / "command_evaluation_support.rs",
+    REPO_ROOT / "rust" / "crates" / "guard-runtime" / "src" / "command_effect.rs",
+    REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "native_command_effect.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "action_lattice.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "models.py",
     REPO_ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_parser.py",
@@ -185,7 +189,8 @@ def framed_sha256(payload: bytes) -> str:
 def source_binding_id(repo_relative_path: str) -> str:
     """Return a stable opaque identifier for one repository source path."""
 
-    return f"source-{hashlib.sha256(repo_relative_path.encode()).hexdigest()[:24]}"
+    normalized = repo_relative_path.replace("\\", "/")
+    return f"source-{hashlib.sha256(normalized.encode()).hexdigest()[:24]}"
 
 
 def report_framed_sha256(report: Mapping[str, object] | None = None) -> str:

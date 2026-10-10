@@ -1202,10 +1202,10 @@ class TestGuardApprovals:
                 GuardApprovalRequest(
                     request_id=request_id,
                     harness=harness,
-                    artifact_id=f"{harness}:project:mcp:item",
+                    artifact_id="shared:project:mcp:item",
                     artifact_name=f"{harness}-item",
                     artifact_type="mcp_server",
-                    artifact_hash=f"hash-{request_id}",
+                    artifact_hash="hash-shared-item",
                     policy_action="require-reapproval",
                     recommended_scope="global",
                     changed_fields=("args",),
@@ -1216,6 +1216,26 @@ class TestGuardApprovals:
                 ),
                 "2026-04-11T00:00:00+00:00",
             )
+        # A pending request for a different action must survive a global
+        # decision about this one.
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-unrelated",
+                harness="codex",
+                artifact_id="codex:project:mcp:other",
+                artifact_name="other-item",
+                artifact_type="mcp_server",
+                artifact_hash="hash-other-item",
+                policy_action="require-reapproval",
+                recommended_scope="global",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "codex" / ".config" / "guard.toml"),
+                review_command="hol-guard approvals approve req-unrelated",
+                approval_url="http://127.0.0.1:4455/approvals/req-unrelated",
+            ),
+            "2026-04-11T00:01:00+00:00",
+        )
 
         resolved = apply_approval_resolution(
             store=store,
@@ -1231,7 +1251,7 @@ class TestGuardApprovals:
         decisions = store.list_policy_decisions()
 
         assert resolved["status"] == "resolved"
-        assert pending == []
+        assert [row["request_id"] for row in pending] == ["req-unrelated"]
         assert decisions[0]["harness"] == "*"
 
     def test_guard_package_artifact_approval_replay_fails_closed_without_integrity_key(self, tmp_path):
@@ -2830,7 +2850,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 200
-        assert allow_headers == ("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
+        assert allow_headers == ("Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
 
     def test_guard_daemon_limits_request_resolution_to_local_dashboard_origin(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
