@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 from .native_business_document_compile import COMPILE_CAPABILITY, MAX_DOCUMENT_BYTES, UnverifiedBusinessDocument
 from .native_policy_snapshot_codec import _canonical_json_bytes_v3, _strict_json_loads_v3, _valid_digest_v3
-from .native_policy_snapshot_constants import NativePolicySnapshotError
+from .native_policy_snapshot_constants import BUSINESS_NATIVE_TIMEOUT_SECONDS, NativePolicySnapshotError
 
 if TYPE_CHECKING:
     from .native_runtime_values import NativeRuntimeStatus
@@ -25,7 +25,7 @@ CODEC_CAPABILITY = "native-business-source-codec-v1"
 MAX_REQUEST_BYTES = 2 * MAX_RECORD_BYTES + 4096
 # One native codec call. A complete installation spans several native processes
 # and owns a larger budget; each call inside it still keeps this cap.
-OPERATION_BUDGET_SECONDS = 5.0
+OPERATION_BUDGET_SECONDS = BUSINESS_NATIVE_TIMEOUT_SECONDS
 _REQUIRED = {COMPILE_CAPABILITY, CODEC_CAPABILITY, "native-business-policy-retained-floor-v1"}
 _VERIFICATION_FIELDS = frozenset(
     {

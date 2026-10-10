@@ -19,10 +19,10 @@ from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .native_context import (
     context_mcp_tool_approval_hash,
     context_mcp_tool_policy,
-    context_mcp_tool_risk,
     context_opaque_digest,
 )
 from .native_mcp_runtime_evidence import argument_entries, native_command_text
+from .native_mcp_tool_evidence import native_tool_risk_evidence
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -44,7 +44,7 @@ from .runtime.approval_reuse import (
     approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
-from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
+from .runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
@@ -637,15 +637,12 @@ def _evaluate_current_tool_call(
             "config": _tool_call_configuration(config),
         }
     )
-    categories = tuple(policy["risk_categories"])
-    signals = _risk_signals_from_categories(artifact, arguments, categories)
-    summary = {
-        "no_risk": "Guard did not detect a high-risk signal in this tool call.",
-        "configuration_stricter": (
-            "Local Guard's current configuration is stricter than the tool-call-specific recommendation."
-        ),
-        "risk": _risk_summary_from_signals(signals),
-    }[policy["summary_code"]]
+    categories, signals, summary = native_tool_risk_evidence(
+        artifact,
+        arguments,
+        risk_categories=tuple(policy["risk_categories"]),
+        summary_code=policy["summary_code"],
+    )
     return ToolCallDecision(
         action=cast(GuardAction, policy["action"]),
         source=policy["source"],
@@ -700,61 +697,18 @@ def _tool_call_decision_with_reuse(
 
 
 def tool_call_risk_signals(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    return _risk_signals_from_categories(artifact, arguments, tool_call_risk_categories(artifact, arguments))
-
-
-def _risk_signals_from_categories(
-    artifact: GuardArtifact,
-    arguments: object,
-    categories: tuple[str, ...],
-) -> tuple[str, ...]:
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    signals_by_category: dict[str, str] = {
-        "filesystem_access": "call shape implies filesystem path access",
-        "destructive_mutation": "tool name implies destructive file or system changes",
-        "command_execution": "tool name implies shell or command execution",
-        "outbound_network": "call arguments imply outbound network activity",
-        "secret_access": "call arguments mention sensitive local files or secrets",
-        "privileged_system_mutation": "call arguments imply privileged system mutation",
-        "tool_schema_mismatch": "tool name understates dangerous schema capabilities",
-    }
-    if browser_intent is not None:
-        target = browser_intent_display_target(browser_intent, arguments)
-        signals_by_category.update(
-            {
-                "browser_navigation": f"browser navigation to {target}",
-                "browser_inspection": f"browser inspection of {target}",
-                "browser_interaction": f"browser interaction on {target}",
-                "browser_transfer": f"browser file transfer involving {target}",
-                "browser_privileged": f"privileged browser access to {target}",
-                "browser_external_domain": f"first navigation to external domain {target}",
-                "browser_shared_profile": "browser MCP uses a shared or remote-debugging profile",
-                "browser_sensitive_surface": (
-                    "browser action touches sensitive surfaces: " + ", ".join(browser_intent.sensitive_surface_flags)
-                ),
-            }
-        )
-    return tuple(signals_by_category[category] for category in categories)
+    """Return Rust-owned human-readable risk signals for one MCP tool call."""
+    return native_tool_risk_evidence(artifact, arguments)[1]
 
 
 def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
     """Return Rust-owned Cloud risk categories for one MCP tool call."""
-    return context_mcp_tool_risk(
-        {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)},
-        arguments,
-    )
+    return native_tool_risk_evidence(artifact, arguments)[0]
 
 
 def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    return _risk_summary_from_signals(tool_call_risk_signals(artifact, arguments))
-
-
-def _risk_summary_from_signals(signals: tuple[str, ...]) -> str:
-    if len(signals) == 0:
-        return "No high-risk signal was detected in this tool call."
-    if len(signals) == 1:
-        return signals[0].capitalize() + "."
-    return f"{signals[0].capitalize()}, and it also {', and it also '.join(signals[1:])}."
+    """Return the Rust-owned risk summary for one MCP tool call."""
+    return native_tool_risk_evidence(artifact, arguments)[2]
 
 
 _INLINE_SOURCES = frozenset({"inline-approved", "inline-denied", "native-approved", "claude-native-approved"})

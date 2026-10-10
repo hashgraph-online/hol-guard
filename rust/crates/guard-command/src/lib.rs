@@ -42,11 +42,11 @@ mod executable_flag_contract;
 pub mod extension_control;
 pub mod extension_evidence;
 pub mod extension_trust;
-mod github_capability_contract;
+pub mod github_capability_contract;
 #[cfg(test)]
 mod github_capability_contract_tests;
 mod github_capability_interaction;
-mod github_command_capabilities;
+pub mod github_command_capabilities;
 #[cfg(test)]
 mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
@@ -67,10 +67,12 @@ pub mod launch_identity_environment;
 pub mod mcp_arguments;
 pub mod mcp_launch_environment;
 pub mod mcp_runtime_evidence;
+pub mod mcp_skill_firewall;
 pub mod mcp_tool_approval;
 pub mod mcp_tool_catalog;
 pub mod mcp_tool_policy;
 pub mod mcp_tool_risk;
+pub mod mcp_tool_signals;
 pub mod native_command_catalog;
 pub mod native_command_controls;
 pub mod native_command_extension_evidence;

@@ -3,25 +3,18 @@
 from __future__ import annotations
 
 import importlib
-from dataclasses import asdict, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..models import GuardArtifact
 from ..native_context import (
-    context_mcp_descriptor,
     context_sha256_digest,
     is_unbound_context_digest,
     native_context_failure_reason,
 )
 from ..native_mcp_runtime_evidence import argument_entries, native_runtime_action_record, runtime_action_key
-from .approval_context import build_configured_environment_hash
-from .mcp_protection import (
-    McpServerIdentity,
-    McpToolIdentity,
-    build_mcp_server_identity,
-    build_mcp_tool_identity,
-)
+from ..native_mcp_tool_evidence import native_firewall_metadata_patch
 
 if TYPE_CHECKING:
     from .actions import GuardActionEnvelope
@@ -44,68 +37,6 @@ def _publisher_stable_id(source: str | None) -> str | None:
     if not normalized:
         return None
     return f"publisher:{_descriptor_digest(normalized)}"
-
-
-def portal_mcp_server_identity(
-    identity: McpServerIdentity,
-    *,
-    config_path: str,
-    args: tuple[str, ...] = (),
-    publisher: str | None = None,
-    install_source: str | None = None,
-) -> dict[str, object]:
-    return context_mcp_descriptor(
-        "mcp_server_descriptor",
-        {
-            "identity": asdict(identity),
-            "config_path": config_path,
-            "args": list(args),
-            "publisher": publisher,
-            "install_source": install_source,
-        },
-    )
-
-
-def _portal_mcp_server_identity_from_parts(
-    *,
-    config_path: str,
-    command: str,
-    args: tuple[str, ...],
-    transport: str,
-    env: dict[str, str] | None = None,
-    publisher: str | None = None,
-    install_source: str | None = None,
-) -> dict[str, object]:
-    identity = build_mcp_server_identity(
-        config_path=config_path,
-        command=command,
-        args=args,
-        transport=transport,
-        env=env,
-    )
-    return portal_mcp_server_identity(
-        identity,
-        config_path=config_path,
-        args=args,
-        publisher=publisher,
-        install_source=install_source,
-    )
-
-
-def portal_mcp_tool_identity(
-    identity: McpToolIdentity,
-    *,
-    schema: object | None = None,
-    description: str | None = None,
-) -> dict[str, object]:
-    return context_mcp_descriptor(
-        "mcp_tool_descriptor",
-        {
-            "identity": asdict(identity),
-            "schema": schema,
-            "description": description,
-        },
-    )
 
 
 def skill_identity_metadata(
@@ -161,29 +92,6 @@ def build_mcp_skill_firewall_fingerprints(
     return payload
 
 
-def attach_mcp_skill_firewall_metadata(
-    metadata: dict[str, object],
-    firewall: dict[str, object],
-) -> dict[str, object]:
-    enriched = dict(metadata)
-    enriched["mcpSkillFirewall"] = firewall
-    mcp_server = firewall.get("mcpServer")
-    if isinstance(mcp_server, dict):
-        enriched["mcp_server_identity"] = _legacy_server_identity(mcp_server)
-    mcp_tools = firewall.get("mcpTools")
-    if isinstance(mcp_tools, list):
-        if len(mcp_tools) == 1 and isinstance(mcp_tools[0], dict):
-            enriched["mcp_tool_identity"] = _legacy_tool_identity(mcp_tools[0])
-        elif mcp_tools:
-            enriched["mcp_tool_identities"] = [
-                _legacy_tool_identity(item) for item in mcp_tools if isinstance(item, dict)
-            ]
-    skill = firewall.get("skill")
-    if isinstance(skill, dict):
-        enriched["mcp_skill_identity"] = _legacy_skill_identity(skill)
-    return enriched
-
-
 def build_runtime_action_record(
     *,
     artifact: GuardArtifact,
@@ -208,204 +116,6 @@ def build_runtime_action_record(
     )
 
 
-def enrich_artifact_with_mcp_skill_firewall(artifact: GuardArtifact) -> GuardArtifact:
-    firewall = _firewall_for_artifact(artifact)
-    if firewall is None:
-        return artifact
-    metadata = attach_mcp_skill_firewall_metadata(dict(artifact.metadata), firewall)
-    return replace(artifact, metadata=metadata)
-
-
-def scanner_evidence_for_mcp_skill_firewall(
-    artifact: GuardArtifact,
-    *,
-    arguments: object | None = None,
-    action_envelope: GuardActionEnvelope | None = None,
-    risk_categories: tuple[str, ...] = (),
-) -> dict[str, object]:
-    enriched = enrich_artifact_with_mcp_skill_firewall(artifact)
-    evidence: dict[str, object] = {}
-    firewall = enriched.metadata.get("mcpSkillFirewall")
-    if isinstance(firewall, dict):
-        evidence["mcpSkillFirewall"] = firewall
-    runtime_action = build_runtime_action_record(
-        artifact=enriched,
-        arguments=arguments,
-        action_envelope=action_envelope,
-        risk_categories=risk_categories,
-    )
-    if runtime_action is not None:
-        evidence["runtimeAction"] = runtime_action
-    return evidence
-
-
-def _firewall_for_artifact(artifact: GuardArtifact) -> dict[str, object] | None:
-    if artifact.artifact_type == "mcp_server":
-        return _firewall_for_mcp_server(artifact)
-    if artifact.artifact_type == "skill":
-        return _firewall_for_skill(artifact)
-    if artifact.artifact_type == "tool_call":
-        return _firewall_for_tool_call(artifact)
-    return None
-
-
-def _firewall_for_mcp_server(artifact: GuardArtifact) -> dict[str, object] | None:
-    if not isinstance(artifact.command, str) or not artifact.command.strip():
-        return None
-    env = _string_env(artifact.metadata.get("env"))
-    transport = artifact.transport or ("http" if artifact.url else "stdio")
-    server = _portal_mcp_server_identity_from_parts(
-        config_path=artifact.config_path,
-        command=artifact.command,
-        args=artifact.args,
-        transport=transport,
-        env=env,
-        publisher=artifact.publisher,
-    )
-    tool_names = _tool_names_from_metadata(artifact.metadata)
-    tools = [
-        portal_mcp_tool_identity(
-            build_mcp_tool_identity(server_hash=str(server["identityHash"]), tool_name=tool_name),
-            schema=None,
-            description=None,
-        )
-        for tool_name in tool_names
-    ]
-    return build_mcp_skill_firewall_fingerprints(mcp_server=server, mcp_tools=tools)
-
-
-def _firewall_for_skill(artifact: GuardArtifact) -> dict[str, object] | None:
-    content = _read_text_file(artifact.config_path)
-    if content is None:
-        return None
-    identity = _skill_protection_module().build_skill_identity(content, skill_path=artifact.config_path)
-    skill = portal_skill_identity(identity, publisher=artifact.publisher)
-    return build_mcp_skill_firewall_fingerprints(skill=skill)
-
-
-def _firewall_for_tool_call(artifact: GuardArtifact) -> dict[str, object] | None:
-    server_record = artifact.metadata.get("mcp_server_identity")
-    tool_record = artifact.metadata.get("mcp_tool_identity")
-    if isinstance(server_record, dict) and isinstance(tool_record, dict):
-        server = _portal_server_from_legacy(server_record, artifact)
-        tool = _portal_tool_from_legacy(tool_record, artifact.metadata)
-        return build_mcp_skill_firewall_fingerprints(mcp_server=server, mcp_tools=[tool])
-    if artifact.command is None:
-        return None
-    transport = artifact.transport or "stdio"
-    server_identity = build_mcp_server_identity(
-        config_path=artifact.config_path,
-        command=artifact.metadata.get("server_name", artifact.name).__str__(),
-        args=artifact.args,
-        transport=transport,
-        env=_string_env(artifact.metadata.get("env")),
-    )
-    server = portal_mcp_server_identity(
-        server_identity,
-        config_path=artifact.config_path,
-        args=artifact.args,
-        publisher=artifact.publisher,
-    )
-    tool_name = artifact.command
-    tool_schema = artifact.metadata.get("tool_schema")
-    tool_description = artifact.metadata.get("tool_description")
-    description = tool_description if isinstance(tool_description, str) else None
-    tool_identity = build_mcp_tool_identity(
-        server_hash=str(server["identityHash"]),
-        tool_name=tool_name,
-        schema=tool_schema,
-        description=description,
-    )
-    tool = portal_mcp_tool_identity(
-        tool_identity,
-        schema=tool_schema,
-        description=description,
-    )
-    return build_mcp_skill_firewall_fingerprints(mcp_server=server, mcp_tools=[tool])
-
-
-def _portal_server_from_legacy(record: dict[str, object], artifact: GuardArtifact) -> dict[str, object]:
-    identity_hash = str(record.get("identity_hash") or record.get("identityHash") or "")
-    command = str(record.get("command") or artifact.command or "unknown")
-    args_hash = str(record.get("args_hash") or record.get("argsHash") or identity_hash)
-    transport = str(record.get("transport") or artifact.transport or "unknown")
-    raw_env_keys = record.get("env_keys") or record.get("envKeys")
-    env_keys = [item for item in raw_env_keys if isinstance(item, str)] if isinstance(raw_env_keys, list) else []
-    env_values_hash = _legacy_environment_values_hash(record, env_keys=env_keys)
-    return {
-        "argsHash": args_hash,
-        "command": command,
-        "commandHash": str(record.get("command_hash") or record.get("commandHash") or args_hash),
-        "configPath": str(record.get("config_path") or record.get("configPath") or artifact.config_path),
-        "dependencyHash": record.get("dependency_hash") or record.get("dependencyHash"),
-        "envKeys": env_keys,
-        "envValuesHash": env_values_hash,
-        "identityHash": identity_hash,
-        "packageName": record.get("package_name") or record.get("packageName"),
-        "packageSource": record.get("package_source") or record.get("packageSource"),
-        "packageVersion": record.get("package_version") or record.get("packageVersion"),
-        "publisherStableId": record.get("publisher_stable_id") or record.get("publisherStableId"),
-        "transport": transport,
-        "transportHash": str(record.get("transport_hash") or record.get("transportHash") or identity_hash),
-    }
-
-
-def _portal_tool_from_legacy(record: dict[str, object], metadata: dict[str, object]) -> dict[str, object]:
-    schema = metadata.get("tool_schema")
-    description = metadata.get("tool_description")
-    return {
-        "descriptionHash": record.get("description_hash") or record.get("descriptionHash"),
-        "descriptorHash": record.get("descriptor_hash")
-        or record.get("descriptorHash")
-        or record.get("description_hash")
-        or record.get("descriptionHash"),
-        "hashScope": "full" if schema is not None or description else "manifest",
-        "identityHash": record.get("identity_hash") or record.get("identityHash"),
-        "schemaHash": record.get("schema_hash") or record.get("schemaHash"),
-        "serverHash": record.get("server_hash") or record.get("serverHash"),
-        "toolName": record.get("tool_name") or record.get("toolName"),
-    }
-
-
-def _legacy_server_identity(server: dict[str, object]) -> dict[str, object]:
-    raw_env_keys = server.get("envKeys")
-    env_keys = [item for item in raw_env_keys if isinstance(item, str)] if isinstance(raw_env_keys, list) else []
-    return {
-        "args_hash": server.get("argsHash"),
-        "command": server.get("command"),
-        "command_hash": server.get("commandHash"),
-        "config_path": server.get("configPath"),
-        "dependency_hash": server.get("dependencyHash"),
-        "env_keys": env_keys,
-        "env_values_hash": _legacy_environment_values_hash(server, env_keys=env_keys),
-        "identity_hash": server.get("identityHash"),
-        "package_name": server.get("packageName"),
-        "package_source": server.get("packageSource"),
-        "package_version": server.get("packageVersion"),
-        "publisher_stable_id": server.get("publisherStableId"),
-        "transport": server.get("transport"),
-        "transport_hash": server.get("transportHash"),
-    }
-
-
-def _legacy_environment_values_hash(record: dict[str, object], *, env_keys: list[str]) -> str:
-    raw_hash = record.get("env_values_hash") or record.get("envValuesHash")
-    if isinstance(raw_hash, str) and raw_hash.strip():
-        return raw_hash.strip()
-    return build_configured_environment_hash(None, configured_keys=env_keys)
-
-
-def _legacy_tool_identity(tool: dict[str, object]) -> dict[str, object]:
-    return {
-        "description_hash": tool.get("descriptionHash"),
-        "descriptor_hash": tool.get("descriptorHash"),
-        "identity_hash": tool.get("identityHash"),
-        "schema_hash": tool.get("schemaHash"),
-        "server_hash": tool.get("serverHash"),
-        "tool_name": tool.get("toolName"),
-    }
-
-
 def _legacy_skill_identity(skill: dict[str, object]) -> dict[str, object]:
     return {
         "dependency_hashes": skill.get("dependencyHashes") or [],
@@ -417,17 +127,13 @@ def _legacy_skill_identity(skill: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _tool_names_from_metadata(metadata: dict[str, object]) -> list[str]:
-    raw = metadata.get("tool_names") or metadata.get("toolNames")
-    if not isinstance(raw, list):
-        return []
-    return [str(item) for item in raw if isinstance(item, str) and item.strip()]
-
-
-def _string_env(value: object) -> dict[str, str]:
-    if not isinstance(value, dict):
-        return {}
-    return {str(key): str(item) for key, item in value.items() if isinstance(key, str) and isinstance(item, str)}
+def _firewall_for_skill(artifact: GuardArtifact) -> dict[str, object] | None:
+    content = _read_text_file(artifact.config_path)
+    if content is None:
+        return None
+    identity = _skill_protection_module().build_skill_identity(content, skill_path=artifact.config_path)
+    skill = portal_skill_identity(identity, publisher=artifact.publisher)
+    return build_mcp_skill_firewall_fingerprints(skill=skill)
 
 
 def _read_text_file(path: str) -> str | None:
@@ -437,14 +143,44 @@ def _read_text_file(path: str) -> str | None:
         return None
 
 
+def _can_carry_firewall(artifact: GuardArtifact) -> bool:
+    if artifact.artifact_type == "mcp_server":
+        return isinstance(artifact.command, str) and bool(artifact.command.strip())
+    if artifact.command is not None:
+        return True
+    return isinstance(artifact.metadata.get("mcp_server_identity"), dict) and isinstance(
+        artifact.metadata.get("mcp_tool_identity"), dict
+    )
+
+
+def enrich_artifact_with_mcp_skill_firewall(artifact: GuardArtifact) -> GuardArtifact:
+    """Attach firewall metadata; MCP server and tool-call evidence is native-owned."""
+    if artifact.artifact_type == "skill":
+        firewall = _firewall_for_skill(artifact)
+        if firewall is None:
+            return artifact
+        skill = firewall.get("skill")
+        metadata = dict(artifact.metadata)
+        metadata["mcpSkillFirewall"] = firewall
+        if isinstance(skill, dict):
+            metadata["mcp_skill_identity"] = _legacy_skill_identity(skill)
+        return replace(artifact, metadata=metadata)
+    if artifact.artifact_type not in {"mcp_server", "tool_call"}:
+        return artifact
+    if not _can_carry_firewall(artifact):
+        # Transport precondition, not evidence derivation: these never have a
+        # firewall, so they must not need a resident round trip.
+        return artifact
+    patch = native_firewall_metadata_patch(artifact)
+    if patch is None:
+        return artifact
+    return replace(artifact, metadata={**artifact.metadata, **patch})
+
+
 __all__ = [
-    "attach_mcp_skill_firewall_metadata",
     "build_mcp_skill_firewall_fingerprints",
     "build_runtime_action_record",
     "enrich_artifact_with_mcp_skill_firewall",
-    "portal_mcp_server_identity",
-    "portal_mcp_tool_identity",
     "portal_skill_identity",
-    "scanner_evidence_for_mcp_skill_firewall",
     "skill_identity_metadata",
 ]
