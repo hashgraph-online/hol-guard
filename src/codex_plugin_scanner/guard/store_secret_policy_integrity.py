@@ -12,6 +12,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
+from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -186,7 +187,7 @@ class StoreSecretPolicyIntegrityMixin:
         return cast(SecretStore | None, secret_store)
 
     @_policy_integrity_secret_store.setter
-    def _policy_integrity_secret_store(self, value: SecretStore | None | object) -> None:
+    def _policy_integrity_secret_store(self, value: SecretStore | object | None) -> None:
         self.__policy_integrity_secret_store = value
 
     def _build_scoped_secret_ref(self, prefix: str) -> str:
@@ -278,6 +279,8 @@ class StoreSecretPolicyIntegrityMixin:
             return None
         if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
             return secret_store.get_secret(secret_id)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return self._get_secret_from_store(secret_store, secret_id)
         if isinstance(secret_store, FallbackSecretStore):
             fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_value is not None:
@@ -421,6 +424,8 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return _secret_store_backend_name(secret_store.fallback)
         return _secret_store_backend_name(secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -646,24 +651,6 @@ class StoreSecretPolicyIntegrityMixin:
             """,
             _REMOTE_POLICY_SOURCE_PARAMS,
         ).fetchone()
-        return int(row["total"]) if row is not None else 0
-
-    @staticmethod
-    def _count_local_policy_rows(
-        connection: sqlite3.Connection,
-        *,
-        harness: str | None = None,
-    ) -> int:
-        query = f"""
-            select count(*) as total
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
-        """
-        params: tuple[object, ...] = _REMOTE_POLICY_SOURCE_PARAMS
-        if harness is not None:
-            query += " and harness = ?"
-            params = (*params, harness)
-        row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
     def _advance_policy_integrity_generation(
@@ -1072,35 +1059,37 @@ class StoreSecretPolicyIntegrityMixin:
 
         def compute_prepared_state(base_state: dict[str, object]) -> dict[str, object]:
             connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            connection.row_factory = sqlite3.Row
-            try:
-                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                return self._prepared_startup_policy_integrity_state(
-                    connection,
-                    key=raw_key,
-                    key_id=key_id,
-                    trusted_state=base_state,
-                )
-            finally:
-                connection.close()
+            with self._hold_storage_gate(exclusive=False):
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+                connection.row_factory = sqlite3.Row
+                try:
+                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                    return self._prepared_startup_policy_integrity_state(
+                        connection,
+                        key=raw_key,
+                        key_id=key_id,
+                        trusted_state=base_state,
+                    )
+                finally:
+                    connection.close()
 
         prepared_state = compute_prepared_state(trusted_state)
         current_trusted_state = self._load_policy_integrity_control_state(create=False)
         if current_trusted_state is None:
             connect_timeout_seconds = sqlite_connect_timeout_seconds()
-            connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
-            connection.row_factory = sqlite3.Row
-            try:
-                connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
-                still_matches = self._prefetched_startup_state_still_matches_local_rows(
-                    connection,
-                    key=raw_key,
-                    key_id=key_id,
-                    trusted_state=trusted_state,
-                )
-            finally:
-                connection.close()
+            with self._hold_storage_gate(exclusive=False):
+                connection = sqlite3.connect(self.path, timeout=connect_timeout_seconds)
+                connection.row_factory = sqlite3.Row
+                try:
+                    connection.execute(f"pragma busy_timeout={int(connect_timeout_seconds * 1000)}")
+                    still_matches = self._prefetched_startup_state_still_matches_local_rows(
+                        connection,
+                        key=raw_key,
+                        key_id=key_id,
+                        trusted_state=trusted_state,
+                    )
+                finally:
+                    connection.close()
             if prepared_state == trusted_state and still_matches:
                 self._startup_prefetched_policy_integrity_trusted_state = trusted_state
                 return

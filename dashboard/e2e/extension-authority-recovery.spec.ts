@@ -7,6 +7,7 @@ import {
   emptyReceiptsPayload,
   freeStateSnapshot,
 } from "./fixture-states";
+import { routeCatalogV2, type CatalogFixture } from "./extension-control-fixtures";
 
 const DAEMON = "guardDaemon=http://127.0.0.1:4175";
 const catalogDigest = "a".repeat(64);
@@ -36,6 +37,7 @@ async function mountRecoveryFixture(page: Page, setup?: {
   initialHealth?: "tampered" | "unenrolled";
 }): Promise<void> {
   let repaired = false;
+  await routeCatalogV2(page, () => catalog as unknown as CatalogFixture);
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -115,6 +117,23 @@ test("enrollment waits for approval lookup and refreshes on Check again", async 
   setup.failSettings = false;
   await page.getByRole("button", { name: "Check again", exact: true }).click();
   await expect(page.getByRole("button", { name: "Copy setup command", exact: true })).toBeVisible();
+});
+
+test("recovery routes unconfigured approval to settings instead of asking for proof", async ({ page }) => {
+  const runtimeErrors: string[] = [];
+  page.on("pageerror", (error) => runtimeErrors.push(error.message));
+  await mountRecoveryFixture(page, {
+    configured: false,
+    enabled: false,
+    failSettings: false,
+    initialHealth: "tampered",
+  });
+  await page.goto(`/extensions?${DAEMON}`);
+  await expect(page.getByRole("heading", { name: "Protection needs repair" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Repair protection", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Set up approval", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\?.*section=approval/);
+  await expect(runtimeErrors).toEqual([]);
 });
 
 test("authenticated extension recovery shows progress and reaches protected state", async ({ page }) => {

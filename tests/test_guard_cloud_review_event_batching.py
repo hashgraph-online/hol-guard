@@ -10,7 +10,11 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_wake import review_event_wake_signal
-from codex_plugin_scanner.guard.runtime import cloud_review_event_delivery, cloud_review_sync, cloud_review_sync_worker
+from codex_plugin_scanner.guard.runtime import (
+    cloud_review_event_delivery,
+    cloud_review_sync,
+    cloud_review_sync_worker,
+)
 from codex_plugin_scanner.guard.runtime.cloud_review_batching import (
     CLOUD_REVIEW_DEFAULT_BATCH_EVENTS,
     CLOUD_REVIEW_MAX_BATCH_BYTES,
@@ -359,6 +363,9 @@ def test_retry_deadline_bounds_healthy_worker_wait(tmp_path: Path, monkeypatch: 
     store = connected_exact_review_store(tmp_path)
     stop_event = threading.Event()
     waits: list[float] = []
+    # Start the native resident before the deadline clock so cold-start cost
+    # does not eat the one-second retry window under test.
+    store.get_review_event_oauth_binding()
 
     class RecordingSignal:
         def generation(self) -> int:

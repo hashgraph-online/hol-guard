@@ -33,6 +33,8 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 @pytest.fixture(autouse=True)
 def _stable_guard_run_launch_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2023,6 +2025,7 @@ def test_matching_saved_allow_is_composed_non_consumingly_before_any_claim(
     assert item["approval_reuse_reason_code"] == reason_code
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_evaluation_records_exact_saved_allow_without_claiming_before_launch(
     tmp_path: Path,
 ) -> None:
@@ -2228,13 +2231,13 @@ def _with_runtime_detector_telemetry(
 
 
 def test_runtime_detector_context_excludes_only_elapsed_and_normalizes_semantics() -> None:
-    context = guard_runner_module._runtime_detector_context(
+    context = guard_runner_module._authority.detector_authority(
         _with_runtime_detector_telemetry(
             {"blocked": False, "artifacts": []},
             status="ok",
             elapsed_ms=917,
         )
-    )
+    ).context
 
     assert context is not None
     assert context["telemetry"] == [
@@ -2269,7 +2272,7 @@ def test_runtime_detector_telemetry_status_change_after_claim_prevents_launch(
         status="ok",
         elapsed_ms=1,
     )
-    initial_detector_context = guard_runner_module._runtime_detector_context(initial_detector_evaluation)
+    initial_detector_context = guard_runner_module._authority.detector_authority(initial_detector_evaluation).context
     assert initial_detector_context is not None
     initial = evaluate_detection(
         detection,
@@ -2333,7 +2336,7 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
         status="ok",
         elapsed_ms=1,
     )
-    initial_detector_context = guard_runner_module._runtime_detector_context(initial_detector_evaluation)
+    initial_detector_context = guard_runner_module._authority.detector_authority(initial_detector_evaluation).context
     assert initial_detector_context is not None
     initial = evaluate_detection(
         detection,
@@ -2569,7 +2572,10 @@ def test_changed_scanner_provenance_rejects_review_allow_as_capability_change(tm
     )
 
 
-def test_saved_block_remains_authoritative_after_current_review_is_computed(tmp_path: Path) -> None:
+def test_saved_block_remains_authoritative_after_current_review_is_computed(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
@@ -2596,6 +2602,7 @@ def test_saved_block_remains_authoritative_after_current_review_is_computed(tmp_
 
 def test_consumer_current_allow_and_exact_allow_do_not_hide_tampered_broader_authority(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
@@ -2652,6 +2659,7 @@ def test_consumer_current_allow_and_exact_allow_do_not_hide_tampered_broader_aut
 
 def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
@@ -2696,7 +2704,9 @@ def test_consumer_current_allow_detects_tampered_block_moved_out_of_exact_lookup
     assert item["approval_reuse_reason_code"] == "approval_reuse_integrity_failure"
 
 
-def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path: Path) -> None:
+def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
@@ -2740,11 +2750,12 @@ def test_consumer_current_allow_ignores_tampered_nonmatching_local_row(tmp_path:
 def test_approval_queue_persists_exact_v1_context_instead_of_legacy_content_hash(
     tmp_path: Path,
     queued_action: GuardAction,
+    native_context_digest: Path,
 ) -> None:
     artifact = _artifact(tmp_path)
     detection = _detection(artifact)
     store = GuardStore(tmp_path / "guard-home")
-    config = _config(tmp_path, action=queued_action)
+    config = replace(_config(tmp_path, action=queued_action), guard_home=native_context_digest)
     evaluation = evaluate_detection(detection, store, config, persist=False)
 
     queued = queue_blocked_approvals(

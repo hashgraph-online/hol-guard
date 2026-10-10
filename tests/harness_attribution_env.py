@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import pytest
 
 from codex_plugin_scanner.guard.adapters.zcode_config import ZCODE_ENV_HINTS
 from codex_plugin_scanner.guard.runtime.harness_attribution import (

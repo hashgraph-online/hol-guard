@@ -197,7 +197,8 @@ def emit_devin_hook_response(
         event_name=resolved_event,
     )
     stream = output_stream if output_stream is not None else sys.stdout
-    stream.write(json.dumps(response, separators=(",", ":")) + "\n")
+    # stdout is the harness delivery channel; approval payloads must reach the operator.
+    stream.write(json.dumps(response, separators=(",", ":")) + "\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 

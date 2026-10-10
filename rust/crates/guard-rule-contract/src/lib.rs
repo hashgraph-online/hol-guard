@@ -5,6 +5,7 @@ use sha2::{Digest, Sha256};
 
 pub const RULE_CONTRACT_SCHEMA: &str = "hol-guard-native-rule-contract.v2";
 const RULE_CONTRACT_DOMAIN: &[u8] = b"hol-guard-native-rule-contract.v2\0";
+const PROGRAM_COMPONENT: &str = "native-command-program-artifact";
 
 const COMPONENTS: &[(&str, &[u8])] = &[
     (
@@ -208,8 +209,10 @@ const COMPONENTS: &[(&str, &[u8])] = &[
         include_bytes!("../../guard-runtime/src/policy_store_command_floor.rs"),
     ),
     (
-        "native-command-program-artifact",
-        include_bytes!("../../../../contracts/extensions/native-command-program.v1.json"),
+        PROGRAM_COMPONENT,
+        // Resolved from the shared allocation when hashing, so this constant
+        // table cannot embed another copy of the program in the runtime.
+        &[],
     ),
     (
         "guard-command-command-ascii-comparison",
@@ -301,9 +304,17 @@ fn sha256_hex(bytes: &[u8]) -> String {
 pub fn rule_contract() -> RuleContract {
     let components: Vec<RuleComponentDigest> = COMPONENTS
         .iter()
-        .map(|(name, bytes)| RuleComponentDigest {
-            name,
-            sha256: sha256_hex(bytes),
+        .map(|(name, bytes)| {
+            let bytes = if *name == PROGRAM_COMPONENT {
+                guard_command::native_command_program::packaged_command_program_bytes()
+            } else {
+                bytes
+            };
+            assert!(!bytes.is_empty(), "rule contract component bytes missing");
+            RuleComponentDigest {
+                name,
+                sha256: sha256_hex(bytes),
+            }
         })
         .collect();
 
@@ -419,5 +430,13 @@ mod tests {
             .iter()
             .all(|component| component.sha256.len() == 64));
         assert_eq!(first.rule_digest.len(), 64);
+        let program = guard_command::native_command_program::packaged_command_program_bytes();
+        assert!(!program.is_empty());
+        let component = first
+            .components
+            .iter()
+            .find(|entry| entry.name == PROGRAM_COMPONENT)
+            .unwrap();
+        assert_eq!(component.sha256, sha256_hex(program));
     }
 }

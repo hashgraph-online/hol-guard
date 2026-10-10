@@ -75,6 +75,18 @@ class StoreApprovalQueriesMixin:
         with self._connect() as connection:
             return load_approval_request(connection, request_id)
 
+    def get_approval_extension_allow_hint(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return get_approval_extension_allow_hint(connection, request_id)
+
+    def get_raw_approval_request_snapshot(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            row = connection.execute(
+                "select * from approval_requests where request_id = ?",
+                (request_id,),
+            ).fetchone()
+        return dict(row) if row is not None else None
+
     def approval_desktop_notified_at(self, request_id: str) -> str | None:
         with self._connect() as connection:
             row = connection.execute(

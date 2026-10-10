@@ -1202,10 +1202,10 @@ class TestGuardApprovals:
                 GuardApprovalRequest(
                     request_id=request_id,
                     harness=harness,
-                    artifact_id=f"{harness}:project:mcp:item",
+                    artifact_id="shared:project:mcp:item",
                     artifact_name=f"{harness}-item",
                     artifact_type="mcp_server",
-                    artifact_hash=f"hash-{request_id}",
+                    artifact_hash="hash-shared-item",
                     policy_action="require-reapproval",
                     recommended_scope="global",
                     changed_fields=("args",),
@@ -1216,6 +1216,26 @@ class TestGuardApprovals:
                 ),
                 "2026-04-11T00:00:00+00:00",
             )
+        # A pending request for a different action must survive a global
+        # decision about this one.
+        store.add_approval_request(
+            GuardApprovalRequest(
+                request_id="req-unrelated",
+                harness="codex",
+                artifact_id="codex:project:mcp:other",
+                artifact_name="other-item",
+                artifact_type="mcp_server",
+                artifact_hash="hash-other-item",
+                policy_action="require-reapproval",
+                recommended_scope="global",
+                changed_fields=("args",),
+                source_scope="project",
+                config_path=str(tmp_path / "codex" / ".config" / "guard.toml"),
+                review_command="hol-guard approvals approve req-unrelated",
+                approval_url="http://127.0.0.1:4455/approvals/req-unrelated",
+            ),
+            "2026-04-11T00:01:00+00:00",
+        )
 
         resolved = apply_approval_resolution(
             store=store,
@@ -1231,7 +1251,7 @@ class TestGuardApprovals:
         decisions = store.list_policy_decisions()
 
         assert resolved["status"] == "resolved"
-        assert pending == []
+        assert [row["request_id"] for row in pending] == ["req-unrelated"]
         assert decisions[0]["harness"] == "*"
 
     def test_guard_package_artifact_approval_replay_fails_closed_without_integrity_key(self, tmp_path):
@@ -1272,6 +1292,15 @@ class TestGuardApprovals:
         with store._connect() as connection:
             policy_count = connection.execute("select count(*) from policy_decisions").fetchone()[0]
         assert policy_count == 1
+        # Persist the resident verifier key before stripping the keyring. The
+        # verifier is provisioned lazily on first lookup; a store that wrote a
+        # signed policy already owns this file, and it must survive keyring loss
+        # so the resident can serve the lookup and degrade the unsigned row.
+        from codex_plugin_scanner.guard.native_policy_snapshot_publisher import (
+            provision_native_verifier_key_for_store,
+        )
+
+        provision_native_verifier_key_for_store(store)
         store._policy_integrity_secret_store = None
         store._clear_policy_integrity_cache()
         first_retry = store.resolve_policy_decision(
@@ -1605,6 +1634,7 @@ class TestGuardApprovals:
             "_reap_stale_ephemeral_guard_daemons",
             lambda *_args, **_kwargs: None,
         )
+        monkeypatch.setattr(daemon_manager_module, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
         monkeypatch.setattr(daemon_manager_module, "_running_ephemeral_guard_daemon_processes", lambda: [])
         monkeypatch.setattr(
             daemon_manager_module,
@@ -2820,7 +2850,7 @@ class TestGuardApprovals:
             daemon.stop()
 
         assert status == 200
-        assert allow_headers == ("Authorization, Content-Type, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
+        assert allow_headers == ("Authorization, Content-Type, If-None-Match, Last-Event-ID, X-Guard-Dashboard-Session, X-Guard-Token")
 
     def test_guard_daemon_limits_request_resolution_to_local_dashboard_origin(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
@@ -3146,7 +3176,7 @@ class TestGuardApprovals:
         assert approvals[0]["decision_v2_json"]["action"] == "ask"
         assert (
             approvals[0]["decision_v2_json"]["harness_message"]
-            == "HOL Guard needs a fresh approval because this action changed."
+            == "HOL Guard needs a fresh approval before this action can run."
         )
 
     def test_guard_approvals_cli_lists_and_resolves_requests(self, tmp_path, capsys, monkeypatch):

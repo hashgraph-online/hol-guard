@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import pytest
+
+from codex_plugin_scanner.guard.native_approval_protocol import (
+    decode_native_approval_artifact,
+)
 from codex_plugin_scanner.guard.native_response_decoder import (
     decode_native_approval_challenge,
     decode_native_approval_result,
@@ -105,6 +110,64 @@ def test_decoder_requires_epoch_and_accepts_full_native_contract() -> None:
     assert decode_native_approval_result(result, phase="validated") is None
 
 
+def test_approval_decoders_reject_floor_lowering_and_tampering() -> None:
+    challenge = _challenge()
+    lowered = challenge | {"minimum_action": "sandbox-required"}
+    assert decode_native_approval_challenge(lowered) is None
+    assert decode_native_approval_challenge(challenge | {"forged": True}) is None
+    for key in ("action_type", "operation", "intrinsic_action", "minimum_action", "requested_action"):
+        assert decode_native_approval_challenge(challenge | {key: []}) is None
+
+    validated = {
+        "schema": "guard-native-approval-result.v3",
+        "version": 3,
+        "authority": "rust",
+        "receipt": _receipt(),
+    }
+    assert decode_native_approval_result(validated, phase="consumed") is None
+
+    def _consumed_result() -> dict[str, object]:
+        receipt = _receipt()
+        receipt["phase"] = "consumed"
+        receipt["reason_code"] = "native_approval_consumed"
+        return {
+            "schema": "guard-native-approval-result.v3",
+            "version": 3,
+            "authority": "rust",
+            "receipt": receipt,
+        }
+
+    assert decode_native_approval_result(_consumed_result(), phase="consumed") == _consumed_result()
+    for key in (
+        "phase",
+        "policy_digest",
+        "rule_digest",
+        "runtime_identity",
+        "harness",
+        "scope_binding",
+        "resident_epoch",
+        "nonce",
+        "expires_at_ms",
+    ):
+        result = _consumed_result()
+        receipt = result["receipt"]
+        assert isinstance(receipt, dict)
+        receipt.pop(key)
+        assert decode_native_approval_result(result, phase="consumed") is None
+
+    artifact = _challenge()
+    artifact.pop("signing_key_id")
+    artifact["approved_action"] = "allow"
+    artifact["integrity"] = {
+        "algorithm": "ed25519",
+        "key_id": "c" * 64,
+        "signature": "e" * 128,
+    }
+    artifact["schema"] = "guard-native-approval-artifact.v3"
+    assert decode_native_approval_artifact(artifact) == artifact
+    assert decode_native_approval_artifact(artifact | {"extra": "forged"}) is None
+
+
 def test_native_error_rejects_unregistered_approval_codes() -> None:
     assert native_error({"error": "native_approval_replay", "retryable": False}) == "native_approval_replay"
     assert native_error({"error": "native_approval_not_in_contract", "retryable": False}) is None
@@ -116,3 +179,24 @@ def test_native_error_accepts_exact_lifecycle_codes_only() -> None:
     )
     assert native_error({"error": "native_resident_start_in_progress:/private/request", "retryable": True}) is None
     assert native_error({"error": "native_policy_snapshot_future_unregistered_code", "retryable": False}) is None
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "native_business_policy_floor_invalid",
+        "native_business_policy_removal_requires_authority",
+        "native_business_source_authority_invalid",
+        "native_business_source_authority_missing",
+        "native_business_source_authority_not_current",
+        "native_business_source_enforce_required",
+        "native_business_source_mutation_in_progress",
+    ],
+)
+def test_native_error_preserves_registered_business_rejection_without_private_detail(code: str) -> None:
+    assert native_error({"error": code, "retryable": False}) == code
+    assert native_error({"error": code + ":/private/request", "retryable": False}) is None
+
+
+def test_native_error_rejects_unregistered_business_codes() -> None:
+    assert native_error({"error": "native_business_source_future_unregistered_code", "retryable": False}) is None

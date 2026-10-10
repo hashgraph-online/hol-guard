@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     risk_classes_for_command_action,
@@ -12,6 +14,7 @@ from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.command_structured_matchers import (
     LeadingOperandCountMatcher,
     OptionValueKeyMatcher,
+    SubcommandOperandPrefixMatcher,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
@@ -311,7 +314,9 @@ REMOTE_SAFE_COMMANDS: tuple[str, ...] = (
 
 def test_remote_observer_and_preview_commands_remain_safe(tmp_path: Path) -> None:
     upload_cases = tuple(command for command in REMOTE_SAFE_COMMANDS if command.startswith(("scp ", "rsync ")))
-    assert_safe_command_cases(tuple(command for command in REMOTE_SAFE_COMMANDS if command not in upload_cases), tmp_path)
+    assert_safe_command_cases(
+        tuple(command for command in REMOTE_SAFE_COMMANDS if command not in upload_cases), tmp_path
+    )
     for command in upload_cases:
         assert real_native_command_evaluation(command, cwd=tmp_path).evaluation.minimum_action in {"review", "block"}
 
@@ -441,3 +446,51 @@ def test_leading_subcommand_matcher_exit_flags_stop_before_delimiter(tmp_path: P
         assert matcher.match(parse_shell_command(exiting, cwd=tmp_path, home_dir=tmp_path)) == (), exiting
     for executing in ("remote-admin run web -- --help", "remote-admin run web -- uptime"):
         assert matcher.match(parse_shell_command(executing, cwd=tmp_path, home_dir=tmp_path)), executing
+
+
+def test_subcommand_operand_prefix_matcher_ignores_option_values_and_skips_leading_operands() -> None:
+    matcher = SubcommandOperandPrefixMatcher(
+        executables=frozenset({"remote-admin"}),
+        subcommands=("workspace", "run"),
+        operand_prefixes=frozenset({"workspace:"}),
+        leading_options_with_values=frozenset({"--profile"}),
+        options_with_values=frozenset({"--context"}),
+        leading_operands_to_skip=1,
+    )
+
+    assert matcher.match(
+        parse_shell_command(
+            "remote-admin --profile prod workspace run --context workspace:option-value source workspace:target"
+        )
+    )
+    assert (
+        matcher.match(parse_shell_command("remote-admin --profile prod workspace run --context workspace:option-value"))
+        == ()
+    )
+
+
+def test_structured_matchers_reject_invalid_operand_and_value_key_contracts() -> None:
+    with pytest.raises(ValueError, match="at least one operand"):
+        LeadingOperandCountMatcher(
+            executables=frozenset({"remote-admin"}),
+            minimum_operands=0,
+        )
+    with pytest.raises(ValueError, match="negative operand count"):
+        SubcommandOperandPrefixMatcher(
+            executables=frozenset({"remote-admin"}),
+            subcommands=("workspace",),
+            operand_prefixes=frozenset({"workspace:"}),
+            leading_operands_to_skip=-1,
+        )
+    with pytest.raises(ValueError, match="executables, subcommands, and prefixes"):
+        SubcommandOperandPrefixMatcher(
+            executables=frozenset({"remote-admin"}),
+            subcommands=("workspace",),
+            operand_prefixes=frozenset(),
+        )
+    with pytest.raises(ValueError, match="option names, and value keys"):
+        OptionValueKeyMatcher(
+            executables=frozenset({"remote-admin"}),
+            option_names=frozenset({"-o"}),
+            value_keys=frozenset({" "}),
+        )

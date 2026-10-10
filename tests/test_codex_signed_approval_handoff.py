@@ -30,14 +30,14 @@ def test_live_hook_copy_loads_auth_once_and_builds_signed_link_once(
     review_url = "http://127.0.0.1:5474/requests/req-codex-single-load"
     payload = {"primary_approval_url": review_url}
     loads: list[Path] = []
-    builds: list[tuple[str, str | None]] = []
+    builds: list[tuple[str, str | None, str]] = []
 
     def load_token(home: Path) -> str:
         loads.append(home)
         return "synthetic-daemon-token"
 
-    def build_url(url: str, *, auth_token: str | None) -> str:
-        builds.append((url, auth_token))
+    def build_url(url: str, *, auth_token: str | None, surface: str = "approval-center") -> str:
+        builds.append((url, auth_token, surface))
         return f"{url}#guard-token=fixture"
 
     monkeypatch.setattr(approval_hook_copy_module, "load_guard_daemon_auth_token", load_token)
@@ -54,7 +54,7 @@ def test_live_hook_copy_loads_auth_once_and_builds_signed_link_once(
     signed_url = f"{review_url}#guard-token=fixture"
     assert live.count(signed_url) == 2
     assert loads == [guard_home]
-    assert builds == [(review_url, "synthetic-daemon-token")]
+    assert builds == [(review_url, "synthetic-daemon-token", "approval-center")]
 
 
 def test_live_hook_copy_does_not_advertise_raw_loopback_without_auth(tmp_path: Path) -> None:

@@ -116,11 +116,16 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
         NATIVE_CORPUS_BATCH_SIZE,
         evaluate_native_corpus_batch,
         pin_neutral_attribution,
+        pin_offline_shell_context,
     )
     from tests.guard_command_corpus_native_contract import configure_native_contract_shard, validate_native_case
     from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
+    from tests.native_command_test_support import _native_binaries
+    from tests.native_github_offline import install_offline_github_classifier
 
+    install_offline_github_classifier(_native_binaries()[0])
     pin_neutral_attribution()
+    pin_offline_shell_context()
     configure_native_contract_shard(worker_index, worker_count)
     ranks = {
         action: guard_action_severity(action)
@@ -206,11 +211,16 @@ def _decode_groups(value: object) -> dict[str, list[str]]:
 def _run_worker(worker_index: int) -> WorkerReport:
     completed = subprocess.run(
         [sys.executable, str(Path(__file__).resolve()), "--worker", str(worker_index)],
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         timeout=WORKER_TIMEOUT_SECONDS,
     )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"corpus worker {worker_index} exited {completed.returncode}: "
+            f"{completed.stderr[-3000:] if completed.stderr else 'no stderr'}"
+        )
     return _decode_worker(completed.stdout)
 
 
@@ -226,20 +236,26 @@ def _coordinator_report() -> dict[str, object]:
     native_contract_groups: defaultdict[str, list[str]] = defaultdict(list)
     native_error_groups: defaultdict[str, list[str]] = defaultdict(list)
     started = time.perf_counter()
-    reports = tuple(_iter_reports())
+    worker_rss: list[float] = []
+    worker_elapsed: list[float] = []
+    for report in _iter_reports():
+        worker_rss.append(report["rss_mib"])
+        worker_elapsed.append(report["elapsed"])
+        for destination, source in (
+            (groups, report["groups"]),
+            (native_contract_groups, report["native_contract_groups"]),
+            (native_error_groups, report["native_error_groups"]),
+        ):
+            for key, case_ids in source.items():
+                if key in destination:
+                    destination[key].extend(case_ids)
+                else:
+                    destination[key] = case_ids
     elapsed = time.perf_counter() - started
-    for report in reports:
-        for key, case_ids in report["groups"].items():
-            groups[key].extend(case_ids)
-        for key, case_ids in report["native_contract_groups"].items():
-            native_contract_groups[key].extend(case_ids)
-        for key, case_ids in report["native_error_groups"].items():
-            native_error_groups[key].extend(case_ids)
     actual = {
         key: [len(ids), hashlib.sha256(("\n".join(sorted(ids)) + "\n").encode()).hexdigest()]
         for key, ids in groups.items()
     }
-    worker_rss = [report["rss_mib"] for report in reports]
     active_worker_rss = sum(sorted(worker_rss, reverse=True)[:MAX_CONCURRENT_WORKERS])
     observed_contract = {key: (len(ids), _framed_ids_sha256(ids)) for key, ids in native_contract_groups.items()}
     if observed_contract != expected_native_groups():
@@ -260,7 +276,7 @@ def _coordinator_report() -> dict[str, object]:
         "original_oracle_above_count": sum(len(ids) for key, ids in groups.items() if "|overclassified|" in key),
         "elapsed": elapsed,
         "rss_mib": peak_rss_mib() + active_worker_rss,
-        "worker_elapsed": [report["elapsed"] for report in reports],
+        "worker_elapsed": worker_elapsed,
     }
 
 

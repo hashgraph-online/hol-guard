@@ -10,7 +10,10 @@ from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_comma
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_authority import (
+    AuthorityHealth,
+    ExtensionControlAuthorityView,
+)
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import (
     NativeCommandExtensionEvidenceError,
@@ -20,13 +23,16 @@ from codex_plugin_scanner.guard.runtime.native_command_extension_evidence import
 
 def _payload(command_text: str) -> tuple[dict[str, object], object, ExtensionControlRuntimeSnapshot]:
     command = parse_shell_command(command_text)
-    snapshot = ExtensionControlRuntimeSnapshot(
-        AuthorityHealth.PROTECTED,
-        7,
-        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        "d" * 64,
-        (),
-        3,
+    # The effective digest is derived, never asserted: the resident recomputes
+    # it from the binding fields and refuses any snapshot that disagrees.
+    snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
+        ExtensionControlAuthorityView(
+            AuthorityHealth.PROTECTED,
+            7,
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            (),
+            3,
+        )
     )
     observation = {
         "extension_id": "command.api-gateway",

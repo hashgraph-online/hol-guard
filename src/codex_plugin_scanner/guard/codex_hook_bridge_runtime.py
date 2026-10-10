@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, TypedDict
+
+_BASE64URL_ARGUMENT = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def decode_bridge_config_argument(argument: str) -> str:
+    """Return the JSON text of a bridge config argument.
+
+    POSIX installs pass the JSON itself. Windows installs pass unpadded
+    base64url text because the Windows shells cannot carry JSON quotes intact.
+    """
+
+    if argument.startswith("{"):
+        return argument
+    if not _BASE64URL_ARGUMENT.fullmatch(argument):
+        raise ValueError("bridge config argument is neither JSON nor base64url")
+    try:
+        text = base64.urlsafe_b64decode(argument + "=" * (-len(argument) % 4)).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        raise ValueError("bridge config argument is not valid base64url") from exc
+    if not text.startswith("{"):
+        raise ValueError("bridge config argument does not encode a JSON object")
+    return text
 
 
 class BridgeConfig(TypedDict):
@@ -55,24 +80,27 @@ def trusted_hook_launch(
     fallback_command: Sequence[str],
     start_command: Sequence[str],
     config_json: str,
+    deadline_monotonic: float | None = None,
 ) -> TrustedHookLaunch:
+    from .codex_hook_file_integrity import hook_validation_deadline
     from .codex_hook_runtime_trust import validate_codex_hook_launch
 
-    return validate_codex_hook_launch(
-        manifest_path=manifest_path,
-        state_path=state_path,
-        fallback_command=fallback_command,
-        start_command=start_command,
-        config_json=config_json,
-    )
+    with hook_validation_deadline(deadline_monotonic):
+        return validate_codex_hook_launch(
+            manifest_path=manifest_path,
+            state_path=state_path,
+            fallback_command=fallback_command,
+            start_command=start_command,
+            config_json=config_json,
+        )
 
 
 def bridge_config_from_argv(argv: Sequence[str], *, timeout_grace_seconds: int) -> BridgeConfig:
     if len(argv) != 2:
         raise SystemExit("codex_daemon_hook_bridge expects one JSON config argument")
     try:
-        payload = json.loads(argv[1])
-    except json.JSONDecodeError as exc:
+        payload = json.loads(decode_bridge_config_argument(argv[1]))
+    except ValueError as exc:
         raise SystemExit("codex_daemon_hook_bridge config must be a JSON object") from exc
     if not isinstance(payload, dict):
         raise SystemExit("codex_daemon_hook_bridge config must be a JSON object")

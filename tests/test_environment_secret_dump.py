@@ -5,6 +5,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.redaction import redact_text
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.environment_secret_dump import (
@@ -15,6 +17,9 @@ from tests.native_command_test_support import (
 )
 from tests.native_command_test_support import inspect_command_native_test as inspect_command
 from tests.native_command_test_support import real_native_command_evaluation
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
+
 
 _ACTION = "process environment secret read"
 
@@ -109,6 +114,7 @@ def test_inspect_command_reviews_python_environ_dump() -> None:
     assert "local_secret_read" in payload["risk_classes"]
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_grok_pretool_denies_python_environ_dump(tmp_path: Path, monkeypatch, capsys) -> None:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"

@@ -62,6 +62,7 @@ jobs:
             pyproject.toml
             uv.lock
           save-cache: false
+      - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
       - name: Generate an ephemeral MDM lab admin token
         shell: bash
@@ -127,7 +128,7 @@ jobs:
       - name: Trivy scan MDM lab image and configuration
         run: |
           docker run --rm -v "$PWD:/workdir" \
-            aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c \
+            ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c \
             fs --scanners misconfig,secret --severity HIGH,CRITICAL \
             --exit-code 1 --quiet /workdir/scripts/mdm/cloud-lab
       - name: Collect bounded Compose logs on failure

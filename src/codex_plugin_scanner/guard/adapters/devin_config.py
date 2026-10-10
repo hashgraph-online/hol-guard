@@ -26,7 +26,6 @@ from ..aibom_detection import enrich_mcp_server_metadata
 from ..models import GuardArtifact
 from ..skill_directory_discovery import discover_skill_documents
 from ..skill_directory_identity import (
-    incomplete_skill_directory_identity,
     inspect_skill_directory,
     skill_directory_identity_metadata,
 )
@@ -204,6 +203,12 @@ def load_devin_jsonc(path: Path) -> DevinJsonDocument:
         # must fail closed so install() refuses rather than rewriting it.
         exists = path.exists()
         return DevinJsonDocument(payload={}, had_comments=False, parse_failed=exists, exists=exists)
+    return parse_devin_jsonc(text)
+
+
+def parse_devin_jsonc(text: str) -> DevinJsonDocument:
+    """Parse an already captured generation with the same JSONC inventory rules."""
+
     if not text.strip():
         return DevinJsonDocument(payload={}, had_comments=False, parse_failed=False, exists=True)
     try:
@@ -397,16 +402,20 @@ def append_devin_skill_artifacts(
                 metadata=metadata,
             )
         )
+    try:
+        root_label = skill_root.relative_to(identity_scope_root).as_posix()
+    except ValueError:
+        root_label = skill_root.as_posix()
     for issue in discovery.issues:
         append_found_path(found_paths, issue.path)
-        identity = incomplete_skill_directory_identity(issue.failure_reason)
+        identity = issue.identity
         metadata = skill_directory_identity_metadata(
             identity, version_label=f"skills/.guard-discovery/{issue.issue_id}"
         )
         warnings.append(f"Devin {scope} skill discovery is incomplete; approval reuse is disabled.")
         artifacts.append(
             GuardArtifact(
-                artifact_id=f"devin:{scope}:skill-discovery:{issue.issue_id}",
+                artifact_id=f"devin:{scope}:skill-discovery:{root_label}:{issue.issue_id}",
                 name="Incomplete Devin skill discovery",
                 harness="devin",
                 artifact_type="skill",

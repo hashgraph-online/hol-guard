@@ -10,12 +10,8 @@ import stat
 from pathlib import Path
 
 from ..models import GuardArtifact
-from ..runtime.runner import (
-    _PROMPT_SENTENCE_BOUNDARY_PATTERN,
-    _SECRET_READ_INTENT_PATTERN,
-    _secret_read_intent_is_negated,
-    extract_prompt_requests,
-)
+from ..native_prompt import NativePromptAnalysisError, extract_prompt_requests
+from ..native_prompt import trailing_secret_read_state as _trailing_secret_read_state
 from .commands_support_codex_paths import (
     _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH,
     _PROMPT_FILE_READ_VERB_PATTERN,
@@ -23,7 +19,7 @@ from .commands_support_codex_paths import (
     _path_contains_symlink,
 )
 
-_ATTACHMENT_SCAN_CHUNK_BYTES = 128 * 1024
+_ATTACHMENT_SCAN_CHUNK_BYTES = 64 * 1024
 _ATTACHMENT_SCAN_MAX_BYTES = 8 * 1024 * 1024
 _ATTACHMENT_SCAN_OVERLAP_CHARS = 4 * 1024
 _OPEN_SUPPORTS_DIR_FD = os.open in os.supports_dir_fd
@@ -35,7 +31,9 @@ _GUARDED_ATTACHMENT_CLASSES = frozenset(
 )
 
 
-def _codex_prompt_attachment_artifact(*, prompt_text: str, home_dir: Path, config_path: str) -> GuardArtifact | None:
+def _codex_prompt_attachment_artifact(
+    *, prompt_text: str, home_dir: Path, config_path: str, guard_home: Path | None = None
+) -> GuardArtifact | None:
     """Scan explicitly requested Codex attachment text without exposing its contents."""
 
     if _PROMPT_FILE_READ_VERB_PATTERN.search(prompt_text) is None:
@@ -61,8 +59,8 @@ def _codex_prompt_attachment_artifact(*, prompt_text: str, home_dir: Path, confi
                 attachment_root=attachment_root,
                 resolved_root=resolved_root,
             )
-            classes, digest = _scan_attachment(descriptor)
-        except (OSError, UnicodeError):
+            classes, digest = _scan_attachment(descriptor, guard_home=guard_home)
+        except (OSError, UnicodeError, NativePromptAnalysisError):
             return _scan_failure(requested_path, "Guard could not fully scan the Codex attachment.", config_path)
         finally:
             if descriptor is not None:
@@ -131,7 +129,7 @@ def _open_verified_attachment(candidate: Path, *, attachment_root: Path, resolve
         os.close(directory_descriptor)
 
 
-def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
+def _scan_attachment(descriptor: int, *, guard_home: Path | None = None) -> tuple[list[str], str]:
     file_stat = os.fstat(descriptor)
     if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > _ATTACHMENT_SCAN_MAX_BYTES:
         raise OSError("unsupported attachment shape")
@@ -153,6 +151,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
             window,
             classification_cache=classification_cache,
             inherited_secret_read_state=inherited_secret_read_state,
+            guard_home=guard_home,
         )
         guarded_classes.extend(window_classes)
         overlap = window[-_ATTACHMENT_SCAN_OVERLAP_CHARS:]
@@ -162,6 +161,7 @@ def _scan_attachment(descriptor: int) -> tuple[list[str], str]:
             f"{overlap}{final_text}",
             classification_cache=classification_cache,
             inherited_secret_read_state=inherited_secret_read_state,
+            guard_home=guard_home,
         )
         guarded_classes.extend(window_classes)
     return list(dict.fromkeys(guarded_classes)), digest.hexdigest()[:_CODEX_PROMPT_FILE_FINGERPRINT_LENGTH]
@@ -172,8 +172,9 @@ def _classify_stream_window(
     *,
     classification_cache: dict[tuple[int, bytes], tuple[str, ...]] | None = None,
     inherited_secret_read_state: tuple[int, bool] | None,
+    guard_home: Path | None = None,
 ) -> tuple[tuple[str, ...], tuple[int, bool] | None]:
-    classes = list(_cached_guarded_classes(content_window, classification_cache))
+    classes = list(_cached_guarded_classes(content_window, classification_cache, guard_home=guard_home))
     prefix = ""
     if inherited_secret_read_state is not None:
         distance, positive = inherited_secret_read_state
@@ -183,35 +184,16 @@ def _classify_stream_window(
     if inherited_secret_read_state is not None and "secret_read" in _cached_guarded_classes(
         inherited_window,
         classification_cache,
+        guard_home=guard_home,
     ):
         classes.append("secret_read")
-    return tuple(dict.fromkeys(classes)), _trailing_secret_read_state(inherited_window)
+    return tuple(dict.fromkeys(classes)), _trailing_secret_read_state(inherited_window, guard_home=guard_home)
 
 
-def _trailing_secret_read_state(content: str) -> tuple[int, bool] | None:
-    previous_sentence_start = 0
-    trailing_sentence_start = 0
-    for match in _PROMPT_SENTENCE_BOUNDARY_PATTERN.finditer(content):
-        previous_sentence_start = trailing_sentence_start
-        trailing_sentence_start = match.end()
-    trailing_polarity = _secret_read_polarity(content[trailing_sentence_start:])
-    if trailing_polarity is not None:
-        return 0, trailing_polarity
-    previous_polarity = _secret_read_polarity(content[previous_sentence_start:trailing_sentence_start])
-    return None if previous_polarity is None else (1, previous_polarity)
-
-
-def _secret_read_polarity(sentence: str) -> bool | None:
-    intents = tuple(_SECRET_READ_INTENT_PATTERN.finditer(sentence))
-    if not intents:
-        return None
-    return any(not _secret_read_intent_is_negated(sentence, match.start(), match.end()) for match in intents)
-
-
-def _guarded_classes(content_window: str) -> tuple[str, ...]:
+def _guarded_classes(content_window: str, *, guard_home: Path | None = None) -> tuple[str, ...]:
     return tuple(
         request.request_class
-        for request in extract_prompt_requests(content_window)
+        for request in extract_prompt_requests(content_window, guard_home=guard_home)
         if request.request_class in _GUARDED_ATTACHMENT_CLASSES
     )
 
@@ -219,15 +201,17 @@ def _guarded_classes(content_window: str) -> tuple[str, ...]:
 def _cached_guarded_classes(
     content_window: str,
     cache: dict[tuple[int, bytes], tuple[str, ...]] | None,
+    *,
+    guard_home: Path | None = None,
 ) -> tuple[str, ...]:
     if cache is None:
-        return _guarded_classes(content_window)
+        return _guarded_classes(content_window, guard_home=guard_home)
     encoded_window = content_window.encode()
     cache_key = (len(encoded_window), hashlib.sha256(encoded_window).digest())
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
-    classes = _guarded_classes(content_window)
+    classes = _guarded_classes(content_window, guard_home=guard_home)
     cache[cache_key] = classes
     return classes
 

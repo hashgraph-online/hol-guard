@@ -120,8 +120,6 @@ MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 # operators can explicitly disable it for emergency rollback.
 # These are read from os.environ at call time so tests/daemon can toggle without restart.
 HOOK_FAST_PATH_ENV = "HOL_GUARD_HOOK_FAST_PATH"
-HOOK_SOURCE_REF_ENV = "HOL_GUARD_HOOK_SOURCE_REF"
-HOOK_FAST_PATH_SHADOW_ENV = "HOL_GUARD_HOOK_FAST_PATH_SHADOW"
 
 
 def hook_fast_path_enabled() -> bool:
@@ -129,20 +127,6 @@ def hook_fast_path_enabled() -> bool:
     import os
 
     return os.environ.get(HOOK_FAST_PATH_ENV, "1") == "1"
-
-
-def hook_source_ref_enabled() -> bool:
-    """Whether the Pi managed extension should generate guard_source_ref."""
-    import os
-
-    return os.environ.get(HOOK_SOURCE_REF_ENV, "0") == "1"
-
-
-def hook_fast_path_shadow_enabled() -> bool:
-    """Whether to evaluate fast path but return legacy behavior (shadow mode)."""
-    import os
-
-    return os.environ.get(HOOK_FAST_PATH_SHADOW_ENV, "0") == "1"
 
 
 VALID_GUARD_ACTIONS = frozenset(GUARD_ACTION_VALUES)
@@ -282,6 +266,7 @@ EDITABLE_GUARD_SETTING_KEYS = frozenset(
         "harness_risk_actions",
         "approval_wait_timeout_seconds",
         "approval_surface_policy",
+        "blocked_request_mode",
         "approval_browser_delay_seconds",
         "approval_browser_immediate_severity",
         "desktop_notifications",
@@ -299,6 +284,7 @@ VALID_APPROVAL_BROWSER_SEVERITIES = frozenset({"info", "low", "medium", "high", 
 BARE_TOML_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 WORKSPACE_BLOCKED_POLICY_KEYS = frozenset(
     {
+        "blocked_request_mode",
         "mode",
         "presentation_mode",
         "presentation_mode_explicit",
@@ -402,6 +388,7 @@ class GuardConfig:
     subprocess_action: GuardAction = "warn"
     approval_wait_timeout_seconds: int = 120
     approval_surface_policy: str = "attention-aware"
+    blocked_request_mode: str = "safe-alternative"
     approval_browser_delay_seconds: int = 20
     approval_browser_immediate_severity: str = "critical"
     desktop_notifications: bool = True
@@ -504,10 +491,12 @@ def load_guard_config(
     *,
     managed_policy_state: ManagedPolicyState | None = None,
     require_canonical_workspace: bool = False,
+    create_home: bool = True,
 ) -> GuardConfig:
     """Load Guard config from home and workspace overrides."""
 
-    guard_home.mkdir(parents=True, exist_ok=True)
+    if create_home:
+        guard_home.mkdir(parents=True, exist_ok=True)
     home_config = _read_toml(guard_home / "config.toml")
     workspace_config = _load_workspace_guard_config(workspace, require_canonical=require_canonical_workspace)
 
@@ -580,6 +569,7 @@ def load_guard_config(
             120,
         ),
         approval_surface_policy=_coerce_loaded_approval_surface_policy(merged.get("approval_surface_policy")),
+        blocked_request_mode=("ask" if merged.get("blocked_request_mode") == "ask" else "safe-alternative"),
         approval_browser_delay_seconds=_coerce_loaded_bounded_int(
             merged.get("approval_browser_delay_seconds"),
             default=20,
@@ -663,6 +653,7 @@ def editable_guard_settings(config: GuardConfig) -> dict[str, object]:
         "harness_risk_actions": dict(config.harness_risk_actions or {}),
         "approval_wait_timeout_seconds": config.approval_wait_timeout_seconds,
         "approval_surface_policy": config.approval_surface_policy,
+        "blocked_request_mode": config.blocked_request_mode,
         "approval_browser_delay_seconds": config.approval_browser_delay_seconds,
         "approval_browser_immediate_severity": config.approval_browser_immediate_severity,
         "desktop_notifications": config.desktop_notifications,
@@ -895,6 +886,10 @@ def _coerce_editable_setting(key: str, value: object) -> object:
         if isinstance(value, str) and value in VALID_APPROVAL_SURFACE_POLICIES:
             return "attention-aware" if value == "auto-open-once" else value
         raise ValueError("Invalid approval surface policy.")
+    if key == "blocked_request_mode":
+        if isinstance(value, str) and value in {"safe-alternative", "ask"}:
+            return value
+        raise ValueError("Choose safe-alternative or ask for blocked requests.")
     if key == "approval_browser_delay_seconds":
         if isinstance(value, int) and not isinstance(value, bool) and 0 <= value <= 300:
             return value
@@ -1381,10 +1376,27 @@ def _migrate_guard_home_transactionally(*, source: Path, destination: Path) -> N
             staging_root = Path(temp_dir) / destination.name
             _migrate_guard_home_state(source=source, destination=staging_root)
             if destination.exists():
+                _refuse_live_database_companions(destination)
                 _remove_guard_home_destination(destination)
             shutil.move(str(staging_root), str(destination))
     except OSError:
         raise GuardHomeMigrationError("guard home migration failed") from None
+
+
+def _refuse_live_database_companions(destination: Path) -> None:
+    """Never swap guard.db out from under a non-empty WAL or rollback journal.
+
+    A later checkpoint of the old log would write stale pages into the new
+    database, and another Guard process may still hold the old files open.
+    """
+
+    for suffix in ("-wal", "-journal"):
+        companion = destination / f"guard.db{suffix}"
+        try:
+            if companion.is_file() and companion.stat().st_size > 0:
+                raise GuardHomeMigrationError("guard home has a live database log")
+        except OSError:
+            raise GuardHomeMigrationError("guard home migration failed") from None
 
 
 def _remove_guard_home_destination(path: Path) -> None:

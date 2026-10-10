@@ -106,20 +106,6 @@ BRAND_TOKEN_KEYS = ("product_name", "logo_mark", "primary_color", "accent_color"
 
 
 @dataclass(frozen=True, slots=True)
-class NextAction:
-    """Plain-language action shown after Guard explains a risk."""
-
-    label: str
-    reason: str
-    cta: str
-    target: str
-    urgency: ActionUrgency
-
-    def to_dict(self) -> dict[str, str]:
-        return asdict(self)
-
-
-@dataclass(frozen=True, slots=True)
 class RuntimeModel:
     """Hermes/OpenClaw hosted-runtime capability model."""
 
@@ -226,6 +212,12 @@ LOCAL_ROUTE_OWNERSHIP = (
     RouteOwnership(route="/policy", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(route="/feed-health", persona=("solo", "team_manager"), auth_required=True, writes_state=True),
     RouteOwnership(route="/settings", persona=("solo",), auth_required=True, writes_state=True),
+    RouteOwnership(
+        route="/protection/repair",
+        persona=("solo",),
+        auth_required=True,
+        writes_state=True,
+    ),
 )
 LOCAL_API_OWNERSHIP = (
     ApiOwnership(path="/v1/initialize", method="POST", category="config", auth_required=False, writes_state=True),
@@ -355,6 +347,13 @@ LOCAL_API_OWNERSHIP = (
     ),
     ApiOwnership(path="/v1/daemon/repair", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/protection/repair", method="POST", category="config", auth_required=True, writes_state=True),
+    ApiOwnership(
+        path="/v1/protection/repair/approval-gate/setup",
+        method="POST",
+        category="config",
+        auth_required=True,
+        writes_state=True,
+    ),
     ApiOwnership(path="/v1/settings", method="GET", category="config", auth_required=True, writes_state=False),
     ApiOwnership(path="/v1/settings", method="POST", category="config", auth_required=True, writes_state=True),
     ApiOwnership(path="/v1/settings/export", method="GET", category="config", auth_required=True, writes_state=False),
@@ -366,18 +365,6 @@ _STABLE_ID_PATTERN = re.compile(
     r"^(?:(act|inc|snap)_[0-9A-HJKMNP-TV-Z]{26}|[0-9a-f]{32}|[0-9a-f]{64}|guard-receipt-[0-9a-f]{8}-"
     r"[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
 )
-
-
-def is_stable_guard_id(value: str) -> bool:
-    """Return true when a value follows Guard's stable ID prefix contract."""
-
-    return bool(_STABLE_ID_PATTERN.fullmatch(value))
-
-
-def build_next_action(label: str, reason: str, cta: str, target: str, urgency: ActionUrgency) -> NextAction:
-    """Build a typed next-action contract."""
-
-    return NextAction(label=label, reason=reason, cta=cta, target=target, urgency=urgency)
 
 
 def export_product_model_v1() -> dict[str, object]:

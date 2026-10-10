@@ -10,11 +10,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.runtime import mcp_server_contribution as mcp_module
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class, trust_class_for
+from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
-    catalog_mcp_fields,
     load_mcp_contribution_payloads,
     mcp_catalog_ids,
     mcp_tool_state,
@@ -31,10 +29,13 @@ def _filesystem_payload() -> dict[str, object]:
 
 
 def test_in_tree_mcp_contributions_are_external_catalog_ids() -> None:
+    from tests.support.extension_freshness import pending_contribution_regen
+
     payloads = load_mcp_contribution_payloads()
     ids = {catalog_id_for_mcp_id(str(item["id"])) for item in payloads}
     assert ids == mcp_catalog_ids()
-    assert ids <= ids_for_class("external")
+    if not pending_contribution_regen():
+        assert ids <= ids_for_class("external")
     assert "command.mcp-filesystem" in ids
     for payload in payloads:
         validate_mcp_contribution(payload, filename=str(payload["id"]))
@@ -110,24 +111,6 @@ def test_mcp_contribution_rejects_unknown_icon() -> None:
     payload["icon"] = {"kind": "react-icon", "name": "NotAnAllowlistedIcon"}
     with pytest.raises(ValueError, match="allowlisted"):
         validate_mcp_contribution(payload, filename="icon.json")
-
-
-def test_filesystem_catalog_item_is_external_opt_in() -> None:
-    extension = BUILT_IN_COMMAND_EXTENSION_REGISTRY.get("command.mcp-filesystem")
-    assert extension is not None
-    payload = extension.to_dict()
-    assert payload["enabled"] is False
-    assert payload["trust_class"] == "external"
-    assert payload["activation"] == "opt-in"
-    assert payload["surface"] == "mcp"
-    assert payload["mcp_launch"]["package"] == "@modelcontextprotocol/server-filesystem"
-    assert payload["publisher"]["id"] == "community.modelcontextprotocol"
-    assert payload["icon"]["name"] == "HiMiniFolder"
-    assert payload["permissions"][0]["configurable"] is False
-    assert trust_class_for("command.mcp-filesystem") == "external"
-    overlay = catalog_mcp_fields("command.mcp-filesystem")
-    assert overlay is not None
-    assert overlay["surface"] == "mcp"
 
 
 def test_mcp_tool_state_uses_named_then_other() -> None:

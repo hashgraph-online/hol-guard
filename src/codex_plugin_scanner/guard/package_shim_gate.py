@@ -37,6 +37,7 @@ def package_shim_command_requires_guard(
     argv: Sequence[str],
     *,
     workspace: Path | None = None,
+    guard_home: Path | None = None,
 ) -> bool:
     """Return whether a shimmed package-manager command should enter Guard protect."""
 
@@ -54,9 +55,7 @@ def package_shim_command_requires_guard(
             ("help",),
         }
     command = [normalized_manager, *normalized_argv]
-    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
-
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace, guard_home=guard_home)
     return intent is not None
 
 
@@ -65,6 +64,7 @@ def package_shim_command_requires_external_archive_binding(
     argv: Sequence[str],
     *,
     workspace: Path | None = None,
+    guard_home: Path | None = None,
 ) -> bool:
     """Return whether Guard itself must launch a digest-bound archive command."""
 
@@ -72,10 +72,9 @@ def package_shim_command_requires_external_archive_binding(
     if normalized_manager not in _PACKAGE_SHIM_PARSER_MANAGERS:
         return False
     command = [normalized_manager, *[str(argument) for argument in argv]]
-    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
     from codex_plugin_scanner.guard.runtime.restricted_archive_download import is_external_https_archive_source
 
-    intent = parse_package_intent(shlex.join(command), workspace=workspace)
+    intent = _parse_shim_package_intent(shlex.join(command), workspace=workspace, guard_home=guard_home)
     return bool(
         intent is not None
         and any(
@@ -85,3 +84,14 @@ def package_shim_command_requires_external_archive_binding(
             for target in intent.targets
         )
     )
+
+
+def _parse_shim_package_intent(raw_command: str, *, workspace: Path | None = None, guard_home: Path | None = None):
+    """Route shim package-intent parsing through the resident native authority.
+
+    ``parse_package_intent`` is resident-sole-authority, so this helper only
+    binds the selected guard home and returns its result.
+    """
+    from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
+
+    return parse_package_intent(raw_command, workspace=workspace, guard_home=guard_home)

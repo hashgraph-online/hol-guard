@@ -9,11 +9,11 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
-import subprocess
+import os  # noqa: F401
+import subprocess  # noqa: F401
 import sys
 import tempfile
-import time
+import time  # noqa: F401
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -39,7 +39,6 @@ from scripts.bench_guard_native_installed_slo_runtime import (  # noqa: E402
 )
 from scripts.native_slo_adapter import (  # noqa: E402
     Observation,
-    payload,
     process_rss_bytes,
     route_matrix,
     source_payloads,
@@ -47,13 +46,23 @@ from scripts.native_slo_adapter import (  # noqa: E402
 from scripts.native_slo_baseline import (  # noqa: E402, F401
     steady_state_rss_baseline as _steady_state_rss_baseline,
 )
+from scripts.native_slo_benchmark_stages import (  # noqa: E402
+    _observe_with_progress,
+    _run_cold,
+    _run_recovery,
+    _run_serialized_warmup,
+    _wire_request,  # noqa: F401
+)
 from scripts.native_slo_capacity import (  # noqa: E402, F401
     _stabilize_ready_hook_workers,
     measure_capacity,
 )
-from scripts.native_slo_contract import SAFE_ROUTE_NAMES, SIZE_CLASSES  # noqa: E402
+from scripts.native_slo_contract import SIZE_CLASSES  # noqa: E402
+from scripts.native_slo_preflight import preflight_operation  # noqa: E402
 from scripts.native_slo_reporting import (  # noqa: E402
     SloMeasurements,
+    SloProgress,
+    incomplete_slo_result,
     safe_failure_rate,
     slo_gates,
     slo_result,
@@ -75,7 +84,9 @@ def _installed_corpus(runtime: Path, expected_routes: int) -> dict[str, int]:
     """Exercise the canonical all-harness installed ingress corpus."""
 
     with tempfile.TemporaryDirectory(prefix="hol-guard-installed-corpus-") as temporary:
-        root = Path(temporary)
+        # Match scripts/native_slo_session.py:AdapterSession: macOS aliases must not register one workspace
+        # twice and invalidate its acknowledged native policy on first ingress.
+        root = Path(temporary).resolve()
         report: Mapping[str, object] | None = None
         try:
             candidate = _installed_hook_corpus(root)
@@ -122,150 +133,58 @@ def _installed_corpus(runtime: Path, expected_routes: int) -> dict[str, int]:
         }
 
 
-def _run_warm(session: AdapterSession, routes: tuple[tuple[str, str], ...], iterations: int) -> list[Observation]:
+def _run_warm(
+    session: AdapterSession,
+    routes: tuple[tuple[str, str], ...],
+    iterations: int,
+    *,
+    progress: SloProgress | None = None,
+) -> list[Observation]:
     for harness, event in routes:
-        session.observe(harness, event, "1k")
+        if progress is None:
+            session.observe(harness, event, "1k")
+        else:
+            _observe_with_progress(progress, session, harness, event, "1k", "warm_precondition")
     observations: list[Observation] = []
     for _ in range(iterations):
-        observations.extend(session.observe(harness, event, "1k") for harness, event in routes)
+        for harness, event in routes:
+            observations.append(
+                session.observe(harness, event, "1k")
+                if progress is None
+                else _observe_with_progress(progress, session, harness, event, "1k", "warm")
+            )
     return observations
 
 
-def _run_sizes(session: AdapterSession, routes: tuple[tuple[str, str], ...]) -> list[Observation]:
+def _run_sizes(
+    session: AdapterSession,
+    routes: tuple[tuple[str, str], ...],
+    *,
+    progress: SloProgress | None = None,
+) -> list[Observation]:
+    if progress is not None:
+        progress.activate("sizes")
     post_routes = tuple((harness, event) for harness, event in routes if event == "PostToolUse")
     selected = post_routes or (routes[0],)
     large_payloads = source_payloads(session.workspace)
     observations: list[Observation] = []
     for size_class in SIZE_CLASSES[1:]:
         request_payload = large_payloads[size_class]
-        observations.extend(session.observe(harness, event, size_class, request_payload) for harness, event in selected)
+        for harness, event in selected:
+            observations.append(
+                session.observe(harness, event, size_class, request_payload)
+                if progress is None
+                else _observe_with_progress(
+                    progress,
+                    session,
+                    harness,
+                    event,
+                    size_class,
+                    f"size_{size_class}",
+                    request_payload,
+                )
+            )
     return observations
-
-
-def _wire_request(workspace: Path, guard_home: Path, request_id: str) -> str:
-    return json.dumps(
-        {
-            "protocol_version": 1,
-            "request_id": request_id,
-            "harness": "claude-code",
-            "event_name": "PostToolUse",
-            "payload": payload("PostToolUse", "1k"),
-            "guard_remaining_ms": 1_000,
-            "cwd": str(workspace),
-            "home_dir": str(workspace),
-            "guard_home": str(guard_home),
-            "source_ref_external_allowed": False,
-            "observe_mode": False,
-            "deadline_budget_ms": 5_000,
-        },
-        separators=(",", ":"),
-    )
-
-
-def _run_cold(runtime: Path, session: AdapterSession, iterations: int) -> list[float]:
-    values: list[float] = []
-    environment = {
-        "HOME": str(session.workspace),
-        "TMPDIR": tempfile.gettempdir(),
-        **{key: value for key in ("LANG", "LC_ALL") if (value := os.environ.get(key))},
-    }
-    request = _wire_request(session.workspace, session.guard_home, "native-slo-cold")
-    for _ in range(iterations):
-        _require(session.stop_resident(), "cold native resident stop was not contained")
-        started = time.perf_counter()
-        completed = subprocess.run(
-            (str(runtime), "hook", "--stdin"),
-            input=request.encode("utf-8"),
-            cwd=runtime.parent,
-            env=environment,
-            capture_output=True,
-            check=False,
-            timeout=5,
-        )
-        elapsed_ms = (time.perf_counter() - started) * 1_000.0
-        _require(completed.returncode == 0, "cold native one-shot failed")
-        try:
-            response = json.loads(completed.stdout)
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise RuntimeError("cold native one-shot returned invalid JSON") from error
-        _require(isinstance(response, Mapping) and response.get("decision") == "allow", "cold decision was unsafe")
-        values.append(elapsed_ms)
-    return values
-
-
-def _run_recovery(session: AdapterSession, iterations: int) -> list[float]:
-    values: list[float] = []
-    for index in range(iterations):
-        warm = session.observe("claude-code", "PostToolUse", "1k")
-        _require(
-            warm.allowed and warm.route == "native_resident", f"recovery sample {index} was not resident before stop"
-        )
-        _require(
-            # A resident restart leaves the installed adapter's persistent
-            # Rust client alive. That stream re-discovers/authenticates the
-            # new generation on the next request; destroying it here would
-            # add a separate client cold start to the resident recovery SLO.
-            session.stop_resident(preserve_clients=True),
-            f"resident stop failed during recovery sample {index}",
-        )
-        started = time.perf_counter()
-        observation = session.observe("claude-code", "PostToolUse", "1k")
-        elapsed_ms = (time.perf_counter() - started) * 1_000.0
-        values.append(elapsed_ms)
-        print(
-            json.dumps(
-                {
-                    "schema": "hol-guard.native-recovery-sample.v1",
-                    "sample": index,
-                    "adapter_ms": round(observation.latency_ms, 3),
-                    "elapsed_ms": round(elapsed_ms, 3),
-                    "route": observation.route,
-                    "allowed": observation.allowed,
-                },
-                sort_keys=True,
-            ),
-            file=sys.stderr,
-            flush=True,
-        )
-        _require(observation.allowed and observation.route == "native_resident", f"recovery sample {index} failed")
-    return values
-
-
-def _run_serialized_warmup(session: AdapterSession, harness: str, event: str) -> None:
-    observation = session.observe(harness, event, "1k")
-    passed = observation.allowed and observation.route == "native_resident"
-    if not passed:
-        from codex_plugin_scanner.guard.native_approval_errors import NATIVE_COMMAND_CONTROL_ERROR_CODES
-
-        publisher = session.daemon._server.hook_worker.policy_snapshot_publisher
-        error = publisher.last_error
-        reasons = NATIVE_COMMAND_CONTROL_ERROR_CODES | {
-            "native_policy_snapshot_resident_changed",
-            "native_policy_snapshot_expired",
-            "native_policy_snapshot_runtime_unavailable",
-            "native_policy_snapshot_publish_failed",
-            "native_policy_snapshot_native_disabled",
-            "native_policy_snapshot_protocol_unsupported",
-        }
-        binding = publisher.current_snapshot_binding()
-        generation = binding.get("generation") if isinstance(binding, dict) else None
-        print(
-            json.dumps(
-                {
-                    "schema": "hol-guard.native-serialized-warmup-failure.v1",
-                    "route": observation.route if observation.route in SAFE_ROUTE_NAMES else "unknown",
-                    "allowed": observation.allowed,
-                    "adapter_ms": round(observation.latency_ms, 3),
-                    "publisher_error": error if error in reasons else None,
-                    "publisher_ready": binding is not None,
-                    "policy_generation": generation if type(generation) is int and 0 <= generation < 2**64 else None,
-                },
-                sort_keys=True,
-            ),
-            file=sys.stderr,
-            flush=True,
-        )
-    _require(passed, "serialized resident pool warmup did not stay on the allowed native route")
 
 
 def _measure_slo(
@@ -277,22 +196,96 @@ def _measure_slo(
     recovery_iterations: int,
     readiness_samples: int,
     include_capacity: bool,
+    progress: SloProgress | None = None,
 ) -> SloMeasurements:
     # Cold probes stop the session's resident before each one-shot call. Keep
     # them separate so this lifecycle exercise does not consume the bounded
     # restart budget used by warmup and recovery.
-    with AdapterSession(runtime) as cold_session:
-        cold = _run_cold(runtime, cold_session, cold_iterations)
-    with AdapterSession(runtime) as session:
-        warm = _run_warm(session, routes, warm_iterations)
-        sizes = _run_sizes(session, routes)
-        recovery = _run_recovery(session, recovery_iterations)
-        warmup_harness, warmup_event = routes[0]
-        _run_serialized_warmup(session, warmup_harness, warmup_event)
-        capacity = measure_capacity(session, routes, include_capacity=include_capacity)
-        readiness = [session.readiness_ms]
+    cold_entered = False
+    if progress is not None:
+        progress.activate("cold")
+    try:
+        with AdapterSession(runtime) as cold_session:
+            cold_entered = True
+            cold = _run_cold(runtime, cold_session, cold_iterations, progress=progress)
+    except Exception as error:
+        if progress is not None and not cold_entered:
+            progress.fail_request("cold")
+            progress.record_failure(error, stage="cold")
+        raise
+
+    readiness_completed = False
+    if progress is not None:
+        progress.activate("readiness")
+        progress.submit("readiness")
+        progress.attempt("readiness")
+    try:
+        with AdapterSession(runtime) as session:
+            readiness = [session.readiness_ms]
+            readiness_completed = True
+            if progress is not None:
+                progress.complete("readiness")
+            warm = _run_warm(session, routes, warm_iterations, progress=progress)
+            sizes = _run_sizes(session, routes, progress=progress)
+            recovery_adapter: list[float] = []
+            recovery_enclosing: list[float] = []
+            recovery = _run_recovery(
+                session,
+                recovery_iterations,
+                progress=progress,
+                adapter_values=recovery_adapter,
+                enclosing_values=recovery_enclosing,
+            )
+            warmup_harness, warmup_event = routes[0]
+            _run_serialized_warmup(session, warmup_harness, warmup_event, progress=progress)
+
+            def observe_capacity(harness: str, event: str, size_class: str, stage: str) -> Observation:
+                if progress is None:
+                    return session.observe(harness, event, size_class)
+                return _observe_with_progress(
+                    progress,
+                    session,
+                    harness,
+                    event,
+                    size_class,
+                    stage,
+                    fatal=False,
+                    record_submission=False,
+                    complete=stage != "capacity_prewarm",
+                )
+
+            capacity = measure_capacity(
+                session,
+                routes,
+                include_capacity=include_capacity,
+                observer=observe_capacity if progress is not None else None,
+                on_submitted=progress.submit if progress is not None else None,
+                on_cancelled=progress.cancel if progress is not None else None,
+                on_deferred_complete=progress.complete if progress is not None else None,
+                on_deferred_failure=progress.fail_request if progress is not None else None,
+                progress=progress,
+            )
+    except Exception as error:
+        if progress is not None and not readiness_completed:
+            progress.fail_request("readiness")
+            progress.record_failure(error, stage="readiness")
+        raise
     if readiness_samples > 1:
-        readiness.extend(_readiness_samples(runtime, readiness_samples - 1))
+        try:
+            readiness.extend(
+                _readiness_samples(
+                    runtime,
+                    readiness_samples - 1,
+                    progress_submit=progress.submit if progress is not None else None,
+                    progress_attempt=progress.attempt if progress is not None else None,
+                    progress_complete=progress.complete if progress is not None else None,
+                )
+            )
+        except Exception as error:
+            if progress is not None:
+                progress.fail_request("readiness")
+                progress.record_failure(error, stage="readiness")
+            raise
     rss_peak = max(capacity.rss_peak, process_rss_bytes())
     return SloMeasurements(
         warm=warm,
@@ -306,6 +299,8 @@ def _measure_slo(
         readiness=readiness,
         rss_baseline=capacity.rss_baseline,
         rss_peak=rss_peak,
+        recovery_adapter=recovery_adapter,
+        recovery_enclosing=recovery_enclosing,
     )
 
 
@@ -317,11 +312,39 @@ def run_slo(
     recovery_iterations: int,
     readiness_samples: int,
     include_capacity: bool,
+    progress: SloProgress | None = None,
 ) -> dict[str, object]:
-    _clear_proof_overrides()
-    runtime_summary = _runtime_summary(runtime)
-    routes = route_matrix()
-    installed_corpus = _installed_corpus(runtime, len(routes))
+    progress = progress or SloProgress()
+    progress.set_warm_iterations(warm_iterations)
+    progress.configure_invocation(
+        warm_iterations=warm_iterations,
+        cold_iterations=cold_iterations,
+        recovery_iterations=recovery_iterations,
+        readiness_samples=readiness_samples,
+        include_capacity=include_capacity,
+    )
+    with preflight_operation(progress, "cleanup"):
+        _clear_proof_overrides()
+    with preflight_operation(progress, "runtime"):
+        runtime_summary = _runtime_summary(runtime)
+    progress.runtime_summary = runtime_summary
+    with preflight_operation(progress, "routes"):
+        routes = route_matrix()
+        progress.configure_routes(routes)
+    progress.activate("installed_corpus")
+    progress.submit("installed_corpus")
+    progress.attempt("installed_corpus")
+    try:
+        installed_corpus = _installed_corpus(runtime, len(routes))
+    except Exception as error:
+        progress.fail_request("installed_corpus")
+        progress.record_failure(error, stage="installed_corpus")
+        raise
+    progress.complete("installed_corpus")
+    progress.submit("installed_corpus_routes", len(routes))
+    progress.attempt("installed_corpus_routes", len(routes))
+    progress.complete("installed_corpus_routes", len(routes))
+    progress.installed_corpus = installed_corpus
     measurements = _measure_slo(
         runtime,
         routes,
@@ -330,6 +353,7 @@ def run_slo(
         recovery_iterations=recovery_iterations,
         readiness_samples=readiness_samples,
         include_capacity=include_capacity,
+        progress=progress,
     )
     summary = summarize_measurements(measurements)
     gates = slo_gates(
@@ -347,6 +371,7 @@ def run_slo(
         summary,
         gates,
         corpus_origin=_INSTALLED_WHEEL_OWNERSHIP_CONTRACT,
+        progress=progress,
     )
 
 
@@ -365,20 +390,47 @@ def main() -> int:
         parser.error("iteration counts must be positive")
     if not 1 <= args.readiness_samples <= _MAX_READINESS_SAMPLES:
         parser.error("readiness samples must be between one and eight")
-    runtime = args.runtime.expanduser().resolve(strict=True)
-    _require(runtime.is_file() and not args.runtime.is_symlink(), "runtime must be a regular non-symlink file")
-    result = run_slo(
-        runtime,
+    progress = SloProgress()
+    progress.set_warm_iterations(args.warm_iterations)
+    progress.configure_invocation(
         warm_iterations=args.warm_iterations,
         cold_iterations=args.cold_iterations,
         recovery_iterations=args.recovery_iterations,
         readiness_samples=args.readiness_samples,
         include_capacity=not args.skip_capacity,
     )
+    execution_failed = False
+    try:
+        with preflight_operation(progress, "runtime_input"):
+            runtime = args.runtime.expanduser().resolve(strict=True)
+            _require(runtime.is_file() and not args.runtime.is_symlink(), "runtime must be a regular non-symlink file")
+        result = run_slo(
+            runtime,
+            warm_iterations=args.warm_iterations,
+            cold_iterations=args.cold_iterations,
+            recovery_iterations=args.recovery_iterations,
+            readiness_samples=args.readiness_samples,
+            include_capacity=not args.skip_capacity,
+            progress=progress,
+        )
+    except Exception as error:
+        execution_failed = True
+        progress.record_failure(error, stage="unknown", labels={})
+        result = incomplete_slo_result(progress, include_capacity=not args.skip_capacity)
+        print("native_installed_slo_failed: benchmark aborted; aggregate report is available", file=sys.stderr)
     rendered = json.dumps(result, indent=2, sort_keys=True)
-    print(rendered)
     if args.json is not None:
-        args.json.write_text(rendered + "\n", encoding="utf-8")
+        try:
+            args.json.write_text(rendered + "\n", encoding="utf-8")
+        except Exception as error:
+            execution_failed = True
+            progress.record_failure(error, stage="report")
+            result = incomplete_slo_result(progress, include_capacity=not args.skip_capacity)
+            rendered = json.dumps(result, indent=2, sort_keys=True)
+            print("native_installed_slo_failed: aggregate report could not be exported", file=sys.stderr)
+    print(rendered)
+    if execution_failed:
+        return 1
     return 0 if not args.enforce or result.get("passed") is True else 1
 
 

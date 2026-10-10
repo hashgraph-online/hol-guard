@@ -5,6 +5,7 @@ on:
     types: [closed]
     paths:
       - "contributions/extensions/**"
+      - "contributions/command-sources/**"
       - "contributions/mcp-servers/**"
       - "contributions/extension-listings/**"
   workflow_dispatch:
@@ -20,6 +21,11 @@ on:
         type: boolean
       dry_run:
         description: "Print the notice body without posting (read-only rehearsal)"
+        required: false
+        default: false
+        type: boolean
+      refresh_existing:
+        description: "Refresh an existing trusted claim notice after rechecking authority"
         required: false
         default: false
         type: boolean
@@ -53,6 +59,7 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
           ALLOW_RENAMES: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.allow_renames || 'false' }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+          REFRESH_EXISTING: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.refresh_existing || 'false' }}
           GUARD_EXTENSION_STUDIO_URL: https://hol.org/guard/extension-studio
         run: |
           args=(
@@ -65,5 +72,8 @@ jobs:
           fi
           if [[ "$DRY_RUN" == "true" ]]; then
             args+=(--dry-run)
+          fi
+          if [[ "$REFRESH_EXISTING" == "true" ]]; then
+            args+=(--refresh-existing)
           fi
           python3 "${args[@]}"

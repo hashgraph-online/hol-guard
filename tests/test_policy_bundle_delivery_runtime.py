@@ -31,8 +31,8 @@ _VECTOR_PATH = (
     Path(__file__).resolve().parents[1]
     / "contracts/managed-controls/v1/policy-bundle-v2-extension-signature-vector.json"
 )
-_GUARD_RELEASE_CATALOG_DIGEST = "5ddd99d39d734148250f7f212e4b615cf8db38c864e70731e4b835117126c31d"
-_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:56cdb673cf14d447a7bc0a8135fb26d0fb32d5518474029f248e92e2f21912d8"
+_GUARD_RELEASE_CATALOG_DIGEST = "e27a20311c72def2ca490db1b03a34deaa35860c4c537d453cfa346967293b1f"
+_GUARD_RELEASE_PROJECTION_DIGEST = "sha256:7fb5310f60395b624123872305baa9f4a0d3a996a2dbfba10fa3c0b583dcdad9"
 
 
 class _Response:
@@ -66,18 +66,14 @@ def _bundle() -> dict[str, object]:
 
 
 def test_signed_cloud_extension_projection_matches_shared_vector() -> None:
+    """Verify signed cloud extension projection matches shared vector."""
     vector_path = _VECTOR_PATH.with_name("extension-projection-digest-vector.json")
     vector = json.loads(vector_path.read_text())
 
     assert vector["catalogDigest"] == _GUARD_RELEASE_CATALOG_DIGEST
     assert vector["expectedExtensionProjectionDigest"] == _GUARD_RELEASE_PROJECTION_DIGEST
-    assert (
-        vector["catalogDigest"]
-        == runner.build_builtin_extension_catalog_wire(
-            guard_version="test",
-            generated_at="2026-08-25T12:00:00Z",
-        )["catalogDigest"]
-    )
+    # Fixed crypto input, not a snapshot of the growing production catalog.
+    # Dynamic catalog binding is covered by the delivery/apply tests below.
     assert (
         signed_cloud_extension_projection_json(
             parse_managed_bundle(_bundle()),

@@ -16,9 +16,6 @@ from codex_plugin_scanner.guard.contained_package_script_execution import (
 )
 from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
 from codex_plugin_scanner.guard.runtime import local_package_script_evidence as evidence_module
-from codex_plugin_scanner.guard.runtime.command_contained_routine_candidates import (
-    contained_routine_candidate_operation,
-)
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentAttestation,
     ContainmentBackend,
@@ -40,7 +37,7 @@ from codex_plugin_scanner.guard.runtime.local_package_script_evidence import (
 from codex_plugin_scanner.guard.runtime.workspace_snapshot_inputs import complete_workspace_snapshot
 from tests.guard_command_corpus import iter_adversarial_corpus, iter_benign_corpus
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
-from tests.native_command_test_support import real_native_command_evaluation
+from tests.native_command_test_support import iter_native_command_evaluations
 
 _INTEGRITY = "sha512-" + base64.b64encode(bytes(64)).decode("ascii")
 _OPERATIONS = {
@@ -151,58 +148,70 @@ def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecu
     )
 
 
+def _requires_containment_proof(evaluation: object) -> bool:
+    reasons = evaluation.decision_plane.reasons
+    return any(reason.reason_code == "contained-routine-proof-required" for reason in reasons)
+
+
 @pytest.mark.parametrize("partition", range(_CORPUS_PARTITIONS))
 def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: int) -> None:
-    # Keep all 51,000 cases while allowing CI to distribute this formerly
-    # five-minute pytest node across its duration-balanced shard plan.
-    for case, oracle in zip(
-        iter_benign_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        iter_benign_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        strict=True,
-    ):
-        assert case.case_id == oracle.case_id
-        evaluation = real_native_command_evaluation(
-            case.command, cwd=Path("workspace"), home_dir=Path("home")
-        ).evaluation
-        operation = contained_routine_candidate_operation(evaluation.command)
-        if oracle.owner != "CDX-061":
-            assert operation is None
-            continue
-        assert operation is not None
-        assert evaluation.minimum_action == "review"
-        assert evaluation.decision_plane.action == "review"
-        assert evaluation.decision_plane.proof_routes == frozenset()
-        assert any(
-            reason.reason_code == "contained-routine-proof-required" for reason in evaluation.decision_plane.reasons
+    # Keep every case and oracle assertion, but amortize native process startup
+    # through the existing bounded evaluator rather than spawning per command.
+    benign = list(
+        zip(
+            iter_benign_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            iter_benign_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            strict=True,
         )
-    for case, oracle in zip(
-        iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        iter_adversarial_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
-        strict=True,
-    ):
+    )
+    evaluations = iter_native_command_evaluations(
+        (case.command for case, _oracle in benign), cwd=Path("workspace"), home_dir=Path("home")
+    )
+    for (case, oracle), reviewed in zip(benign, evaluations, strict=True):
+        assert case.case_id == oracle.case_id
+        evaluation = reviewed.evaluation
+        owned = _requires_containment_proof(evaluation)
+        if oracle.owner != "CDX-061":
+            assert not owned
+            continue
+        assert owned
+        assert evaluation.minimum_action == "review"
+        # Intrinsic Git-context reapproval strengthens, never replaces, the
+        # independently required containment proof.
+        expected_floor = "require-reapproval" if reviewed.native_minimum_action == "require-reapproval" else "review"
+        assert evaluation.decision_plane.action == expected_floor
+        assert evaluation.decision_plane.proof_routes == frozenset()
+    adversarial = list(
+        zip(
+            iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            iter_adversarial_oracle(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
+            strict=True,
+        )
+    )
+    evaluations = iter_native_command_evaluations(
+        (case.command for case, _oracle in adversarial), cwd=Path("workspace"), home_dir=Path("home")
+    )
+    for (case, oracle), reviewed in zip(adversarial, evaluations, strict=True):
         assert case.case_id == oracle.case_id
         assert oracle.owner != "CDX-061"
-        evaluation = real_native_command_evaluation(
-            case.command, cwd=Path("workspace"), home_dir=Path("home")
-        ).evaluation
-        assert contained_routine_candidate_operation(evaluation.command) is None
+        assert not _requires_containment_proof(reviewed.evaluation)
 
 
 def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
-    operations: set[str] = set()
+    owned = [
+        (case, oracle)
+        for case, oracle in zip(iter_benign_corpus(), iter_benign_oracle(), strict=True)
+        if oracle.owner == "CDX-061"
+    ]
+    evaluations = iter_native_command_evaluations(
+        (case.command for case, _oracle in owned), cwd=Path("workspace"), home_dir=Path("home")
+    )
     count = 0
-    for case, oracle in zip(iter_benign_corpus(), iter_benign_oracle(), strict=True):
-        if oracle.owner != "CDX-061":
-            continue
-        evaluation = real_native_command_evaluation(
-            case.command, cwd=Path("workspace"), home_dir=Path("home")
-        ).evaluation
-        operation = contained_routine_candidate_operation(evaluation.command)
+    for (case, oracle), reviewed in zip(owned, evaluations, strict=True):
+        assert case.case_id == oracle.case_id
         count += 1
-        assert operation is not None
-        operations.add(operation)
+        assert _requires_containment_proof(reviewed.evaluation)
     assert count == 275
-    assert operations == {"test", "lint", "build", "typecheck", "compile-check", "dependency-tree", "workspace-check"}
 
 
 @pytest.mark.parametrize("operation", tuple(_OPERATIONS))

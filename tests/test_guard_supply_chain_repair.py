@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.daemon.server import _repair_detected_package_shims
+from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
+from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler, _repair_detected_package_shims
 from codex_plugin_scanner.guard.runtime.runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotConfiguredError,
@@ -18,6 +20,64 @@ from codex_plugin_scanner.guard.supply_chain_repair import (
     coordinate_supply_chain_repair,
 )
 from codex_plugin_scanner.guard.supply_chain_repair_sync import repair_sync_intelligence
+
+
+@pytest.mark.parametrize("allowed,proof_required", [(False, False), (True, False), (True, True)])
+def test_guided_repair_checks_cloud_access_before_requesting_local_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    allowed: bool,
+    proof_required: bool,
+) -> None:
+    handler = object.__new__(_GuardDaemonHandler)
+    handler.server = SimpleNamespace(store=SimpleNamespace(guard_home=tmp_path, get_cloud_workspace_id=lambda: None))
+    events: list[str] = []
+    responses: list[tuple[int, dict]] = []
+    context = HarnessContext(guard_home=tmp_path, home_dir=tmp_path, workspace_dir=tmp_path)
+    monkeypatch.setattr(handler, "_enforce_package_firewall_rate_limit", lambda *args: True)
+    monkeypatch.setattr(
+        handler, "_supply_chain_entitlement", lambda: {"allowed": allowed, "reason": "paid_guard_cloud_required"}
+    )
+    monkeypatch.setattr(handler, "_supply_chain_context", lambda payload: context)
+    monkeypatch.setattr(handler, "_write_json", lambda payload, status=200: responses.append((status, payload)))
+    monkeypatch.setattr(
+        handler, "_write_approval_gate_error", lambda error: responses.append((error.status, {"error": error.code}))
+    )
+    monkeypatch.setattr(handler, "_record_headless_receipt", lambda **kwargs: None)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.package_shim_status", lambda context: {"installed_managers": []}
+    )
+
+    def require_proof(*args, **kwargs):
+        events.append("proof")
+        if proof_required:
+            raise ApprovalGateError("approval_gate_required", "Local approval required.")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.server.require_high_risk", require_proof)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server._repair_detected_package_shims",
+        lambda *args, **kwargs: events.append("repair"),
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server._activate_package_firewall_runtime", lambda context: (200, {})
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.repair_sync_intelligence", lambda *args, **kwargs: None
+    )
+
+    handler._handle_supply_chain_repair({})
+
+    if proof_required:
+        assert events == ["proof"]
+        assert responses == [(403, {"error": "approval_gate_required"})]
+    elif allowed:
+        assert events == ["proof", "repair"]
+        assert responses[0][0] == 200
+        assert responses[0][1]["result"]["repaired"] is True
+    else:
+        assert events == []
+        assert responses[0][0] == 402
+        assert responses[0][1]["error"] == "paid_guard_cloud_required"
 
 
 def test_supply_chain_repair_runs_every_step() -> None:
@@ -201,3 +261,50 @@ def test_repair_detected_package_shims_installs_detected_unprotected_manager(
     assert result["installed_now"] == ["npm"]
     package_shims = cast(dict[str, object], result["package_shims"])
     assert package_shims["installed_managers"] == ["npm"]
+
+
+def test_local_recovery_without_cloud_access_does_not_install_new_managers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = HarnessContext(guard_home=tmp_path, home_dir=tmp_path, workspace_dir=tmp_path)
+    observed: list[tuple[str, ...]] = []
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.package_shim_status",
+        lambda context: {
+            "installed_managers": ["npm"],
+            "detected_managers": ["npm", "pip3"],
+            "missing_managers": ["pip3"],
+            "manager_details": [{"manager": "npm", "integrity": "ok"}, {"manager": "pip3", "integrity": "missing"}],
+        },
+    )
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server.activate_package_shims",
+        lambda context, *, managers, repair: observed.append(managers) or {},
+    )
+
+    result = coordinate_supply_chain_repair(
+        repair_package_shims=lambda: _repair_detected_package_shims(context, install_missing=False),
+        activate_runtime=lambda: (200, {}),
+        sync_intelligence=lambda: None,
+    )
+
+    assert observed == [("npm",)]
+    assert result["repaired"] is False
+    assert result["failed_steps"] == []
+    assert result["completed_steps"] == ["runtime_activation", "intelligence_sync"]
+    assert result["remaining_steps"] == [
+        {
+            "step": "package_shims",
+            "code": "paid_guard_cloud_required",
+            "action": "check_access",
+            "message": (
+                "Existing package tools were repaired. "
+                "Check Cloud access to protect additional detected tools: pip3."
+            ),
+        }
+    ]
+    assert (
+        result["message"]
+        == "Existing protection was repaired. Check Cloud access before protecting additional package tools."
+    )

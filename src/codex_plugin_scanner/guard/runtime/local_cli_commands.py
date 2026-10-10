@@ -11,13 +11,14 @@ from typing import Literal
 
 from .command_model import parse_shell_command
 from .local_cli_identity import UnlistedCliIdentity
+from .local_cli_runner import runner_inner_arguments
 
-LocalCliCommandState = Literal["inherit", "allow", "block"]
+LocalCliCommandState = Literal["inherit", "allow", "review", "block"]
 
 ROOT_COMMAND_ID = "root"
 OTHER_COMMAND_ID = "other"
 _COMMAND_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{0,40}$")
-MAX_LOCAL_CLI_COMMANDS = 80
+MAX_LOCAL_CLI_COMMANDS = 101
 _MAX_COMMANDS = MAX_LOCAL_CLI_COMMANDS
 _MAX_DEPTH = 4
 
@@ -65,7 +66,7 @@ def slug_local_cli_command_id(name: str) -> str:
 
 
 def is_local_cli_command_state(value: object) -> bool:
-    return value in {"inherit", "allow", "block"}
+    return value in {"inherit", "allow", "review", "block"}
 
 
 def local_cli_command_state(value: object) -> LocalCliCommandState | None:
@@ -75,6 +76,8 @@ def local_cli_command_state(value: object) -> LocalCliCommandState | None:
         return "allow"
     if value == "block":
         return "block"
+    if value == "review":
+        return "review"
     return None
 
 
@@ -135,7 +138,12 @@ def command_tokens_for_invocation(
     if not model.segments:
         return ()
     arguments = list(model.segments[0].arguments)
-    if identity.kind == "script" and arguments:
+    if identity.runner is not None:
+        split = runner_inner_arguments(identity.runner, arguments)
+        if split is None:
+            return ()
+        arguments = split
+    elif identity.kind == "script" and arguments:
         first_name = Path(arguments[0]).name
         if first_name == identity.name:
             arguments = arguments[1:]

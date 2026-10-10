@@ -14,12 +14,15 @@ fn policy() -> EffectiveNativePolicyV3 {
         harness_actions: BTreeMap::new(),
         publisher_actions: BTreeMap::new(),
         artifact_actions: BTreeMap::new(),
+        mcp_tool_actions: BTreeMap::new(),
+        mcp_provider_actions: BTreeMap::new(),
+        mcp_provider_catalog_hash: None,
         sandbox_analysis: "off".into(),
         receipt_redaction_level: "full".into(),
     }
 }
 
-fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
+pub(super) fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
     let effective_policy = policy();
     let mut result = PolicySnapshotV3 {
         schema: POLICY_SNAPSHOT_SCHEMA.into(),
@@ -39,6 +42,7 @@ fn snapshot(generation: u64, key: &[u8]) -> PolicySnapshotV3 {
         },
         effective_policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: 100,
         expires_at_ms: 1_000,
         integrity: SnapshotIntegrityV3 {
@@ -57,6 +61,55 @@ fn validates_authenticated_v3_snapshot() {
     let key = [7u8; 32];
     let snapshot = snapshot(1, &key);
     assert!(validate_v3(&snapshot, 1, &"a".repeat(64), &"b".repeat(64), &key, 200).is_ok());
+}
+
+#[test]
+fn provider_restrictions_are_authenticated_and_cannot_authorize_unverified_accounts() {
+    let key = [7u8; 32];
+    let selector = "codex:mcp__codex_apps__composio__:composio:all-accounts:SLACK_SEND_MESSAGE";
+    let mut bound = snapshot(1, &key);
+    bound
+        .effective_policy
+        .mcp_provider_actions
+        .insert(selector.into(), "block".into());
+    bound.config_digest = config_digest(&bound.effective_policy).unwrap();
+    bound.policy_digest = policy_digest(&bound).unwrap();
+    bound.integrity.mac = integrity_mac(&bound, &key).unwrap();
+    assert!(validate_v3(&bound, 1, &"a".repeat(64), &"b".repeat(64), &key, 200).is_ok());
+    let mut forged = bound.clone();
+    forged
+        .effective_policy
+        .mcp_provider_actions
+        .insert(selector.into(), "review".into());
+    assert_eq!(
+        validate_v3(&forged, 1, &"a".repeat(64), &"b".repeat(64), &key, 200),
+        Err(SnapshotError::DigestMismatch)
+    );
+    assert!(!observed_mcp::validate_mcp_provider_actions(
+        &BTreeMap::from([(selector.into(), "allow".into()),])
+    ));
+    let over_capacity = (0..=POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS)
+        .map(|index| {
+            (
+                format!("codex:mcp__server__:composio:all-accounts:ACTION_{index}"),
+                "block".into(),
+            )
+        })
+        .collect();
+    assert!(!observed_mcp::validate_mcp_provider_actions(&over_capacity));
+    let mut changed_catalog = bound.clone();
+    changed_catalog.effective_policy.mcp_provider_catalog_hash = Some("c".repeat(64));
+    assert_eq!(
+        validate_v3(
+            &changed_catalog,
+            1,
+            &"a".repeat(64),
+            &"b".repeat(64),
+            &key,
+            200
+        ),
+        Err(SnapshotError::DigestMismatch)
+    );
 }
 
 #[test]

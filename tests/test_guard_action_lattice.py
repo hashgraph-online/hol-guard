@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.action_lattice import (
     normalize_guard_action,
     normalize_guard_action_result,
 )
-from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _requested_policy_action_normalization
 from codex_plugin_scanner.guard.config import (
     GuardConfig,
     _coerce_action_map,
@@ -27,7 +26,7 @@ from codex_plugin_scanner.guard.mdm.policy import _merge_strongest_actions, _str
 from codex_plugin_scanner.guard.models import GUARD_ACTION_VALUES, GuardAction
 from codex_plugin_scanner.guard.policy.engine import decide_action
 from codex_plugin_scanner.guard.policy.engine import guard_action_severity as policy_engine_action_severity
-from codex_plugin_scanner.guard.proxy.runtime_mcp import _guard_action, _most_restrictive_package_policy_action
+from codex_plugin_scanner.guard.proxy.runtime_mcp import _guard_action
 from codex_plugin_scanner.guard.receipts.manager import _resolve_policy_decision
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import PackageRequestEvaluation
@@ -73,8 +72,6 @@ def test_most_restrictive_composition_is_idempotent_and_associative() -> None:
 
 @pytest.mark.parametrize("weaker", ("allow", "warn", "review", "require-reapproval"))
 def test_sandbox_required_cannot_be_downgraded_by_package_or_managed_composition(weaker: GuardAction) -> None:
-    assert _most_restrictive_package_policy_action("sandbox-required", weaker) == "sandbox-required"
-    assert _most_restrictive_package_policy_action(weaker, "sandbox-required") == "sandbox-required"
     assert _merge_strongest_actions("sandbox-required", weaker) == "sandbox-required"
     assert _strongest_security_value(weaker, "sandbox-required") == "sandbox-required"
 
@@ -104,8 +101,6 @@ def test_legacy_product_ask_alias_normalizes_to_exact_review_without_contract_er
 def test_unknown_action_never_loses_to_allow_or_warn() -> None:
     assert most_restrictive_guard_action("future-action", "allow") == "review"
     assert most_restrictive_guard_action("warn", "future-action") == "review"
-    assert _most_restrictive_package_policy_action("allow", "future-action") == "review"
-    assert _most_restrictive_package_policy_action("future-action", "warn") == "review"
     assert _merge_strongest_actions("sandbox-required", "future-action") == "block"
     assert _merge_strongest_actions(None, "future-action") == "block"
 
@@ -115,20 +110,6 @@ def test_policy_engine_present_unknown_actions_do_not_fall_through_to_allow(tmp_
 
     assert decide_action("future-action", "allow", config, changed=False) == "require-reapproval"
     assert decide_action(None, "future-action", config, changed=False) == "require-reapproval"
-
-
-@pytest.mark.parametrize("payload_action", ("future-action", "", None, 7))
-def test_runtime_hook_present_unknown_action_normalizes_with_diagnostics(payload_action: object) -> None:
-    result = _requested_policy_action_normalization(None, None, {"policy_action": payload_action})
-
-    assert result is not None
-    assert result.action == "require-reapproval"
-    assert result.reason_code == UNKNOWN_GUARD_ACTION_REASON
-    assert result.original_action == (payload_action if isinstance(payload_action, str) else None)
-
-
-def test_runtime_hook_absent_action_preserves_computed_policy_fallback() -> None:
-    assert _requested_policy_action_normalization(None, None, {}) is None
 
 
 def test_runtime_policy_and_receipt_boundaries_share_canonical_normalization() -> None:

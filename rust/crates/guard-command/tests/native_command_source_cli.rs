@@ -19,8 +19,8 @@ fn request() -> Vec<u8> {
     let source: Value =
         serde_json::from_slice(include_bytes!("fixtures/command-source-example.v1.json")).unwrap();
     let trust: Value = serde_json::from_slice(include_bytes!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../../contracts/extensions/trust-class-map.v1.json"
+        env!("OUT_DIR"),
+        "/trust-class-map.v1.json"
     )))
     .unwrap();
     serde_json::to_vec(&json!({
@@ -28,6 +28,25 @@ fn request() -> Vec<u8> {
         "sources":[source], "trust":trust, "base":"packaged"
     }))
     .unwrap()
+}
+
+#[test]
+fn offline_cli_exports_build_derived_trust_without_stdin() {
+    let output = invoke(&["export-trust"], &[]);
+    assert!(output.status.success());
+    let trust: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(trust["schemaVersion"], "guard.extension-trust-class-map.v1");
+    assert!(trust["classes"]["external"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("command.noodle")));
+    assert!(trust["classes"]["first-party"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("command.git")));
+    assert!(!invoke(&["export-trust", "arbitrary-file.json"], &[])
+        .status
+        .success());
 }
 
 #[test]

@@ -1,3 +1,5 @@
+import type { GuardApprovalExtensionRecommendation } from "./approval-extension-recommendation-types";
+
 export type DecisionScope = "artifact" | "workspace" | "publisher" | "harness" | "global";
 export type ApprovalResolutionAction = "allow" | "block";
 
@@ -104,10 +106,18 @@ export type PackageExecutionContextEvidence = {
   changed_components?: string[];
 };
 
+export type GuardWatchOnlyScannerEvidence = {
+  source: "observe_mode_inbox";
+  observed_policy_action: GuardAction;
+  queued_policy_action: GuardAction;
+  authoritative_action: GuardAction;
+};
+
 export type GuardScannerEvidence =
   | RiskSignalV2
   | GuardSupplyChainScannerEvidence
-  | PackageExecutionContextEvidence;
+  | PackageExecutionContextEvidence
+  | GuardWatchOnlyScannerEvidence;
 
 export type GuardDecisionV2 = {
   /** Exact six-valued enforcement action. */
@@ -226,6 +236,8 @@ export type GuardHeadlineState =
   | "connected";
 
 export type GuardApprovalRequest = {
+  /** Local native snapshot projection; never a decision-capable approval row. */
+  native_business_review_display_only?: boolean;
   request_id: string;
   harness: string;
   artifact_id: string;
@@ -276,9 +288,14 @@ export type GuardApprovalRequest = {
   dedupe_count?: number;
   last_seen_at?: string | null;
   display_status?: string;
+  superseded_by_request_id?: string;
+  /** Explicit Core classification; absent on older daemons that only emit scanner evidence. */
+  watch_only_observation?: boolean;
   scanner_evidence?: GuardScannerEvidence[];
   temporary_mcp_approval?: GuardTemporaryMcpApproval | null;
   local_tool_approval?: GuardLocalToolApproval | null;
+  /** Live daemon advice: a built-in extension permission that would let this command run automatically. */
+  extension_recommendation?: GuardApprovalExtensionRecommendation;
 };
 
 export type GuardTemporaryMcpGrantTarget = "exact" | "category" | "server";
@@ -974,6 +991,7 @@ export type GuardSettings = {
   harness_risk_actions: Record<string, Record<string, string>>;
   approval_wait_timeout_seconds: number;
   approval_surface_policy: string;
+  blocked_request_mode?: "safe-alternative" | "ask";
   approval_browser_delay_seconds: number;
   approval_browser_immediate_severity: RiskSignalV2Severity;
   telemetry: boolean;

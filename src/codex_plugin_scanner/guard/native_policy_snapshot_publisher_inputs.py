@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import sqlite3
 import stat
 from pathlib import Path
 from threading import Condition
 from typing import TYPE_CHECKING, cast
 
+from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
 from .native_policy_snapshot_codec import _digest_v3
@@ -15,7 +17,11 @@ from .native_policy_snapshot_constants import (
     NATIVE_RUNTIME_STATE_DIRECTORY,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_policy import _merge_effective_native_policies, effective_native_policy_v3
+from .native_policy_snapshot_policy import (
+    _merge_effective_native_policies,
+    _stricter_action,
+    effective_native_policy_v3,
+)
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
@@ -27,10 +33,12 @@ class NativePolicySnapshotPublisherInputs:
 
     store: GuardStore  # pyright: ignore[reportUninitializedInstanceVariable]
     _command_control_runtime: ExtensionControlRuntime | None = None
+    _observe_extension_refresh: bool = False
     guard_home: Path  # pyright: ignore[reportUninitializedInstanceVariable]
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
     _acked: bool  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
 
@@ -49,6 +57,8 @@ class NativePolicySnapshotPublisherInputs:
             self.guard_home / "guard.db-journal",
             self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME,
             self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / AUTHORITY_FILE_NAME,
+            self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / SOURCE_FILE_NAME,
+            self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / ANCHOR_FILE_NAME,
             *self._external_policy_paths(),
             *self._workspace_policy_paths(),
         )
@@ -140,7 +150,20 @@ class NativePolicySnapshotPublisherInputs:
         """Reject ACKs that do not identify the resident observed after push."""
 
         if before and before != observed:
-            return None
+            # resident-stop removes the generation file, not its scope directory.
+            # A new authenticated ACK may create the first generation in those
+            # same empty roots. Treat that like cold startup, not replacement
+            # of a resident observed before publication. A pre-existing generation
+            # still requires the original unchanged-before/after fence.
+            before_roots = {path for path, _mtime, _size in before}
+            observed_roots = {path for path, _mtime, _size in observed if "/" not in path}
+            started_in_empty_roots = (
+                all(path.startswith("resident-v3-") and "/" not in path for path in before_roots)
+                and before_roots == observed_roots
+                and any("/generation-" in path and path.endswith(".json") for path, _mtime, _size in observed)
+            )
+            if not started_in_empty_roots:
+                return None
         if not self._resident_fingerprint_matches_generation(observed, resident_generation):
             return None
         # Re-read only bounded metadata while the barrier is held. A changed
@@ -183,18 +206,74 @@ class NativePolicySnapshotPublisherInputs:
             paths.extend(workspace / filename for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
         return tuple(paths)
 
-    def _compiled_effective_policy(self) -> dict[str, object]:
-        """Build the native snapshot input off the synchronous hook path."""
+    def _pending_workspace_policy_paths(self) -> set[str]:
+        with self._condition:
+            pending = tuple(self._pending_workspace_paths)
+        return {
+            str(workspace / filename)
+            for workspace in pending
+            for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
+        }
+
+    def _compiled_effective_policy(
+        self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None
+    ) -> dict[str, object]:
+        """Build the native snapshot input off the synchronous hook path.
+
+        ``settled_only`` omits workspaces still awaiting their first ACK so
+        observation compares like with the published snapshot. ``workspaces``
+        pins publication to the set its ACK will release.
+        """
 
         from .config import load_guard_config
+        from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
-            workspaces = tuple(sorted(self._workspace_paths, key=str))
+            selected = self._workspace_paths if workspaces is None else self._workspace_paths & workspaces
+            if settled_only:
+                selected = selected - self._pending_workspace_paths
+            selected_workspaces = tuple(sorted(selected, key=str))
         configs = [load_guard_config(self.guard_home)]
-        configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in workspaces)
-        return _merge_effective_native_policies(
+        configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
+        policy = _merge_effective_native_policies(
             tuple(effective_native_policy_v3(config) | {"mode": config.mode} for config in configs)
         )
+        try:
+            mcp_actions = native_observed_mcp_tool_actions(self.store)
+        except sqlite3.Error as error:
+            raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
+        if mcp_actions:
+            existing = cast(dict[str, str], policy.get("mcp_tool_actions", {}))
+            merged = dict(existing)
+            required_blocks = frozenset(key for key, action in existing.items() if action == "block")
+            namespace_blocks = tuple(key[:-1] for key in required_blocks if key.endswith("*"))
+            for key, action in mcp_actions.items():
+                # An exact local allow cannot create an exception to a configured
+                # namespace block. Existing configured restrictions remain floors.
+                if action == "allow" and key.startswith(namespace_blocks):
+                    continue
+                merged[key] = _stricter_action(merged.get(key, "allow"), action)
+            policy["mcp_tool_actions"] = bound_native_mcp_tool_actions(merged, required_blocks=required_blocks)
+        from .native_policy_snapshot_policy import _provider_action_map
+
+        provider_reader = getattr(self.store, "read_mcp_provider_choices", None)
+        if callable(provider_reader):
+            try:
+                provider_choices = _provider_action_map(provider_reader())
+            except sqlite3.Error as error:
+                raise NativePolicySnapshotError("native_policy_snapshot_policy_unavailable") from error
+            if provider_choices:
+                existing_provider = cast(dict[str, str], policy.get("mcp_provider_actions", {}))
+                merged_provider = dict(existing_provider)
+                for key, action in provider_choices.items():
+                    merged_provider[key] = _stricter_action(merged_provider.get(key, "review"), action)
+                policy["mcp_provider_actions"] = _provider_action_map(merged_provider)
+        provider_authority_reader = getattr(self.store, "read_mcp_provider_authority_hash", None)
+        if callable(provider_authority_reader):
+            provider_hash = provider_authority_reader()
+            if provider_hash is not None:
+                policy["mcp_provider_catalog_hash"] = provider_hash
+        return policy
 
     def _compiled_command_extensions(self) -> dict[str, object]:
         try:
@@ -206,6 +285,22 @@ class NativePolicySnapshotPublisherInputs:
                 self._acked = False
                 self._condition.notify_all()
             raise
+
+    def _compiled_business_source(self):
+        from .business_policy_document_import import read_business_source_for_store
+
+        return read_business_source_for_store(self.store)
+
+    @staticmethod
+    def _source_control_fingerprint(command_extensions, source) -> str:
+        if source is None:
+            return _digest_v3(command_extensions)
+        return _digest_v3(
+            {
+                "command_extensions": command_extensions,
+                "business_source": source.retained_identity_bytes.decode("utf-8"),
+            }
+        )
 
     @staticmethod
     def _external_policy_paths() -> tuple[Path, ...]:
@@ -223,6 +318,12 @@ class NativePolicySnapshotPublisherInputs:
         """Compare effective policy in the publisher thread, never in hooks."""
 
         force_republish = False
+        if changed_paths:
+            # A pending workspace already has a publish queued that reads its
+            # overlay. Treating its files as an effective-input change would
+            # withdraw the ACK home-wide and bump the epoch, which is how a
+            # stream of new workspaces starves readiness for every hook.
+            changed_paths = changed_paths - self._pending_workspace_policy_paths()
         if changed_paths:
             database_paths = {
                 str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
@@ -242,8 +343,9 @@ class NativePolicySnapshotPublisherInputs:
                 with self._condition:
                     self._acked = False
                     self._condition.notify_all()
+        source = None
         try:
-            effective_policy = self._compiled_effective_policy()
+            effective_policy = self._compiled_effective_policy(settled_only=True)
             # ``_compiled_effective_policy`` carries the raw mode beside the
             # bounded policy so snapshot generation can derive enforce versus
             # observe. ``config_digest`` deliberately covers only the
@@ -252,10 +354,11 @@ class NativePolicySnapshotPublisherInputs:
             # and continuously revoke the ACKed snapshot.
             policy_for_digest = dict(effective_policy)
             policy_for_digest.pop("mode", None)
+            source = self._compiled_business_source()
             current_fingerprint = (
                 cast(str, _digest_v3(policy_for_digest)),
                 cast(str, effective_policy["mode"]),
-                _digest_v3(self._compiled_command_extensions()),
+                self._source_control_fingerprint(self._compiled_command_extensions(), source),
             )
         except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
             current_fingerprint = ("unavailable", "", "")
@@ -268,7 +371,23 @@ class NativePolicySnapshotPublisherInputs:
         )
         self._observed_policy_fingerprint = current_fingerprint
         changed = force_republish or previous_fingerprint != current_fingerprint
-        if changed or current_fingerprint[0] == "unavailable":
+        # Command-control churn under Watch must republish, but it must not
+        # withdraw the resident-validated observe snapshot. Withdrawing it
+        # makes the next review pause, and that pause is what churns the
+        # controls again. Policy, mode, and unavailable inputs still withdraw.
+        self._observe_extension_refresh = bool(
+            changed
+            and not force_republish
+            and previous_fingerprint is not None
+            and current_fingerprint[0] not in {"", "unavailable"}
+            and previous_fingerprint[0] == current_fingerprint[0]
+            and previous_fingerprint[1] == "observe"
+            and current_fingerprint[1] == "observe"
+            and previous_fingerprint[2] != current_fingerprint[2]
+            and source is None
+            and not (getattr(self, "_snapshot", None) or {}).get("business_policy")
+        )
+        if (changed or current_fingerprint[0] == "unavailable") and not self._observe_extension_refresh:
             # A verified state change invalidates the previous ACK immediately,
             # including WAL-only mutations. Do not leave a readiness window
             # between observation and the publisher's next push attempt.

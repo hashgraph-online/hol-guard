@@ -1,5 +1,4 @@
-import { aN as fetchLocalCliApi, r as reactExports, aO as fetchExtensionControlApi, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, aP as HiMiniNoSymbol, af as HiMiniLockClosed, P as HiMiniExclamationTriangle, aQ as useResolvedApprovalGate, al as HiMiniArrowPath, w as HiMiniShieldCheck, aR as HiMiniInformationCircle, an as isApprovalProofSubmitDisabled, C as HiMiniXMark, am as ApprovalProofFieldInputs, ao as buildApprovalProofCredentials, aS as GenIcon, Q as HiMiniBolt, aT as HiMiniGlobeAlt, aU as HiMiniCube, K as HiMiniCloud, aV as HiMiniServerStack, b as HiMiniCommandLine, aW as HiMiniFolder, aX as FaWindows, aY as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, aZ as approvalProofRecentlySatisfied, a_ as HiMiniArrowLeft, a$ as HiMiniPlus, a8 as HiMiniClipboardDocumentCheck, a9 as HiMiniClipboard, ah as HiMiniAdjustmentsHorizontal, b0 as HiMiniCheck, aH as HiMiniMagnifyingGlass, b1 as startGuardCloudConnect, b2 as HiMiniArrowTopRightOnSquare, aG as WorkspacePageHeader, b3 as guardAwareHref } from "../guard-dashboard.js";
-import { A as ApprovalProofModal } from "./approval-proof-modal.js";
+import { aT as fetchLocalCliApi, r as reactExports, aU as fetchExtensionCatalog, aV as normalizeExtensionCatalogSummary, aW as normalizeExtensionPermission, aX as ExtensionControlProtocolError, aY as ExtensionControlApiError, aZ as normalizeExtensionCatalogItem, a_ as guardApiCacheScope, a$ as fetchExtensionCatalogV2Api, b0 as localPermissionDraftState, b1 as setLocalPermissionDraftState, b2 as newExtensionPolicyDraftIdentity, b3 as extensionPolicyDraftIsDirty, b4 as setLocalPermissionDraftStates, b5 as buildExtensionPolicyDraftMutation, b6 as previewExtensionMutation, b7 as isCurrentExtensionPolicyDraft, b8 as applyExtensionMutation, b9 as fetchEffectiveExtensionControls, ba as fetchExtensionControlHistory, j as jsxRuntimeExports, B as HiMiniSparkles, s as HiMiniCheckCircle, bb as HiMiniNoSymbol, al as HiMiniLockClosed, P as HiMiniExclamationTriangle, at as isApprovalProofSubmitDisabled, C as HiMiniXMark, as as ApprovalProofFieldInputs, bc as useResolvedApprovalGate, ar as HiMiniArrowPath, w as HiMiniShieldCheck, bd as HiMiniInformationCircle, au as buildApprovalProofCredentials, be as GenIcon, Q as HiMiniBolt, bf as HiMiniGlobeAlt, bg as HiMiniCube, K as HiMiniCloud, bh as HiMiniServerStack, b as HiMiniCommandLine, bi as HiMiniFolder, bj as FaWindows, bk as FaAws, c as HiMiniChevronRight, I as HiMiniChevronDown, bl as approvalProofRecentlySatisfied, bm as isBulkApproveGateReady, bn as HiMiniArrowLeft, bo as HiMiniPlus, bp as startGuardCloudConnect, bq as HiMiniArrowTopRightOnSquare, br as fetchExtensionControlApi, ae as HiMiniClipboardDocumentCheck, af as HiMiniClipboard, bs as ApprovalProofModal, bt as guardAwareHref, aN as HiMiniMagnifyingGlass, an as HiMiniAdjustmentsHorizontal, bu as HiMiniCheck, aM as WorkspacePageHeader, bv as acknowledgeDegradedExtensionControlAuthority, bw as recoverExtensionControlAuthority } from "../guard-dashboard.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
 const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
@@ -74,23 +73,23 @@ function extensionDetailHref(extensionId, state = DEFAULT_EXTENSION_DETAIL_URL_S
 function canonicalExtensionId(catalog, candidate) {
   if (!candidate) return null;
   const normalized = candidate.trim().toLowerCase();
-  const direct = catalog.find((extension2) => extension2.extension_id === normalized);
+  const direct = catalog.find((extension) => extension.extension_id === normalized);
   if (direct) return direct.extension_id;
-  return catalog.find((extension2) => extension2.aliases.includes(normalized))?.extension_id ?? null;
+  return catalog.find((extension) => extension.aliases.includes(normalized))?.extension_id ?? null;
 }
-function explicitControlState(effective, kind, targetId2) {
-  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.local_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.local_state;
+function explicitControlState(effective, kind, targetId) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId)?.local_state : effective.projection?.permissions.find((item) => item.permission_id === targetId)?.local_state;
   if (projected) return projected === "inherited" ? null : projected;
   return effective.controls.find(
-    (control) => control.target.kind === kind && control.target.target_id === targetId2
+    (control) => control.target.kind === kind && control.target.target_id === targetId
   )?.state ?? null;
 }
-function managedExplicitControlState(effective, kind, targetId2) {
-  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.managed_state;
+function managedExplicitControlState(effective, kind, targetId) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId)?.managed_state;
   if (projected) return projected === "inherited" ? null : projected;
   for (const layer of effective.layers) {
     if (layer.kind !== "signed-cloud") continue;
-    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId2);
+    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId);
     if (control) return control.state;
   }
   return null;
@@ -98,24 +97,24 @@ function managedExplicitControlState(effective, kind, targetId2) {
 function managedPermissionState(effective, permissionId) {
   return managedExplicitControlState(effective, "permission", permissionId);
 }
-function extensionEffectiveState(effective, extension2) {
-  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension2.extension_id);
+function extensionEffectiveState(effective, extension) {
+  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension.extension_id);
   if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
   if (effective.health !== "protected") return "disabled";
   if (effective.global_lockdown) return "disabled";
-  if (extension2.required) return "enabled";
-  const explicit = explicitControlState(effective, "extension", extension2.extension_id);
-  if (extension2.trust_class === "external" || extension2.activation === "opt-in") {
+  if (extension.required) return "enabled";
+  const explicit = explicitControlState(effective, "extension", extension.extension_id);
+  if (extension.trust_class === "external" || extension.activation === "opt-in") {
     return explicit === "enabled" ? "enabled" : "disabled";
   }
   return explicit ?? "enabled";
 }
-function permissionEffectiveState(effective, extension2, permission2) {
-  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
+function permissionEffectiveState(effective, extension, permission) {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission.permission_id);
   if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
-  if (extensionEffectiveState(effective, extension2) === "disabled") return "disabled";
-  if (!permission2.configurable) return permission2.default_enabled ? "enabled" : "disabled";
-  return explicitControlState(effective, "permission", permission2.permission_id) ?? (permission2.default_enabled ? "enabled" : "disabled");
+  if (extensionEffectiveState(effective, extension) === "disabled") return "disabled";
+  if (!permission.configurable) return permission.default_enabled ? "enabled" : "disabled";
+  return explicitControlState(effective, "permission", permission.permission_id) ?? (permission.default_enabled ? "enabled" : "disabled");
 }
 function extensionDisplayName(name) {
   for (const suffix of [" command protection", " protection"]) {
@@ -126,25 +125,25 @@ function extensionDisplayName(name) {
   }
   return name;
 }
-function extensionStateLabel(effective, extension2) {
+function extensionStateLabel(effective, extension) {
   if (effective.health !== "protected") return "Unavailable";
   if (effective.global_lockdown) return "Lockdown";
-  if (managedExplicitControlState(effective, "extension", extension2.extension_id) !== null) return "Managed";
-  if (extension2.required) return "Required";
-  return extensionEffectiveState(effective, extension2) === "enabled" ? "Allowed" : "Blocked";
+  if (managedExplicitControlState(effective, "extension", extension.extension_id) !== null) return "Managed";
+  if (extension.required) return "Required";
+  return extensionEffectiveState(effective, extension) === "enabled" ? "Allowed" : "Blocked";
 }
-function catalogRowSecondLine(extension2, state) {
+function catalogRowSecondLine(extension, state) {
   if (state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
-  if (extension2.trust_class === "external" && state !== "Allowed" && state !== "Required") {
+  if (extension.trust_class === "external" && state !== "Allowed" && state !== "Required") {
     return "Off until you turn it on";
   }
   if (state === "Blocked") return state;
-  const executables = extension2.executables.join(" · ").trim();
-  return executables || extension2.description;
+  const executables = extension.executables.join(" · ").trim();
+  return executables || extension.description;
 }
-function controlProvenance(effective, kind, targetId2) {
+function controlProvenance(effective, kind, targetId) {
   const managedSource2 = effective.managed_controls?.authority_mode === "managed-restrictive" ? `Managed by ${effective.managed_controls.workspace_id}` : "Synced from Guard Cloud";
-  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2) : effective.projection?.permissions.find((item) => item.permission_id === targetId2);
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId) : effective.projection?.permissions.find((item) => item.permission_id === targetId);
   if (projected) {
     const sources2 = [];
     if (effective.global_lockdown) sources2.push("Emergency Lockdown");
@@ -156,15 +155,15 @@ function controlProvenance(effective, kind, targetId2) {
   const sources = [];
   if (effective.global_lockdown) sources.push("Emergency Lockdown");
   for (const layer of effective.layers) {
-    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId2)) {
+    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId)) {
       sources.push(layer.kind === "signed-cloud" ? managedSource2 : "Set on this device");
     }
   }
   if (sources.length === 0) sources.push("Recommended by Guard");
   return sources;
 }
-function permissionForRule(extension2, rule2) {
-  return extension2.permissions.find((permission2) => permission2.rule_ids.includes(rule2.rule_id)) ?? null;
+function permissionForRule(extension, rule) {
+  return extension.permissions.find((permission) => permission.rule_ids.includes(rule.rule_id)) ?? null;
 }
 function treatmentLabel(value) {
   const labels = {
@@ -182,7 +181,7 @@ function treatmentLabel(value) {
   return labels[value] ?? value.replaceAll("-", " ");
 }
 function familyHeading(permissions) {
-  const examples = permissions.map((permission2) => permission2.example_command).filter((example) => Boolean(example)).map((example) => example.split(/\s+/));
+  const examples = permissions.map((permission) => permission.example_command).filter((example) => Boolean(example)).map((example) => example.split(/\s+/));
   if (!examples.length) return permissions[0]?.label ?? "";
   const first = examples[0];
   const shared = [];
@@ -196,12 +195,12 @@ function familyHeading(permissions) {
 function groupPermissionsByFamily(permissions) {
   const byFamily = /* @__PURE__ */ new Map();
   const ungrouped = [];
-  for (const permission2 of permissions) {
-    if (!permission2.family) ungrouped.push(permission2);
+  for (const permission of permissions) {
+    if (!permission.family) ungrouped.push(permission);
     else {
-      const members = byFamily.get(permission2.family) ?? [];
-      members.push(permission2);
-      byFamily.set(permission2.family, members);
+      const members = byFamily.get(permission.family) ?? [];
+      members.push(permission);
+      byFamily.set(permission.family, members);
     }
   }
   const families = [...byFamily.entries()].map(([family, members]) => ({ family, heading: familyHeading(members), permissions: members })).sort((left, right) => left.family.localeCompare(right.family));
@@ -231,16 +230,37 @@ function parseProtectionRoute(pathname) {
 function localCliHref(cliId) {
   return `/extensions/local-cli/${encodeURIComponent(cliId)}`;
 }
-class LocalCliApiError extends Error {
-  code;
-  constructor(code, message) {
-    super(message);
-    this.code = code;
-  }
+const PROFILE_SETUP_COMMANDS = { wrangler: "npx wrangler" };
+const PROFILE_COMMAND_PARAM = "command";
+function profileSetupCommand(item) {
+  return item.profile_id ? PROFILE_SETUP_COMMANDS[item.profile_id] ?? null : null;
+}
+function customExtensionDisplayName(item) {
+  return item.display_name ?? item.name;
+}
+function customExtensionBadge(item) {
+  if (item.seeded === true) return "Set up";
+  if (item.surface === "cli" && item.state === "unset" && item.suggestable) return "Detected";
+  return null;
+}
+function hasSuggestedRules(item) {
+  return item.commands.some((command) => command.suggested_state !== void 0);
+}
+function prefillSuggestedStates(item) {
+  if (item.state !== "unset") return item.commands;
+  return item.commands.map((command) => command.state === "inherit" && command.suggested_state !== void 0 && command.suggested_state !== "inherit" ? { ...command, state: command.suggested_state } : command);
+}
+function addCustomExtensionPrefillHref(base, command) {
+  if (!command || !Object.values(PROFILE_SETUP_COMMANDS).includes(command)) return base;
+  return `${base}?${PROFILE_COMMAND_PARAM}=${encodeURIComponent(command)}`;
+}
+function initialAddCommand(search) {
+  const value = new URLSearchParams(search).get(PROFILE_COMMAND_PARAM);
+  return value !== null && Object.values(PROFILE_SETUP_COMMANDS).includes(value) ? value : "";
 }
 const CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-function isRecord(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null;
 }
 function requiredString(value, field) {
@@ -251,7 +271,7 @@ function requiredInt(value, field) {
   if (typeof value !== "number" || !Number.isInteger(value)) throw new Error(`Invalid local CLI ${field}`);
   return value;
 }
-function optionalString$1(value) {
+function optionalString(value) {
   if (value === null || value === void 0) return null;
   if (typeof value !== "string") throw new Error("Invalid local CLI string");
   return value;
@@ -259,8 +279,436 @@ function optionalString$1(value) {
 function isLocalCliId(value) {
   return CLI_ID_PATTERN.test(value);
 }
-function addedCustomExtensions(items) {
-  return items.filter((item) => item.state !== "unset");
+async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
+  const normalize = (body) => {
+    if (!isRecord$1(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
+      throw new Error("Invalid discovery progress");
+    }
+    return body;
+  };
+  const request2 = async (payload) => {
+    const body = await readJson2(await fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+    const next = normalize(body);
+    if (payload.job_id !== next.job_id) throw new Error("Discovery identity changed");
+    return next;
+  };
+  let job = normalize(initialJob);
+  let finished = false;
+  try {
+    for (let poll = 0; poll < 120; poll += 1) {
+      if (signal.aborted) return;
+      if (job.state === "complete" || job.state === "cancelled") {
+        finished = true;
+        return;
+      }
+      if (job.state === "failed") {
+        finished = true;
+        let message;
+        switch (job.error) {
+          case "mcp_refresh_unavailable":
+            message = "Guard cannot list this connection directly. Refresh it in its host app.";
+            break;
+          case "mcp_launch_failed":
+            message = "Guard could not launch this MCP server. Check its configured executable and dependencies in the host app. Known tools and choices were kept.";
+            break;
+          case "mcp_transport_failed":
+            message = "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.";
+            break;
+          case "mcp_initialize_failed":
+            message = "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.";
+            break;
+          case "mcp_protocol_unsupported":
+            message = "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.";
+            break;
+          case "mcp_capability_rejected":
+            message = "The MCP server rejected Guard's discovery capabilities. Check the server's client requirements and Guard version. Known tools and choices were kept.";
+            break;
+          case "catalog_revision_conflict":
+            message = "A newer discovery finished first. Reload the inventory.";
+            break;
+          case "configured_host_scan_failed":
+            message = "Guard could not read the host's configured connections. Check the host app and retry.";
+            break;
+          case "observed_provider_scan_failed":
+            message = "Guard could not merge observed provider tools. Known tools and choices were kept; retry discovery.";
+            break;
+          case "catalog_limit_reached":
+            message = "This connector has more tools than Guard can catalog safely. Existing choices were kept.";
+            break;
+          default:
+            console.warn("Unknown discovery error code:", job.error);
+            message = "Discovery did not finish. Known tools and choices were kept. Try again shortly.";
+        }
+        throw new Error(message);
+      }
+      await new Promise((resolve) => {
+        const done = () => {
+          window.clearTimeout(timer);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        const timer = window.setTimeout(done, 500);
+        signal.addEventListener("abort", done, { once: true });
+      });
+      if (!signal.aborted) job = await request2({ job_id: job.job_id });
+    }
+    throw new Error("Discovery took too long. Known tools and choices were kept.");
+  } finally {
+    if (!finished) await request2({ job_id: job.job_id, cancel: true });
+  }
+}
+function record$2(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hostMetadataText(value, maximum) {
+  if (typeof value !== "string" || !value.trim() || [...value].length > maximum || value.includes("\0")) {
+    throw new Error("Invalid host metadata");
+  }
+  return value;
+}
+function optionalText(value, maximum) {
+  return value === null || value === void 0 ? null : hostMetadataText(value, maximum);
+}
+function normalizeCodexHostInventory(value) {
+  if (!record$2(value) || value.host !== "Codex" || value.catalog_coverage !== "host-summary" || value.account_verified !== false || value.schemas_available !== false || value.permissions_granted !== false || value.snapshot_age !== "unknown" || typeof value.metadata_complete !== "boolean" || typeof value.expires_at_ms !== "number" || !Number.isSafeInteger(value.expires_at_ms) || value.expires_at_ms <= 0 || typeof value.connection_id !== "string" || !/^[a-f0-9]{64}$/.test(value.connection_id) || !Array.isArray(value.apps) || value.apps.length > 1e3) return void 0;
+  try {
+    const appIds = /* @__PURE__ */ new Set();
+    let totalTools = 0;
+    const apps = value.apps.map((entry) => {
+      if (!record$2(entry) || typeof entry.enabled !== "boolean" || typeof entry.callable !== "boolean" || typeof entry.metadata_available !== "boolean" || !Array.isArray(entry.tools)) {
+        throw new Error("Invalid host app");
+      }
+      const appId = hostMetadataText(entry.app_id, 256);
+      if (appIds.has(appId)) throw new Error("Duplicate host app");
+      appIds.add(appId);
+      totalTools += entry.tools.length;
+      if (totalTools > 1e4) throw new Error("Host summary limit");
+      const names = /* @__PURE__ */ new Set();
+      const tools = entry.tools.map((tool) => {
+        if (!record$2(tool)) throw new Error("Invalid host tool");
+        const name = hostMetadataText(tool.name, 256);
+        if (names.has(name)) throw new Error("Duplicate host tool");
+        names.add(name);
+        return { name, title: optionalText(tool.title, 512), description: optionalText(tool.description, 4e3) };
+      });
+      return {
+        app_id: appId,
+        name: hostMetadataText(entry.name, 256),
+        enabled: entry.enabled,
+        callable: entry.callable,
+        metadata_available: entry.metadata_available,
+        tools
+      };
+    });
+    return {
+      host: "Codex",
+      connection_id: value.connection_id,
+      catalog_coverage: "host-summary",
+      account_verified: false,
+      schemas_available: false,
+      permissions_granted: false,
+      snapshot_age: "unknown",
+      metadata_complete: value.metadata_complete,
+      expires_at_ms: value.expires_at_ms,
+      apps
+    };
+  } catch {
+    return void 0;
+  }
+}
+function filterCodexHostApps(apps, query) {
+  const search = query.trim().toLocaleLowerCase();
+  if (!search) return apps;
+  return apps.flatMap((app) => {
+    if (`${app.name} ${app.app_id}`.toLocaleLowerCase().includes(search)) return [app];
+    const tools = app.tools.filter((tool) => `${tool.name} ${tool.title ?? ""} ${tool.description ?? ""}`.toLocaleLowerCase().includes(search));
+    return tools.length ? [{ ...app, tools }] : [];
+  });
+}
+const BRAND_PATTERN = /^[a-z0-9-]{1,40}$/;
+const PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+function normalizeProfileFields(value) {
+  const result = {};
+  if (typeof value.profile_id === "string" && PROFILE_ID_PATTERN.test(value.profile_id)) {
+    result.profile_id = value.profile_id;
+  }
+  if (typeof value.brand === "string" && BRAND_PATTERN.test(value.brand)) result.brand = value.brand;
+  if (typeof value.display_name === "string") {
+    const name = value.display_name.trim().slice(0, 120);
+    if (name) result.display_name = name;
+  }
+  if (typeof value.seeded === "boolean") result.seeded = value.seeded;
+  if (typeof value.installed === "boolean") result.installed = value.installed;
+  return result;
+}
+function normalizeSuggestedState(value) {
+  return value === "inherit" || value === "allow" || value === "review" || value === "block" ? { suggested_state: value } : {};
+}
+function normalizeMcpClassification(value) {
+  if (!isRecord$1(value) || value.schema_version !== "guard.mcp-classification.v1" || value.advisory_only !== true || !["reviewed-mapping", "limited"].includes(String(value.confidence))) return void 0;
+  const labels = [value.effect, value.data, value.destination, value.reversibility];
+  if (!labels.every((label) => typeof label === "string" && /^[a-z-]{1,40}$/.test(label))) return void 0;
+  const codes = (list) => Array.isArray(list) && list.length <= 16 && list.every((code) => typeof code === "string" && /^[a-z0-9:-]{1,80}$/.test(code));
+  if (!codes(value.evidence) || !codes(value.warnings)) return void 0;
+  return {
+    effect: value.effect,
+    data: value.data,
+    destination: value.destination,
+    reversibility: value.reversibility,
+    confidence: value.confidence,
+    evidence: value.evidence,
+    warnings: value.warnings
+  };
+}
+function normalizeLocalCliItem(value) {
+  if (!isRecord$1(value)) throw new Error("Invalid local CLI item");
+  const cliId = requiredString(value.cli_id, "id");
+  if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
+  const identityHash = requiredString(value.identity_hash, "identity");
+  if (!SHA256_PATTERN.test(identityHash)) throw new Error("Invalid local CLI identity");
+  const kind = value.kind;
+  if (kind !== "executable" && kind !== "script") throw new Error("Invalid local CLI kind");
+  const state = value.state;
+  if (state !== "unset" && state !== "allowed" && state !== "blocked") throw new Error("Invalid local CLI state");
+  const catalog = normalizeMcpCatalog(value.mcp_catalog);
+  const providerCatalog = normalizeProviderCatalog(value.provider_catalog);
+  return {
+    cli_id: cliId,
+    name: requiredString(value.name, "name").slice(0, 120),
+    kind,
+    identity_hash: identityHash,
+    example_label: requiredString(value.example_label, "example").slice(0, 160),
+    interpreter_name: optionalString(value.interpreter_name),
+    observed_count: requiredInt(value.observed_count, "count"),
+    last_seen_at: optionalString(value.last_seen_at),
+    source_path: optionalString(value.source_path),
+    help_status: normalizeHelpStatus(value.help_status),
+    surface: normalizeSurface(value.surface),
+    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
+    source_label: optionalSourceLabel(value.source_label),
+    state,
+    stale: value.stale === true,
+    grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
+    authority_revision: requiredInt(value.authority_revision, "revision"),
+    suggestable: value.suggestable === true,
+    suggestion_score: optionalScore(value.suggestion_score),
+    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+    continuity: normalizeContinuity(value.continuity),
+    ...value.shares_enrolled_server === true ? { shares_enrolled_server: true } : {},
+    ...catalog ? { mcp_catalog: catalog } : {},
+    ...providerCatalog ? { provider_catalog: providerCatalog } : {},
+    ...["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope)) ? { permission_scope: value.permission_scope } : {},
+    ...normalizeProfileFields(value)
+  };
+}
+function normalizeMcpCatalog(value) {
+  if (!isRecord$1(value) || typeof value.complete !== "boolean" || typeof value.stale !== "boolean") return null;
+  const count = (candidate) => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 1e4;
+  if (!count(value.pages) || !count(value.listed_count) || !count(value.known_count)) return null;
+  if (value.listed_count > value.known_count) return null;
+  if (typeof value.revision !== "number" || !Number.isSafeInteger(value.revision) || value.revision < 1) return null;
+  if (typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return null;
+  const reason = typeof value.reason === "string" ? value.reason.slice(0, 80) : null;
+  if (value.complete && reason !== null) return null;
+  const changes = normalizeMcpCatalogChanges(value.changes);
+  const skills = value.skills_catalog;
+  const skillsCatalog = isRecord$1(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
+    declared: skills.declared,
+    complete: skills.complete,
+    stale: skills.stale,
+    known_count: skills.known_count,
+    reason: typeof skills.reason === "string" ? skills.reason.slice(0, 80) : null
+  } : void 0;
+  return {
+    complete: value.complete,
+    stale: value.stale,
+    reason,
+    pages: value.pages,
+    listed_count: value.listed_count,
+    known_count: value.known_count,
+    protocol_version: typeof value.protocol_version === "string" ? value.protocol_version.slice(0, 40) : null,
+    revision: value.revision,
+    updated_at: value.updated_at.slice(0, 64),
+    last_complete_at: typeof value.last_complete_at === "string" && Number.isFinite(Date.parse(value.last_complete_at)) ? value.last_complete_at.slice(0, 64) : null,
+    ...changes ? { changes } : {},
+    ...skillsCatalog ? { skills_catalog: skillsCatalog } : {},
+    ...typeof value.fresh_until === "string" && Number.isFinite(Date.parse(value.fresh_until)) ? { fresh_until: value.fresh_until } : {},
+    ...value.cache_scope === "private" || value.cache_scope === "public" ? { cache_scope: value.cache_scope } : {}
+  };
+}
+function normalizeProviderCatalog(value) {
+  if (!isRecord$1(value) || value.provider !== "composio" || value.coverage !== "discovery-subset" || value.account_binding !== "unverified" || typeof value.known_count !== "number" || !Number.isSafeInteger(value.known_count) || value.known_count < 1 || value.known_count > 1e4 || typeof value.full_schema_count !== "number" || !Number.isSafeInteger(value.full_schema_count) || value.full_schema_count < 0 || value.full_schema_count > value.known_count || typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return void 0;
+  return {
+    provider: "composio",
+    known_count: value.known_count,
+    full_schema_count: value.full_schema_count,
+    updated_at: value.updated_at.slice(0, 64),
+    coverage: "discovery-subset",
+    account_binding: "unverified"
+  };
+}
+function normalizeMcpCatalogChanges(value) {
+  if (!isRecord$1(value)) return void 0;
+  const result = { added: [], changed: [], removed: [], stale: [] };
+  for (const key of ["added", "changed", "removed", "stale"]) {
+    const names = value[key];
+    if (!Array.isArray(names) || names.length > 1e4 || !names.every(
+      (name) => typeof name === "string" && name.length > 0 && name.length <= 256 && name.trim() === name
+    )) return void 0;
+    result[key] = [...new Set(names)];
+  }
+  return result;
+}
+function normalizeContinuity(value) {
+  if (!isRecord$1(value)) return null;
+  const status = value.status;
+  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
+  return {
+    status,
+    reason: typeof value.reason === "string" ? value.reason : "",
+    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
+    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
+  };
+}
+function normalizeSurface(value) {
+  if (value === "mcp") return "mcp";
+  if (value === "package-scripts") return "package-scripts";
+  return "cli";
+}
+function normalizeHelpStatus(value) {
+  if (value === "ok" || value === "empty" || value === "failed") return value;
+  return null;
+}
+function normalizeIdentityHash(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
+}
+function optionalScore(value) {
+  if (value === null || value === void 0) return 0;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("Invalid local CLI suggestion score");
+  }
+  return value;
+}
+function optionalSourceLabel(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string") return null;
+  return value.trim().slice(0, 120) || null;
+}
+function normalizeLocalCliCommand(value) {
+  if (!isRecord$1(value)) throw new Error("Invalid local CLI command");
+  const state = value.state;
+  if (state !== "inherit" && state !== "allow" && state !== "review" && state !== "block") {
+    throw new Error("Invalid local CLI command state");
+  }
+  const parent = value.parent_id;
+  if (parent !== null && parent !== void 0 && typeof parent !== "string") {
+    throw new Error("Invalid local CLI command parent");
+  }
+  return {
+    command_id: requiredString(value.command_id, "command").slice(0, 80),
+    name: requiredString(value.name, "command name").slice(0, 120),
+    usage: requiredString(value.usage, "command usage").slice(0, 160),
+    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
+    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
+    state,
+    classification: normalizeMcpClassification(value.classification),
+    ...normalizeSuggestedState(value.suggested_state)
+  };
+}
+function normalizeLocalCliList(value) {
+  if (!isRecord$1(value)) throw new Error("Invalid local CLI list");
+  const cloud = isRecord$1(value.cloud) ? value.cloud : {};
+  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }) : [];
+  const seededItems = Array.isArray(value.seeded_items) ? value.seeded_items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }).filter((item) => item.seeded === true) : [];
+  const revision = requiredInt(value.revision, "revision");
+  const publication = value.native_publication;
+  const discoveryIssue = value.discovery_issue;
+  const hostInventory = normalizeCodexHostInventory(value.host_inventory);
+  let nativePublication;
+  if (isRecord$1(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
+    nativePublication = { state: publication.state, revision };
+  } else if (isRecord$1(publication) && publication.state === "acknowledged" && publication.revision === revision && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
+    nativePublication = { state: "acknowledged", revision, generation: publication.generation };
+  }
+  return {
+    schema_version: requiredString(value.schema_version, "schema"),
+    revision,
+    ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
+    ...nativePublication ? { native_publication: nativePublication } : {},
+    ...hostInventory ? { host_inventory: hostInventory } : {},
+    items,
+    seeded_items: seededItems,
+    cloud: {
+      sync_local_only: cloud.sync_local_only !== false,
+      continuity_enabled: cloud.continuity_enabled === true,
+      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
+    }
+  };
+}
+async function startCancelableDiscoveryJob(signal, start) {
+  if (signal.aborted) return null;
+  const clientJobId = globalThis.crypto.randomUUID().replaceAll("-", "");
+  let cancelSent = false;
+  const cancel = () => {
+    if (cancelSent) return;
+    cancelSent = true;
+    void fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: clientJobId, cancel: true })
+    }).catch(() => void 0);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    const result = await start(clientJobId);
+    return signal.aborted ? null : result;
+  } catch (error) {
+    if (signal.aborted) return null;
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (signal.aborted) cancel();
+  }
+}
+class LocalCliApiError extends Error {
+  code;
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+function customExtensionNeedsReview(item) {
+  return item.stale || item.state === "unset" || item.mcp_catalog?.stale || item.mcp_catalog?.complete === false || Boolean(item.mcp_catalog?.changes?.added.length) || Boolean(item.mcp_catalog?.changes?.changed.length);
+}
+function connectorWorkspaceItems(items, query = "", seeded = []) {
+  const needle = query.trim().toLowerCase();
+  const known = new Set(items.map((item) => item.cli_id));
+  const seededRows = seeded.filter((item) => item.seeded === true && !known.has(item.cli_id));
+  return [...items, ...seededRows].filter((item) => item.state !== "unset" || item.suggestable && (item.surface === "mcp" || item.surface === "cli") || item.seeded === true).filter((item) => !needle || [
+    item.name,
+    item.display_name,
+    item.source_label,
+    item.surface,
+    ...item.commands.flatMap((command) => [command.name, command.usage, command.description])
+  ].some((value) => value?.toLowerCase().includes(needle))).sort((a, b) => Number(customExtensionNeedsReview(b)) - Number(customExtensionNeedsReview(a)) || (Date.parse(b.last_seen_at ?? "") || 0) - (Date.parse(a.last_seen_at ?? "") || 0) || a.name.localeCompare(b.name) || a.cli_id.localeCompare(b.cli_id));
 }
 function suggestedCustomExtensions(items) {
   return items.filter((item) => item.state === "unset" && item.suggestable);
@@ -399,121 +847,10 @@ function suggestionMatchesQuery(item, needle) {
   if (item.surface !== "package-scripts") return false;
   return item.commands.some((command) => commandMatchesQuery(command, compact));
 }
-function normalizeLocalCliItem(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI item");
-  const cliId = requiredString(value.cli_id, "id");
-  if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
-  const identityHash = requiredString(value.identity_hash, "identity");
-  if (!SHA256_PATTERN.test(identityHash)) throw new Error("Invalid local CLI identity");
-  const kind = value.kind;
-  if (kind !== "executable" && kind !== "script") throw new Error("Invalid local CLI kind");
-  const state = value.state;
-  if (state !== "unset" && state !== "allowed" && state !== "blocked") throw new Error("Invalid local CLI state");
-  return {
-    cli_id: cliId,
-    name: requiredString(value.name, "name").slice(0, 120),
-    kind,
-    identity_hash: identityHash,
-    example_label: requiredString(value.example_label, "example").slice(0, 160),
-    interpreter_name: optionalString$1(value.interpreter_name),
-    observed_count: requiredInt(value.observed_count, "count"),
-    last_seen_at: optionalString$1(value.last_seen_at),
-    source_path: optionalString$1(value.source_path),
-    help_status: normalizeHelpStatus(value.help_status),
-    surface: normalizeSurface(value.surface),
-    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
-    source_label: optionalSourceLabel(value.source_label),
-    state,
-    stale: value.stale === true,
-    grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
-    authority_revision: requiredInt(value.authority_revision, "revision"),
-    suggestable: value.suggestable === true,
-    suggestion_score: optionalScore(value.suggestion_score),
-    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
-    continuity: normalizeContinuity(value.continuity)
-  };
-}
-function normalizeContinuity(value) {
-  if (!isRecord(value)) return null;
-  const status = value.status;
-  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
-  return {
-    status,
-    reason: typeof value.reason === "string" ? value.reason : "",
-    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
-    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
-  };
-}
-function normalizeSurface(value) {
-  if (value === "mcp") return "mcp";
-  if (value === "package-scripts") return "package-scripts";
-  return "cli";
-}
-function normalizeHelpStatus(value) {
-  if (value === "ok" || value === "empty" || value === "failed") return value;
-  return null;
-}
-function normalizeIdentityHash(value) {
-  if (value === null || value === void 0 || value === "") return null;
-  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
-  return value;
-}
-function optionalScore(value) {
-  if (value === null || value === void 0) return 0;
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new Error("Invalid local CLI suggestion score");
-  }
-  return value;
-}
-function optionalSourceLabel(value) {
-  if (value === null || value === void 0 || value === "") return null;
-  if (typeof value !== "string") return null;
-  return value.trim().slice(0, 120) || null;
-}
-function normalizeLocalCliCommand(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI command");
-  const state = value.state;
-  if (state !== "inherit" && state !== "allow" && state !== "block") {
-    throw new Error("Invalid local CLI command state");
-  }
-  const parent = value.parent_id;
-  if (parent !== null && parent !== void 0 && typeof parent !== "string") {
-    throw new Error("Invalid local CLI command parent");
-  }
-  return {
-    command_id: requiredString(value.command_id, "command").slice(0, 80),
-    name: requiredString(value.name, "command name").slice(0, 120),
-    usage: requiredString(value.usage, "command usage").slice(0, 160),
-    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
-    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
-    state
-  };
-}
-function normalizeLocalCliList(value) {
-  if (!isRecord(value)) throw new Error("Invalid local CLI list");
-  const cloud = isRecord(value.cloud) ? value.cloud : {};
-  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
-    try {
-      return [normalizeLocalCliItem(entry)];
-    } catch {
-      return [];
-    }
-  }) : [];
-  return {
-    schema_version: requiredString(value.schema_version, "schema"),
-    revision: requiredInt(value.revision, "revision"),
-    items,
-    cloud: {
-      sync_local_only: cloud.sync_local_only !== false,
-      continuity_enabled: cloud.continuity_enabled === true,
-      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
-    }
-  };
-}
 async function readJson(response) {
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    const record2 = isRecord(payload) ? payload : {};
+    const record2 = isRecord$1(payload) ? payload : {};
     const code = typeof record2.error === "string" ? record2.error : "local_cli_request_failed";
     const message = typeof record2.message === "string" ? record2.message : "Guard could not update this custom extension.";
     throw new LocalCliApiError(code, message);
@@ -532,7 +869,7 @@ async function previewLocalCliMutation(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   }));
-  if (!isRecord(body)) throw new Error("Invalid local CLI preview");
+  if (!isRecord$1(body)) throw new Error("Invalid local CLI preview");
   return { summary: requiredString(body.summary, "summary") };
 }
 async function recognizeLocalCli(command, options) {
@@ -541,10 +878,11 @@ async function recognizeLocalCli(command, options) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       command,
-      ...options?.cliId ? { cli_id: options.cliId } : {}
+      ...options?.cliId ? { cli_id: options.cliId } : {},
+      ...options?.refresh ? { refresh: true } : {}
     })
   }));
-  if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
+  if (!isRecord$1(body)) throw new Error("Invalid local CLI recognition");
   const item = normalizeLocalCliItem(body.item);
   return {
     item,
@@ -559,6 +897,75 @@ async function applyLocalCliMutation(payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   }));
+}
+async function refreshMcpInventory(cliId, signal, configuredConnections = false, forceRefresh = false) {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify(configuredConnections ? { operation: "configured-connections", client_job_id: clientJobId, ...forceRefresh ? { force_refresh: true } : {} } : { cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId })
+    }
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+async function refreshCodexHostInventory(signal, forceRefresh = false) {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        operation: "codex-host-connections",
+        client_job_id: clientJobId,
+        ...forceRefresh ? { force_refresh: true } : {}
+      })
+    }
+  )));
+  if (initialJob !== null) await waitForMcpDiscoveryJob("inventory:codex-host", initialJob, signal);
+}
+async function waitForMcpDiscoveryJob(cliId, initialJob, signal) {
+  await waitForDiscoveryJob(cliId, initialJob, signal, readJson);
+}
+async function fetchMcpProviderActions(cliId, options) {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/provider-actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify({
+      cli_id: cliId,
+      search: options.search,
+      offset: options.offset,
+      limit: 50,
+      ...options.catalogToken ? { catalog_token: options.catalogToken } : {}
+    })
+  }));
+  if (!isRecord$1(body) || body.cli_id !== cliId || body.coverage !== "discovery-subset" || !Array.isArray(body.actions) || body.actions.length > 50 || typeof body.catalog_token !== "string" || !SHA256_PATTERN.test(body.catalog_token)) throw new Error("Invalid provider action inventory");
+  const actions = body.actions.map((entry) => {
+    if (!isRecord$1(entry) || typeof entry.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.tool_slug) || typeof entry.toolkit !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.toolkit) || typeof entry.description !== "string" || entry.description.length > 2e3 || typeof entry.full_schema !== "boolean" || !["review", "block"].includes(String(entry.permission_state)) || entry.allow_supported !== false || entry.account_binding !== "unverified" || typeof entry.revision !== "number" || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || typeof entry.updated_at !== "string" || !Number.isFinite(Date.parse(entry.updated_at))) {
+      throw new Error("Invalid provider action evidence");
+    }
+    return {
+      tool_slug: entry.tool_slug,
+      toolkit: entry.toolkit,
+      description: entry.description,
+      full_schema: entry.full_schema,
+      revision: entry.revision,
+      updated_at: entry.updated_at,
+      permission_state: entry.permission_state,
+      allow_supported: false,
+      account_binding: "unverified",
+      classification: normalizeMcpClassification(entry.classification)
+    };
+  });
+  const nextOffset = body.next_offset;
+  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset !== options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
+  return { actions, nextOffset, catalogToken: body.catalog_token };
 }
 const FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -616,825 +1023,234 @@ function useModalDialog(onClose, canClose = true) {
   }, []);
   return dialogRef;
 }
-function cloneLayers$1(layers) {
-  return layers.map((layer) => ({
-    ...layer,
-    controls: layer.controls.map((control) => ({ ...control }))
-  }));
+const CATALOG_V2_PATH = "/v2/extension-controls/catalog/";
+const PAGE_LIMIT = 100;
+const MAX_CATALOG_V2_PAGE_BYTES = 262144;
+const MAX_TRAVERSAL_PAGES = 4096;
+const MAX_TRAVERSAL_BYTES = 64 * 1024 * 1024;
+const MAX_CACHE_ENTRIES = 256;
+const UNSUPPORTED = /* @__PURE__ */ new Set(["404:", "404:not_found", "501:catalog_read_model_unavailable"]);
+const CATALOG_SNAPSHOT_EXPIRED = "catalog_snapshot_expired";
+class CatalogV2UnsupportedError extends ExtensionControlApiError {
 }
-function sortedControls(layer) {
-  return {
-    ...layer,
-    controls: [...layer.controls].sort(
-      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
-    )
-  };
+const readCache = /* @__PURE__ */ new Map();
+function isRecord(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function localPermissionDraftState(layers, permissionId) {
-  const local = layers.find((layer) => layer.kind === "local-admin");
-  const control = local?.controls.find(
-    (item) => item.target_kind === "permission" && item.target_id === permissionId
-  );
-  if (!control) return "inherit";
-  return control.state === "enabled" ? "allow" : "block";
+function protocolError(message, code) {
+  return new ExtensionControlApiError(message, code === CATALOG_SNAPSHOT_EXPIRED ? 409 : 502, code);
 }
-function setLocalPermissionDraftState(layers, catalogDigest, permissionId, state) {
-  const next = cloneLayers$1(layers);
-  let local = next.find((layer) => layer.kind === "local-admin");
-  if (!local && state === "inherit") return next;
-  if (!local) {
-    local = {
-      schema_version: "1.0.0",
-      kind: "local-admin",
-      catalog_digest: catalogDigest,
-      global_lockdown: false,
-      controls: []
-    };
-    next.push(local);
-  }
-  const hadPermissionControl = local.controls.some(
-    (control) => control.target_kind === "permission" && control.target_id === permissionId
-  );
-  local.controls = local.controls.filter(
-    (control) => control.target_kind !== "permission" || control.target_id !== permissionId
-  );
-  if (state !== "inherit") {
-    local.controls.push({
-      target_kind: "permission",
-      target_id: permissionId,
-      state: state === "allow" ? "enabled" : "disabled"
-    });
-  }
-  if (state === "inherit" && hadPermissionControl && !local.global_lockdown && local.controls.length === 0) {
-    const localIndex = next.indexOf(local);
-    next.splice(localIndex, 1);
-  }
-  const normalized = next.map((layer) => sortedControls(layer));
-  normalized.sort((left, right) => left.kind.localeCompare(right.kind));
-  return normalized;
-}
-function setLocalPermissionDraftStates(layers, catalogDigest, permissionIds, state) {
-  return permissionIds.reduce(
-    (next, permissionId) => setLocalPermissionDraftState(next, catalogDigest, permissionId, state),
-    layers
-  );
-}
-function canonicalLayerValue(layers) {
-  return JSON.stringify(
-    [...layers].map((layer) => sortedControls(layer)).sort((left, right) => left.kind.localeCompare(right.kind))
-  );
-}
-function extensionPolicyDraftIsDirty(effective, draftLayers) {
-  return canonicalLayerValue(effective.layers) !== canonicalLayerValue(draftLayers);
-}
-function buildExtensionPolicyDraftMutation(effective, catalogDigest, draftLayers, identity) {
-  return {
-    previous_revision: effective.revision,
-    catalog_digest: catalogDigest,
-    layers: cloneLayers$1(draftLayers),
-    actor_id: "dashboard-admin",
-    idempotency_key: identity.idempotencyKey,
-    nonce: identity.nonce
-  };
-}
-function newExtensionPolicyDraftIdentity() {
-  return {
-    idempotencyKey: crypto.randomUUID().replaceAll("-", ""),
-    nonce: crypto.randomUUID().replaceAll("-", "")
-  };
-}
-function isCurrentExtensionPolicyDraft(generation, current) {
-  return generation === current;
-}
-const DIGEST$2 = /^[a-f0-9]{64}$/;
-const EXTENSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const MAX_EXTENSIONS = 512;
-const MAX_PERMISSIONS = 4096;
-const MAX_REASONS = 64;
-function record$3(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function text(value, label, max = 256) {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function integer$2(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid ${label}`);
-  return value;
-}
-function boolean(value, label) {
-  if (typeof value !== "boolean") throw new Error(`Invalid ${label}`);
-  return value;
-}
-function enumValue$1(value, label, values) {
-  const candidate = text(value, label, 64);
-  if (!values.includes(candidate)) throw new Error(`Invalid ${label}`);
-  return candidate;
-}
-function id$1(value, label, pattern) {
-  const candidate = text(value, label).toLowerCase();
-  if (!pattern.test(candidate)) throw new Error(`Invalid ${label}`);
-  return candidate;
-}
-function reasons(value, label) {
-  if (!Array.isArray(value) || value.length > MAX_REASONS) throw new Error(`Invalid ${label}`);
-  return value.map((item, index) => text(item, `${label}[${index}]`, 128));
-}
-function extensionItem(value, label) {
-  const item = record$3(value, label);
-  return {
-    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
-    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
-    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
-    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
-    required: boolean(item.required, `${label}.required`),
-    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
-  };
-}
-function permissionItem(value, label) {
-  const item = record$3(value, label);
-  return {
-    permission_id: id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1),
-    extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
-    effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
-    local_state: enumValue$1(item.local_state, `${label}.local_state`, ["inherited", "enabled", "disabled"]),
-    managed_state: enumValue$1(item.managed_state, `${label}.managed_state`, ["inherited", "enabled", "disabled"]),
-    configurable: boolean(item.configurable, `${label}.configurable`),
-    fixed_reason: item.fixed_reason === null ? null : text(item.fixed_reason, `${label}.fixed_reason`, 2048),
-    reason_codes: reasons(item.reason_codes, `${label}.reason_codes`)
-  };
-}
-function normalizeEffectiveExtensionControlProjection(value) {
-  const root = record$3(value, "extension projection");
-  const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
-  if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
-  const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
-  if (!DIGEST$2.test(digest2)) throw new Error("Invalid projection.catalog_digest");
-  if (!Array.isArray(root.extensions) || root.extensions.length > MAX_EXTENSIONS) throw new Error("Invalid projection.extensions");
-  if (!Array.isArray(root.permissions) || root.permissions.length > MAX_PERMISSIONS) throw new Error("Invalid projection.permissions");
-  const extensions = root.extensions.map((item, index) => extensionItem(item, `projection.extensions[${index}]`));
-  const permissions = root.permissions.map((item, index) => permissionItem(item, `projection.permissions[${index}]`));
-  if (new Set(extensions.map((item) => item.extension_id)).size !== extensions.length) throw new Error("Duplicate projection extension ID");
-  if (new Set(permissions.map((item) => item.permission_id)).size !== permissions.length) throw new Error("Duplicate projection permission ID");
-  return {
-    schema_version: "guard.daemon.extension-control-projection.v1",
-    revision: integer$2(root.revision, "projection.revision"),
-    catalog_digest: digest2,
-    health: enumValue$1(root.health, "projection.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    extensions,
-    permissions
-  };
-}
-const EXTENSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const PERMISSION_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const RULE_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const DIGEST$1 = /^[a-f0-9]{64}$/;
-const VERSION = /^[1-9][0-9]*\.[0-9]+\.[0-9]+$/;
-const EXTENSION_CLIENT_LIMITS = Object.freeze({
-  extensions: 512,
-  rulesPerExtension: 1024,
-  permissionsPerExtension: 512,
-  relationshipIds: 1024,
-  controls: 1024,
-  layers: 2,
-  failures: 256,
-  stringLength: 8192
-});
-class ExtensionControlProtocolError extends Error {
-  constructor(message) {
-    super(`Invalid extension-control response: ${message}`);
-  }
-}
-function record$2(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new ExtensionControlProtocolError(`${label} must be an object`);
-  }
-  return value;
-}
-function array(value, label, max) {
-  if (!Array.isArray(value)) throw new ExtensionControlProtocolError(`${label} must be an array`);
-  if (value.length > max) throw new ExtensionControlProtocolError(`${label} exceeds ${max} items`);
-  return value;
-}
-function string$1(value, label, allowEmpty = false) {
-  if (typeof value !== "string") throw new ExtensionControlProtocolError(`${label} must be a string`);
-  if (value.length > EXTENSION_CLIENT_LIMITS.stringLength) throw new ExtensionControlProtocolError(`${label} is too long`);
-  if (!allowEmpty && value.trim().length === 0) throw new ExtensionControlProtocolError(`${label} is required`);
-  return value;
-}
-function optionalString(value, label) {
-  if (value === null) return null;
-  return string$1(value, label);
-}
-function catalogText(value) {
-  return typeof value === "string" && value.trim() ? value : null;
-}
-function publisher(value, label) {
-  const item = record$2(value, label);
-  const url = item.url;
-  return {
-    id: string$1(item.id, `${label}.id`),
-    displayName: string$1(item.displayName, `${label}.displayName`),
-    ...url === void 0 ? {} : { url: string$1(url, `${label}.url`) }
-  };
-}
-function icon(value, label) {
-  if (value === void 0 || value === null) return { kind: "none" };
-  const item = record$2(value, label);
-  const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"]);
-  const name = item.name === void 0 ? void 0 : string$1(item.name, `${label}.name`);
-  const background = item.background === void 0 ? void 0 : string$1(item.background, `${label}.background`);
-  return { kind, ...name ? { name } : {}, ...background ? { background } : {} };
-}
-function bool$1(value, label) {
-  if (typeof value !== "boolean") throw new ExtensionControlProtocolError(`${label} must be boolean`);
-  return value;
-}
-function integer$1(value, label, min = 0) {
-  if (!Number.isSafeInteger(value) || value < min) {
-    throw new ExtensionControlProtocolError(`${label} must be an integer >= ${min}`);
-  }
-  return value;
-}
-function enumValue(value, label, values) {
-  const candidate = string$1(value, label);
-  if (!values.includes(candidate)) throw new ExtensionControlProtocolError(`${label} has unsupported value`);
-  return candidate;
-}
-function id(value, label, pattern) {
-  const candidate = string$1(value, label).trim().toLowerCase();
-  if (!pattern.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not canonical`);
-  return candidate;
-}
-function digest$1(value, label) {
-  const candidate = string$1(value, label).trim().toLowerCase();
-  if (!DIGEST$1.test(candidate)) throw new ExtensionControlProtocolError(`${label} must be a SHA-256 digest`);
-  return candidate;
-}
-function version(value, label) {
-  const candidate = string$1(value, label);
-  if (!VERSION.test(candidate)) throw new ExtensionControlProtocolError(`${label} is not a semantic implementation version`);
-  return candidate;
-}
-function terminalCommands(value) {
-  if (value === void 0) return void 0;
-  const item = record$2(value, "effective.terminal_commands");
-  return {
-    ...item.shell === void 0 ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"]) },
-    enroll: string$1(item.enroll, "effective.terminal_commands.enroll"),
-    recover_authority: string$1(item.recover_authority, "effective.terminal_commands.recover_authority")
-  };
-}
-function stringList$1(value, label, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  return array(value, label, max).map((item, index) => string$1(item, `${label}[${index}]`));
-}
-function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relationshipIds) {
-  const items = array(value, label, max).map((item, index) => id(item, `${label}[${index}]`, pattern));
-  if (new Set(items).size !== items.length) throw new ExtensionControlProtocolError(`${label} contains duplicates`);
-  return items;
-}
-function safeVariant(value, label) {
-  const item = record$2(value, label);
-  return {
-    variant_id: string$1(item.variant_id, `${label}.variant_id`),
-    title: string$1(item.title, `${label}.title`),
-    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`)
-  };
-}
-function rule(value, extensionId, label) {
-  const item = record$2(value, label);
-  const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
-  if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
-  const rawVersion = item.rule_version;
-  if (!(typeof rawVersion === "string" || Number.isSafeInteger(rawVersion))) {
-    throw new ExtensionControlProtocolError(`${label}.rule_version must be string or integer`);
-  }
-  return {
-    rule_id: ruleId,
-    rule_version: rawVersion,
-    title: string$1(item.title, `${label}.title`),
-    description: string$1(item.description, `${label}.description`),
-    severity: enumValue(item.severity, `${label}.severity`, ["low", "medium", "high", "critical"]),
-    risk_classes: stringList$1(item.risk_classes, `${label}.risk_classes`),
-    action_classes: stringList$1(item.action_classes, `${label}.action_classes`),
-    safer_alternatives: stringList$1(item.safer_alternatives, `${label}.safer_alternatives`),
-    default_mode: enumValue(item.default_mode, `${label}.default_mode`, ["required", "enforce", "review", "monitor", "disabled"]),
-    matcher_kind: string$1(item.matcher_kind, `${label}.matcher_kind`),
-    safe_variants: array(item.safe_variants, `${label}.safe_variants`, EXTENSION_CLIENT_LIMITS.relationshipIds).map((entry, index) => safeVariant(entry, `${label}.safe_variants[${index}]`)),
-    compatibility_fallback: bool$1(item.compatibility_fallback, `${label}.compatibility_fallback`)
-  };
-}
-function permission(value, extensionId, label) {
-  const item = record$2(value, label);
-  const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
-  const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
-  if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
-    throw new ExtensionControlProtocolError(`${label} belongs to another extension`);
-  }
-  const replacement = item.replacement_permission_id === null ? null : id(item.replacement_permission_id, `${label}.replacement_permission_id`, PERMISSION_ID);
-  return {
-    permission_id: permissionId,
-    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
-    extension_id: owner,
-    implementation_version: version(item.implementation_version, `${label}.implementation_version`),
-    label: string$1(item.label, `${label}.label`),
-    description: string$1(item.description, `${label}.description`),
-    risk_tier: enumValue(item.risk_tier, `${label}.risk_tier`, ["low", "medium", "high", "critical"]),
-    baseline_floor: enumValue(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
-    default_enabled: bool$1(item.default_enabled, `${label}.default_enabled`),
-    configurable: bool$1(item.configurable, `${label}.configurable`),
-    fixed_reason: optionalString(item.fixed_reason, `${label}.fixed_reason`),
-    typed_capabilities: stringList$1(item.typed_capabilities, `${label}.typed_capabilities`),
-    action_classes: stringList$1(item.action_classes, `${label}.action_classes`),
-    rule_ids: idList$1(item.rule_ids, `${label}.rule_ids`, RULE_ID),
-    dependencies: idList$1(item.dependencies, `${label}.dependencies`, PERMISSION_ID),
-    conflicts: idList$1(item.conflicts, `${label}.conflicts`, PERMISSION_ID),
-    implied_permissions: idList$1(item.implied_permissions, `${label}.implied_permissions`, PERMISSION_ID),
-    introduced_version: version(item.introduced_version, `${label}.introduced_version`),
-    deprecated: bool$1(item.deprecated, `${label}.deprecated`),
-    replacement_permission_id: replacement,
-    safer_guidance: stringList$1(item.safer_guidance, `${label}.safer_guidance`),
-    example_command: catalogText(item.example_command),
-    family: catalogText(item.family)
-  };
-}
-function mcpLaunch(value, label) {
-  const item = record$2(value, label);
-  const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "remote-http"]);
-  if (kind === "package-launcher") {
-    return {
-      kind,
-      command: string$1(item.command, `${label}.command`),
-      package: string$1(item.package, `${label}.package`)
-    };
-  }
-  return {
-    kind,
-    url: string$1(item.url, `${label}.url`),
-    serverNames: stringList$1(item.serverNames, `${label}.serverNames`, 8)
-  };
-}
-function mcpTool(value, label) {
-  const item = record$2(value, label);
-  return {
-    name: string$1(item.name, `${label}.name`),
-    state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
-  };
-}
-function mcpCatalogFields(item, label) {
-  if (item.surface === void 0) return {};
-  const surface = enumValue(item.surface, `${label}.surface`, ["mcp"]);
-  const launch = item.mcp_launch === void 0 ? void 0 : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
-  const tools = item.mcp_tools === void 0 ? void 0 : array(item.mcp_tools, `${label}.mcp_tools`, 80).map((entry, index) => mcpTool(entry, `${label}.mcp_tools[${index}]`));
-  return {
-    surface,
-    ...launch ? { mcp_launch: launch } : {},
-    ...tools ? { mcp_tools: tools } : {}
-  };
-}
-function extension(value, label) {
-  const item = record$2(value, label);
-  const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
-  const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
-  const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
-  const ruleIds = rules.map((entry) => entry.rule_id);
-  const permissionIds = permissions.map((entry) => entry.permission_id);
-  if (new Set(ruleIds).size !== ruleIds.length) throw new ExtensionControlProtocolError(`${label}.rules contains duplicate rule IDs`);
-  if (new Set(permissionIds).size !== permissionIds.length) throw new ExtensionControlProtocolError(`${label}.permissions contains duplicate permission IDs`);
-  const knownRules = new Set(ruleIds);
-  for (const spec of permissions) {
-    for (const ruleId of spec.rule_ids) {
-      if (!knownRules.has(ruleId)) throw new ExtensionControlProtocolError(`${label} permission references unknown rule ${ruleId}`);
-    }
-  }
-  const ruleCount = integer$1(item.rule_count, `${label}.rule_count`);
-  const permissionCount = integer$1(item.permission_count, `${label}.permission_count`);
-  if (ruleCount !== rules.length || permissionCount !== permissions.length) {
-    throw new ExtensionControlProtocolError(`${label} count metadata does not match payload`);
-  }
-  return {
-    schema_version: integer$1(item.schema_version, `${label}.schema_version`, 1),
-    extension_id: extensionId,
-    name: string$1(item.name, `${label}.name`),
-    description: string$1(item.description, `${label}.description`),
-    enabled: bool$1(item.enabled, `${label}.enabled`),
-    required: bool$1(item.required, `${label}.required`),
-    trust_class: item.trust_class === void 0 ? "first-party" : enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"]),
-    activation: item.activation === void 0 ? "default-on" : enumValue(item.activation, `${label}.activation`, ["default-on", "opt-in"]),
-    publisher: item.publisher === void 0 ? { id: "hol", displayName: "Hashgraph Online" } : publisher(item.publisher, `${label}.publisher`),
-    icon: icon(item.icon, `${label}.icon`),
-    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"]),
-    version: version(item.version, `${label}.version`),
-    aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID),
-    dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID),
-    conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID),
-    delegated_protection: optionalString(item.delegated_protection, `${label}.delegated_protection`),
-    ecosystem_ids: stringList$1(item.ecosystem_ids, `${label}.ecosystem_ids`),
-    executables: stringList$1(item.executables, `${label}.executables`),
-    project_markers: stringList$1(item.project_markers, `${label}.project_markers`),
-    reference_urls: stringList$1(item.reference_urls, `${label}.reference_urls`),
-    action_classes: stringList$1(item.action_classes, `${label}.action_classes`),
-    risk_classes: stringList$1(item.risk_classes, `${label}.risk_classes`),
-    safer_alternatives: stringList$1(item.safer_alternatives, `${label}.safer_alternatives`),
-    rule_count: ruleCount,
-    rules,
-    permission_count: permissionCount,
-    permissions,
-    ...mcpCatalogFields(item, label)
-  };
-}
-function normalizeExtensionControlLayer(value, label = "layer") {
-  const item = record$2(value, label);
-  const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$2(entry, `${label}.controls[${index}]`);
-    const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
-    return {
-      target_kind: kind,
-      target_id: id(raw.target_id, `${label}.controls[${index}].target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID),
-      state: enumValue(raw.state, `${label}.controls[${index}].state`, ["enabled", "disabled"])
-    };
-  });
-  const keys = controls.map((control) => `${control.target_kind}:${control.target_id}`);
-  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError(`${label}.controls contains duplicate targets`);
-  return {
-    schema_version: string$1(item.schema_version, `${label}.schema_version`),
-    kind: enumValue(item.kind, `${label}.kind`, ["local-admin", "signed-cloud"]),
-    catalog_digest: digest$1(item.catalog_digest, `${label}.catalog_digest`),
-    global_lockdown: bool$1(item.global_lockdown, `${label}.global_lockdown`),
-    controls
-  };
-}
-function normalizeExtensionCatalog(value) {
-  const root = record$2(value, "catalog");
-  const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
-  const ids = extensions.map((entry) => entry.extension_id);
-  if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
-  const limits = root.limits === void 0 ? void 0 : record$2(root.limits, "catalog.limits");
-  return {
-    schema_version: string$1(root.schema_version, "catalog.schema_version"),
-    control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
-    catalog_digest: digest$1(root.catalog_digest, "catalog.catalog_digest"),
-    extensions,
-    limits: limits === void 0 ? void 0 : {
-      max_body_bytes: limits.max_body_bytes === void 0 ? void 0 : integer$1(limits.max_body_bytes, "catalog.limits.max_body_bytes", 1),
-      max_controls: limits.max_controls === void 0 ? void 0 : integer$1(limits.max_controls, "catalog.limits.max_controls", 1),
-      max_observations: limits.max_observations === void 0 ? void 0 : integer$1(limits.max_observations, "catalog.limits.max_observations", 1)
-    }
-  };
-}
-function normalizeEffectiveExtensionControls(value) {
-  const root = record$2(value, "effective");
-  const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$2(entry, `effective.controls[${index}]`);
-    const target2 = record$2(raw.target, `effective.controls[${index}].target`);
-    const kind = enumValue(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
-    return {
-      target: {
-        kind,
-        target_id: id(target2.target_id, `effective.controls[${index}].target.target_id`, kind === "extension" ? EXTENSION_ID : PERMISSION_ID)
-      },
-      state: enumValue(raw.state, `effective.controls[${index}].state`, ["enabled", "disabled"])
-    };
-  });
-  const keys = controls.map((control) => `${control.target.kind}:${control.target.target_id}`);
-  if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
-  const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => normalizeExtensionControlLayer(entry, `effective.layers[${index}]`));
-  const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
-    const raw = record$2(entry, `effective.failures[${index}]`);
-    return {
-      code: string$1(raw.code, `effective.failures[${index}].code`),
-      detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
-      layer_kind: raw.layer_kind === void 0 ? void 0 : string$1(raw.layer_kind, `effective.failures[${index}].layer_kind`)
-    };
-  });
-  const managedControls = root.managed_controls === void 0 ? void 0 : (() => {
-    const managed = record$2(root.managed_controls, "effective.managed_controls");
-    const acknowledgement = record$2(
-      managed.acknowledgement,
-      "effective.managed_controls.acknowledgement"
-    );
-    const bundleVersion = managed.bundle_version;
-    if (!(typeof bundleVersion === "string" && bundleVersion.length > 0 && bundleVersion.length <= 160) && !(typeof bundleVersion === "number" && Number.isSafeInteger(bundleVersion) && bundleVersion >= 0)) {
-      throw new ExtensionControlProtocolError("effective.managed_controls.bundle_version is invalid");
-    }
-    const policyRevision = acknowledgement.policy_revision;
-    if (policyRevision !== void 0 && !(typeof policyRevision === "string" && policyRevision.length > 0 && policyRevision.length <= 160) && !(typeof policyRevision === "number" && Number.isSafeInteger(policyRevision) && policyRevision >= 0)) {
-      throw new ExtensionControlProtocolError("effective.managed_controls.acknowledgement.policy_revision is invalid");
-    }
-    return {
-      control_set_id: managed.control_set_id === void 0 ? void 0 : string$1(managed.control_set_id, "effective.managed_controls.control_set_id"),
-      control_set_name: managed.control_set_name === void 0 ? void 0 : string$1(managed.control_set_name, "effective.managed_controls.control_set_name"),
-      bundle_version: bundleVersion,
-      workspace_id: string$1(managed.workspace_id, "effective.managed_controls.workspace_id"),
-      authority_mode: managed.authority_mode === void 0 ? void 0 : enumValue(
-        managed.authority_mode,
-        "effective.managed_controls.authority_mode",
-        ["personal-shared", "workspace-shared", "managed-restrictive"]
-      ),
-      catalog_digest: digest$1(managed.catalog_digest, "effective.managed_controls.catalog_digest"),
-      issued_at: managed.issued_at === void 0 ? void 0 : string$1(managed.issued_at, "effective.managed_controls.issued_at"),
-      expires_at: managed.expires_at === void 0 ? void 0 : string$1(managed.expires_at, "effective.managed_controls.expires_at"),
-      acknowledgement: {
-        extension_authority_revision: integer$1(
-          acknowledgement.extension_authority_revision,
-          "effective.managed_controls.acknowledgement.extension_authority_revision"
-        ),
-        policy_revision: policyRevision,
-        effective_projection_digest: acknowledgement.effective_projection_digest === void 0 ? void 0 : digest$1(
-          acknowledgement.effective_projection_digest,
-          "effective.managed_controls.acknowledgement.effective_projection_digest"
-        ),
-        status: string$1(acknowledgement.status, "effective.managed_controls.acknowledgement.status")
-      }
-    };
-  })();
-  return {
-    schema_version: string$1(root.schema_version, "effective.schema_version"),
-    health: enumValue(root.health, "effective.health", ["unenrolled", "protected", "tampered", "degraded-unacknowledged", "degraded-acknowledged", "recovery-required"]),
-    revision: integer$1(root.revision, "effective.revision"),
-    catalog_digest: digest$1(root.catalog_digest, "effective.catalog_digest"),
-    global_lockdown: bool$1(root.global_lockdown, "effective.global_lockdown"),
-    controls,
-    layers,
-    failures,
-    terminal_commands: terminalCommands(root.terminal_commands),
-    projection: root.projection === void 0 ? void 0 : normalizeEffectiveExtensionControlProjection(root.projection),
-    managed_controls: managedControls
-  };
-}
-const DIGEST = /^[a-f0-9]{64}$/;
-const TARGET_ID = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
-const MAX_CHANGED_TARGETS = 4096;
-const MAX_AFFECTED_IDS = 4096;
-const MAX_WARNINGS = 64;
-const MAX_TEXT = 8192;
-function record$1(value, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
-  return value;
-}
-function string(value, label, max = MAX_TEXT) {
-  if (typeof value !== "string" || value.length === 0 || value.length > max) throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function integer(value, label) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function bool(value, label) {
-  if (typeof value !== "boolean") throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function digest(value, label) {
-  const candidate = string(value, label, 64);
-  if (!DIGEST.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
-  return candidate;
-}
-function targetId(value, label) {
-  const candidate = string(value, label, 256);
-  if (!TARGET_ID.test(candidate)) throw new Error(`Invalid extension-control ${label}`);
-  return candidate;
-}
-function boundedArray(value, label, max) {
-  if (!Array.isArray(value) || value.length > max) throw new Error(`Invalid extension-control ${label}`);
-  return value;
-}
-function idList(value, label) {
-  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => targetId(item, `${label}[${index}]`));
-  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate IDs`);
-  return items;
-}
-function optionalIdList(value, label) {
-  return value === void 0 ? void 0 : idList(value, label);
-}
-function optionalStringList(value, label) {
-  if (value === void 0) return void 0;
-  const items = boundedArray(value, label, MAX_AFFECTED_IDS).map((item, index) => string(item, `${label}[${index}]`, 128));
-  if (new Set(items).size !== items.length) throw new Error(`Invalid extension-control ${label}: duplicate values`);
-  return items;
-}
-function warning(value, label) {
-  const item = record$1(value, label);
-  return {
-    code: string(item.code, `${label}.code`, 128),
-    message: string(item.message, `${label}.message`, 1024),
-    ...item.target_id === void 0 ? {} : { target_id: targetId(item.target_id, `${label}.target_id`) },
-    ...item.count === void 0 ? {} : { count: integer(item.count, `${label}.count`) }
-  };
-}
-function target(value, label) {
-  const item = record$1(value, label);
-  const rawTarget = record$1(item.target, `${label}.target`);
-  const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
-  if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
-  const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
-  const afterExplicit = string(item.after_explicit, `${label}.after_explicit`, 32);
-  if (!["inherited", "enabled", "disabled"].includes(beforeExplicit) || !["inherited", "enabled", "disabled"].includes(afterExplicit)) throw new Error(`Invalid extension-control ${label} explicit state`);
-  const beforeEffective = string(item.before_effective, `${label}.before_effective`, 32);
-  const afterEffective = string(item.after_effective, `${label}.after_effective`, 32);
-  if (!["allowed", "blocked"].includes(beforeEffective) || !["allowed", "blocked"].includes(afterEffective)) throw new Error(`Invalid extension-control ${label} effective state`);
-  const affectedExtensionIds = optionalIdList(item.affected_extension_ids, `${label}.affected_extension_ids`);
-  const dependencyPermissionIds = optionalIdList(item.dependency_permission_ids, `${label}.dependency_permission_ids`);
-  const impliedPermissionIds = optionalIdList(item.implied_permission_ids, `${label}.implied_permission_ids`);
-  const conflictPermissionIds = optionalIdList(item.conflict_permission_ids, `${label}.conflict_permission_ids`);
-  const provenance = optionalStringList(item.provenance, `${label}.provenance`);
-  return {
-    target: { kind, target_id: targetId(rawTarget.target_id, `${label}.target.target_id`) },
-    extension_id: targetId(item.extension_id, `${label}.extension_id`),
-    label: string(item.label, `${label}.label`, 512),
-    before_explicit: beforeExplicit,
-    after_explicit: afterExplicit,
-    before_effective: beforeEffective,
-    after_effective: afterEffective,
-    affected_permission_ids: idList(item.affected_permission_ids, `${label}.affected_permission_ids`),
-    affected_rule_ids: idList(item.affected_rule_ids, `${label}.affected_rule_ids`),
-    ...affectedExtensionIds === void 0 ? {} : { affected_extension_ids: affectedExtensionIds },
-    ...dependencyPermissionIds === void 0 ? {} : { dependency_permission_ids: dependencyPermissionIds },
-    ...impliedPermissionIds === void 0 ? {} : { implied_permission_ids: impliedPermissionIds },
-    ...conflictPermissionIds === void 0 ? {} : { conflict_permission_ids: conflictPermissionIds },
-    ...provenance === void 0 ? {} : { provenance },
-    warnings: boundedArray(item.warnings, `${label}.warnings`, MAX_WARNINGS).map((entry, index) => warning(entry, `${label}.warnings[${index}]`)),
-    ...item.extension_name === void 0 ? {} : { extension_name: string(item.extension_name, `${label}.extension_name`, 512) },
-    ...item.baseline_risk === void 0 ? {} : { baseline_risk: string(item.baseline_risk, `${label}.baseline_risk`, 32) },
-    ...item.baseline_floor === void 0 ? {} : { baseline_floor: string(item.baseline_floor, `${label}.baseline_floor`, 32) }
-  };
-}
-function normalizeExtensionSemanticPreview(value) {
-  const root = record$1(value, "semantic preview");
-  if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
-  const lockdown = record$1(root.global_lockdown, "semantic_preview.global_lockdown");
-  const summary = record$1(root.summary, "semantic_preview.summary");
-  const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
-  const changedTargetCount = integer(root.changed_target_count, "semantic_preview.changed_target_count");
-  if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
-  return {
-    schema_version: "guard.daemon.extension-control-semantic-preview.v1",
-    global_lockdown: {
-      before: bool(lockdown.before, "semantic_preview.global_lockdown.before"),
-      after: bool(lockdown.after, "semantic_preview.global_lockdown.after"),
-      changed: bool(lockdown.changed, "semantic_preview.global_lockdown.changed")
-    },
-    changed_target_count: changedTargetCount,
-    affected_permission_count: integer(root.affected_permission_count, "semantic_preview.affected_permission_count"),
-    affected_rule_count: integer(root.affected_rule_count, "semantic_preview.affected_rule_count"),
-    changed_targets: changedTargets,
-    ...root.approval_required === void 0 ? {} : { approval_required: bool(root.approval_required, "semantic_preview.approval_required") },
-    summary: {
-      newly_blocked_permissions: integer(summary.newly_blocked_permissions, "semantic_preview.summary.newly_blocked_permissions"),
-      newly_allowed_permissions: integer(summary.newly_allowed_permissions, "semantic_preview.summary.newly_allowed_permissions"),
-      effective_change_count: integer(summary.effective_change_count, "semantic_preview.summary.effective_change_count")
-    }
-  };
-}
-function normalizeExtensionMutationPreview(value) {
-  const root = record$1(value, "mutation preview");
-  return {
-    schema_version: string(root.schema_version, "preview.schema_version", 128),
-    previous_revision: integer(root.previous_revision, "preview.previous_revision"),
-    next_revision: integer(root.next_revision, "preview.next_revision"),
-    catalog_digest: digest(root.catalog_digest, "preview.catalog_digest"),
-    canonical_diff_digest: digest(root.canonical_diff_digest, "preview.canonical_diff_digest"),
-    global_lockdown: bool(root.global_lockdown, "preview.global_lockdown"),
-    controls: integer(root.controls, "preview.controls"),
-    semantic_preview: normalizeExtensionSemanticPreview(root.semantic_preview),
-    ...root.proof_id === void 0 ? {} : { proof_id: string(root.proof_id, "preview.proof_id", 256) }
-  };
-}
-function normalizeExtensionMutationApply(value) {
-  const root = record$1(value, "mutation apply");
-  if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
-  return {
-    schema_version: string(root.schema_version, "apply.schema_version", 128),
-    status: "applied",
-    revision: integer(root.revision, "apply.revision"),
-    catalog_digest: digest(root.catalog_digest, "apply.catalog_digest")
-  };
-}
-class ExtensionControlApiError extends Error {
-  constructor(message, status, code, recoveryAction) {
-    super(message);
-    this.status = status;
-    this.code = code;
-    this.recoveryAction = recoveryAction;
-  }
-  status;
-  code;
-  recoveryAction;
-}
-async function request(path, init) {
-  const response = await fetchExtensionControlApi(path, init);
+async function readOnce(path, ifNoneMatch, signal) {
+  const headers = ifNoneMatch ? { "If-None-Match": ifNoneMatch } : {};
+  const response = await fetchExtensionCatalogV2Api(path, { headers, cache: "no-store", signal });
+  const etag = response.headers.get("ETag");
+  if (response.status === 304) return { status: 304, etag };
+  const declared = Number(response.headers.get("Content-Length") ?? "0");
+  if (declared > MAX_CATALOG_V2_PAGE_BYTES) throw protocolError("Guard returned an oversized catalog page");
+  const text = await response.text();
+  const size = new TextEncoder().encode(text).byteLength;
+  if (size > MAX_CATALOG_V2_PAGE_BYTES) throw protocolError("Guard returned an oversized catalog page");
   let payload;
   try {
-    payload = await response.json();
+    payload = JSON.parse(text);
   } catch {
-    throw new ExtensionControlApiError(`Guard returned invalid JSON (${response.status})`, response.status);
+    payload = void 0;
   }
   if (!response.ok) {
-    const error = typeof payload === "object" && payload !== null ? payload : {};
-    throw new ExtensionControlApiError(
-      typeof error.error === "string" ? error.error : `Request failed (${response.status})`,
-      response.status,
-      typeof error.error === "string" ? error.error : void 0,
-      typeof error.recovery === "object" && error.recovery !== null && typeof error.recovery.action === "string" ? error.recovery.action : void 0
-    );
+    const code = isRecord(payload) && typeof payload.error === "string" ? payload.error : void 0;
+    if (UNSUPPORTED.has(`${response.status}:${code ?? ""}`)) {
+      throw new CatalogV2UnsupportedError("Guard does not serve the v2 catalog", response.status, code);
+    }
+    throw new ExtensionControlApiError(code ?? `Request failed (${response.status})`, response.status, code);
   }
-  return payload;
+  if (!isRecord(payload)) throw protocolError(`Guard returned invalid JSON (${response.status})`);
+  return { status: 200, etag, payload, size };
 }
-async function fetchExtensionCatalog() {
-  return normalizeExtensionCatalog(await request("/v1/extension-controls/catalog"));
-}
-async function fetchEffectiveExtensionControls() {
-  const raw = await request("/v1/extension-controls/effective");
-  const normalized = normalizeEffectiveExtensionControls(raw);
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return normalized;
-  const projectionValue = raw.projection;
-  if (projectionValue === void 0) return normalized;
-  const projection = normalizeEffectiveExtensionControlProjection(projectionValue);
-  if (projection.revision !== normalized.revision || projection.catalog_digest !== normalized.catalog_digest || projection.health !== normalized.health) {
-    throw new ExtensionControlApiError("Guard returned an inconsistent extension-control projection", 502);
+async function readSized(route, query, signal) {
+  const path = `${CATALOG_V2_PATH}${route}${query ? `?${query}` : ""}`;
+  const key = `${guardApiCacheScope()}|${path}`;
+  const cached = readCache.get(key);
+  let response = await readOnce(path, cached?.etag ?? null, signal);
+  if (response.status === 304) {
+    if (cached && response.etag === cached.etag) {
+      readCache.delete(key);
+      readCache.set(key, cached);
+      return cached;
+    }
+    response = await readOnce(path, null, signal);
+    if (response.status !== 200) throw protocolError("Guard answered 304 to an unconditional catalog request");
   }
-  return { ...normalized, projection };
+  if (!response.etag) throw protocolError("Guard catalog response is missing its validator");
+  const entry = { etag: response.etag, payload: response.payload, size: response.size };
+  readCache.delete(key);
+  readCache.set(key, entry);
+  while (readCache.size > MAX_CACHE_ENTRIES) {
+    const oldest = readCache.keys().next().value;
+    if (oldest === void 0) break;
+    readCache.delete(oldest);
+  }
+  return entry;
 }
-async function fetchExtensionControlHistory() {
-  const raw = await request("/v1/extension-controls/history");
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) throw new ExtensionControlApiError("Guard returned invalid settings history", 502);
-  const root = raw;
-  if (root.schema_version !== "guard.daemon.extension-control-history.v1") throw new ExtensionControlApiError("Guard returned unsupported settings history", 502);
-  if (!Number.isSafeInteger(root.revision) || root.revision < 0 || typeof root.catalog_digest !== "string") throw new ExtensionControlApiError("Guard returned invalid settings history metadata", 502);
-  if (!Array.isArray(root.items) || root.items.length > 50) throw new ExtensionControlApiError("Guard returned too much settings history", 502);
-  const items = root.items.map((value, index) => {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) throw new ExtensionControlApiError("Guard returned invalid settings history item", 502);
-    const item = value;
-    if (!Number.isSafeInteger(item.revision) || !Number.isSafeInteger(item.previous_revision) || typeof item.occurred_at !== "string" || typeof item.catalog_digest !== "string" || !Array.isArray(item.layers)) throw new ExtensionControlApiError("Guard returned invalid settings history item", 502);
-    const layers = item.layers.map((layer, layerIndex) => normalizeExtensionControlLayer(layer, `history.items[${index}].layers[${layerIndex}]`));
-    return {
-      revision: item.revision,
-      previous_revision: item.previous_revision,
-      occurred_at: item.occurred_at,
-      catalog_digest: item.catalog_digest,
-      layers
-    };
-  });
+function pageFields(page) {
+  const { snapshot_id, native_catalog_digest, total_count, items, next_cursor } = page;
+  if (typeof snapshot_id !== "string" || typeof native_catalog_digest !== "string" || !Number.isSafeInteger(total_count) || !Array.isArray(items) || !items.every(isRecord) || !(next_cursor === null || next_cursor === void 0 || typeof next_cursor === "string")) {
+    throw protocolError("Guard returned an invalid catalog page");
+  }
+  return { snapshot_id, digest: native_catalog_digest, total: total_count, items, next: next_cursor ?? null };
+}
+async function traverseOnce(route, itemKey, params, signal) {
+  const items = [];
+  const seenItems = /* @__PURE__ */ new Set();
+  const seenCursors = /* @__PURE__ */ new Set();
+  let first = null;
+  let cursor = null;
+  let consumed = 0;
+  for (let index = 0; index < MAX_TRAVERSAL_PAGES; index += 1) {
+    signal?.throwIfAborted();
+    const query = { limit: String(PAGE_LIMIT), ...params, ...cursor ? { cursor } : {} };
+    const encoded = new URLSearchParams(Object.entries(query).sort(([left], [right]) => left.localeCompare(right))).toString();
+    const read = await readSized(route, encoded, signal);
+    consumed += read.size;
+    if (consumed > MAX_TRAVERSAL_BYTES) throw protocolError("Guard catalog traversal exceeded its byte budget");
+    const page = pageFields(read.payload);
+    if (first === null) {
+      first = page;
+    } else if (page.snapshot_id !== first.snapshot_id || page.digest !== first.digest || page.total !== first.total) {
+      throw protocolError("Guard catalog changed during the read", CATALOG_SNAPSHOT_EXPIRED);
+    }
+    for (const item of page.items) {
+      const identity = item[itemKey];
+      if (typeof identity !== "string" || seenItems.has(identity)) throw protocolError("Guard catalog traversal returned a duplicate item");
+      seenItems.add(identity);
+      items.push(item);
+    }
+    if (page.next === null) {
+      if (items.length !== first.total) throw protocolError("Guard catalog traversal was incomplete");
+      return { snapshot_id: first.snapshot_id, digest: first.digest, items };
+    }
+    if (seenCursors.has(page.next) || page.items.length === 0) throw protocolError("Guard catalog traversal did not advance");
+    seenCursors.add(page.next);
+    cursor = page.next;
+  }
+  throw protocolError("Guard catalog traversal exceeded its page budget");
+}
+async function traverse(route, itemKey, params = {}, signal) {
+  try {
+    return await traverseOnce(route, itemKey, params, signal);
+  } catch (error) {
+    if (!(error instanceof ExtensionControlApiError) || error.code !== CATALOG_SNAPSHOT_EXPIRED) throw error;
+  }
+  return traverseOnce(route, itemKey, params, signal);
+}
+function extensionRoute(extensionId, collection) {
+  const route = `extensions/${encodeURIComponent(extensionId)}`;
+  return collection ? `${route}/${collection}` : route;
+}
+function sortedByName(items) {
+  return [...items].sort((left, right) => left.name.localeCompare(right.name));
+}
+function requireSnapshot(observed, expected) {
+  if (observed !== expected) throw protocolError("Guard catalog changed. Reload to continue.", CATALOG_SNAPSHOT_EXPIRED);
+}
+async function v2Detail(extensionId, snapshotId) {
+  const detail = (await readSized(extensionRoute(extensionId), "")).payload;
+  const { extension, collections } = detail;
+  if (typeof detail.snapshot_id !== "string" || !isRecord(extension) || !isRecord(collections) || !isRecord(extension.catalog_defaults)) {
+    throw protocolError("Guard returned an invalid catalog detail");
+  }
+  requireSnapshot(detail.snapshot_id, snapshotId);
+  const { catalog_defaults: defaults, content_revision: _revision, ...fields } = extension;
+  const reads = await Promise.all([
+    traverse(extensionRoute(extensionId, "permissions"), "permission_id"),
+    traverse(extensionRoute(extensionId, "rules"), "rule_id"),
+    "mcp_tools" in collections ? traverse(extensionRoute(extensionId, "mcp-tools"), "name") : null
+  ]);
+  for (const read of reads) if (read) requireSnapshot(read.snapshot_id, snapshotId);
+  const [permissions, rules, tools] = reads;
+  return normalizeExtensionCatalogItem({
+    ...fields,
+    enabled: defaults.enabled,
+    activation: defaults.activation,
+    permissions: permissions?.items,
+    rules: rules?.items,
+    ...tools ? { mcp_tools: tools.items } : {}
+  }, `catalog.extensions.${extensionId}`);
+}
+function searchTerms(query) {
+  return query.toLowerCase().split(/\s+/).filter(Boolean);
+}
+async function loadV2() {
+  const index = await traverse("index", "extension_id");
+  const summaries = index.items.map((item, position) => normalizeExtensionCatalogSummary(item, `catalog.index[${position}]`));
+  const byId = new Map(summaries.map((summary) => [summary.extension_id, summary]));
+  const details = /* @__PURE__ */ new Map();
   return {
-    schema_version: "guard.daemon.extension-control-history.v1",
-    revision: root.revision,
-    catalog_digest: root.catalog_digest,
-    items
+    protocol: "v2",
+    catalog_digest: index.digest,
+    extensions: sortedByName(summaries),
+    detail(extensionId) {
+      const summary = byId.get(extensionId);
+      if (!summary) return Promise.reject(new ExtensionControlProtocolError(`Unknown extension ${extensionId}`));
+      const key = `${extensionId}|${summary.content_revision ?? ""}`;
+      let pending = details.get(key);
+      if (!pending) {
+        pending = v2Detail(extensionId, index.snapshot_id);
+        details.set(key, pending);
+        pending.catch(() => details.delete(key));
+      }
+      return pending;
+    },
+    async searchPermissions(query, signal) {
+      const terms = searchTerms(query);
+      if (!terms.length) return [];
+      const result = await traverse("permissions", "permission_id", { q: terms.join(" ") }, signal);
+      requireSnapshot(result.snapshot_id, index.snapshot_id);
+      return result.items.map((item, position) => {
+        const permission = normalizeExtensionPermission(item, `catalog.permissions[${position}]`);
+        const extension = byId.get(permission.extension_id);
+        if (!extension) throw protocolError("Guard returned a permission for an unknown extension");
+        return { extension, permission };
+      });
+    }
   };
 }
-async function recoverExtensionControlAuthority(credentials) {
-  const raw = await request("/v1/extension-controls/recover-authority", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_nonce: crypto.randomUUID().replaceAll("-", ""),
-      ...credentials
-    })
-  });
-  const normalized = normalizeEffectiveExtensionControls(raw);
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
-    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
-  }
-  return normalized;
+function catalogReadModelFromCatalog(catalog) {
+  const byId = new Map(catalog.extensions.map((item) => [item.extension_id, item]));
+  const localSearch = (query) => {
+    const terms = searchTerms(query);
+    if (!terms.length) return [];
+    return catalog.extensions.flatMap((extension) => extension.permissions.filter((permission) => {
+      const text = [
+        permission.label,
+        permission.example_command ?? "",
+        permission.permission_id,
+        permission.description,
+        permission.family ?? "",
+        extension.name,
+        extension.extension_id,
+        ...extension.executables
+      ].join(" ").toLowerCase();
+      return terms.every((term) => text.includes(term));
+    }).map((permission) => ({ extension, permission })));
+  };
+  return {
+    protocol: "v1",
+    catalog_digest: catalog.catalog_digest,
+    extensions: sortedByName(catalog.extensions),
+    detail(extensionId) {
+      const item = byId.get(extensionId);
+      return item ? Promise.resolve(item) : Promise.reject(new ExtensionControlProtocolError(`Unknown extension ${extensionId}`));
+    },
+    searchPermissions: (query) => Promise.resolve(localSearch(query)),
+    localSearch
+  };
 }
-async function acknowledgeDegradedExtensionControlAuthority(credentials) {
-  const raw = await request("/v1/extension-controls/acknowledge-degraded", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      session_nonce: crypto.randomUUID().replaceAll("-", ""),
-      ...credentials
-    })
-  });
-  const normalized = normalizeEffectiveExtensionControls(raw);
-  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.projection !== void 0) {
-    return { ...normalized, projection: normalizeEffectiveExtensionControlProjection(raw.projection) };
-  }
-  return normalized;
-}
-async function previewExtensionMutation(payload) {
+async function loadCatalogReadModel() {
   try {
-    return normalizeExtensionMutationPreview(await request("/v1/extension-controls/preview", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }));
+    return await loadV2();
   } catch (error) {
-    if (error instanceof ExtensionControlApiError) throw error;
-    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid preview response", 502);
-  }
-}
-async function applyExtensionMutation(payload) {
-  try {
-    return normalizeExtensionMutationApply(await request("/v1/extension-controls/apply", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }));
-  } catch (error) {
-    if (error instanceof ExtensionControlApiError) throw error;
-    throw new ExtensionControlApiError(error instanceof Error ? error.message : "Guard returned an invalid apply response", 502);
+    if (error instanceof CatalogV2UnsupportedError) return catalogReadModelFromCatalog(await fetchExtensionCatalog());
+    throw error;
   }
 }
 function permissionSuffix(permissionId) {
@@ -1443,12 +1259,12 @@ function permissionSuffix(permissionId) {
   return index < 0 ? null : permissionId.slice(index + marker.length);
 }
 function latestPermissionId(original, oldExtension, latestExtension) {
-  if (latestExtension.permissions.some((permission2) => permission2.permission_id === original)) return original;
+  if (latestExtension.permissions.some((permission) => permission.permission_id === original)) return original;
   if (latestExtension.extension_id !== oldExtension.extension_id && latestExtension.aliases.includes(oldExtension.extension_id)) {
     const suffix = permissionSuffix(original);
     if (!suffix) return null;
     const candidate = `${latestExtension.extension_id}.permission.${suffix}`;
-    if (latestExtension.permissions.some((permission2) => permission2.permission_id === candidate)) return candidate;
+    if (latestExtension.permissions.some((permission) => permission.permission_id === candidate)) return candidate;
   }
   return null;
 }
@@ -1456,14 +1272,14 @@ function rebaseExtensionPolicyDraft(oldEffective, latestEffective, oldExtension,
   let rebased = latestEffective.layers.map((layer) => ({ ...layer, controls: layer.controls.map((control) => ({ ...control })) }));
   const conflicts = [];
   const remapped = {};
-  for (const permission2 of oldExtension.permissions) {
-    const baseState = localPermissionDraftState(oldEffective.layers, permission2.permission_id);
-    const requestedState = localPermissionDraftState(draftLayers, permission2.permission_id);
+  for (const permission of oldExtension.permissions) {
+    const baseState = localPermissionDraftState(oldEffective.layers, permission.permission_id);
+    const requestedState = localPermissionDraftState(draftLayers, permission.permission_id);
     if (baseState === requestedState) continue;
-    const mapped = latestPermissionId(permission2.permission_id, oldExtension, latestExtension);
+    const mapped = latestPermissionId(permission.permission_id, oldExtension, latestExtension);
     if (!mapped) {
       conflicts.push({
-        original_permission_id: permission2.permission_id,
+        original_permission_id: permission.permission_id,
         latest_permission_id: null,
         kind: "removed",
         base_state: baseState,
@@ -1472,11 +1288,11 @@ function rebaseExtensionPolicyDraft(oldEffective, latestEffective, oldExtension,
       });
       continue;
     }
-    remapped[permission2.permission_id] = mapped;
+    remapped[permission.permission_id] = mapped;
     const latestState = localPermissionDraftState(latestEffective.layers, mapped);
     if (latestState !== baseState && latestState !== requestedState) {
       conflicts.push({
-        original_permission_id: permission2.permission_id,
+        original_permission_id: permission.permission_id,
         latest_permission_id: mapped,
         kind: "overlap",
         base_state: baseState,
@@ -1541,7 +1357,7 @@ function useExtensionPolicyDraft(props) {
   }, [baseEffective, draftLayers]);
   const changedPermissionCount = reactExports.useMemo(
     () => changeCountFor([...new Set(
-      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
+      baseEffective.layers.concat(draftLayers).flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id) => Boolean(id))
     )]),
     [baseEffective.layers, changeCountFor, draftLayers]
   );
@@ -1628,14 +1444,14 @@ function useExtensionPolicyDraft(props) {
       setError(null);
       setStale(false);
       if (applied.revision <= baseEffective.revision) throw new Error("Guard did not advance the committed extension-control revision.");
-      const changedPermissionIds = baseEffective.layers.flatMap((layer) => layer.controls).concat(draftLayers.flatMap((layer) => layer.controls)).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2));
+      const changedPermissionIds = baseEffective.layers.flatMap((layer) => layer.controls).concat(draftLayers.flatMap((layer) => layer.controls)).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id) => Boolean(id));
       const previouslyRequested = new Set(
-        draftLayers.flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id2) => Boolean(id2))
+        draftLayers.flatMap((layer) => layer.controls).map((control) => control.target_kind === "permission" ? control.target_id : null).filter((id) => Boolean(id))
       );
       setLastApplied({
         revision: applied.revision,
         previousLayers: appliedLayersBefore,
-        changedPermissionIds: [...new Set(changedPermissionIds)].filter((id2) => previouslyRequested.has(id2) || localPermissionDraftState(baseEffective.layers, id2) !== localPermissionDraftState(draftLayers, id2))
+        changedPermissionIds: [...new Set(changedPermissionIds)].filter((id) => previouslyRequested.has(id) || localPermissionDraftState(baseEffective.layers, id) !== localPermissionDraftState(draftLayers, id))
       });
       draftGeneration.current += 1;
       setDraftLayers(cloneLayers(baseEffective));
@@ -1657,13 +1473,14 @@ function useExtensionPolicyDraft(props) {
     setPreviewBusy(true);
     setError(null);
     try {
-      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const pairs = oldExtensions.map((oldExtension) => {
+      const [latestCatalog, latestEffective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+      const matches = oldExtensions.map((oldExtension) => {
         const exact = latestCatalog.extensions.find((item) => item.extension_id === oldExtension.extension_id);
-        if (exact) return { oldExtension, latestExtension: exact };
+        if (exact) return { oldExtension, latestId: exact.extension_id };
         const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(oldExtension.extension_id));
-        return aliasMatches.length === 1 ? { oldExtension, latestExtension: aliasMatches[0] } : null;
-      }).filter((pair) => Boolean(pair));
+        return aliasMatches.length === 1 ? { oldExtension, latestId: aliasMatches[0].extension_id } : null;
+      }).filter((match) => Boolean(match));
+      const pairs = await Promise.all(matches.map(async ({ oldExtension, latestId }) => ({ oldExtension, latestExtension: await latestCatalog.detail(latestId) })));
       if (!pairs.length) {
         setError("These extensions no longer exist in the authoritative catalog. Discard the draft and refresh before continuing.");
         return;
@@ -1733,10 +1550,10 @@ function useExtensionPolicyDraft(props) {
     if (profile === "custom") return;
     draftGeneration.current += 1;
     let next = cloneLayers(baseEffective);
-    for (const permission2 of permissions) {
-      if (!permission2.configurable) continue;
+    for (const permission of permissions) {
+      if (!permission.configurable) continue;
       const state = profile === "recommended" ? "inherit" : "block";
-      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission2.permission_id, state);
+      next = setLocalPermissionDraftState(next, baseEffective.catalog_digest, permission.permission_id, state);
     }
     setDraftLayers(next);
     setIdentity(newExtensionPolicyDraftIdentity());
@@ -1865,13 +1682,13 @@ const DEFAULT_QUICK_APPLY_SUBJECT = {
   other: "matching capabilities"
 };
 function quickApplyPermissionIds(permissions, effective, state) {
-  return permissions.filter((permission2) => permission2.configurable).filter((permission2) => state !== "allow" || managedPermissionState(effective, permission2.permission_id) !== "disabled").map((permission2) => permission2.permission_id);
+  return permissions.filter((permission) => permission.configurable).filter((permission) => state !== "allow" || managedPermissionState(effective, permission.permission_id) !== "disabled").map((permission) => permission.permission_id);
 }
 function QuickApplyToolbar(props) {
   const subject = props.subject ?? DEFAULT_QUICK_APPLY_SUBJECT;
-  const configurableCount = props.permissions.filter((permission2) => permission2.configurable).length;
+  const configurableCount = props.permissions.filter((permission) => permission.configurable).length;
   const managedBlockCount = props.permissions.filter(
-    (permission2) => permission2.configurable && managedPermissionState(props.effective, permission2.permission_id) === "disabled"
+    (permission) => permission.configurable && managedPermissionState(props.effective, permission.permission_id) === "disabled"
   ).length;
   let managedBlockCopy = "";
   if (managedBlockCount) {
@@ -1940,19 +1757,19 @@ function managedControlsHref(input) {
   if (!input.cloudControlsUrl) {
     return null;
   }
-  let target2;
+  let target;
   try {
-    target2 = new URL("/guard/controls", input.cloudControlsUrl);
+    target = new URL("/guard/controls", input.cloudControlsUrl);
   } catch {
     return null;
   }
   if (input.extensionId) {
-    target2.searchParams.set("extensionId", input.extensionId);
+    target.searchParams.set("extensionId", input.extensionId);
   }
   if (input.permissionId) {
-    target2.searchParams.set("permissionId", input.permissionId);
+    target.searchParams.set("permissionId", input.permissionId);
   }
-  return target2.toString();
+  return target.toString();
 }
 function buildLocalProtectionView(input) {
   const sources = input.sources?.length ? input.sources : [input.source];
@@ -2197,51 +2014,51 @@ function PreviewPanel(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-2xl font-semibold text-brand-dark", children: semantic.summary.effective_change_count })
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: semantic.changed_targets.map((target2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "border-b border-[rgba(63,65,116,0.12)] py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 space-y-3", children: semantic.changed_targets.map((target) => /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "border-b border-[rgba(63,65,116,0.12)] py-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: target2.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("strong", { className: "text-sm text-brand-dark", children: target.label }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
-          target2.before_explicit,
+          target.before_explicit,
           " → ",
-          target2.after_explicit
+          target.after_explicit
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { children: [
-          target2.before_effective,
+          target.before_effective,
           " → ",
-          target2.after_effective
+          target.after_effective
         ] }),
-        target2.baseline_risk ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[target2.baseline_risk], children: [
-          target2.baseline_risk,
+        target.baseline_risk ? /* @__PURE__ */ jsxRuntimeExports.jsxs(Pill, { tone: RISK_TONE[target.baseline_risk], children: [
+          target.baseline_risk,
           " baseline"
         ] }) : null
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 text-xs text-brand-dark/80", children: [
         "Affects ",
-        target2.affected_permission_ids.length,
+        target.affected_permission_ids.length,
         " permission",
-        target2.affected_permission_ids.length === 1 ? "" : "s",
+        target.affected_permission_ids.length === 1 ? "" : "s",
         " and ",
-        target2.affected_rule_ids.length,
+        target.affected_rule_ids.length,
         " rule",
-        target2.affected_rule_ids.length === 1 ? "" : "s",
+        target.affected_rule_ids.length === 1 ? "" : "s",
         "."
       ] }),
-      target2.affected_rule_ids.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
+      target.affected_rule_ids.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-xs font-semibold text-brand-blue", children: "Developer details" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 max-h-40 overflow-auto", children: target2.affected_rule_ids.map((id2) => /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block break-all text-[11px] text-brand-dark/80", children: id2 }, id2)) })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 max-h-40 overflow-auto", children: target.affected_rule_ids.map((id) => /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "block break-all text-[11px] text-brand-dark/80", children: id }, id)) })
       ] }) : null,
-      target2.warnings.map((warning2, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 flex items-start gap-2 text-xs leading-5 text-amber-950", children: [
+      target.warnings.map((warning, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 flex items-start gap-2 text-xs leading-5 text-amber-950", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-4 shrink-0" }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-            warning2.code,
+            warning.code,
             ":"
           ] }),
           " ",
-          warning2.message
+          warning.message
         ] })
-      ] }, `${warning2.code}-${index}`))
-    ] }, `${target2.target.kind}:${target2.target.target_id}`)) }),
+      ] }, `${warning.code}-${index}`))
+    ] }, `${target.target.kind}:${target.target.target_id}`)) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "cursor-pointer text-xs font-semibold text-brand-dark/80", children: "Developer change identity" }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-2 block break-all text-[11px] text-brand-dark/80", children: props.preview.canonical_diff_digest })
@@ -2253,7 +2070,7 @@ function PolicyReviewSheet(props) {
   const [password, setPassword] = reactExports.useState("");
   const [totpCode, setTotpCode] = reactExports.useState("");
   const count = props.preview.semantic_preview.changed_target_count;
-  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy);
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totpCode }, props.busy, false, true);
   const handleSubmit = (event) => {
     event.preventDefault();
     if (submitDisabled) return;
@@ -2292,6 +2109,7 @@ function PolicyReviewSheet(props) {
               approvalGate: props.approvalGate,
               approvalPassword: password,
               approvalTotpCode: totpCode,
+              requireGate: true,
               onApprovalPasswordChange: (event) => setPassword(event.target.value),
               onApprovalTotpCodeChange: (event) => setTotpCode(event.target.value)
             }
@@ -2356,8 +2174,8 @@ function ExtensionPolicyPanel(props) {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
     });
   }, [reviewOpen, resolveApprovalGate]);
-  const managedCount = policyExtension.permissions.filter((permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null).length;
-  const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission2) => permission2.permission_id));
+  const managedCount = policyExtension.permissions.filter((permission) => managedPermissionState(baseEffective, permission.permission_id) !== null).length;
+  const changeCount = draft.changeCountFor(policyExtension.permissions.map((permission) => permission.permission_id));
   const applyAcrossHref = appliedPolicyCloudHref({
     extensionName: policyExtension.name,
     extensionId: policyExtension.extension_id,
@@ -2407,17 +2225,17 @@ function ExtensionPolicyPanel(props) {
     ) : refreshRequired ? /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyEditingLocks, { refreshRequired: true }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: (() => {
       const { ungrouped, families } = groupPermissionsByFamily(policyExtension.permissions);
-      const renderRow = (permission2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      const renderRow = (permission) => /* @__PURE__ */ jsxRuntimeExports.jsx(
         PermissionPolicyRow,
         {
-          permission: permission2,
+          permission,
           extension: policyExtension,
           effective: baseEffective,
-          draftState: permissionState(permission2.permission_id),
+          draftState: permissionState(permission.permission_id),
           disabled: refreshRequired,
-          onChange: (state) => setPermissionState(permission2.permission_id, state)
+          onChange: (state) => setPermissionState(permission.permission_id, state)
         },
-        permission2.permission_id
+        permission.permission_id
       );
       return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         ungrouped.map(renderRow),
@@ -2496,6 +2314,9 @@ function ExtensionPolicyPanel(props) {
 function enrollableCount(item) {
   return Math.max(enrollablePackageScriptCommands(item.commands).length, 0);
 }
+function isObservedMcpItem(item) {
+  return item?.surface === "mcp" && item.example_label.startsWith("mcp__") && item.source_label?.endsWith(" · observed tools") === true;
+}
 function addDialogSubmitLabel(input) {
   if (input.recognized === null) {
     return input.busy ? "Looking…" : "Find this tool";
@@ -2512,9 +2333,12 @@ function addDialogSubmitLabel(input) {
   if (input.pending === "blocked") {
     return blockActionLabel(input.recognized.surface);
   }
-  return allowActionLabel(input.recognized.surface);
+  return isObservedMcpItem(input.recognized) ? "Save tool permissions" : allowActionLabel(input.recognized.surface);
 }
-function enrollConfirmCopy(surface, recentlySatisfied, totpEnabled) {
+function enrollConfirmCopy(surface, recentlySatisfied, totpEnabled, gateReady) {
+  if (gateReady === false) {
+    return "Local approval isn't ready on this device. Set it up below, then come back to save these settings.";
+  }
   if (recentlySatisfied) {
     return "Recently confirmed with your authenticator. Save these settings.";
   }
@@ -2549,11 +2373,12 @@ function blockActionLabel(surface) {
   if (surface === "package-scripts") return "Block these scripts";
   return "Block this tool";
 }
-function dialogIntro(hasProjects, surface, discovering = false, mcpHasTools = true) {
+function dialogIntro(hasProjects, surface, discovering = false, mcpHasTools = true, observedMcp = false) {
   if (surface === "package-scripts") {
     return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
   }
   if (surface === "mcp") {
+    if (observedMcp) return "Review each detected tool before saving. Allow listed applies only to the tools shown here.";
     if (!mcpHasTools) {
       return "You can still add this server. List tools again to set Recommended, Allow, or Block on each tool.";
     }
@@ -2603,6 +2428,10 @@ function filterCountCopy(visible, total) {
   return `${visible} of ${total} scripts match. Allow still enrolls the whole project.`;
 }
 function suggestionSummary(item) {
+  if (isObservedMcpItem(item)) {
+    const count = item.commands.filter((entry) => entry.command_id !== "other").length;
+    return `${count} detected ${count === 1 ? "tool" : "tools"}. Set permissions for each one. New tools keep the usual review, and safety policy still applies.`;
+  }
   if (item.surface === "package-scripts" && item.commands.length > 0) {
     const count = enrollableCount(item);
     const unit = count === 1 ? "script" : "scripts";
@@ -2640,8 +2469,8 @@ function SuggestionPanel(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       SuggestionGroup,
       {
-        heading: "From your apps",
-        helper: "MCP servers already configured in apps on this device.",
+        heading: "MCP servers and connectors",
+        helper: "Configured in your apps or detected from tool activity. Pick one to review its tools.",
         items: props.harnessSuggestions,
         onSelect: props.onSelect
       }
@@ -2705,12 +2534,16 @@ function SuggestionButton(props) {
   const handleSelect = reactExports.useCallback(() => {
     props.onSelect(props.item);
   }, [props]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleSelect, className: "flex min-h-11 w-full items-baseline justify-between gap-3 py-2 text-left", children: [
+  let connectorLabel = "Load tools";
+  if (mcpCatalogHasTools(props.item.commands)) {
+    connectorLabel = `${props.item.commands.filter((entry) => entry.command_id !== "other").length} tools`;
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: handleSelect, className: "flex min-h-14 w-full items-center justify-between gap-3 rounded-lg px-2 py-3 text-left hover:bg-brand-blue/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-sm font-semibold text-brand-dark", children: props.item.name }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block truncate text-xs text-brand-dark/60", children: props.item.source_label ?? seenSuggestionMeta(props.item) })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate font-mono text-xs text-brand-dark/60", children: props.item.example_label })
+    props.item.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "shrink-0 text-xs font-semibold text-brand-blue", children: connectorLabel }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "max-w-[55%] truncate font-mono text-xs text-brand-dark/60", children: props.item.example_label })
   ] });
 }
 function CatalogPreview(props) {
@@ -2738,9 +2571,10 @@ function CatalogPreview(props) {
 }
 function BulkPolicyPicker(props) {
   const choices = [
-    { value: "inherit", label: "Recommended" },
-    { value: "allow", label: "Allow all" },
-    { value: "block", label: "Block all" }
+    { value: "inherit", label: props.mcpPolicy ? "Use policy" : "Recommended" },
+    { value: "allow", label: props.allowLabel ?? "Allow all" },
+    ...props.mcpPolicy ? [{ value: "review", label: "Ask listed" }] : [],
+    { value: "block", label: props.blockLabel ?? "Block all" }
   ];
   const mixed = props.value === "mixed";
   const selected = mixed ? "inherit" : props.value;
@@ -2760,7 +2594,7 @@ function BulkPolicyPicker(props) {
         role: "radiogroup",
         "aria-label": mixed ? `${groupLabel}. Custom mix` : groupLabel,
         "aria-describedby": mixed ? "bulk-policy-mixed" : void 0,
-        className: "guard-segmented w-fit",
+        className: props.mcpPolicy ? "guard-segmented w-fit !grid grid-cols-2 sm:!flex [&_[role=radio]]:!min-h-11" : "guard-segmented w-fit",
         children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           BulkPolicyChoice,
           {
@@ -2776,7 +2610,7 @@ function BulkPolicyPicker(props) {
         ))
       }
     ),
-    props.value === "mixed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "bulk-policy-mixed", className: "mt-2 text-xs leading-5 text-brand-dark/70", children: props.mixedCopy ?? "Custom mix. Pick Recommended, Allow all, or Block all to reset every tool." }) : null
+    props.value === "mixed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "bulk-policy-mixed", className: "mt-2 text-xs leading-5 text-brand-dark/70", children: props.mixedCopy ?? `Custom mix. Pick Recommended, ${props.allowLabel ?? "Allow all"}, or Block all to reset every tool.` }) : null
   ] });
 }
 function BulkPolicyChoice(props) {
@@ -2800,6 +2634,89 @@ function BulkPolicyChoice(props) {
       children: props.choice.label
     }
   );
+}
+function mcpToolCanReceiveDirectAllow(command) {
+  if (command.command_id === "other") return false;
+  const name = command.usage.split("__").at(-1)?.toLowerCase();
+  return !name?.startsWith("composio_") || ["composio_search_tools", "composio_get_tool_schemas"].includes(name);
+}
+function mcpCatalogCopy(item) {
+  if (item.surface !== "mcp") return null;
+  const catalog = item.mcp_catalog;
+  if (!catalog) return {
+    title: "Inventory not checked",
+    description: "Guard knows observed tools from this connector. Its full inventory has not been verified."
+  };
+  const count = `${catalog.known_count} ${catalog.known_count === 1 ? "tool" : "tools"}`;
+  if (catalog.complete && catalog.fresh_until && Date.parse(catalog.fresh_until) <= Date.now()) return {
+    title: `${count} cached · Refresh available`,
+    description: "This inventory's freshness window ended. Existing choices are kept; list tools again to check for changes."
+  };
+  if (catalog.complete) return {
+    title: `${count} listed`,
+    description: "Discovery finished. Permission choices apply separately to each tool."
+  };
+  if (catalog.reason === "catalog_changed") return {
+    title: "Inventory changed during discovery",
+    description: "Guard kept your choices. List tools again to review a consistent inventory."
+  };
+  if (catalog.reason === "refresh_failed" || catalog.reason === "list_failed") return {
+    title: catalog.stale ? `${count} cached · Refresh failed` : "Discovery did not finish",
+    description: catalog.known_count > 0 ? "Known tools and choices are still available. Retry discovery to check the current inventory." : "Guard could not finish listing tools. Retry discovery to check this connector."
+  };
+  return {
+    title: `${count} known · Inventory incomplete`,
+    description: "Discovery reached a limit or returned an incomplete inventory. Unknown tools still need review."
+  };
+}
+function rebaseCommandDraft(current, previous, next, changedToolNames = []) {
+  const changed = new Set(changedToolNames);
+  const previousStates = new Map(previous.map((command) => [command.command_id, command.state]));
+  const edits = new Map(current.filter((command) => previousStates.has(command.command_id) && command.state !== previousStates.get(command.command_id)).map((command) => [command.command_id, command.state]));
+  return next.map((command) => edits.has(command.command_id) && !(edits.get(command.command_id) === "allow" && (changed.has(command.command_id) || changed.has(command.usage))) ? { ...command, state: edits.get(command.command_id) } : command);
+}
+function commandPermissionChanges(previous, next) {
+  const states = new Map(previous.map((command) => [command.command_id, command.state]));
+  return next.filter((command) => command.state !== states.get(command.command_id)).map((command) => ({
+    commandId: command.command_id,
+    name: command.name,
+    before: states.get(command.command_id) ?? null,
+    after: command.state
+  }));
+}
+const words = (code) => code.replaceAll("-", " ");
+const explanations = {
+  "reviewed-provider-mapping:v1": "Reviewed provider contract",
+  "schema:content-fields": "Schema accepts content",
+  "schema:credential-fields": "Schema accepts credentials",
+  "schema:destination-fields": "Schema accepts a recipient or endpoint",
+  "schema:execution-fields": "Schema accepts executable content",
+  "provider-annotations:unverified": "Provider behavior claims, not verified by Guard"
+};
+function McpClassificationEvidence({ value }) {
+  if (!value) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: [
+      value.effect === "unknown" ? "Effect not resolved" : `Suggested effect: ${words(value.effect)}`,
+      " · View evidence"
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "grid gap-x-4 gap-y-2 sm:grid-cols-2", children: [
+      ["Effect", value.effect],
+      ["Data", value.data],
+      ["Destination", value.destination],
+      ["Reversibility", value.reversibility]
+    ].map(([label, content]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "font-semibold", children: label }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { children: words(content) })
+    ] }, label)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3", children: [
+      "Evidence quality: ",
+      value.confidence === "reviewed-mapping" ? "reviewed contract" : "limited",
+      ". These suggestions do not verify behavior, account, or permission."
+    ] }),
+    value.evidence.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 list-disc pl-5", children: value.evidence.map((code) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: explanations[code] ?? "Unrecognized evidence" }, code)) }) : null,
+    value.warnings.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 font-semibold", children: value.warnings.map(words).join(" · ") }) : null
+  ] });
 }
 function commandStatesPayload(commands) {
   return commands.map((command) => ({ command_id: command.command_id, state: command.state }));
@@ -2826,6 +2743,7 @@ function CustomExtensionCommandList(props) {
     {
       command,
       disabled: props.disabled,
+      surface: props.surface,
       onChange: props.onChange
     },
     command.command_id
@@ -2855,7 +2773,9 @@ function CustomExtensionCommandRow(props) {
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 pr-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: props.command.name }),
           commandRowUsage(props.command.name, props.command.usage) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "guard-pattern-example mt-1", title: props.command.usage, children: props.command.usage }) : null,
-          props.command.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/70", children: props.command.description }) : null
+          props.command.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/70", children: props.command.description }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(McpClassificationEvidence, { value: props.command.classification }),
+          props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 text-xs leading-5 text-brand-dark/75", children: props.command.command_id === "other" ? "New tools require review. You can deny tools outside this inventory." : "Review the actions and account inside this tool. A wrapper permission cannot allow execution." }) : null
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           CommandDraftControl,
@@ -2863,6 +2783,8 @@ function CustomExtensionCommandRow(props) {
             label: props.command.name,
             state: props.command.state,
             disabled: props.disabled,
+            mcpPolicy: props.surface === "mcp",
+            allowDisabled: props.surface === "mcp" && !mcpToolCanReceiveDirectAllow(props.command),
             onChange: handleChange
           }
         )
@@ -2872,9 +2794,10 @@ function CustomExtensionCommandRow(props) {
 }
 function CommandDraftControl(props) {
   const choices = [
-    { value: "inherit", label: "Recommended" },
-    { value: "allow", label: "Allow" },
-    { value: "block", label: "Block" }
+    { value: "inherit", label: props.mcpPolicy ? "Policy" : "Recommended" },
+    { value: "allow", label: "Allow", disabled: props.allowDisabled },
+    ...props.mcpPolicy ? [{ value: "review", label: "Ask" }] : [],
+    { value: "block", label: props.mcpPolicy ? "Deny" : "Block" }
   ];
   const tabStopIndex = extensionPolicyRadioTabStop(choices, props.state, props.disabled);
   const chooseAdjacent = (event, index) => {
@@ -2884,19 +2807,27 @@ function CommandDraftControl(props) {
     props.onChange(choices[next].value);
     event.currentTarget.parentElement?.querySelectorAll('[role="radio"]')[next]?.focus();
   };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "radiogroup", "aria-label": `${props.label} protection setting`, className: "guard-segmented", children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CommandChoiceButton,
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "div",
     {
-      choice,
-      checked: props.state === choice.value,
-      tabIndex: !props.disabled && index === tabStopIndex ? 0 : -1,
-      disabled: props.disabled,
-      index,
-      onChoose: props.onChange,
-      onAdjacent: chooseAdjacent
-    },
-    choice.value
-  )) });
+      role: "radiogroup",
+      "aria-label": `${props.label} protection setting`,
+      className: props.mcpPolicy ? "guard-segmented !grid grid-cols-2 sm:!flex [&_[role=radio]]:!min-h-11" : "guard-segmented",
+      children: choices.map((choice, index) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CommandChoiceButton,
+        {
+          choice,
+          checked: props.state === choice.value,
+          tabIndex: !props.disabled && index === tabStopIndex ? 0 : -1,
+          disabled: props.disabled || choice.disabled === true,
+          index,
+          onChoose: props.onChange,
+          onAdjacent: chooseAdjacent
+        },
+        choice.value
+      ))
+    }
+  );
 }
 function CommandChoiceButton(props) {
   const handleClick = reactExports.useCallback(() => {
@@ -2919,6 +2850,162 @@ function CommandChoiceButton(props) {
       children: props.choice.label
     }
   );
+}
+const object$2 = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const integer$1 = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+async function fetchMcpSkillMetadata(options) {
+  const response = await fetchLocalCliApi("/v1/local-clis/mcp-skills", {
+    method: "POST",
+    signal: options.signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      cli_id: options.cliId,
+      offset: options.offset,
+      search: options.search,
+      ...options.revision === void 0 ? {} : { revision: options.revision }
+    })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(object$2(body) && typeof body.message === "string" ? body.message : "Could not load remote workflow metadata.");
+  if (!object$2(body) || body.cli_id !== options.cliId || body.activation_supported !== false || !Array.isArray(body.entries) || body.entries.length > 50 || !integer$1(body.revision) || body.revision < 1 || body.next_offset !== null && body.next_offset !== options.offset + 50) throw new Error("Invalid remote workflow catalog");
+  const entries = body.entries.map((entry) => {
+    if (!object$2(entry) || entry.origin !== "mcp-served-skill" || entry.connection_identity_hash !== options.identityHash || entry.activation_supported !== false || entry.permissions_granted !== false || typeof entry.uri !== "string" || entry.uri.length > 8192 || !entry.uri.endsWith("/SKILL.md") || typeof entry.name !== "string" || entry.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.name) || typeof entry.description !== "string" || entry.description.length > 1024 || typeof entry.dynamic !== "boolean" || (entry.dynamic ? entry.manifest_digest !== null || entry.resource_count !== null : typeof entry.manifest_digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(entry.manifest_digest) || !integer$1(entry.resource_count) || entry.resource_count < 1 || entry.resource_count > 512)) {
+      throw new Error("Invalid remote workflow provenance");
+    }
+    return {
+      uri: entry.uri,
+      name: entry.name,
+      description: entry.description,
+      dynamic: entry.dynamic,
+      manifest_digest: entry.manifest_digest,
+      resource_count: entry.resource_count
+    };
+  });
+  return { entries, revision: body.revision, nextOffset: body.next_offset };
+}
+function McpDeclaredSkills(props) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [search, setSearch] = reactExports.useState("");
+  const [input, setInput] = reactExports.useState("");
+  const [offset, setOffset] = reactExports.useState(0);
+  const [retry, setRetry] = reactExports.useState(0);
+  const [page, setPage] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const revision = reactExports.useRef(void 0);
+  reactExports.useEffect(() => {
+    if (input === search) return;
+    const timer = window.setTimeout(() => {
+      setSearch(input);
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [input, search]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setBusy(true);
+    setError(null);
+    void fetchMcpSkillMetadata({
+      cliId: props.cliId,
+      identityHash: props.identityHash,
+      offset,
+      search,
+      revision: offset > 0 ? revision.current : void 0,
+      signal: controller.signal
+    }).then((next) => {
+      if (!controller.signal.aborted) {
+        setPage(next);
+        revision.current = next.revision;
+      }
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load workflows.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [open, props.cliId, props.identityHash, props.revision, offset, search, retry]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-6 border-b border-slate-200 pb-5", onToggle: (event) => setOpen(event.currentTarget.open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "min-h-11 cursor-pointer py-3 text-base font-semibold text-brand-dark", children: [
+      "Remote workflows · ",
+      props.knownCount,
+      " cached"
+    ] }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Remote workflow metadata", "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "max-w-2xl text-sm leading-6 text-brand-dark/75", children: [
+        "This connection declares MCP Skills. ",
+        props.complete ? "Its workflow metadata was listed." : "Its workflow inventory is incomplete.",
+        "Instructions are not loaded. Guard has not enabled skill activation in this host; tool permissions remain separate."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block max-w-xl text-sm font-semibold text-brand-dark", children: [
+        "Find a remote workflow",
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "input",
+          {
+            type: "search",
+            value: input,
+            onChange: (event) => setInput(event.target.value),
+            className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal"
+          }
+        )
+      ] }),
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm text-red-700", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setOffset(0);
+              setRetry((current) => current + 1);
+            },
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+            children: "Reload workflow metadata"
+          }
+        )
+      ] }) : null,
+      !busy && !error && page?.entries.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-brand-dark/75", children: "No workflow metadata matches this search." }) : null,
+      !busy && !error && page ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: page.entries.map((entry) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: entry.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-brand-dark/75", children: entry.description }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-all text-xs text-brand-dark/75", children: [
+            "Origin: this MCP connection · ",
+            entry.uri
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-dark/75", children: entry.dynamic ? "Dynamic content cannot carry persisted content approval." : `${entry.resource_count} files in the declared manifest. Files must be verified when read.` })
+        ] }, entry.uri)) }),
+        offset > 0 || page.nextOffset !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Remote workflow pages", className: "mt-3 flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: offset === 0,
+              onClick: () => setOffset(Math.max(0, offset - 50)),
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Previous"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+            "Page ",
+            offset / 50 + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: page.nextOffset === null,
+              onClick: () => {
+                if (page.nextOffset !== null) setOffset(page.nextOffset);
+              },
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Next"
+            }
+          )
+        ] }) : null
+      ] }) : null
+    ] }) : null
+  ] });
 }
 const EXTENSION_PANEL_CLASS = "guard-extensions-panel p-5 sm:p-6";
 const EXTENSION_CHIP_CLASS = "guard-extensions-chip";
@@ -3037,6 +3124,9 @@ function SiDebian(props) {
 function SiComposer(props) {
   return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.66 0c-.07 0-.114.034-.164.095a.416.416 0 00-.07.43c.19.41.363.83.528 1.25.01.02.022.04.039.068-.04-.002-.05-.022-.063-.043-.297-.31-.648-.557-.998-.804-.473-.337-.99-.603-1.503-.872a.578.578 0 00-.214-.065l-.384-.04c-.202-.025-.355.09-.355.292 0 .108-.046.132-.135.14-.08.004-.187.115-.196.192a.694.694 0 00.228.619c.444.415.873.845 1.303 1.275l.015.007a.1.1 0 01.028.038c-.007.003-.014.003-.02.003a.057.057 0 01-.035-.022c-.002-.002-.005-.005-.005-.007-.062-.036-.127-.07-.187-.11-.3-.2-.595-.404-.895-.598a.943.943 0 00-.461-.17.453.453 0 00-.392.143.28.28 0 00-.088.253c.016.146.115.237.223.312.502.338.95.734 1.366 1.174.036.038.074.079.115.112.118.096.19.224.262.356.033.06.02.074-.043.074-.428 0-.836.118-1.246.204-.168.036-.334.094-.394.28-.065.21-.096.328.16.392a9.57 9.57 0 011.49.516.55.55 0 01.117.077c.12.104.23.219.362.303.38.247.77.478 1.22.583.053.012.1.039.15.05.05.015.085.044.095.094.029.178.139.279.305.33.02.006.038.02.06.028.052.017.076.055.093.108.067.24.137.478.212.715.026.08.002.1-.07.123-.372.108-.742.22-1.112.334-.132.04-.134.043-.067.163l.908 1.635c.127.23.132.23.365.11.024-.012.057-.053.079-.014.02.036.06.089.024.13-.113.129-.19.28-.286.42-.031.045-.031.074-.005.117.1.166.202.334.3.502.012.019.034.043.03.058l-.123.367a2.538 2.538 0 00-.317-.716c-.18-.288-.41-.542-.62-.811-.033-.04-.072-.077-.11-.115-.2-.207-.456-.332-.7-.478a1.026 1.026 0 00-.34-.127c-.374-.08-.746-.11-1.12.004-.075.024-.116.005-.161-.06-.092-.127-.166-.273-.29-.372-.3-.24-.616-.458-.985-.583a2.95 2.95 0 00-.865-.168 4.267 4.267 0 00-.463.017c-.396.03-.79.074-1.14.293-.07.043-.15.067-.221.108-.36.194-.716.386-1.016.679a13.1 13.1 0 00-.897.944c-.322.384-.565.818-.783 1.267-.015.03-.022.07-.07.096l-.12-.744c-.007-.046.022-.043.053-.038.089.01.175.014.264.026.067.01.103-.005.12-.08.022-.102.046-.206.067-.311.082-.397.2-.78.303-1.17.02-.074.007-.1-.07-.12-.381-.09-.763-.192-1.145-.283-.072-.017-.106-.043-.084-.12.087-.298.125-.61.242-.9a.178.178 0 01.056-.087c.098-.076.17-.165.16-.302-.007-.103.041-.168.14-.214.182-.086.358-.187.53-.288a.84.84 0 00.327-.333c.322-.605.59-1.242.98-1.81.033-.051.06-.106.1-.15.252-.264.488-.544.771-.78.089-.074.113-.175.115-.285 0-.128-.074-.217-.151-.305-.075-.087-.151-.161-.279-.147-.028.003-.057-.01-.088-.014.019-.04.05-.048.076-.065.339-.218.677-.437 1.016-.658.41-.264.819-.53 1.232-.794.052-.034.076-.06.019-.11-.015-.013-.024-.03-.036-.044-.084-.099-.084-.099-.2-.03L8.084 3.693c-.101.062-.101.062-.152-.05-.112-.263-.177-.54-.261-.81-.02-.062-.003-.098.045-.137.289-.23.553-.49.82-.742a.604.604 0 00.186-.37c.022-.17-.09-.259-.244-.196a1.707 1.707 0 00-.221.105c-.68.375-1.405.632-2.149.848-.043.012-.082.026-.118-.02-.074-.09-.185-.14-.278-.208a.073.073 0 00-.063-.015c-.1.027-.204.056-.266.147-.159.233-.358.44-.507.682-.17.28-.333.562-.525.828-.036.05-.05.058-.084-.002L3.63 2.635a2.837 2.837 0 00-.223-.338c-.094-.118-.209-.176-.358-.16-.026.004-.06-.004-.07.037-.02.11-.07.226-.057.332.034.27.082.542.15.806.114.459.244.912.38 1.364.133.444.282.88.426 1.323.012.038.033.072-.02.103-.067.038-.175.058-.187.125-.012.07.05.15.08.225l.007.017c.024.058.036.144.08.166.057.029.11-.05.162-.082.048-.03.065-.021.087.029.124.293.252.583.38.876a.18.18 0 01.006.137 4.138 4.138 0 00-.192.72c-.012.07-.038.07-.09.055a107.637 107.637 0 00-.834-.21c-.123-.032-.123-.032-.137.093v.01c-.06.665-.12 1.33-.183 1.994-.004.06.003.085.068.092.194.024.386.055.578.084.036.005.067.007.058.06-.043.225-.077.453-.125.677a.178.178 0 00.034.163l.2.264c.045.063.08.144.037.209a.201.201 0 00-.033.118c.007.415.007.83.026 1.246.01.2.007.403.012.605.01.535.04 1.068.06 1.603.01.262-.036.52-.024.783.002.065.017.1.084.122.16.05.312.116.473.166a.28.28 0 01.185.156.436.436 0 01.038.219c-.002.072.024.115.082.156.247.177.492.36.74.542.65.48 1.3.963 1.954 1.44.06.045.074.081.038.146-.034.062-.055.135-.089.197-.029.058-.024.094.031.134.082.058.161.123.236.188.065.055.067.141.048.208-.015.05-.087.005-.132 0-.032-.002-.063-.01-.094-.014-.31-.05-.617-.13-.932-.156-.5-.04-1.003-.084-1.51-.07-.026 0-.067-.024-.074.03-.007.042-.017.088.031.117.024.014.05.026.077.036.283.098.547.24.807.39.168.095.333.203.518.268.034.012.068.038.108.002-.278-.22-.554-.442-.833-.665.04-.029.07-.017.1-.014.332.026.664.072.988.15.713.17 1.421.361 2.122.572.23.07.475.104.682.243.05.033.08.067.074.13.012.014.027.033.01.045-.02.012-.036-.012-.05-.024-.164-.014-.327-.026-.488-.043-.463-.046-.924-.11-1.392-.096-.35.01-.701-.015-1.05.01-.494.033-.989.098-1.48.15-.025.003-.063-.002-.063.027 0 .036.014.077.06.087a.58.58 0 00.113.012c.25.01.497.007.746.011.62.015 1.242-.012 1.86.041.224.02.45.01.668.05 1.03.193 2.055.394 3.078.618.12.026.243.045.36.103-.055.05-.127.065-.158.137-.22.506-.363 1.04-.53 1.563-.03.09.03.192.12.216a.278.278 0 00.352-.22c.02-.109.039-.217.053-.328.005-.036.017-.055.053-.067.132-.053.26-.108.393-.16a1.63 1.63 0 00.529-.325c.134-.127.247-.274.25-.47 0-.06.014-.099.062-.135.22-.17.418-.365.61-.564a6.03 6.03 0 01.6-.533c.024-.02.043-.048.08-.034l.56.221c-.374.228-.73.447-1.082.66-.017.01-.036.015-.053.02a.813.813 0 00-.338.201c-.375.372-.567.814-.545 1.35.014.36.22.53.57.45.616-.145 1.14-.734 1.233-1.38.024-.18.052-.357-.077-.513a2.25 2.25 0 00-.178-.195c.02-.012.029-.019.039-.026.777-.463 1.625-.778 2.475-1.07 1.04-.359 2.1-.644 3.164-.918l-.075-.017c-.07.007-.136.015-.206.02a5.097 5.097 0 00-.872.134l-.016.007a.226.226 0 01-.094.015c-.014 0-.03 0-.048.002.065-.062.252-.264.303-.25l.002-.005h.005c0-.007.019-.02.019-.02.017-.03.04-.049.074-.05a.694.694 0 01.197-.189c.05-.03.103-.062.16-.086h-.001c.16 0 .319-.194.486-.262-.001-.006-.01-.01-.013-.017-.24.034-.476.072-.706.16-.492.181-1.001.323-1.481.534-.742.324-1.482.648-2.195 1.035a.818.818 0 01-.077.036l-.055-.504c-.005-.034.012-.048.04-.063.632-.334 1.266-.665 1.926-.938.543-.226 1.08-.47 1.626-.691.002-.005.005-.01.01-.01h.004c.003 0 .003.003.005.003.007.012.002.02-.005.026-.002.003-.005.003-.01.005h-.002a3.358 3.358 0 00-.372.66c.038.01.053-.003.067-.018.113-.12.226-.237.336-.357.214-.234.44-.458.704-.64.017-.012.045-.022.033-.048-.014-.03-.045-.015-.067-.01-.247.05-.494.096-.74.154-.081.019-.076-.01-.08-.067-.001-.197.028-.39.035-.586a.63.63 0 01.058-.247c.098-.226.197-.45.297-.675.05-.113.08-.233.099-.353.03-.192.055-.386.074-.58.03-.3.137-.58.187-.875.065-.374.118-.751.257-1.11.125-.316.245-.633.372-.947.176-.428.399-.833.505-1.29.036-.158.076-.302.004-.458-.04-.084-.052-.18-.081-.271a.392.392 0 01-.012-.204c.048-.245.07-.488-.063-.716-.036-.062.008-.1.044-.14.088-.09.093-.131.016-.23-.088-.11-.175-.223-.27-.326-.08-.084-.154-.175-.234-.262-.055-.033-.05-.055.012-.076.14-.048.276-.108.418-.152.08-.024.1-.07.106-.141.045-.605.09-1.213.139-1.818.007-.084-.007-.1-.094-.074-.454.144-.907.28-1.363.422-.14.044-.142.044-.204-.093-.231-.52-.411-1.057-.6-1.59a.392.392 0 01.007-.316c.067-.188.024-.377.019-.567a.104.104 0 01-.005-.03 9.16 9.16 0 00-.254-1.547 6.02 6.02 0 00-.5-1.27c-.228-.432-.473-.86-.737-1.275-.113-.178-.233-.339-.434-.427A.702.702 0 0016.66 0zm-2.642.26a.364.364 0 01.2.051 19.041 19.041 0 011.469.805c.247.158.482.338.715.52.11.087.192.217.284.33.038.047.012.09-.024.124-.024.024-.058.039-.087.055-.031.022-.072.04-.06.087.01.04.055.05.09.058a.27.27 0 00.16-.015c.168-.07.31.048.418.166.028.03.04.093.093.074.055-.021.063-.081.058-.137-.012-.15-.05-.297-.084-.444-.09-.377-.27-.718-.418-1.073-.053-.127-.11-.254-.163-.382-.03-.07.01-.132.048-.182.03-.04.08-.005.122.014.152.068.238.19.312.332.08.15.178.29.262.436.144.255.322.495.437.762.168.388.382.758.483 1.176.086.37.208.732.252 1.114.016.144-.01.283.007.422.033.279-.008.543-.123.798-.03.07-.021.136.012.208.252.533.46 1.083.67 1.635.027.072.015.1-.06.123-.482.14-.965.288-1.447.434-.07.022-.092.003-.113-.06-.123-.326-.24-.646-.353-.967-.024-.068-.053-.104-.128-.087-.088.022-.136-.017-.175-.096-.062-.127-.113-.28-.216-.36-.103-.08-.266-.082-.403-.115-.103-.027-.207-.058-.312-.075a1.428 1.428 0 01-.612-.273c-.303-.224-.615-.43-.934-.627-.104-.007-.202-.036-.303-.06-.278-.057-.554-.117-.833-.17-.067-.012-.08-.063-.084-.108-.007-.056.007-.11.065-.144.089-.053.19-.063.29-.08a9.69 9.69 0 011.345-.13c.11-.002.209.04.312.066a.18.18 0 00.166-.03c.216-.143.434-.28.65-.422.034-.021.096-.036.07-.093a.083.083 0 00-.015-.022c-.012-.01-.026-.012-.043-.012l-.05.002h-.007a1.159 1.159 0 00-.668.2c-.08.05-.26.019-.31-.056-.34-.516-.823-.888-1.282-1.29-.204-.176-.403-.361-.62-.525-.054-.04-.08-.144-.042-.196.048-.072.11-.041.168-.015.185.082.362.175.528.293.564.403 1.17.744 1.772 1.085a.51.51 0 00.05.027c.092.03.14-.01.125-.106a.267.267 0 00-.062-.134c-.488-.574-1.001-1.124-1.506-1.683-.105-.116-.23-.216-.348-.32a.854.854 0 01-.22-.278.16.16 0 01.023-.19c.04-.045.077-.055.137-.024.17.082.332.178.483.293.266.202.535.403.804.605l.807.603c.02.017.043.033.062.05.05.046.094.094.142.142l.029.029c.019.019.036.045.06.06.055.033.112.062.17.004.02-.02.029-.036.03-.055 0-.007.004-.014 0-.021l-.001-.01a.171.171 0 00-.043-.072l-.18-.187a4.537 4.537 0 00-.312-.298c-.35-.29-.706-.571-1.066-.845-.183-.14-.397-.233-.596-.348-.072-.041-.12-.101-.173-.159a.144.144 0 01-.024-.15c.022-.054.075-.051.12-.056zM8.252 1.649a.045.045 0 01.029.005c.048.027.03.077.03.135.013.06-.026.11-.08.16-.346.322-.707.627-1.076.922-.147.118-.327.173-.49.262-.034.017-.053 0-.072-.024-.12-.154-.238-.31-.358-.463-.045-.055.017-.053.046-.065.254-.091.504-.195.756-.295.365-.144.696-.35 1.04-.533.036-.02.07-.043.105-.063.024-.01.044-.037.07-.041zm-2.619.83a.223.223 0 01.134.064c.072.067.13.144.18.228.173.28.413.506.646.737.163.163.33.32.502.47.057.05.067.127.098.192.012.024.002.043-.02.055-.011.008-.023.013-.03.02-.142.12-.276.103-.442.019a3.182 3.182 0 01-.864-.646c-.01-.01-.02-.017-.03-.024-.114-.086-.12-.082-.17.05-.052.135-.086.274-.146.404-.022.045.012.094.046.127.038.039.064.099.134.089.031-.005.048-.022.055-.055.017-.08.04-.16.06-.257.262.22.553.39.84.583l-.278.159c-.713.4-1.428.8-2.139 1.205-.058.03-.082.038-.106-.034-.273-.847-.56-1.69-.79-2.552-.052-.2-.074-.408-.112-.612-.012-.06.028-.091.067-.113.053-.026.055.036.074.06.377.52.634 1.11.941 1.669.092.168.195.33.293.497.02.03.034.057.082.04.053-.02.043-.052.034-.09-.039-.174-.128-.33-.193-.493a.18.18 0 01.003-.16c.137-.284.33-.531.48-.803.14-.247.317-.468.451-.717a.205.205 0 01.2-.111zm1.774.492c.014.003.024.016.036.042.12.27.201.555.302.83.01.027.012.049-.017.066l-.256.158c-.008.005-.017.007-.046.02-.007-.013-.017-.034-.031-.051l-.54-.62c-.024-.028-.048-.055 0-.081.177-.101.312-.264.499-.35.024-.011.04-.017.053-.014zm1.929.486a.204.204 0 01.14.046.21.21 0 01.08.218.556.556 0 01-.161.29 5.528 5.528 0 00-.882 1.093c-.228.36-.453.718-.624 1.11a.768.768 0 01-.146.206c-.24.273-.526.485-.855.638a.17.17 0 00-.108.159c-.005.06-.024.118-.029.178a.48.48 0 01-.19.38c-.04.032-.045.083-.06.126l-.273.915c0 .007 0 .014-.002.019 0 .014.002.03-.017.038-.04.01-.077-.002-.113-.021a41.397 41.397 0 01-1.33-.334c-.055-.012-.108-.03-.166-.036-.088-.012-.096-.053-.055-.12.058-.281.125-.56.298-.797.038-.053.036-.096.002-.154-.19-.317-.334-.658-.492-.99-.026-.054-.017-.08.034-.11A574.255 574.255 0 006.97 4.706c.045-.03.089-.012.132-.022.151-.034.298-.08.43-.163.01-.007.026-.012.03-.022.097-.213.31-.286.49-.37.411-.187.826-.36 1.189-.633a.18.18 0 01.095-.04zm11.443 3.772v.005l.002-.001c-.021.256-.043.498-.062.74l-.043.535c-.005.065-.024.106-.094.13a561.275 561.275 0 00-3.37 1.17l-.04.009c-.035.005-.054-.012-.08-.055-.217-.394-.438-.785-.661-1.177-.03-.05-.038-.077.034-.096l4.254-1.246c.014-.005.03-.007.06-.014zm-.41.386c-.154.003-.293.147-.286.293.007.137.124.257.254.252.137-.002.27-.153.267-.302-.005-.166-.082-.245-.236-.243zm-16.83.87c.01 0 .024.002.04.007L5.512 9l1.937.51c.062.017.082.036.06.1l-.278.913c-.01.036-.017.074-.058.074a.06.06 0 01-.02-.002l-1.036-.142c-.226-.03-.45-.062-.675-.093a254.996 254.996 0 00-2.055-.286c-.043-.012-.058-.038-.05-.098.052-.476.103-.951.153-1.43.003-.011.002-.02.005-.03a.035.035 0 00.005-.015c.007-.014.021-.02.038-.02zm8.136.103l.113.002c.197.01.389.086.569.166.08.036.159.07.238.108l.057.029c.058.028.118.057.173.09l.113.065c.036.025.075.046.108.073.072.05.142.105.207.165.218.202.372.44.463.72.065.202.113.409.13.617.016.202-.044.399-.096.593-.008.03-.02.036-.03.034-.014-.005-.021-.022-.033-.036l-.216-.25a2.105 2.105 0 00-1.042-.684 4.159 4.159 0 00-.994-.154 3.799 3.799 0 00-.804.092c-.211.04-.423.074-.631.113-.137.024-.262.086-.387.14-.06.028-.12.054-.18.077l-.02.004c-.376.132-.695.36-1.024.57-.09.06-.165.14-.243.218l-.01.008-.064.065c-.152.147-.3.296-.464.43-.074.103-.175.175-.268.266.024-.17.07-.328.146-.472a4.6 4.6 0 01.262-.435c.048-.07.096-.14.146-.206a7.17 7.17 0 01.315-.396c.081-.097.163-.193.247-.29l.25-.284a.917.917 0 01.115-.1l.026-.03c.078-.066.147-.136.238-.21l.012-.01.067-.061c.24-.228.519-.406.797-.583.028-.02.057-.035.086-.051l.111-.048c.01-.004.02-.01.029-.012a2.78 2.78 0 01.173-.065l.117-.036c.14-.04.279-.074.416-.117a2.45 2.45 0 01.782-.115zm-7.57.449c-.07.004-.153-.003-.215.057a.462.462 0 00.012.665.286.286 0 00.38 0c.145-.127.182-.314.095-.535-.053-.137-.125-.187-.27-.187zm15.846.062c.087-.001.163.053.23.146.014.01.029.02.043.032.022.019.03.04.053.064.099.113.207.224.31.334a.064.064 0 01.014.024.023.023 0 01-.002.022.04.04 0 01-.015.014l-.01.015-.002.002c-.002.002-.002.005-.004.01 0 .002-.003.004-.003.004h.003v.008c-.145.146-.106.283.01.415.006.012.014.024.014.036.096.127.016.254 0 .382-.003.012-.005.016-.015.02l-.007.004a.116.116 0 01-.03-.005l-.01-.003a9.772 9.772 0 01-.251-.077c-.007 0-.012-.004-.02-.007-.006 0-.011-.007-.018-.007a.284.284 0 01-.118-.02.252.252 0 00-.292.05.054.054 0 01-.005.02c.04.06.108.075.168.094.245.08.453.23.68.348.052.03.062.092.057.152-.003.033-.012.067-.02.103l-.072.31a.127.127 0 01-.02.076c.004.168-.114.293-.17.437-.006.012-.011.017-.02.04a3.223 3.223 0 01-.128.299c0 .007-.01.017-.012.024v-.005c0 .002-.002.002-.002.005l-.005.01c-.003.002-.003.004-.005.007-.012.045-.02.093-.058.132a1.913 1.913 0 01-.187.432c-.007.012-.012.012-.017.036-.062.144-.127.317-.19.475-.014.058-.026.115-.04.17l-.008.015c0 .002-.002.002-.002.005 0 .005-.005.01-.007.014a.45.45 0 01-.036.192c-.012.039-.022.082-.034.12a.074.074 0 01-.005.02l-.201.912c-.055.25-.077.504-.118.754-.038.235-.048.477-.106.708-.04.168-.136.324-.213.48-.072.146-.118.302-.207.444l-.007.015a.169.169 0 00-.012.03c-.002.006-.002.013-.005.018l-.007.033a.182.182 0 00-.002.036c0 .012 0 .024-.003.036v.036a.71.71 0 01-.002.072c-.02.257-.053.514-.041.773.002.048-.012.075-.058.09l-.057.023a1.598 1.598 0 00-.113.048l-.06.024c-.031.012-.05.022-.1.034v-.005s-.006.005-.01.005l-.133.055-.093.038a.635.635 0 01-.211.092l-.036.02a25.181 25.181 0 00-.474.212c-.081.024-.165.072-.247.11-.09.04-.175.075-.264.114-.14.062-.278.12-.418.181-.004.002-.012 0-.016 0-.128.048-.26.118-.38.173-.048.026-.117.053-.177.077-.11.043-.135.038-.16-.075-.071-.052-.078-.14-.104-.216-.027-.072-.048-.15-.072-.222-.005-.024-.017-.02-.017-.034-.024-.033-.024-.064-.036-.098l-.003-.017c-.007-.005-.007-.012-.01-.02l-.006-.016h.004c-.033-.1-.07-.2-.093-.3-.024-.067-.067-.132-.08-.202a.17.17 0 010-.07l.008-.033.004-.017c.02-.047.05-.093.075-.14.017-.037.03-.076.048-.114.017-.038.03-.067.048-.115.038-.072.062-.156.11-.24 0-.02.015-.04.02-.058.043-.146.09-.295.149-.437 0-.005-.005-.012-.003-.017.017-.086.098-.117.146-.168v.003c.024-.008.037-.022.049-.022.014-.024.028-.034.043-.048a1.518 1.518 0 00.108-.15c.045-.066.086-.136.137-.203.016-.021.03-.055.057-.055.005 0 .007 0 .012.002.039.01.027.055.022.084a.88.88 0 000 .327c.012.084.026.168.033.252l-.002.038a.578.578 0 01.036.19c.02.082.036.16.06.242.072.15.125.3.173.454l.005-.002c.08.12.163.26.245.39.024.032.05.066.074.09h.005v.02c.024 0 .036.052.072.004-.007-.024-.012-.024-.02-.024a.448.448 0 01-.03-.08c-.005-.016-.013-.035-.015-.05a.387.387 0 01-.012-.05c-.002-.007-.002-.017-.005-.024a.282.282 0 00-.01-.048l-.011-.075-.013-.074c-.007-.007-.007-.017-.007-.026-.002-.01-.004-.02-.01-.03-.002-.028-.007-.057-.011-.086l-.022-.172c-.002-.03-.012-.058-.014-.087a3.634 3.634 0 01.036-.941h.014c.029-.144.058-.31.086-.466.008 0 .015.003.024.003-.01.26.017.52.075.775.002.005.002.012.002.017.036.098.075.197.106.298.007.02.014.043.022.062a.338.338 0 00.055.094c.007.012.02.024.02.036.025.019.037.04.057.06.014.016.026.036.04.053.05.048.104.093.166.156a3.667 3.667 0 01-.017-.14c-.004-.043-.012-.086-.016-.134 0 0-.013-.007-.013-.012a.82.82 0 00-.01-.108l-.04-.33c0-.01 0-.016.002-.025 0-.01.003-.027.003-.027a2.705 2.705 0 01-.02-.415l-.002-.017a1.122 1.122 0 01-.002-.37c.005-.033.002-.07.005-.103 0-.007-.003-.012-.003-.02 0-.158.007-.32.055-.472l.003-.017c.012-.072.024-.158.036-.238.012-.08.024-.16.033-.24.005-.033.015-.05.034-.05.01 0 .024.005.04.017l.05.03.076.049c.024.017.048.033.07.055.002.002.004.005.009.007a.116.116 0 00.017.012h.005v-.002c.168.084.26.226.374.358a.31.31 0 01.11.15c.075.099.13.205.169.323.002.01.007.02.01.03.002.01.007.006.009.03.02.024.03.055.043.084l.034.084.019.04c.005.01.01.017.017.024a.07.07 0 00.04.024c.027-.088-.035-.172-.011-.256h.007c0-.024-.007-.025-.007-.037-.024-.156-.044-.31-.11-.453l-.001-.04c-.058-.143-.086-.29-.17-.416a.103.103 0 01-.037-.063c-.026-.024-.04-.053-.055-.081a4.135 4.135 0 01-.038-.063v.017c0-.002-.005-.005-.005-.007v-.003a2.828 2.828 0 00-.22-.278l-.01-.01c-.01-.01-.02-.01-.03-.033-.057-.024-.112-.096-.17-.147-.007-.007-.014-.01-.02-.017-.004-.004 0-.01-.023-.016-.12-.082-.21-.183-.314-.255-.02-.024-.044-.01-.053-.048.31-.02.61.017.922.036v-.012h.002c.154.024.298.053.437.113.005 0 .01.007.017.007v.005c.096.022.187.065.278.108.02.01.044.04.065.012.017-.024-.01-.046-.024-.065-.036-.05-.07-.1-.108-.151-.007-.012-.02-.024-.02-.036-.071-.07-.126-.15-.19-.22a.953.953 0 01-.06-.063 1.162 1.162 0 01-.208-.17c-.012-.008-.024-.022-.036-.022-.03 0-.064-.034-.096-.056-.03-.021-.064-.04-.096-.062-.012-.007-.024-.012-.036-.02-.146-.055-.293-.105-.44-.16-.004 0-.013-.003-.013-.005 0 0-.013 0-.017-.002a.11.11 0 01-.072-.03.079.079 0 01-.027-.035l-.005-.012c-.007-.02-.01-.041-.007-.063a.968.968 0 00-.012-.22c-.002-.022-.007-.041-.012-.063a2.158 2.158 0 00-.014-.06l-.015-.062a2.29 2.29 0 00-.024-.09s-.01-.002-.01-.01c-.023-.145-.08-.292-.124-.436l-.017-.057a.369.369 0 01-.057-.168c0-.02 0-.036.002-.056l.002-.026c.005-.027.01-.055.02-.082l.033-.108c0-.005 0-.017.003-.017h-.003c.03-.17.099-.314.147-.468 0-.002.005-.002.005-.005l.01-.01c.002-.002.004-.002.004-.004a.265.265 0 00.053-.185.326.326 0 00-.027-.103c-.016-.043-.038-.084-.06-.127-.002-.005-.01-.01-.014-.012-.002-.003-.005-.005-.005-.008a1.196 1.196 0 01-.21-.355l-.015-.038c-.005-.005-.005-.01-.008-.017l-.002-.007a.12.12 0 01-.007-.017l.002.002-.002-.005a.276.276 0 01.012-.043c.004-.01.01-.017.014-.026.005-.007.012-.014.02-.022l.009-.007c.065-.094.125-.192.197-.283a.26.26 0 00.05-.252c-.04-.137-.036-.14.1-.19.025-.01.316-.12.433-.156l.075-.03.019-.006a41.644 41.644 0 01.509-.19c.005-.002.012-.002.017-.002.14-.072.293-.118.44-.168.02-.007.037-.015.06-.02.025-.02.097-.035.12-.055.12-.038.217-.093.325-.117a.287.287 0 01.167-.067zm-5.432.603a.82.82 0 01.23.036l.014.004c.259.08.523.142.77.26.04.019.084.038.113.077.16.115.307.247.43.405.19.245.38.492.557.773-.011-.003-.022-.008-.034-.013v-.001a1.018 1.018 0 01-.185-.103 6.452 6.452 0 00-.674-.356 1.467 1.467 0 00-.331-.1 3.307 3.307 0 00-.91-.041c-.084.007-.17 0-.255 0-.062 0-.091-.03-.091-.092 0-.235.012-.472-.06-.7-.015-.048.014-.068.055-.082a1.12 1.12 0 01.372-.067zm-2.75.773c.423-.015.812.105 1.167.324.132.08.253.176.363.284l.014.013c.122.123.23.26.32.41.08.13.059.272.032.414-.072.406-.316.706-.592.987-.265.269-.596.444-.903.648-.435.29-.932.403-1.438.478-.632.093-1.273.103-1.906.187-.23.029-.464.048-.694.089a1.07 1.07 0 00-.68.41c-.062.084-.1.187-.16.303a.527.527 0 01.026-.394 1.12 1.12 0 01.533-.54c.415-.22.879-.262 1.323-.375.36-.091.73-.144 1.087-.242a7.234 7.234 0 001.426-.55c.24-.125.49-.252.656-.485a.73.73 0 00.12-.557c-.005-.034-.015-.05-.027-.053-.012-.002-.03.007-.05.027-.18.16-.367.314-.571.449-.32.206-.673.33-1.038.42-.58.144-1.166.266-1.764.31a4.84 4.84 0 00-1.239.242c-.34.118-.687.235-.96.49-.034.03-.075.057-.13.098l.007-.038-.026.019v-.005c.01-.006.016-.013.024-.017a.599.599 0 01.084-.2l.646-1.022a.285.285 0 01.041-.053c.334-.33.653-.677 1.023-.965.614-.48 1.284-.855 2.055-1.02.187-.041.377-.07.57-.07.22-.002.443-.01.66-.017zm-7.632.022c.013 0 .03.002.048.009.03.01.062.007.094.01.127.028.26.03.386.062.012 0 .017.002.034.01a2.174 2.174 0 01.4.057c.145.02.29.036.433.06.033 0 .062-.002.093.017.005 0 .012-.002.012 0 .168.02.3.03.445.055h-.015v.005c.096.012.16.024.233.036.077.012.156.03.23.03h.003c.007 0 .012.004.017.004l.021.005c.048.002.067.028.075.07.038.227.07.455.117.683 0 .017.01.032.008.046l.02.11.061.332c0 .01 0 .03.003.036v.01c.024.143.05.273.074.41v.046a1.717 1.717 0 00-.3.46c-.03.075-.07.152-.1.226l-.006.003c-.024.076-.062.15-.098.223-.003 0-.005.005-.007.01-.005.009-.008.024-.012.03v.003a2.478 2.478 0 01-.192.415c-.008.02-.024.039-.024.056-.024.09-.046.182-.092.266a.757.757 0 01-.074.226 2.102 2.102 0 01-.13.394c-.007.019-.019.036-.019.055l-.002.007c-.003.007-.005.02-.01.029a.106.106 0 01-.01.03l-.002.01-.038.742.021.008.094-.185c.031-.06.055-.123.09-.185.018-.043.05-.086.05-.13.071-.12.136-.24.21-.35.008-.012.022-.02.03-.043.062-.097.134-.224.208-.334.026-.043.054-.08.078-.123.016-.048.042-.055.064-.076.021-.022.033-.044.081-.065 0 .019.005.036.003.053l-.003.01c0 .009-.004.018-.007.028l-.002.01c-.003.007-.003.012-.005.019a.054.054 0 00-.002.02c0 .006-.005.01-.003.018l-.003.015h.003c-.022.144-.02.307-.024.458 0 .007-.005.02-.005.024l.005-.002c.02.144.043.288.062.432h-.002c.003 0 .005.03.005.043.024.144.055.29.072.437l.002.017c.003.01.005.017.005.026.024.116.11.195.163.296.039.055.08.12.116.168h.002v.002c.12.106.22.214.355.31.02 0 .039.024.058.024h-.002v.012c.048.005.088.043.139.029a.087.087 0 00.026-.012c.007-.005.017-.01.02-.017.011-.022-.01-.034-.027-.041-.197-.125-.166-.33-.19-.521h.008v-.003c.048.046.081.09.122.14a.1.1 0 00.024.026l.05.055c.034.036.07.07.108.1.039.032.08.066.125.09.02.007.039.024.056.024h-.005c.144.07.269.137.4.206a.15.15 0 01.08.036c.048.144.105.288.091.456.005 0 .01.017.012.03a.066.066 0 01-.002.03c.017.14.017.28-.003.42a.044.044 0 01-.002.039c-.003.005 0 .007-.002.012h.002c0 .14-.002.278-.038.415-.003.137-.046.27-.06.406 0 .005-.003.01-.005.017-.008.026-.02.057.038.05v-.002c.13-.136.26-.267.38-.418v.01c.002-.048.03-.073.057-.096.05-.05.1-.13.151-.2.05-.07.101-.137.152-.206l.002-.012c.007-.024.017-.04.029-.046.005-.002.01-.005.014-.005H9.3a.133.133 0 01.05.02.835.835 0 01.077.048c.144.079.307.132.415.269.012.012.026.014.038.038.05.024.096.08.133.132l.038.036c.002.002.005.002.007.005.19.16.204.246.067.46-.004.007-.012.014-.016.014a.236.236 0 01-.024.055.216.216 0 01-.02.036l-.01.017c-.035.058-.074.118-.088.185a.443.443 0 00-.012.168c.026.094.05.19.07.286.012.057.024.115.028.175.02.142-.048.228-.168.288v-.002c-.024.002-.026.017-.038.024a.078.078 0 01-.02.014.362.362 0 01-.038.026.192.192 0 00-.077.087c0 .007 0 .005-.002.01-.002.004 0 .014-.002.014h.007v.014c-.024.07-.036.12-.048.156-.003.01-.007.017-.01.024-.002.008-.007.012-.01.017-.002.005-.007.01-.009.012a.045.045 0 01-.024.012h-.007a.165.165 0 01-.05-.012c-.034-.012-.078-.029-.138-.048-.004-.002-.009-.002-.011-.005a.025.025 0 00-.012-.004l-.027-.012h-.01v-.01h-.002c-.072-.024-.14-.038-.204-.065-.038-.014-.08-.026-.12-.043-.05-.012-.1-.036-.151-.036-.14-.048-.281-.072-.416-.12-.011 0-.019.002-.043 0v.002c-.096-.019-.173-.043-.264-.06-.089-.014-.122-.06-.113-.148.005-.037.003-.08.003-.116 0-.012-.003-.017-.003-.04-.014-.025-.036-.053-.055-.085a.11.11 0 01-.014-.026c-.012-.012-.036-.024-.036-.038-.024-.005-.015-.01-.022-.015-.074-.07-.053-.163-.043-.252l.002-.029.008-.055c.002-.01.002-.02.004-.026.039-.15.048-.29-.113-.38-.019-.012-.03-.024-.055-.04v.004a2.869 2.869 0 00-.225-.165c-.012-.024-.015-.029-.039-.039a1.418 1.418 0 01-.31-.227l-.074-.04h.01c-.015-.025-.032-.022-.044-.034-.019-.014-.036-.024-.06-.04-.12-.102-.283-.198-.413-.315-.045-.015-.074-.05-.11-.08v-.004c-.127-.09-.252-.176-.377-.272h.003c-.015 0-.015-.012-.039-.024-.072-.036-.144-.096-.206-.144-.02-.024-.039-.024-.058-.024-.058-.048-.108-.07-.156-.113-.02-.012-.036-.026-.06-.04a2.178 2.178 0 01-.396-.29l-.012-.011-.022-.024a.188.188 0 01-.038-.081v.019c-.087-.094-.144-.202-.216-.3l-.007-.015a.027.027 0 01-.005-.014.107.107 0 01-.003-.026.118.118 0 01.024-.053c0-.005.003-.012.003-.02.024-.153.108-.292.168-.436v-.037s0-.022-.003-.032l-.004-.014-.005-.005a.038.038 0 00-.017-.01h-.007a.122.122 0 00-.058.022.312.312 0 00-.055.043l-.02.015a.13.13 0 00-.014.019l-.007.01c0 .002-.002 0-.002 0 0 .002-.003 0-.003 0v.002c-.048.055-.12.103-.182.154-.012.012-.034.026-.034.038v-.002h-.007c-.02.024-.045.024-.072.012l-.31-.137c-.024-.012-.036-.038-.04-.062a.64.64 0 01-.008-.032l-.007-.026v.005c-.036-.168.022-.293.053-.437.002-.012.005-.024.005-.036.024-.14.033-.288.074-.423v-.062c-.02-.154-.022-.305-.033-.46l.002-.078c-.014-.286-.033-.571-.043-.857-.022-.598-.07-1.193-.053-1.79a.636.636 0 00-.074-.315 1.968 1.968 0 00-.099-.164.264.264 0 01-.048-.237c.036-.14.063-.284.09-.425.008-.05.021-.084.06-.086zm-.166.38l.005.015c.005.032-.007.065-.02.113a.117.117 0 010-.086.295.295 0 01.015-.041zm10.715.003c.13-.002.257.005.38.024.22.017.42.058.55.164.095.04.189.09.28.144.22.132.44.269.662.403a.389.389 0 01.118.108l.223.315c.012.016.03.036.015.057a.038.038 0 01-.02.014c-.018.004-.034-.002-.05-.011-.098-.056-.2-.108-.298-.164a4.76 4.76 0 00-1.184-.46c-.107-.03-.208-.06-.323-.075l-.152-.034c-.004.003.005.012.017.024.005.005.01.01.012.015a.138.138 0 00.04.033l.02.01c.228.115.613.187.893.317l.058.029c.156.08.298.182.44.29l.268.207c.404.293.65.689.77 1.169.003.014.008.029.01.043l.01.014c.02.03.024.065.017.096.002.008.002.015.005.022-.005.07-.06.04-.092.04a2.504 2.504 0 01-.61-.11h-.006c-.051-.016-.118-.04-.165-.054-.211-.075-.41-.163-.615-.238-.252-.09-.45-.261-.662-.413a7.777 7.777 0 01-1.001-.816.34.34 0 01-.08-.106 4.11 4.11 0 01-.062-.153l-.036-.094a1.088 1.088 0 00-.024-.06l-.002-.005c-.003-.002-.003-.007-.003-.01v-.002l-.002-.01a.168.168 0 01.007-.122c.002-.005.002-.01.005-.014l.005-.017.004-.014c.003-.005.003-.013.005-.017l.003-.015.002-.017.003-.014.002-.017.002-.014.003-.017.002-.014.003-.017c0-.005 0-.01.002-.015 0-.004 0-.012.003-.016v-.266c-.003-.082.026-.114.108-.111.08.002.162-.001.243-.005l.075.004c.04-.002.08-.005.122-.005zm.284.532a.12.12 0 00.028.008H15c-.012.008-.028.005-.033.02-.004-.02-.002-.027.003-.028zm.88.342a.206.206 0 00.012.006h.003zm-1.908.177l.002.003c.007.003.014.01.022.024.076.154.182.28.3.399.124.12.259.23.389.348.268.242.542.48.818.713.178.15.392.228.62.288.518.132 1.049.182 1.575.254.139.02.264.065.374.156h-.007c.01.008.017.012.024.02-.296-.043-.59-.04-.886-.046-.324-.007-.641.03-.96.067a.986.986 0 01-.336-.026c-.308-.07-.598-.195-.89-.317-.328-.14-.601-.353-.861-.588l-.057-.055a1.002 1.002 0 01-.205-.285l-.002-.006c-.09-.212-.085-.448-.016-.708.019-.07.04-.14.062-.21.007-.022.02-.034.034-.031zm-.248 1.18c.065.233.233.396.375.573l.029.039.028.038a.57.57 0 00.106.094c.017.012.03.02.046.033l.02.017a10.088 10.088 0 00.539.396l.329.229c.149.103.305.19.468.266.04.02.082.036.123.055.124.053.25.099.379.14l.02.007c.08.02.167.028.25.038.032.002.064.007.092.01a.195.195 0 01.06.024.411.411 0 01.068.05c.074.067.144.163.148.22 0 .01 0 .018-.002.025-.002.005-.002.007-.005.01-.01.016-.024.03-.033.048-.03.05-.06.1-.085.153l-.011.027a.311.311 0 00.002.26c.115-.114.218-.236.293-.376a1.139 1.139 0 00.086-.201c.01-.027.003-.058.01-.084.01-.03-.024-.07-.01-.09 0-.001.003-.001.005-.004a.04.04 0 01.014-.007c.01-.002.02-.005.027-.005.019-.002.036-.005.055-.005.048 0 .094.008.14.022.028.01.019.045.016.072v.005c-.005.086-.04.165-.072.242a.554.554 0 01-.024.055 1.68 1.68 0 01-.192.375c-.118.156-.254.302-.475.31h-.063c-.038 0-.077.01-.115.012a.085.085 0 00-.086.057c-.017.039-.04.072-.058.11l-.007.017a1.534 1.534 0 01-.408.57c-.08.07-.164.139-.25.203a1.95 1.95 0 01-.468.224l-.036.014-.034.015-.02.007c-.01.002-.021.007-.03.01-.036.014-.065.035-.046.09.02.06.063.077.118.08.012 0 .026 0 .04-.003a.613.613 0 00.15-.033c.048-.017.096-.04.146-.06.034-.015.067-.03.103-.041-.03.122-.045.235-.084.34l-.021.054a6.794 6.794 0 01-.09.192c-.018.043-.04.084-.062.125-.115.23-.245.45-.405.655a1.682 1.682 0 01-.356.34 3.954 3.954 0 01-.103.073 2.788 2.788 0 01-.38.205l-.064.03-.053.02-.043.018c-.04.016-.082.03-.123.045a2.674 2.674 0 01-.168.053 4.848 4.848 0 01-.57.134c-.008 0-.013.003-.02.003-.055.01-.108.017-.163.026-.058.008-.116.017-.176.024a2.156 2.156 0 01-.605-.02l-.028-.008a.68.68 0 01-.145-.06c-.062-.034-.12-.07-.182-.1a1.728 1.728 0 01-.13-.073 1.868 1.868 0 01-.16-.106.632.632 0 01-.233-.278 1.794 1.794 0 00-.092-.194c-.01-.02-.021-.036-.03-.053a2.718 2.718 0 00-.277-.367 2.76 2.76 0 00-.125-.142c-.021-.024-.04-.048-.062-.07a7.07 7.07 0 00-.26-.276l-.067-.067a2.787 2.787 0 00-.364-.302 2.784 2.784 0 00-.303-.192l-.06-.04a1.58 1.58 0 01-.63-.761c-.043-.093-.107-.122-.22-.124a.63.63 0 01-.252-.048l-.002-.002a.457.457 0 01-.132-.084l-.026-.016c-.022-.026-.038-.058-.058-.09a5.295 5.295 0 01-.386-.658c0 .003.002.005.003.008l-.006-.013.003.005a3.772 3.772 0 00-.073-.196l-.036-.086a.382.382 0 01-.014-.154l.007-.031c.002-.005.002-.01.005-.015a.145.145 0 01.012-.03.46.46 0 01.127-.14.898.898 0 01.067-.05c.046-.034.094-.063.14-.094.071-.044.143-.084.218-.123.271-.14.56-.238.857-.314.017-.005.033-.008.053-.012.033-.008.07-.01.105-.015.036-.002.072-.005.106-.005l.106-.002c.016 0 .036 0 .052-.002a17.864 17.864 0 00.9-.063c.18-.017.36-.036.54-.055a3.504 3.504 0 001.127-.324c.036-.02.074-.036.11-.055l.063-.034c.144-.077.288-.151.427-.233.014-.02.03-.026.055-.033l.01-.003v.012a.06.06 0 01-.02.034l-.021.014c-.14.178-.331.3-.497.45a.415.415 0 00-.05.045c-.053.043-.106.089-.166.137.209 0 .41-.024.598-.08a1.654 1.654 0 00.869-.6c.103-.137.197-.297.278-.482zm-3.265.016a1.244 1.244 0 01-.343.109c-.56.139-1.13.22-1.697.326a2.603 2.603 0 00-1.105.487c-.019.015-.04.032-.062.043-.026.017-.039.013-.043-.01-.003-.004-.003-.011-.003-.018-.01-.144.034-.214.166-.274.18-.082.36-.168.54-.252.235-.108.487-.142.742-.168.396-.043.792-.094 1.19-.14l.524-.086zm2.386 1.245h-.026c-.038.01-.036.05-.036.08.003.1.007.202.02.303.01.11.047.219.112.307a.842.842 0 00.51.334c.155.036.155.038.17.2.007.069.016.13.08.17.114.067.227.137.364.146.084.007.17.012.242.068a.583.583 0 00.32.098c.084.007.17.01.254.024.067.012.113-.01.16-.05.239-.197.474-.397.697-.617-.026-.03-.065-.04-.118-.012a6.25 6.25 0 00-.415.223.315.315 0 01-.113.048 4.032 4.032 0 01-.722.074.68.68 0 01-.368-.13c-.067-.043-.134-.105-.146-.201.036-.012.07.002.103.007.127.017.252.063.382.055.312-.02.605-.113.898-.213l.283-.103c.043-.015.055-.03.017-.07-.046-.05-.096-.04-.147-.034a5.625 5.625 0 01-1.87-.045c-.18-.034-.372-.046-.442-.27-.02-.06-.038-.12-.05-.182a.37.37 0 00-.094-.17.094.094 0 00-.065-.04zm-.573.065c-.048 0-.08.05-.103.093-.06.103-.137.196-.207.292-.108.147-.26.178-.418.154a17.985 17.985 0 00-1.718-.18c-.03-.002-.058-.01-.082.01-.183.134-.367.264-.483.468.007.002.015.007.02.007.019-.002.035-.007.055-.01.297-.074.607-.098.922-.072.398.034.792.113 1.188.168.053.008.106.01.156.036.12.063.18.173.226.29.07.18.09.373.103.565.01.15-.022.278-.144.38a.556.556 0 00-.2.278c.154 0 .286.026.387.156.063.08.144.149.223.218a.379.379 0 00.586-.081c.058-.094.113-.19.175-.281.087-.127.17-.264.325-.32.093-.03.052-.076.02-.115-.061-.08-.177-.081-.28-.02-.16.097-.266.239-.381.376-.034.04-.068.08-.113.115-.058.04-.108.043-.16-.01-.056-.057-.114-.117-.176-.168-.053-.043-.063-.082-.032-.144a.728.728 0 00.082-.413c-.03-.312-.08-.62-.3-.867-.024-.026-.024-.04.01-.064a.94.94 0 00.408-.701c.007-.075-.007-.135-.067-.156a.075.075 0 00-.022-.004zm4.46.035c.206 0 .388.08.567.182-.005 0-.007 0-.012.003l.03.017c-.27.04-.54.06-.81.03-.084-.01-.168-.026-.255-.023-.17.005-.307-.084-.451-.161h.017c-.012-.007-.024-.012-.036-.02.024.003.05.003.074.005.029.003.055.01.084.015.238.05.468-.02.704-.043a.8.8 0 01.089-.005zm-8.689.714a.045.045 0 00-.016.004c-.05.019-.098.048-.112.115-.048.223.055.437.278.552.1.053.178.127.226.23.016.037.019.106.072.094.052-.012.01-.077.021-.103.008-.135-.019-.25-.127-.32-.08-.05-.11-.12-.14-.201-.038-.106-.047-.223-.134-.307-.02-.021-.036-.064-.069-.064zm1.843.354c-.11.027-.236.053-.353.106-.082.038-.087.084-.015.139.043.034.087.05.14.03a.466.466 0 01.494.097.509.509 0 00.523.087c.106-.036.197-.096.293-.15a.319.319 0 01.113-.04c.144-.014.288-.033.43-.053.038-.005.098.01.108-.036.01-.048-.046-.077-.08-.108-.016-.017-.045-.02-.07-.026a.82.82 0 00-.436-.015 2.092 2.092 0 01-.888 0c-.08-.02-.163-.02-.26-.03zm6.903.889c.006 0 .01.003.015.007a.05.05 0 01.012.014l.008.005c.043.034-.007.11-.02.168-.03.168-.057.334-.086.502-.007.048-.012.098-.048.165l-.007-.043-.012.024a5.307 5.307 0 01-.075-.706c-.002-.053.034-.065.068-.077.048-.016.107-.066.145-.06zm-3.22.902a.08.08 0 00-.022.01c-.19.105-.404.11-.613.137-.088.012-.2-.015-.264.05-.158.156-.293.09-.432-.02-.007-.004-.014-.011-.024-.014-.206-.11-.413-.15-.624-.005a.338.338 0 01-.267.068c-.074-.02-.131-.015-.19.038-.028.027-.066.048-.1.07-.094.062-.094.072-.007.14.02.018.043.025.067.033.2.06.387.016.562-.08.182-.098.353-.093.518.032.152.112.312.115.48.045a2.97 2.97 0 01.653-.213c.034-.005.068-.017.099.01.096.088.187.026.279-.01.036-.015.04-.044.038-.08-.007-.076-.065-.12-.098-.18-.015-.025-.032-.035-.054-.03zm-4.717.07c.009 0 .02.006.032.017.039.036.075.074.113.11l.015.014c.019.017.021.039.012.06l-.224.45-.024-.008c0-.005.003-.007.003-.012.048-.197.029-.4.055-.6.002-.02.009-.03.018-.03zm3.9.588c-.238.007-.48.046-.703.122-.185.063-.392.106-.488.32-.055.124-.048.256-.086.38.017.1.017.197.074.281.017.024.024.063.065.06.043-.002.058-.038.07-.067.043-.09.053-.194.08-.29.047-.156.119-.28.282-.35.17-.072.343-.14.516-.206a.184.184 0 01.1-.012c.215.03.438.02.628.146a.079.079 0 00.062.012c.072-.017.08-.04.036-.098a.723.723 0 00-.636-.298zm-2.218.741l.014.017c.094.117.187.218.25.336.15.29.374.501.662.655.135.072.256.172.414.19l.003.001h.018c.017 0 .04-.004.036.023-.003.014-.017.014-.031.012h-.007c-.005 0-.01 0-.015-.003-.167.005-.33.033-.493.067-.085.018-.17.038-.255.058a7.838 7.838 0 01-.243.055h-.003c-.033.008-.048.024-.043.058.005.04.02.062.067.072a1.305 1.305 0 00.274.017c.118-.003.235-.015.353-.034a2.602 2.602 0 01.778-.002c-.43.07-.785.312-1.174.475-.202.084-.358.245-.55.348-.014.017-.022.044-.036.06-.031.04-.036.118-.087.11h-.004c-.005 0-.01.003-.015 0a.623.623 0 01-.266-.086c-.03-.019-.022-.055-.022-.089v-.453c0-.032.012-.067-.019-.09-.106-.066-.08-.182-.106-.278-.01-.038.017-.057.039-.08l.278-.31c.063-.068.089-.143.043-.224-.086-.163-.072-.32-.002-.485.055-.13.091-.267.142-.42zm4.585.177c.005.003.01.005.012.008l.007-.008c.039.022.04.05.05.075.102.247.2.497.3.744.025.055.03.103-.006.15a.502.502 0 00-.077.49c.067.205.019.347-.183.448a.229.229 0 01-.12.036.124.124 0 01-.088-.03c-.375-.259-.821-.345-1.242-.494-.06-.02-.117-.043-.18-.057-.072-.017-.067-.065-.057-.116.007-.036.026-.04.045-.038.02-.005.046.01.063.014.48.12.965.216 1.428.396.017.008.03.01.043.013.034-.005.044-.037.039-.082-.01-.108-.02-.214-.144-.27a2.8 2.8 0 00-.975-.234c-.05-.005-.098-.007-.15-.01.239-.144.5-.22.714-.406a.999.999 0 00.075-.067l.398-.482zm-1.882 1.133h.02c.03-.002.054.005.057.053 0 .044.01.082-.06.092a1.752 1.752 0 01-.274.021c-.094 0-.185-.01-.278-.03-.05-.013-.07-.047-.065-.087.002-.027.02-.027.04-.027a.103.103 0 01.039.003h.18a1.143 1.143 0 00.34-.024zm.036.396c.006 0 .012.002.02.005l.844.35c-.132.11-.254.207-.374.303-.221.178-.44.358-.646.553-.05.048-.09.05-.147.014a9.33 9.33 0 00-1.097-.545c-.165-.07-.34-.098-.511-.158.02-.036.055-.036.084-.046.367-.137.742-.26 1.102-.42.094-.043.187-.007.278.005.137.02.27.021.394-.046a.092.092 0 01.053-.015zm-2.161.698a.27.27 0 01.082.018c.197.077.38.185.569.274a.04.04 0 01.029.01c.004.002.005.004.005.011v.005c0 .003-.003.003-.003.005-.002.003-.005.003-.007.003l-.01-.003a.03.03 0 01-.012-.012l-.862-.214c.074-.059.133-.1.209-.097zm8.17.535c-.142-.004-.26.062-.372.15-.03.022-.046.048-.094.017-.105-.072-.206-.053-.295.04a.402.402 0 00-.103.186c-.125.504-.252 1.006-.372 1.512-.041.17.048.255.223.23.158-.026.238-.117.264-.32.026-.198.053-.392.11-.596.15.187.29.362.433.538.139.17.29.321.494.412.144.065.269.027.382-.074a.186.186 0 00.055-.206.157.157 0 00-.158-.125.246.246 0 01-.152-.07 2.27 2.27 0 01-.362-.396c-.09-.12-.094-.12.026-.202.252-.173.34-.417.322-.71-.014-.219-.132-.346-.34-.38a.454.454 0 00-.061-.006zm-10.733.03c-.04 0-.077.02-.097.075-.019.05-.053.043-.091.038a.751.751 0 00-.665.22c-.38.37-.574.813-.552 1.353.014.358.22.53.569.451.689-.16 1.224-.835 1.253-1.582.007-.192-.168-.47-.34-.538a.214.214 0 00-.077-.016zm-1.93.058a.943.943 0 00-.613.238c-.346.302-.547.693-.646 1.138a.642.642 0 00.075.482c.07.118.158.161.292.135a3.12 3.12 0 00.87-.305.867.867 0 00.225-.168.291.291 0 00.084-.204c0-.075-.033-.1-.103-.104-.07-.002-.13.024-.192.046-.207.075-.408.166-.622.22-.105.027-.14.003-.163-.105a.301.301 0 01.005-.122c.04-.168.098-.33.187-.483a.82.82 0 01.245-.283c.14-.089.283-.137.442-.04.052.03.103.016.15-.013a.352.352 0 00.15-.2c.016-.05.002-.09-.044-.117a.773.773 0 00-.343-.115zm9.2.07a.692.692 0 00-.517.206c-.156.161-.183.324-.084.526.074.151.177.28.278.415.072.094.149.187.216.286.048.07.024.125-.058.151a.199.199 0 01-.14-.005 1.076 1.076 0 01-.373-.23.243.243 0 01-.082-.125c-.012-.074-.053-.108-.125-.115-.081-.007-.156-.007-.204.08-.08.138-.057.263.087.393.276.245.605.353.933.38.3.004.485-.267.387-.522-.043-.115-.118-.216-.19-.314-.12-.159-.245-.313-.357-.476-.09-.125-.048-.216.098-.264.135-.043.25-.005.36.08.13.1.24.047.269-.116.017-.086-.03-.144-.09-.194a.68.68 0 00-.41-.157zm1.905.06c-.137-.003-.274 0-.41.016-.164.02-.32.065-.38.248-.002.01-.014.024-.024.026-.187.048-.252.202-.302.358-.106.346-.2.696-.298 1.042-.024.084.01.14.08.182.054.034.11.032.172.015.324-.08.648-.166.987-.142a.26.26 0 00.127-.029.242.242 0 00.117-.24c-.014-.09-.086-.117-.163-.13a1.484 1.484 0 00-.177-.016 3.855 3.855 0 00-.62.052c.03-.228.048-.242.264-.242.16 0 .322-.01.473-.072.1-.043.166-.113.176-.226.007-.076-.025-.122-.104-.124a1.65 1.65 0 00-.19.002l-.453.04c.024-.052.036-.1.062-.136.044-.062-.007-.178.084-.209.075-.024.164-.007.245-.01.214-.004.427-.007.634-.074a.347.347 0 00.192-.13c.07-.108.043-.18-.082-.185-.136-.006-.273-.014-.41-.017zm-6.664.008c-.071-.003-.13.042-.185.093a3.95 3.95 0 00-.392.434l-.367.456c-.02.024-.04.07-.08.05-.03-.014-.018-.055-.014-.086.01-.11.024-.218.036-.329.015-.144.034-.288.01-.432-.031-.173-.156-.22-.295-.113a.836.836 0 00-.094.091 3.168 3.168 0 00-.298.414c-.225.348-.432.71-.703 1.027-.05.06-.103.118-.149.182-.048.072-.067.154-.022.23.041.068.11.092.188.087.081-.004.125-.064.168-.122l.626-.852c.012-.015.017-.044.053-.034a1.37 1.37 0 00-.012.11c-.01.137-.038.274-.01.413.034.16.16.224.306.152a.902.902 0 00.204-.152c.117-.112.228-.233.33-.362.114-.144.229-.29.349-.447.036.12.022.228.017.336-.012.188-.048.375-.012.565.024.117.091.187.187.194a.44.44 0 00.278-.07c.125-.079.137-.237.02-.343a.19.19 0 01-.063-.113c-.026-.13-.004-.257.017-.384.039-.245.115-.485.103-.737-.004-.098-.02-.19-.12-.237a.19.19 0 00-.076-.02zm8.04.19c.117-.01.175.063.14.176a.387.387 0 01-.07.132c-.128.161-.291.27-.495.353a1.56 1.56 0 01.11-.425c.062-.134.163-.223.315-.237zm-6.651.02a.292.292 0 01.15.034c.076.043.098.146.045.233a.676.676 0 01-.185.184 1.47 1.47 0 01-.483.243c.07-.216.128-.415.245-.586a.286.286 0 01.228-.108zm1.6.091a.509.509 0 01.213.034c.113.046.15.1.149.27a1.257 1.257 0 01-.425.818.562.562 0 01-.324.136c-.147.012-.262-.08-.247-.228.028-.32.115-.624.33-.876a.436.436 0 01.304-.154zm-5.882.003a.501.501 0 01.218.036c.11.043.149.098.144.262a1.243 1.243 0 01-.422.818.581.581 0 01-.325.14c-.15.011-.266-.082-.252-.233.03-.315.116-.613.325-.86a.442.442 0 01.312-.163z" }, "child": [] }] })(props);
 }
+function SiCloudflare(props) {
+  return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M16.5088 16.8447c.1475-.5068.0908-.9707-.1553-1.3154-.2246-.3164-.6045-.499-1.0615-.5205l-8.6592-.1123a.1559.1559 0 0 1-.1333-.0713c-.0283-.042-.0351-.0986-.021-.1553.0278-.084.1123-.1484.2036-.1562l8.7359-.1123c1.0351-.0489 2.1601-.8868 2.5537-1.9136l.499-1.3013c.0215-.0561.0293-.1128.0147-.168-.5625-2.5463-2.835-4.4453-5.5499-4.4453-2.5039 0-4.6284 1.6177-5.3876 3.8614-.4927-.3658-1.1187-.5625-1.794-.499-1.2026.119-2.1665 1.083-2.2861 2.2856-.0283.31-.0069.6128.0635.894C1.5683 13.171 0 14.7754 0 16.752c0 .1748.0142.3515.0352.5273.0141.083.0844.1475.1689.1475h15.9814c.0909 0 .1758-.0645.2032-.1553l.12-.4268zm2.7568-5.5634c-.0771 0-.1611 0-.2383.0112-.0566 0-.1054.0415-.127.0976l-.3378 1.1744c-.1475.5068-.0918.9707.1543 1.3164.2256.3164.6055.498 1.0625.5195l1.8437.1133c.0557 0 .1055.0263.1329.0703.0283.043.0351.1074.0214.1562-.0283.084-.1132.1485-.204.1553l-1.921.1123c-1.041.0488-2.1582.8867-2.5527 1.914l-.1406.3585c-.0283.0713.0215.1416.0986.1416h6.5977c.0771 0 .1474-.0489.169-.126.1122-.4082.1757-.837.1757-1.2803 0-2.6025-2.125-4.727-4.7344-4.727" }, "child": [] }] })(props);
+}
 function SiCircleci(props) {
   return GenIcon({ "attr": { "role": "img", "viewBox": "0 0 24 24" }, "child": [{ "tag": "path", "attr": { "d": "M8.963 12c0-1.584 1.284-2.855 2.855-2.855 1.572 0 2.856 1.284 2.856 2.855 0 1.572-1.284 2.856-2.856 2.856-1.57 0-2.855-1.284-2.855-2.856zm2.855-12C6.215 0 1.522 3.84.19 9.025c-.01.036-.01.07-.01.12 0 .313.252.576.575.576H5.59c.23 0 .433-.13.517-.333.997-2.16 3.18-3.672 5.712-3.672 3.466 0 6.286 2.82 6.286 6.287 0 3.47-2.82 6.29-6.29 6.29-2.53 0-4.714-1.5-5.71-3.673-.097-.19-.29-.336-.517-.336H.755c-.312 0-.575.253-.575.576 0 .037.014.072.014.12C1.514 20.16 6.214 24 11.818 24c6.624 0 12-5.375 12-12 0-6.623-5.376-12-12-12z" }, "child": [] }] })(props);
 }
@@ -3100,7 +3190,8 @@ const EXTENSION_BRANDS = {
   restic: { slug: "restic", label: "Restic", color: "2EA043" },
   borg: { slug: "borg", label: "Borg", color: "00B000" },
   velero: { slug: "velero", label: "Velero", color: "326CE5" },
-  openssh: { slug: "openssh", label: "OpenSSH", color: "F2CA30" }
+  openssh: { slug: "openssh", label: "OpenSSH", color: "F2CA30" },
+  cloudflare: { slug: "cloudflare", label: "Cloudflare", color: "F38020" }
 };
 const CLOUD_CLUSTER = ["aws", "gcp", "azure"];
 const BY_EXTENSION_ID = {
@@ -3215,6 +3306,7 @@ const INFERENCE = [
   { slug: "restic", pattern: /\brestic\b/ },
   { slug: "borg", pattern: /\bborg\b/ },
   { slug: "velero", pattern: /\bvelero\b/ },
+  { slug: "cloudflare", pattern: /\b(?:cloudflare|wrangler)\b/ },
   { slug: "openssh", pattern: /\b(?:ssh|scp|openssh)\b/ }
 ];
 function searchableText(input) {
@@ -3236,10 +3328,10 @@ function uniqueSlugs(slugs) {
   return ordered.slice(0, 3);
 }
 function inferSlugs(input) {
-  const text2 = searchableText(input);
+  const text = searchableText(input);
   const found = [];
   for (const entry of INFERENCE) {
-    if (entry.pattern.test(text2)) found.push(entry.slug);
+    if (entry.pattern.test(text)) found.push(entry.slug);
   }
   return uniqueSlugs(found);
 }
@@ -3259,13 +3351,17 @@ function isNearBlackBrand(color) {
   const hex = color.toLowerCase();
   return hex === "000000" || hex === "181717" || hex === "231f20" || hex === "343434";
 }
+function brandSlugFromField(brand) {
+  return brand !== void 0 && Object.prototype.hasOwnProperty.call(EXTENSION_BRANDS, brand) ? brand : null;
+}
 function resolveExtensionBrand(input) {
   const fallback = fallbackForExtensionId(input.extension_id);
   if (input.extension_id === "command.guard-self-protection") {
     return { kind: "guard", marks: [], fallback: "shield" };
   }
   const mapped = BY_EXTENSION_ID[input.extension_id];
-  const slugs = uniqueSlugs(mapped ?? inferSlugs(input));
+  const declared = brandSlugFromField(input.brand);
+  const slugs = uniqueSlugs(mapped ?? (declared ? [declared] : inferSlugs(input)));
   if (slugs.length === 0) {
     return { kind: "fallback", marks: [], fallback };
   }
@@ -3347,7 +3443,8 @@ const BRAND_ICONS = {
   restic: ResticMark,
   borg: SiBorgbackup,
   velero: VeleroMark,
-  openssh: SiOpenbsd
+  openssh: SiOpenbsd,
+  cloudflare: SiCloudflare
 };
 const FALLBACK_ICONS = {
   shield: HiMiniShieldCheck,
@@ -3466,6 +3563,7 @@ function ProtectionModuleRow(props) {
         name: props.name,
         executables: props.executables,
         ecosystem_ids: props.ecosystemIds,
+        brand: props.brand,
         size: "md"
       }
     ),
@@ -3476,9 +3574,11 @@ function ProtectionModuleRow(props) {
         props.mcp ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "MCP" }) : null,
         props.external ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "External" }) : null,
         props.managed ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: props.managedLabel ?? "Synced from Guard Cloud" }) : null,
-        props.custom ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Custom" }) : null
+        props.custom ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-[11px] font-semibold text-brand-dark/55", children: "Custom" }) : null,
+        props.badge ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "rounded-full border border-brand-blue/30 bg-brand-blue/5 px-2 py-0.5 text-[11px] font-semibold text-brand-dark", "data-testid": "custom-extension-badge", children: props.badge }) : null
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate text-sm text-brand-dark/70", children: props.behavior })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block truncate text-sm text-brand-dark/70", children: props.behavior }),
+      props.actionLabel ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-sm font-semibold text-brand-blue", children: props.actionLabel }) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronRight, { className: "size-5 shrink-0 text-brand-dark/35", "aria-hidden": "true" })
   ] });
@@ -3572,12 +3672,1150 @@ function customExtensionContinuityView(state) {
       };
   }
 }
+function actionTitle(action) {
+  const prefix = `${action.toolkit.toUpperCase()}_`;
+  const name = action.tool_slug.startsWith(prefix) ? action.tool_slug.slice(prefix.length) : action.tool_slug;
+  const words2 = name.replaceAll("_", " ").toLowerCase();
+  return words2.charAt(0).toUpperCase() + words2.slice(1);
+}
+function McpProviderActions(props) {
+  const [input, setInput] = reactExports.useState("");
+  const [search, setSearch] = reactExports.useState("");
+  const [offset, setOffset] = reactExports.useState(0);
+  const [page, setPage] = reactExports.useState(null);
+  const [busy, setBusy] = reactExports.useState(true);
+  const [error, setError] = reactExports.useState(null);
+  const [retry, setRetry] = reactExports.useState(0);
+  const catalogToken = reactExports.useRef(void 0);
+  reactExports.useEffect(() => {
+    if (input === search) return;
+    const timer = window.setTimeout(() => {
+      setSearch(input);
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [input, search]);
+  reactExports.useEffect(() => {
+    const controller = new AbortController();
+    setBusy(true);
+    setError(null);
+    void fetchMcpProviderActions(props.cliId, {
+      search,
+      offset,
+      signal: controller.signal,
+      catalogToken: offset > 0 ? catalogToken.current : void 0
+    }).then((next) => {
+      if (!controller.signal.aborted) {
+        catalogToken.current = next.catalogToken;
+        setPage(next);
+      }
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load discovered actions.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [props.cliId, props.authorityRevision, search, offset, retry]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 border-b border-slate-200 pb-5", "aria-labelledby": "mcp-provider-heading", "aria-busy": busy, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-provider-heading", className: "text-base font-semibold text-brand-dark", children: "Discovered app actions" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: [
+      props.knownCount,
+      " actions cached from discovery results. This is a partial inventory. Allow requires a verified account and enforcement of the action inside its execution wrapper. Deny applies to this action across all accounts in this host connection. Opaque workbench execution is blocked while any action is denied."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "mt-4 block text-sm font-semibold text-brand-dark", htmlFor: "mcp-provider-search", children: "Search actions or apps" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        id: "mcp-provider-search",
+        type: "search",
+        maxLength: 128,
+        value: input,
+        onChange: (event) => setInput(event.target.value),
+        className: "mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark"
+      }
+    ),
+    busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: "Loading discovered actions…" }) : null,
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm text-red-700", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+          onClick: () => {
+            setOffset(0);
+            setRetry((value) => value + 1);
+          },
+          children: "Reload action inventory"
+        }
+      )
+    ] }) : null,
+    !busy && !error && page?.actions.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark/75", children: "No discovered actions match this search. Discovery may find more during use." }) : null,
+    !error && page && !busy ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: page.actions.map((action) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: actionTitle(action) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-xs text-brand-dark/75", children: [
+              action.toolkit,
+              " · Account not verified"
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "flex items-center gap-2 text-xs font-semibold text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
+              "Permission for ",
+              actionTitle(action)
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "select",
+              {
+                disabled: props.disabled,
+                "aria-label": `Permission for ${actionTitle(action)}`,
+                value: props.drafts[action.tool_slug]?.state ?? action.permission_state,
+                onChange: (event) => props.onChange(action, event.target.value),
+                className: "min-h-11 rounded-xl border border-slate-300 bg-white px-3 text-sm",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "review", children: "Ask" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "block", children: "Deny" })
+                ]
+              }
+            )
+          ] })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl break-words text-sm leading-6 text-brand-dark/75", children: action.description.slice(0, 260) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(McpClassificationEvidence, { value: action.classification }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-1 text-xs text-brand-dark/75", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Action details" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono", children: action.tool_slug }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+            "Schema ",
+            action.full_schema ? "available" : "incomplete",
+            " · Revision ",
+            action.revision
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Observed provider metadata. Execution permission has not been granted." })
+        ] })
+      ] }, action.tool_slug)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: offset === 0,
+            onClick: () => setOffset(Math.max(0, offset - 50)),
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+            children: "Previous page"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+          "Page ",
+          offset / 50 + 1
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: page.nextOffset === null,
+            onClick: () => {
+              if (page.nextOffset !== null) setOffset(page.nextOffset);
+            },
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+            children: "Next page"
+          }
+        )
+      ] })
+    ] }) : null
+  ] });
+}
+function object$1(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+async function fetchProviderWorkflows(cliId, offset, signal) {
+  const response = await fetchLocalCliApi("/v1/local-clis/provider-workflows", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cli_id: cliId, offset })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(object$1(body) && typeof body.message === "string" ? body.message : "Could not load workflow suggestions.");
+  if (!object$1(body) || body.cli_id !== cliId || !Array.isArray(body.proposals) || body.proposals.length > 10 || body.next_offset !== null && body.next_offset !== offset + 10) throw new Error("Invalid workflow suggestions");
+  const proposals = body.proposals.map((entry) => {
+    if (!object$1(entry) || typeof entry.proposal_id !== "string" || !/^[a-f0-9]{64}$/.test(entry.proposal_id) || entry.source !== "composio-search-guidance" || entry.permissions_granted !== false || entry.requirements_complete !== false || entry.account_binding !== "unverified" || typeof entry.guidance_present !== "boolean" || !Array.isArray(entry.requirements) || entry.requirements.length > 50) throw new Error("Invalid workflow provenance");
+    const requirements = entry.requirements.map((part) => {
+      if (!object$1(part) || typeof part.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(part.tool_slug) || !["primary", "supporting"].includes(String(part.role)) || !["ask", "saved-deny", "unresolved"].includes(String(part.state)) || typeof part.schema_observed !== "boolean") throw new Error("Invalid workflow dependency");
+      return {
+        slug: part.tool_slug,
+        role: part.role,
+        state: part.state,
+        schemaObserved: part.schema_observed
+      };
+    });
+    return { proposalId: entry.proposal_id, guidancePresent: entry.guidance_present, requirements };
+  });
+  return { proposals, nextOffset: body.next_offset };
+}
+const requirementLabels = { "saved-deny": "Saved Deny", unresolved: "Not observed", ask: "Needs review" };
+function ProviderWorkflows({ cliId }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [offset, setOffset] = reactExports.useState(0);
+  const [retry, setRetry] = reactExports.useState(0);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [page, setPage] = reactExports.useState(null);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setBusy(true);
+    setError(null);
+    setPage(null);
+    void fetchProviderWorkflows(cliId, offset, controller.signal).then((result) => {
+      if (!controller.signal.aborted) setPage(result);
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load suggestions.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setBusy(false);
+    });
+    return () => controller.abort();
+  }, [cliId, open, offset, retry]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-5 border-b border-slate-200 pb-5", onToggle: (event) => setOpen(event.currentTarget.open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 text-base font-semibold text-brand-dark", children: "Suggested action workflows" }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Composio workflow suggestions", "aria-busy": busy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-2xl text-sm leading-6 text-brand-dark/75", children: "Suggestions from observed Composio search results. They are not MCP Skills, account verification, or permission grants. Search may omit a workflow, and each action still needs its own review." }),
+      busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: "Loading suggestions…" }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm text-red-700", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setOffset(0);
+              setRetry((value) => value + 1);
+            },
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+            children: "Reload suggestions"
+          }
+        )
+      ] }) : null,
+      !busy && !error && page?.proposals.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No workflow suggestion was observed. Search Composio for a specific task to discover one." }) : null,
+      !busy && !error && page ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { start: offset + 1, className: "mt-4 space-y-4", children: page.proposals.map((proposal) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "li",
+          {
+            className: "rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-brand-dark",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold", children: [
+                "Suggested workflow ",
+                offset + page.proposals.indexOf(proposal) + 1
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: proposal.guidancePresent ? "Composio also returned plan guidance; Guard kept only suggested action IDs." : "Action suggestions only; no plan guidance was returned." }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: proposal.requirements.map((part) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "break-words", children: [
+                part.slug.replaceAll("_", " ").toLowerCase(),
+                " · ",
+                part.role === "primary" ? "Primary" : "Supporting",
+                " · ",
+                requirementLabels[part.state],
+                !part.schemaObserved && part.state !== "unresolved" ? " · Schema incomplete" : ""
+              ] }, part.slug)) })
+            ]
+          },
+          proposal.proposalId
+        )) }),
+        offset > 0 || page.nextOffset !== null ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Suggestion pages", className: "mt-3 flex items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: offset === 0,
+              onClick: () => setOffset(Math.max(0, offset - 10)),
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Previous"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+            "Page ",
+            offset / 10 + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: page.nextOffset === null,
+              onClick: () => {
+                if (page.nextOffset !== null) setOffset(page.nextOffset);
+              },
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Next"
+            }
+          )
+        ] }) : null
+      ] }) : null
+    ] }) : null
+  ] });
+}
+function customExtensionActionLabel(item) {
+  if (item.seeded === true) return `Set up ${item.display_name ?? item.name}`;
+  if (item.state !== "unset" || item.surface !== "cli" || !item.suggestable) return null;
+  return hasSuggestedRules(item) ? "Review suggested rules" : "Review and add";
+}
+const SUGGESTED_RULES_NOTICE = "Suggested rules are pre-selected for commands you have not set yet. Nothing changes until you review and confirm.";
 function randomToken$2() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+function customExtensionRowDescription(item, catalogTitle) {
+  if (item.seeded === true) return `${item.display_name ?? item.name} is not set up yet. Set it up to review its commands.`;
+  if (catalogTitle) return [item.source_label, catalogTitle].filter(Boolean).join(" · ");
+  if (item.source_label) return `${item.example_label} · ${item.source_label}`;
+  return item.example_label;
+}
+function nativePublicationMessage(publication, permissionScope) {
+  if (permissionScope === "configured-connection") {
+    return publication?.state === "failed" ? "Your choices are stored, but policy publication failed. Guard has not confirmed enforcement for this connection." : "Your choices are stored for this configured connection. Native host-hook calls use separately observed tool permissions until Guard verifies a binding to this connection.";
+  }
+  if (publication?.state === "acknowledged") {
+    return `Native policy acknowledged saved revision ${publication.revision}. Live calls still check host namespace and tool authority.`;
+  }
+  if (publication?.state === "pending") {
+    return "Your choices are stored. Waiting for the native runtime to acknowledge this revision before showing them as enforced.";
+  }
+  if (publication?.state === "failed") {
+    return "Your choices are stored, but native publication failed. Enforcement readiness is not confirmed.";
+  }
+  return "Your choices are stored. Native enforcement readiness has not been confirmed.";
+}
+function mcpPermissionStatusLabel(publication, permissionScope) {
+  if (permissionScope === "configured-connection") return "Connection choices stored · host binding unverified";
+  if (publication?.state === "acknowledged") return "Tool permissions saved and acknowledged";
+  if (publication?.state === "pending") return "Waiting for policy confirmation";
+  return "Policy confirmation unavailable";
+}
+function detailPolicyCopy(surface) {
+  if (surface === "mcp") {
+    return "Ask requires approval. Allow and Deny apply within the scope shown in Connection details. Allow does not override stricter Guard policy, so protected MCP actions may still need fresh approval. Execution wrappers require review of their underlying actions.";
+  }
+  if (surface === "package-scripts") {
+    return "Recommended keeps Guard's usual review. Allow or block applies to that npm, pnpm, yarn, or bun script in this project. Nested names such as guard:audit stay grouped.";
+  }
+  return "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.";
+}
+function detailCatalogHeading(surface) {
+  if (surface === "mcp") return "MCP tools";
+  if (surface === "package-scripts") return "Package scripts";
+  return "Command patterns";
+}
+function detailCatalogHelper(surface) {
+  if (surface === "mcp") {
+    return "Choose Allow, Ask, or Deny for each tool. Policy follows Guard's existing rules.";
+  }
+  if (surface === "package-scripts") {
+    return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
+  }
+  return "Same settings as built-in tools. Recommended is the safe default.";
+}
+function bulkPolicyCopy(surface) {
+  if (surface === "mcp") {
+    return {
+      groupLabel: "Listed tools with direct permissions",
+      mixedCopy: "Custom mix. Use policy, allow, ask, or deny the listed tools with direct permissions."
+    };
+  }
+  if (surface === "package-scripts") {
+    return {
+      groupLabel: "All scripts protection setting",
+      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every script."
+    };
+  }
+  return {
+    groupLabel: "All commands protection setting",
+    mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every command."
+  };
+}
+function reviewTitle(name, state) {
+  if (state === "allowed") return `Save ${name} command settings`;
+  if (state === "blocked") return `Block ${name}`;
+  return `Remove ${name}`;
+}
+function reviewModalDetail(gate) {
+  if (approvalProofRecentlySatisfied(gate)) {
+    return "Recently confirmed with your authenticator. A new code is not needed yet.";
+  }
+  if (gate?.totp_enabled === true) {
+    return "Enter the current authenticator code to save these settings on this device.";
+  }
+  return "This custom Extension remains local to this device until portable continuity is enabled.";
+}
+function customExtensionUnits(surface) {
+  if (surface === "mcp") return { unit: "tool", units: "tools", source: "this server" };
+  if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
+  return { unit: "command", units: "commands", source: "this file" };
+}
+function customExtensionStateLabel(item) {
+  if (item.seeded === true) return "Not set up yet. Guard keeps its usual review until you add it.";
+  if (item.state === "unset" && item.surface === "cli" && item.suggestable) {
+    return hasSuggestedRules(item) ? "Guard detected this tool. Review suggested rules before adding it." : "Guard detected this tool. Review it before adding it.";
+  }
+  const { unit, units, source } = customExtensionUnits(item.surface);
+  if (item.stale) {
+    if (item.surface === "mcp") return "This connection changed. Review its permissions again.";
+    return item.surface === "package-scripts" ? "package.json scripts changed. Review the extension again." : "This file changed. Review the extension again.";
+  }
+  if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
+  if (item.state === "allowed") {
+    if (item.surface === "mcp") {
+      const tools = item.commands.filter((command) => command.command_id !== "other");
+      if (tools.length === 0) return "No tools allowed yet. List the inventory to choose permissions.";
+      const allowed2 = tools.filter((command) => command.state === "allow" && mcpToolCanReceiveDirectAllow(command)).length;
+      const denied = tools.filter((command) => command.state === "block").length;
+      const ask = tools.filter((command) => command.state === "review" || !mcpToolCanReceiveDirectAllow(command) && command.state !== "block").length;
+      return `${allowed2} allowed · ${ask} ask · ${denied} denied. New tools require review.`;
+    }
+    if (item.commands.length === 0) {
+      return `Matching ${units} from ${source} are allowed.`;
+    }
+    const allowed = item.commands.filter((command) => command.state === "allow").length;
+    if (allowed > 0) return `${allowed} ${allowed === 1 ? unit : units} allowed. The rest follow Recommended.`;
+    return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
+  }
+  return item.surface === "mcp" ? "Detected · Permissions not configured. Inspect this connection." : item.example_label;
+}
+function continuityCopy(item) {
+  const status = item.continuity?.status;
+  if (status === "applied") {
+    const view = customExtensionContinuityView("identity-matched");
+    return { title: view.title, description: view.description };
+  }
+  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
+  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
+  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
+  if (status === "removed") return customExtensionContinuityView("removed");
+  if (status === "stale") return customExtensionContinuityView("stale");
+  return null;
+}
+function CustomExtensionReviewModal(props) {
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  const dialogRef = useModalDialog(props.onCancel, !props.busy);
+  const title = props.providerUpdates.length > 0 ? "Review app action permissions" : reviewTitle(props.item.name, props.nextState);
+  const handlePassword = reactExports.useCallback((event) => {
+    setPassword(event.target.value);
+  }, []);
+  const handleTotp = reactExports.useCallback((event) => {
+    const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
+    event.target.value = digits;
+    setTotp(digits);
+  }, []);
+  const handleSubmit = reactExports.useCallback((event) => {
+    event.preventDefault();
+    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
+      approvalPassword: password,
+      approvalTotpCode: totp
+    }));
+  }, [password, props, totp]);
+  const submitDisabled = isApprovalProofSubmitDisabled(
+    props.approvalGate,
+    { approvalPassword: password, approvalTotpCode: totp },
+    props.busy,
+    false,
+    true
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "custom-extension-review-title", onSubmit: handleSubmit, className: "max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-review-title", className: "text-xl font-semibold text-brand-dark", children: title }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: reviewModalDetail(props.approvalGate) }),
+    props.item.surface === "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 text-sm leading-6 text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        props.item.source_label || "This host",
+        " · This configured connection"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: connectionReviewMessage(props.nextState) })
+    ] }) : null,
+    props.commandChanges.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Permission changes", className: "mt-4 text-sm leading-6 text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold", children: [
+        props.commandChanges.length,
+        " ",
+        props.item.surface === "mcp" ? "tool" : "command",
+        " changes"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 max-h-48 space-y-2 overflow-y-auto", children: props.commandChanges.map((change) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "break-words", children: [
+        change.name,
+        ": ",
+        permissionLabel(change.before),
+        " → ",
+        permissionLabel(change.after)
+      ] }, change.commandId)) })
+    ] }) : null,
+    props.providerUpdates.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-h-48 overflow-y-auto text-sm leading-6 text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+        props.providerUpdates.length,
+        " action changes for this host connection, across all accounts."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", children: props.providerUpdates.map((update) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "break-words", children: [
+        update.tool_slug.replaceAll("_", " ").toLowerCase(),
+        " → ",
+        update.state === "block" ? "Deny" : "Ask"
+      ] }, update.tool_slug)) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Any Deny also blocks opaque workbench execution. Allow is unavailable until the account is verified." })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofFieldInputs,
+      {
+        approvalGate: props.approvalGate,
+        approvalPassword: password,
+        approvalTotpCode: totp,
+        requireGate: true,
+        onApprovalPasswordChange: handlePassword,
+        onApprovalTotpCodeChange: handleTotp
+      }
+    ) }),
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.error }) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: "Cancel" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: props.busy ? "Saving…" : "Confirm" })
+    ] })
+  ] }) });
+}
+function permissionLabel(state) {
+  if (state === null) return "Not previously listed";
+  const labels = {
+    allow: "Allow",
+    block: "Deny",
+    review: "Ask",
+    inherit: "Policy"
+  };
+  return labels[state];
+}
+function connectionReviewMessage(state) {
+  if (state === "blocked") return "The connection will deny every tool, including tools listed as Allow.";
+  if (state === "unset") return "Saved connection permissions will be removed. Future calls return to Guard policy.";
+  return "Unknown and future tools still require review. These choices do not verify the provider account.";
+}
+async function forgetLocalCli(item) {
+  await readJson(await fetchLocalCliApi("/v1/local-clis/forget", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ cli_id: item.cli_id, identity_hash: item.identity_hash })
+  }));
+}
+function lastSeenCopy(lastSeenAt) {
+  if (!lastSeenAt) return null;
+  const seen = new Date(lastSeenAt);
+  if (Number.isNaN(seen.getTime())) return null;
+  return `Last seen ${seen.toLocaleDateString(void 0, { year: "numeric", month: "short", day: "numeric" })}`;
+}
+function canForgetLocalCli(item) {
+  return item.state === "unset" && item.observed_count > 0 && item.shares_enrolled_server !== true;
+}
+function ForgetLocalCliButton(props) {
+  const { confirm, dialog } = useConfirmDialog();
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const forget = reactExports.useCallback(async () => {
+    const confirmed = await confirm({
+      title: "Forget this connection?",
+      description: "Guard removes it from this list. If an agent uses it again or an app still configures it, Guard lists it again.",
+      confirmLabel: "Forget"
+    });
+    if (!confirmed) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await forgetLocalCli(props.item);
+      await props.onForgotten();
+    } catch (caught) {
+      setError(caught instanceof LocalCliApiError ? caught.message : "Guard could not forget this connection.");
+    } finally {
+      setBusy(false);
+    }
+  }, [confirm, props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        disabled: props.disabled || busy,
+        onClick: () => void forget(),
+        className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80 disabled:opacity-50",
+        children: busy ? "Forgetting…" : "Forget this connection"
+      }
+    ),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "basis-full text-sm leading-6 text-red-700", children: error }) : null,
+    dialog
+  ] });
+}
+const isSetupDigest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+function parseRecentMcpSetups(value) {
+  if (!Array.isArray(value) || value.length > 32) throw new Error("Could not verify recent setup history. Retry history.");
+  const handles = /* @__PURE__ */ new Set();
+  return value.map((entry) => {
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry) || !isSetupDigest(entry.rollback_handle) || !isSetupDigest(entry.selection_digest) || handles.has(entry.rollback_handle) || typeof entry.setup_name !== "string" || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(entry.setup_name) || !["remote", "package"].includes(entry.kind) || typeof entry.registry_name !== "string" || entry.registry_name.length > 256 || typeof entry.version !== "string" || entry.version.length > 80) {
+      throw new Error("Could not verify recent setup history. Retry history.");
+    }
+    handles.add(entry.rollback_handle);
+    if (entry.rollback_available !== void 0 && typeof entry.rollback_available !== "boolean") {
+      throw new Error("Could not verify recent setup history. Retry history.");
+    }
+    return {
+      rollback_handle: entry.rollback_handle,
+      setup_name: entry.setup_name,
+      kind: entry.kind,
+      registry_name: entry.registry_name,
+      version: entry.version,
+      selection_digest: entry.selection_digest,
+      ...entry.rollback_available === void 0 ? {} : { rollback_available: entry.rollback_available }
+    };
+  });
+}
+const object = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+async function registrySearch(query, signal) {
+  const response = await fetchLocalCliApi("/v1/local-clis/registry-search", {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ search: query })
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Registry search failed.");
+  if (!object(body) || body.source !== "official-mcp-registry" || body.coverage !== "search-page" || !Array.isArray(body.results) || body.results.length > 20 || typeof body.more_available !== "boolean") {
+    throw new Error("Invalid registry response");
+  }
+  const entries = body.results.map((entry) => {
+    if (!object(entry) || entry.provenance !== "official-mcp-registry" || entry.verified_package !== false || entry.configured !== false || entry.installed !== false || !["active", "deprecated", "unknown"].includes(String(entry.status)) || typeof entry.name !== "string" || entry.name.length > 256 || typeof entry.title !== "string" || entry.title.length > 120 || typeof entry.version !== "string" || entry.version.length > 80 || typeof entry.description !== "string" || entry.description.length > 500 || !Array.isArray(entry.remote_endpoints) || entry.remote_endpoints.length > 8 || !Array.isArray(entry.package_options) || entry.package_options.length > 8 || typeof entry.package_count !== "number" || !Number.isSafeInteger(entry.package_count) || entry.package_count < 0 || entry.package_count > 100) {
+      throw new Error("Invalid registry provenance");
+    }
+    const endpoints = entry.remote_endpoints.map((remote) => {
+      if (!object(remote) || typeof remote.url !== "string" || !remote.url.startsWith("https://") || !["streamable-http", "sse"].includes(String(remote.transport))) throw new Error("Invalid registry endpoint");
+      return { url: remote.url, transport: remote.transport };
+    });
+    const packages = entry.package_options.map((option) => {
+      if (!object(option) || !["npm", "pypi"].includes(String(option.registry_type)) || typeof option.identifier !== "string" || option.identifier.length > 160 || typeof option.version !== "string" || option.version.length > 80 || !["npx", "uvx"].includes(String(option.command)) || option.transport !== "stdio" || option.verified_package !== false || !Array.isArray(option.arguments) || option.arguments.length > (option.registry_type === "pypi" ? 17 : 18) || !option.arguments.every((argument) => typeof argument === "string" && argument.length <= 160)) {
+        throw new Error("Invalid registry package option");
+      }
+      return option;
+    });
+    return {
+      name: entry.name,
+      version: entry.version,
+      title: entry.title,
+      description: entry.description,
+      status: entry.status,
+      remote_endpoints: endpoints,
+      package_count: entry.package_count,
+      package_options: packages,
+      verified_package: false,
+      configured: false,
+      installed: false
+    };
+  });
+  return { entries, moreAvailable: body.more_available };
+}
+function McpRegistrySearch({ items, approvalGate, onOpenChange, onConfigured }) {
+  const [open, setOpen] = reactExports.useState(false);
+  const [query, setQuery] = reactExports.useState("");
+  const [entries, setEntries] = reactExports.useState(null);
+  const [moreAvailable, setMoreAvailable] = reactExports.useState(false);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const controller = reactExports.useRef(null);
+  const operation = reactExports.useRef(null);
+  const interactionGeneration = reactExports.useRef(0);
+  const historyGeneration = reactExports.useRef(0);
+  const historyController = reactExports.useRef(null);
+  const [recent, setRecent] = reactExports.useState([]);
+  const [historyError, setHistoryError] = reactExports.useState(null);
+  const [historyBusy, setHistoryBusy] = reactExports.useState(false);
+  const returnFocus = reactExports.useRef(null);
+  const [candidate, setCandidate] = reactExports.useState(null);
+  const [configured, setConfigured] = reactExports.useState(null);
+  const [password, setPassword] = reactExports.useState("");
+  const [totp, setTotp] = reactExports.useState("");
+  reactExports.useEffect(() => () => {
+    controller.current?.abort();
+    historyController.current?.abort();
+  }, []);
+  async function loadRecent() {
+    historyController.current?.abort();
+    const next = new AbortController();
+    historyController.current = next;
+    const generation = ++historyGeneration.current;
+    setHistoryBusy(true);
+    setHistoryError(null);
+    try {
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        signal: next.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "recent" })
+      });
+      const body = await response.json();
+      if (!response.ok || !object(body)) throw new Error("Recent setup history is unavailable. Retry history.");
+      const setups = parseRecentMcpSetups(body.setups);
+      if (!next.signal.aborted && historyGeneration.current === generation) setRecent(setups);
+    } catch (caught) {
+      if (!next.signal.aborted && historyGeneration.current === generation) {
+        setHistoryError(caught instanceof Error ? caught.message : "Recent setup history is unavailable. Retry history.");
+      }
+    } finally {
+      if (historyGeneration.current === generation) setHistoryBusy(false);
+    }
+  }
+  function invalidateHistory() {
+    historyGeneration.current += 1;
+    historyController.current?.abort();
+    setHistoryBusy(false);
+  }
+  async function previewUndo(setup, button) {
+    if (operation.current) return;
+    returnFocus.current = button;
+    const generation = ++interactionGeneration.current;
+    operation.current = "rollback-preview";
+    const next = new AbortController();
+    controller.current = next;
+    setBusy(true);
+    setError(null);
+    setCandidate(null);
+    setConfigured(null);
+    setPassword("");
+    setTotp("");
+    try {
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ operation: "rollback-preview", rollback_handle: setup.rollback_handle }),
+        signal: next.signal
+      });
+      const body = await response.json();
+      if (next.signal.aborted || interactionGeneration.current !== generation) return;
+      if (!response.ok) {
+        if (object(body) && (body.error === "codex_config_changed" || body.code === "codex_config_changed")) void loadRecent();
+        throw new Error(object(body) && typeof body.message === "string" ? body.message : "Could not review removal. Review this connection in Codex.");
+      }
+      if (!object(body) || body.host !== "codex" || body.rollback_handle !== setup.rollback_handle || body.setup_name !== setup.setup_name || body.selection_digest !== setup.selection_digest || body.registry_name !== setup.registry_name || body.version !== setup.version || body.kind !== setup.kind || body.permissions_granted !== false || body.host_change_applied !== false || (body.kind === "remote" ? typeof body.endpoint !== "string" || body.endpoint.length > 2048 : typeof body.command !== "string" || body.command.length > 4096 || !Array.isArray(body.arguments) || body.arguments.length > 18 || !body.arguments.every((arg) => typeof arg === "string" && arg.length <= 160) || typeof body.package_identifier !== "string" || typeof body.package_version !== "string" || body.verified_package !== false)) throw new Error("Could not verify removal. Review this connection in Codex.");
+      if (interactionGeneration.current === generation) setCandidate(body);
+    } catch (caught) {
+      if (!next.signal.aborted && interactionGeneration.current === generation) {
+        setError(caught instanceof Error ? caught.message : "Could not review removal.");
+      }
+    } finally {
+      if (controller.current === next && interactionGeneration.current === generation) {
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+      }
+    }
+  }
+  async function search() {
+    if (query.trim().length < 2 || busy || operation.current) return;
+    const generation = ++interactionGeneration.current;
+    operation.current = "search";
+    const next = new AbortController();
+    controller.current = next;
+    setBusy(true);
+    setError(null);
+    setEntries(null);
+    setCandidate(null);
+    setConfigured(null);
+    try {
+      const result = await registrySearch(query, next.signal);
+      if (!next.signal.aborted) {
+        setEntries(result.entries);
+        setMoreAvailable(result.moreAvailable);
+      }
+    } catch (caught) {
+      if (!next.signal.aborted) setError(caught instanceof Error ? caught.message : "Registry unavailable.");
+    } finally {
+      if (controller.current === next && interactionGeneration.current === generation) {
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+      }
+    }
+  }
+  async function preview(entry, target) {
+    if (operation.current) return;
+    const generation = ++interactionGeneration.current;
+    operation.current = "preview";
+    const next = new AbortController();
+    controller.current = next;
+    setBusy(true);
+    setError(null);
+    setCandidate(null);
+    setConfigured(null);
+    setPassword("");
+    setTotp("");
+    const setupName = entry.name.split("/").at(-1)?.toLowerCase().replace(/[^a-z0-9_-]/g, "-") ?? "mcp-server";
+    try {
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "preview",
+          registry_name: entry.name,
+          version: entry.version,
+          setup_name: setupName,
+          ..."endpoint" in target ? { kind: "remote", endpoint: target.endpoint } : {
+            kind: "package",
+            package_identifier: target.packageOption.identifier,
+            package_version: target.packageOption.version
+          }
+        }),
+        signal: next.signal
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(object(body) && typeof body.message === "string" ? body.message : "Could not review setup.");
+      if (!object(body) || body.host !== "codex" || body.registry_name !== entry.name || body.version !== entry.version || body.setup_name !== setupName || body.permissions_granted !== false || body.host_change_applied !== false || typeof body.selection_digest !== "string" || !/^[a-f0-9]{64}$/.test(body.selection_digest)) throw new Error("Invalid Codex setup preview");
+      if ("endpoint" in target) {
+        if (body.endpoint !== target.endpoint || body.kind !== "remote") throw new Error("Invalid Codex endpoint preview");
+      } else if (body.kind !== "package" || body.package_identifier !== target.packageOption.identifier || body.package_version !== target.packageOption.version || typeof body.command !== "string" || !Array.isArray(body.arguments) || !body.arguments.every((argument) => typeof argument === "string") || body.verified_package !== false) throw new Error("Invalid Codex package preview");
+      if (!next.signal.aborted && interactionGeneration.current === generation) setCandidate(body);
+    } catch (caught) {
+      if (!next.signal.aborted && interactionGeneration.current === generation) {
+        setError(caught instanceof Error ? caught.message : "Could not review setup.");
+      }
+    } finally {
+      if (controller.current === next && interactionGeneration.current === generation) {
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+      }
+    }
+  }
+  async function apply() {
+    if (!candidate || busy || operation.current || isApprovalProofSubmitDisabled(
+      approvalGate,
+      { approvalPassword: password, approvalTotpCode: totp },
+      false
+    )) return;
+    const generation = ++interactionGeneration.current;
+    operation.current = "apply";
+    setBusy(true);
+    setError(null);
+    try {
+      const proof = buildApprovalProofCredentials(
+        approvalGate,
+        { approvalPassword: password, approvalTotpCode: totp }
+      );
+      const response = await fetchLocalCliApi("/v1/local-clis/registry-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: candidate.rollback_handle ? "rollback" : "apply",
+          ...candidate.rollback_handle ? { rollback_handle: candidate.rollback_handle } : {},
+          registry_name: candidate.registry_name,
+          version: candidate.version,
+          setup_name: candidate.setup_name,
+          ...candidate.kind === "package" ? {
+            kind: "package",
+            package_identifier: candidate.package_identifier,
+            package_version: candidate.package_version
+          } : { kind: "remote", endpoint: candidate.endpoint },
+          selection_digest: candidate.selection_digest,
+          confirm_host_change: true,
+          session_nonce: crypto.randomUUID().replaceAll("-", ""),
+          ...proof
+        })
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        if (candidate.rollback_handle && object(body) && (body.error === "codex_config_changed" || body.code === "codex_config_changed")) setCandidate(null);
+        throw new Error(object(body) && typeof body.message === "string" ? body.message : "Codex setup did not finish.");
+      }
+      if (!object(body) || body.host !== "codex" || body.setup_name !== candidate.setup_name || body.kind !== (candidate.kind === "package" ? "package" : "remote") || body.host_change_applied !== true || body.permissions_granted !== false || (candidate.rollback_handle ? body.setup_rolled_back !== true : !isSetupDigest(body.rollback_handle))) {
+        throw new Error("Codex setup outcome is uncertain. Check recent setup history and review this connection in Codex before retrying.");
+      }
+      invalidateHistory();
+      if (candidate.rollback_handle) setRecent((previous) => previous.filter((setup) => setup.rollback_handle !== candidate.rollback_handle));
+      else setRecent((previous) => [{
+        rollback_handle: body.rollback_handle,
+        setup_name: candidate.setup_name,
+        kind: candidate.kind,
+        registry_name: candidate.registry_name,
+        version: candidate.version,
+        selection_digest: candidate.selection_digest
+      }, ...previous].slice(0, 32));
+      void loadRecent();
+      setConfigured({ name: candidate.setup_name, kind: candidate.kind, removed: Boolean(candidate.rollback_handle) });
+      setCandidate(null);
+      setPassword("");
+      setTotp("");
+      void Promise.resolve().then(onConfigured).then((outcome) => {
+        if (outcome === "partial" && interactionGeneration.current === generation) setError("Codex configuration changed, but Guard could not fully rescan host connections. Existing connections remain visible. Retry discovery in Extensions.");
+      }).catch(() => {
+        if (interactionGeneration.current === generation) setError("Codex configuration changed, but Guard could not fully rescan host connections. Retry discovery in Extensions.");
+      });
+    } catch (caught) {
+      setPassword("");
+      setTotp("");
+      void loadRecent();
+      setError(caught instanceof Error ? caught.message : "Codex setup did not finish. Review this connection in Codex before retrying.");
+    } finally {
+      operation.current = null;
+      setBusy(false);
+    }
+  }
+  const setupStatus = reactExports.useMemo(() => {
+    if (!configured) return null;
+    const change = configured.removed ? "removed from" : "added to";
+    let text = `${configured.name} was ${change} Codex. Restart Codex to load this configuration change.`;
+    if (!configured.removed) {
+      text += " Complete any provider-owned sign-in there.";
+      if (configured.kind === "package") text += " Codex may download and run the pinned package on first use.";
+      text += " Review each tool in Extensions after Codex loads it.";
+    }
+    return `${text} No tool permission was granted.`;
+  }, [configured]);
+  const setupReviewText = reactExports.useMemo(() => {
+    if (!candidate || candidate.rollback_handle) return null;
+    if (candidate.kind === "package") {
+      return "This changes Codex configuration. Codex may download and execute this package on first use. It does not authenticate an account or allow tools in Guard.";
+    }
+    return "This changes Codex configuration. It does not download a package, authenticate an account, activate this session, or allow tools in Guard.";
+  }, [candidate]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-6 rounded-2xl border border-slate-200 bg-white p-4", onToggle: (event) => {
+    setOpen(event.currentTarget.open);
+    onOpenChange(event.currentTarget.open);
+    if (event.currentTarget.open) void loadRecent();
+    else {
+      invalidateHistory();
+      if (operation.current !== "apply") {
+        controller.current?.abort();
+        controller.current = null;
+        operation.current = null;
+        setBusy(false);
+        interactionGeneration.current += 1;
+        setCandidate(null);
+        setPassword("");
+        setTotp("");
+      }
+    }
+  }, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold text-brand-dark", children: "Find an MCP server in the public registry" }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Public MCP registry search", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-6 text-brand-dark/75", children: "Search official listing metadata. Review a pinned package or HTTPS endpoint before adding it to Codex. A listing does not verify package safety, connect an account, or enable tools. App-owned connections stay in their host." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-end gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "block min-w-56 flex-1 text-sm font-semibold text-brand-dark", children: [
+          "Server or app name",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "search",
+              minLength: 2,
+              maxLength: 80,
+              value: query,
+              onChange: (event) => setQuery(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void search();
+                }
+              },
+              className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 px-3 font-normal"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              void search();
+            },
+            disabled: busy || query.trim().length < 2,
+            className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white disabled:opacity-50",
+            children: "Search registry"
+          }
+        )
+      ] }),
+      busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: {
+        search: "Searching public listings…",
+        preview: "Checking the exact registry listing…",
+        "rollback-preview": "Checking the saved setup…",
+        apply: candidate?.rollback_handle ? "Removing the reviewed connection from Codex…" : "Adding the reviewed connection to Codex…"
+      }[operation.current ?? "apply"] }) : null,
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm text-red-700", children: error }) : null,
+      setupStatus ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark", children: setupStatus }) : null,
+      candidate ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Review Codex MCP setup", className: "mt-4 rounded-xl border border-slate-200 p-4 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: candidate.rollback_handle ? "Review removal from Codex" : "Review Codex connection" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+          candidate.registry_name,
+          " · version ",
+          candidate.version
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all", children: [
+          "Codex name: ",
+          candidate.setup_name
+        ] }),
+        candidate.kind === "package" ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+            "Unverified registry package: ",
+            candidate.package_identifier,
+            " · pinned version ",
+            candidate.package_version
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all font-mono text-xs", children: [
+            "Launch: ",
+            [candidate.command, ...candidate.arguments].map((part) => JSON.stringify(part)).join(" ")
+          ] })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 break-all", children: [
+          "HTTPS endpoint: ",
+          candidate.endpoint
+        ] }) }),
+        setupReviewText ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: setupReviewText }) : null,
+        candidate.rollback_handle ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Remove only the connection added by this setup. If Codex configuration has changed since then, Guard leaves it unchanged so you can review it in Codex. Removing setup does not revoke provider access or erase Guard tool choices." }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3 max-w-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ApprovalProofFieldInputs,
+          {
+            approvalGate,
+            approvalPassword: password,
+            approvalTotpCode: totp,
+            onApprovalPasswordChange: (event) => setPassword(event.target.value),
+            onApprovalTotpCodeChange: (event) => setTotp(event.target.value.replace(/\D/g, "").slice(0, 6))
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: busy || isApprovalProofSubmitDisabled(
+                approvalGate,
+                { approvalPassword: password, approvalTotpCode: totp },
+                false
+              ),
+              onClick: () => {
+                void apply();
+              },
+              className: "min-h-11 rounded-xl bg-brand-blue px-4 font-semibold text-white disabled:opacity-50",
+              children: candidate.rollback_handle ? "Remove from Codex" : "Add to Codex"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: busy,
+              onClick: () => {
+                setCandidate(null);
+                setPassword("");
+                setTotp("");
+                returnFocus.current?.focus();
+              },
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 font-semibold",
+              children: "Cancel"
+            }
+          )
+        ] })
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Recent MCP setup", className: "mt-4 border-t border-slate-200 pt-4 text-sm text-brand-dark", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold", children: "Recent setup" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: "Undo is available for up to an hour while this Guard runtime stays open. For older or changed connections, review configuration in Codex." }),
+        historyBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-2", children: "Loading recent setup…" }) : null,
+        historyError ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "text-red-700", children: historyError }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: historyBusy || busy,
+              onClick: () => {
+                void loadRecent();
+              },
+              className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold",
+              children: "Retry history"
+            }
+          )
+        ] }) : null,
+        !historyBusy && !historyError && !recent.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-brand-dark/75", children: "No setup available to undo in this runtime." }) : null,
+        recent.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-slate-200", children: recent.map((setup) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "li",
+          {
+            className: "flex flex-wrap items-center justify-between gap-3 py-3",
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-semibold", children: setup.setup_name }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "break-all text-brand-dark/75", children: [
+                  setup.registry_name,
+                  " · ",
+                  setup.version
+                ] }),
+                setup.rollback_available === false ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: "Configuration changed. Review this connection in Codex." }) : null
+              ] }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "button",
+                {
+                  type: "button",
+                  disabled: busy || setup.rollback_available === false,
+                  onClick: (event) => {
+                    void previewUndo(setup, event.currentTarget);
+                  },
+                  "aria-label": `Undo setup for ${setup.setup_name}`,
+                  className: "min-h-11 rounded-xl border border-slate-300 px-4 font-semibold disabled:opacity-50",
+                  children: "Undo setup"
+                }
+              )
+            ]
+          },
+          setup.rollback_handle
+        )) }) : null
+      ] }),
+      entries?.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No listing on this search page. Try another name." }) : null,
+      moreAvailable && entries ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "More listings match. Refine the name to find a specific server; this page is not the complete registry." }) : null,
+      entries ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: entries.map((entry) => {
+        const basename = entry.name.split("/").at(-1)?.toLowerCase();
+        const possibleExisting = items.some((item) => item.surface === "mcp" && (item.name.toLowerCase() === entry.title.toLowerCase() || item.name.toLowerCase() === basename));
+        return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4 text-sm text-brand-dark", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-semibold", children: [
+            entry.title,
+            " · ",
+            entry.version
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-brand-dark/75", children: entry.description }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 break-all text-xs text-brand-dark/75", children: entry.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/75", children: [
+            entry.status,
+            " listing · ",
+            entry.remote_endpoints.length,
+            " HTTPS endpoint(s) · ",
+            entry.package_options.length,
+            " reviewed launch option(s) of ",
+            entry.package_count,
+            " package listing(s) · Packages unverified"
+          ] }),
+          possibleExisting ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs font-semibold text-brand-dark", children: "Possible existing connection. Inspect it before adding another." }) : null,
+          entry.status === "active" && !possibleExisting && entry.remote_endpoints.some((remote) => remote.transport === "streamable-http") ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: () => {
+            const endpoint = entry.remote_endpoints.find((remote) => remote.transport === "streamable-http");
+            if (endpoint) void preview(entry, { endpoint: endpoint.url });
+          }, className: "mt-3 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark", children: "Review HTTPS setup" }) : null,
+          entry.status === "active" && !possibleExisting ? entry.package_options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              disabled: busy,
+              onClick: () => {
+                void preview(entry, { packageOption: option });
+              },
+              className: "ml-2 mt-3 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+              children: [
+                "Review ",
+                option.registry_type,
+                " package · ",
+                option.identifier,
+                "@",
+                option.version
+              ]
+            },
+            `${option.registry_type}/${option.identifier}/${option.version}`
+          )) : null
+        ] }, `${entry.name}/${entry.version}`);
+      }) }) : null
+    ] }) : null
+  ] });
+}
+function randomToken$1() {
   return crypto.randomUUID().replaceAll("-", "");
 }
 function AddCustomExtensionWorkspace(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
-  const [command, setCommand] = reactExports.useState("");
+  const [command, setCommand] = reactExports.useState(() => initialAddCommand(window.location.search));
   const [recognized, setRecognized] = reactExports.useState(null);
   const [commands, setCommands] = reactExports.useState([]);
   const [summary, setSummary] = reactExports.useState(null);
@@ -3588,6 +4826,8 @@ function AddCustomExtensionWorkspace(props) {
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
   const [reviewingScripts, setReviewingScripts] = reactExports.useState(false);
+  const [toolQuery, setToolQuery] = reactExports.useState("");
+  const [registryOpen, setRegistryOpen] = reactExports.useState(false);
   const recognizeGeneration = reactExports.useRef(0);
   const autoRecognizedCommand = reactExports.useRef("");
   const didAutoSelect = reactExports.useRef(false);
@@ -3611,6 +4851,7 @@ function AddCustomExtensionWorkspace(props) {
     setSummary(null);
     setPending(null);
     setReviewingScripts(false);
+    setToolQuery("");
     setStep("pick");
   }, []);
   const handleCommand = reactExports.useCallback((event) => {
@@ -3631,10 +4872,11 @@ function AddCustomExtensionWorkspace(props) {
   }, []);
   const markRecognized = reactExports.useCallback((item, nextSummary) => {
     setRecognized(item);
-    setCommands(item.commands);
+    setCommands(prefillSuggestedStates(item));
     setSummary(nextSummary);
     setPending("allowed");
-    setReviewingScripts(false);
+    setReviewingScripts(item.surface === "mcp");
+    setToolQuery("");
     setStep("review");
   }, []);
   const runRecognize = reactExports.useCallback(async (commandText, cliId, silent = false, keepOnError = false) => {
@@ -3761,7 +5003,7 @@ function AddCustomExtensionWorkspace(props) {
         interpreter_name: recognized.interpreter_name,
         state: pending,
         previous_revision: props.revision,
-        session_nonce: randomToken$2(),
+        session_nonce: randomToken$1(),
         commands: enrollmentCommandStates(commands, pending, recognized.surface),
         ...buildApprovalProofCredentials(resolvedApprovalGate, {
           approvalPassword: password,
@@ -3780,6 +5022,7 @@ function AddCustomExtensionWorkspace(props) {
   }, [commands, findTool, password, pending, props, recognized, refreshApprovalGate, resolvedApprovalGate, step, totp]);
   const handleCommandState = reactExports.useCallback((commandId, state) => {
     setCommands((current) => withCommandState(current, commandId, state));
+    setPending("allowed");
   }, []);
   const proofReady = pending !== null && recognized !== null;
   const confirming = step === "confirm" && recognized !== null;
@@ -3791,20 +5034,35 @@ function AddCustomExtensionWorkspace(props) {
     proofBlocked: isApprovalProofSubmitDisabled(
       resolvedApprovalGate,
       { approvalPassword: password, approvalTotpCode: totp },
-      busy
+      busy,
+      false,
+      true
     ),
     busy
   });
   const showingPackageCatalog = recognized?.surface === "package-scripts";
   const showingMcpCatalog = recognized?.surface === "mcp";
+  const observedMcp = isObservedMcpItem(recognized);
   const showingCatalog = showingPackageCatalog || showingMcpCatalog;
   const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
   const mcpHasTools = mcpCatalogHasTools(enrollable);
   const showMcpRetry = showingMcpCatalog && !mcpHasTools;
-  const visibleCommands = showingPackageCatalog ? filterPackageScriptCommands(enrollable, command) : commands;
+  let visibleCommands = commands;
+  if (showingPackageCatalog) {
+    visibleCommands = filterPackageScriptCommands(enrollable, command);
+  } else if (showingMcpCatalog) {
+    visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
+  }
+  let confirmTitle = allowActionLabel(recognized?.surface ?? "cli");
+  if (pending === "blocked") {
+    confirmTitle = blockActionLabel(recognized?.surface ?? "cli");
+  } else if (observedMcp) {
+    confirmTitle = "Save tool permissions";
+  }
   const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
   const bulkState = bulkCommandState(enrollable);
   const recentlySatisfied = approvalProofRecentlySatisfied(resolvedApprovalGate);
+  const gateReady = resolvedApprovalGate === null ? null : isBulkApproveGateReady(resolvedApprovalGate);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "form",
     {
@@ -3825,16 +5083,17 @@ function AddCustomExtensionWorkspace(props) {
           }
         ),
         confirming && recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 max-w-xl", "aria-labelledby": "custom-extension-confirm-title", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "custom-extension-confirm-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: pending === "blocked" ? blockActionLabel(recognized.surface) : allowActionLabel(recognized.surface) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { id: "custom-extension-confirm-title", className: "text-2xl font-semibold tracking-tight text-brand-dark", children: confirmTitle }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: recognized.source_label ? `${recognized.name} · ${recognized.source_label}` : recognized.name }),
-          summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-slate-500", children: summary }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/80", children: enrollConfirmCopy(recognized.surface, recentlySatisfied, resolvedApprovalGate?.totp_enabled === true) }),
+          summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/70", children: observedMcp && pending === "blocked" ? "This connector will be blocked, including tools that have not been listed yet." : summary }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-5 text-sm leading-6 text-brand-dark/80", children: enrollConfirmCopy(recognized.surface, recentlySatisfied, resolvedApprovalGate?.totp_enabled === true, gateReady) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 max-w-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
             ApprovalProofFieldInputs,
             {
               approvalGate: resolvedApprovalGate,
               approvalPassword: password,
               approvalTotpCode: totp,
+              requireGate: true,
               onApprovalPasswordChange: handlePassword,
               onApprovalTotpCodeChange: handleTotp
             }
@@ -3846,53 +5105,82 @@ function AddCustomExtensionWorkspace(props) {
               rememberedProjects.length > 0,
               recognized?.surface ?? null,
               props.discovering === true && recognized === null,
-              !showMcpRetry
+              !showMcpRetry,
+              observedMcp
             ) })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-4 block text-sm font-semibold text-brand-dark", children: commandFieldLabel(recognized?.surface ?? null) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "input",
-            {
-              id: "custom-extension-command",
-              value: command,
-              onChange: handleCommand,
-              spellCheck: false,
-              autoComplete: "off",
-              placeholder: showingPackageCatalog ? "guard:audit" : "npm run guard:audit",
-              className: "mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/40 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-            }
-          ),
+          !observedMcp ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-command", className: "mt-4 block text-sm font-semibold text-brand-dark", children: recognized === null ? "Find an extension" : commandFieldLabel(recognized.surface) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              "input",
+              {
+                id: "custom-extension-command",
+                value: command,
+                onChange: handleCommand,
+                spellCheck: false,
+                autoComplete: "off",
+                placeholder: showingPackageCatalog ? "guard:audit" : "Server name, launch command, or npm run",
+                className: "mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/70 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
+              }
+            )
+          ] }) : null,
           recognized !== null && showingPackageCatalog ? /* @__PURE__ */ jsxRuntimeExports.jsx(ProjectSwitcher, { items: rememberedProjects, currentId: recognized.cli_id, onSelect: selectSuggestion }) : null,
           recognized ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-5 max-w-3xl", "aria-labelledby": "custom-extension-selected", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-selected", className: "text-xl font-semibold tracking-tight text-brand-dark", children: recognized.name }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-mono text-xs text-brand-dark/70", children: recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label }),
-            summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: summary }) : null,
-            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(BulkPolicyPicker, { value: bulkState, disabled: busy, onChange: applyBulk }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 text-xs text-brand-dark/70${observedMcp ? "" : " font-mono"}`, children: observedMcp ? recognized.source_label : recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label }),
+            summary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/70", children: observedMcp && pending === "blocked" ? "This connector will be blocked, including tools that have not been listed yet." : summary }) : null,
+            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(BulkPolicyPicker, { value: bulkState, disabled: busy, onChange: applyBulk, allowLabel: observedMcp ? "Allow listed" : void 0 }) : null,
             showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(McpListingStatus, { name: recognized.name, busy, onRetry: retryMcpListing }) : null,
-            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-              CatalogPreview,
-              {
-                query: command,
-                showFilterCount: showingPackageCatalog,
-                previewNames,
-                visibleCount: visibleCommands.length,
-                totalCount: enrollable.length,
-                reviewing: reviewingScripts,
-                adjustLabel: showingMcpCatalog ? "Adjust individual tools" : "Adjust individual scripts",
-                hideLabel: "Hide individual settings",
-                onOpenReview: openScriptReview,
-                onCloseReview: closeScriptReview,
-                children: visibleCommands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-                  CustomExtensionCommandList,
+            showingCatalog && enrollable.length > 0 && !showMcpRetry ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              showingMcpCatalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 max-w-xl", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: "custom-extension-tool-search", className: "block text-sm font-semibold text-brand-dark", children: "Find a tool" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(
+                  "input",
                   {
-                    commands: visibleCommands,
-                    disabled: busy,
-                    surface: recognized.surface,
-                    onChange: handleCommandState
+                    id: "custom-extension-tool-search",
+                    type: "search",
+                    value: toolQuery,
+                    onChange: (event) => setToolQuery(event.target.value),
+                    placeholder: "Search tool names or descriptions",
+                    className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/70 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
                   }
-                ) }) : null
-              }
-            ) : null,
+                ),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/70", role: "status", "aria-live": "polite", children: [
+                  visibleCommands.length,
+                  " of ",
+                  enrollable.length,
+                  " tools",
+                  observedMcp ? ". More appear as your app uses them." : "."
+                ] })
+              ] }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsxs(
+                CatalogPreview,
+                {
+                  query: command,
+                  showFilterCount: showingPackageCatalog,
+                  previewNames,
+                  visibleCount: visibleCommands.length,
+                  totalCount: enrollable.length,
+                  reviewing: reviewingScripts,
+                  adjustLabel: showingMcpCatalog ? "Adjust individual tools" : "Adjust individual scripts",
+                  hideLabel: "Hide individual settings",
+                  onOpenReview: openScriptReview,
+                  onCloseReview: closeScriptReview,
+                  children: [
+                    visibleCommands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+                      CustomExtensionCommandList,
+                      {
+                        commands: visibleCommands,
+                        disabled: busy,
+                        surface: recognized.surface,
+                        onChange: handleCommandState
+                      }
+                    ) }) : null,
+                    showingMcpCatalog && visibleCommands.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-brand-dark/70", children: "No tools match. Try a different name or clear the search." }) : null
+                  ]
+                }
+              )
+            ] }) : null,
             !showingCatalog && visibleCommands.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
               CustomExtensionCommandList,
               {
@@ -3902,21 +5190,32 @@ function AddCustomExtensionWorkspace(props) {
                 onChange: handleCommandState
               }
             ) }) : null
-          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-            SuggestionPanel,
-            {
-              query: command,
-              discovering: props.discovering === true,
-              hasSuggestions,
-              packageScriptSuggestions,
-              harnessSuggestions,
-              seenSuggestions,
-              onSelect: selectSuggestion
-            }
-          )
+          ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              SuggestionPanel,
+              {
+                query: command,
+                discovering: props.discovering === true,
+                hasSuggestions,
+                packageScriptSuggestions,
+                harnessSuggestions,
+                seenSuggestions,
+                onSelect: selectSuggestion
+              }
+            ),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(
+              McpRegistrySearch,
+              {
+                items: props.items,
+                approvalGate: resolvedApprovalGate,
+                onOpenChange: setRegistryOpen,
+                onConfigured: props.onConfigured
+              }
+            )
+          ] })
         ] }),
         error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 max-w-xl", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "sticky bottom-0 mt-auto border-t border-slate-200 bg-white py-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: `${registryOpen && !recognized ? "relative" : "sticky bottom-0"} mt-auto border-t border-slate-200 bg-white py-4`, children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: addDialogSubmitLabel({ recognized, busy, pending, step: recognized ? step : "pick" }) }),
           recognized && confirming && pending === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestBlock, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: blockActionLabel(recognized.surface) }) : null,
           recognized && confirming && pending === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: requestAllow, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: allowActionLabel(recognized.surface) }) : null
@@ -3937,13 +5236,29 @@ async function fetchLocalCliDiscover() {
   }
   return normalizeLocalCliList(payload);
 }
+function discoveryIssueMessage(issue) {
+  switch (issue) {
+    case "catalog_limit_reached":
+      return "Some connectors have more tools than Guard can catalog safely. Existing choices were kept.";
+    case "configured_host_scan_failed":
+      return "Guard could not read configured host connections. Check the host app and retry.";
+    case "observed_provider_scan_failed":
+      return "Guard could not merge observed provider tools. Existing choices were kept; retry discovery.";
+    case "package_catalog_refresh_failed":
+      return "Guard could not refresh project scripts. Existing custom extensions were kept; retry discovery.";
+    default:
+      return null;
+  }
+}
 function useLocalCliCatalog() {
   const [data, setData] = reactExports.useState(null);
   const [error, setError] = reactExports.useState(null);
+  const [discoveryNotice, setDiscoveryNotice] = reactExports.useState(null);
   const [discovering, setDiscovering] = reactExports.useState(false);
   const [catalogReady, setCatalogReady] = reactExports.useState(false);
   const loadGeneration = reactExports.useRef(0);
-  const load = reactExports.useCallback(async () => {
+  const publicationPoll = reactExports.useRef({ revision: -1, attempts: 0 });
+  const load = reactExports.useCallback(async (preserveDiscoveryNotice = false) => {
     const generation = loadGeneration.current + 1;
     loadGeneration.current = generation;
     try {
@@ -3951,6 +5266,7 @@ function useLocalCliCatalog() {
       if (loadGeneration.current !== generation) return;
       setData(next);
       setError(null);
+      if (!preserveDiscoveryNotice) setDiscoveryNotice(null);
     } catch (caught) {
       if (loadGeneration.current !== generation) return;
       setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
@@ -3963,18 +5279,23 @@ function useLocalCliCatalog() {
     setCatalogReady(false);
     try {
       const next = await fetchLocalCliDiscover();
-      if (loadGeneration.current !== generation) return;
+      if (loadGeneration.current !== generation) return "superseded";
       setData(next);
       setError(null);
-    } catch {
+      setDiscoveryNotice(discoveryIssueMessage(next.discovery_issue));
+      return next.discovery_issue ? "partial" : "refreshed";
+    } catch (error2) {
       try {
         const next = await fetchLocalCliList();
-        if (loadGeneration.current !== generation) return;
+        if (loadGeneration.current !== generation) return "superseded";
         setData(next);
         setError(null);
+        setDiscoveryNotice(error2 instanceof Error ? error2.message : "Guard could not refresh custom extensions.");
+        return "partial";
       } catch (caught) {
-        if (loadGeneration.current !== generation) return;
+        if (loadGeneration.current !== generation) return "superseded";
         setError(caught instanceof Error ? caught.message : "Guard could not load custom extensions.");
+        return "partial";
       }
     } finally {
       if (loadGeneration.current === generation) {
@@ -3986,115 +5307,19 @@ function useLocalCliCatalog() {
   reactExports.useEffect(() => {
     void load();
   }, [load]);
-  return { data, error, load, discover, discovering, catalogReady };
-}
-function randomToken$1() {
-  return crypto.randomUUID().replaceAll("-", "");
-}
-function detailPolicyCopy(surface) {
-  if (surface === "mcp") {
-    return "Recommended keeps Guard's usual review. Allow or block applies to that tool from this MCP server. Destructive tools stay under Guard's usual rules.";
-  }
-  if (surface === "package-scripts") {
-    return "Recommended keeps Guard's usual review. Allow or block applies to that npm, pnpm, yarn, or bun script in this project. Nested names such as guard:audit stay grouped.";
-  }
-  return "Recommended keeps Guard's usual review. Allow or block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.";
-}
-function detailCatalogHeading(surface) {
-  if (surface === "mcp") return "MCP tools";
-  if (surface === "package-scripts") return "Package scripts";
-  return "Command patterns";
-}
-function detailCatalogHelper(surface) {
-  if (surface === "mcp") {
-    return "Same settings as built-in tools. Recommended is the safe default for each MCP tool.";
-  }
-  if (surface === "package-scripts") {
-    return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
-  }
-  return "Same settings as built-in tools. Recommended is the safe default.";
-}
-function bulkPolicyCopy(surface) {
-  if (surface === "mcp") {
-    return {
-      groupLabel: "All tools protection setting",
-      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every tool."
-    };
-  }
-  if (surface === "package-scripts") {
-    return {
-      groupLabel: "All scripts protection setting",
-      mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every script."
-    };
-  }
-  return {
-    groupLabel: "All commands protection setting",
-    mixedCopy: "Custom mix. Pick Recommended, Allow all, or Block all to reset every command."
-  };
-}
-function reviewTitle(name, state) {
-  if (state === "allowed") return `Save ${name} command settings`;
-  if (state === "blocked") return `Block ${name}`;
-  return `Remove ${name}`;
-}
-function reviewModalDetail(gate) {
-  if (approvalProofRecentlySatisfied(gate)) {
-    return "Recently confirmed with your authenticator. A new code is not needed yet.";
-  }
-  if (gate?.totp_enabled === true) {
-    return "Enter the current authenticator code to save these settings on this device.";
-  }
-  return "This custom Extension remains local to this device until portable continuity is enabled.";
-}
-function customExtensionUnits(surface) {
-  if (surface === "mcp") return { unit: "tool", units: "tools", source: "this server" };
-  if (surface === "package-scripts") return { unit: "script", units: "scripts", source: "this project" };
-  return { unit: "command", units: "commands", source: "this file" };
-}
-function customExtensionStateLabel(item) {
-  const { unit, units, source } = customExtensionUnits(item.surface);
-  if (item.stale) {
-    return item.surface === "package-scripts" ? "package.json scripts changed. Review the extension again." : "This file changed. Review the extension again.";
-  }
-  if (item.state === "blocked") return `Every ${unit} from ${source} is blocked.`;
-  if (item.state === "allowed") {
-    if (item.commands.length === 0) {
-      return `Matching ${units} from ${source} are allowed.`;
+  reactExports.useEffect(() => {
+    if (discovering || data?.native_publication?.state !== "pending") return;
+    if (publicationPoll.current.revision !== data.revision) {
+      publicationPoll.current = { revision: data.revision, attempts: 0 };
     }
-    const allowed = item.commands.filter((command) => command.state === "allow").length;
-    if (allowed > 0) return `${allowed} ${allowed === 1 ? unit : units} allowed. The rest follow Recommended.`;
-    return `${units.charAt(0).toUpperCase()}${units.slice(1)} follow Recommended until you allow or block them.`;
-  }
-  return item.example_label;
-}
-function continuityCopy(item) {
-  const status = item.continuity?.status;
-  if (status === "applied") {
-    const view = customExtensionContinuityView("identity-matched");
-    return { title: view.title, description: view.description };
-  }
-  if (status === "pending_observation") return customExtensionContinuityView("pending-observation");
-  if (status === "changed_identity") return customExtensionContinuityView("changed-identity");
-  if (status === "locally_overridden") return customExtensionContinuityView("locally-overridden");
-  if (status === "removed") return customExtensionContinuityView("removed");
-  if (status === "stale") return customExtensionContinuityView("stale");
-  return null;
-}
-function CustomExtensionsSection(props) {
-  const added = addedCustomExtensions(props.items);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "custom-extensions-heading", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: "Your own scripts, binaries, and MCP servers, not Guard's built-in catalog." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-semibold text-brand-blue", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
-        "Add custom extension"
-      ] })
-    ] }),
-    added.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark/75", children: "None yet. Add one by pasting the command, or pick an MCP server Guard found in your apps." }) : /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: added.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CustomExtensionRow, { item, onOpen: props.onOpen }, item.cli_id)) })
-  ] });
+    if (publicationPoll.current.attempts >= 20) return;
+    const timer = window.setTimeout(() => {
+      publicationPoll.current.attempts += 1;
+      void load(true);
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [data, discovering, load]);
+  return { data, error, discoveryNotice, load, discover, discovering, catalogReady };
 }
 function AddCustomExtensionButton(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onClick, className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", children: [
@@ -4102,35 +5327,38 @@ function AddCustomExtensionButton(props) {
     "Add custom extension"
   ] });
 }
-function CustomExtensionRow(props) {
-  const handleOpen = reactExports.useCallback(() => {
-    props.onOpen(props.item.cli_id);
-  }, [props]);
-  const continuity = continuityCopy(props.item);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    ProtectionModuleRow,
-    {
-      extensionId: props.item.cli_id,
-      name: props.item.name,
-      description: props.item.source_label ? `${props.item.example_label} · ${props.item.source_label}` : props.item.example_label,
-      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
-      custom: true,
-      executables: [props.item.name],
-      onOpen: handleOpen
-    }
-  );
-}
 function LocalCliDetail(props) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = reactExports.useState(null);
-  const [commands, setCommands] = reactExports.useState(props.item.commands);
+  const [commands, setCommands] = reactExports.useState(() => prefillSuggestedStates(props.item));
+  const [providerDrafts, setProviderDrafts] = reactExports.useState({});
+  const previousItem = reactExports.useRef(props.item);
   const [busy, setBusy] = reactExports.useState(false);
+  const [catalogBusy, setCatalogBusy] = reactExports.useState(false);
+  const [catalogError, setCatalogError] = reactExports.useState(null);
+  const catalogController = reactExports.useRef(null);
+  reactExports.useEffect(() => () => catalogController.current?.abort(), []);
   const [error, setError] = reactExports.useState(null);
   const added = props.item.state !== "unset";
-  const commandsDirty = commands.some((command, index) => command.state !== props.item.commands[index]?.state);
+  const commandChanges = commandPermissionChanges(props.item.commands, commands);
+  const commandsDirty = commandChanges.length > 0;
   reactExports.useEffect(() => {
-    setCommands(props.item.commands);
-  }, [props.item.cli_id, props.item.grant_revision]);
+    const previous = previousItem.current;
+    if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
+      setPending(null);
+      setProviderDrafts({});
+      setCatalogError(null);
+      setError(previous.cli_id === props.item.cli_id ? "This extension changed. Review its permissions again." : null);
+    }
+    setCommands((current) => {
+      if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
+        return prefillSuggestedStates(props.item);
+      }
+      const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision ? props.item.mcp_catalog?.changes?.changed : [];
+      return rebaseCommandDraft(current, previous.commands, props.item.commands, changed);
+    });
+    previousItem.current = props.item;
+  }, [props.item]);
   const openPending = reactExports.useCallback(async (state) => {
     await refreshApprovalGate();
     setPending(state);
@@ -4146,16 +5374,37 @@ function LocalCliDetail(props) {
     setCommands((current) => withCommandState(current, commandId, state));
   }, []);
   const applyBulk = reactExports.useCallback((state) => {
-    setCommands((current) => applyBulkCommandState(
-      current,
-      state,
-      props.item.surface === "package-scripts" ? /* @__PURE__ */ new Set(["root", "other"]) : /* @__PURE__ */ new Set()
-    ));
+    setCommands((current) => {
+      let excluded = /* @__PURE__ */ new Set();
+      if (props.item.surface === "package-scripts") excluded = /* @__PURE__ */ new Set(["root", "other"]);
+      if (props.item.surface === "mcp") {
+        excluded = new Set(current.filter((command) => !mcpToolCanReceiveDirectAllow(command)).map((command) => command.command_id));
+      }
+      return applyBulkCommandState(current, state, excluded);
+    });
   }, [props.item.surface]);
-  const bulkTargets = props.item.surface === "package-scripts" ? enrollablePackageScriptCommands(commands) : commands;
+  let bulkTargets = commands;
+  if (props.item.surface === "package-scripts") bulkTargets = enrollablePackageScriptCommands(commands);
+  if (props.item.surface === "mcp") bulkTargets = commands.filter(mcpToolCanReceiveDirectAllow);
   const bulkState = bulkCommandState(bulkTargets);
   const bulkCopy = bulkPolicyCopy(props.item.surface);
   const continuity = customExtensionContinuityView("local-only");
+  const catalog = mcpCatalogCopy(props.item);
+  const refreshCatalog = reactExports.useCallback(async () => {
+    const controller = new AbortController();
+    catalogController.current = controller;
+    setCatalogBusy(true);
+    setCatalogError(null);
+    try {
+      await refreshMcpInventory(props.item.cli_id, controller.signal);
+      if (!controller.signal.aborted) await props.onRefresh();
+    } catch (caught) {
+      if (!controller.signal.aborted) setCatalogError(caught instanceof Error ? caught.message : "Guard could not refresh this connector. Try again.");
+    } finally {
+      setCatalogBusy(false);
+      if (catalogController.current === controller) catalogController.current = null;
+    }
+  }, [props.item.cli_id, props.onRefresh]);
   const clearPending = reactExports.useCallback(() => {
     if (!busy) setPending(null);
   }, [busy]);
@@ -4173,12 +5422,14 @@ function LocalCliDetail(props) {
         interpreter_name: props.item.interpreter_name,
         state: pending,
         previous_revision: props.revision,
-        session_nonce: randomToken$1(),
+        session_nonce: randomToken$2(),
         commands: commandStatesPayload(commands),
+        ...pending !== "unset" && Object.keys(providerDrafts).length > 0 ? { provider_actions: Object.values(providerDrafts) } : {},
         ...credentials
       };
       await previewLocalCliMutation(payload);
       await applyLocalCliMutation(payload);
+      setProviderDrafts({});
       await props.onRefresh();
       await refreshApprovalGate();
       setPending(null);
@@ -4187,7 +5438,7 @@ function LocalCliDetail(props) {
     } finally {
       setBusy(false);
     }
-  }, [commands, pending, props, refreshApprovalGate]);
+  }, [commands, providerDrafts, pending, props, refreshApprovalGate]);
   reactExports.useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
       setError("Guard could not load the local approval settings yet.");
@@ -4199,28 +5450,176 @@ function LocalCliDetail(props) {
       "Extensions"
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "mt-4 border-b border-slate-200 pb-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: props.item.name }),
+      props.item.surface !== "mcp" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-mono text-xs font-semibold tracking-[0.14em] text-slate-400", children: props.item.example_label }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "mt-2 text-2xl font-semibold tracking-tight text-brand-dark", children: customExtensionDisplayName(props.item) }),
+      props.item.surface === "mcp" && props.item.source_label ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-slate-600", children: props.item.source_label }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-slate-500", children: customExtensionStateLabel(props.item) }),
+      lastSeenCopy(props.item.last_seen_at) ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs leading-5 text-slate-500", children: lastSeenCopy(props.item.last_seen_at) }) : null,
       continuityCopy(props.item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3", "data-testid": "custom-extension-continuity", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: continuityCopy(props.item)?.title }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-slate-600", children: continuityCopy(props.item)?.description })
       ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75", children: detailPolicyCopy(props.item.surface) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 flex flex-wrap gap-3", children: added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: "Allow this extension's commands" }),
-        props.item.state === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Blocked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80", onClick: requestRemove, children: "Remove custom extension" })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }) })
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-5 flex flex-wrap gap-3", children: [
+        added ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          props.item.state === "allowed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: props.item.surface === "mcp" ? mcpPermissionStatusLabel(props.nativePublication, props.item.permission_scope) : "Allowed on this device" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAllow, children: props.item.surface === "mcp" ? "Enable tool permissions" : "Allow this extension's commands" }),
+          props.item.state === "blocked" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "inline-flex min-h-11 items-center rounded-xl bg-slate-100 px-4 text-sm font-semibold text-brand-dark", children: "Blocked" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark", onClick: requestBlock, children: "Block this extension" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80", onClick: requestRemove, children: "Remove custom extension" })
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(jsxRuntimeExports.Fragment, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestAdd, children: "Add custom extension" }) }),
+        canForgetLocalCli(props.item) && /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ForgetLocalCliButton,
+          {
+            item: props.item,
+            disabled: busy,
+            onForgotten: async () => {
+              props.onBack();
+              await props.onRefresh();
+            }
+          }
+        )
+      ] })
     ] }),
+    props.item.surface === "mcp" && added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-5 rounded-xl border border-slate-200 p-4", "aria-labelledby": "mcp-publication-heading", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-publication-heading", className: "text-sm font-semibold text-brand-dark", children: props.item.permission_scope === "configured-connection" ? "Policy status" : "Enforcement status" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-2 text-sm leading-6 text-brand-dark/75", children: nativePublicationMessage(props.nativePublication, props.item.permission_scope) }),
+      props.nativePublication?.state !== "acknowledged" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "mt-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+          disabled: busy || catalogBusy,
+          onClick: () => void props.onRefresh(),
+          children: "Check enforcement status"
+        }
+      ) : null
+    ] }) : null,
+    catalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 border-b border-slate-200 pb-5", "aria-labelledby": "mcp-inventory-heading", "aria-busy": catalogBusy, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "mcp-inventory-heading", className: "text-sm font-semibold text-brand-dark", children: catalog.title }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: catalog.description }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: "Refresh starts this connection’s configured server to list tools. It does not grant execution permission." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: refreshCatalog,
+          disabled: busy || catalogBusy || pending !== null,
+          className: "mt-3 inline-flex min-h-11 items-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:cursor-wait disabled:opacity-50",
+          children: catalogBusy ? "Refreshing inventory…" : "Refresh inventory"
+        }
+      ),
+      catalogBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: () => catalogController.current?.abort(),
+          className: "ml-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+          children: "Cancel refresh"
+        }
+      ) : null,
+      catalogError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 max-w-2xl text-sm leading-6 text-red-700", children: catalogError }) : null,
+      props.item.mcp_catalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+        "Last discovery attempt: ",
+        /* @__PURE__ */ jsxRuntimeExports.jsx("time", { dateTime: props.item.mcp_catalog.updated_at, children: new Date(props.item.mcp_catalog.updated_at).toLocaleString() })
+      ] }) : null,
+      props.item.mcp_catalog?.changes && Object.values(props.item.mcp_catalog.changes).some((names) => names.length > 0) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3 text-sm text-brand-dark/75", open: true, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Changes from the last inventory" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-2xl leading-6", children: "New and changed tools need review. Removed tools lose Allow; their Deny choices remain. Stale tools have not been confirmed by this discovery attempt." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-3 grid gap-3 sm:grid-cols-2", children: [
+          ["added", "New tools"],
+          ["changed", "Changed authority"],
+          ["removed", "Removed tools"],
+          ["stale", "Not confirmed"]
+        ].map(([key, label]) => {
+          const names = props.item.mcp_catalog?.changes?.[key] ?? [];
+          return names.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dt", { className: "font-semibold", children: [
+              label,
+              " · ",
+              names.length
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 break-words leading-6", children: [
+              names.slice(0, 10).join(", "),
+              names.length > 10 ? ` and ${names.length - 10} more` : ""
+            ] })
+          ] }, key) : null;
+        }) })
+      ] }) : null,
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-3 text-sm text-brand-dark/75", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Connection details" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono text-xs leading-6", children: props.item.example_label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+          "Protocol: ",
+          props.item.mcp_catalog?.protocol_version ?? "Not verified"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+          "Permission scope: ",
+          props.item.permission_scope === "configured-connection" ? "This configured host connection. Provider account and native host-hook binding are not verified." : props.item.permission_scope === "host-namespace" ? "This connector namespace in its host. Account changes cannot currently be verified." : props.item.permission_scope === "legacy-device" ? "This server identity across this device. This is a legacy setting." : "Not verified. Prefer Ask while the connection is unresolved."
+        ] })
+      ] })
+    ] }) : null,
+    props.item.mcp_catalog?.skills_catalog?.declared ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      McpDeclaredSkills,
+      {
+        cliId: props.item.cli_id,
+        identityHash: props.item.identity_hash,
+        revision: props.item.mcp_catalog.revision,
+        knownCount: props.item.mcp_catalog.skills_catalog.known_count,
+        complete: props.item.mcp_catalog.skills_catalog.complete
+      }
+    ) : null,
+    props.item.provider_catalog ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        McpProviderActions,
+        {
+          cliId: props.item.cli_id,
+          knownCount: props.item.provider_catalog.known_count,
+          disabled: busy,
+          authorityRevision: props.revision,
+          drafts: providerDrafts,
+          onChange: (action, state) => {
+            if (!(action.tool_slug in providerDrafts) && Object.keys(providerDrafts).length >= 100) {
+              setError("Review and save these 100 action changes before changing more.");
+              return;
+            }
+            setProviderDrafts((current) => ({
+              ...current,
+              [action.tool_slug]: { tool_slug: action.tool_slug, state, revision: action.revision }
+            }));
+          }
+        },
+        props.item.cli_id + props.item.identity_hash
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ProviderWorkflows,
+        {
+          cliId: props.item.cli_id
+        },
+        `workflow-${props.item.cli_id}-${props.item.identity_hash}`
+      ),
+      Object.keys(providerDrafts).length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+        "button",
+        {
+          type: "button",
+          disabled: busy,
+          className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white",
+          onClick: requestSaveCommands,
+          children: [
+            "Review ",
+            Object.keys(providerDrafts).length,
+            " action changes"
+          ]
+        }
+      ) : null
+    ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4", "aria-labelledby": "custom-extension-continuity-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-continuity-heading", className: "text-sm font-semibold text-brand-dark", children: continuity.title }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: props.continuity.summary || continuity.description }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs leading-5 text-brand-dark/60", children: continuity.privacyDisclosure })
     ] }),
-    added ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": "custom-extension-commands-heading", children: [
+    added || hasSuggestedRules(props.item) ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": "custom-extension-commands-heading", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-commands-heading", className: "text-lg font-semibold text-brand-dark", children: detailCatalogHeading(props.item.surface) }),
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-slate-500", children: detailCatalogHelper(props.item.surface) }),
+      commandsDirty && hasSuggestedRules(props.item) && !added ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "note", className: "mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75", children: SUGGESTED_RULES_NOTICE }) : null,
       bulkTargets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
         BulkPolicyPicker,
         {
@@ -4228,9 +5627,19 @@ function LocalCliDetail(props) {
           disabled: busy,
           onChange: applyBulk,
           groupLabel: bulkCopy.groupLabel,
+          allowLabel: props.item.surface === "mcp" ? "Allow listed" : void 0,
+          blockLabel: props.item.surface === "mcp" ? "Deny listed" : void 0,
+          mcpPolicy: props.item.surface === "mcp",
           mixedCopy: bulkCopy.mixedCopy
         }
       ) : null,
+      props.item.surface === "mcp" && bulkTargets.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+        "Bulk choices apply to ",
+        bulkTargets.length,
+        " listed ",
+        bulkTargets.length === 1 ? "tool" : "tools",
+        " with direct permissions. Execution wrappers and unlisted tools keep their separate review settings."
+      ] }) : null,
       /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
         CustomExtensionCommandList,
         {
@@ -4240,7 +5649,13 @@ function LocalCliDetail(props) {
           onChange: handleCommandState
         }
       ) }),
-      commandsDirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestSaveCommands, children: "Review command changes" }) : null
+      commandsDirty ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white", onClick: requestSaveCommands, children: [
+        "Review ",
+        commandChanges.length,
+        " ",
+        props.item.surface === "mcp" ? "tool" : "command",
+        " changes"
+      ] }) : null
     ] }) : null,
     error && !pending ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: error }) }) : null,
     pending ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -4248,6 +5663,8 @@ function LocalCliDetail(props) {
       {
         item: props.item,
         nextState: pending,
+        commandChanges: pending === "unset" ? [] : commandChanges,
+        providerUpdates: pending === "unset" ? [] : Object.values(providerDrafts),
         busy,
         error,
         approvalGate: resolvedApprovalGate,
@@ -4256,71 +5673,6 @@ function LocalCliDetail(props) {
       }
     ) : null
   ] });
-}
-function CustomExtensionReviewModal(props) {
-  const [password, setPassword] = reactExports.useState("");
-  const [totp, setTotp] = reactExports.useState("");
-  const dialogRef = useModalDialog(props.onCancel, !props.busy);
-  const title = reviewTitle(props.item.name, props.nextState);
-  const handlePassword = reactExports.useCallback((event) => {
-    setPassword(event.target.value);
-  }, []);
-  const handleTotp = reactExports.useCallback((event) => {
-    const digits = event.target.value.replace(/\D/g, "").slice(0, 6);
-    event.target.value = digits;
-    setTotp(digits);
-  }, []);
-  const handleSubmit = reactExports.useCallback((event) => {
-    event.preventDefault();
-    props.onConfirm(buildApprovalProofCredentials(props.approvalGate, {
-      approvalPassword: password,
-      approvalTotpCode: totp
-    }));
-  }, [password, props, totp]);
-  const submitDisabled = isApprovalProofSubmitDisabled(
-    props.approvalGate,
-    { approvalPassword: password, approvalTotpCode: totp },
-    props.busy
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "custom-extension-review-title", onSubmit: handleSubmit, className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extension-review-title", className: "text-xl font-semibold text-brand-dark", children: title }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/80", children: reviewModalDetail(props.approvalGate) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofFieldInputs,
-      {
-        approvalGate: props.approvalGate,
-        approvalPassword: password,
-        approvalTotpCode: totp,
-        onApprovalPasswordChange: handlePassword,
-        onApprovalTotpCodeChange: handleTotp
-      }
-    ) }),
-    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.error }) }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark", children: "Cancel" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "submit", disabled: submitDisabled, className: "min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60", children: props.busy ? "Saving…" : "Confirm" })
-    ] })
-  ] }) });
-}
-const PROTECTION_TERMS = {
-  pageTitle: "Extensions"
-};
-function looksLikeUnauthorizedSession(message) {
-  const lower = message.trim().toLowerCase();
-  if (!lower || lower === "unauthorized" || lower.includes("unauthorized") || lower.includes("session")) return true;
-  return /(^|[^0-9])401([^0-9]|$)/.test(lower);
-}
-function protectionCenterLoadError(message) {
-  if (looksLikeUnauthorizedSession(message)) {
-    return {
-      title: "This view needs a signed local session",
-      detail: "Local protection is still running on this device. Open Extensions from the local Guard dashboard and try again after Guard signs this session."
-    };
-  }
-  return {
-    title: "Extensions unavailable",
-    detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
-  };
 }
 function effectiveStatusKey(effective, options = {}) {
   const managed = effective.managed_controls;
@@ -4356,907 +5708,6 @@ function effectiveStatusKey(effective, options = {}) {
       }
     } : null
   });
-}
-const DEFAULT_TERMINAL_COMMANDS = {
-  enroll: "hol-guard command controls enroll",
-  recover_authority: "hol-guard command controls recover-authority"
-};
-function authorityNoticeView(health, approvalGateReady, terminalCommands2) {
-  const commands = terminalCommands2 ?? DEFAULT_TERMINAL_COMMANDS;
-  const terminalName = terminalCommands2?.shell === "powershell" ? "PowerShell" : "your terminal";
-  switch (health) {
-    case "tampered":
-    case "recovery-required":
-      return {
-        tone: "warning",
-        title: "Protection needs repair",
-        body: "Guard found a problem with this device's trusted protection settings and is staying fail-safe. Protection changes stay locked until the settings are rebuilt with your approval. Commands keep being checked in the meantime.",
-        action: { kind: "repair" },
-        actionLabel: "Repair protection",
-        actionDetail: "Rebuilding the trusted settings needs your approval password. Guard verifies the repair before protection changes unlock again.",
-        command: commands.recover_authority,
-        commandLabel: "Repair from the terminal",
-        copyButtonLabel: "Copy repair command",
-        terminalSummary: `Run this in ${terminalName} if the button above cannot reach the approval gate.`
-      };
-    case "degraded-unacknowledged":
-      return {
-        tone: "warning",
-        title: "Protection is limited",
-        body: "Guard cannot fully verify the trusted protection settings and is staying fail-safe until that is resolved. Acknowledging records the limited state honestly — it does not restore full protection.",
-        action: { kind: "acknowledge" },
-        actionLabel: "Acknowledge limited state",
-        actionDetail: "Acknowledging the limited state needs your approval password. Guard keeps protecting fail-safe afterwards.",
-        command: commands.recover_authority,
-        commandLabel: "Repair from the terminal",
-        copyButtonLabel: "Copy repair command",
-        terminalSummary: `A full repair runs from ${terminalName}.`
-      };
-    case "degraded-acknowledged":
-      return {
-        tone: "warning",
-        title: "Protection is limited",
-        body: "The limited state is acknowledged. Guard keeps protection changes locked until the trusted settings are rebuilt from this device's terminal. Commands keep being checked in the meantime.",
-        action: { kind: "none" },
-        actionLabel: null,
-        actionDetail: null,
-        command: commands.recover_authority,
-        commandLabel: "Repair from the terminal",
-        copyButtonLabel: "Copy repair command",
-        terminalSummary: `Run this in ${terminalName} to rebuild the trusted settings.`
-      };
-    default:
-      if (approvalGateReady === null) {
-        return {
-          tone: "info",
-          title: "Checking approval setup",
-          body: "Guard is checking whether this device is ready to enroll trusted protection settings. Enrollment steps will appear when the check finishes. If this takes too long, check again.",
-          action: { kind: "none" },
-          actionLabel: null,
-          actionDetail: null,
-          command: "",
-          commandLabel: "",
-          copyButtonLabel: "",
-          terminalSummary: ""
-        };
-      }
-      if (!approvalGateReady) {
-        return {
-          tone: "info",
-          title: "Set up local approval before enrollment",
-          body: "Extension controls require this device's local approval gate. Guard Cloud sign-in and account MFA are separate and do not enable this gate. In Settings > Approval gate, enable Ask for proof on allow decisions and set an Approval password, then return here to enroll. Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown.",
-          action: { kind: "configure-approval" },
-          actionLabel: "Set up approval",
-          actionDetail: null,
-          command: "",
-          commandLabel: "",
-          copyButtonLabel: "",
-          terminalSummary: ""
-        };
-      }
-      return {
-        tone: "info",
-        title: "Finish setting up protection",
-        body: "Command protection settings are not enrolled on this device yet. One command in your terminal creates this device's trusted settings. Local command checking already runs without them.",
-        action: { kind: "none" },
-        actionLabel: null,
-        actionDetail: null,
-        command: commands.enroll,
-        commandLabel: "Enroll from the terminal",
-        copyButtonLabel: "Copy setup command",
-        terminalSummary: `Run this in ${terminalName} to create the trusted settings.`
-      };
-  }
-}
-function ProtectionAuthorityNotice(props) {
-  const health = props.effective.health;
-  const approvalGateReady = props.approvalGate === null ? null : props.approvalGate.configured && props.approvalGate.enabled;
-  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands);
-  const [proofOpen, setProofOpen] = reactExports.useState(false);
-  const [pendingAction, setPendingAction] = reactExports.useState(null);
-  const [copyState, setCopyState] = reactExports.useState("idle");
-  const [checkPending, setCheckPending] = reactExports.useState(false);
-  const [checkComplete, setCheckComplete] = reactExports.useState(false);
-  const [checkError, setCheckError] = reactExports.useState(null);
-  const checkBaselineRef = reactExports.useRef(null);
-  reactExports.useEffect(() => {
-    if (props.status) setProofOpen(false);
-  }, [props.status]);
-  if (health === "protected") return null;
-  const gatePending = props.approvalGate === null;
-  const copyCommand = async () => {
-    try {
-      await navigator.clipboard.writeText(view.command);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-  };
-  const checkAgain = async () => {
-    if (checkPending || props.busy) return;
-    checkBaselineRef.current = effectiveStatusKey(props.effective, { approvalGate: props.approvalGate });
-    setCheckPending(true);
-    setCheckComplete(false);
-    setCheckError(null);
-    try {
-      await props.onCheckAgain();
-      setCheckComplete(true);
-    } catch {
-      setCheckError("Guard could not refresh the current protection status. The displayed state remains in force; try again.");
-    } finally {
-      setCheckPending(false);
-    }
-  };
-  const warning2 = view.tone === "warning";
-  const panelClass = warning2 ? "border border-amber-200 bg-amber-50" : "border border-brand-blue/25 bg-[rgba(85,153,254,0.06)]";
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-authority-notice-heading", className: `mt-4 rounded-2xl p-5 sm:p-6 ${panelClass}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-      warning2 ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0 text-amber-600", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-authority-notice-heading", className: `text-base font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.title }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 max-w-3xl text-sm leading-6 ${warning2 ? "text-amber-950/90" : "text-brand-dark/80"}`, children: view.body }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-2", children: [
-          view.actionLabel && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              "aria-busy": props.busy || checkPending,
-              disabled: props.busy || checkPending || gatePending,
-              onClick: () => {
-                if (view.action.kind === "configure-approval") {
-                  props.onOpenApprovalSettings();
-                  return;
-                }
-                setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge");
-                setProofOpen(true);
-              },
-              className: "inline-flex min-h-11 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60",
-              children: gatePending && !props.error ? "Loading approval settings…" : view.actionLabel
-            }
-          ) : null,
-          view.action.kind === "none" && view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: () => {
-                void copyCommand();
-              },
-              className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark",
-              children: [
-                copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
-                copyState === "copied" ? "Command copied" : view.copyButtonLabel
-              ]
-            }
-          ) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              disabled: props.busy || checkPending,
-              "aria-busy": checkPending,
-              onClick: () => {
-                void checkAgain();
-              },
-              className: "inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60",
-              children: checkPending ? "Checking…" : "Check again"
-            }
-          )
-        ] }),
-        props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
-        checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
-        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
-        checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
-        props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
-        props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
-        view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning2 ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning2 ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-brand-dark", children: view.command }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              "button",
-              {
-                type: "button",
-                onClick: () => {
-                  void copyCommand();
-                },
-                className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40",
-                children: [
-                  copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
-                  copyState === "copied" ? "Copied" : "Copy command"
-                ]
-              }
-            )
-          ] })
-        ] }) : null
-      ] })
-    ] }),
-    proofOpen && (view.action.kind === "repair" || view.action.kind === "acknowledge") ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ApprovalProofModal,
-      {
-        title: view.action.kind === "repair" ? "Repair protection" : "Acknowledge limited state",
-        detail: view.actionDetail ?? "",
-        confirmLabel: view.actionLabel ?? "Confirm",
-        approvalGate: props.approvalGate,
-        busy: props.busy,
-        error: props.error,
-        onCancel: () => {
-          if (!props.busy) setProofOpen(false);
-        },
-        onConfirm: (credentials) => {
-          props.onAction(view.action.kind === "repair" ? "repair" : "acknowledge", credentials);
-        }
-      }
-    ) : null
-  ] });
-}
-const PROTECTION_CATEGORIES = [
-  { id: "source-control", label: "Source control", description: "Protect repository history, branches, and source-control operations.", searchAliases: ["git", "github", "repository", "source"] },
-  { id: "packages", label: "Packages and dependencies", description: "Protect dependency installs, package managers, and supply-chain changes.", searchAliases: ["npm", "pnpm", "yarn", "pip", "package", "dependency"] },
-  { id: "files-secrets", label: "Files and secrets", description: "Protect sensitive files, credentials, and secret-bearing operations.", searchAliases: ["file", "secret", "credential", "environment"] },
-  { id: "cloud-infrastructure", label: "Cloud and infrastructure", description: "Protect infrastructure, cloud resources, and administrative actions.", searchAliases: ["aws", "gcp", "azure", "terraform", "cloud", "infrastructure"] },
-  { id: "network-downloads", label: "Network and downloads", description: "Protect downloads, remote access, and network-facing operations.", searchAliases: ["curl", "wget", "ssh", "network", "download", "remote"] },
-  { id: "data-databases", label: "Data and databases", description: "Protect databases, storage, backups, and destructive data operations.", searchAliases: ["database", "sql", "postgres", "mysql", "redis", "data", "backup"] },
-  { id: "deployments-ci", label: "Deployments and CI", description: "Protect deployment, build, release, and CI/CD operations.", searchAliases: ["deploy", "release", "ci", "cd", "workflow", "pipeline"] },
-  { id: "messaging-collaboration", label: "Messaging and collaboration", description: "Protect actions in messaging, search, and collaboration tools.", searchAliases: ["slack", "message", "collaboration", "search"] },
-  { id: "system-shell", label: "System and shell actions", description: "Protect high-impact local shell, process, and system operations.", searchAliases: ["shell", "system", "bash", "terminal", "process"] },
-  { id: "ai-workflows", label: "AI tools and agent workflows", description: "Protect AI-agent, tool, and automated workflow actions.", searchAliases: ["ai", "agent", "mcp", "tool", "workflow"] }
-];
-new Map(PROTECTION_CATEGORIES.map((category) => [category.id, category]));
-function searchableExtensionText(extension2) {
-  return [
-    extension2.extension_id,
-    extension2.name,
-    extension2.description,
-    ...extension2.ecosystem_ids,
-    ...extension2.executables,
-    ...extension2.action_classes,
-    ...extension2.risk_classes
-  ].join(" ").toLowerCase();
-}
-function protectionCategoryIdForExtension(extension2) {
-  const text2 = searchableExtensionText(extension2);
-  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text2)) return "source-control";
-  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text2)) return "packages";
-  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text2)) return "files-secrets";
-  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text2)) return "cloud-infrastructure";
-  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text2)) return "network-downloads";
-  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text2)) return "data-databases";
-  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text2)) return "deployments-ci";
-  if (/slack|discord|message|collaboration|search|email/.test(text2)) return "messaging-collaboration";
-  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text2)) return "ai-workflows";
-  return "system-shell";
-}
-const EMPTY_CATALOG_FILTERS = {
-  trusts: [],
-  kinds: [],
-  areas: []
-};
-const CATALOG_TRUST_FILTERS = [
-  "first-party",
-  "trusted-library",
-  "external"
-];
-const CATALOG_KIND_FILTERS = ["commands", "mcp"];
-function catalogFiltersActive(filters) {
-  return filters.trusts.length > 0 || filters.kinds.length > 0 || filters.areas.length > 0;
-}
-function catalogTrustLabel(trust) {
-  if (trust === "first-party") return "Built in";
-  if (trust === "trusted-library") return "Trusted";
-  return "External";
-}
-function catalogKindLabel(kind) {
-  if (kind === "mcp") return "MCP";
-  return "Commands";
-}
-function catalogItemKind(extension2) {
-  if (extension2.surface === "mcp") return "mcp";
-  return "commands";
-}
-function toggleCatalogFilterValue(selected, value) {
-  if (selected.includes(value)) return selected.filter((item) => item !== value);
-  return [...selected, value];
-}
-function catalogItemMatchesFilters(extension2, filters) {
-  if (filters.trusts.length > 0 && !filters.trusts.includes(extension2.trust_class)) return false;
-  if (filters.kinds.length > 0 && !filters.kinds.includes(catalogItemKind(extension2))) return false;
-  if (filters.areas.length > 0) {
-    const area = protectionCategoryIdForExtension(extension2);
-    if (!filters.areas.includes(area)) return false;
-  }
-  return true;
-}
-function filterCatalogExtensions(extensions, filters) {
-  if (!catalogFiltersActive(filters)) return [...extensions];
-  return extensions.filter((extension2) => catalogItemMatchesFilters(extension2, filters));
-}
-function customItemMatchesKind(item, kinds) {
-  if (kinds.length === 0) return true;
-  if (item.surface === "mcp") return kinds.includes("mcp");
-  return kinds.includes("commands");
-}
-function customItemMatchesFilters(item, filters) {
-  if (filters.trusts.length > 0 || filters.areas.length > 0) return false;
-  return customItemMatchesKind(item, filters.kinds);
-}
-function sameFilterValues(left, right) {
-  if (left.length !== right.length) return false;
-  return left.every((item, index) => item === right[index]);
-}
-function catalogFiltersEqual(left, right) {
-  return sameFilterValues(left.trusts, right.trusts) && sameFilterValues(left.kinds, right.kinds) && sameFilterValues(left.areas, right.areas);
-}
-function pruneCatalogFilters(filters, extensions) {
-  const presentTrusts = new Set(extensions.map((item) => item.trust_class));
-  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
-  const presentAreas = new Set(populatedCatalogAreas(extensions));
-  return {
-    trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
-    kinds: filters.kinds.filter((kind) => presentKinds.has(kind)),
-    areas: filters.areas.filter((area) => presentAreas.has(area))
-  };
-}
-function catalogToolUnit(count) {
-  if (count === 1) return "tool";
-  return "tools";
-}
-function catalogFilterCountCopy(visible, total, filtering) {
-  if (!filtering) return `${total} ${catalogToolUnit(total)}`;
-  return `${visible} of ${total} ${catalogToolUnit(total)}`;
-}
-function catalogFilterChipAriaLabel(label, count) {
-  return `${label}, ${count} ${catalogToolUnit(count)}`;
-}
-function populatedCatalogAreas(extensions) {
-  const present = /* @__PURE__ */ new Set();
-  for (const extension2 of extensions) {
-    present.add(protectionCategoryIdForExtension(extension2));
-  }
-  return PROTECTION_CATEGORIES.map((category) => category.id).filter((id2) => present.has(id2));
-}
-function populatedCatalogAreaOptions(extensions) {
-  const present = new Set(populatedCatalogAreas(extensions));
-  return PROTECTION_CATEGORIES.filter((category) => present.has(category.id)).map((category) => ({ id: category.id, label: category.label }));
-}
-function catalogFilterChipCount(extensions, filters, patch) {
-  return filterCatalogExtensions(extensions, { ...filters, ...patch }).length;
-}
-function CatalogFilterOption(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      "aria-pressed": props.pressed,
-      "aria-label": catalogFilterChipAriaLabel(props.label, props.count),
-      disabled: props.disabled,
-      onClick: props.onToggle,
-      className: "group flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-[rgba(63,65,116,0.16)] bg-white px-2.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid size-4 shrink-0 place-items-center text-brand-blue", children: props.pressed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4", "aria-hidden": "true" }) : null }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.label })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65", children: props.count })
-      ]
-    }
-  );
-}
-function ActiveFilterToken(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      "aria-label": `Remove ${props.valueLabel} ${props.groupLabel.toLowerCase()} filter`,
-      onClick: props.onRemove,
-      className: "group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-blue/45 bg-brand-blue/10 py-1 pl-2.5 pr-2 text-xs font-semibold text-brand-dark transition-colors hover:border-brand-blue hover:bg-brand-blue/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue motion-reduce:transition-none",
-      children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-dark/65", children: [
-          props.groupLabel,
-          ":"
-        ] }),
-        props.valueLabel,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-3.5 shrink-0 text-brand-dark/55 group-hover:text-brand-dark", "aria-hidden": "true" })
-      ]
-    }
-  );
-}
-function CatalogFilterGroup(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: `min-w-0 ${props.className ?? ""}`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold text-brand-dark/55", children: props.legend }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-col gap-1.5", children: props.children })
-  ] });
-}
-function TrustFilterOption(props) {
-  const handleToggle = reactExports.useCallback(() => {
-    props.onToggle(props.value);
-  }, [props]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CatalogFilterOption,
-    {
-      label: catalogTrustLabel(props.value),
-      count: props.count,
-      pressed: props.pressed,
-      disabled: props.count === 0 && !props.pressed,
-      onToggle: handleToggle
-    }
-  );
-}
-function KindFilterOption(props) {
-  const handleToggle = reactExports.useCallback(() => {
-    props.onToggle(props.value);
-  }, [props]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CatalogFilterOption,
-    {
-      label: catalogKindLabel(props.value),
-      count: props.count,
-      pressed: props.pressed,
-      disabled: props.count === 0 && !props.pressed,
-      onToggle: handleToggle
-    }
-  );
-}
-function AreaFilterOption(props) {
-  const handleToggle = reactExports.useCallback(() => {
-    props.onToggle(props.value);
-  }, [props]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    CatalogFilterOption,
-    {
-      label: props.label,
-      count: props.count,
-      pressed: props.pressed,
-      disabled: props.count === 0 && !props.pressed,
-      onToggle: handleToggle
-    }
-  );
-}
-function CatalogFilterBar(props) {
-  const [panelOpen, setPanelOpen] = reactExports.useState(false);
-  const panelId = reactExports.useId();
-  const triggerRef = reactExports.useRef(null);
-  const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
-  const filtering = catalogFiltersActive(props.filters);
-  const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
-  const handleToggleTrust = reactExports.useCallback((value) => {
-    props.onChange({
-      ...props.filters,
-      trusts: toggleCatalogFilterValue(props.filters.trusts, value)
-    });
-  }, [props]);
-  const handleToggleKind = reactExports.useCallback((value) => {
-    props.onChange({
-      ...props.filters,
-      kinds: toggleCatalogFilterValue(props.filters.kinds, value)
-    });
-  }, [props]);
-  const handleToggleArea = reactExports.useCallback((value) => {
-    props.onChange({
-      ...props.filters,
-      areas: toggleCatalogFilterValue(props.filters.areas, value)
-    });
-  }, [props]);
-  const handleClear = reactExports.useCallback(() => {
-    props.onChange(EMPTY_CATALOG_FILTERS);
-  }, [props]);
-  const handleKeyDown = reactExports.useCallback((event) => {
-    if (event.key !== "Escape" || !panelOpen) return;
-    event.stopPropagation();
-    setPanelOpen(false);
-    triggerRef.current?.focus();
-  }, [panelOpen]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 scroll-mt-28", "data-testid": "catalog-filters", onKeyDown: handleKeyDown, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          ref: triggerRef,
-          "aria-expanded": panelOpen,
-          "aria-controls": panelId,
-          onClick: () => setPanelOpen((open) => !open),
-          className: "inline-flex min-h-10 items-center gap-2 rounded-lg border border-[rgba(63,65,116,0.18)] bg-white px-3 text-xs font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
-          children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
-            "Filters",
-            activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: activeCount }) : null,
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              HiMiniChevronDown,
-              {
-                className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${panelOpen ? "rotate-180" : ""}`,
-                "aria-hidden": "true"
-              }
-            )
-          ]
-        }
-      ),
-      props.filters.trusts.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ActiveFilterToken,
-        {
-          groupLabel: "Trust",
-          valueLabel: catalogTrustLabel(trust),
-          onRemove: () => handleToggleTrust(trust)
-        },
-        `trust-${trust}`
-      )),
-      props.filters.kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ActiveFilterToken,
-        {
-          groupLabel: "Kind",
-          valueLabel: catalogKindLabel(kind),
-          onRemove: () => handleToggleKind(kind)
-        },
-        `kind-${kind}`
-      )),
-      props.filters.areas.map((areaId) => {
-        const area = areas.find((option) => option.id === areaId);
-        return /* @__PURE__ */ jsxRuntimeExports.jsx(
-          ActiveFilterToken,
-          {
-            groupLabel: "Area",
-            valueLabel: area?.label ?? areaId,
-            onRemove: () => handleToggleArea(areaId)
-          },
-          `area-${areaId}`
-        );
-      }),
-      filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
-        "Clear filters"
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "hidden text-xs text-brand-dark/70 sm:inline", children: "Narrow by trust, kind, or area." })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      "div",
-      {
-        id: panelId,
-        hidden: !panelOpen,
-        className: "mt-3 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-sm sm:p-5",
-        children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            TrustFilterOption,
-            {
-              value: trust,
-              count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
-              pressed: props.filters.trusts.includes(trust),
-              onToggle: handleToggleTrust
-            },
-            trust
-          )) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            KindFilterOption,
-            {
-              value: kind,
-              count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
-              pressed: props.filters.kinds.includes(kind),
-              onToggle: handleToggleKind
-            },
-            kind
-          )) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-            AreaFilterOption,
-            {
-              value: area.id,
-              label: area.label,
-              count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
-              pressed: props.filters.areas.includes(area.id),
-              onToggle: handleToggleArea
-            },
-            area.id
-          )) }) })
-        ] })
-      }
-    )
-  ] });
-}
-const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
-  simpleRuleRenderCap: 500,
-  recentDecisionCap: 20,
-  humanSearchCharacterCap: 160,
-  humanSearchTermCap: 8,
-  developerRelationshipCap: 1024
-});
-const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
-function patternSearchText(extension2, permission2) {
-  return [
-    permission2.label,
-    permission2.description,
-    permission2.example_command ?? "",
-    permission2.family ?? "",
-    permission2.permission_id,
-    extension2.name,
-    extension2.extension_id,
-    ...extension2.executables
-  ].join(" ").toLowerCase();
-}
-function searchCommandPatterns(extensions, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
-  const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
-  if (!normalized) return [];
-  const terms = normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap);
-  const matches = [];
-  for (const extension2 of extensions) {
-    for (const permission2 of extension2.permissions) {
-      const text2 = patternSearchText(extension2, permission2);
-      if (terms.every((term) => text2.includes(term))) {
-        matches.push({ extension: extension2, permission: permission2, score: terms.length });
-      }
-    }
-  }
-  return matches.sort(
-    (left, right) => right.permission.risk_tier.localeCompare(left.permission.risk_tier) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
-  ).slice(0, limit);
-}
-function CatalogSearchRow(props) {
-  const handleOpen = reactExports.useCallback(() => {
-    props.onOpen(props.extension);
-  }, [props]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    ProtectionModuleRow,
-    {
-      extensionId: props.extension.extension_id,
-      name: extensionDisplayName(props.extension.name),
-      description: props.extension.description,
-      behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
-      required: props.extension.required,
-      mcp: props.extension.surface === "mcp",
-      external: props.extension.trust_class === "external",
-      executables: props.extension.executables,
-      ecosystemIds: props.extension.ecosystem_ids,
-      onOpen: handleOpen
-    }
-  );
-}
-function PatternSearchConsole(props) {
-  const [internalQuery, setInternalQuery] = reactExports.useState("");
-  const query = props.query ?? internalQuery;
-  const setQuery = props.onQueryChange ?? setInternalQuery;
-  const [focused, setFocused] = reactExports.useState(false);
-  const inputRef = reactExports.useRef(null);
-  const searchActive = props.active ?? true;
-  const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
-  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
-  const {
-    baseEffective,
-    dirty,
-    preview,
-    previewBusy,
-    applyBusy,
-    reviewOpen,
-    error,
-    stale,
-    refreshRequired,
-    lastApplied,
-    undoLastApplied,
-    changedPermissionCount,
-    setReviewOpen,
-    setPermissionState,
-    setPermissionStates,
-    resetDraft,
-    runPreview,
-    apply,
-    permissionState
-  } = draft;
-  reactExports.useEffect(() => {
-    if (!searchActive) return;
-    const onKeyDown = (event) => {
-      if (event.key !== "/" || event.defaultPrevented) return;
-      const target2 = event.target;
-      if (target2 && (target2.tagName === "INPUT" || target2.tagName === "TEXTAREA" || target2.isContentEditable)) return;
-      event.preventDefault();
-      inputRef.current?.focus();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [searchActive]);
-  const totalPermissionCount = reactExports.useMemo(
-    () => props.catalog.reduce((total, extension2) => total + extension2.permissions.length, 0),
-    [props.catalog]
-  );
-  const allMatches = reactExports.useMemo(
-    () => searchCommandPatterns(props.catalog, query, totalPermissionCount),
-    [props.catalog, query, totalPermissionCount]
-  );
-  const matches = reactExports.useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
-  const toolMatches = reactExports.useMemo(() => {
-    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    if (!terms.length) return [];
-    return props.catalog.filter((extension2) => {
-      const text2 = [extension2.name, extension2.extension_id, ...extension2.executables, ...extension2.aliases].join(" ").toLowerCase();
-      return terms.every((term) => text2.includes(term));
-    });
-  }, [props.catalog, query]);
-  const grouped = reactExports.useMemo(() => {
-    const groups = /* @__PURE__ */ new Map();
-    for (const match of matches) {
-      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissionIds: [] };
-      group.permissionIds.push(match.permission.permission_id);
-      groups.set(match.extension.extension_id, group);
-    }
-    return [...groups.values()];
-  }, [matches]);
-  const involvedPermissions = reactExports.useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
-  const changeCount = changedPermissionCount;
-  const showResults = query.trim().length > 0;
-  reactExports.useEffect(() => {
-    if (!reviewOpen) return;
-    void resolveApprovalGate({ failClosed: true }).catch(() => {
-    });
-  }, [reviewOpen, resolveApprovalGate]);
-  const managedCount = involvedPermissions.filter(
-    (permission2) => managedPermissionState(baseEffective, permission2.permission_id) !== null
-  ).length;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "pattern-search-heading", className: "mt-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "pattern-search-heading", className: "sr-only", children: "Search command patterns" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search command patterns" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "input",
-        {
-          ref: inputRef,
-          type: "text",
-          role: "searchbox",
-          enterKeyHint: "search",
-          value: query,
-          onFocus: () => setFocused(true),
-          onChange: (event) => setQuery(event.target.value.slice(0, 160)),
-          placeholder: 'Search any command Guard watches — "squash", "git push --force", "kubectl"…',
-          "aria-describedby": "pattern-search-hint",
-          className: "min-h-12 w-full rounded-2xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
-        }
-      ),
-      showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: () => {
-            setQuery("");
-            inputRef.current?.focus();
-          },
-          "aria-label": "Clear search",
-          className: "absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark",
-          children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" })
-        }
-      ) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
-    props.actionSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.actionSlot }) : null,
-    showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PolicyEditingLocks,
-      {
-        health: baseEffective.health,
-        globalLockdown: baseEffective.global_lockdown,
-        refreshRequired
-      }
-    ) : null,
-    showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
-      matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          QuickApplyToolbar,
-          {
-            permissions: involvedPermissions,
-            effective: baseEffective,
-            disabled: refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected",
-            permissionState,
-            onApply: setPermissionStates
-          }
-        ),
-        allMatches.length > matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-3 text-xs text-brand-dark/65", children: [
-          "Showing ",
-          matches.length,
-          " of ",
-          allMatches.length,
-          " matching capabilities. Quick actions apply to all ",
-          allMatches.length,
-          "."
-        ] }) : null
-      ] }) : null,
-      grouped.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": `${group.extension.name} patterns`, className: "guard-pattern-family", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "guard-pattern-family-heading", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            ExtensionBrandMark,
-            {
-              extension_id: group.extension.extension_id,
-              name: group.extension.name,
-              executables: group.extension.executables,
-              ecosystem_ids: group.extension.ecosystem_ids,
-              size: "sm"
-            }
-          ),
-          group.extension.executables.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.extension.executables[0] }) : null,
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: extensionDisplayName(group.extension.name) })
-        ] }),
-        group.permissionIds.map((permissionId) => {
-          const permission2 = group.extension.permissions.find((item) => item.permission_id === permissionId);
-          if (!permission2) return null;
-          return /* @__PURE__ */ jsxRuntimeExports.jsx(
-            PermissionPolicyRow,
-            {
-              permission: permission2,
-              extension: group.extension,
-              effective: baseEffective,
-              draftState: permissionState(permission2.permission_id),
-              disabled: refreshRequired,
-              onChange: (state) => setPermissionState(permission2.permission_id, state)
-            },
-            permission2.permission_id
-          );
-        })
-      ] }, group.extension.extension_id)),
-      toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Matching tools", className: "guard-pattern-family", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "guard-pattern-family-heading", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tools" }) }),
-        toolMatches.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CatalogSearchRow,
-          {
-            extension: extension2,
-            effective: props.effective,
-            onOpen: props.onOpenExtension
-          },
-          extension2.extension_id
-        ))
-      ] }) : null,
-      managedCount ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-indigo-950", children: [
-        managedCount,
-        " matched setting",
-        managedCount === 1 ? "" : "s are",
-        " managed by your organization and cannot be weakened on this device."
-      ] }) : null
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No command patterns or tools match this search." }) : null,
-    dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
-        changeCount,
-        " unsaved setting change",
-        changeCount === 1 ? "" : "s",
-        "."
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy || applyBusy, onClick: resetDraft, className: "min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark", children: "Reset changes" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: previewBusy || applyBusy || baseEffective.health !== "protected" || stale, onClick: () => {
-          void runPreview();
-        }, className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40", children: [
-          previewBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }),
-          "Review ",
-          changeCount,
-          " change",
-          changeCount === 1 ? "" : "s"
-        ] })
-      ] })
-    ] }) }) : null,
-    lastApplied ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      AppliedPolicyToast,
-      {
-        revision: lastApplied.revision,
-        onUndo: () => {
-          undoLastApplied();
-        },
-        onViewHistory: () => {
-          document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      }
-    ) : null,
-    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "alert", className: "mt-4 text-sm text-red-950", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
-    ] }) }) : dirty && !preview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change." })
-    ] }) : null,
-    reviewOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PolicyReviewSheet,
-      {
-        preview,
-        approvalGate: resolvedApprovalGate,
-        busy: applyBusy,
-        error,
-        onClose: () => {
-          if (!applyBusy) setReviewOpen(false);
-        },
-        onApply: (credentials) => {
-          void apply(credentials);
-        }
-      }
-    ) : null
-  ] });
 }
 function safeCloudSignInHref(value) {
   if (!value) return null;
@@ -5302,11 +5753,17 @@ function ManagedControlsPrimaryAction(props) {
   }
   return null;
 }
-function layerTargetsExtension(effective, extension2, kind) {
-  const permissionIds = new Set(extension2.permissions.map((permission2) => permission2.permission_id));
+function extensionPermissionIds(effective, extension) {
+  const ids = new Set(
+    (effective.projection?.permissions ?? []).filter((item) => item.extension_id === extension.extension_id).map((item) => item.permission_id)
+  );
+  if ("permissions" in extension) for (const permission of extension.permissions) ids.add(permission.permission_id);
+  return ids;
+}
+function layerTargetsExtension(effective, extension, permissionIds, kind) {
   return effective.layers.some(
     (layer) => layer.kind === kind && layer.controls.some(
-      (control) => control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
+      (control) => control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id)
     )
   );
 }
@@ -5314,53 +5771,51 @@ function managedSource(effective) {
   const managed = effective.managed_controls;
   return managed?.authority_mode === "managed-restrictive" ? `Managed by ${managed.workspace_id}` : "Synced from Guard Cloud";
 }
-function extensionProtectionAuthority(effective, extension2) {
+function extensionProtectionAuthority(effective, extension) {
   if (effective.global_lockdown) {
     return { effectiveState: "lockdown", source: "Emergency Lockdown", sources: ["Emergency Lockdown"] };
   }
-  const permissionIds = new Set(extension2.permissions.map((permission2) => permission2.permission_id));
+  const permissionIds = extensionPermissionIds(effective, extension);
   const extensionProjection = effective.projection?.extensions.find(
-    (item) => item.extension_id === extension2.extension_id
+    (item) => item.extension_id === extension.extension_id
   );
   const permissionProjections = effective.projection?.permissions.filter(
-    (item) => item.extension_id === extension2.extension_id || permissionIds.has(item.permission_id)
+    (item) => item.extension_id === extension.extension_id || permissionIds.has(item.permission_id)
   ) ?? [];
   const projections = extensionProjection ? [extensionProjection, ...permissionProjections] : permissionProjections;
   const managed = managedSource(effective);
-  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension2, "signed-cloud");
-  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension2, "local-admin");
+  const hasManaged = projections.some((item) => item.managed_state !== "inherited") || layerTargetsExtension(effective, extension, permissionIds, "signed-cloud");
+  const hasLocal = projections.some((item) => item.local_state !== "inherited") || layerTargetsExtension(effective, extension, permissionIds, "local-admin");
   const sources = [];
   if (hasManaged) sources.push(managed);
   if (hasLocal) sources.push("Set on this device");
-  if (sources.length === 0) sources.push(extension2.required ? "Required by Guard" : "Recommended by Guard");
+  if (sources.length === 0) sources.push(extension.required ? "Required by Guard" : "Recommended by Guard");
   const managedBlocks = projections.some(
     (item) => item.effective_state === "blocked" && item.managed_state === "disabled"
   ) || effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
-    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
   ));
   const localBlocks = projections.some(
     (item) => item.effective_state === "blocked" && item.local_state === "disabled"
   ) || effective.layers.some((layer) => layer.kind === "local-admin" && layer.controls.some(
-    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension2.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
+    (control) => control.state === "disabled" && (control.target_kind === "extension" && control.target_id === extension.extension_id || control.target_kind === "permission" && permissionIds.has(control.target_id))
   ));
-  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension2) === "disabled";
-  const permissionStates = extension2.permissions.map(
-    (permission2) => permissionEffectiveState(effective, extension2, permission2)
-  );
+  const extensionBlocked = extensionProjection?.effective_state === "blocked" || extensionEffectiveState(effective, extension) === "disabled";
+  const permissionStates = "permissions" in extension ? extension.permissions.map((permission) => permissionEffectiveState(effective, extension, permission)) : permissionProjections.map((item) => item.effective_state === "allowed" ? "enabled" : "disabled");
   const blockedPermissionCount = permissionStates.filter((state) => state === "disabled").length;
   let effectiveState;
   if (extensionBlocked) effectiveState = "blocked";
   else if (blockedPermissionCount > 0 && blockedPermissionCount < permissionStates.length) effectiveState = "partial";
   else if (blockedPermissionCount > 0 || localBlocks || managedBlocks) effectiveState = "blocked";
-  else if (extension2.required) effectiveState = "required";
-  else effectiveState = extensionEffectiveState(effective, extension2) === "enabled" ? "allowed" : "blocked";
+  else if (extension.required) effectiveState = "required";
+  else effectiveState = extensionEffectiveState(effective, extension) === "enabled" ? "allowed" : "blocked";
   let source = sources.at(-1) ?? "Recommended by Guard";
   if (localBlocks) source = "Set on this device";
   if (managedBlocks) source = managed;
   return { effectiveState, source, sources };
 }
-function extensionProtectionSource(effective, extension2) {
-  return extensionProtectionAuthority(effective, extension2).source;
+function extensionProtectionSource(effective, extension) {
+  return extensionProtectionAuthority(effective, extension).source;
 }
 function cloudBase(runtime) {
   const candidate = runtime?.dashboard_url?.trim() || runtime?.connect_url?.trim();
@@ -5378,9 +5833,9 @@ function recoveryNotice(recovery) {
   }
   return "Guard Cloud data is stale. Local protection continues with the last verified authority; check again to see whether a newer Control Set is available.";
 }
-function extensionLocalProtectionInput(extension2, effective, runtime) {
+function extensionLocalProtectionInput(extension, effective, runtime) {
   const managed = effective.managed_controls;
-  const authority = extensionProtectionAuthority(effective, extension2);
+  const authority = extensionProtectionAuthority(effective, extension);
   const failureCodes = new Set(effective.failures.map((failure) => failure.code.toLowerCase()));
   let recovery;
   if (failureCodes.has("unsupported-control-schema")) recovery = "unsupported-version";
@@ -5388,8 +5843,8 @@ function extensionLocalProtectionInput(extension2, effective, runtime) {
   else if (runtime?.cloud_policy_sync_error || [...failureCodes].some((code) => code.includes("stale"))) recovery = "stale";
   else if (effective.health !== "protected") recovery = "degraded";
   return {
-    extensionName: extension2.name,
-    extensionId: extension2.extension_id,
+    extensionName: extension.name,
+    extensionId: extension.extension_id,
     effectiveState: authority.effectiveState,
     source: authority.source,
     sources: authority.sources,
@@ -5416,7 +5871,7 @@ function ExtensionManagedControlsPanel(props) {
   const input = extensionLocalProtectionInput(props.extension, props.effective, props.runtime);
   const view = buildLocalProtectionView(input);
   const connected = props.runtime?.cloud_state === "paired_active" || props.runtime?.cloud_state === "paired_waiting";
-  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, "signed-cloud");
+  const hasManagedControl = layerTargetsExtension(props.effective, props.extension, extensionPermissionIds(props.effective, props.extension), "signed-cloud");
   const refresh = reactExports.useCallback(async () => {
     if (refreshState === "checking") return;
     refreshBaselineRef.current = effectiveStatusKey(props.effective, { runtime: props.runtime });
@@ -5483,162 +5938,22 @@ function ExtensionManagedControlsPanel(props) {
     hasManagedControl && input.authorityMode === "managed-restrictive" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-2xl border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-950", children: "This is a managed-restrictive Control Set. Local settings can add stricter blocks, but they cannot weaken this workspace restriction." }) : null
   ] });
 }
-function sourceIsManaged(effective, extensionId) {
-  return effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
-    (control) => control.target_kind === "extension" && control.target_id === extensionId
-  ));
-}
-function CatalogExtensionRow(props) {
-  const handleOpen = reactExports.useCallback(() => {
-    props.onOpen(props.extension);
-  }, [props]);
-  const source = extensionProtectionSource(props.effective, props.extension);
-  const cloudSource = source === "Synced from Guard Cloud" || source.startsWith("Managed by ");
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    ProtectionModuleRow,
-    {
-      extensionId: props.extension.extension_id,
-      name: extensionDisplayName(props.extension.name),
-      description: props.extension.description,
-      behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
-      required: props.extension.required,
-      mcp: props.extension.surface === "mcp",
-      external: props.extension.trust_class === "external",
-      managed: cloudSource || sourceIsManaged(props.effective, props.extension.extension_id),
-      managedLabel: cloudSource ? source : void 0,
-      executables: props.extension.executables,
-      ecosystemIds: props.extension.ecosystem_ids,
-      onOpen: handleOpen
-    }
-  );
-}
-function CatalogFilterEmpty(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Remove a filter or start over to see the full catalog again." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: props.onClear, children: "Clear filters" })
-  ] });
-}
-function ExtensionsOverview(props) {
-  const [query, setQuery] = reactExports.useState("");
-  const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
-  reactExports.useEffect(() => {
-    setFilters((current) => {
-      const next = pruneCatalogFilters(current, props.catalogExtensions);
-      if (catalogFiltersEqual(current, next)) return current;
-      return next;
-    });
-  }, [props.catalogExtensions]);
-  const searching = query.trim().length > 0;
-  const filtering = catalogFiltersActive(filters);
-  const visibleCatalog = reactExports.useMemo(
-    () => filterCatalogExtensions(props.catalogExtensions, filters),
-    [filters, props.catalogExtensions]
-  );
-  const handleClearFilters = reactExports.useCallback(() => {
-    setFilters(EMPTY_CATALOG_FILTERS);
-  }, []);
-  const addedCustomItems = addedCustomExtensions(props.localCliItems).filter(
-    (item) => customItemMatchesFilters(item, filters)
-  );
-  const addedCustomCount = addedCustomItems.length;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      WorkspacePageHeader,
-      {
-        eyebrow: "On this device",
-        title: PROTECTION_TERMS.pageTitle,
-        description: "Choose an Extension to review its permissions and effective protection."
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        ProtectionStatusHero,
-        {
-          status: props.status,
-          onPrimaryAction: props.status.primaryAction === "review-lockdown" ? props.onPrimaryStatusAction : void 0
-        }
-      ),
-      props.recoveryStatus && !props.healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: props.recoveryStatus }) : null
-    ] }),
-    props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
-    props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PatternSearchConsole,
-      {
-        catalog: visibleCatalog,
-        effective: props.effective,
-        active: props.active,
-        query,
-        onQueryChange: setQuery,
-        onRefresh: props.onRefresh,
-        onOpenExtension: props.onOpenExtension,
-        actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }) : null
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      CatalogFilterBar,
-      {
-        catalog: props.catalogExtensions,
-        filters,
-        onChange: setFilters
-      }
-    ),
-    searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      addedCustomCount ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-        CustomExtensionsSection,
-        {
-          items: addedCustomItems,
-          onOpen: props.onOpenLocalCli,
-          onAdd: props.onAddCustom
-        }
-      ) : null,
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-3", children: [
-            addedCustomCount ? null : /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: props.onAddCustom }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) })
-          ] })
-        ] }),
-        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension2) => /* @__PURE__ */ jsxRuntimeExports.jsx(
-          CatalogExtensionRow,
-          {
-            extension: extension2,
-            effective: props.effective,
-            onOpen: props.onOpenExtension
-          },
-          extension2.extension_id
-        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
-      ] })
-    ] })
-  ] });
-}
-function pushExtensionHistory(href) {
-  window.history.pushState({}, "", guardAwareHref(href));
-}
-function replaceExtensionHistory(href) {
-  window.history.replaceState({}, "", guardAwareHref(href));
-}
-function receiptMatchesExtension(receipt, extension2) {
+function receiptMatchesExtension(receipt, extension) {
   const identities = /* @__PURE__ */ new Set([
-    extension2.extension_id,
-    ...extension2.permissions.map((permission2) => permission2.permission_id),
-    ...extension2.rules.map((rule2) => rule2.rule_id)
+    extension.extension_id,
+    ...extension.permissions.map((permission) => permission.permission_id),
+    ...extension.rules.map((rule) => rule.rule_id)
   ]);
   if (identities.has(receipt.artifact_id)) return true;
   if (receipt.changed_capabilities.some((capability) => identities.has(capability))) return true;
   const envelope = receipt.action_envelope_json;
   if (!envelope) return false;
-  if (envelope.command_category === extension2.extension_id) return true;
+  if (envelope.command_category === extension.extension_id) return true;
   const toolName = envelope.tool_name?.trim().toLowerCase();
-  return Boolean(toolName && extension2.executables.some((executable) => executable.toLowerCase() === toolName));
+  return Boolean(toolName && extension.executables.some((executable) => executable.toLowerCase() === toolName));
 }
-function recentExtensionReceipts(receipts, extension2, limit = 8) {
-  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension2)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
+function recentExtensionReceipts(receipts, extension, limit = 8) {
+  return receipts.filter((receipt) => receiptMatchesExtension(receipt, extension)).sort((left, right) => Date.parse(right.timestamp) - Date.parse(left.timestamp)).slice(0, limit);
 }
 function receiptDecisionLabel(receipt) {
   if (receipt.policy_decision === "allow") return "Allowed";
@@ -5680,34 +5995,41 @@ function toolStateLabel(state) {
   if (state === "block") return "Block";
   return "Recommended";
 }
-function McpServerDefaults({ extension: extension2 }) {
-  if (extension2.surface !== "mcp") return null;
-  const launch = extension2.mcp_launch;
-  const tools = extension2.mcp_tools ?? [];
+function McpServerDefaults({ extension }) {
+  if (extension.surface !== "mcp") return null;
+  const launch = extension.mcp_launch;
+  const tools = extension.mcp_tools ?? [];
   const remoteLaunch = launch?.kind === "remote-http" ? launch : null;
   const packageLaunch = launch?.kind === "package-launcher" ? launch : null;
+  const directLaunch = launch?.kind === "direct-command" ? launch : null;
+  const unsupportedLaunch = launch?.kind === "unsupported";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "rounded-3xl border border-slate-200 bg-white p-5 shadow-sm lg:col-span-2", "data-testid": "mcp-server-defaults", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-lg font-semibold text-brand-dark", children: "MCP server defaults" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: remoteLaunch.url })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
-      ] })
-    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+    unsupportedLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", "data-testid": "mcp-launch-unsupported", children: "This server uses a launch type this version of Guard does not recognize, so its launch details are unavailable. Update Guard to see them." }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-6 text-brand-dark/75", children: remoteLaunch ? "Matching hosted endpoints use these defaults after you turn the server on. A custom extension on this device still wins." : directLaunch ? "Matching launches use this command. Defaults apply only after you turn the server on. A custom extension on this device still wins." : "Matching launches use this package name. Defaults apply only after you turn the server on. A custom extension on this device still wins." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("dl", { className: "mt-5 grid gap-4 sm:grid-cols-2", children: remoteLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Endpoint" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: remoteLaunch.url })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Server names" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: remoteLaunch.serverNames.join(", ") })
+        ] })
+      ] }) : directLaunch ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: packageLaunch?.command ?? "Package launcher" })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Package" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: packageLaunch?.package ?? "Unknown package" })
-      ] })
-    ] }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: directLaunch.command })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Launcher" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: packageLaunch?.command ?? "Package launcher" })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Package" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 break-all font-mono text-sm text-brand-dark", children: packageLaunch?.package ?? "Unknown package" })
+        ] })
+      ] }) })
+    ] }),
     tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5 overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-left text-sm", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "text-xs uppercase tracking-wide text-brand-dark/55", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "pb-2 pr-4 font-semibold", children: "Tool" }),
@@ -5723,7 +6045,7 @@ function McpServerDefaults({ extension: extension2 }) {
 const DECISIONS = /* @__PURE__ */ new Set(["allowed", "ask-first", "blocked"]);
 const MINIMUM_ACTIONS = /* @__PURE__ */ new Set(["allow", "monitor", "review", "block"]);
 const SEVERITIES = /* @__PURE__ */ new Set(["low", "medium", "high", "critical"]);
-function record(value) {
+function record$1(value) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Guard returned an invalid Test Lab response");
   return value;
 }
@@ -5738,7 +6060,7 @@ function stringList(value, field, limit) {
   return [...value];
 }
 function normalizeProtectionTestResult(value) {
-  const raw = record(value);
+  const raw = record$1(value);
   if (raw.schema_version !== "guard.daemon.extension-control-test.v1") throw new Error("Guard returned an unsupported Test Lab response");
   if (typeof raw.decision !== "string" || !DECISIONS.has(raw.decision)) throw new Error("Guard returned an invalid Test Lab decision");
   if (typeof raw.minimum_action !== "string" || !MINIMUM_ACTIONS.has(raw.minimum_action)) throw new Error("Guard returned an invalid Test Lab action");
@@ -5747,7 +6069,7 @@ function normalizeProtectionTestResult(value) {
   }
   if (!Array.isArray(raw.matches) || raw.matches.length > 32) throw new Error("Guard returned too many Test Lab matches");
   const matches = raw.matches.map((item) => {
-    const match = record(item);
+    const match = record$1(item);
     if (typeof match.severity !== "string" || !SEVERITIES.has(match.severity)) throw new Error("Guard returned an invalid Test Lab severity");
     return {
       extension_id: boundedString(match.extension_id, "extension ID", 256),
@@ -5794,9 +6116,9 @@ async function testProtectionCommand(extensionId, command) {
   }
   return normalizeProtectionTestResult(payload);
 }
-function safeExamples(extension2) {
-  const executable = extension2.executables[0];
-  const examples = extension2.extension_id === "command.git" ? ["git status", "git reset --hard HEAD~1", "git push --force-with-lease"] : executable ? [`${executable} --help`] : [];
+function safeExamples(extension) {
+  const executable = extension.executables[0];
+  const examples = extension.extension_id === "command.git" ? ["git status", "git reset --hard HEAD~1", "git push --force-with-lease"] : executable ? [`${executable} --help`] : [];
   return examples.slice(0, 3);
 }
 function resultTitle(result) {
@@ -5804,12 +6126,12 @@ function resultTitle(result) {
   if (result.decision === "ask-first") return "Guard would ask first";
   return "Guard would allow this";
 }
-function ProtectionTestLab({ extension: extension2 }) {
+function ProtectionTestLab({ extension }) {
   const [command, setCommand] = reactExports.useState("");
   const [result, setResult] = reactExports.useState(null);
   const [busy, setBusy] = reactExports.useState(false);
   const [error, setError] = reactExports.useState(null);
-  const examples = reactExports.useMemo(() => safeExamples(extension2), [extension2]);
+  const examples = reactExports.useMemo(() => safeExamples(extension), [extension]);
   const run = async () => {
     const candidate = command.trim();
     if (!candidate || busy) return;
@@ -5817,7 +6139,7 @@ function ProtectionTestLab({ extension: extension2 }) {
     setError(null);
     setResult(null);
     try {
-      setResult(await testProtectionCommand(extension2.extension_id, candidate));
+      setResult(await testProtectionCommand(extension.extension_id, candidate));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Test Lab could not evaluate this command.");
     } finally {
@@ -5831,7 +6153,7 @@ function ProtectionTestLab({ extension: extension2 }) {
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
       "See how Guard would handle a ",
-      extension2.name,
+      extension.name,
       " command without running it."
     ] }),
     examples.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4 flex flex-wrap gap-2", children: examples.map((example) => /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: busy, onClick: () => {
@@ -5911,18 +6233,26 @@ function canonicalProtectionDetailTab(tab) {
   if (tab === "managed-controls" || tab === "permissions" || tab === "technical") return tab;
   return tab === "activity" ? "activity" : "overview";
 }
-function requiredLine(extension2) {
-  if (!extension2.required) return null;
+function availabilityTitle(extension) {
+  if (extension.surface === "mcp") return "MCP tools available";
+  if (extension.surface === "unsupported") return "Protection available";
+  return "Commands available";
+}
+function requiredLine(extension) {
+  if (!extension.required) return null;
   return "Required by Guard — this protection stays on. The command patterns below can still follow recommended settings or be blocked on this device.";
 }
-function availabilityCopy(extension2, enabled) {
-  if (extension2.surface === "mcp" && extension2.trust_class === "external") {
+function availabilityCopy(extension, enabled) {
+  if (extension.surface === "unsupported") {
+    return enabled ? "This protection follows the settings below. Update Guard to see what it covers." : "This protection is off on this device. Update Guard to see what it covers.";
+  }
+  if (extension.surface === "mcp" && extension.trust_class === "external") {
     if (enabled) {
       return "Matching MCP tools follow the protection settings below. Turn off to leave this community server inactive.";
     }
     return "This community MCP server stays off until you turn it on.";
   }
-  if (extension2.trust_class === "external") {
+  if (extension.trust_class === "external") {
     if (enabled) {
       return "Matching commands follow the protection settings below. Turn off to leave this community tool inactive.";
     }
@@ -5968,24 +6298,24 @@ function DeveloperModuleDetails(props) {
           /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Matcher" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Default" })
         ] }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: props.extension.rules.map((rule2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-[rgba(63,65,116,0.08)]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: props.extension.rules.map((rule) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t border-[rgba(63,65,116,0.08)]", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("td", { className: "px-3 py-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-brand-dark/80", children: rule2.title }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-[10px] text-brand-dark/80", children: rule2.rule_id })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "font-medium text-brand-dark/80", children: rule.title }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "break-all text-[10px] text-brand-dark/80", children: rule.rule_id })
           ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule2.severity }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule2.matcher_kind }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: treatmentLabel(rule2.default_mode) })
-        ] }, rule2.rule_id)) })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.severity }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: rule.matcher_kind }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: treatmentLabel(rule.default_mode) })
+        ] }, rule.rule_id)) })
       ] }) })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "font-semibold text-brand-dark", children: "Protection setting identifiers" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-2", children: props.extension.permissions.map((permission2) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-medium text-brand-dark/80", children: permission2.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-brand-dark/80", children: permission2.permission_id }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-brand-dark/80", children: permission2.action_classes.join(", ") || "No action classes" })
-      ] }, permission2.permission_id)) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 space-y-2", children: props.extension.permissions.map((permission) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "py-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "text-sm font-medium text-brand-dark/80", children: permission.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "mt-1 block break-all text-[11px] text-brand-dark/80", children: permission.permission_id }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-1 text-xs text-brand-dark/80", children: permission.action_classes.join(", ") || "No action classes" })
+      ] }, permission.permission_id)) })
     ] })
   ] }) });
 }
@@ -6019,9 +6349,9 @@ function ProtectionModuleDetail(props) {
         if (requested) ruleId = requested;
       }
       if (ruleId) {
-        const rule2 = props.extension.rules.find((item) => item.rule_id === ruleId);
-        const permission2 = rule2 ? permissionForRule(props.extension, rule2) : null;
-        rowId = permission2 ? `pattern-${permission2.permission_id}` : null;
+        const rule = props.extension.rules.find((item) => item.rule_id === ruleId);
+        const permission = rule ? permissionForRule(props.extension, rule) : null;
+        rowId = permission ? `pattern-${permission.permission_id}` : null;
       }
       clearHighlight();
       if (!rowId) return;
@@ -6151,7 +6481,7 @@ function ProtectionModuleDetail(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: props.extension.surface === "mcp" ? "MCP tools available" : "Commands available" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: availabilityTitle(props.extension) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-5 text-brand-dark/75", children: availabilityCopy(props.extension, extensionEnabled) })
         ] })
       ] }) : null,
@@ -6222,12 +6552,12 @@ function ProtectionModuleDetail(props) {
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Baseline floors" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission2) => treatmentLabel(permission2.baseline_floor)))].join(", ") || "Built-in" })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm text-brand-dark", children: [...new Set(props.extension.permissions.map((permission) => treatmentLabel(permission.baseline_floor)))].join(", ") || "Built-in" })
           ] }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-xs font-semibold uppercase text-brand-dark/55", children: "Configurable" }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("dd", { className: "mt-1 text-sm text-brand-dark", children: [
-              props.extension.permissions.filter((permission2) => permission2.configurable).length,
+              props.extension.permissions.filter((permission) => permission.configurable).length,
               " of ",
               props.extension.permission_count
             ] })
@@ -6307,6 +6637,2039 @@ function ExtensionsNotFound(props) {
       }
     )
   ] }) });
+}
+function CatalogExtensionDetail(props) {
+  const { readModel, summary, ...detailProps } = props;
+  const key = `${readModel.catalog_digest}|${summary.extension_id}|${summary.content_revision ?? ""}`;
+  const [state, setState] = reactExports.useState({ kind: "loading", key });
+  const [attempt, setAttempt] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    let cancelled = false;
+    setState({ kind: "loading", key });
+    readModel.detail(summary.extension_id).then(
+      (extension) => {
+        if (!cancelled) setState({ kind: "ready", key, extension });
+      },
+      (error) => {
+        if (cancelled) return;
+        const stale2 = error instanceof ExtensionControlApiError && error.code === CATALOG_SNAPSHOT_EXPIRED;
+        setState({ kind: "error", key, stale: stale2, message: error instanceof Error ? error.message : "Extension details are unavailable" });
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt, key, readModel, summary.extension_id]);
+  const { onRefresh } = detailProps;
+  const stale = state.kind === "error" && state.stale;
+  const retry = reactExports.useCallback(async () => {
+    if (stale) await onRefresh();
+    setAttempt((value) => value + 1);
+  }, [onRefresh, stale]);
+  if (state.key !== key || state.kind === "loading") return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading extension" });
+  if (state.kind === "error") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadError, { title: "Extension details unavailable", detail: state.message, onRetry: () => {
+      void retry();
+    } });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(ProtectionModuleDetail, { ...detailProps, extension: state.extension });
+}
+function randomToken() {
+  return crypto.randomUUID().replaceAll("-", "");
+}
+function buildExtensionMutation(state, change) {
+  const layers = structuredClone(state.effective.layers);
+  let local = layers.find((layer) => layer.kind === "local-admin");
+  if (!local) {
+    local = {
+      schema_version: "1.0.0",
+      kind: "local-admin",
+      catalog_digest: state.catalog.catalog_digest,
+      global_lockdown: false,
+      controls: []
+    };
+    layers.push(local);
+  }
+  if ("globalLockdown" in change) {
+    local.global_lockdown = change.globalLockdown;
+  } else {
+    local.controls = local.controls.filter(
+      (control) => control.target_kind !== "extension" || control.target_id !== change.extension.extension_id
+    );
+    local.controls.push({
+      target_kind: "extension",
+      target_id: change.extension.extension_id,
+      state: change.enabled ? "enabled" : "disabled"
+    });
+    local.controls.sort(
+      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
+    );
+  }
+  return {
+    previous_revision: state.effective.revision,
+    catalog_digest: state.catalog.catalog_digest,
+    layers,
+    actor_id: "dashboard-admin",
+    idempotency_key: randomToken(),
+    nonce: randomToken()
+  };
+}
+const PROTECTION_TERMS = {
+  pageTitle: "Extensions"
+};
+function looksLikeUnauthorizedSession(message) {
+  const lower = message.trim().toLowerCase();
+  if (!lower || lower === "unauthorized" || lower.includes("unauthorized") || lower.includes("session")) return true;
+  return /(^|[^0-9])401([^0-9]|$)/.test(lower);
+}
+function protectionCenterLoadError(message) {
+  if (looksLikeUnauthorizedSession(message)) {
+    return {
+      title: "This view needs a signed local session",
+      detail: "Local protection is still running on this device. Open Extensions from the local Guard dashboard and try again after Guard signs this session."
+    };
+  }
+  return {
+    title: "Extensions unavailable",
+    detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
+  };
+}
+const DEFAULT_TERMINAL_COMMANDS = {
+  enroll: "hol-guard command controls enroll",
+  recover_authority: "hol-guard command controls recover-authority"
+};
+const GATE_SETUP_SUFFIX = " Enable Ask for proof and set an Approval password in Settings > Approval gate, then return here.";
+function authorityNoticeView(health, approvalGateReady, terminalCommands) {
+  const commands = terminalCommands ?? DEFAULT_TERMINAL_COMMANDS;
+  const terminalName = terminalCommands?.shell === "powershell" ? "PowerShell" : "your terminal";
+  switch (health) {
+    case "tampered":
+    case "recovery-required": {
+      const gateBlocked = approvalGateReady === false;
+      return {
+        tone: "warning",
+        title: "Protection needs repair",
+        body: `Guard found a problem with this device's trusted protection settings and is staying fail-safe. Protection changes stay locked until the settings are rebuilt with your approval. Commands keep being checked in the meantime.${gateBlocked ? ` Rebuilding needs your approval password, and local approval is not ready on this device.${GATE_SETUP_SUFFIX}` : ""}`,
+        action: gateBlocked ? { kind: "configure-approval" } : { kind: "repair" },
+        actionLabel: gateBlocked ? "Set up approval" : "Repair protection",
+        actionDetail: "Rebuilding the trusted settings needs your approval password. Guard verifies the repair before protection changes unlock again.",
+        command: commands.recover_authority,
+        commandLabel: "Repair from the terminal",
+        copyButtonLabel: "Copy repair command",
+        terminalSummary: `Run this in ${terminalName} if the button above cannot reach the approval gate.`
+      };
+    }
+    case "degraded-unacknowledged": {
+      const gateBlocked = approvalGateReady === false;
+      return {
+        tone: "warning",
+        title: "Protection is limited",
+        body: `Guard cannot fully verify the trusted protection settings and is staying fail-safe until that is resolved. Acknowledging records the limited state honestly — it does not restore full protection.${gateBlocked ? ` Acknowledging needs your approval password, and local approval is not ready on this device.${GATE_SETUP_SUFFIX}` : ""}`,
+        action: gateBlocked ? { kind: "configure-approval" } : { kind: "acknowledge" },
+        actionLabel: gateBlocked ? "Set up approval" : "Acknowledge limited state",
+        actionDetail: "Acknowledging the limited state needs your approval password. Guard keeps protecting fail-safe afterwards.",
+        command: commands.recover_authority,
+        commandLabel: "Repair from the terminal",
+        copyButtonLabel: "Copy repair command",
+        terminalSummary: `A full repair runs from ${terminalName}.`
+      };
+    }
+    case "degraded-acknowledged": {
+      const gateBlocked = approvalGateReady === false;
+      return {
+        tone: "warning",
+        title: "Protection is limited",
+        body: `The limited state is acknowledged. Guard keeps protection changes locked until the trusted settings are rebuilt from this device's terminal. Commands keep being checked in the meantime.${gateBlocked ? ` The rebuild needs your approval password, and local approval is not ready on this device.${GATE_SETUP_SUFFIX}` : ""}`,
+        action: gateBlocked ? { kind: "configure-approval" } : { kind: "none" },
+        actionLabel: gateBlocked ? "Set up approval" : null,
+        actionDetail: null,
+        command: commands.recover_authority,
+        commandLabel: "Repair from the terminal",
+        copyButtonLabel: "Copy repair command",
+        terminalSummary: `Run this in ${terminalName} to rebuild the trusted settings.`
+      };
+    }
+    default:
+      if (approvalGateReady === null) {
+        return {
+          tone: "info",
+          title: "Checking approval setup",
+          body: "Guard is checking whether this device is ready to enroll trusted protection settings. Enrollment steps will appear when the check finishes. If this takes too long, check again.",
+          action: { kind: "none" },
+          actionLabel: null,
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: ""
+        };
+      }
+      if (!approvalGateReady) {
+        return {
+          tone: "info",
+          title: "Set up local approval before enrollment",
+          body: "Extension controls require this device's local approval gate. Guard Cloud sign-in and account MFA are separate and do not enable this gate. In Settings > Approval gate, enable Ask for proof on allow decisions and set an Approval password, then return here to enroll. Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown.",
+          action: { kind: "configure-approval" },
+          actionLabel: "Set up approval",
+          actionDetail: null,
+          command: "",
+          commandLabel: "",
+          copyButtonLabel: "",
+          terminalSummary: ""
+        };
+      }
+      return {
+        tone: "info",
+        title: "Finish setting up protection",
+        body: "Command protection settings are not enrolled on this device yet. One command in your terminal creates this device's trusted settings. Local command checking already runs without them.",
+        action: { kind: "none" },
+        actionLabel: null,
+        actionDetail: null,
+        command: commands.enroll,
+        commandLabel: "Enroll from the terminal",
+        copyButtonLabel: "Copy setup command",
+        terminalSummary: `Run this in ${terminalName} to create the trusted settings.`
+      };
+  }
+}
+function ProtectionAuthorityNotice(props) {
+  const health = props.effective.health;
+  const approvalGateReady = props.approvalGate === null ? null : props.approvalGate.configured && props.approvalGate.enabled;
+  const view = authorityNoticeView(health, approvalGateReady, props.effective.terminal_commands);
+  const [proofOpen, setProofOpen] = reactExports.useState(false);
+  const [pendingAction, setPendingAction] = reactExports.useState(null);
+  const [copyState, setCopyState] = reactExports.useState("idle");
+  const [checkPending, setCheckPending] = reactExports.useState(false);
+  const [checkComplete, setCheckComplete] = reactExports.useState(false);
+  const [checkError, setCheckError] = reactExports.useState(null);
+  const checkBaselineRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    if (props.status) setProofOpen(false);
+  }, [props.status]);
+  if (health === "protected") return null;
+  const gatePending = props.approvalGate === null;
+  const copyCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(view.command);
+      setCopyState("copied");
+    } catch {
+      setCopyState("failed");
+    }
+  };
+  const checkAgain = async () => {
+    if (checkPending || props.busy) return;
+    checkBaselineRef.current = effectiveStatusKey(props.effective, { approvalGate: props.approvalGate });
+    setCheckPending(true);
+    setCheckComplete(false);
+    setCheckError(null);
+    try {
+      await props.onCheckAgain();
+      setCheckComplete(true);
+    } catch {
+      setCheckError("Guard could not refresh the current protection status. The displayed state remains in force; try again.");
+    } finally {
+      setCheckPending(false);
+    }
+  };
+  const warning = view.tone === "warning";
+  const panelClass = warning ? "border border-amber-200 bg-amber-50" : "border border-brand-blue/25 bg-[rgba(85,153,254,0.06)]";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "protection-authority-notice-heading", className: `mt-4 rounded-2xl p-5 sm:p-6 ${panelClass}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+      warning ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0 text-amber-600", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "protection-authority-notice-heading", className: `text-base font-semibold ${warning ? "text-amber-950" : "text-brand-dark"}`, children: view.title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-1 max-w-3xl text-sm leading-6 ${warning ? "text-amber-950/90" : "text-brand-dark/80"}`, children: view.body }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-2", children: [
+          view.actionLabel && view.action.kind !== "none" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              "aria-busy": props.busy || checkPending,
+              disabled: props.busy || checkPending || gatePending,
+              onClick: () => {
+                if (view.action.kind === "configure-approval") {
+                  props.onOpenApprovalSettings();
+                  return;
+                }
+                setPendingAction(view.action.kind === "repair" ? "repair" : "acknowledge");
+                setProofOpen(true);
+              },
+              className: "inline-flex min-h-11 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-60",
+              children: gatePending && !props.error ? "Loading approval settings…" : view.actionLabel
+            }
+          ) : null,
+          view.action.kind === "none" && view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                void copyCommand();
+              },
+              className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white hover:bg-brand-dark",
+              children: [
+                copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+                copyState === "copied" ? "Command copied" : view.copyButtonLabel
+              ]
+            }
+          ) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: props.busy || checkPending,
+              "aria-busy": checkPending,
+              onClick: () => {
+                void checkAgain();
+              },
+              className: "inline-flex min-h-11 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark hover:border-brand-blue/40 disabled:opacity-60",
+              children: checkPending ? "Checking…" : "Check again"
+            }
+          )
+        ] }),
+        props.busy ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: pendingAction === "acknowledge" ? "Confirming the limited state…" : "Repairing local protection…" }) : null,
+        checkPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: "Checking current protection status…" }) : null,
+        checkComplete ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", "aria-live": "polite", className: `mt-3 text-sm font-medium ${warning ? "text-amber-950" : "text-brand-dark"}`, children: effectiveStatusKey(props.effective, { approvalGate: props.approvalGate }) === checkBaselineRef.current ? "Check complete. No change detected; local protection remains in its current fail-safe state." : "Check complete. Protection status updated." }) : null,
+        checkError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: checkError }) : null,
+        props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
+        props.status ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-brand-dark", children: props.status }) : null,
+        view.command ? /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: `cursor-pointer text-sm font-semibold ${warning ? "text-amber-950" : "text-brand-dark"}`, children: view.commandLabel }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: `mt-2 text-sm leading-6 ${warning ? "text-amber-950/80" : "text-brand-dark/70"}`, children: view.terminalSummary }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-col gap-2 sm:flex-row sm:items-center", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "min-w-0 flex-1 overflow-x-auto rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-xs text-brand-dark", children: view.command }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "button",
+              {
+                type: "button",
+                onClick: () => {
+                  void copyCommand();
+                },
+                className: "inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-blue hover:border-brand-blue/40",
+                children: [
+                  copyState === "copied" ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocumentCheck, { className: "size-4", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboard, { className: "size-4", "aria-hidden": "true" }),
+                  copyState === "copied" ? "Copied" : "Copy command"
+                ]
+              }
+            )
+          ] })
+        ] }) : null
+      ] })
+    ] }),
+    proofOpen && (view.action.kind === "repair" || view.action.kind === "acknowledge") ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ApprovalProofModal,
+      {
+        title: view.action.kind === "repair" ? "Repair protection" : "Acknowledge limited state",
+        detail: view.actionDetail ?? "",
+        confirmLabel: view.actionLabel ?? "Confirm",
+        approvalGate: props.approvalGate,
+        busy: props.busy,
+        error: props.error,
+        onCancel: () => {
+          if (!props.busy) setProofOpen(false);
+        },
+        onConfirm: (credentials) => {
+          props.onAction(view.action.kind === "repair" ? "repair" : "acknowledge", credentials);
+        }
+      }
+    ) : null
+  ] });
+}
+const digest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+const record = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const integer = (value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+async function request(payload, signal) {
+  const response = await fetchLocalCliApi("/v1/local-clis/skills", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(record(body) && typeof body.message === "string" ? body.message : "Could not read skill metadata.");
+  if (!record(body)) throw new Error("Invalid skill metadata response");
+  return body;
+}
+async function fetchLocalSkillRoots(signal) {
+  const body = await request({ operation: "roots" }, signal);
+  if (!Array.isArray(body.roots) || body.roots.length > 16 || body.permissions_granted !== false) throw new Error("Invalid skill roots");
+  return body.roots.map((root) => {
+    if (!record(root) || !digest(root.root_id) || typeof root.path !== "string" || root.path.length > 4096 || typeof root.available !== "boolean") throw new Error("Invalid skill root");
+    return { root_id: root.root_id, path: root.path, available: root.available };
+  });
+}
+async function scanLocalSkillMetadata(rootIds, signal) {
+  if (signal.aborted) return;
+  const job = await startCancelableDiscoveryJob(signal, (clientJobId) => request(
+    { operation: "scan", confirm_metadata_read: true, approved_root_ids: rootIds, client_job_id: clientJobId },
+    signal
+  ));
+  if (job === null) return;
+  await waitForMcpDiscoveryJob("inventory:skills", job, signal);
+}
+async function fetchLocalSkillPage(options) {
+  const body = await request({
+    operation: "list",
+    offset: options.offset,
+    search: options.search,
+    ...options.revision === void 0 ? {} : { revision: options.revision }
+  }, options.signal);
+  if (!Array.isArray(body.skills) || body.skills.length > 50 || body.permissions_granted !== false || !integer(body.known_count) || body.known_count > 1e3 || !integer(body.matched_count) || body.matched_count > body.known_count || !integer(body.revision) || !integer(body.issue_count) || typeof body.complete !== "boolean" || body.next_offset !== null && body.next_offset !== options.offset + 50) {
+    throw new Error("Invalid skill inventory");
+  }
+  const skills = body.skills.map((skill) => {
+    if (!record(skill) || !digest(skill.skill_id) || !digest(skill.root_id) || !digest(skill.metadata_digest) || skill.origin !== "local-agent-skill" || skill.permission_state !== "not-granted" || skill.requirements_complete !== false || skill.instruction_content_loaded !== false || typeof skill.name !== "string" || skill.name.length > 64 || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(skill.name) || typeof skill.description !== "string" || skill.description.length > 1024 || typeof skill.uri !== "string" || !skill.uri.startsWith("file://") || skill.uri.length > 8192 || typeof skill.compatibility !== "string" || skill.compatibility.length > 500 || typeof skill.requested_tools !== "string" || skill.requested_tools.length > 2048 || typeof skill.duplicate_name !== "boolean") throw new Error("Invalid local skill evidence");
+    return {
+      skill_id: skill.skill_id,
+      root_id: skill.root_id,
+      metadata_digest: skill.metadata_digest,
+      name: skill.name,
+      description: skill.description,
+      uri: skill.uri,
+      compatibility: skill.compatibility,
+      requested_tools: skill.requested_tools,
+      duplicate_name: skill.duplicate_name
+    };
+  });
+  return {
+    skills,
+    known_count: body.known_count,
+    matched_count: body.matched_count,
+    revision: body.revision,
+    next_offset: body.next_offset,
+    complete: body.complete,
+    issue_count: body.issue_count
+  };
+}
+async function prepareSkillWorkflow(skillId, signal) {
+  if (signal.aborted) return null;
+  const job = await startCancelableDiscoveryJob(signal, (clientJobId) => request(
+    { operation: "preflight", skill_id: skillId, confirm_directory_read: true, client_job_id: clientJobId },
+    signal
+  ));
+  if (job === null) return null;
+  await waitForMcpDiscoveryJob(`skill:${skillId}`, job, signal);
+  if (signal.aborted) return null;
+  const body = await request({ operation: "preflight-result", skill_id: skillId }, signal);
+  if (body.skill_id !== skillId || body.schema_version !== "guard.workflow-preflight.v1" || body.dependency_source !== "guard-extension" || !["absent", "invalid", "declared"].includes(String(body.dependency_status)) || !integer(body.authority_revision) || !integer(body.expires_in_seconds) || body.expires_in_seconds > 30 || body.requirements_complete !== false || body.permissions_granted !== false || body.runtime_checks_required !== true || !Array.isArray(body.requirements) || body.requirements.length > 50 || !record(body.inspection) || !["complete", "incomplete"].includes(String(body.inspection.status)) || !integer(body.inspection.entry_count) || body.inspection.permissions_granted !== false || body.inspection.status === "complete" && (typeof body.inspection.manifest_digest !== "string" || !/^sha256:[a-f0-9]{64}$/.test(body.inspection.manifest_digest))) throw new Error("Invalid workflow preflight");
+  const requirements = body.requirements.map((entry) => {
+    if (!record(entry) || typeof entry.connection_id !== "string" || !isLocalCliId(entry.connection_id) || typeof entry.tool_name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}$/.test(entry.tool_name) || !["saved-allow", "deny", "ask", "unresolved"].includes(String(entry.state))) throw new Error("Invalid workflow requirement");
+    return {
+      connection_id: entry.connection_id,
+      tool_name: entry.tool_name,
+      state: entry.state
+    };
+  });
+  const native = normalizeLocalCliList({
+    schema_version: "guard.daemon.local-clis.v1",
+    revision: body.authority_revision,
+    items: [],
+    native_publication: body.native_publication
+  }).native_publication;
+  return {
+    skill_id: skillId,
+    dependency_status: body.dependency_status,
+    authority_revision: body.authority_revision,
+    requirements,
+    native_state: native?.state ?? "unavailable",
+    inspection: {
+      status: body.inspection.status,
+      entry_count: body.inspection.entry_count,
+      manifest_digest: typeof body.inspection.manifest_digest === "string" ? body.inspection.manifest_digest : null
+    },
+    expires_at: performance.now() + body.expires_in_seconds * 1e3
+  };
+}
+function LocalSkillsWorkspace() {
+  const [open, setOpen] = reactExports.useState(false);
+  const [roots, setRoots] = reactExports.useState([]);
+  const [selected, setSelected] = reactExports.useState([]);
+  const [page, setPage] = reactExports.useState(null);
+  const [offset, setOffset] = reactExports.useState(0);
+  const [input, setInput] = reactExports.useState("");
+  const [search, setSearch] = reactExports.useState("");
+  const [reload, setReload] = reactExports.useState(0);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [loading, setLoading] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const [preparing, setPreparing] = reactExports.useState(null);
+  const [preflights, setPreflights] = reactExports.useState({});
+  const revision = reactExports.useRef(void 0);
+  const scan = reactExports.useRef(null);
+  reactExports.useEffect(() => () => scan.current?.abort(), []);
+  reactExports.useEffect(() => {
+    if (input === search) return;
+    const timer = window.setTimeout(() => {
+      setSearch(input);
+      setOffset(0);
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [input, search]);
+  reactExports.useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    void Promise.all([
+      fetchLocalSkillRoots(controller.signal),
+      fetchLocalSkillPage({ offset, search, revision: offset > 0 ? revision.current : void 0, signal: controller.signal })
+    ]).then(([nextRoots, nextPage]) => {
+      if (!controller.signal.aborted) {
+        setRoots(nextRoots);
+        setPage(nextPage);
+        revision.current = nextPage.revision;
+      }
+    }).catch((caught) => {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not load skill metadata.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [open, offset, search, reload]);
+  const readMetadata = async () => {
+    const controller = new AbortController();
+    scan.current = controller;
+    setBusy(true);
+    setError(null);
+    try {
+      await scanLocalSkillMetadata(selected, controller.signal);
+      if (!controller.signal.aborted) {
+        setOffset(0);
+        setPreflights({});
+        setReload((value) => value + 1);
+      }
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Skill discovery did not finish.");
+    } finally {
+      setBusy(false);
+      if (scan.current === controller) scan.current = null;
+    }
+  };
+  const prepareWorkflow = async (skillId) => {
+    const controller = new AbortController();
+    scan.current = controller;
+    setPreparing(skillId);
+    setError(null);
+    try {
+      const result = await prepareSkillWorkflow(skillId, controller.signal);
+      if (result) setPreflights((current) => ({ ...current, [skillId]: result }));
+    } catch (caught) {
+      if (!controller.signal.aborted) setError(caught instanceof Error ? caught.message : "Could not prepare this workflow.");
+    } finally {
+      setPreparing(null);
+      if (scan.current === controller) scan.current = null;
+    }
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-8 border-b border-slate-200 pb-5", onToggle: (event) => setOpen(event.currentTarget.open), children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 text-base font-semibold text-brand-dark", children: "Local skills and workflows" }),
+    open ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Local skill metadata", "aria-busy": busy || loading || preparing !== null, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "max-w-2xl text-sm leading-6 text-brand-dark/75", children: "Choose the skill folders Guard may inspect. This reads bounded names and descriptions. Instructions and scripts stay unloaded; declared tools remain requests for permission." }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { disabled: busy || loading || preparing !== null, className: "mt-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-sm font-semibold text-brand-dark", children: "Folders to read" }),
+        roots.map((root) => /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-2 flex min-h-11 items-center gap-3 text-sm text-brand-dark/75", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "checkbox",
+              checked: selected.includes(root.root_id),
+              disabled: !root.available,
+              onChange: (event) => setSelected((current) => event.target.checked ? [...current, root.root_id] : current.filter((id) => id !== root.root_id))
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "break-all", children: [
+            root.path,
+            root.available ? "" : " · Not available"
+          ] })
+        ] }, root.root_id))
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            disabled: busy || loading || preparing !== null || selected.length === 0,
+            onClick: () => void readMetadata(),
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+            children: busy ? "Reading skill metadata…" : "Read selected skill metadata"
+          }
+        ),
+        busy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => scan.current?.abort(),
+            className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+            children: "Cancel skill scan"
+          }
+        ) : null
+      ] }),
+      error ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { role: "alert", className: "mt-3 text-sm leading-6 text-red-700", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: error }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: () => {
+              setOffset(0);
+              setReload((value) => value + 1);
+            },
+            className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 font-semibold text-brand-dark",
+            children: "Reload skill metadata"
+          }
+        )
+      ] }) : null,
+      page && page.revision > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-4 text-sm leading-6 text-brand-dark/75", children: [
+          page.known_count,
+          " skills indexed.",
+          page.complete ? "" : ` ${page.issue_count} discovery gaps; some metadata could not be indexed.`,
+          " No permissions granted."
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "mt-4 block max-w-xl text-sm font-semibold text-brand-dark", children: [
+          "Find a local skill",
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "search",
+              value: input,
+              onChange: (event) => setInput(event.target.value),
+              className: "mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-normal"
+            }
+          )
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 divide-y divide-slate-200", children: page.skills.map((skill) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-4", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: skill.name }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-2xl text-sm leading-6 text-brand-dark/75", children: skill.description }),
+          skill.duplicate_name ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs font-semibold text-brand-dark/75", children: "Same name found in another origin. Each copy keeps its own identity and review." }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "mt-2 text-xs leading-5 text-brand-dark/75", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("summary", { className: "min-h-11 cursor-pointer py-3 font-semibold", children: "Origin and requirements" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all", children: skill.uri }),
+            skill.compatibility ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+              "Declared compatibility: ",
+              skill.compatibility
+            ] }) : null,
+            skill.requested_tools ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 break-words", children: [
+              "Requested tools: ",
+              skill.requested_tools
+            ] }) : null,
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "Requirements are incomplete. Loading this skill cannot allow its tools." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 max-w-2xl text-xs leading-5 text-brand-dark/75", children: "Prepare inspects files in this skill directory to identify its revision and check declared dependencies. It does not run scripts or activate the skill." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: busy || preparing !== null,
+              onClick: () => void prepareWorkflow(skill.skill_id),
+              className: "mt-2 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark disabled:opacity-50",
+              children: preparing === skill.skill_id ? "Preparing workflow…" : `Prepare ${skill.name}`
+            }
+          ),
+          preparing === skill.skill_id ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => scan.current?.abort(),
+              className: "ml-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark",
+              children: "Cancel preparation"
+            }
+          ) : null,
+          preflights[skill.skill_id] ? /* @__PURE__ */ jsxRuntimeExports.jsx(SkillPreflightPreview, { plan: preflights[skill.skill_id] }) : null
+        ] }, skill.skill_id)) }),
+        page.matched_count === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/75", children: "No skills match this search." }) : null,
+        page.matched_count > 50 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Local skill pages", className: "mt-4 flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              disabled: offset === 0 || loading,
+              onClick: () => setOffset(Math.max(0, offset - 50)),
+              className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50",
+              children: "Previous"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-sm text-brand-dark/75", children: [
+            "Page ",
+            offset / 50 + 1
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: page.next_offset === null || loading, onClick: () => {
+            if (page.next_offset !== null) setOffset(page.next_offset);
+          }, className: "min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold disabled:opacity-50", children: "Next" })
+        ] }) : null
+      ] }) : null
+    ] }) : null
+  ] });
+}
+function SkillPreflightPreview({ plan }) {
+  const [expired, setExpired] = reactExports.useState(false);
+  reactExports.useEffect(() => {
+    const remaining = plan.expires_at - performance.now();
+    setExpired(remaining <= 0);
+    const timer = window.setTimeout(() => setExpired(true), Math.max(0, remaining));
+    return () => window.clearTimeout(timer);
+  }, [plan.expires_at]);
+  if (expired) return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 text-xs leading-5 text-brand-dark/75", children: "This workflow preview expired. Prepare it again to check current evidence." });
+  const stateLabel = { "saved-allow": "Saved Allow · runtime checks required", deny: "Denied", ask: "Needs review", unresolved: "Not resolved" };
+  const dependencyLabel = {
+    declared: "Guard dependency manifest (nonstandard extension)",
+    invalid: "Invalid Guard dependency manifest; review the skill's metadata.",
+    absent: "No Guard dependency manifest. Requirements remain unresolved."
+  }[plan.dependency_status];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Workflow preflight", className: "mt-4 border-l-2 border-brand-blue pl-4 text-xs leading-5 text-brand-dark/75", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-semibold", children: plan.inspection.status === "complete" ? "Skill revision inspected" : "Skill revision could not be fully inspected" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+      "Dependencies: ",
+      dependencyLabel
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2", children: [
+      "Permissions checked at revision ",
+      plan.authority_revision,
+      ". Native publication: ",
+      plan.native_state,
+      "."
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 divide-y divide-slate-200", children: plan.requirements.map((requirement) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-all font-mono", children: requirement.tool_name }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 font-semibold", children: stateLabel[requirement.state] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: guardAwareHref(localCliHref(requirement.connection_id)), className: "mt-2 inline-flex min-h-11 items-center font-semibold text-brand-blue", children: "Review connection permissions" })
+    ] }, `${requirement.connection_id}:${requirement.tool_name}`)) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2", children: "This is a preview of current evidence. Preparing grants nothing; every runtime call still checks its permissions." })
+  ] });
+}
+const PAGE_SIZE = 25;
+function HostAppTools({ app }) {
+  const [shown, setShown] = reactExports.useState(PAGE_SIZE);
+  if (!app.metadata_available) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Tool summaries are unavailable for this app." });
+  }
+  if (app.tools.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Codex provided no tool summaries." });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 divide-y divide-brand-dark/10", children: app.tools.slice(0, shown).map((tool) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "py-2 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "break-words font-medium", children: tool.title ?? tool.name }),
+      tool.description ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose break-words leading-6 text-brand-dark/80", children: tool.description }) : null
+    ] }, tool.name)) }),
+    shown < app.tools.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip mt-2", onClick: () => setShown((value) => value + PAGE_SIZE), children: [
+      "Show more tools for ",
+      app.name
+    ] }) : null
+  ] });
+}
+function HostAppRow({ app }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "border-b border-brand-dark/10 py-3", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer rounded-lg px-1 py-1 text-sm text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "break-words font-semibold", children: app.name }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-2 text-xs text-brand-dark/70", children: app.enabled ? "Enabled in Codex" : "Disabled in Codex" })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 pl-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs leading-5 text-brand-dark/80", children: [
+        app.callable ? "Codex reports tools available." : "Codex does not report callable tools.",
+        " ",
+        "Permissions in Guard are unchanged."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HostAppTools, { app })
+    ] })
+  ] });
+}
+function HostInventoryApps({ inventory }) {
+  const searchId = reactExports.useId();
+  const [query, setQuery] = reactExports.useState("");
+  const [shown, setShown] = reactExports.useState(PAGE_SIZE);
+  if (inventory.apps.length === 0) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", children: "Codex did not report any apps. Check host connections again after using an app in Codex." });
+  }
+  const matches = filterCodexHostApps(inventory.apps, query);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("label", { htmlFor: searchId, className: "mt-4 block text-sm font-medium text-brand-dark", children: "Search Codex apps and tool summaries" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "input",
+      {
+        id: searchId,
+        type: "search",
+        value: query,
+        maxLength: 128,
+        onChange: (event) => {
+          setQuery(event.target.value);
+          setShown(PAGE_SIZE);
+        },
+        className: "mt-1 w-full rounded-xl border border-brand-dark/20 bg-white px-3 py-2 text-sm text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/80", role: "status", children: [
+      matches.length,
+      " ",
+      matches.length === 1 ? "app" : "apps",
+      query.trim() ? " match this search" : " in the host snapshot",
+      " · Tool summaries only"
+    ] }),
+    matches.slice(0, shown).map((app) => /* @__PURE__ */ jsxRuntimeExports.jsx(HostAppRow, { app }, `${inventory.connection_id}:${app.app_id}`)),
+    matches.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", children: "No Codex apps or tool summaries match this search." }) : null,
+    shown < matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: () => setShown((value) => value + PAGE_SIZE), children: "Show more Codex apps" }) : null
+  ] });
+}
+function CodexHostConnectors({ inventory }) {
+  const headingId = reactExports.useId();
+  const [reported, setReported] = reactExports.useState(Boolean(inventory));
+  const [now, setNow] = reactExports.useState(Date.now);
+  reactExports.useEffect(() => {
+    if (!inventory) return;
+    setReported(true);
+    setNow(Date.now());
+    const remaining = Math.max(0, Math.min(3e4, inventory.expires_at_ms - Date.now()));
+    const timer = window.setTimeout(() => setNow(inventory.expires_at_ms), remaining);
+    return () => window.clearTimeout(timer);
+  }, [inventory?.expires_at_ms]);
+  if (!inventory && !reported) return null;
+  let content;
+  if (!inventory || inventory.expires_at_ms <= now) {
+    content = /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-dark/80", role: "status", children: "Host summaries expired or are unavailable. Check host connections again." });
+  } else {
+    content = /* @__PURE__ */ jsxRuntimeExports.jsx(HostInventoryApps, { inventory });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-8", "aria-labelledby": headingId, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: headingId, className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Apps reported by Codex" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-prose text-sm leading-6 text-brand-dark/80", children: "Inspect apps and tool summaries from your existing Codex host. Guard has not verified their accounts or tool permissions. Manage tools Guard has observed under Custom extensions." }),
+    content
+  ] });
+}
+const CUSTOM_EXTENSION_PREVIEW_COUNT = 8;
+const CUSTOM_EXTENSION_PAGE_SIZE = 25;
+function CustomExtensionRow(props) {
+  const { item, onOpen, onSetUp } = props;
+  const handleOpen = reactExports.useCallback(() => {
+    const setup = item.seeded === true ? profileSetupCommand(item) : null;
+    if (setup !== null && onSetUp) onSetUp(setup);
+    else onOpen(item.cli_id);
+  }, [item, onOpen, onSetUp]);
+  const action = customExtensionActionLabel(item);
+  const continuity = continuityCopy(props.item);
+  const catalog = mcpCatalogCopy(props.item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ProtectionModuleRow,
+    {
+      extensionId: props.item.cli_id,
+      name: customExtensionDisplayName(props.item),
+      description: customExtensionRowDescription(props.item, catalog?.title ?? null),
+      behavior: continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item),
+      brand: props.item.brand,
+      badge: customExtensionBadge(props.item) ?? void 0,
+      actionLabel: action ?? void 0,
+      custom: true,
+      executables: [props.item.name],
+      onOpen: handleOpen
+    }
+  );
+}
+function CustomExtensionEmptyState(props) {
+  let title = "No custom extensions yet.";
+  let detail = "Add a tool you run yourself, or connect an MCP server. Guard also detects connectors from your host apps automatically.";
+  if (props.search) {
+    title = "No custom extensions match this search.";
+    detail = "No connectors or custom tools match this search.";
+  }
+  if (props.filteredOut) {
+    title = "No custom extensions match these filters.";
+    detail = "Remove a filter or start over to see all custom extensions again.";
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "div",
+    {
+      className: "mt-4 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6",
+      "data-testid": props.filteredOut ? "custom-extensions-filter-empty" : "custom-extensions-empty",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: title }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm leading-6 text-brand-dark/70", children: detail }),
+        props.filteredOut ? props.onClearFilters ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onClearFilters, className: "guard-extensions-chip mt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+          "Clear filters"
+        ] }) : null : props.search ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onClearSearch, className: "guard-extensions-chip mt-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+          "Clear search"
+        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
+            "Add custom extension"
+          ] }),
+          props.discovering ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: "Checking host configuration for connectors…" }) : null
+        ] })
+      ]
+    }
+  );
+}
+function CustomExtensionsSection(props) {
+  const [search, setSearch] = reactExports.useState("");
+  const [showAll, setShowAll] = reactExports.useState(false);
+  const [page, setPage] = reactExports.useState(0);
+  const rowsId = reactExports.useId();
+  const all = reactExports.useMemo(() => connectorWorkspaceItems(props.items, "", props.seededItems), [props.items, props.seededItems]);
+  const added = reactExports.useMemo(
+    () => search ? connectorWorkspaceItems(props.items, search, props.seededItems) : all,
+    [props.items, props.seededItems, search, all]
+  );
+  const searchable = all.length > CUSTOM_EXTENSION_PREVIEW_COUNT || search !== "";
+  const filteredOut = props.filteredOut === true && search === "";
+  const needsReview = added.filter(customExtensionNeedsReview);
+  const reviewed = added.filter((item) => !customExtensionNeedsReview(item));
+  const grouped = needsReview.length > 0 && reviewed.length > 0;
+  const pageCount = Math.max(1, Math.ceil(added.length / CUSTOM_EXTENSION_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const handleSearchChange = reactExports.useCallback((event) => {
+    setSearch(event.target.value);
+    setShowAll(false);
+    setPage(0);
+  }, []);
+  const handleClearSearch = reactExports.useCallback(() => {
+    setSearch("");
+    setPage(0);
+  }, []);
+  const handleExpand = reactExports.useCallback(() => {
+    setShowAll(true);
+    setPage(0);
+  }, []);
+  const handleCollapse = reactExports.useCallback(() => {
+    setShowAll(false);
+    setPage(0);
+  }, []);
+  const handlePrevious = reactExports.useCallback(() => {
+    if (currentPage > 0) setPage(currentPage - 1);
+  }, [currentPage]);
+  const handleNext = reactExports.useCallback(() => {
+    if (currentPage < pageCount - 1) setPage(currentPage + 1);
+  }, [currentPage, pageCount]);
+  const start = showAll ? currentPage * CUSTOM_EXTENSION_PAGE_SIZE : 0;
+  const visible = added.slice(start, start + (showAll ? CUSTOM_EXTENSION_PAGE_SIZE : CUSTOM_EXTENSION_PREVIEW_COUNT));
+  const visibleNeedsReview = grouped ? visible.filter(customExtensionNeedsReview) : visible;
+  const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
+  const unit = added.length === 1 ? "extension" : "extensions";
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "custom-extensions-heading", "data-testid": "custom-extensions-section", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm text-slate-500", children: "Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
+        "Add custom extension"
+      ] })
+    ] }),
+    searchable ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block w-full max-w-sm", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search custom extensions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "input",
+        {
+          type: "search",
+          value: search,
+          onChange: handleSearchChange,
+          placeholder: "Search connectors",
+          className: "min-h-11 w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 text-sm font-normal text-brand-dark"
+        }
+      )
+    ] }) }) : null,
+    added.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      CustomExtensionEmptyState,
+      {
+        search,
+        filteredOut,
+        discovering: props.discovering,
+        onAdd: props.onAdd,
+        onClearFilters: props.onClearFilters,
+        onClearSearch: handleClearSearch
+      }
+    ) : /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4", id: rowsId, children: [
+      grouped && visibleNeedsReview.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs font-semibold text-brand-dark/55", children: [
+        "Needs review · ",
+        needsReview.length
+      ] }) : null,
+      visibleNeedsReview.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CustomExtensionRow, { item, onOpen: props.onOpen, onSetUp: props.onSetUp }, item.cli_id)),
+      grouped && visibleReviewed.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-6 text-xs font-semibold text-brand-dark/55", children: [
+        "Reviewed · ",
+        reviewed.length
+      ] }) : null,
+      visibleReviewed.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(CustomExtensionRow, { item, onOpen: props.onOpen, onSetUp: props.onSetUp }, item.cli_id)),
+      !showAll && added.length > visible.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleExpand,
+            "aria-controls": rowsId,
+            className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark",
+            children: added.length > CUSTOM_EXTENSION_PAGE_SIZE ? `Browse all ${added.length} ${unit}` : `Show all ${added.length} ${unit}`
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark/70", children: [
+          "Showing ",
+          visible.length,
+          " of ",
+          added.length,
+          ". Search to narrow the list."
+        ] })
+      ] }) : null,
+      showAll && added.length > CUSTOM_EXTENSION_PREVIEW_COUNT ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center gap-3", children: [
+        pageCount > 1 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("nav", { "aria-label": "Custom extension pages", className: "flex flex-wrap items-center gap-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              "aria-disabled": currentPage === 0,
+              "aria-controls": rowsId,
+              onClick: handlePrevious,
+              className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark aria-disabled:opacity-50",
+              children: "Previous page"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "text-sm text-brand-dark/70 tabular-nums", children: [
+            "Page ",
+            currentPage + 1,
+            " of ",
+            pageCount,
+            " · Showing ",
+            start + 1,
+            "–",
+            start + visible.length,
+            " of ",
+            added.length
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              "aria-disabled": currentPage === pageCount - 1,
+              "aria-controls": rowsId,
+              onClick: handleNext,
+              className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark aria-disabled:opacity-50",
+              children: "Next page"
+            }
+          )
+        ] }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleCollapse,
+            "aria-controls": rowsId,
+            className: "min-h-11 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark",
+            children: "Show fewer"
+          }
+        )
+      ] }) : null
+    ] })
+  ] });
+}
+const PROTECTION_CATEGORIES = [
+  { id: "source-control", label: "Source control", description: "Protect repository history, branches, and source-control operations.", searchAliases: ["git", "github", "repository", "source"] },
+  { id: "packages", label: "Packages and dependencies", description: "Protect dependency installs, package managers, and supply-chain changes.", searchAliases: ["npm", "pnpm", "yarn", "pip", "package", "dependency"] },
+  { id: "files-secrets", label: "Files and secrets", description: "Protect sensitive files, credentials, and secret-bearing operations.", searchAliases: ["file", "secret", "credential", "environment"] },
+  { id: "cloud-infrastructure", label: "Cloud and infrastructure", description: "Protect infrastructure, cloud resources, and administrative actions.", searchAliases: ["aws", "gcp", "azure", "terraform", "cloud", "infrastructure"] },
+  { id: "network-downloads", label: "Network and downloads", description: "Protect downloads, remote access, and network-facing operations.", searchAliases: ["curl", "wget", "ssh", "network", "download", "remote"] },
+  { id: "data-databases", label: "Data and databases", description: "Protect databases, storage, backups, and destructive data operations.", searchAliases: ["database", "sql", "postgres", "mysql", "redis", "data", "backup"] },
+  { id: "deployments-ci", label: "Deployments and CI", description: "Protect deployment, build, release, and CI/CD operations.", searchAliases: ["deploy", "release", "ci", "cd", "workflow", "pipeline"] },
+  { id: "messaging-collaboration", label: "Messaging and collaboration", description: "Protect actions in messaging, search, and collaboration tools.", searchAliases: ["slack", "message", "collaboration", "search"] },
+  { id: "system-shell", label: "System and shell actions", description: "Protect high-impact local shell, process, and system operations.", searchAliases: ["shell", "system", "bash", "terminal", "process"] },
+  { id: "ai-workflows", label: "AI tools and agent workflows", description: "Protect AI-agent, tool, and automated workflow actions.", searchAliases: ["ai", "agent", "mcp", "tool", "workflow"] }
+];
+new Map(PROTECTION_CATEGORIES.map((category) => [category.id, category]));
+function searchableExtensionText(extension) {
+  return [
+    extension.extension_id,
+    extension.name,
+    extension.description,
+    ...extension.ecosystem_ids,
+    ...extension.executables,
+    ...extension.action_classes,
+    ...extension.risk_classes
+  ].join(" ").toLowerCase();
+}
+function protectionCategoryIdForExtension(extension) {
+  const text = searchableExtensionText(extension);
+  if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text)) return "source-control";
+  if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text)) return "packages";
+  if (/secret|credential|\.env|filesystem|sensitive.?file|keychain/.test(text)) return "files-secrets";
+  if (/aws|azure|gcp|cloud|terraform|kubectl|kubernetes|infrastructure|platform/.test(text)) return "cloud-infrastructure";
+  if (/network|egress|download|curl|wget|ssh|remote|http|ftp/.test(text)) return "network-downloads";
+  if (/database|sql|postgres|mysql|sqlite|redis|mongo|storage|backup|data/.test(text)) return "data-databases";
+  if (/deploy|release|ci.?cd|pipeline|workflow|build|artifact/.test(text)) return "deployments-ci";
+  if (/slack|discord|message|collaboration|search|email/.test(text)) return "messaging-collaboration";
+  if (/agent|\bmcp\b|assistant|model|prompt|ai.?tool/.test(text)) return "ai-workflows";
+  return "system-shell";
+}
+const EMPTY_CATALOG_FILTERS = {
+  trusts: [],
+  kinds: [],
+  areas: []
+};
+const CATALOG_TRUST_FILTERS = [
+  "first-party",
+  "trusted-library",
+  "external"
+];
+const CATALOG_KIND_FILTERS = ["commands", "mcp"];
+function catalogFiltersActive(filters) {
+  return filters.trusts.length > 0 || filters.kinds.length > 0 || filters.areas.length > 0;
+}
+function catalogTrustLabel(trust) {
+  if (trust === "first-party") return "Built in";
+  if (trust === "trusted-library") return "Trusted";
+  return "External";
+}
+function catalogKindLabel(kind) {
+  if (kind === "mcp") return "MCP";
+  return "Commands";
+}
+function catalogItemKind(extension) {
+  if (extension.surface === "mcp") return "mcp";
+  if (extension.surface === "unsupported") return null;
+  return "commands";
+}
+function toggleCatalogFilterValue(selected, value) {
+  if (selected.includes(value)) return selected.filter((item) => item !== value);
+  return [...selected, value];
+}
+function catalogItemMatchesFilters(extension, filters) {
+  if (filters.trusts.length > 0 && !filters.trusts.includes(extension.trust_class)) return false;
+  if (filters.kinds.length > 0) {
+    const kind = catalogItemKind(extension);
+    if (kind === null || !filters.kinds.includes(kind)) return false;
+  }
+  if (filters.areas.length > 0) {
+    const area = protectionCategoryIdForExtension(extension);
+    if (!filters.areas.includes(area)) return false;
+  }
+  return true;
+}
+function filterCatalogExtensions(extensions, filters) {
+  if (!catalogFiltersActive(filters)) return [...extensions];
+  return extensions.filter((extension) => catalogItemMatchesFilters(extension, filters));
+}
+function customItemMatchesKind(item, kinds) {
+  if (kinds.length === 0) return true;
+  if (item.surface === "mcp") return kinds.includes("mcp");
+  return kinds.includes("commands");
+}
+function customItemMatchesFilters(item, filters) {
+  if (filters.trusts.length > 0 || filters.areas.length > 0) return false;
+  return customItemMatchesKind(item, filters.kinds);
+}
+function sameFilterValues(left, right) {
+  if (left.length !== right.length) return false;
+  return left.every((item, index) => item === right[index]);
+}
+function catalogFiltersEqual(left, right) {
+  return sameFilterValues(left.trusts, right.trusts) && sameFilterValues(left.kinds, right.kinds) && sameFilterValues(left.areas, right.areas);
+}
+function pruneCatalogFilters(filters, extensions) {
+  const presentTrusts = new Set(extensions.map((item) => item.trust_class));
+  const presentKinds = new Set(extensions.map((item) => catalogItemKind(item)));
+  const presentAreas = new Set(populatedCatalogAreas(extensions));
+  return {
+    trusts: filters.trusts.filter((trust) => presentTrusts.has(trust)),
+    kinds: filters.kinds.filter((kind) => presentKinds.has(kind)),
+    areas: filters.areas.filter((area) => presentAreas.has(area))
+  };
+}
+function catalogToolUnit(count) {
+  if (count === 1) return "tool";
+  return "tools";
+}
+function catalogFilterCountCopy(visible, total, filtering) {
+  if (!filtering) return `${total} ${catalogToolUnit(total)}`;
+  return `${visible} of ${total} ${catalogToolUnit(total)}`;
+}
+function catalogFilterChipAriaLabel(label, count) {
+  return `${label}, ${count} ${catalogToolUnit(count)}`;
+}
+function populatedCatalogAreas(extensions) {
+  const present = /* @__PURE__ */ new Set();
+  for (const extension of extensions) {
+    present.add(protectionCategoryIdForExtension(extension));
+  }
+  return PROTECTION_CATEGORIES.map((category) => category.id).filter((id) => present.has(id));
+}
+function populatedCatalogAreaOptions(extensions) {
+  const present = new Set(populatedCatalogAreas(extensions));
+  return PROTECTION_CATEGORIES.filter((category) => present.has(category.id)).map((category) => ({ id: category.id, label: category.label }));
+}
+function catalogFilterChipCount(extensions, filters, patch) {
+  return filterCatalogExtensions(extensions, { ...filters, ...patch }).length;
+}
+function CatalogFilterOption(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-pressed": props.pressed,
+      "aria-label": catalogFilterChipAriaLabel(props.label, props.count),
+      disabled: props.disabled,
+      onClick: props.onToggle,
+      className: "group flex min-h-10 w-full items-center justify-between gap-3 rounded-lg border border-[rgba(63,65,116,0.16)] bg-white px-2.5 text-[0.8125rem] font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/45 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue disabled:cursor-not-allowed disabled:opacity-45 aria-pressed:border-brand-blue/55 aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex min-w-0 items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid size-4 shrink-0 place-items-center text-brand-blue", children: props.pressed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheck, { className: "size-4", "aria-hidden": "true" }) : null }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "truncate", children: props.label })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "tabular-nums text-xs font-medium text-brand-dark/50 group-aria-pressed:text-brand-dark/65", children: props.count })
+      ]
+    }
+  );
+}
+function ActiveFilterToken(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      "aria-label": `Remove ${props.valueLabel} ${props.groupLabel.toLowerCase()} filter`,
+      onClick: props.onRemove,
+      className: "group inline-flex min-h-8 items-center gap-1.5 rounded-full border border-brand-blue/45 bg-brand-blue/10 py-1 pl-2.5 pr-2 text-xs font-semibold text-brand-dark transition-colors hover:border-brand-blue hover:bg-brand-blue/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-brand-dark/65", children: [
+          props.groupLabel,
+          ":"
+        ] }),
+        props.valueLabel,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-3.5 shrink-0 text-brand-dark/55 group-hover:text-brand-dark", "aria-hidden": "true" })
+      ]
+    }
+  );
+}
+function CatalogFilterGroup(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: `min-w-0 ${props.className ?? ""}`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "text-xs font-semibold text-brand-dark/55", children: props.legend }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2 flex flex-col gap-1.5", children: props.children })
+  ] });
+}
+function TrustFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: catalogTrustLabel(props.value),
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function KindFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: catalogKindLabel(props.value),
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function AreaFilterOption(props) {
+  const handleToggle = reactExports.useCallback(() => {
+    props.onToggle(props.value);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    CatalogFilterOption,
+    {
+      label: props.label,
+      count: props.count,
+      pressed: props.pressed,
+      disabled: props.count === 0 && !props.pressed,
+      onToggle: handleToggle
+    }
+  );
+}
+function CatalogFilterTrigger(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      ref: props.buttonRef,
+      "aria-expanded": props.open,
+      "aria-controls": props.panelId,
+      title: "Filters (press f)",
+      onClick: props.onToggle,
+      className: "inline-flex min-h-11 items-center gap-2 rounded-xl border border-[rgba(63,65,116,0.18)] bg-white px-3.5 text-sm font-semibold text-brand-dark shadow-sm transition-colors hover:border-brand-blue hover:text-brand-blue focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-expanded:border-brand-blue aria-expanded:text-brand-blue motion-reduce:transition-none",
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "size-4", "aria-hidden": "true" }),
+        "Filters",
+        props.activeCount > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "grid min-w-5 place-items-center rounded-full bg-brand-blue px-1 text-[0.6875rem] font-semibold leading-5 text-white tabular-nums", children: props.activeCount }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          HiMiniChevronDown,
+          {
+            className: `size-4 transition-transform duration-200 motion-reduce:transition-none ${props.open ? "rotate-180" : ""}`,
+            "aria-hidden": "true"
+          }
+        )
+      ]
+    }
+  );
+}
+function CatalogFilterBar(props) {
+  const areas = reactExports.useMemo(() => populatedCatalogAreaOptions(props.catalog), [props.catalog]);
+  const filtering = catalogFiltersActive(props.filters);
+  const activeCount = props.filters.trusts.length + props.filters.kinds.length + props.filters.areas.length;
+  const visibleCount = reactExports.useMemo(
+    () => filterCatalogExtensions(props.catalog, props.filters).length,
+    [props.catalog, props.filters]
+  );
+  const handleToggleTrust = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      trusts: toggleCatalogFilterValue(props.filters.trusts, value)
+    });
+  }, [props]);
+  const handleToggleKind = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      kinds: toggleCatalogFilterValue(props.filters.kinds, value)
+    });
+  }, [props]);
+  const handleToggleArea = reactExports.useCallback((value) => {
+    props.onChange({
+      ...props.filters,
+      areas: toggleCatalogFilterValue(props.filters.areas, value)
+    });
+  }, [props]);
+  const handleClear = reactExports.useCallback(() => {
+    props.onChange(EMPTY_CATALOG_FILTERS);
+    props.onAfterClear?.();
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+    filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex flex-wrap items-center gap-2", "data-testid": "catalog-filter-tokens", children: [
+      props.filters.trusts.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
+        {
+          groupLabel: "Trust",
+          valueLabel: catalogTrustLabel(trust),
+          onRemove: () => handleToggleTrust(trust)
+        },
+        `trust-${trust}`
+      )),
+      props.filters.kinds.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActiveFilterToken,
+        {
+          groupLabel: "Kind",
+          valueLabel: catalogKindLabel(kind),
+          onRemove: () => handleToggleKind(kind)
+        },
+        `kind-${kind}`
+      )),
+      props.filters.areas.map((areaId) => {
+        const area = areas.find((option) => option.id === areaId);
+        return /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ActiveFilterToken,
+          {
+            groupLabel: "Area",
+            valueLabel: area?.label ?? areaId,
+            onRemove: () => handleToggleArea(areaId)
+          },
+          `area-${areaId}`
+        );
+      }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+        "Clear filters"
+      ] })
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "div",
+      {
+        id: props.panelId,
+        hidden: !props.open,
+        "data-testid": "catalog-filter-panel",
+        className: "mt-2 max-h-[min(70vh,32rem)] overflow-y-auto overscroll-contain rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white p-4 shadow-[0_12px_32px_rgba(63,65,116,0.16)] sm:absolute sm:inset-x-0 sm:top-full sm:z-30 sm:mt-2 sm:p-5",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,14rem)_minmax(0,12rem)_minmax(0,1fr)]", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Trust", children: CATALOG_TRUST_FILTERS.map((trust) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              TrustFilterOption,
+              {
+                value: trust,
+                count: catalogFilterChipCount(props.catalog, props.filters, { trusts: [trust] }),
+                pressed: props.filters.trusts.includes(trust),
+                onToggle: handleToggleTrust
+              },
+              trust
+            )) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Kind", children: CATALOG_KIND_FILTERS.map((kind) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              KindFilterOption,
+              {
+                value: kind,
+                count: catalogFilterChipCount(props.catalog, props.filters, { kinds: [kind] }),
+                pressed: props.filters.kinds.includes(kind),
+                onToggle: handleToggleKind
+              },
+              kind
+            )) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterGroup, { legend: "Area", className: "sm:col-span-2 lg:col-span-1", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid gap-x-6 gap-y-1.5 sm:grid-cols-2", children: areas.map((area) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              AreaFilterOption,
+              {
+                value: area.id,
+                label: area.label,
+                count: catalogFilterChipCount(props.catalog, props.filters, { areas: [area.id] }),
+                pressed: props.filters.areas.includes(area.id),
+                onToggle: handleToggleArea
+              },
+              area.id
+            )) }) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-[rgba(63,65,116,0.12)] pt-3", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-brand-dark/65", "data-testid": "catalog-filter-count", children: catalogFilterCountCopy(visibleCount, props.catalog.length, filtering) }),
+            filtering ? /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-extensions-chip", onClick: handleClear, children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" }),
+              "Clear all ",
+              activeCount,
+              " ",
+              activeCount === 1 ? "filter" : "filters"
+            ] }) : null
+          ] })
+        ]
+      }
+    )
+  ] });
+}
+const PROTECTION_CENTER_PERFORMANCE_BUDGETS = Object.freeze({
+  simpleRuleRenderCap: 500,
+  recentDecisionCap: 20,
+  humanSearchCharacterCap: 160,
+  humanSearchTermCap: 8,
+  developerRelationshipCap: 1024
+});
+const COMMAND_PATTERN_DISPLAY_LIMIT = 24;
+const IDENTITY_MATCH = 0;
+const EXAMPLE_MATCH = 1;
+const CONTEXT_MATCH = 2;
+const RISK_TIER_SEVERITY = { critical: 3, high: 2, medium: 1, low: 0 };
+function catalogOriginRank(extension) {
+  return extension.source === "local-admin" ? 1 : 0;
+}
+function patternSearchBands(extension, permission) {
+  return [
+    [permission.label, extension.name, extension.extension_id, ...extension.executables].join(" ").toLowerCase(),
+    [permission.example_command ?? "", permission.permission_id].join(" ").toLowerCase(),
+    [permission.description, permission.family ?? ""].join(" ").toLowerCase()
+  ];
+}
+function termBand(term, bands) {
+  if (bands[IDENTITY_MATCH].includes(term)) return IDENTITY_MATCH;
+  if (bands[EXAMPLE_MATCH].includes(term)) return EXAMPLE_MATCH;
+  return CONTEXT_MATCH;
+}
+function commandPatternQuery(rawQuery) {
+  const normalized = rawQuery.trim().toLowerCase().slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchCharacterCap);
+  return normalized.split(/\s+/).filter(Boolean).slice(0, PROTECTION_CENTER_PERFORMANCE_BUDGETS.humanSearchTermCap).join(" ");
+}
+function searchCommandPatterns(candidates, rawQuery, limit = COMMAND_PATTERN_DISPLAY_LIMIT) {
+  const query = commandPatternQuery(rawQuery);
+  if (!query) return [];
+  const terms = query.split(" ");
+  const matches = [];
+  for (const { extension, permission } of candidates) {
+    const bands = patternSearchBands(extension, permission);
+    const text = bands.join(" ");
+    if (!terms.every((term) => text.includes(term))) continue;
+    const score = Math.max(...terms.map((term) => termBand(term, bands)));
+    matches.push({ extension, permission, score });
+  }
+  return matches.sort(
+    (left, right) => left.score - right.score || catalogOriginRank(left.extension) - catalogOriginRank(right.extension) || (RISK_TIER_SEVERITY[right.permission.risk_tier] ?? 0) - (RISK_TIER_SEVERITY[left.permission.risk_tier] ?? 0) || left.permission.label.localeCompare(right.permission.label) || left.extension.name.localeCompare(right.extension.name)
+  ).slice(0, limit);
+}
+function useDebounce(value, delay) {
+  const [debouncedValue, setDebouncedValue] = reactExports.useState(value);
+  reactExports.useEffect(() => {
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debouncedValue;
+}
+const SEARCH_DEBOUNCE_MS = 150;
+function useCatalogPermissionSearch(catalog, rawQuery) {
+  const current = commandPatternQuery(rawQuery);
+  const query = useDebounce(current, SEARCH_DEBOUNCE_MS);
+  const [state, setState] = reactExports.useState({ query: "", hits: [], error: null });
+  const local = reactExports.useMemo(
+    () => catalog.localSearch ? { query: current, hits: catalog.localSearch(current), error: null } : null,
+    [catalog, current]
+  );
+  reactExports.useEffect(() => {
+    if (local) return;
+    if (!query) {
+      setState({ query, hits: [], error: null });
+      return;
+    }
+    const controller = new AbortController();
+    catalog.searchPermissions(query, controller.signal).then(
+      (hits) => {
+        if (!controller.signal.aborted) setState({ query, hits, error: null });
+      },
+      (error) => {
+        if (controller.signal.aborted) return;
+        setState({ query, hits: [], error: error instanceof Error ? error.message : "Guard could not search command patterns." });
+      }
+    );
+    return () => controller.abort();
+  }, [catalog, local, query]);
+  if (local) return { ...local, pending: false };
+  return { ...state, pending: current !== "" && state.query !== current };
+}
+function CatalogSearchRow(props) {
+  const handleOpen = reactExports.useCallback(() => {
+    props.onOpen(props.extension);
+  }, [props]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ProtectionModuleRow,
+    {
+      extensionId: props.extension.extension_id,
+      name: extensionDisplayName(props.extension.name),
+      description: props.extension.description,
+      behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
+      required: props.extension.required,
+      mcp: props.extension.surface === "mcp",
+      external: props.extension.trust_class === "external",
+      executables: props.extension.executables,
+      ecosystemIds: props.extension.ecosystem_ids,
+      onOpen: handleOpen
+    }
+  );
+}
+function PatternSearchConsole(props) {
+  const [internalQuery, setInternalQuery] = reactExports.useState("");
+  const query = props.query ?? internalQuery;
+  const setQuery = props.onQueryChange ?? setInternalQuery;
+  const [focused, setFocused] = reactExports.useState(false);
+  const inputRef = reactExports.useRef(null);
+  const searchActive = props.active ?? true;
+  const draft = useExtensionPolicyDraft({ effective: props.effective, onRefresh: props.onRefresh });
+  const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
+  const {
+    baseEffective,
+    dirty,
+    preview,
+    previewBusy,
+    applyBusy,
+    reviewOpen,
+    error,
+    stale,
+    refreshRequired,
+    lastApplied,
+    undoLastApplied,
+    changedPermissionCount,
+    setReviewOpen,
+    setPermissionState,
+    setPermissionStates,
+    resetDraft,
+    runPreview,
+    apply,
+    permissionState
+  } = draft;
+  reactExports.useEffect(() => {
+    if (!searchActive) return;
+    const onKeyDown = (event) => {
+      if (event.key !== "/" || event.defaultPrevented) return;
+      const target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [searchActive]);
+  const totalPermissionCount = reactExports.useMemo(
+    () => props.catalog.reduce((total, extension) => total + extension.permission_count, 0),
+    [props.catalog]
+  );
+  const search = useCatalogPermissionSearch(props.readModel, query);
+  const allMatches = reactExports.useMemo(() => {
+    const visible = new Set(props.catalog.map((extension) => extension.extension_id));
+    const candidates = search.hits.filter((hit) => visible.has(hit.extension.extension_id));
+    return searchCommandPatterns(candidates, query, totalPermissionCount);
+  }, [props.catalog, search.hits, query, totalPermissionCount]);
+  const matches = reactExports.useMemo(() => allMatches.slice(0, COMMAND_PATTERN_DISPLAY_LIMIT), [allMatches]);
+  const toolMatches = reactExports.useMemo(() => {
+    const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!terms.length) return [];
+    return props.catalog.filter((extension) => {
+      const text = [extension.name, extension.extension_id, ...extension.executables, ...extension.aliases].join(" ").toLowerCase();
+      return terms.every((term) => text.includes(term));
+    });
+  }, [props.catalog, query]);
+  const grouped = reactExports.useMemo(() => {
+    const groups = /* @__PURE__ */ new Map();
+    for (const match of matches) {
+      const group = groups.get(match.extension.extension_id) ?? { extension: match.extension, permissions: [] };
+      group.permissions.push(match.permission);
+      groups.set(match.extension.extension_id, group);
+    }
+    return [...groups.values()];
+  }, [matches]);
+  const involvedPermissions = reactExports.useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
+  const changeCount = changedPermissionCount;
+  const showResults = query.trim().length > 0;
+  reactExports.useEffect(() => {
+    if (!reviewOpen) return;
+    void resolveApprovalGate({ failClosed: true }).catch(() => {
+    });
+  }, [reviewOpen, resolveApprovalGate]);
+  const managedCount = involvedPermissions.filter(
+    (permission) => managedPermissionState(baseEffective, permission.permission_id) !== null
+  ).length;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "pattern-search-heading", className: "mt-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "pattern-search-heading", className: "sr-only", children: "Search command patterns" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "relative", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: "relative block min-w-0 flex-1 sm:min-w-60", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "sr-only", children: "Search command patterns" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-brand-dark/55", "aria-hidden": "true" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              ref: inputRef,
+              type: "text",
+              role: "searchbox",
+              enterKeyHint: "search",
+              value: query,
+              onFocus: () => setFocused(true),
+              onChange: (event) => setQuery(event.target.value.slice(0, 160)),
+              placeholder: 'Search any command Guard watches — "squash", "git push --force", "kubectl"…',
+              "aria-describedby": "pattern-search-hint",
+              className: "min-h-11 w-full rounded-xl border border-[rgba(63,65,116,0.14)] bg-white/85 py-2.5 pl-9 pr-10 text-sm text-brand-dark shadow-sm focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-blue-100"
+            }
+          ),
+          showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "button",
+            {
+              type: "button",
+              onClick: () => {
+                setQuery("");
+                inputRef.current?.focus();
+              },
+              "aria-label": "Clear search",
+              className: "absolute right-2 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-lg text-brand-dark/55 hover:bg-[rgba(63,65,116,0.06)] hover:text-brand-dark",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "size-4", "aria-hidden": "true" })
+            }
+          ) : null
+        ] }),
+        props.toolbarSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex shrink-0 flex-wrap items-center gap-2", children: props.toolbarSlot }) : null
+      ] }),
+      props.subtoolbarSlot
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { id: "pattern-search-hint", className: `mt-2 text-xs text-brand-dark/60 ${focused || showResults ? "" : "sr-only"}`, children: "Matches patterns across every tool. Press / to focus search from anywhere on this page." }),
+    props.actionSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: props.actionSlot }) : null,
+    showResults ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyEditingLocks,
+      {
+        health: baseEffective.health,
+        globalLockdown: baseEffective.global_lockdown,
+        refreshRequired
+      }
+    ) : null,
+    showResults && search.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-3 text-sm font-medium text-rose-800", children: search.error }) : null,
+    showResults ? matches.length || toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3", children: [
+      matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          QuickApplyToolbar,
+          {
+            permissions: involvedPermissions,
+            effective: baseEffective,
+            disabled: refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected",
+            permissionState,
+            onApply: setPermissionStates
+          }
+        ),
+        allMatches.length > matches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { role: "status", className: "mt-3 text-xs text-brand-dark/65", children: [
+          "Showing ",
+          matches.length,
+          " of ",
+          allMatches.length,
+          " matching capabilities. Quick actions apply to all ",
+          allMatches.length,
+          "."
+        ] }) : null
+      ] }) : null,
+      grouped.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": `${group.extension.name} patterns`, className: "guard-pattern-family", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("h3", { className: "guard-pattern-family-heading", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            ExtensionBrandMark,
+            {
+              extension_id: group.extension.extension_id,
+              name: group.extension.name,
+              executables: group.extension.executables,
+              ecosystem_ids: group.extension.ecosystem_ids,
+              size: "sm"
+            }
+          ),
+          group.extension.executables.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("code", { children: group.extension.executables[0] }) : null,
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: extensionDisplayName(group.extension.name) })
+        ] }),
+        group.permissions.map((permission) => {
+          return /* @__PURE__ */ jsxRuntimeExports.jsx(
+            PermissionPolicyRow,
+            {
+              permission,
+              extension: group.extension,
+              effective: baseEffective,
+              draftState: permissionState(permission.permission_id),
+              disabled: refreshRequired,
+              onChange: (state) => setPermissionState(permission.permission_id, state)
+            },
+            permission.permission_id
+          );
+        })
+      ] }, group.extension.extension_id)),
+      toolMatches.length ? /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-label": "Matching tools", className: "guard-pattern-family", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "guard-pattern-family-heading", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: "Tools" }) }),
+        toolMatches.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CatalogSearchRow,
+          {
+            extension,
+            effective: props.effective,
+            onOpen: props.onOpenExtension
+          },
+          extension.extension_id
+        ))
+      ] }) : null,
+      managedCount ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-indigo-950", children: [
+        managedCount,
+        " matched setting",
+        managedCount === 1 ? "" : "s are",
+        " managed by your organization and cannot be weakened on this device."
+      ] }) : null
+    ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm text-brand-dark/75", children: search.pending ? "Searching command patterns…" : "No command patterns or tools match this search." }) : null,
+    dirty ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-review-bar", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "text-sm text-brand-dark", children: [
+        changeCount,
+        " unsaved setting change",
+        changeCount === 1 ? "" : "s",
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: previewBusy || applyBusy, onClick: resetDraft, className: "min-h-11 rounded-xl border border-[rgba(63,65,116,0.2)] px-4 text-sm font-semibold text-brand-dark", children: "Reset changes" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", disabled: previewBusy || applyBusy || baseEffective.health !== "protected" || stale, onClick: () => {
+          void runPreview();
+        }, className: "inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40", children: [
+          previewBusy ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "size-4 animate-spin motion-reduce:animate-none" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "size-4" }),
+          "Review ",
+          changeCount,
+          " change",
+          changeCount === 1 ? "" : "s"
+        ] })
+      ] })
+    ] }) }) : null,
+    lastApplied ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      AppliedPolicyToast,
+      {
+        revision: lastApplied.revision,
+        onUndo: () => {
+          undoLastApplied();
+        },
+        onViewHistory: () => {
+          document.getElementById("pattern-search-heading")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }
+    ) : null,
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { role: "alert", className: "mt-4 text-sm text-red-950", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 size-5 shrink-0" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: error })
+    ] }) }) : dirty && !preview ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 flex items-start gap-3 text-sm text-brand-dark", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInformationCircle, { className: "mt-0.5 size-5 shrink-0" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: "Review is required before approval. Guard calculates the real outcome from current protections, dependencies, organization settings, and Emergency Lockdown before anything can change." })
+    ] }) : null,
+    reviewOpen && preview ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyReviewSheet,
+      {
+        preview,
+        approvalGate: resolvedApprovalGate,
+        busy: applyBusy,
+        error,
+        onClose: () => {
+          if (!applyBusy) setReviewOpen(false);
+        },
+        onApply: (credentials) => {
+          void apply(credentials);
+        }
+      }
+    ) : null
+  ] });
+}
+function sourceIsManaged(effective, extensionId) {
+  return effective.layers.some((layer) => layer.kind === "signed-cloud" && layer.controls.some(
+    (control) => control.target_kind === "extension" && control.target_id === extensionId
+  ));
+}
+function CatalogExtensionRow(props) {
+  const handleOpen = reactExports.useCallback(() => {
+    props.onOpen(props.extension);
+  }, [props]);
+  const source = extensionProtectionSource(props.effective, props.extension);
+  const cloudSource = source === "Synced from Guard Cloud" || source.startsWith("Managed by ");
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ProtectionModuleRow,
+    {
+      extensionId: props.extension.extension_id,
+      name: extensionDisplayName(props.extension.name),
+      description: props.extension.description,
+      behavior: catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension)),
+      required: props.extension.required,
+      mcp: props.extension.surface === "mcp",
+      external: props.extension.trust_class === "external",
+      managed: cloudSource || sourceIsManaged(props.effective, props.extension.extension_id),
+      managedLabel: cloudSource ? source : void 0,
+      executables: props.extension.executables,
+      ecosystemIds: props.extension.ecosystem_ids,
+      onOpen: handleOpen
+    }
+  );
+}
+function ConnectorDiscoveryControl(props) {
+  if (props.discovering) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "px-1 text-xs text-brand-dark/60", children: "Checking host connections…" });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
+    props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "max-w-56 truncate text-xs text-brand-dark/60", title: props.error, children: props.error }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip", onClick: props.onRetry, children: props.error ? "Check for connectors again" : "Check host connections" })
+  ] });
+}
+function CatalogFilterEmpty(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "No extensions match these filters." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-6 text-brand-dark/70", children: "Remove a filter or start over to see the full catalog again." }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", className: "guard-extensions-chip mt-3", onClick: props.onClear, children: "Clear filters" })
+  ] });
+}
+function ExtensionsOverview(props) {
+  const [query, setQuery] = reactExports.useState("");
+  const discoveryStarted = reactExports.useRef(false);
+  const reloadConnections = reactExports.useRef(props.onReloadConnections);
+  reloadConnections.current = props.onReloadConnections;
+  const [discoveryError, setDiscoveryError] = reactExports.useState(null);
+  const [hostDiscoveryError, setHostDiscoveryError] = reactExports.useState(null);
+  const [discovering, setDiscovering] = reactExports.useState(false);
+  const [discoveryAttempt, setDiscoveryAttempt] = reactExports.useState(0);
+  reactExports.useEffect(() => {
+    if (!props.active || discoveryStarted.current) return;
+    discoveryStarted.current = true;
+    const controller = new AbortController();
+    setDiscovering(true);
+    setDiscoveryError(null);
+    setHostDiscoveryError(null);
+    const reload = async () => {
+      if (!controller.signal.aborted) await reloadConnections.current();
+    };
+    const configured = refreshMcpInventory("inventory:configured", controller.signal, true, discoveryAttempt > 0).then(reload).catch(() => {
+      if (!controller.signal.aborted) setDiscoveryError("Could not check host configuration. Known connections remain available.");
+    });
+    let hostRunning = false;
+    const refreshHost = async (force) => {
+      if (hostRunning || controller.signal.aborted) return;
+      hostRunning = true;
+      try {
+        await refreshCodexHostInventory(controller.signal, force);
+        if (!controller.signal.aborted) setHostDiscoveryError(null);
+      } catch {
+        if (!controller.signal.aborted) setHostDiscoveryError("Could not read Codex app inventory. Known connections remain available.");
+      } finally {
+        await reload();
+        hostRunning = false;
+      }
+    };
+    const host = refreshHost(discoveryAttempt > 0);
+    const hostTimer = window.setInterval(() => {
+      if (!document.hidden) void refreshHost(true);
+    }, 25e3);
+    void Promise.all([configured, host]).finally(() => {
+      if (!controller.signal.aborted) setDiscovering(false);
+    });
+    return () => {
+      window.clearInterval(hostTimer);
+      controller.abort();
+      discoveryStarted.current = false;
+    };
+  }, [props.active, discoveryAttempt]);
+  const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
+  const [filterPanelOpen, setFilterPanelOpen] = reactExports.useState(false);
+  const filterPanelId = reactExports.useId();
+  const filterTriggerRef = reactExports.useRef(null);
+  const filterToolbarRef = reactExports.useRef(null);
+  reactExports.useEffect(() => {
+    setFilters((current) => {
+      const next = pruneCatalogFilters(current, props.catalogExtensions);
+      if (catalogFiltersEqual(current, next)) return current;
+      return next;
+    });
+  }, [props.catalogExtensions]);
+  reactExports.useEffect(() => {
+    if (!filterPanelOpen) return;
+    const onPointerDown = (event) => {
+      if (filterToolbarRef.current?.contains(event.target)) return;
+      setFilterPanelOpen(false);
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      setFilterPanelOpen(false);
+      filterTriggerRef.current?.focus();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [filterPanelOpen]);
+  reactExports.useEffect(() => {
+    if (!props.active) return;
+    const onKeyDown = (event) => {
+      if (event.key !== "f" || event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const target = event.target;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      event.preventDefault();
+      setFilterPanelOpen(true);
+      filterTriggerRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [props.active]);
+  const searching = query.trim().length > 0;
+  const filtering = catalogFiltersActive(filters);
+  const visibleCatalog = reactExports.useMemo(
+    () => filterCatalogExtensions(props.catalogExtensions, filters),
+    [filters, props.catalogExtensions]
+  );
+  const handleClearFilters = reactExports.useCallback(() => {
+    setFilters(EMPTY_CATALOG_FILTERS);
+  }, []);
+  const onAddCustom = props.onAddCustom;
+  const handleAddCustom = reactExports.useCallback(() => {
+    onAddCustom();
+  }, [onAddCustom]);
+  const allCustomItems = connectorWorkspaceItems(props.localCliItems, "", props.seededItems);
+  const addedCustomItems = allCustomItems.filter(
+    (item) => customItemMatchesFilters(item, filters)
+  );
+  const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      WorkspacePageHeader,
+      {
+        eyebrow: "On this device",
+        title: PROTECTION_TERMS.pageTitle,
+        description: "Choose an Extension to review its permissions and effective protection."
+      }
+    ),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ProtectionStatusHero,
+        {
+          status: props.status,
+          onPrimaryAction: props.status.primaryAction === "review-lockdown" ? props.onPrimaryStatusAction : void 0
+        }
+      ),
+      props.recoveryStatus && !props.healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-3 text-sm font-medium text-emerald-800", children: props.recoveryStatus }) : null
+    ] }),
+    props.mutationError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.mutationError }) }) : null,
+    props.localCliError ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(InlineError, { message: props.localCliError }) }) : null,
+    props.localCliNotice ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mt-4 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: props.localCliNotice }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "div",
+      {
+        ref: filterToolbarRef,
+        "data-testid": "catalog-filters",
+        children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          PatternSearchConsole,
+          {
+            catalog: visibleCatalog,
+            readModel: props.readModel,
+            effective: props.effective,
+            active: props.active,
+            query,
+            onQueryChange: setQuery,
+            onRefresh: props.onRefresh,
+            onOpenExtension: props.onOpenExtension,
+            actionSlot: searching ? /* @__PURE__ */ jsxRuntimeExports.jsx(AddCustomExtensionButton, { onClick: handleAddCustom }) : null,
+            toolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                CatalogFilterTrigger,
+                {
+                  open: filterPanelOpen,
+                  activeCount: filters.trusts.length + filters.kinds.length + filters.areas.length,
+                  panelId: filterPanelId,
+                  buttonRef: filterTriggerRef,
+                  onToggle: () => setFilterPanelOpen((open) => !open)
+                }
+              ),
+              props.active ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+                ConnectorDiscoveryControl,
+                {
+                  discovering,
+                  error: [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null,
+                  onRetry: () => setDiscoveryAttempt((attempt) => attempt + 1)
+                }
+              ) : null
+            ] }),
+            subtoolbarSlot: /* @__PURE__ */ jsxRuntimeExports.jsx(
+              CatalogFilterBar,
+              {
+                catalog: props.catalogExtensions,
+                filters,
+                onChange: setFilters,
+                open: filterPanelOpen,
+                onOpenChange: setFilterPanelOpen,
+                panelId: filterPanelId,
+                onAfterClear: () => filterTriggerRef.current?.focus()
+              }
+            )
+          }
+        )
+      }
+    ),
+    searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        CustomExtensionsSection,
+        {
+          items: addedCustomItems,
+          onOpen: props.onOpenLocalCli,
+          seededItems: addedCustomItems.filter((item) => item.seeded === true),
+          onSetUp: props.onAddCustom,
+          onAdd: handleAddCustom,
+          discovering,
+          filteredOut: customItemsFilteredOut,
+          onClearFilters: handleClearFilters
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(LocalSkillsWorkspace, {}),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CodexHostConnectors, { inventory: props.hostInventory }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) }) })
+        ] }),
+        visibleCatalog.length ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: visibleCatalog.map((extension) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+          CatalogExtensionRow,
+          {
+            extension,
+            effective: props.effective,
+            onOpen: props.onOpenExtension
+          },
+          extension.extension_id
+        )) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })
+      ] })
+    ] })
+  ] });
+}
+function pushExtensionHistory(href) {
+  window.history.pushState({}, "", guardAwareHref(href));
+}
+function replaceExtensionHistory(href) {
+  window.history.replaceState({}, "", guardAwareHref(href));
 }
 function deriveProtectionStatus(effective) {
   if (effective.global_lockdown) {
@@ -6412,7 +8775,7 @@ function ReviewModal(props) {
     event.preventDefault();
     props.onConfirm(buildApprovalProofCredentials(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }));
   }, [password, props, totp]);
-  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }, props.busy);
+  const submitDisabled = isApprovalProofSubmitDisabled(props.approvalGate, { approvalPassword: password, approvalTotpCode: totp }, props.busy, false, true);
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("form", { ref: dialogRef, tabIndex: -1, role: "dialog", "aria-modal": "true", "aria-labelledby": "protection-review-title", onSubmit: handleSubmit, className: "w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl focus:outline-none", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
@@ -6430,7 +8793,7 @@ function ReviewModal(props) {
       /* @__PURE__ */ jsxRuntimeExports.jsx("span", { children: requested })
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm leading-6 text-brand-dark", children: "Guard's built-in minimum safety rules and organization policy remain active. This change does not disable detection." }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate: props.approvalGate, approvalPassword: password, approvalTotpCode: totp, onApprovalPasswordChange: handlePassword, onApprovalTotpCodeChange: handleTotp }) }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsx(ApprovalProofFieldInputs, { approvalGate: props.approvalGate, approvalPassword: password, approvalTotpCode: totp, requireGate: true, onApprovalPasswordChange: handlePassword, onApprovalTotpCodeChange: handleTotp }) }),
     props.error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800", children: props.error }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex justify-end gap-3", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", disabled: props.busy, onClick: props.onCancel, className: "min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark hover:bg-white/70 disabled:opacity-50", children: "Cancel" }),
@@ -6467,46 +8830,6 @@ function authorityActionErrorMessage(error, recoveryCommand, recoveryShell) {
   }
   return error instanceof Error && error.message && !/^authority_|^approval_/.test(error.message) ? error.message : `Guard could not complete this action. Local protection continues. Try again, or run \`${command}\` in ${terminalName}.`;
 }
-function randomToken() {
-  return crypto.randomUUID().replaceAll("-", "");
-}
-function buildExtensionMutation(state, change) {
-  const layers = structuredClone(state.effective.layers);
-  let local = layers.find((layer) => layer.kind === "local-admin");
-  if (!local) {
-    local = {
-      schema_version: "1.0.0",
-      kind: "local-admin",
-      catalog_digest: state.catalog.catalog_digest,
-      global_lockdown: false,
-      controls: []
-    };
-    layers.push(local);
-  }
-  if ("globalLockdown" in change) {
-    local.global_lockdown = change.globalLockdown;
-  } else {
-    local.controls = local.controls.filter(
-      (control) => control.target_kind !== "extension" || control.target_id !== change.extension.extension_id
-    );
-    local.controls.push({
-      target_kind: "extension",
-      target_id: change.extension.extension_id,
-      state: change.enabled ? "enabled" : "disabled"
-    });
-    local.controls.sort(
-      (left, right) => `${left.target_kind}:${left.target_id}`.localeCompare(`${right.target_kind}:${right.target_id}`)
-    );
-  }
-  return {
-    previous_revision: state.effective.revision,
-    catalog_digest: state.catalog.catalog_digest,
-    layers,
-    actor_id: "dashboard-admin",
-    idempotency_key: randomToken(),
-    nonce: randomToken()
-  };
-}
 function ProtectionCenterWorkspace(props) {
   const [state, setState] = reactExports.useState({ kind: "loading" });
   const [routeState, setRouteState] = reactExports.useState(() => currentExtensionRouteState());
@@ -6523,6 +8846,7 @@ function ProtectionCenterWorkspace(props) {
   const aliasRedirected = reactExports.useRef(null);
   const overviewKeepAlive = reactExports.useRef(false);
   const loadInFlightRef = reactExports.useRef(null);
+  const catalogRef = reactExports.useRef(null);
   const refreshInFlightRef = reactExports.useRef(null);
   const localClis = useLocalCliCatalog();
   const load = reactExports.useCallback(() => {
@@ -6530,8 +8854,11 @@ function ProtectionCenterWorkspace(props) {
     const request2 = (async () => {
       setState((current) => current.kind === "ready" ? current : { kind: "loading" });
       try {
-        const [catalog, effective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-        if (catalog.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        const [fresh, effective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+        if (fresh.catalog_digest !== effective.catalog_digest) throw new Error("Protection data changed while Guard was loading. Check again before making changes.");
+        const previous = catalogRef.current;
+        const catalog = previous?.catalog_digest === fresh.catalog_digest && previous.protocol === fresh.protocol ? previous : fresh;
+        catalogRef.current = catalog;
         setState({ kind: "ready", catalog, effective });
         return effective;
       } catch (error) {
@@ -6566,7 +8893,7 @@ function ProtectionCenterWorkspace(props) {
     if (routeState.route.kind !== "add-custom") return;
     void localClis.discover();
   }, [localClis.discover, routeState.route.kind]);
-  const catalogExtensions = reactExports.useMemo(() => state.kind === "ready" ? [...state.catalog.extensions].sort((a, b) => a.name.localeCompare(b.name)) : [], [state]);
+  const catalogExtensions = reactExports.useMemo(() => state.kind === "ready" ? state.catalog.extensions : [], [state]);
   const requestedExtensionId = routeState.route.kind === "detail" ? routeState.route.extensionId : null;
   const canonicalSelected = reactExports.useMemo(() => canonicalExtensionId(catalogExtensions, requestedExtensionId), [catalogExtensions, requestedExtensionId]);
   const selectedExtension = reactExports.useMemo(() => catalogExtensions.find((item) => item.extension_id === canonicalSelected) ?? null, [catalogExtensions, canonicalSelected]);
@@ -6579,9 +8906,9 @@ function ProtectionCenterWorkspace(props) {
     replaceExtensionHistory(extensionDetailHref(canonicalSelected, routeState.detail));
     setRouteState({ route: { kind: "detail", extensionId: canonicalSelected }, detail: routeState.detail });
   }, [canonicalSelected, routeState, state]);
-  const openExtension = reactExports.useCallback((extension2) => {
-    pushExtensionHistory(extensionDetailHref(extension2.extension_id, DEFAULT_EXTENSION_DETAIL_URL_STATE));
-    setRouteState({ route: { kind: "detail", extensionId: extension2.extension_id }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
+  const openExtension = reactExports.useCallback((extension) => {
+    pushExtensionHistory(extensionDetailHref(extension.extension_id, DEFAULT_EXTENSION_DETAIL_URL_STATE));
+    setRouteState({ route: { kind: "detail", extensionId: extension.extension_id }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
   const closeExtension = reactExports.useCallback(() => {
@@ -6599,9 +8926,9 @@ function ProtectionCenterWorkspace(props) {
     setRouteState({ route: { kind: "local-cli", cliId }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, []);
-  const openAddCustom = reactExports.useCallback(() => {
+  const openAddCustom = reactExports.useCallback((command) => {
     void localClis.discover();
-    pushExtensionHistory(addCustomExtensionHref());
+    pushExtensionHistory(addCustomExtensionPrefillHref(addCustomExtensionHref(), typeof command === "string" ? command : void 0));
     setRouteState({ route: { kind: "add-custom" }, detail: DEFAULT_EXTENSION_DETAIL_URL_STATE });
     window.scrollTo({ top: 0, behavior: "auto" });
   }, [localClis.discover]);
@@ -6641,8 +8968,8 @@ function ProtectionCenterWorkspace(props) {
     setMutationError(null);
     void resolveApprovalGate({ failClosed: true }).then(() => setPending(change)).catch(() => setMutationError("Guard could not load local approval settings. Check the local connection and try again."));
   }, [resolveApprovalGate]);
-  const handleRequestExtensionChange = reactExports.useCallback((extension2, enabled) => {
-    requestChange({ extension: { extension_id: extension2.extension_id, name: extension2.name }, enabled });
+  const handleRequestExtensionChange = reactExports.useCallback((extension, enabled) => {
+    requestChange({ extension: { extension_id: extension.extension_id, name: extension.name }, enabled });
   }, [requestChange]);
   const confirm = reactExports.useCallback(async (credentials) => {
     if (state.kind !== "ready" || !pending) return;
@@ -6760,9 +9087,13 @@ function ProtectionCenterWorkspace(props) {
       ExtensionsOverview,
       {
         catalogExtensions,
+        readModel: state.catalog,
         effective: state.effective,
         localCliItems: localClis.data?.items ?? [],
+        seededItems: localClis.data?.seeded_items ?? [],
+        hostInventory: localClis.data?.host_inventory,
         localCliError: localClis.error,
+        localCliNotice: localClis.discoveryNotice,
         mutationError: mutationError && !pending ? mutationError : null,
         recoveryStatus,
         healthBroken,
@@ -6770,6 +9101,7 @@ function ProtectionCenterWorkspace(props) {
         active: showOverview,
         onPrimaryStatusAction: handlePrimaryStatusAction,
         onRefresh: refreshProtection,
+        onReloadConnections: localClis.load,
         onOpenExtension: openExtension,
         onOpenLocalCli: openLocalCliDetail,
         onAddCustom: openAddCustom
@@ -6784,6 +9116,7 @@ function ProtectionCenterWorkspace(props) {
       }
     ) : null,
     showLocalCli && localClis.error && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mb-3 text-sm font-medium text-rose-800", children: localClis.error }) : null,
+    (showLocalCli || routeState.route.kind === "add-custom") && localClis.discoveryNotice && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "mb-3 rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-3 text-sm text-brand-dark", children: localClis.discoveryNotice }) : null,
     showLocalCli && !localClis.data && !localClis.error ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading custom extension" }) : null,
     routeState.route.kind === "add-custom" && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       AddCustomExtensionWorkspace,
@@ -6792,7 +9125,8 @@ function ProtectionCenterWorkspace(props) {
         revision: localClis.data?.revision ?? 0,
         discovering: localClis.discovering || !localClis.catalogReady,
         onBack: closeExtension,
-        onAdded: handleCustomExtensionAdded
+        onAdded: handleCustomExtensionAdded,
+        onConfigured: localClis.discover
       }
     ) : null,
     showLocalCli && selectedLocalCli && localClis.data ? /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -6801,14 +9135,16 @@ function ProtectionCenterWorkspace(props) {
         item: selectedLocalCli,
         revision: localClis.data.revision,
         continuity: localClis.data.cloud,
+        nativePublication: localClis.data.native_publication,
         onBack: closeExtension,
         onRefresh: localClis.load
       }
     ) : null,
     showDetail && selectedExtension && state.kind === "ready" ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      ProtectionModuleDetail,
+      CatalogExtensionDetail,
       {
-        extension: selectedExtension,
+        readModel: state.catalog,
+        summary: selectedExtension,
         effective: state.effective,
         catalogDigest: state.catalog.catalog_digest,
         runtime: props.runtime,

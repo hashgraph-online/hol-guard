@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -278,14 +277,14 @@ def test_unavailable_authority_cannot_relax_native_redirect_block(command: str) 
     from codex_plugin_scanner.guard.runtime.native_command_evaluation import review_command_native
     from tests.native_command_test_support import real_native_review_fixture
 
-    fixture = real_native_review_fixture(command)
+    fixture = real_native_review_fixture(command, health=AuthorityHealth.UNENROLLED)
     canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
     assert canonical is not None
     assert fixture.payload["minimum_action"] == "block"
     assert canonical.uncertainty_reason == "command_redirect_not_yet_supported"
     assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
     assert fixture.payload["command_extensions"]["observations"] == []
-    snapshot = replace(fixture.snapshot, health=AuthorityHealth.UNENROLLED)
+    snapshot = fixture.snapshot
     with use_extension_control_snapshot(snapshot):
         evaluation = evaluate_command(command, canonical_command=canonical, native_extension_evidence=fixture.payload)
         # Valid, request-bound failure evidence remains an authoritative block
@@ -305,13 +304,13 @@ def test_unavailable_authority_blocks_otherwise_valid_native_destructive_evidenc
     from tests.native_command_test_support import real_native_review_fixture
 
     command = "rm -rf ./build"
-    fixture = real_native_review_fixture(command)
+    fixture = real_native_review_fixture(command, health=AuthorityHealth.UNENROLLED)
     canonical = _canonical_command_from_native(command, fixture.payload["command_model"])
     assert canonical is not None
     assert fixture.payload["command_extensions"]["evaluation_error"] is None
     # Even otherwise matching native evidence cannot authorize an unhealthy
     # control snapshot. This exercises the reducer's independent health floor.
-    snapshot = replace(fixture.snapshot, health=AuthorityHealth.UNENROLLED)
+    snapshot = fixture.snapshot
     with use_extension_control_snapshot(snapshot):
         evaluation = evaluate_command(
             command,
@@ -352,20 +351,24 @@ def test_daemon_refreshes_resident_snapshot_after_external_authority_change(
         port=0,
         extension_control_refresh_interval_seconds=0.01,
     )
+    updated = ExtensionControlAuthorityView(
+        AuthorityHealth.PROTECTED,
+        7,
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        (),
+    )
+    assert daemon._server.extension_control_runtime.current().revision != updated.revision
+    # The resident snapshot is initialized in the daemon constructor. Install
+    # the external authority view before the refresh worker starts so its first
+    # read cannot race into the real SQLite path on a loaded Windows runner.
+    monkeypatch.setattr(
+        store,
+        "read_extension_control_authority_for_registry",
+        lambda registry, *, read_only=False: updated,
+    )
     daemon.start()
     try:
-        updated = ExtensionControlAuthorityView(
-            AuthorityHealth.PROTECTED,
-            7,
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-            (),
-        )
-        monkeypatch.setattr(
-            store,
-            "read_extension_control_authority_for_registry",
-            lambda registry, *, read_only=False: updated,
-        )
-        deadline = time.monotonic() + 5
+        deadline = time.monotonic() + 30
         while daemon._server.extension_control_runtime.current().revision != 7:
             assert time.monotonic() < deadline
             time.sleep(0.01)

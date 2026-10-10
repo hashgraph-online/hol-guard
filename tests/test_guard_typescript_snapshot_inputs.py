@@ -57,7 +57,7 @@ def test_streaming_discovery_enforces_hard_budgets(
         observed_times = iter((0.0, 10.0))
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.runtime.typescript_snapshot_inputs.time.monotonic",
-            lambda: next(observed_times),
+            lambda: next(observed_times, 10.0),
         )
 
     expected_message = "discovery entry budget" if budget == "entries" else "discovery time budget"

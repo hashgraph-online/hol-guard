@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import pi_extension_runtime_ownership, pi_extension_source
+from codex_plugin_scanner.guard.hook_execution_environment import _DEFAULT_EQUIVALENT_PAGER
 
 
 def _source(tmp_path: Path) -> str:
@@ -20,6 +21,14 @@ def _source(tmp_path: Path) -> str:
 
 def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path) -> None:
     source = _source(tmp_path)
+    assert "guard_execution_environment" in source
+    assert "home: typeof process.env.HOME" in source
+    assert "['1', 'true', 'yes', 'on']" in source
+    pager_rule = "/^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$/"
+    assert f"{pager_rule}.test(process.env.GIT_PAGER)" in source
+    assert f"{pager_rule}.test(process.env.PAGER)" in source
+    assert pager_rule == f"/^{_DEFAULT_EQUIVALENT_PAGER.pattern}$/"
+    assert "let payloadToSend = {" in source
     for constant in (
         "const GUARD_TIMEOUT_MS = 4250;",
         "const GUARD_DEADLINE_RESERVE_MS = 250;",
@@ -29,7 +38,9 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
         "const GUARD_CLI_TIMEOUT_MS = 300;",
     ):
         assert constant in source
-    assert "const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
+    assert (
+        "const deadlineAt = options?.deadlineAt ?? Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS" in source
+    )
     assert "Math.max(deadlineAt - Date.now(), 1)" in source
     assert "spawnSync" not in source
 
@@ -92,9 +103,7 @@ def test_managed_extension_prefers_macos_desktop_support_shim_over_path_pipx(
     official_cli.parent.mkdir(parents=True)
     official_cli.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     official_cli.chmod(0o755)
-    desktop_shim = (
-        home / "Library" / "Application Support" / "org.hol.guard.desktop" / "core" / "current-hol-guard"
-    )
+    desktop_shim = home / "Library" / "Application Support" / "org.hol.guard.desktop" / "core" / "current-hol-guard"
     desktop_shim.parent.mkdir(parents=True)
     desktop_shim.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     desktop_shim.chmod(0o755)

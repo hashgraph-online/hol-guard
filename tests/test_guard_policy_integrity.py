@@ -6,6 +6,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import itertools
 import json
 import os
 import pickle
@@ -552,7 +553,10 @@ def test_trust_backend_check_separates_startup_and_runtime_timeouts(
 ) -> None:
     sleep_delays: list[float] = []
     join_timeouts: list[float | None] = []
-    monotonic_values = iter((100.0, 103.5))
+    # time.monotonic is patched globally, so unrelated in-process calls (e.g.
+    # coverage instrumentation) can consume values; repeat the last one so
+    # incidental callers cannot exhaust the deterministic sequence.
+    monotonic_values = itertools.chain((100.0, 103.5), itertools.repeat(103.5))
 
     class FakeProcess:
         def __init__(self, args: tuple[str, str, str]) -> None:
@@ -1539,29 +1543,18 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
         store,
         artifact_id="codex:project:remote-tampered",
     )
-    original_result = GuardStore._policy_integrity_result_for_row
-
-    def _forced_invalid(
-        self: GuardStore,
-        row: sqlite3.Row,
-        *,
-        mode: str,
-        key: bytes | None,
-        key_id: str | None,
-        trusted_generation: int | None = None,
-    ) -> PolicyIntegrityVerificationResult:
-        if row["artifact_id"] == "codex:project:remote-tampered":
-            return PolicyIntegrityVerificationResult(status="invalid_mac", message="remote bundle row was tampered")
-        return original_result(
-            self,
-            row,
-            mode=mode,
-            key=key,
-            key_id=key_id,
-            trusted_generation=trusted_generation,
+    # Row verification now runs in the native resident. Remote-source rows
+    # (policy-bundle) bypass local HMAC — they are trusted via the materialized
+    # bundle-decision identity probe instead. Tamper with a field that is part
+    # of the materialized identity so the persisted row no longer matches the
+    # authorized bundle decision and is silently filtered: resolved=None and,
+    # critically, no `rule.ignored.local_integrity` evidence (which is reserved
+    # for local rules).
+    with store._connect() as connection:
+        connection.execute(
+            "update policy_decisions set reason = ? where artifact_id = ?",
+            ("tampered-reason", "codex:project:remote-tampered"),
         )
-
-    monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _forced_invalid)
 
     resolved = store.resolve_policy(
         "codex",
@@ -1573,7 +1566,10 @@ def test_remote_policy_integrity_failure_does_not_emit_local_rule_event(
     ignored_events = store.list_events(limit=100, event_name="rule.ignored.local_integrity")
 
     assert resolved is None
-    assert any(
+    # Remote rows bypass local HMAC; the tamper is detected by identity mismatch
+    # which is a silent filter (no policy_integrity_violation), and no
+    # rule.ignored.local_integrity (reserved for local rules).
+    assert not any(
         event.get("payload", {}).get("artifact_id") == "codex:project:remote-tampered" for event in integrity_events
     )
     assert not any(

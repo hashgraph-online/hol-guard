@@ -99,6 +99,42 @@ def test_lifecycle_gate_warns_and_allows_when_protection_is_disabled(
     assert "This notice is advisory and does not block the current command." in warning
 
 
+def test_lifecycle_gate_does_not_warn_when_totp_gate_is_enabled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    error_stream = io.StringIO()
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(commands_lifecycle_gate, "canonical_lifecycle_home", lambda: tmp_path)
+    monkeypatch.setattr(
+        commands_lifecycle_gate,
+        "public_config",
+        lambda _home: SimpleNamespace(enabled=True, totp_enabled=True, cooldown_seconds=900),
+    )
+    monkeypatch.setattr(
+        commands_lifecycle_gate,
+        "prompt_for_approval_gate",
+        lambda _home, **_kwargs: ApprovalGateInput(totp_code="synthetic-totp-code"),
+    )
+    monkeypatch.setattr(
+        commands_lifecycle_gate,
+        "require_high_risk",
+        lambda _home, **kwargs: captured.append(kwargs),
+    )
+
+    enforce_lifecycle_gate(
+        argparse.Namespace(guard_command="doctor", repair=True),
+        guard_home=tmp_path,
+        error_stream=error_stream,
+    )
+
+    assert error_stream.getvalue() == ""
+    assert len(captured) == 1
+    gate_input = captured[0]["approval_gate_input"]
+    assert isinstance(gate_input, ApprovalGateInput)
+    assert gate_input.totp_code == "synthetic-totp-code"
+
+
 def test_lifecycle_gate_requires_fresh_password_when_enabled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

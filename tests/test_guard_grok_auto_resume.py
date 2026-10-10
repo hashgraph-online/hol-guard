@@ -8,7 +8,6 @@ import json
 import sys
 import threading
 import time
-from contextlib import redirect_stderr
 from pathlib import Path
 
 import pytest
@@ -21,6 +20,8 @@ from codex_plugin_scanner.guard.adapters.grok_approval_resume import (
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _request(tmp_path: Path, request_id: str) -> GuardApprovalRequest:
@@ -258,49 +259,6 @@ def test_grok_live_wait_skips_observe_events_and_zero_timeout(tmp_path: Path) ->
     )
 
 
-def test_grok_generic_hook_does_not_wait_when_timeout_is_zero(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli.commands_hook_generic import _run_hook_generic_payload
-    from codex_plugin_scanner.guard.config import GuardConfig
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    guard_home = tmp_path / ".hol-guard"
-    store = GuardStore(guard_home)
-    config = GuardConfig(
-        guard_home=guard_home,
-        workspace=tmp_path,
-        approval_wait_timeout_seconds=0,
-    )
-    args = argparse.Namespace(
-        harness="grok",
-        json=False,
-        policy_action="require-reapproval",
-        artifact_id=None,
-        artifact_name=None,
-    )
-    stdout_capture = io.StringIO()
-    with redirect_stderr(io.StringIO()):
-        started = time.monotonic()
-        rc = _run_hook_generic_payload(
-            args,
-            action_envelope=None,
-            config=config,
-            output_stream=stdout_capture,
-            payload={
-                "hookEventName": "PreToolUse",
-                "toolName": "run_terminal_command",
-                "toolInput": {"command": "cat README.md"},
-            },
-            home_dir=tmp_path,
-            runtime_workspace=tmp_path,
-            store=store,
-        )
-    elapsed = time.monotonic() - started
-
-    assert rc == 2
-    assert json.loads(stdout_capture.getvalue())["decision"] == "deny"
-    assert elapsed < 2
-
-
 def test_grok_emit_allows_after_live_approval(tmp_path: Path, monkeypatch) -> None:
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request(tmp_path, "req-grok-emit"), "2026-05-08T10:00:00+00:00")
@@ -458,6 +416,7 @@ def test_grok_live_wait_runs_in_json_mode(tmp_path: Path) -> None:
     assert decision == "allow"
 
 
+@pytest.mark.usefixtures("native_hook_force")
 def test_grok_isolated_hook_resumes_after_approval(tmp_path: Path) -> None:
     import sys as runtime_sys
 

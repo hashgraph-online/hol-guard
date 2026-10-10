@@ -24,8 +24,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from .daemon.live_identity import DaemonArtifactBinding
     from .daemon.manager import GuardDaemonHookFailureKind
 
+from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .frozen_runtime_commands import (
     FROZEN_CODEX_BRIDGE_ARG,
     FROZEN_DAEMON_RECOVER_ARG,
@@ -114,7 +116,7 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
         if len(source_argv) != 4:
             raise RuntimeError("Guard's source Codex bridge contract is not canonical")
         config_json = source_argv[3]
-        payload = _decode_private_payload(config_json, label="Codex bridge")
+        payload = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
         if not payload:
             raise RuntimeError("Guard's Codex bridge config is empty")
         return (python_executable, _FROZEN_BRIDGE_ARG, config_json)
@@ -125,6 +127,14 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
         # frozen runtime bytes that actually implement those roles.
         return tuple((role, executable) for role, _path in source_packaged_paths())
 
+    def frozen_interpreter() -> str:
+        # The authenticated roles and runtime validator identify these exact
+        # bytes. A mutable Desktop launcher can select a different generation
+        # between publication and execution and cannot satisfy that contract.
+        # Retention of this generation belongs to the artifact lifecycle.
+        return str(Path(sys.executable).expanduser().resolve(strict=True))
+
+    codex._guard_python_executable = frozen_interpreter
     codex._local_hook_command_parts_for_home_mode = frozen_local_command
     codex._daemon_start_command = frozen_daemon_start_command
     codex._hook_command_parts_for_home_mode = frozen_hook_command
@@ -276,11 +286,19 @@ def _validate_frozen_codex_hook_launch(
     fallback_command: Sequence[str],
     start_command: Sequence[str],
     config_json: str,
+    expected_artifact: DaemonArtifactBinding | None = None,
 ):
-    """Authenticate the frozen bridge and its child launch contracts."""
+    """Authenticate the frozen bridge and its child launch contracts.
+
+    The ordinary bridge binds to this process. A transition observer may use
+    its separately verified artifact filter to inspect the retained executable.
+    This filter grants no lifecycle or hook authority: the private signed
+    manifest, exact executable bytes, package version and launch contracts
+    still have to agree. It never changes the process identity or environment.
+    """
 
     from . import codex_hook_runtime_trust as trust
-    from .codex_hook_file_integrity import verify_executable_file_identity
+    from .codex_hook_file_integrity import active_hook_validation_deadline, verify_executable_file_identity
     from .codex_hook_integrity import load_authenticated_hook_manifest_path
     from .codex_hook_launch_runtime import isolated_hook_environment, private_hook_runtime_cwd
 
@@ -294,7 +312,15 @@ def _validate_frozen_codex_hook_launch(
     invocation_path = interpreter.get("invocation_path")
     target = trust._mapping(interpreter.get("target"), label="interpreter target")
     target_path = target.get("path")
-    current_invocation = str(Path(sys.executable).expanduser().absolute())
+    current_invocation = str(Path(sys.executable).expanduser().resolve(strict=True))
+    if expected_artifact is not None:
+        current_invocation = str(expected_artifact.executable)
+        if (
+            target_path != current_invocation
+            or target.get("sha256") != expected_artifact.executable_sha256
+            or manifest.get("package_version") != expected_artifact.package_version
+        ):
+            raise ValueError("managed frozen Codex transition artifact identity is invalid")
     if invocation_path != current_invocation or not isinstance(target_path, str):
         raise ValueError("managed frozen Codex hook executable identity is invalid")
     if any(identity.get("path") != target_path for identity in packaged_by_role.values()):
@@ -320,6 +346,7 @@ def _validate_frozen_codex_hook_launch(
     return trust.TrustedCodexHookLaunch(
         cwd=private_hook_runtime_cwd(configured_manifest),
         environment=isolated_hook_environment(),
+        deadline_monotonic=active_hook_validation_deadline(),
     )
 
 
@@ -397,7 +424,7 @@ def _verify_frozen_bridge_contract(
     invocation_path = interpreter.get("invocation_path")
     if not isinstance(invocation_path, str):
         raise ValueError("managed frozen Codex hook interpreter path is invalid")
-    config = _decode_private_payload(config_json, label="Codex bridge")
+    config = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
     if (
         config.get("state_path") != str(state)
         or config.get("manifest_path") != str(configured_manifest)

@@ -22,13 +22,18 @@ def _seed_waiting_request(
     tmp_path: Path,
     *,
     request_id: str,
+    store: GuardStore | None = None,
+    artifact_id: str | None = None,
+    artifact_hash: str | None = None,
+    target_path: str | None = None,
 ) -> tuple[GuardStore, str]:
-    store = GuardStore(tmp_path / "guard-home")
+    store = store or GuardStore(tmp_path / "guard-home")
     observed = datetime.now(timezone.utc)
     now = observed.isoformat()
-    artifact_id = f"codex:project:{request_id}"
-    artifact_hash = f"hash-{request_id}"
+    artifact_id = artifact_id or f"codex:project:{request_id}"
+    artifact_hash = artifact_hash or f"hash-{request_id}"
     workspace = "/workspace/project"
+    target_path = target_path or f"{workspace}/.npmrc"
     process_identity = current_process_identity()
     assert process_identity is not None
     store.add_approval_request(
@@ -46,12 +51,12 @@ def _seed_waiting_request(
             source_scope="project",
             config_path=f"{workspace}/.guard/config.toml",
             workspace=workspace,
-            launch_target=f"Read {workspace}/.npmrc",
+            launch_target=f"Read {target_path}",
             review_command=f"hol-guard approvals approve {request_id}",
             approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
             action_envelope_json={
                 "action_type": "file_read",
-                "target_paths": [f"{workspace}/.npmrc"],
+                "target_paths": [target_path],
                 "tool_name": "Read",
             },
             continuation_snapshot={

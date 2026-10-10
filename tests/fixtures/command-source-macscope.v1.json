@@ -1,0 +1,1057 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "MacScope feature-write capability command",
+            "MacScope experimental feature-write capability command",
+            "MacScope utility-write capability command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews MacScopeMCPServer launches that opt into established feature writes, separately gated experimental feature writes, or allowlisted utility execution.",
+          "ecosystem_ids": [],
+          "executables": [
+            "macscopemcpserver"
+          ],
+          "extension_id": "command.macscope",
+          "homepage": "https://github.com/rsm23/macscope",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "MacScope MCP command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "MacScope feature-write capability command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies a MacScopeMCPServer launch that enables the preflight, apply, and undo workflow for allowlisted recommended and advanced macOS feature changes.",
+              "example_command": "MacScopeMCPServer --allow-feature-writes",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "MacScope feature-write capability",
+              "permission_id": "command.macscope.permission.feature-writes",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Start MacScopeMCPServer without write flags and enable feature writes only for a specific task.",
+                "Inspect the exact feature and retain MacScope's expiring undo token before applying the change."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "MacScope experimental feature-write capability command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies a MacScopeMCPServer launch that separately enables experimental feature changes and also implies the established feature-write gate.",
+              "example_command": "MacScopeMCPServer --allow-experimental-feature-writes",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "MacScope experimental feature-write capability",
+              "permission_id": "command.macscope.permission.experimental-feature-writes",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Use --allow-feature-writes when the requested feature is recommended or advanced.",
+                "Enable experimental writes only after reviewing the exact feature, restart effect, and undo path."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "MacScope utility-write capability command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies a MacScopeMCPServer launch that enables exact actions from MacScope's compiled utility catalog, including local state changes and explicitly marked destructive actions.",
+              "example_command": "MacScopeMCPServer --allow-utility-writes",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "MacScope utility-write capability",
+              "permission_id": "command.macscope.permission.utility-writes",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Start MacScopeMCPServer without utility writes until an allowlisted action is required.",
+                "Inspect macscope_list_utilities and keep the MCP client's write-tool approval policy enabled."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.macscope",
+            "url": "https://github.com/rsm23/macscope"
+          },
+          "reference_urls": [
+            "https://github.com/rsm23/macscope/blob/a3056e7de62b88c1021b1ccbad04711c34eaf00b/Sources/MacScopeMCPServer/ServerMain.swift",
+            "https://github.com/rsm23/macscope/blob/a3056e7de62b88c1021b1ccbad04711c34eaf00b/docs/MCP_SERVER.md"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "MacScope feature-write capability command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies a MacScopeMCPServer launch that enables the preflight, apply, and undo workflow for allowlisted recommended and advanced macOS feature changes.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "macscopemcpserver"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--allow-feature-writes"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.macscope.permission.feature-writes",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.macscope.feature-writes",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-feature-writes",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-feature-writes",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server help",
+                  "variant_id": "short-help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-feature-writes",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server version",
+                  "variant_id": "version"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-feature-writes",
+                            "-v"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server version",
+                  "variant_id": "short-version"
+                }
+              ],
+              "safer_alternatives": [
+                "Start MacScopeMCPServer without write flags and enable feature writes only for a specific task.",
+                "Inspect the exact feature and retain MacScope's expiring undo token before applying the change."
+              ],
+              "severity": "medium",
+              "title": "MacScope feature-write capability"
+            },
+            {
+              "action_classes": [
+                "MacScope experimental feature-write capability command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies a MacScopeMCPServer launch that separately enables experimental feature changes and also implies the established feature-write gate.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "macscopemcpserver"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--allow-experimental-feature-writes"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.macscope.permission.experimental-feature-writes",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.macscope.experimental-feature-writes",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-experimental-feature-writes",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-experimental-feature-writes",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server help",
+                  "variant_id": "short-help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-experimental-feature-writes",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server version",
+                  "variant_id": "version"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-experimental-feature-writes",
+                            "-v"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server version",
+                  "variant_id": "short-version"
+                }
+              ],
+              "safer_alternatives": [
+                "Use --allow-feature-writes when the requested feature is recommended or advanced.",
+                "Enable experimental writes only after reviewing the exact feature, restart effect, and undo path."
+              ],
+              "severity": "high",
+              "title": "MacScope experimental feature-write capability"
+            },
+            {
+              "action_classes": [
+                "MacScope utility-write capability command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies a MacScopeMCPServer launch that enables exact actions from MacScope's compiled utility catalog, including local state changes and explicitly marked destructive actions.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "macscopemcpserver"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--allow-utility-writes"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": []
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.macscope.permission.utility-writes",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.macscope.utility-writes",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-utility-writes",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server help",
+                  "variant_id": "help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-utility-writes",
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server help",
+                  "variant_id": "short-help"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-utility-writes",
+                            "--version"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server version",
+                  "variant_id": "version"
+                },
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "macscopemcpserver"
+                          ],
+                          "fail_secure_unknown_options": true,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "required_flags": [
+                            "--allow-utility-writes",
+                            "-v"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": []
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "MacScope MCP server version",
+                  "variant_id": "short-version"
+                }
+              ],
+              "safer_alternatives": [
+                "Start MacScopeMCPServer without utility writes until an allowlisted action is required.",
+                "Inspect macscope_list_utilities and keep the MCP client's write-tool approval policy enabled."
+              ],
+              "severity": "high",
+              "title": "MacScope utility-write capability"
+            }
+          ],
+          "safer_alternatives": [
+            "Use MacScope's read-only default and add only the narrowest write gate required for the task.",
+            "Keep experimental feature writes disabled unless a reviewed experimental catalog entry is needed."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.macscope",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "MacScopeMCPServer --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "feature-writes",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-experimental-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "experimental-writes",
+      "rule_id": "command.macscope.experimental-feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-utility-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "utility-writes",
+      "rule_id": "command.macscope.utility-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-feature-writes --allow-experimental-feature-writes --allow-utility-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "all-writes",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-feature-writes --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "feature-help",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-experimental-feature-writes -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "experimental-help",
+      "rule_id": "command.macscope.experimental-feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-utility-writes --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "utility-version",
+      "rule_id": "command.macscope.utility-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "short-help",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer -v",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "short-version",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bare",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-sensitive-read",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "unmatched-read-flag",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --allow-artifact-read",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "unmatched-artifact-flag",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "exec MacScopeMCPServer --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec-blocked",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "xargs -n1 MacScopeMCPServer --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs-blocked",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "echo MacScopeMCPServer --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "unrelated-echo",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "MacScopeMCPServer --help && MacScopeMCPServer --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "help-then-write",
+      "rule_id": "command.macscope.feature-writes"
+    },
+    {
+      "command": "'/Applications/MacScope.app/Contents/Resources/MacScopeMCPServer' --allow-feature-writes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.macscope"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "app-bundle-path",
+      "rule_id": "command.macscope.feature-writes"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

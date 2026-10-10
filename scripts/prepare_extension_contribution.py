@@ -149,6 +149,7 @@ def _compiler(path: Path | None) -> Path:
 
 
 def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
+    """Run an authoring subprocess and preserve its diagnostics when it fails."""
     completed = subprocess.run(
         command,
         input=input_bytes,
@@ -158,7 +159,7 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
     )
     if completed.returncode:
         detail = completed.stderr.decode(errors="replace").strip() or completed.stdout.decode(errors="replace").strip()
-        raise ValueError(detail[:1024] or "Declarative contribution preparation failed.")
+        raise ValueError(detail[-2048:] or "Declarative contribution preparation failed.")
     return completed.stdout
 
 
@@ -227,12 +228,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--source", type=Path, help="One explicit command source to bind to --fixture.")
     parser.add_argument("--fixture", type=Path, help="One explicit portable fixture to bind to --source.")
+    parser.add_argument(
+        "--publish-directory",
+        action="store_true",
+        help="Preview the full public directory in CI; ordinary authoring only stages its own public record.",
+    )
     args = parser.parse_args(argv)
     try:
         if (args.source is None) != (args.fixture is None):
             raise ValueError("Use --source and --fixture together.")
         compiler = _compiler(args.compiler)
         fixture_paths = _fixtures()
+        public_ids = set()
         if args.source is not None:
             source = _load_object(args.source)
             extension_id = _extension_id(source, args.source)
@@ -240,10 +247,14 @@ def main(argv: list[str] | None = None) -> int:
             if _fixture_source_ids(fixture, args.fixture).get(extension_id) != source:
                 raise ValueError("The portable fixture does not bind the exact source document.")
             fixture_paths = [args.fixture]
+            public_ids.add(extension_id)
         if args.changed_from:
-            fixture_paths = _validate_changed_source_fixture_pairs(
-                _changed_paths(args.changed_from), fixture_paths, revision=args.changed_from
-            )
+            changed = _changed_paths(args.changed_from)
+            fixture_paths = _validate_changed_source_fixture_pairs(changed, fixture_paths, revision=args.changed_from)
+            for name in changed:
+                path = ROOT / name
+                if name.startswith("contributions/command-sources/command.") and path.is_file():
+                    public_ids.add(_extension_id(_load_object(path), path))
         validated = [_validate_fixture(compiler, path) for path in fixture_paths]
         projection = [
             sys.executable,
@@ -251,12 +262,18 @@ def main(argv: list[str] | None = None) -> int:
             "--compiler",
             str(compiler),
         ]
+        if args.publish_directory:
+            projection.extend(["--descriptor-dir", "contributions/extensions"])
+        else:
+            for extension_id in sorted(public_ids):
+                projection.extend(["--publish-descriptor", extension_id])
         directory = [sys.executable, str(ROOT / "scripts/export_extension_directory.py")]
         if args.check:
             projection.append("--check")
             directory.append("--check")
         _ = _run(projection)
-        _ = _run(directory)
+        if args.publish_directory:
+            _ = _run(directory)
         print(
             json.dumps(
                 {

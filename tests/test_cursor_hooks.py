@@ -114,14 +114,6 @@ def _trusted_cursor_after_shell_env(
     }
 
 
-def test_managed_hook_events_exclude_pretooluse() -> None:
-    assert "preToolUse" not in _MANAGED_HOOK_EVENTS
-    assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution", "beforeMCPExecution", "beforeReadFile",
-        "beforeWriteFile", "afterShellExecution", "afterMCPExecution",
-    )
-
-
 def test_prepare_cursor_hook_payload_maps_before_read_file() -> None:
     payload = prepare_cursor_hook_payload(
         {
@@ -229,8 +221,8 @@ def test_cursor_hook_script_source_includes_daemon_fast_path(tmp_path: Path) -> 
     assert "_cursor_availability_response" in source
     assert "cursor_fallback_permission" in source
     assert "run_isolated_hook_process = None" in source
-    assert 'compact_event == "beforereadfile"' in source
-    assert "hook_action_is_emergency_safe" in source
+    assert 'hook_event_name.strip().lower() == "beforereadfile"' in source
+    assert "_cursor_permission" in source
     assert "/v1/hooks/cursor?" in source
     assert '"hook_env"' in source
     assert "subprocess.CompletedProcess(" in source
@@ -242,7 +234,7 @@ def test_cursor_hook_script_uses_one_deadline_and_isolated_process_tree(tmp_path
     context = HarnessContext(home_dir=tmp_path / "home", guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     source = cursor_hook_script_source(context)
 
-    assert "deadline_monotonic = time.monotonic() + GUARD_HOOK_TIMEOUT_SECONDS" in source
+    assert "deadline_monotonic = _HOOK_DEADLINE_MONOTONIC" in source
     assert "timeout = _request_timeout(deadline_monotonic" in source
     assert "run_isolated_hook_process(" in source
     assert "allow_windows_breakaway=True" in source
@@ -499,11 +491,13 @@ def test_cursor_hook_recovery_honors_total_deadline(tmp_path: Path) -> None:
 
     # Includes cold interpreter startup, which can dominate the injected 200 ms hook budget on loaded CI.
     assert time.monotonic() - started < 2
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert response["user_message"] == ("HOL Guard could not complete the native hook decision safely.")
 
 
-def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_path: Path) -> None:
+def test_cursor_hook_denies_workspace_read_within_recovery_deadline(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
     home_dir = tmp_path / "home"
@@ -527,14 +521,16 @@ def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_p
     (guard_home / "daemon-auth-token").write_text("stale-token", encoding="utf-8")
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
-    script_path.write_text(
-        cursor_hook_script_source(
-            context,
-            guard_cli=[sys.executable, str(fallback)],
-            recovery_command=[sys.executable, str(recovery)],
-        ),
-        encoding="utf-8",
+    source = cursor_hook_script_source(
+        context,
+        guard_cli=[sys.executable, str(fallback)],
+        recovery_command=[sys.executable, str(recovery)],
+    ).replace(
+        f"GUARD_HOOK_TIMEOUT_SECONDS = {_MANAGED_HOOK_TIMEOUT_SECONDS - 3}",
+        "GUARD_HOOK_TIMEOUT_SECONDS = 0.2",
+        1,
     )
+    script_path.write_text(source, encoding="utf-8")
     started = time.monotonic()
     proc = subprocess.run(
         [sys.executable, str(script_path)],
@@ -551,8 +547,10 @@ def test_cursor_hook_allows_workspace_read_without_blocking_on_dead_daemon(tmp_p
         timeout=3,
     )
     assert time.monotonic() - started < 2
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert proc.returncode == 2, proc.stderr
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert response["user_message"] == ("HOL Guard could not complete the native hook decision safely.")
     assert not fallback_marker.exists()
 
 
@@ -566,7 +564,14 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
     workspace_dir.mkdir()
     context = HarnessContext(home_dir=home_dir, guard_home=guard_home, workspace_dir=workspace_dir)
     script_path = tmp_path / "cursor-hook.py"
-    script_path.write_text(cursor_hook_script_source(context), encoding="utf-8")
+    script_path.write_text(
+        cursor_hook_script_source(
+            context,
+            guard_cli=[sys.executable, "-c", "raise SystemExit(1)"],
+            recovery_command=[sys.executable, "-c", "raise SystemExit(0)"],
+        ),
+        encoding="utf-8",
+    )
     proc = subprocess.run(
         [sys.executable, "-S", str(script_path)],
         input=json.dumps(
@@ -579,10 +584,13 @@ def test_cursor_hook_emits_json_when_guard_package_import_fails(tmp_path: Path) 
         capture_output=True,
         text=True,
         env={"PATH": os.environ.get("PATH", ""), "HOME": str(home_dir)},
-        timeout=10,
+        timeout=3,
     )
-    assert proc.returncode == 0, proc.stderr
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2, proc.stderr
+    assert json.loads(proc.stdout) == {
+        "permission": "deny",
+        "user_message": "HOL Guard could not complete the native hook decision safely.",
+    }
 
 
 @pytest.mark.skipif(os.name != "posix", reason="process-group descendant assertion requires POSIX")
@@ -635,8 +643,8 @@ def test_cursor_hook_timeout_kills_fallback_descendants(
     )
     time.sleep(1)
 
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout)["permission"] == "allow"
+    assert proc.returncode == 2
+    assert json.loads(proc.stdout)["permission"] == "deny"
     assert not marker.exists()
 
 
@@ -701,6 +709,10 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
 def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
 
+    # The daemon fast path asserts the off-mode denial surface; pin the mode so
+    # a native-regression ambient env does not force a live native review.
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
+
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard"
     workspace_dir = tmp_path / "workspace"
@@ -737,8 +749,10 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     finally:
         daemon.stop()
 
-    assert proc.returncode == 0
-    assert json.loads(proc.stdout) == {"permission": "allow"}
+    assert proc.returncode == 2
+    response = json.loads(proc.stdout)
+    assert response["permission"] == "deny"
+    assert "explicitly disabled" in response["user_message"]
 
 
 @pytest.mark.parametrize(
@@ -749,7 +763,7 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
         ({"recorded": False}, 0),
     ],
 )
-def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
+def test_generated_cursor_hook_denies_missing_or_unknown_guard_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     guard_payload: dict[str, object],
@@ -791,9 +805,12 @@ def test_generated_cursor_hook_continues_for_missing_or_unknown_guard_action(
         timeout=10,
     )
 
-    assert proc.returncode == 0
+    assert proc.returncode == 2
     response = json.loads(proc.stdout)
-    assert response["permission"] == "allow"
+    assert response["permission"] == "deny"
+    assert response["user_message"] == (
+        "Guard could not complete a trusted hook decision. Retry or repair Guard from a terminal."
+    )
 
 
 def test_cursor_resolve_guard_cli_command_ignores_path_collisions(
@@ -1089,54 +1106,6 @@ def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path)
     ]
     stripped = _strip_managed_hook_entries(entries, script_path=script_path)
     assert stripped == [{"command": "lean-ctx hook rewrite", "matcher": "Shell"}]
-
-
-def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home = tmp_path / "home"
-    guard_home = tmp_path / "guard"
-    workspace = tmp_path / "workspace"
-    home.mkdir()
-    guard_home.mkdir()
-    workspace.mkdir()
-    cursor_dir = home / ".cursor"
-    cursor_dir.mkdir()
-    script_path = cursor_dir / "hooks" / "hol-guard-cursor-hook.py"
-    hooks_path = cursor_dir / "hooks.json"
-    hooks_path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "hooks": {
-                    "preToolUse": [
-                        {"command": "lean-ctx hook rewrite", "matcher": "Shell"},
-                        {
-                            "command": str(script_path),
-                            "failClosed": True,
-                            "matcher": "Shell|Read",
-                            "timeout": 35,
-                        },
-                    ]
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda _context: ["hol-guard"],
-    )
-    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
-    result = install_cursor_hooks(context)
-    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    pre_tool_use = installed["hooks"].get("preToolUse")
-    if pre_tool_use is not None:
-        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
-    assert "beforeShellExecution" in installed["hooks"]
-    assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
-    for event_name in _MANAGED_HOOK_EVENTS:
-        entry = installed["hooks"][event_name][-1]
-        assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
 
 
 def test_install_cursor_hooks_preserves_top_level_event_entries(
@@ -1860,94 +1829,6 @@ def test_normalize_cursor_shell_command_unwraps_lean_ctx_wrapper() -> None:
 
     assert normalized.startswith("gh api graphql")
     assert "lean-ctx" not in normalized
-
-
-def test_cursor_native_shell_is_approved_for_lean_ctx_wrapped_retry(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home_dir = tmp_path / "home"
-    store = GuardStore(home_dir)
-    conversation_id = "conv-cursor-lean-ctx-session-allow"
-    command = "gh api graphql -f query='query { viewer { login } }'"
-    wrapped = "/path/to/lean-ctx -c 'gh api graphql -f query='\\''query { viewer { login } }'\\'''"
-    now = guard_commands_module._now()
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-gh-viewer-login",
-        now=now,
-    )
-
-    payload = {"conversation_id": conversation_id, "command": wrapped}
-    assert guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) == "hash-gh-viewer-login"
-
-
-def test_unsigned_cursor_native_shell_allowance_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-unsigned-session-allow"
-    command = "gh api graphql -f query='query { viewer { login } }'"
-    now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
-    store.set_sync_payload(
-        state_key,
-        {
-            "saved_at": now,
-            "action": "allow",
-            "artifact_id": "cursor:project:tool-action:gh-viewer-login",
-            "artifact_hash": "hash-gh-viewer-login",
-            "artifact_name": "destructive shell command",
-            "command": command,
-            "native_source": "cursor-native",
-        },
-        now,
-    )
-
-    payload = {"conversation_id": conversation_id, "command": command}
-    assert not guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) is None
-    assert store.get_sync_payload(state_key) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["source"] == "cursor-native-session"
-    assert events[0]["payload"]["integrity_status"] == "missing_integrity"
-
-
-def test_tampered_cursor_native_shell_allowance_fails_closed_with_integrity_event(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
-    from codex_plugin_scanner.guard.cli.commands_hook_runtime_eval import _cursor_native_saved_approval_hash
-
-    store = GuardStore(tmp_path / "home")
-    conversation_id = "conv-cursor-tampered-session-allow"
-    command = "rm -rf ./sensitive-directory"
-    now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
-    assert guard_commands_module._record_cursor_native_shell_allow_state(
-        store=store,
-        conversation_id=conversation_id,
-        command=command,
-        artifact=_cursor_shell_artifact(workspace_dir=tmp_path, command=command),
-        artifact_hash="hash-before-tamper",
-        now=now,
-    )
-    stored = store.get_sync_payload(state_key)
-    assert isinstance(stored, dict)
-    store.set_sync_payload(state_key, {**stored, "artifact_hash": "forged-hash"}, now)
-
-    payload = {"conversation_id": conversation_id, "command": command}
-    assert not guard_commands_module._cursor_native_shell_is_approved(store, payload)
-    assert _cursor_native_saved_approval_hash(store, payload) is None
-    events = store.list_events(event_name="rule.ignored.local_integrity")
-    assert len(events) == 1
-    assert events[0]["payload"]["integrity_status"] == "tampered"
-    assert events[0]["payload"]["message"] == "local_authority_integrity_payload_hash_mismatch"
 
 
 def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tmp_path: Path) -> None:

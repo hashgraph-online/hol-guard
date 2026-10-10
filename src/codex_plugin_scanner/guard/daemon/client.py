@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import http.client
-import io
 import json
+import math
 import socket
 import time
 import urllib.error
@@ -14,9 +14,10 @@ from contextlib import closing, suppress
 from http.client import HTTPConnection, HTTPException
 from pathlib import Path
 from threading import Timer
-from typing import Protocol, TypeGuard, cast
+from typing import TypeGuard, cast
 from urllib.parse import urlsplit
 
+from ..runtime.extension_control_limits import MAX_DAEMON_CATALOG_RESPONSE_BYTES, MAX_DAEMON_GET_RESPONSE_BYTES
 from .manager import (
     clear_guard_daemon_state,
     ensure_guard_daemon,
@@ -24,6 +25,7 @@ from .manager import (
     load_guard_daemon_url,
     load_running_guard_daemon_identity,
 )
+from .response_bounds import _bound_response_read, _ReadableResponse, _response_is_closed
 
 _HEALTH_PROBE_DEADLINE_SECONDS = 1.0
 
@@ -35,9 +37,21 @@ def _interrupt_health_socket(stream: socket.socket) -> None:
         stream.shutdown(socket.SHUT_RDWR)
 
 
-def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, object] | None:
+def read_guard_health_details(
+    daemon_url: str,
+    auth_token: str,
+    *,
+    deadline_monotonic: float | None = None,
+) -> dict[str, object] | None:
     """Read bounded authenticated health details over direct, non-redirecting loopback IPC."""
     try:
+        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
+        if deadline_monotonic is not None:
+            if isinstance(deadline_monotonic, bool) or not math.isfinite(deadline_monotonic):
+                return None
+            deadline = min(deadline, deadline_monotonic)
+        if time.monotonic() >= deadline:
+            return None
         parsed = urlsplit(daemon_url)
         if (
             parsed.scheme != "http"
@@ -53,10 +67,10 @@ def read_guard_health_details(daemon_url: str, auth_token: str) -> dict[str, obj
             return None
         # HTTPConnection neither consults proxy environment variables nor follows
         # redirects. Never forward the daemon token to a redirected authority.
-        deadline = time.monotonic() + _HEALTH_PROBE_DEADLINE_SECONDS
-        with closing(
-            HTTPConnection(parsed.hostname, parsed.port, timeout=_HEALTH_PROBE_DEADLINE_SECONDS)
-        ) as connection:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None
+        with closing(HTTPConnection(parsed.hostname, parsed.port, timeout=remaining)) as connection:
             connection.connect()
             stream = connection.sock
             remaining = deadline - time.monotonic()
@@ -114,54 +128,7 @@ class GuardDaemonResponseSchemaError(GuardDaemonRequestError):
 
 _DEFAULT_REQUEST_TIMEOUT_S: float = 5.0
 _STATUS_REQUEST_TIMEOUT_S: float = 0.25
-_MAX_GET_RESPONSE_BYTES: int = 1_048_576
-
-
-class _ReadableResponse(Protocol):
-    def read(self, n: int = -1) -> bytes: ...
-
-
-def _bound_response_read(response: object, timeout: float) -> bool:
-    """Apply a socket deadline before a blocking urllib response read."""
-
-    if isinstance(response, io.BytesIO):
-        return True
-    candidates: list[object] = [response]
-    seen: set[int] = set()
-    while candidates and len(seen) < 12:
-        candidate = candidates.pop(0)
-        if id(candidate) in seen:
-            continue
-        seen.add(id(candidate))
-        if isinstance(candidate, io.BytesIO):
-            return True
-        set_timeout = getattr(candidate, "settimeout", None)
-        if callable(set_timeout):
-            set_timeout(timeout)
-            return True
-        for attribute in ("fp", "raw", "_sock", "sock", "socket"):
-            nested = getattr(candidate, attribute, None)
-            if nested is not None:
-                candidates.append(nested)
-    return False
-
-
-def _response_is_closed(response: object) -> bool:
-    candidates: list[object] = [response]
-    seen: set[int] = set()
-    while candidates and len(seen) < 12:
-        candidate = candidates.pop(0)
-        if id(candidate) in seen:
-            continue
-        seen.add(id(candidate))
-        is_closed = getattr(candidate, "isclosed", None)
-        if callable(is_closed) and is_closed() is True:
-            return True
-        for attribute in ("fp", "raw"):
-            nested = getattr(candidate, attribute, None)
-            if nested is not None:
-                candidates.append(nested)
-    return False
+_MAX_GET_RESPONSE_BYTES: int = MAX_DAEMON_GET_RESPONSE_BYTES
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -247,20 +214,6 @@ class GuardSurfaceDaemonClient:
             },
         )
 
-    def add_operation_item(
-        self,
-        *,
-        operation_id: str,
-        item_type: str,
-        payload: dict[str, object],
-    ) -> dict[str, object]:
-        response = self._post(
-            f"/v1/operations/{operation_id}/items",
-            {"item_type": item_type, "payload": payload},
-        )
-        item = response.get("item")
-        return dict(item) if _is_string_object_dict(item) else response
-
     def update_operation_status(
         self,
         *,
@@ -279,7 +232,12 @@ class GuardSurfaceDaemonClient:
         return dict(operation) if _is_string_object_dict(operation) else response
 
     def extension_control_catalog(self) -> dict[str, object]:
-        return self._get("/v1/extension-controls/catalog", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
+        # The legacy full catalog enumerates every built-in extension and has its own local budget.
+        return self._get(
+            "/v1/extension-controls/catalog",
+            timeout=_DEFAULT_REQUEST_TIMEOUT_S,
+            max_bytes=MAX_DAEMON_CATALOG_RESPONSE_BYTES,
+        )
 
     def effective_extension_controls(self) -> dict[str, object]:
         return self._get("/v1/extension-controls/effective", timeout=_DEFAULT_REQUEST_TIMEOUT_S)
@@ -328,7 +286,18 @@ class GuardSurfaceDaemonClient:
         response = self._post("/v1/policy/claim", payload)
         return response.get("claimed") is True
 
-    def _get(self, path: str, *, timeout: float) -> dict[str, object]:
+    def open_get(self, path: str, headers: dict[str, str], *, timeout: float) -> http.client.HTTPResponse:
+        """Open an authenticated loopback GET; the caller owns and closes the response."""
+        request = urllib.request.Request(f"{self.daemon_url}{path}", headers=headers, method="GET")
+        return urllib.request.urlopen(request, timeout=timeout)
+
+    def _get(
+        self,
+        path: str,
+        *,
+        timeout: float,
+        max_bytes: int = _MAX_GET_RESPONSE_BYTES,
+    ) -> dict[str, object]:
         deadline = time.monotonic() + timeout
         request = urllib.request.Request(
             f"{self.daemon_url}{path}",
@@ -337,7 +306,7 @@ class GuardSurfaceDaemonClient:
         )
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:
-                payload = self._read_response_with_deadline(response, deadline=deadline)
+                payload = self._read_response_with_deadline(response, deadline=deadline, max_bytes=max_bytes)
                 return self._decode_json_response(payload.decode("utf-8"))
         except urllib.error.HTTPError as error:
             raise self._http_request_error(error, deadline=deadline) from error
@@ -351,7 +320,11 @@ class GuardSurfaceDaemonClient:
                 raise GuardDaemonTransportError("Guard daemon response was truncated") from error
             try:
                 with urllib.request.urlopen(request, timeout=remaining) as retry_response:
-                    payload = self._read_response_with_deadline(retry_response, deadline=deadline)
+                    payload = self._read_response_with_deadline(
+                        retry_response,
+                        deadline=deadline,
+                        max_bytes=max_bytes,
+                    )
                     return self._decode_json_response(payload.decode("utf-8"))
             except TimeoutError as retry_error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
@@ -375,7 +348,10 @@ class GuardSurfaceDaemonClient:
         response: _ReadableResponse,
         *,
         deadline: float,
+        max_bytes: int = _MAX_GET_RESPONSE_BYTES,
     ) -> bytes:
+        if type(max_bytes) is not int or not 0 < max_bytes <= MAX_DAEMON_CATALOG_RESPONSE_BYTES:
+            raise ValueError("Guard daemon response limit must be a positive bounded integer")
         remaining = deadline - time.monotonic()
         if remaining <= 0.0:
             raise GuardDaemonTimeoutError("Guard daemon request timed out")
@@ -384,12 +360,12 @@ class GuardSurfaceDaemonClient:
         read1 = getattr(response, "read1", None)
         if not callable(read1):
             try:
-                payload = response.read(_MAX_GET_RESPONSE_BYTES + 1)
+                payload = response.read(max_bytes + 1)
             except TimeoutError as error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
             if time.monotonic() >= deadline:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out")
-            if len(payload) > _MAX_GET_RESPONSE_BYTES:
+            if len(payload) > max_bytes:
                 raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
             return payload
 
@@ -403,7 +379,7 @@ class GuardSurfaceDaemonClient:
             if not _bound_response_read(response, remaining):
                 raise GuardDaemonTransportError("Guard daemon response does not support bounded reads")
             try:
-                chunk = bounded_read(min(65_536, _MAX_GET_RESPONSE_BYTES + 1 - total_bytes))
+                chunk = bounded_read(min(65_536, max_bytes + 1 - total_bytes))
             except TimeoutError as error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from error
             if time.monotonic() >= deadline:
@@ -411,7 +387,7 @@ class GuardSurfaceDaemonClient:
             if not chunk:
                 break
             total_bytes += len(chunk)
-            if total_bytes > _MAX_GET_RESPONSE_BYTES:
+            if total_bytes > max_bytes:
                 raise GuardDaemonResponseSchemaError("Guard daemon response exceeded the size limit")
             chunks.append(chunk)
             if _response_is_closed(response):

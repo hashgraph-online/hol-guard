@@ -27,6 +27,7 @@ from .native_policy_snapshot_constants import (
     _VALID_SECURITY_LEVELS,
     POLICY_SNAPSHOT_MAX_HARNESS_ENTRIES,
     POLICY_SNAPSHOT_MAX_MAP_ENTRIES,
+    POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS,
     NativePolicySnapshotError,
 )
 
@@ -73,10 +74,16 @@ def _action_value(config: GuardConfig | Mapping[str, object], name: str, default
     return value
 
 
-def _string_map(value: object, *, risk_keys: bool = False, selector_keys: bool = False) -> dict[str, str]:
+def _string_map(
+    value: object,
+    *,
+    risk_keys: bool = False,
+    selector_keys: bool = False,
+    max_entries: int = POLICY_SNAPSHOT_MAX_MAP_ENTRIES,
+) -> dict[str, str]:
     if value is None:
         return {}
-    if not isinstance(value, Mapping) or len(value) > POLICY_SNAPSHOT_MAX_MAP_ENTRIES:
+    if not isinstance(value, Mapping) or len(value) > max_entries:
         raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
     result: dict[str, str] = {}
     for key, action in value.items():
@@ -159,7 +166,7 @@ def effective_native_policy_v3(config: GuardConfig | Mapping[str, object]) -> di
         or redaction_level not in _VALID_REDACTION_LEVELS
     ):
         raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
-    return {
+    policy: dict[str, object] = {
         "protection_posture": posture,
         "security_level": security_level,
         "default_action": _action_value(config, "default_action", "warn"),
@@ -175,6 +182,52 @@ def effective_native_policy_v3(config: GuardConfig | Mapping[str, object]) -> di
         "sandbox_analysis": sandbox_analysis,
         "receipt_redaction_level": redaction_level,
     }
+    mcp_actions = _observed_mcp_action_map(_config_value(config, "mcp_tool_actions"))
+    if mcp_actions:
+        policy["mcp_tool_actions"] = mcp_actions
+    provider_actions = _provider_action_map(_config_value(config, "mcp_provider_actions"))
+    if provider_actions:
+        policy["mcp_provider_actions"] = provider_actions
+    provider_catalog_hash = _config_value(config, "mcp_provider_catalog_hash")
+    if provider_catalog_hash is not None:
+        if (
+            not isinstance(provider_catalog_hash, str)
+            or len(provider_catalog_hash) != 64
+            or any(character not in "0123456789abcdef" for character in provider_catalog_hash)
+        ):
+            raise NativePolicySnapshotError("native_provider_catalog_hash_invalid")
+        policy["mcp_provider_catalog_hash"] = provider_catalog_hash
+    return policy
+
+
+def _observed_mcp_action_map(value: object) -> dict[str, str]:
+    from .runtime.observed_mcp_tools import observed_mcp_tool
+
+    actions = _string_map(value, max_entries=POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS)
+    for selector, action in actions.items():
+        harness, separator, tool_name = selector.partition(":")
+        wildcard = tool_name.endswith("__*")
+        parsed = observed_mcp_tool(harness, tool_name[:-1] + "probe" if wildcard else tool_name)
+        if (
+            not separator
+            or parsed is None
+            or parsed.harness != harness
+            or action not in {"allow", "review", "block"}
+            or (wildcard and action != "block")
+        ):
+            raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
+    return actions
+
+
+def _provider_action_map(value: object) -> dict[str, str]:
+    from .runtime.mcp_provider_permissions import valid_provider_action_selector
+
+    actions = _string_map(value, max_entries=POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS)
+    if any(
+        action not in {"review", "block"} or not valid_provider_action_selector(key) for key, action in actions.items()
+    ):
+        raise NativePolicySnapshotError("native_policy_snapshot_provider_actions_invalid")
+    return actions
 
 
 def _stricter_action(left: object, right: object) -> str:
@@ -192,7 +245,7 @@ _SCALAR_ACTION_FIELDS = (
     "new_network_domain_action",
     "subprocess_action",
 )
-_MAP_FIELDS = ("risk_actions", "publisher_actions", "artifact_actions")
+_MAP_FIELDS = ("risk_actions", "publisher_actions", "artifact_actions", "mcp_tool_actions", "mcp_provider_actions")
 
 
 def _merge_scalar_actions(
@@ -213,14 +266,15 @@ def _merge_action_maps(
     for field in _MAP_FIELDS:
         values: dict[str, str] = {}
         for policy in policies:
-            mapping = policy.get(field)
+            mapping = policy.get(field, {} if field in {"mcp_tool_actions", "mcp_provider_actions"} else None)
             if not isinstance(mapping, Mapping):
                 raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
             for key, action in mapping.items():
                 if not isinstance(key, str):
                     raise NativePolicySnapshotError("native_policy_snapshot_policy_invalid")
                 values[key] = _stricter_action(values.get(key, "allow"), action)
-        merged[field] = values
+        if values or field not in {"mcp_tool_actions", "mcp_provider_actions"}:
+            merged[field] = values
 
 
 def _merge_harness_actions(

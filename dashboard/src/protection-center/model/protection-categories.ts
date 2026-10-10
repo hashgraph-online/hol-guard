@@ -1,4 +1,4 @@
-import type { ExtensionCatalogItem } from "../../extension-controls-api";
+import type { ExtensionCatalogSummary } from "../../extension-controls-api";
 
 export type ProtectionCategoryId =
   | "source-control"
@@ -34,7 +34,7 @@ export const PROTECTION_CATEGORIES: readonly ProtectionCategory[] = [
 
 const CATEGORY_BY_ID = new Map(PROTECTION_CATEGORIES.map((category) => [category.id, category]));
 
-function searchableExtensionText(extension: ExtensionCatalogItem): string {
+function searchableExtensionText(extension: ExtensionCatalogSummary): string {
   return [
     extension.extension_id,
     extension.name,
@@ -46,7 +46,7 @@ function searchableExtensionText(extension: ExtensionCatalogItem): string {
   ].join(" ").toLowerCase();
 }
 
-export function protectionCategoryIdForExtension(extension: ExtensionCatalogItem): ProtectionCategoryId {
+export function protectionCategoryIdForExtension(extension: ExtensionCatalogSummary): ProtectionCategoryId {
   const text = searchableExtensionText(extension);
   if (/\bgit\b|github|source.?control|repository|branch|commit/.test(text)) return "source-control";
   if (/package|dependency|npm|pnpm|yarn|pip|poetry|cargo|composer|gem|supply.?chain/.test(text)) return "packages";
@@ -60,13 +60,13 @@ export function protectionCategoryIdForExtension(extension: ExtensionCatalogItem
   return "system-shell";
 }
 
-export function protectionCategoryForExtension(extension: ExtensionCatalogItem): ProtectionCategory {
+export function protectionCategoryForExtension(extension: ExtensionCatalogSummary): ProtectionCategory {
   const id = protectionCategoryIdForExtension(extension);
   return CATEGORY_BY_ID.get(id) ?? PROTECTION_CATEGORIES[8]!;
 }
 
-export function groupProtectionModules(extensions: readonly ExtensionCatalogItem[]): Map<ProtectionCategoryId, ExtensionCatalogItem[]> {
-  const groups = new Map<ProtectionCategoryId, ExtensionCatalogItem[]>();
+export function groupProtectionModules(extensions: readonly ExtensionCatalogSummary[]): Map<ProtectionCategoryId, ExtensionCatalogSummary[]> {
+  const groups = new Map<ProtectionCategoryId, ExtensionCatalogSummary[]>();
   for (const extension of extensions) {
     const id = protectionCategoryIdForExtension(extension);
     const existing = groups.get(id) ?? [];
