@@ -15,12 +15,12 @@ def bridge_calls(events: list[dict[str, Any]], parents: list[dict[str, Any]]) ->
         if kind == "tool_execution_start" and key in parent_ids:
             active.add(key)
         elif kind == "tool_execution_end" and key in parent_ids:
-            if any(item["parent"] == key for item in pending.values()):
+            if key not in active or any(item["parent"] == key for item in pending.values()):
                 raise ValueError("eval ended with an incomplete bridge call")
             active.remove(key)
         elif kind in {"eval_bridge_start", "eval_bridge_end"}:
             parent, event = row.get("parentToolCallId"), row.get("event")
-            if active != {parent} or not isinstance(event, dict):
+            if not isinstance(parent, str) or active != {parent} or not isinstance(event, dict):
                 raise ValueError("eval bridge lacks an executing model parent")
             key, name = event.get("toolCallId"), event.get("toolName")
             if not isinstance(key, str) or not isinstance(name, str) or not key.startswith(f"js-{name}-"):
