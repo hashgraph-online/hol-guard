@@ -162,6 +162,7 @@ def _resident_request(
             "claim_approval_reuse_decisions",
             "approval_reuse_diagnostic",
             "approval_resolution_plan",
+            "approval_queue_identity",
             "daemon_route",
             "daemon_handler",
         }:

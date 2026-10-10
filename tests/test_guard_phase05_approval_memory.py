@@ -8,11 +8,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard import store_approval_writes
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _codex_prompt_credential_file_artifact
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, GuardArtifact, HarnessDetection, PolicyDecision
+from codex_plugin_scanner.guard.native_approval_queue_identity import (
+    QueueIdentity,
+    native_approval_queue_identities,
+    queue_identity_item,
+)
 from codex_plugin_scanner.guard.native_approval_resolution import ApprovalResolutionPlanUnavailableError
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
@@ -30,7 +36,6 @@ from codex_plugin_scanner.guard.store import (
     _warn_only_policy_integrity_status,
     runtime_tool_action_exact_match_context,
 )
-from codex_plugin_scanner.guard.store_approvals import approval_queue_identity_for_request
 
 
 def _store(tmp_path: Path) -> GuardStore:
@@ -167,14 +172,31 @@ def _detector_context(tmp_path: Path) -> DetectorContext:
     )
 
 
-def test_gr101_gr103_action_identity_reuses_same_action_and_splits_changed_command() -> None:
+def _queue_identity(request: GuardApprovalRequest, guard_home: Path) -> tuple[str, str]:
+    identity = native_approval_queue_identities(
+        [
+            queue_identity_item(
+                launch_target=request.launch_target,
+                harness=request.harness,
+                workspace=request.workspace,
+                artifact_id=request.artifact_id,
+                envelope=request.action_envelope_json,
+                browser_intent=request.browser_intent,
+            )
+        ],
+        guard_home=guard_home,
+    )[0]
+    return identity.action_identity, identity.queue_group_id
+
+
+def test_gr101_gr103_action_identity_reuses_same_action_and_splits_changed_command(tmp_path: Path) -> None:
     same_a = _request("req-same-a", command="cat ~/.npmrc --request-id req-aaaa")
     same_b = _request("req-same-b", command="cat ~/.npmrc --request-id req-bbbb")
     changed = _request("req-changed", command="cat ~/.ssh/config")
 
-    same_identity_a, same_group_a = approval_queue_identity_for_request(same_a)
-    same_identity_b, same_group_b = approval_queue_identity_for_request(same_b)
-    changed_identity, changed_group = approval_queue_identity_for_request(changed)
+    same_identity_a, same_group_a = _queue_identity(same_a, tmp_path)
+    same_identity_b, same_group_b = _queue_identity(same_b, tmp_path)
+    changed_identity, changed_group = _queue_identity(changed, tmp_path)
 
     assert same_identity_a == same_identity_b
     assert same_group_a == same_group_b
@@ -1144,9 +1166,18 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
     )
 
 
-def test_resolution_without_any_integrity_backend_names_the_missing_key(tmp_path: Path) -> None:
+def test_resolution_without_any_integrity_backend_names_the_missing_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     store = _store(tmp_path)
     store._policy_integrity_secret_store = None
+    # Queue identity provisions the verifier key for the home; this test needs
+    # a home that never had one, so the identity is supplied directly.
+    monkeypatch.setattr(
+        store_approval_writes,
+        "native_approval_queue_identities",
+        lambda items, *, guard_home: [QueueIdentity("cat ~/.npmrc", "action", "approval-group:v1:test")],
+    )
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     store.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
 
