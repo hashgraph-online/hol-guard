@@ -4,14 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from ..action_lattice import guard_action_severity
-from .command_decision_adapter import evaluate_extension_interaction, legacy_rule_floor
-from .command_extensions import CommandSafetyExtensionRegistry
-from .command_model import CanonicalCommand
-from .extension_control_runtime import current_extension_control_snapshot
-from .extension_trust import filter_inert_external_observations
-from .native_command_extension_evidence import observations_from_native_evidence
-
 
 @dataclass(frozen=True, slots=True)
 class CommandExtensionInteractionMatch:
@@ -23,67 +15,3 @@ class CommandExtensionInteractionMatch:
 class CommandExtensionInteraction:
     priority: CommandExtensionInteractionMatch | None
     fallback: CommandExtensionInteractionMatch | None
-
-
-def classify_command_extension_interaction(
-    command: CanonicalCommand,
-    registry: CommandSafetyExtensionRegistry,
-    *,
-    native_extension_evidence: object,
-) -> CommandExtensionInteraction:
-    """Return sanitized legacy interaction projections from the central plane."""
-
-    snapshot = current_extension_control_snapshot()
-    if snapshot is None:
-        return CommandExtensionInteraction(None, None)
-    observations = filter_inert_external_observations(
-        observations_from_native_evidence(
-            native_extension_evidence,
-            registry,
-            command=command,
-            control_snapshot=snapshot,
-        ),
-        snapshot.layers,
-    )
-    reviewable_signal = any(
-        bool(item.uncertainty_reasons)
-        or (bool(item.effective_evidence) and legacy_rule_floor(item.extension, item.rule) not in {"allow", "monitor"})
-        for item in observations
-    )
-    decision = evaluate_extension_interaction(command, observations)
-    requires_interaction = reviewable_signal and guard_action_severity(decision.action) >= guard_action_severity(
-        "review"
-    )
-    if not requires_interaction:
-        return CommandExtensionInteraction(None, None)
-    matcher_failure_controls = any(
-        reason.reason_code in {"matcher-failure", "uncertainty.matcher-failure"}
-        for reason in decision.controlling_reasons
-    )
-    if matcher_failure_controls and decision.action != "block":
-        return CommandExtensionInteraction(
-            CommandExtensionInteractionMatch(
-                "command extension attribution uncertain",
-                "Guard requires review because it could not match this command to its extension permissions.",
-            ),
-            None,
-        )
-    if matcher_failure_controls:
-        return CommandExtensionInteraction(
-            CommandExtensionInteractionMatch(
-                "command extension matcher failure",
-                "Guard blocked an extension matcher boundary failure without exposing matcher-provided data.",
-            ),
-            None,
-        )
-
-    matches = tuple(
-        CommandExtensionInteractionMatch(item.rule.action_classes[0], item.rule.description)
-        for item in observations
-        if item.effective_evidence and item.rule.action_classes
-    )
-    priority = next(
-        (item for item in matches if item.action_class == "GitHub Actions administrative command"),
-        None,
-    )
-    return CommandExtensionInteraction(priority, matches[0] if matches else None)

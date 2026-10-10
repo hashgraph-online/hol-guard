@@ -18,8 +18,6 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPubl
 
 from .evidence_hash import canonical_guard_evidence_payload, guard_evidence_hash
 
-GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION = "guard-aibom-trust-attestation.v1"
-GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V2 = "guard-aibom-trust-attestation.v2"
 GUARD_TRUST_ATTESTATION_PAYLOAD_VERSION_V3 = "guard-aibom-trust-attestation.v3"
 GUARD_TRUST_ATTESTATION_DOMAIN = "hol-guard:aibom-trust-attestation:v3"
 GUARD_TRUST_ATTESTATION_SIGNATURE_ALGORITHM = "rsa-pss-sha256"
@@ -60,10 +58,6 @@ class GuardTrustAttestationVerificationPolicy:
 
 def canonical_trust_attestation_payload(payload: Mapping[str, object]) -> bytes:
     return canonical_guard_evidence_payload(payload).encode("utf-8")
-
-
-def payload_hash_for_trust_attestation(payload: Mapping[str, object]) -> str:
-    return guard_evidence_hash(payload)
 
 
 def resolve_trust_attestation_signing_config(

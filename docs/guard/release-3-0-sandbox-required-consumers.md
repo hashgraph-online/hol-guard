@@ -25,7 +25,6 @@ The canonical `sandbox-required` directive semantics and every consumer that rea
 | Persistence | schema | `store_command_shadow_schema.py`, `models.py`, `types.py` | store verbatim | No |
 | CLI support | payload/policy | `cli/commands_support_{hook_payload,interaction,prompts,runtime_policy}.py`, `cli/render.py` | render/pass through | No |
 | Supply chain | package eval | `local_supply_chain.py`, `runtime/supply_chain_package_eval.py`, `runtime/command_permission_catalog.py`, `runtime/secret_file_requests.py` | enforce on package path | No |
-| Advisory escalation | escalation | `runtime/advisory_escalation.py` | can raise, never lower | No |
 | Dashboard | UI display | `daemon/static/assets/*` (js) | display only | No (read-only) |
 | Schemas | product model | `schemas/guard_product_model_v1.json` | declares value | No |
 | Consumer service | orchestration | `consumer/service.py`, `decision_boundaries.py`, `harness_usage.py` | enforce at boundary | No |

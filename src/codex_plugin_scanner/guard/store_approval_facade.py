@@ -215,28 +215,6 @@ class StoreApprovalsMixin:
                 resolved_at=resolved_at,
             )
 
-    def resolve_request_with_signed_remote_result(
-        self,
-        request_id: str,
-        *,
-        resolution_action: str,
-        resolution_scope: str,
-        reason: str | None,
-        resolved_at: str,
-    ) -> dict[str, object]:
-        with self._connect() as connection:
-            request = load_approval_request(connection, request_id)
-            if request is not None:
-                require_resolvable_approval_request(request)
-            return persist_queue_resolution(
-                connection,
-                request_id,
-                resolution_action=resolution_action,
-                resolution_scope=resolution_scope,
-                reason=reason,
-                resolved_at=resolved_at,
-            )
-
     def resolve_matching_approval_requests(
         self,
         *,
@@ -437,28 +415,6 @@ class StoreApprovalsMixin:
                 """,
                 (resolution_action, resolution_scope, reason, resolved_at, *chunk),
             )
-
-    @staticmethod
-    def _matches_scope(
-        item: dict[str, object],
-        *,
-        scope: str,
-        artifact_id: str | None,
-        workspace: str | None,
-        publisher: str | None,
-    ) -> bool:
-        if scope == "global":
-            return True
-        if scope == "harness":
-            return True
-        if scope == "artifact":
-            return str(item["artifact_id"]) == artifact_id
-        if scope == "publisher":
-            return isinstance(item.get("publisher"), str) and item.get("publisher") == publisher
-        if scope == "workspace" and isinstance(workspace, str):
-            config_path = str(item.get("config_path") or "")
-            return _path_within_workspace(config_path, workspace)
-        return False
 
     def bulk_resolve_approval_requests(
         self,

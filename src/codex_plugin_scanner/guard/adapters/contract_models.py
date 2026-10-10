@@ -193,20 +193,6 @@ class HarnessCapabilityReport:
             "capabilities": [capability.to_dict() for capability in self.capabilities],
         }
 
-    def to_json(self) -> str:
-        """Render the deterministic machine representation."""
-
-        from .capability_report import render_capability_report_json
-
-        return render_capability_report_json(self)
-
-    def to_markdown(self) -> str:
-        """Render the deterministic Markdown representation."""
-
-        from .capability_report import render_capability_report_markdown
-
-        return render_capability_report_markdown(self)
-
 
 CapabilityReport = HarnessCapabilityReport
 

@@ -10,10 +10,11 @@ use guard_contracts::{
     GuardHookEnvelopeV2, LocalCliGrantRequestV1, McpRuntimeEvidenceRequestV1,
     McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
     McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, NativeHookRequestV1,
-    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1, PackageIntentParseRequestV1,
-    PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1, RuntimeCapabilitiesV1,
-    ShimAdminRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
-    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1, SupplyChainEvalRequestV1,
+    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
+    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -77,6 +78,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE.into(),
         guard_contracts::APPROVAL_GATE_FEATURE.into(),
         guard_contracts::PACKAGE_AUTHORITY_FEATURE.into(),
+        guard_contracts::PACKAGE_EVALUATION_COMPOSE_FEATURE.into(),
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
@@ -158,6 +160,7 @@ pub(crate) enum ResidentOperationV1 {
     McpStdioSessionRecv(McpStdioSessionRecvRequestV1),
     McpStdioSessionClose(McpStdioSessionCloseRequestV1),
     PackageAdvisoryIds(PackageAdvisoryIdsRequestV1),
+    PackageEvaluationCompose(PackageEvaluationComposeRequestV1),
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     GitExecutionSafety(GitExecutionSafetyRequestV1),
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
