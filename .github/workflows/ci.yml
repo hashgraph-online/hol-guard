@@ -417,8 +417,6 @@ jobs:
             --deselect tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences \
             --deselect tests/test_guard_policy_integrity.py::test_trust_backend_check_uses_spawn_from_concurrent_threads \
             --deselect tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store \
-            --deselect
-            --deselect
             --deselect tests/test_guard_headless_daemon_api.py::test_supply_chain_audit_scans_workspace_manifests \
             --deselect tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms \
             --deselect tests/test_guard_update_artifact.py::test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat \
