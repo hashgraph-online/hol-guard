@@ -38,6 +38,7 @@ _is_guard_hook_command = _hook_config.is_guard_hook_command
 _is_guard_hook_url = _hook_config.is_guard_hook_url
 _manifest_notes = _hook_config.manifest_notes
 _merge_hook_group = _hook_config.merge_hook_group
+_mark_missing_guard_hooks = _hook_config.mark_missing_guard_hooks
 _prune_guard_hook_entries = _hook_config.prune_guard_hook_entries
 _remove_unsupported_guard_hook_groups = _hook_config.remove_unsupported_guard_hook_groups
 _sync_runtime_hook_groups = _hook_config.sync_runtime_hook_groups
@@ -425,6 +426,13 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        payload = super().diagnostics(context)
+        if payload.get("setup_status") == "active":
+            settings_path = _claude_managed_settings_path(context)
+            _mark_missing_guard_hooks(payload, settings_path, _json_payload(settings_path))
+        return payload
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         resolved_executable = self.resolved_executable(context)

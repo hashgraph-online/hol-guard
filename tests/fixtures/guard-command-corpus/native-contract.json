@@ -2,14 +2,14 @@
   "authoring_method": "Expected signatures were authored from reviewed native source and host critical floors. Membership counts and hashes use only immutable corpus inputs and explicit variant selectors; native evaluation results are not an authoring input.",
   "groups": [
     {
-      "basis": "host critical capability replay floor blocks the exact native command",
+      "basis": "host critical capability replay floor blocks the exact native command and the native pretool self-protection floor blocks it too",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
         "model_confidence": "exact",
         "model_uncertainty": null,
-        "native_floor": "review",
-        "native_reason": "native_command_review_required",
+        "native_floor": "block",
+        "native_reason": "native_guard_self_protection",
         "path_overridden": false,
         "uncertain_rule_ids": []
       },

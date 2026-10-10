@@ -2459,5 +2459,56 @@
    "exact_raw_text": true,
    "parser_profile": "posix-simple-v1"
   }
+ },
+ {
+  "command": "hol-guard hooks remove --help",
+  "factors": [
+   {
+    "source": "policy",
+    "reason_code": "critical.guard-control-help",
+    "action": "review",
+    "proof_route": null,
+    "segment_ref": "segment:0"
+   }
+  ],
+  "v1": {
+   "normalized_text": "hol-guard hooks remove --help",
+   "dialect": "posix",
+   "transport": "shell_string",
+   "extraction_provenance": "guard-shell",
+   "wrapper_chain": [],
+   "segments": [
+    {
+     "text": "hol-guard hooks remove --help",
+     "tokens": [
+      "hol-guard",
+      "hooks",
+      "remove",
+      "--help"
+     ],
+     "executable": "hol-guard",
+     "arguments": [
+      "hooks",
+      "remove",
+      "--help"
+     ],
+     "environment_names": [],
+     "wrapper_chain": [],
+     "path_overridden": false,
+     "execution_context": "top:0",
+     "pipeline_index": 0,
+     "span": {
+      "source": "normalized",
+      "start": 0,
+      "end": 29
+     }
+    }
+   ],
+   "confidence": "exact",
+   "uncertainty_reason": null,
+   "path_overridden": false,
+   "exact_raw_text": true,
+   "parser_profile": "posix-simple-v1"
+  }
  }
 ]

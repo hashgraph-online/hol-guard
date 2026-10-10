@@ -382,3 +382,34 @@ def test_relative_configured_guard_home_denies_before_daemon_dispatch(
 
     assert returncode == 0
     assert _json_object(output.getvalue())["decision"] == "deny"
+
+
+@pytest.mark.parametrize(
+    ("trailing", "dispatched"),
+    [
+        (["#", "HOL_GUARD_MANAGED_ZCODE"], True),
+        (["#", "HOL_GUARD_MANAGED_OTHER"], False),
+        (["HOL_GUARD_MANAGED_ZCODE"], False),
+        (["#", "HOL_GUARD_MANAGED_ZCODE", "extra"], False),
+    ],
+)
+def test_cmd_exe_passes_zcode_marker_comment_as_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    trailing: list[str],
+    dispatched: bool,
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run(config: dict[str, object], *, input_text: str, deadline_monotonic: float | None = None) -> int:
+        calls.append(config)
+        return 0
+
+    monkeypatch.setattr(bounded_cli_hook_bridge, "run_bounded_cli_hook", fake_run)
+    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_bounded_stdin", lambda _deadline: ("{}", "{}"))
+    output = io.StringIO()
+    with redirect_stdout(output):
+        returncode = bounded_cli_hook_bridge.main_from_argv([json.dumps(_config(tmp_path, harness="zcode")), *trailing])
+
+    assert bool(calls) is dispatched
+    assert returncode == (0 if dispatched else 2)

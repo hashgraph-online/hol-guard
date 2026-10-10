@@ -61,6 +61,8 @@ mod local_mcp_grant;
 pub use local_mcp_grant::*;
 mod mcp_proxy_decision;
 pub use mcp_proxy_decision::*;
+mod mcp_sensitive_read;
+pub use mcp_sensitive_read::*;
 mod request_context;
 pub use request_context::*;
 mod skill_directory_identity;
@@ -97,6 +99,8 @@ mod generic_hook_payload;
 pub use generic_hook_payload::*;
 mod hook_decision;
 pub use hook_decision::*;
+mod daemon_handler;
+pub use daemon_handler::*;
 mod daemon_route;
 pub use daemon_route::*;
 

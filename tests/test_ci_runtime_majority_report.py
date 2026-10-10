@@ -198,6 +198,8 @@ def test_shipped_scope_is_valid_and_has_no_stale_entries(shipped_report: dict) -
     assert result["metric"]["rust_runtime_loc"] > 0
     assert 0 < result["metric"]["share"] < 1
     assert len(result["retirement_worklist"]) == 40
+    assert result["python"]["pending_unclassified_loc"] == 0
+    assert result["python"]["pending_unclassified_modules"] == []
     assert result["exclusions"], "every exclusion must be reported"
 
 

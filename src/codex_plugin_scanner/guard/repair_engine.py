@@ -227,6 +227,8 @@ def repair_hooks(
             repaired.append(harness)
         except Exception as error:
             failed.append({"harness": harness, "error": f"{type(error).__name__}: {str(error)[:_MAX_ERROR_CHARS]}"})
+    still_broken = _still_broken_after_reinstall(context, store, repaired)
+    repaired = [name for name in repaired if name not in still_broken]
     if failed:
         failed_names = ", ".join(item["harness"] for item in failed)
         return _step(
@@ -235,8 +237,39 @@ def repair_hooks(
             f"Reinstalled {len(repaired)} app(s); {len(failed)} failed: {failed_names}.",
             repaired=repaired,
             failed=failed,
+            needs_attention=still_broken,
         )
-    return _step("hooks", "changed", f"Reinstalled hooks for: {', '.join(repaired)}.", repaired=repaired, failed=[])
+    if still_broken and not repaired:
+        return _step(
+            "hooks",
+            "skipped",
+            f"Reinstalling hooks did not clear the problem for: {', '.join(still_broken)}. "
+            "Check that the app is installed and its hooks are trusted, then run `hol-guard doctor --json`.",
+            repaired=[],
+            failed=[],
+            needs_attention=still_broken,
+        )
+    summary = f"Reinstalled hooks for: {', '.join(repaired)}."
+    if still_broken:
+        summary += f" Still needs attention: {', '.join(still_broken)}."
+    return _step("hooks", "changed", summary, repaired=repaired, failed=[], needs_attention=still_broken)
+
+
+def _still_broken_after_reinstall(context: HarnessContext, store: GuardStore, reinstalled: list[str]) -> list[str]:
+    """Reinstalled apps that stay broken, such as a missing binary or untrusted hooks.
+
+    Reinstalling cannot fix those, so reporting them as repaired every run
+    would hide a problem that needs the user.
+    """
+
+    if not reinstalled:
+        return []
+    try:
+        remaining = {str(item["harness"]) for item in broken_hook_harnesses(context, store)}
+    except Exception:
+        # An unverified reinstall is not proof the hooks work again.
+        return list(reinstalled)
+    return [name for name in reinstalled if name in remaining]
 
 
 def repair_package_shims(context: HarnessContext, *, dry_run: bool) -> dict[str, object]:
@@ -313,9 +346,14 @@ def run_repair(
     return build_report(steps, dry_run=dry_run)
 
 
+def _step_needs_attention(step: dict[str, object]) -> bool:
+    attention = step.get("needs_attention")
+    return isinstance(attention, list) and bool(attention)
+
+
 def build_report(steps: list[dict[str, object]], *, dry_run: bool) -> dict[str, object]:
     statuses = [str(item["status"]) for item in steps]
-    if "error" in statuses:
+    if "error" in statuses or any(_step_needs_attention(item) for item in steps):
         status = "partial"
     elif "planned" in statuses:
         status = "needs_repair"
@@ -348,6 +386,8 @@ def format_repair_summary(steps: list[dict[str, object]], *, status: str, dry_ru
         lines.append("Guard was repaired. Restart any open coding-agent sessions that were blocked.")
     else:
         lines.append("Nothing needed repair.")
+    if any(_step_needs_attention(item) for item in steps):
+        lines.append("Some apps still need attention. See the hooks step above.")
     return "\n".join(lines)
 
 

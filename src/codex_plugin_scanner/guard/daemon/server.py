@@ -25,13 +25,13 @@ import uuid
 from collections.abc import Callable, Mapping
 from contextlib import suppress
 from datetime import datetime, timezone
+from functools import partial
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, BinaryIO, ClassVar, TypeAlias, TypedDict, TypeGuard, cast
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
-from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
@@ -141,11 +141,22 @@ from ..local_supply_chain import (
 )
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import (
-    DECISION_SCOPE_VALUES,
-    DecisionScope,
     GuardRuntimeRegistration,
     PolicyDecision,
     format_local_http_origin,
+)
+from ..native_daemon_handler import (
+    HandlerDecision,
+    NativeDaemonHandlerError,
+    native_body_handler,
+    native_detection_app_statuses,
+    native_events_cursor,
+    native_harness_action,
+    native_headless_action_error,
+    native_headless_action_state,
+    native_headless_cursor_surface_error,
+    native_requests_list,
+    native_supply_chain_error,
 )
 from ..native_daemon_route import (
     NativeDaemonRouteError,
@@ -394,10 +405,6 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
             "unsupported_managers": [],
         }
     }
-
-
-def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
-    return value in DECISION_SCOPE_VALUES
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -1396,191 +1403,27 @@ def _headless_safe_failure_reasons() -> dict[str, str]:
     }
 
 
-def _supply_chain_package_action_error_response(
-    *,
-    operation: str,
-    error: Exception,
-) -> tuple[int, dict[str, object]]:
-    if isinstance(error, GuardSyncAuthorizationExpiredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_reconnect_required",
-                "message": str(error).strip() or "Guard Cloud authorization expired.",
-                "operation": operation,
-            },
-        )
-    if isinstance(error, GuardSyncNotConfiguredError):
-        return (
-            403,
-            {
-                "error": "guard_cloud_connect_required",
-                "message": str(error).strip() or "Guard Cloud workspace is not connected.",
-                "operation": operation,
-            },
-        )
-    if isinstance(error, GuardSyncNotAvailableError):
-        payload: dict[str, object] = {
-            "error": "supply_chain_sync_unavailable",
-            "message": str(error).strip() or "Supply-chain sync is not available on this device.",
-            "operation": operation,
-        }
-        if error.retryable:
-            payload["retryable"] = True
-        return (503, payload)
-    message = str(error).strip() or "Guard supply-chain bundle sync failed."
-    return (
-        502,
-        {
-            "error": "supply_chain_sync_failed",
-            "message": message,
-            "operation": operation,
-        },
-    )
-
-
-def _headless_detection_status_to_app_status(value: object) -> str:
-    status_map = {
-        "protected": "protected",
-        "found": "observed",
-        "not_found": "inactive",
-    }
-    return status_map.get(str(value), "unknown")
-
-
-def _headless_error_payload(
-    *,
-    code: str,
-    message: str,
-    retryable: bool,
-    detail: str | None = None,
-) -> dict[str, object]:
-    error_payload: dict[str, object] = {
-        "code": code,
-        "message": message,
-        "retryable": retryable,
-    }
-    if detail:
-        error_payload["detail"] = detail
-    payload: dict[str, object] = {
-        "status": "failed",
-        "error": error_payload,
-    }
-    return payload
-
-
-def _headless_action_error_payload(
-    *,
-    operation: str,
-    error_code: str,
-) -> tuple[int, dict[str, object]]:
-    error_details = {
-        "missing_harness": (
-            400,
-            "Choose an app before retrying.",
-            False,
-        ),
-        "unknown_harness": (
-            404,
-            "This app is not supported by local Guard.",
-            False,
-        ),
-        "confirmation_required": (
-            409,
-            "Disconnect needs the local confirmation phrase before Guard removes protection.",
-            False,
-        ),
-        "unsupported_operation": (
-            400,
-            "This version of local Guard cannot run the requested app action.",
-            False,
-        ),
-    }
-    known_error = error_details.get(error_code)
-    if known_error is not None:
-        status, message, retryable = known_error
-        return status, _headless_error_payload(
-            code=error_code,
-            message=message,
-            retryable=retryable,
-        )
-    operation_code = "proof_failed" if operation == "scan" else f"{operation}_failed"
-    operation_label = "connection check" if operation == "scan" else operation
-    return 400, _headless_error_payload(
-        code=operation_code,
-        message=f"Guard could not finish the {operation_label}.",
-        retryable=True,
-    )
-
-
-def _headless_app_status_from_result(*, operation: str, result: dict[str, object]) -> str:
-    if operation in {"install", "repair"}:
-        managed_install = result.get("managed_install")
-        if isinstance(managed_install, dict) and bool(managed_install.get("active")):
-            return "protected"
-        return "unknown"
-    if operation == "remove":
-        managed_install = result.get("managed_install")
-        if isinstance(managed_install, dict) and managed_install.get("active") is False:
-            return "inactive"
-        return "unknown"
-    verification = result.get("verification")
-    if isinstance(verification, dict):
-        if bool(verification.get("installed")):
-            return "protected"
-        if bool(verification.get("command_available")) or bool(verification.get("config_paths")):
-            return "observed"
-        return "inactive"
-    return "unknown"
-
-
-def _headless_action_state_payload(
-    *,
-    harness: str,
-    operation: str,
-    result: dict[str, object],
-    receipt: dict[str, object],
-) -> dict[str, object]:
-    app_status = _headless_app_status_from_result(operation=operation, result=result)
-    if operation == "install":
-        outcome = "app_connected"
-        message = f"{harness} is connected through local Guard."
-        proof_status = "pending"
-    elif operation == "repair":
-        outcome = "app_repaired"
-        message = f"{harness} protection was refreshed."
-        proof_status = "pending"
-    elif operation == "remove":
-        outcome = "app_disconnected"
-        message = f"{harness} protection was removed."
-        proof_status = "not_applicable"
-    elif operation == "scan":
-        proof_passed = app_status == "protected"
-        # Keep protocol values stable for Cloud clients; user-facing copy below avoids jargon.
-        outcome = "proof_passed" if proof_passed else "proof_failed"
-        message = (
-            f"{harness} connection check passed. Guard sees local protection."
-            if proof_passed
-            else f"{harness} connection check finished, but Guard does not see active local protection yet."
-        )
-        proof_status = "passed" if proof_passed else "failed"
-    else:
-        outcome = "status_checked"
-        message = f"{harness} status checked."
-        proof_status = "not_applicable"
+def _receipt_summary(receipt: dict[str, object]) -> dict[str, object]:
     return {
-        "app_status": app_status,
-        "message": message,
-        "outcome": outcome,
-        "proof_status": proof_status,
-        "receipt_summary": {
-            "id": receipt.get("id"),
-            "operation": receipt.get("operation"),
-            "status": receipt.get("status"),
-            "timestamp": receipt.get("timestamp"),
-        },
-        "retryable": operation in {"install", "repair", "scan"},
+        "id": receipt.get("id"),
+        "operation": receipt.get("operation"),
+        "status": receipt.get("status"),
+        "timestamp": receipt.get("timestamp"),
     }
+
+
+_NATIVE_HANDLER_UNAVAILABLE: tuple[int, dict[str, object]] = (503, {"error": "native_handler_policy_unavailable"})
+
+
+def _headless_failure(
+    ask: Callable[[], tuple[int, dict[str, Any]]],
+) -> tuple[int, dict[str, object]]:
+    """A failed headless action as the resident shaped it; fail closed when it cannot answer."""
+
+    try:
+        return ask()
+    except NativeDaemonHandlerError:
+        return _NATIVE_HANDLER_UNAVAILABLE
 
 
 def _run_headless_cloud_sync(
@@ -2691,7 +2534,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
-            self._stream_events(_int_query_value(parsed.query, "cursor"))
+            cursor_decision = self._native_handler_decision(
+                lambda: native_events_cursor(parsed.query, guard_home=store.guard_home)
+            )
+            if cursor_decision is None:
+                return
+            self._stream_events(cursor_decision.fields["cursor"])
             return
         if parsed.path == "/v1/command-activity/events":
             if self._query_has_guard_token(parsed.query):
@@ -2922,7 +2770,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_mcp_policy_request_get(path_parts[3])
             return
         if parsed.path == "/v1/events":
-            self._write_json({"items": store.list_events_after(_int_query_value(parsed.query, "cursor"), limit=200)})
+            cursor_decision = self._native_handler_decision(
+                lambda: native_events_cursor(parsed.query, guard_home=store.guard_home)
+            )
+            if cursor_decision is None:
+                return
+            self._write_json({"items": store.list_events_after(cursor_decision.fields["cursor"], limit=200)})
             return
         if parsed.path == "/v1/requests":
             self._handle_requests_list(parsed.query)
@@ -3740,15 +3593,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
         supported = []
         failure_reasons = _headless_safe_failure_reasons()
-        for item in items:
-            harness = item.get("harness")
-            if not isinstance(harness, str):
-                continue
+        listed = [item for item in items if isinstance(item.get("harness"), str)]
+        try:
+            app_statuses = native_detection_app_statuses(
+                [item.get("status") for item in listed],
+                guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+            )
+        except NativeDaemonHandlerError:
+            self._write_json(_NATIVE_HANDLER_UNAVAILABLE[1], status=_NATIVE_HANDLER_UNAVAILABLE[0])
+            return
+        for item, app_status in zip(listed, app_statuses, strict=True):
+            harness = item["harness"]
             supported.append(
                 {
                     "display_name": item.get("display_name"),
                     "harness": harness,
-                    "status": _headless_detection_status_to_app_status(item.get("status")),
+                    "status": app_status,
                     "command_available": bool(item.get("command_available")),
                     "headless_actions": list(_HEADLESS_OPERATIONS[:-1]),
                     "safe_failure_reasons": failure_reasons,
@@ -3834,40 +3694,33 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         action_path: str,
         payload: dict[str, object],
     ) -> tuple[int, dict[str, object]]:
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+
+        def failure(operation: str, error_code: str) -> tuple[int, dict[str, object]]:
+            return _headless_failure(lambda: native_headless_action_error(operation, error_code, guard_home=guard_home))
+
         try:
             mapping = _HEADLESS_APP_ACTIONS[action_path]
         except KeyError:
-            return _headless_action_error_payload(
-                operation=action_path,
-                error_code="unsupported_operation",
-            )
+            return failure(action_path, "unsupported_operation")
         operation, harness_action = mapping
         harness = self._optional_string(payload.get("harness"))
         if harness is None:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code="missing_harness",
-            )
+            return failure(operation, "missing_harness")
         try:
             adapter = get_adapter(harness)
         except ValueError:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code="unknown_harness",
-            )
+            return failure(operation, "unknown_harness")
         try:
             surface = self._cursor_headless_surface(payload) if adapter.harness == "cursor" else None
         except ValueError:
-            error_payload = _headless_error_payload(
-                code="invalid_cursor_surface",
-                message="Choose Cursor editor or CLI before retrying this local action.",
-                retryable=False,
+            status, error_payload = _headless_failure(
+                lambda: native_headless_cursor_surface_error(guard_home=guard_home)
             )
-            error = error_payload["error"]
-            if isinstance(error, dict):
-                error["app_id"] = "cursor"
+            error = error_payload.get("error")
+            if status == 400 and isinstance(error, dict):
                 error["surface"] = self._optional_string(payload.get("surface")) or ""
-            return 400, error_payload
+            return status, error_payload
         context = self._harness_context(payload)
         try:
             if harness_action == "verify":
@@ -3884,10 +3737,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ApprovalGateError as error:
             return error.status, error.to_payload()
         except ValueError as error:
-            return _headless_action_error_payload(
-                operation=operation,
-                error_code=str(error),
-            )
+            return failure(operation, str(error))
         location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
             payload.get("locationId")
         )
@@ -3905,18 +3755,25 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             managed_controls_publish=_managed_controls_publish_for(self.server),
         )
         receipt["cloud_sync"] = cloud_sync
+        try:
+            state = native_headless_action_state(adapter.harness, operation, result, guard_home=guard_home)
+        except NativeDaemonHandlerError:
+            # The action already ran and its receipt is recorded; say so, so a client does not blindly retry.
+            return 503, {
+                **_NATIVE_HANDLER_UNAVAILABLE[1],
+                "action_applied": True,
+                "cloud_sync": cloud_sync,
+                "harness": adapter.harness,
+                "operation": operation,
+                "receipt": receipt,
+            }
         return 200, {
             "cloud_sync": cloud_sync,
             "harness": adapter.harness,
             "operation": operation,
             "result": result,
             "receipt": receipt,
-            "state": _headless_action_state_payload(
-                harness=adapter.harness,
-                operation=operation,
-                result=result,
-                receipt=receipt,
-            ),
+            "state": {**state, "receipt_summary": _receipt_summary(receipt)},
             "reconnect": self._headless_reconnect_payload(
                 cloud_sync=cloud_sync,
                 location_id=location_id,
@@ -4389,9 +4246,13 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._write_json(self._supply_chain_value_error_payload(operation, str(error)), status=400)
             return
         except Exception as error:
-            status, error_payload = _supply_chain_package_action_error_response(
-                operation=operation,
-                error=error,
+            status, error_payload = _headless_failure(
+                partial(
+                    native_supply_chain_error,
+                    operation,
+                    error,
+                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
+                )
             )
             self._write_json(error_payload, status=status)
             return
@@ -5006,53 +4867,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }
 
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:
-        harness = self._optional_string(payload.get("harness"))
-        source = self._optional_string(payload.get("source"))
-        scope = self._optional_string(payload.get("scope"))
-        artifact_id = self._optional_string(payload.get("artifact_id"))
-        artifact_hash = self._optional_string(payload.get("artifact_hash"))
-        workspace = self._optional_string(payload.get("workspace"))
-        publisher = self._optional_string(payload.get("publisher"))
-        try:
-            clear_all = self._optional_bool(payload.get("all"), default=False)
-            artifact_id_is_null = self._optional_bool(payload.get("artifact_id_is_null"), default=False)
-            artifact_hash_is_null = self._optional_bool(payload.get("artifact_hash_is_null"), default=False)
-        except ValueError:
-            self._write_json({"error": "invalid_clear_payload", "cleared": 0}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("policy_clear", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
-        if scope is not None and scope not in {"artifact", "workspace", "publisher", "harness", "global"}:
-            self._write_json({"error": "invalid_scope", "cleared": 0, "scope": scope}, status=400)
-            return
-        if clear_all and harness is not None:
-            self._write_json(
-                {
-                    "error": "choose_all_or_harness",
-                    "cleared": 0,
-                    "harness": harness,
-                    "source": source,
-                },
-                status=400,
-            )
-            return
-        if not clear_all and harness is None:
-            self._write_json({"error": "missing_harness_or_all", "cleared": 0}, status=400)
-            return
+        fields = verdict.fields
         try:
             approval_gate_grant = require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
+                guard_home,
                 purpose="policy_clear",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
             cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
-                None if clear_all else harness,
-                source,
-                scope=scope,
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                artifact_id_is_null=artifact_id_is_null,
-                artifact_hash_is_null=artifact_hash_is_null,
-                workspace=workspace,
-                publisher=publisher,
+                fields["harness"],
+                fields["source"],
+                scope=fields["scope"],
+                artifact_id=fields["artifact_id"],
+                artifact_hash=fields["artifact_hash"],
+                artifact_id_is_null=fields["artifact_id_is_null"],
+                artifact_hash_is_null=fields["artifact_hash_is_null"],
+                workspace=fields["workspace"],
+                publisher=fields["publisher"],
                 approval_gate_grant=approval_gate_grant,
             )
         except ApprovalGateError as error:
@@ -5060,35 +4897,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["cleared"] = 0
             self._write_json(payload, status=error.status)
             return
-        self._write_json(
-            {
-                "cleared": cleared,
-                "harness": None if clear_all else harness,
-                "source": source,
-                "scope": scope,
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-                "artifact_id_is_null": artifact_id_is_null,
-                "artifact_hash_is_null": artifact_hash_is_null,
-                "workspace": workspace,
-                "publisher": publisher,
-            }
-        )
+        self._write_json({"cleared": cleared, **verdict.body})
 
     def _handle_requests_clear(self, payload: dict[str, object]) -> None:
-        status = self._optional_string(payload.get("status")) or "pending"
-        harness = self._optional_string(payload.get("harness"))
-        if status not in {"pending", "resolved"}:
-            self._write_json({"error": "invalid_status", "cleared": 0, "status": status}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("requests_clear", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
+        status = verdict.fields["status"]
         try:
             require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
+                guard_home,
                 purpose="queue_clear",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
             cleared = self.server.store.clear_approval_requests(  # type: ignore[attr-defined]
-                harness=harness,
+                harness=verdict.fields["harness"],
                 status=status,
             )
         except ApprovalGateError as error:
@@ -5097,17 +4923,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["status"] = status
             self._write_json(payload, status=error.status)
             return
-        self._write_json({"cleared": cleared, "status": status, "harness": harness})
+        self._write_json({"cleared": cleared, **verdict.body})
 
     def _handle_bulk_allow_read_once(self, payload: dict[str, object]) -> None:
-        request_ids = payload.get("request_ids")
-        if not isinstance(request_ids, list) or len(request_ids) == 0:
-            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("bulk_allow", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
-        normalized_ids = [str(item).strip() for item in request_ids if isinstance(item, str) and str(item).strip()]
-        if len(normalized_ids) == 0:
-            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
-            return
+        normalized_ids = verdict.fields["request_ids"]
         try:
             result = bulk_allow_read_only_once(
                 store=self.server.store,  # type: ignore[attr-defined]
@@ -5143,8 +4968,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_harness_action(self, harness: str, action: str, payload: dict[str, object]) -> None:
-        if action not in {"install", "verify", "repair", "uninstall"}:
-            self._write_json({"error": "not_found"}, status=404)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(lambda: native_harness_action(action, payload, guard_home=guard_home))
+        if verdict is None:
             return
         context = self._harness_context(payload)
         if action == "verify":
@@ -5153,11 +4979,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self._write_json({"error": str(error)}, status=404)
             return
-        try:
-            dry_run = self._optional_bool(payload.get("dry_run"), default=True)
-        except ValueError:
-            self._write_json({"error": "invalid_dry_run"}, status=400)
-            return
+        dry_run = verdict.fields["dry_run"]
         try:
             adapter = get_adapter(harness)
         except ValueError as error:
@@ -5243,19 +5065,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
 
     def _handle_requests_list(self, query_string: str) -> None:
-        limit = self._query_limit(query_string, default=200, maximum=200)
-        if limit is None:
-            self._write_json({"error": "invalid_limit"}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(lambda: native_requests_list(query_string, guard_home=guard_home))
+        if verdict is None:
             return
-        status = self._query_string(query_string, "status") or "pending"
-        if status == "all":
-            status_filter = None
-        elif status in {"pending", "resolved"}:
-            status_filter = status
-        else:
-            self._write_json({"error": "invalid_status"}, status=400)
-            return
-        include_totals = self._query_bool(query_string, "include_totals", default=True)
+        options = verdict.fields
         from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
 
         try:
@@ -5264,14 +5078,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if self._is_hosted_dashboard_origin()
                 else (lambda **options: local_request_page(self.server.store, **options))
             )
-            page = read_page(
-                status=status_filter,
-                limit=limit,
-                cursor=self._query_string(query_string, "cursor"),
-                harness=self._query_string(query_string, "harness"),
-                search=self._query_string(query_string, "search"),
-                include_totals=include_totals,
-            )
+            page = read_page(**options)
         except NativeBusinessReviewQueueReadError:
             self._write_json(
                 {"error": "native_local_business_queue_read_failed"},
@@ -7904,56 +7711,32 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
+    def _native_handler_decision(self, ask: Callable[[], HandlerDecision]) -> HandlerDecision | None:
+        """Ask the resident to validate a request.
+
+        A rejection is written as the resident shaped it; so is the fail-closed
+        reply when the resident cannot answer. Both return ``None``.
+        """
+
+        try:
+            decision = ask()
+        except NativeDaemonHandlerError:
+            self._write_json({"error": "native_handler_policy_unavailable"}, status=503)
+            return None
+        if decision.rejected:
+            self._write_json(decision.body, status=decision.status)
+            return None
+        return decision
+
     def _handle_policy_upsert(self, payload: dict[str, object]) -> None:
-        harness = payload.get("harness")
-        scope = payload.get("scope")
-        action = payload.get("action")
-        if (
-            not isinstance(harness, str)
-            or not harness.strip()
-            or not isinstance(scope, str)
-            or not scope.strip()
-            or not isinstance(action, str)
-            or not action.strip()
-        ):
-            self._write_json({"saved": False, "error": "missing_required_fields"}, status=400)
-            return
-        normalized_harness = harness.strip()
-        normalized_scope = scope.strip()
-        normalized_action = action.strip()
-        if not _is_decision_scope(normalized_scope) or not _is_guard_action(normalized_action):
-            self._write_json({"saved": False, "error": "unsupported_policy_value"}, status=400)
-            return
-        if normalized_scope == "global" and normalized_action == "allow":
-            self._write_json({"saved": False, "error": "broad_allow_requires_narrow_scope"}, status=400)
-            return
-        record = {
-            "harness": normalized_harness,
-            "scope": normalized_scope,
-            "action": normalized_action,
-            "artifact_id": self._optional_string(payload.get("artifact_id")),
-            "workspace": self._optional_string(payload.get("workspace")),
-            "publisher": self._optional_string(payload.get("publisher")),
-            "reason": self._optional_string(payload.get("reason")),
-        }
-        if not self._scope_target_is_valid(
-            normalized_scope,
-            artifact_id=record["artifact_id"],
-            workspace=record["workspace"],
-            publisher=record["publisher"],
-        ):
-            self._write_json({"saved": False, "error": "missing_scope_target"}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("policy_upsert", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
         store = self.server.store  # type: ignore[attr-defined]
-        decision = PolicyDecision(
-            harness=normalized_harness,
-            scope=normalized_scope,
-            action=normalized_action,
-            artifact_id=record["artifact_id"],
-            workspace=record["workspace"],
-            publisher=record["publisher"],
-            reason=record["reason"],
-        )
+        decision = PolicyDecision(**verdict.fields)
         try:
             approval_gate_grant = require_high_risk(
                 store.guard_home,
@@ -7973,7 +7756,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"saved": False, "error": str(error)}, status=400)
             return
-        self._write_json({"saved": True, "decision": record})
+        self._write_json(verdict.body)
 
     def _handle_policy_resolve(self, payload: dict[str, object]) -> None:
         from .policy_authority_api import PolicyAuthorityApiError, resolve_policy_decision
@@ -8026,19 +7809,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if normalized in {"0", "false", "no", "off"}:
             return False
         return default
-
-    @staticmethod
-    def _query_limit(query_string: str, *, default: int, maximum: int) -> int | None:
-        raw_value = parse_qs(query_string).get("limit", [None])[-1]
-        if raw_value is None:
-            return default
-        try:
-            value = int(raw_value)
-        except (TypeError, ValueError):
-            return None
-        if value < 1:
-            return None
-        return min(value, maximum)
 
     def _validated_hook_directory_string(
         self,
@@ -8138,24 +7908,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _hook_safe_roots(self) -> tuple[Path, ...]:
         return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
-
-    @staticmethod
-    def _scope_target_is_valid(
-        scope: str,
-        *,
-        artifact_id: str | None,
-        workspace: str | None,
-        publisher: str | None,
-    ) -> bool:
-        if scope in {"global", "harness"}:
-            return True
-        if scope == "artifact":
-            return artifact_id is not None
-        if scope == "workspace":
-            return workspace is not None
-        if scope == "publisher":
-            return publisher is not None
-        return False
 
     def _write_json(
         self,
@@ -9463,15 +9215,6 @@ def _guard_daemon_idle_timeout_seconds(
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
     resolved_parts = guard_home.resolve().parts
     return any(part.startswith("pytest-") or "pytest-of-" in part for part in resolved_parts)
-
-
-def _int_query_value(query: str, key: str) -> int:
-    values = parse_qs(query).get(key, ["0"])
-    raw_value = values[-1]
-    try:
-        return int(str(raw_value))
-    except ValueError:
-        return 0
 
 
 forget_in_child(GuardDaemonServer._quarantined_services)
