@@ -27,10 +27,12 @@ def _run_core(executable: Path, args: list[str], *, env: dict[str, str]) -> subp
 def _print_failure_metadata(guard_home: Path, commands: list[dict[str, object]]) -> None:
     """Keep finite lifecycle phases and command times in the existing pytest log."""
 
-    with suppress(Exception):
-        from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_bounded_incident_daemon_lifecycle_events
+    # Import outside the suppression so a renamed helper fails loudly instead of
+    # silently dropping every diagnostic.
+    from codex_plugin_scanner.guard.daemon.lifecycle_journal import load_bounded_incident_lifecycle_events
 
-        events, journal_status = load_bounded_incident_daemon_lifecycle_events(guard_home, limit=20)
+    with suppress(Exception):
+        events, journal_status = load_bounded_incident_lifecycle_events(guard_home, limit=20)
         fields = {"recorded_at_ns", "pid", "port", "event", "reason"}
         metadata = {
             "commands": commands[-12:],

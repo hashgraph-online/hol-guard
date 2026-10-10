@@ -106,6 +106,7 @@ def test_bulk_selection_cannot_return_only_the_other_127_successful_consumer_sha
     from urllib.parse import parse_qs, urlsplit
 
     from scripts.ci.successful_job_artifact import select_many
+    from scripts.ci.wait_for_pytest_shards import ShardWaitError
 
     run, template_job, template_artifact, _ = inventory("Rust workspace (test)", "rust-coverage")
     names = {f"coverage (3.12, {index})": f"rust-consumer-coverage-2-3.12-{index}" for index in range(128)}
@@ -118,19 +119,26 @@ def test_bulk_selection_cannot_return_only_the_other_127_successful_consumer_sha
     elif boundary == "last-missing-artifact":
         artifacts.pop()
     else:
-        artifacts[-1]["created_at"] = "2025-01-01T00:00:04Z"
+        artifacts[-1]["created_at"] = "2026-01-01T00:00:04Z"
 
     def fetch(endpoint, timeout):
         url = urlsplit(endpoint)
         page = int(parse_qs(url.query).get("page", ["1"])[0])
         if url.path.endswith("/jobs"):
-            return {"jobs": jobs[(page - 1) * 100 : page * 100]}
+            return {"total_count": len(jobs), "jobs": jobs[(page - 1) * 100 : page * 100]}
         if url.path.endswith("/artifacts"):
-            return {"artifacts": artifacts[(page - 1) * 100 : page * 100]}
+            return {"total_count": len(artifacts), "artifacts": artifacts[(page - 1) * 100 : page * 100]}
         return run
 
     now = [0]
-    with pytest.raises((ValueError, RuntimeError)):
+    failures = {
+        "last-failure": (ShardWaitError, r"coverage \(3\.12, 127\) completed with failure"),
+        "last-stale": (ValueError, r"coverage \(3\.12, 127\) producer identity mismatch"),
+        "last-missing-artifact": (ValueError, r"Timed out waiting for current-attempt successful reports"),
+        "last-late-artifact": (ValueError, r"rust-consumer-coverage-2-3\.12-127 artifact is not bound"),
+    }
+    error_type, message = failures[boundary]
+    with pytest.raises(error_type, match=message):
         select_many(
             "owner/repo",
             12,

@@ -27,9 +27,15 @@ BINS = ("hol-guard-runtime", "guard-command-source")
 TOOLS = ("llvm-cov", "llvm-profdata")
 
 
-def regular(path: Path, *, limit: int = 512 * 1024 * 1024) -> Path:
+def regular(path: Path, *, limit: int = 512 * 1024 * 1024, allow_links: bool = False) -> Path:
+    """Accept only a plain file; `allow_links` is solely for Cargo's own build output.
+
+    Cargo hard-links an uplifted binary from its deps directory on Linux, so the
+    freshly built executable legitimately has two links. Downloaded artifacts,
+    profiles and metadata keep the strict single-link requirement.
+    """
     info = path.lstat()
-    if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_size > limit:
+    if not stat.S_ISREG(info.st_mode) or (info.st_nlink != 1 and not allow_links) or info.st_size > limit:
         raise ValueError("Native coverage input is linked, non-regular, or oversized")
     return path
 
@@ -169,7 +175,7 @@ def build(root: Path, directory: Path) -> None:
         env=env,
     )
     for name in BINS:
-        shutil.copy2(regular(target / "release" / name), directory / "bin" / name)
+        shutil.copy2(regular(target / "release" / name, allow_links=True), directory / "bin" / name)
     for name in TOOLS:
         source = (tool_directory / name).resolve(strict=True)
         if not source.is_relative_to(sysroot.resolve()):
@@ -325,7 +331,7 @@ def export_shard(root: Path, directory: Path, output: Path, shard: int) -> None:
                 str(directory / "tools/llvm-profdata"),
                 "merge",
                 "--sparse",
-                "--failure-mode=all",
+                "--failure-mode=any",
                 *map(str, inputs),
                 "-o",
                 str(profdata),

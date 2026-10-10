@@ -33,6 +33,7 @@ runs:
       cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
       save-cache: false
   - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
+    shell: pwsh
   - name: Build and exercise packaged Windows Core daemon gate
     if: runner.os == 'Windows'
     shell: pwsh

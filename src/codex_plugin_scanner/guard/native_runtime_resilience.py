@@ -283,7 +283,6 @@ def native_oneshot_lease(
     acquired_global = False
     acquired_key = False
     key = _privacy_safe_key(identity_sha256, guard_home)
-    key = _privacy_safe_key(identity_sha256, guard_home)
     with _STATE_LOCK:
         state = _state(key)
         now = time.monotonic()

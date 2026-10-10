@@ -12,6 +12,7 @@ from pathlib import Path
 
 from scripts.ci import install_llvm_cov, install_nextest, lcov
 from scripts.ci import wait_for_pytest_shards as barrier
+from scripts.ci.clippy_report import digest
 from scripts.ci.successful_job_artifact import select, select_many
 
 SCHEMA = "hol-guard.rust-coverage.v1"
@@ -42,10 +43,6 @@ COMMAND = [
     "--output-path",
     "../rust-coverage/rust-lcov.info",
 ]
-
-
-def digest(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def source_tree_hash(root: Path) -> str:
