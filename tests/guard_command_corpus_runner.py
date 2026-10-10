@@ -116,6 +116,7 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
         NATIVE_CORPUS_BATCH_SIZE,
         evaluate_native_corpus_batch,
         pin_neutral_attribution,
+        pin_offline_shell_context,
     )
     from tests.guard_command_corpus_native_contract import configure_native_contract_shard, validate_native_case
     from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
@@ -124,6 +125,7 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
 
     install_offline_github_classifier(_native_binaries()[0])
     pin_neutral_attribution()
+    pin_offline_shell_context()
     configure_native_contract_shard(worker_index, worker_count)
     ranks = {
         action: guard_action_severity(action)

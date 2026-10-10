@@ -61,6 +61,9 @@ from tests.guard_command_corpus_native import (
 from tests.guard_command_corpus_native import (
     pin_neutral_attribution as _pin_neutral_attribution,
 )
+from tests.guard_command_corpus_native import (
+    pin_offline_shell_context as _pin_offline_shell_context,
+)
 from tests.guard_command_corpus_native_contract import configure_native_contract_shard, validate_native_case
 from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
 from tests.guard_command_corpus_oracle_types import OracleRecord
@@ -100,6 +103,7 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
 
     install_offline_github_classifier(_native_binaries()[0])
     _pin_neutral_attribution()
+    _pin_offline_shell_context()
     configure_native_contract_shard(worker_index, EVALUATION_SHARD_COUNT)
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
     native_floor_ids: defaultdict[str, list[str]] = defaultdict(list)

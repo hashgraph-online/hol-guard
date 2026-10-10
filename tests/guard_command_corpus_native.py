@@ -26,6 +26,30 @@ def pin_neutral_attribution() -> None:
     package_protect_projection.resolve_parent_process_harness = lambda: None
 
 
+def pin_offline_shell_context() -> None:
+    """Answer shell request context offline: complete, with no directory model.
+
+    The shell context is resident-only, and the corpus evaluates commands through
+    the offline compiler without a resident. Without this answer the read
+    assessment would take its fail-closed native-unavailable path for every
+    command, instead of the literal-marker path the corpus contract describes.
+    """
+
+    from codex_plugin_scanner.guard.runtime import shell_secret_reads
+    from codex_plugin_scanner.guard.runtime.shell_execution_context import ShellExecutionContext
+
+    shell_secret_reads.model_shell_execution_context = lambda command_text, **_kwargs: ShellExecutionContext(
+        command_text=command_text,
+        initial_cwd=None,
+        workspace_root=None,
+        workspace_identity=None,
+        segments=(),
+        complete=True,
+        reason_code=None,
+        directory_change_present=False,
+    )
+
+
 def evaluate_native_corpus_batch(
     cases: Sequence[CommandCorpusCase],
     *,
