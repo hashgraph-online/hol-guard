@@ -6149,7 +6149,7 @@
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
 
-  .focus-visible\:ring-brand-blue\/30:focus-visible {
+  .focus-visible\:ring-brand-blue:focus-visible, .focus-visible\:ring-brand-blue\/30:focus-visible {
     --tw-ring-color: var(--brand-blue);
   }
 
@@ -6436,6 +6436,10 @@
 
     .sm\:h-full {
       height: 100%;
+    }
+
+    .sm\:min-h-0 {
+      min-height: 0;
     }
 
     .sm\:w-44 {

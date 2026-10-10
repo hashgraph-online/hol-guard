@@ -200,7 +200,11 @@ def apply_harness_posture_patch(
 
 def harness_posture_override(config: GuardConfig, harness: object) -> str | None:
     key = runtime_harness_key(harness)
-    return (config.harness_postures or {}).get(key) if key is not None else None
+    postures = getattr(config, "harness_postures", None)
+    if key is None or not isinstance(postures, Mapping):
+        return None
+    value = postures.get(key)
+    return value if isinstance(value, str) else None
 
 
 def global_effective_posture(config: GuardConfig) -> str:

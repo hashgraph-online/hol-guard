@@ -87,9 +87,11 @@ def posture_risk_overlay(base: object, config: GuardConfig) -> object:
     if not overrides:
         return base
     baseline = _STRENGTH[global_effective_posture(config)]
-    merged: dict[str, dict[str, str]] = (
-        {str(key): dict(value) for key, value in base.items()} if isinstance(base, Mapping) else {}
-    )
+    merged: dict[str, dict[str, str]] = {}
+    if isinstance(base, Mapping):
+        for key, value in base.items():
+            if isinstance(value, Mapping):
+                merged[str(key)] = {str(risk): str(action) for risk, action in value.items()}
     for harness, posture in sorted(overrides.items()):
         floors = POSTURE_RISK_ACTIONS.get(posture)
         if floors is None or _STRENGTH.get(posture, 0) <= baseline:
@@ -164,12 +166,16 @@ def write_harness_postures_sidecar(
     generation: int,
     policy_digest: str,
     postures: Mapping[str, str],
-) -> None:
-    """Persist overrides for the ACKed snapshot. Failure only means no overrides."""
+) -> dict[str, str]:
+    """Persist overrides for the ACKed snapshot and return what readers will see.
+
+    Failure only means no overrides. The publisher binds the returned value, so
+    its in-memory binding and readers of the signed file always agree.
+    """
 
     guard_home = getattr(store, "guard_home", None)
     if guard_home is None:
-        return
+        return {}
     verified = valid_harness_postures(postures)
     path: Path | None = None
     try:
@@ -177,7 +183,7 @@ def write_harness_postures_sidecar(
         verifier_key = _verifier_key_for_store(store) if verified else None
         if verifier_key is None:
             path.unlink(missing_ok=True)
-            return
+            return {}
         document = {
             "schema": _SIDECAR_SCHEMA,
             "generation": generation,
@@ -187,9 +193,11 @@ def write_harness_postures_sidecar(
         }
         _write_private_file(path, json.dumps(document, separators=(",", ":"), sort_keys=True).encode("utf-8"))
     except (OSError, NativePolicySnapshotError):
-        logger.debug("Could not persist per-harness posture sidecar", exc_info=True)
+        logger.warning("Could not persist per-harness posture sidecar; apps follow the global posture", exc_info=True)
         if path is not None:
             with_suppressed_unlink(path)
+        return {}
+    return verified
 
 
 def with_suppressed_unlink(path: Path) -> None:

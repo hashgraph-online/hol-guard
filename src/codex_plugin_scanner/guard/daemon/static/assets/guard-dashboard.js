@@ -33143,6 +33143,39 @@ function WatchProtectionBanner(props) {
   const message = props.model?.message ?? WATCH_BANNER_COPY;
   const confirmMessage = props.model?.confirmMessage ?? DEFAULT_CONFIRM;
   const actionLabel = props.model !== void 0 && props.model !== null && !props.model.globalWatch ? "Turn protection on for these apps" : "Turn protection on";
+  let action = null;
+  if (onTurnProtectionOn !== void 0 && confirming) {
+    action = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleConfirm,
+          className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+          children: "Turn on"
+        }
+      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleCancel,
+          className: "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
+          children: "Not now"
+        }
+      )
+    ] });
+  } else if (onTurnProtectionOn !== void 0) {
+    action = /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: handleAsk,
+        className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
+        children: actionLabel
+      }
+    );
+  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "div",
     {
@@ -33156,34 +33189,7 @@ function WatchProtectionBanner(props) {
             confirming ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-600", children: confirmMessage }) : null
           ] })
         ] }),
-        onTurnProtectionOn === void 0 ? null : confirming ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: handleConfirm,
-              className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-              children: "Turn on"
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            "button",
-            {
-              type: "button",
-              onClick: handleCancel,
-              className: "inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark",
-              children: "Not now"
-            }
-          )
-        ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleAsk,
-            className: "inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white",
-            children: actionLabel
-          }
-        )
+        action
       ]
     }
   );
@@ -33204,7 +33210,14 @@ function normalizeHarnessPostures(value) {
   return result;
 }
 function globalPosture(settings) {
-  return isProtectionPosture(settings.protection_posture) ? settings.protection_posture : settings.mode === "observe" ? "watch" : "protected";
+  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
+  if (settings.mode === "observe") return "watch";
+  return "protected";
+}
+function protectedLevel(effective, baseline) {
+  if (effective !== "watch") return effective;
+  if (baseline !== "watch") return baseline;
+  return "protected";
 }
 function effectiveHarnessPosture(settings, harness) {
   const override = settings.harness_postures?.[harness];
@@ -33226,9 +33239,7 @@ function harnessPostureRows(settings, capabilities) {
   });
 }
 function harnessPostureOptions(settings, harness) {
-  const effective = effectiveHarnessPosture(settings, harness);
-  const baseline = globalPosture(settings);
-  const onLevel = effective !== "watch" ? effective : baseline === "watch" ? "protected" : baseline;
+  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
   return [
     { choice: "on", label: POSTURE_LABEL[onLevel] },
     { choice: "watch", label: POSTURE_LABEL.watch }
@@ -33248,13 +33259,24 @@ function selectHarnessPosture(settings, harness, choice) {
   }
   return { ...settings, harness_postures: next };
 }
+function canRestartHarnessWatch(settings, harness) {
+  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
+}
+function restartHarnessWatch(settings, harness) {
+  if (!canRestartHarnessWatch(settings, harness)) return settings;
+  const restarts = new Set(settings.harness_watch_restart ?? []);
+  restarts.add(harness);
+  return { ...settings, harness_watch_restart: [...restarts].sort() };
+}
 function harnessPosturePatch(draft, saved) {
   const before = saved?.harness_postures ?? {};
   const after = draft.harness_postures ?? {};
+  const restarts = new Set(draft.harness_watch_restart ?? []);
   const patch = {};
   for (const harness of /* @__PURE__ */ new Set([...Object.keys(before), ...Object.keys(after)])) {
     const posture = after[harness] ?? null;
-    if (posture !== (before[harness] ?? null)) patch[harness] = posture;
+    const restart = posture === "watch" && restarts.has(harness);
+    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }
@@ -33279,6 +33301,7 @@ function withHarnessPosturePatch(payload, draft, saved) {
     harness_postures_effective: _effective,
     harness_postures_locked: _locked,
     harness_watch_entered_at: _enteredAt,
+    harness_watch_restart: _restart,
     ...rest
   } = payload;
   const patch = harnessPosturePatch(draft, saved);
@@ -33290,6 +33313,18 @@ function harnessPostureSummary(rows) {
   if (watching.length === 0) return "Every app is protected.";
   if (watching.length === rows.length) return "Every app is in Watch.";
   return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
+}
+function harnessWatchPrompt(rows, harness) {
+  const row = rows.find((candidate) => candidate.harness === harness);
+  const name = row?.displayName ?? harness;
+  const others = rows.filter((candidate) => candidate.harness !== harness);
+  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
+  const lead = `Guard will only record in ${name}.`;
+  if (others.length === 0) return lead;
+  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
+  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
+  const verb = protectedOthers.length === 1 ? "stays" : "stay";
+  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
 }
 function joinNames(names) {
   if (names.length <= 1) return names[0] ?? "";
@@ -34613,7 +34648,7 @@ export {
   protectionReasonText as Z,
   HiMiniExclamationCircle as _,
   EvidenceActivityHeatmapMini as a,
-  normalizeHarnessPostures as a$,
+  isProtectionPosture as a$,
   remainingProtectionRepairParts as a0,
   protectionGapSignature as a1,
   repairOutcomeIsStalled as a2,
@@ -34624,33 +34659,33 @@ export {
   safeCloudConnectUrl as a7,
   openPackageFirewallAuthorizeFallback as a8,
   waitForCloudConnection as a9,
-  buildApprovalProofCredentials as aA,
-  changeCloudReviewSettings as aB,
-  resolveProtectionLevelCopy as aC,
-  fetchSettings as aD,
-  fetchRuntimeSnapshot as aE,
-  clearHarnessWatchOverrides as aF,
-  withHarnessPosturePatch as aG,
-  clearPolicy as aH,
-  clearReviewQueue as aI,
-  revokeApprovalGateCooldown as aJ,
-  disableApprovalGateTotp as aK,
-  importSettings as aL,
-  resetSettings as aM,
-  enrollApprovalGateTotp as aN,
-  verifyApprovalGateTotp as aO,
-  clearEvidence as aP,
-  exportDiagnostics as aQ,
-  repairApprovalCenter as aR,
-  exportSettings as aS,
-  setupDesktopNotifications as aT,
-  settingsWatchBannerModel as aU,
-  WorkspacePageHeader as aV,
-  HiMiniMagnifyingGlass as aW,
-  humanizeList as aX,
-  isProtectionPosture as aY,
-  deriveProtectionPosture as aZ,
-  Tag as a_,
+  HiMiniArrowPath as aA,
+  ApprovalProofFieldInputs as aB,
+  isApprovalProofSubmitDisabled as aC,
+  buildApprovalProofCredentials as aD,
+  changeCloudReviewSettings as aE,
+  resolveProtectionLevelCopy as aF,
+  fetchSettings as aG,
+  fetchRuntimeSnapshot as aH,
+  clearHarnessWatchOverrides as aI,
+  withHarnessPosturePatch as aJ,
+  clearPolicy as aK,
+  clearReviewQueue as aL,
+  revokeApprovalGateCooldown as aM,
+  disableApprovalGateTotp as aN,
+  importSettings as aO,
+  resetSettings as aP,
+  enrollApprovalGateTotp as aQ,
+  verifyApprovalGateTotp as aR,
+  clearEvidence as aS,
+  exportDiagnostics as aT,
+  repairApprovalCenter as aU,
+  exportSettings as aV,
+  setupDesktopNotifications as aW,
+  settingsWatchBannerModel as aX,
+  WorkspacePageHeader as aY,
+  HiMiniMagnifyingGlass as aZ,
+  humanizeList as a_,
   activeFailedHarnesses as aa,
   resetRepairOutcomeTracker as ab,
   HiMiniWrenchScrewdriver as ac,
@@ -34663,155 +34698,158 @@ export {
   POSTURE_OUTCOME_COLUMNS as aj,
   harnessPostureRows as ak,
   selectHarnessPosture as al,
-  harnessPostureSummary as am,
-  harnessPostureOptions as an,
-  getDefaultExportFromCjs as ao,
-  React as ap,
-  HiMiniKey as aq,
-  HiMiniLockClosed as ar,
-  HiMiniBellAlert as as,
-  HiMiniAdjustmentsHorizontal as at,
-  HiMiniCircleStack as au,
-  TabBar as av,
-  fetchCloudReviewSettings as aw,
-  HiMiniArrowPath as ax,
-  ApprovalProofFieldInputs as ay,
-  isApprovalProofSubmitDisabled as az,
+  restartHarnessWatch as am,
+  harnessPostureSummary as an,
+  harnessWatchPrompt as ao,
+  harnessPostureOptions as ap,
+  canRestartHarnessWatch as aq,
+  getDefaultExportFromCjs as ar,
+  React as as,
+  HiMiniKey as at,
+  HiMiniLockClosed as au,
+  HiMiniBellAlert as av,
+  HiMiniAdjustmentsHorizontal as aw,
+  HiMiniCircleStack as ax,
+  TabBar as ay,
+  fetchCloudReviewSettings as az,
   HiMiniCommandLine as b,
-  EvidenceActionList as b$,
-  approvalGateCooldownLabel as b0,
-  fetchLocalCliApi as b1,
-  fetchExtensionCatalog as b2,
-  normalizeExtensionCatalogSummary as b3,
-  normalizeExtensionPermission as b4,
-  ExtensionControlProtocolError as b5,
-  ExtensionControlApiError as b6,
-  normalizeExtensionCatalogItem as b7,
-  guardApiCacheScope as b8,
-  fetchExtensionCatalogV2Api as b9,
-  HiMiniArrowTopRightOnSquare as bA,
-  fetchExtensionControlApi as bB,
-  ApprovalProofModal as bC,
-  guardAwareHref as bD,
-  HiMiniCheck as bE,
-  acknowledgeDegradedExtensionControlAuthority as bF,
-  recoverExtensionControlAuthority as bG,
-  GuardModalLayer as bH,
-  runHarnessAction as bI,
-  GuardHarnessActionError as bJ,
-  HiMiniRocketLaunch as bK,
-  HiMiniTrash as bL,
-  isGuardDemoMode as bM,
-  fetchGuardApi as bN,
-  formatHarnessCommand as bO,
-  fetchApprovalPage as bP,
-  fetchPolicy as bQ,
-  HiMiniHome as bR,
-  appSetupTarget as bS,
-  guardActionPresentation as bT,
-  DEFAULT_FILTER_STATE as bU,
-  filterEvidence as bV,
-  sortEvidence as bW,
-  computeMetrics as bX,
-  CommandActivityWorkspace as bY,
-  EvidenceFilterBar as bZ,
-  EvidenceInsightStrip as b_,
-  localPermissionDraftState as ba,
-  setLocalPermissionDraftState as bb,
-  newExtensionPolicyDraftIdentity as bc,
-  extensionPolicyDraftIsDirty as bd,
-  setLocalPermissionDraftStates as be,
-  buildExtensionPolicyDraftMutation as bf,
-  previewExtensionMutation as bg,
-  isCurrentExtensionPolicyDraft as bh,
-  applyExtensionMutation as bi,
-  fetchEffectiveExtensionControls as bj,
-  fetchExtensionControlHistory as bk,
-  HiMiniNoSymbol as bl,
-  useResolvedApprovalGate as bm,
-  HiMiniInformationCircle as bn,
-  GenIcon as bo,
-  HiMiniGlobeAlt as bp,
-  HiMiniCube as bq,
-  HiMiniServerStack as br,
-  HiMiniFolder as bs,
-  FaWindows as bt,
-  FaAws as bu,
-  approvalProofRecentlySatisfied as bv,
-  isBulkApproveGateReady as bw,
-  HiMiniArrowLeft as bx,
-  HiMiniPlus as by,
-  startGuardCloudConnect as bz,
+  CommandActivityWorkspace as b$,
+  deriveProtectionPosture as b0,
+  Tag as b1,
+  normalizeHarnessPostures as b2,
+  approvalGateCooldownLabel as b3,
+  fetchLocalCliApi as b4,
+  fetchExtensionCatalog as b5,
+  normalizeExtensionCatalogSummary as b6,
+  normalizeExtensionPermission as b7,
+  ExtensionControlProtocolError as b8,
+  ExtensionControlApiError as b9,
+  HiMiniArrowLeft as bA,
+  HiMiniPlus as bB,
+  startGuardCloudConnect as bC,
+  HiMiniArrowTopRightOnSquare as bD,
+  fetchExtensionControlApi as bE,
+  ApprovalProofModal as bF,
+  guardAwareHref as bG,
+  HiMiniCheck as bH,
+  acknowledgeDegradedExtensionControlAuthority as bI,
+  recoverExtensionControlAuthority as bJ,
+  GuardModalLayer as bK,
+  runHarnessAction as bL,
+  GuardHarnessActionError as bM,
+  HiMiniRocketLaunch as bN,
+  HiMiniTrash as bO,
+  isGuardDemoMode as bP,
+  fetchGuardApi as bQ,
+  formatHarnessCommand as bR,
+  fetchApprovalPage as bS,
+  fetchPolicy as bT,
+  HiMiniHome as bU,
+  appSetupTarget as bV,
+  guardActionPresentation as bW,
+  DEFAULT_FILTER_STATE as bX,
+  filterEvidence as bY,
+  sortEvidence as bZ,
+  computeMetrics as b_,
+  normalizeExtensionCatalogItem as ba,
+  guardApiCacheScope as bb,
+  fetchExtensionCatalogV2Api as bc,
+  localPermissionDraftState as bd,
+  setLocalPermissionDraftState as be,
+  newExtensionPolicyDraftIdentity as bf,
+  extensionPolicyDraftIsDirty as bg,
+  setLocalPermissionDraftStates as bh,
+  buildExtensionPolicyDraftMutation as bi,
+  previewExtensionMutation as bj,
+  isCurrentExtensionPolicyDraft as bk,
+  applyExtensionMutation as bl,
+  fetchEffectiveExtensionControls as bm,
+  fetchExtensionControlHistory as bn,
+  HiMiniNoSymbol as bo,
+  useResolvedApprovalGate as bp,
+  HiMiniInformationCircle as bq,
+  GenIcon as br,
+  HiMiniGlobeAlt as bs,
+  HiMiniCube as bt,
+  HiMiniServerStack as bu,
+  HiMiniFolder as bv,
+  FaWindows as bw,
+  FaAws as bx,
+  approvalProofRecentlySatisfied as by,
+  isBulkApproveGateReady as bz,
   HiMiniChevronRight as c,
-  HiMiniFunnel as c$,
-  EvidenceActionDetail as c0,
-  policyIdentityKey as c1,
-  clearLabelForScope as c2,
-  HiMiniChartBar as c3,
-  isSupplyChainAuditIncomplete as c4,
-  isSupplyChainAuditEvidence as c5,
-  readString$1 as c6,
-  isRecord$3 as c7,
-  HiMiniClock as c8,
-  IconActionButton as c9,
-  HiMiniClipboardDocument as cA,
-  HiMiniUsers as cB,
-  HiMiniIdentification as cC,
-  policyActionLabel as cD,
-  createCloudExceptionRequest as cE,
-  HiMiniArrowRight as cF,
-  HiMiniPuzzlePiece as cG,
-  fetchCloudExceptions as cH,
-  fetchCloudExceptionRequests as cI,
-  downloadBlob as cJ,
-  PolicyStatField as cK,
-  PaginationControls as cL,
-  HiMiniArrowDownTray as cM,
-  HiMiniQueueList as cN,
-  Surface as cO,
-  HiMiniCheckBadge as cP,
-  fetchResolvedApprovalGate as cQ,
-  fetchMcpPolicyRequest as cR,
-  resolveMcpPolicyRequest as cS,
-  HiMiniDocumentPlus as cT,
-  HiMiniDocumentMagnifyingGlass as cU,
-  fetchSupplyChainBundle as cV,
-  isSupplyChainScannerEvidence as cW,
-  isBlockedGuardAction as cX,
-  HiMiniShieldExclamation as cY,
-  HiMiniComputerDesktop as cZ,
-  HiMiniChevronLeft as c_,
-  HiMiniBeaker as ca,
-  ActivationSummary as cb,
-  ActionResultPanel as cc,
-  HiMiniBugAnt as cd,
-  ConnectFlowCard as ce,
-  ApprovalProofInline as cf,
-  HiMiniCloudArrowDown as cg,
-  fetchPackageFirewallStatus as ch,
-  runPackageAudit as ci,
-  resolveSupplyChainAuditFailure as cj,
-  runPackageSync as ck,
-  startPackageFirewallConnect as cl,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as cm,
-  repairSupplyChainProtection as cn,
-  runPackageFirewallAction as co,
-  parseInterceptProofSnapshot as cp,
-  activatePackageFirewallRuntime as cq,
-  EntitlementNotice as cr,
-  chooseSupplyChainAuditFolder as cs,
-  fetchReceipts as ct,
-  lazyWorkspace as cu,
-  __vitePreload as cv,
-  scopeLabel as cw,
-  HiMiniDocumentText as cx,
-  HiMiniCloudArrowUp as cy,
-  HiMiniCodeBracket as cz,
+  HiMiniShieldExclamation as c$,
+  EvidenceFilterBar as c0,
+  EvidenceInsightStrip as c1,
+  EvidenceActionList as c2,
+  EvidenceActionDetail as c3,
+  policyIdentityKey as c4,
+  clearLabelForScope as c5,
+  HiMiniChartBar as c6,
+  isSupplyChainAuditIncomplete as c7,
+  isSupplyChainAuditEvidence as c8,
+  readString$1 as c9,
+  HiMiniDocumentText as cA,
+  HiMiniCloudArrowUp as cB,
+  HiMiniCodeBracket as cC,
+  HiMiniClipboardDocument as cD,
+  HiMiniUsers as cE,
+  HiMiniIdentification as cF,
+  policyActionLabel as cG,
+  createCloudExceptionRequest as cH,
+  HiMiniArrowRight as cI,
+  HiMiniPuzzlePiece as cJ,
+  fetchCloudExceptions as cK,
+  fetchCloudExceptionRequests as cL,
+  downloadBlob as cM,
+  PolicyStatField as cN,
+  PaginationControls as cO,
+  HiMiniArrowDownTray as cP,
+  HiMiniQueueList as cQ,
+  Surface as cR,
+  HiMiniCheckBadge as cS,
+  fetchResolvedApprovalGate as cT,
+  fetchMcpPolicyRequest as cU,
+  resolveMcpPolicyRequest as cV,
+  HiMiniDocumentPlus as cW,
+  HiMiniDocumentMagnifyingGlass as cX,
+  fetchSupplyChainBundle as cY,
+  isSupplyChainScannerEvidence as cZ,
+  isBlockedGuardAction as c_,
+  isRecord$3 as ca,
+  HiMiniClock as cb,
+  IconActionButton as cc,
+  HiMiniBeaker as cd,
+  ActivationSummary as ce,
+  ActionResultPanel as cf,
+  HiMiniBugAnt as cg,
+  ConnectFlowCard as ch,
+  ApprovalProofInline as ci,
+  HiMiniCloudArrowDown as cj,
+  fetchPackageFirewallStatus as ck,
+  runPackageAudit as cl,
+  resolveSupplyChainAuditFailure as cm,
+  runPackageSync as cn,
+  startPackageFirewallConnect as co,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as cp,
+  repairSupplyChainProtection as cq,
+  runPackageFirewallAction as cr,
+  parseInterceptProofSnapshot as cs,
+  activatePackageFirewallRuntime as ct,
+  EntitlementNotice as cu,
+  chooseSupplyChainAuditFolder as cv,
+  fetchReceipts as cw,
+  lazyWorkspace as cx,
+  __vitePreload as cy,
+  scopeLabel as cz,
   createCommandActivityClient as d,
-  HiMiniArrowDown as d0,
-  HiMiniArrowUp as d1,
-  runAuditRemediation as d2,
-  HiMiniSignal as d3,
+  HiMiniComputerDesktop as d0,
+  HiMiniChevronLeft as d1,
+  HiMiniFunnel as d2,
+  HiMiniArrowDown as d3,
+  HiMiniArrowUp as d4,
+  runAuditRemediation as d5,
+  HiMiniSignal as d6,
   updateSettings as e,
   fetchCommandActivityApi as f,
   getHeatmapLevel as g,

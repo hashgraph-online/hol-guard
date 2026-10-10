@@ -42,11 +42,19 @@ export function normalizeHarnessPostures(value: unknown): Record<string, GuardPr
 }
 
 function globalPosture(settings: GuardSettings): GuardProtectionPostureValue {
-  return isProtectionPosture(settings.protection_posture)
-    ? settings.protection_posture
-    : settings.mode === "observe"
-      ? "watch"
-      : "protected";
+  if (isProtectionPosture(settings.protection_posture)) return settings.protection_posture;
+  if (settings.mode === "observe") return "watch";
+  return "protected";
+}
+
+/** Level an app gets when it is not in Watch: its own level, or the machine's protected level. */
+function protectedLevel(
+  effective: GuardProtectionPostureValue,
+  baseline: GuardProtectionPostureValue,
+): GuardProtectionPostureValue {
+  if (effective !== "watch") return effective;
+  if (baseline !== "watch") return baseline;
+  return "protected";
 }
 
 export function effectiveHarnessPosture(settings: GuardSettings, harness: string): GuardProtectionPostureValue {
@@ -76,11 +84,7 @@ export function harnessPostureRows(
 
 /** The two choices offered for one app: its protected level, and Watch. */
 export function harnessPostureOptions(settings: GuardSettings, harness: string): HarnessPostureOption[] {
-  const effective = effectiveHarnessPosture(settings, harness);
-  const baseline = globalPosture(settings);
-  const onLevel: GuardProtectionPostureValue = effective !== "watch"
-    ? effective
-    : baseline === "watch" ? "protected" : baseline;
+  const onLevel = protectedLevel(effectiveHarnessPosture(settings, harness), globalPosture(settings));
   return [
     { choice: "on", label: POSTURE_LABEL[onLevel] },
     { choice: "watch", label: POSTURE_LABEL.watch },
@@ -108,9 +112,23 @@ export function selectHarnessPosture(
   return { ...settings, harness_postures: next };
 }
 
+/** True when an app is in Watch through its own entry, so its own timer can restart. */
+export function canRestartHarnessWatch(settings: GuardSettings, harness: string): boolean {
+  return settings.harness_postures?.[harness] === "watch" && (settings.watch_auto_revert_hours ?? 24) > 0;
+}
+
+/** Draft that restarts one app's Watch timer on the next save. */
+export function restartHarnessWatch(settings: GuardSettings, harness: string): GuardSettings {
+  if (!canRestartHarnessWatch(settings, harness)) return settings;
+  const restarts = new Set(settings.harness_watch_restart ?? []);
+  restarts.add(harness);
+  return { ...settings, harness_watch_restart: [...restarts].sort() };
+}
+
 /**
- * Only the entries that changed, so saving other settings never re-stamps an
- * app that is already in Watch. `null` clears an override.
+ * Only the entries that changed, plus Watch entries the user asked to restart,
+ * so saving other settings never re-stamps an app that is already in Watch.
+ * `null` clears an override.
  */
 export function harnessPosturePatch(
   draft: GuardSettings,
@@ -118,10 +136,12 @@ export function harnessPosturePatch(
 ): GuardHarnessPosturePatch | null {
   const before = saved?.harness_postures ?? {};
   const after = draft.harness_postures ?? {};
+  const restarts = new Set(draft.harness_watch_restart ?? []);
   const patch: GuardHarnessPosturePatch = {};
   for (const harness of new Set([...Object.keys(before), ...Object.keys(after)])) {
     const posture = after[harness] ?? null;
-    if (posture !== (before[harness] ?? null)) patch[harness] = posture;
+    const restart = posture === "watch" && restarts.has(harness);
+    if (restart || posture !== (before[harness] ?? null)) patch[harness] = posture;
   }
   return Object.keys(patch).length > 0 ? patch : null;
 }
@@ -159,6 +179,7 @@ export function withHarnessPosturePatch(
     harness_postures_effective: _effective,
     harness_postures_locked: _locked,
     harness_watch_entered_at: _enteredAt,
+    harness_watch_restart: _restart,
     ...rest
   } = payload;
   const patch = harnessPosturePatch(draft, saved);
@@ -171,6 +192,20 @@ export function harnessPostureSummary(rows: HarnessPostureRow[]): string {
   if (watching.length === 0) return "Every app is protected.";
   if (watching.length === rows.length) return "Every app is in Watch.";
   return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
+}
+
+/** Confirmation copy for putting one app in Watch, given what the other apps will do. */
+export function harnessWatchPrompt(rows: HarnessPostureRow[], harness: string): string {
+  const row = rows.find((candidate) => candidate.harness === harness);
+  const name = row?.displayName ?? harness;
+  const others = rows.filter((candidate) => candidate.harness !== harness);
+  const protectedOthers = others.filter((candidate) => candidate.effective !== "watch");
+  const lead = `Guard will only record in ${name}.`;
+  if (others.length === 0) return lead;
+  if (protectedOthers.length === 0) return `${lead} Every app will then be in Watch.`;
+  if (protectedOthers.length === others.length) return `${lead} Your other apps stay protected.`;
+  const verb = protectedOthers.length === 1 ? "stays" : "stay";
+  return `${lead} ${joinNames(protectedOthers.map((candidate) => candidate.displayName))} ${verb} protected.`;
 }
 
 export function joinNames(names: string[]): string {

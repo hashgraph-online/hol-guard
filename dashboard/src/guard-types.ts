@@ -994,6 +994,8 @@ export type GuardSettings = {
   harness_postures_effective?: Record<string, GuardProtectionPostureValue>;
   /** Read-only: true when managed policy blocks local Watch/Protected app overrides. */
   harness_postures_locked?: boolean;
+  /** Draft-only: apps whose Watch timer should restart on the next save. Never sent as-is. */
+  harness_watch_restart?: string[];
   security_level: "relaxed" | "gentle" | "balanced" | "strict" | "custom";
   default_action: string;
   unknown_publisher_action: string;

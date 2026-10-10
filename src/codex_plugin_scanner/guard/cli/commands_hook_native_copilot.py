@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import most_restrictive_guard_action, normalize_guard_action
-from ..harness_posture import harness_is_recording_only
+from ..harness_posture import harness_is_recording_only, harness_posture_override
 from ..mcp_tool_calls import resolve_tool_call_policy_action
 from ..models import GuardAction
 from ..retry_lineage import capture_retry_lineage
@@ -181,6 +181,7 @@ def run_native_copilot_pretool(
         runtime_artifact_hash = decision.post_claim_authority.artifact_hash
         runtime_arguments = decision.post_claim_authority.arguments
     policy_action = resolve_tool_call_policy_action(decision)
+    native_floor_applied = False
     if isinstance(native_edge_result, Mapping):
         edge_action_value = native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
         if edge_action_value:
@@ -198,12 +199,20 @@ def run_native_copilot_pretool(
             # The native edge verdict is a non-bypassable floor on the
             # emitted Copilot decision.
             policy_action = most_restrictive_guard_action(policy_action, native_edge_action)
+            native_floor_applied = True
+    recording_only = harness_is_recording_only(config, "copilot")
+    if recording_only and native_floor_applied and harness_posture_override(config, "copilot") == "watch":
+        # A per-app Watch edit that the native publisher has not acknowledged
+        # yet must not undo an enforcing native verdict.
+        from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
+
+        recording_only = recording_only_from_acked_snapshot(store, "copilot")
     approval_reuse = _copilot_approval_reuse_evidence(decision)
     decision_scanner_evidence = _copilot_tool_decision_scanner_evidence(decision)
     saved_policy_blocks = decision.saved_action == "block"
     now = _now()
     observed_policy_action: GuardAction | None = None
-    if harness_is_recording_only(config, "copilot") and policy_action not in {"allow", "warn"}:
+    if recording_only and policy_action not in {"allow", "warn"}:
         observed_policy_action = policy_action
         observe_mode_evidence: dict[str, object] = {
             "source": "observe_mode",
@@ -212,7 +221,7 @@ def run_native_copilot_pretool(
         }
         decision_scanner_evidence = (*decision_scanner_evidence, observe_mode_evidence)
         policy_action = "allow"
-    if harness_is_recording_only(config, "copilot") and observed_policy_action is not None:
+    if recording_only and observed_policy_action is not None:
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=runtime_artifact,

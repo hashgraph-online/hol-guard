@@ -238,7 +238,7 @@ class NativePolicySnapshotPublisherInputs:
         policy = _merge_effective_native_policies(
             tuple(
                 effective_native_policy_v3(config)
-                | {"mode": config.mode, "harness_postures": dict(config.harness_postures or {})}
+                | {"mode": config.mode, "harness_postures": dict(getattr(config, "harness_postures", None) or {})}
                 for config in configs
             )
         )

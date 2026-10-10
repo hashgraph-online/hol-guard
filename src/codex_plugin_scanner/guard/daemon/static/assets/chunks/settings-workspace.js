@@ -1,4 +1,4 @@
-import { ai as PROTECTION_POSTURE_COPY, aj as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ak as harnessPostureRows, al as selectHarnessPosture, am as harnessPostureSummary, an as harnessPostureOptions, ao as getDefaultExportFromCjs, ap as React, P as useFocusTrap, aq as HiMiniKey, S as SectionLabel, A as ActionButton, y as HiMiniShieldCheck, ar as HiMiniLockClosed, as as HiMiniBellAlert, at as HiMiniAdjustmentsHorizontal, au as HiMiniCircleStack, av as TabBar, c as HiMiniChevronRight, aw as fetchCloudReviewSettings, M as HiMiniCloud, ax as HiMiniArrowPath, I as HiMiniXMark, ay as ApprovalProofFieldInputs, az as isApprovalProofSubmitDisabled, aA as buildApprovalProofCredentials, aB as changeCloudReviewSettings, aC as resolveProtectionLevelCopy, aD as fetchSettings, aE as fetchRuntimeSnapshot, aF as clearHarnessWatchOverrides, aG as withHarnessPosturePatch, e as updateSettings, aH as clearPolicy, aI as clearReviewQueue, aJ as revokeApprovalGateCooldown, aK as disableApprovalGateTotp, aL as importSettings, aM as resetSettings, aN as enrollApprovalGateTotp, aO as verifyApprovalGateTotp, aP as clearEvidence, aQ as exportDiagnostics, aR as repairApprovalCenter, aS as exportSettings, aT as setupDesktopNotifications, n as EmptyState, aU as settingsWatchBannerModel, aV as WorkspacePageHeader, W as WatchProtectionBanner, aW as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, aX as humanizeList, aY as isProtectionPosture, aZ as deriveProtectionPosture, a_ as Tag, a$ as normalizeHarnessPostures, b0 as approvalGateCooldownLabel } from "../guard-dashboard.js";
+import { ai as PROTECTION_POSTURE_COPY, aj as POSTURE_OUTCOME_COLUMNS, j as jsxRuntimeExports, r as reactExports, ak as harnessPostureRows, al as selectHarnessPosture, am as restartHarnessWatch, an as harnessPostureSummary, ao as harnessWatchPrompt, ap as harnessPostureOptions, aq as canRestartHarnessWatch, ar as getDefaultExportFromCjs, as as React, P as useFocusTrap, at as HiMiniKey, S as SectionLabel, A as ActionButton, y as HiMiniShieldCheck, au as HiMiniLockClosed, av as HiMiniBellAlert, aw as HiMiniAdjustmentsHorizontal, ax as HiMiniCircleStack, ay as TabBar, c as HiMiniChevronRight, az as fetchCloudReviewSettings, M as HiMiniCloud, aA as HiMiniArrowPath, I as HiMiniXMark, aB as ApprovalProofFieldInputs, aC as isApprovalProofSubmitDisabled, aD as buildApprovalProofCredentials, aE as changeCloudReviewSettings, aF as resolveProtectionLevelCopy, aG as fetchSettings, aH as fetchRuntimeSnapshot, aI as clearHarnessWatchOverrides, aJ as withHarnessPosturePatch, e as updateSettings, aK as clearPolicy, aL as clearReviewQueue, aM as revokeApprovalGateCooldown, aN as disableApprovalGateTotp, aO as importSettings, aP as resetSettings, aQ as enrollApprovalGateTotp, aR as verifyApprovalGateTotp, aS as clearEvidence, aT as exportDiagnostics, aU as repairApprovalCenter, aV as exportSettings, aW as setupDesktopNotifications, n as EmptyState, aX as settingsWatchBannerModel, aY as WorkspacePageHeader, W as WatchProtectionBanner, aZ as HiMiniMagnifyingGlass, K as HiMiniChevronDown, s as HiMiniCheckCircle, R as HiMiniExclamationTriangle, a_ as humanizeList, a$ as isProtectionPosture, b0 as deriveProtectionPosture, b1 as Tag, b2 as normalizeHarnessPostures, b3 as approvalGateCooldownLabel } from "../guard-dashboard.js";
 import { f as filterSettingsBySearch, R as RISK_CONTROL_CONSEQUENCES } from "./app-catalog.js";
 import { u as useConfirmDialog } from "./confirm-dialog.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
@@ -97,18 +97,22 @@ function HarnessPostureSection(props) {
     setPendingWatch(null);
   }, [onSettingsChange, pendingWatch, settings]);
   const handleCancelWatch = reactExports.useCallback(() => setPendingWatch(null), []);
+  const handleRestartWatch = reactExports.useCallback((harness) => {
+    onSettingsChange(restartHarnessWatch(settings, harness));
+  }, [onSettingsChange, settings]);
   if (rows.length === 0) return null;
   const pendingRow = rows.find((row) => row.harness === pendingWatch);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-3", "data-testid": "harness-posture-section", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", "data-testid": "harness-posture-summary", children: harnessPostureSummary(rows) }),
-    locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Your organization manages protection, so Watch is unavailable here." }) : null,
+    locked ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Your organization manages protection for each app, so these choices can't be changed here." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white", children: rows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       HarnessPostureRowView,
       {
         row,
         settings,
         locked,
-        onChoose: handleChoice
+        onChoose: handleChoice,
+        onRestartWatch: handleRestartWatch
       },
       row.harness
     )) }),
@@ -119,11 +123,7 @@ function HarnessPostureSection(props) {
         role: "alertdialog",
         "aria-label": `Switch ${pendingRow.displayName} to Watch`,
         children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm text-brand-dark", children: [
-            "Guard will only record in ",
-            pendingRow.displayName,
-            ". Your other apps stay protected."
-          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: harnessWatchPrompt(rows, pendingRow.harness) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx(
               "button",
@@ -152,10 +152,25 @@ function HarnessPostureSection(props) {
 function HarnessPostureRowView(props) {
   const options = harnessPostureOptions(props.settings, props.row.harness);
   const groupName = `harness-posture-${props.row.harness}`;
+  const { onRestartWatch } = props;
+  const harness = props.row.harness;
+  const handleRestart = reactExports.useCallback(() => onRestartWatch(harness), [harness, onRestartWatch]);
+  const restartPending = props.settings.harness_watch_restart?.includes(harness) === true;
+  const canRestart = !props.locked && canRestartHarnessWatch(props.settings, harness);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: props.row.displayName }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: rowCaption(props.row) })
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: rowCaption(props.row) }),
+      canRestart && restartPending ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Watch timer restarts when you save." }) : null,
+      canRestart && !restartPending ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          onClick: handleRestart,
+          className: "mt-1 min-h-11 text-xs font-semibold text-brand-blue underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue sm:min-h-0",
+          children: "Restart Watch timer"
+        }
+      ) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "border-0 p-0", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "sr-only", children: `Protection for ${props.row.displayName}` }),
@@ -166,7 +181,7 @@ function HarnessPostureRowView(props) {
           choice: option.choice,
           label: option.label,
           selected: props.row.selected === option.choice,
-          disabled: props.locked && option.choice === "watch",
+          disabled: props.locked,
           harness: props.row.harness,
           onChoose: props.onChoose
         },
@@ -185,7 +200,8 @@ function HarnessPostureChoiceView(props) {
     props.onChoose(props.harness, props.choice);
   }, [props.choice, props.disabled, props.harness, props.onChoose]);
   let choiceClass = "cursor-pointer text-slate-600 hover:text-brand-dark";
-  if (props.disabled) choiceClass = "cursor-not-allowed text-slate-400";
+  if (props.disabled && props.selected) choiceClass = "cursor-not-allowed bg-white text-slate-500 shadow-sm";
+  else if (props.disabled) choiceClass = "cursor-not-allowed text-slate-400";
   else if (props.selected) choiceClass = "cursor-pointer bg-white text-brand-dark shadow-sm";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "label",

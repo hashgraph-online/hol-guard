@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { HiMiniExclamationTriangle } from "react-icons/hi2";
 import { WATCH_BANNER_COPY } from "./protection-posture-copy";
 import type { WatchBannerModel } from "./harness-posture-ui";
@@ -27,6 +27,38 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
     ? "Turn protection on for these apps"
     : "Turn protection on";
 
+  let action: ReactNode = null;
+  if (onTurnProtectionOn !== undefined && confirming) {
+    action = (
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={handleConfirm}
+          className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white"
+        >
+          Turn on
+        </button>
+        <button
+          type="button"
+          onClick={handleCancel}
+          className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark"
+        >
+          Not now
+        </button>
+      </div>
+    );
+  } else if (onTurnProtectionOn !== undefined) {
+    action = (
+      <button
+        type="button"
+        onClick={handleAsk}
+        className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white"
+      >
+        {actionLabel}
+      </button>
+    );
+  }
+
   return (
     <div
       className="flex flex-col gap-3 rounded-xl border border-brand-attention/30 bg-brand-attention/[0.06] px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
@@ -39,32 +71,7 @@ export function WatchProtectionBanner(props: WatchProtectionBannerProps) {
           {confirming ? <p className="mt-1 text-sm text-slate-600">{confirmMessage}</p> : null}
         </div>
       </div>
-      {onTurnProtectionOn === undefined ? null : confirming ? (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white"
-          >
-            Turn on
-          </button>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-medium text-brand-dark"
-          >
-            Not now
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={handleAsk}
-          className="inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-attention px-4 text-sm font-semibold text-white"
-        >
-          {actionLabel}
-        </button>
-      )}
+      {action}
     </div>
   );
 }

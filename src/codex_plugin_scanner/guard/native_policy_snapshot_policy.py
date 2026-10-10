@@ -182,7 +182,11 @@ def effective_native_policy_v3(config: GuardConfig | Mapping[str, object]) -> di
         "sandbox_analysis": sandbox_analysis,
         "receipt_redaction_level": redaction_level,
     }
-    if not isinstance(config, Mapping) and config.harness_postures:
+    if (
+        not isinstance(config, Mapping)
+        and isinstance(getattr(config, "harness_postures", None), Mapping)
+        and config.harness_postures
+    ):
         from .native_policy_snapshot_harness_postures import posture_risk_overlay
 
         policy["harness_risk_actions"] = _harness_risk_map(posture_risk_overlay(policy["harness_risk_actions"], config))

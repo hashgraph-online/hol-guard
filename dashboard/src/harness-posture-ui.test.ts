@@ -1,12 +1,15 @@
 import type { GuardProtectionCapability, GuardSettings } from "./guard-types";
 import {
+  canRestartHarnessWatch,
   clearHarnessWatchOverrides,
   effectiveHarnessPosture,
   harnessPostureOptions,
   harnessPosturePatch,
   harnessPostureRows,
   harnessPostureSummary,
+  harnessWatchPrompt,
   normalizeHarnessPostures,
+  restartHarnessWatch,
   selectHarnessPosture,
   turnProtectionOnUpdate,
   watchBannerModel,
@@ -124,3 +127,29 @@ assert(
 );
 const appOnly = turnProtectionOnUpdate({ protection_posture: "protected", harness_postures: { codex: "watch" } });
 assert(appOnly.protection_posture === undefined, "turn on leaves a protected machine alone");
+
+// The Watch prompt describes what the other apps actually do.
+const underGlobalWatch = settings({ protection_posture: "watch", mode: "observe", harness_postures: { codex: "protected" } });
+assert(
+  harnessWatchPrompt(harnessPostureRows(underGlobalWatch, capabilities), "codex") ===
+    "Guard will only record in Codex. Every app will then be in Watch.",
+  "prompt does not claim other apps stay protected under machine Watch",
+);
+assert(
+  harnessWatchPrompt(harnessPostureRows(settings(), capabilities), "codex") ===
+    "Guard will only record in Codex. Your other apps stay protected.",
+  "prompt keeps other apps protected under a protected machine",
+);
+
+// An app already in its own Watch can restart its timer; unrelated saves leave it alone.
+const appWatch = settings({ harness_postures: { codex: "watch" } });
+assert(canRestartHarnessWatch(appWatch, "codex"), "own Watch entry can restart");
+assert(!canRestartHarnessWatch(appWatch, "claude-code"), "inherited posture has no own timer");
+assert(!canRestartHarnessWatch({ ...appWatch, watch_auto_revert_hours: 0 }, "codex"), "no timer when auto-revert is off");
+assert(harnessPosturePatch(appWatch, appWatch) === null, "unchanged Watch is not re-sent");
+const restarted = restartHarnessWatch(appWatch, "codex");
+assert(harnessPosturePatch(restarted, appWatch)?.codex === "watch", "restart re-sends the Watch entry");
+assert(
+  !("harness_watch_restart" in withHarnessPosturePatch(restarted, restarted, appWatch)),
+  "restart marker stays out of the payload",
+);

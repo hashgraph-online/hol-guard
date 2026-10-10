@@ -276,12 +276,13 @@ class NativePolicySnapshotPublicationMixin:
                     # Per-harness posture rides this same ACK: capture the
                     # overrides compiled into the snapshot being acknowledged,
                     # never a later re-read of config.toml.
-                    publisher._harness_postures = valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY))
-                    write_harness_postures_sidecar(
+                    # Bind only what the sidecar write persisted, so daemon hooks
+                    # and readers of the signed file never disagree.
+                    publisher._harness_postures = write_harness_postures_sidecar(
                         publisher.store,
                         generation=cast(int, snapshot["generation"]),
                         policy_digest=cast(str, snapshot["policy_digest"]),
-                        postures=publisher._harness_postures,
+                        postures=valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY)),
                     )
                     publisher._acked = True
                     publisher._last_error = None

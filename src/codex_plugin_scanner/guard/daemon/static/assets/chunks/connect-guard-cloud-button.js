@@ -1,4 +1,4 @@
-import { a8 as openPackageFirewallAuthorizeFallback, a9 as waitForCloudConnection, a5 as waitForAuthorizeUrl, a6 as startOrRecoverCloudConnect, j as jsxRuntimeExports, A as ActionButton, cy as HiMiniCloudArrowUp, r as reactExports, a7 as safeCloudConnectUrl, cm as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE } from "../guard-dashboard.js";
+import { a8 as openPackageFirewallAuthorizeFallback, a9 as waitForCloudConnection, a5 as waitForAuthorizeUrl, a6 as startOrRecoverCloudConnect, j as jsxRuntimeExports, A as ActionButton, cB as HiMiniCloudArrowUp, r as reactExports, a7 as safeCloudConnectUrl, cp as PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE } from "../guard-dashboard.js";
 const SIGN_IN_PENDING_MESSAGE = "Sign-in is still pending. Complete it in the opened window, or open sign-in again.";
 function cloudConnectErrorMessage(message) {
   if (/CERTIFICATE_VERIFY_FAILED|certificate verify failed/i.test(message)) {

@@ -1130,11 +1130,14 @@ def resolve_risk_action(config: GuardConfig, risk_class: str | None, *, harness:
 
     if not isinstance(risk_class, str) or risk_class not in VALID_RISK_ACTION_KEYS:
         return None
-    if isinstance(harness, str) and config.harness_risk_actions is not None:
-        harness_actions = config.harness_risk_actions.get(harness)
-        if harness_actions is not None and risk_class in harness_actions:
-            return harness_actions[risk_class]
-    if config.risk_actions is not None and risk_class in config.risk_actions:
+    harness_actions = (
+        config.harness_risk_actions.get(harness)
+        if isinstance(harness, str) and config.harness_risk_actions is not None
+        else None
+    )
+    if harness_actions is not None and risk_class in harness_actions:
+        resolved = harness_actions[risk_class]
+    elif config.risk_actions is not None and risk_class in config.risk_actions:
         resolved = config.risk_actions[risk_class]
     else:
         resolved = _posture_or_level_defaults(config).get(risk_class)
@@ -1166,8 +1169,15 @@ def _sync_protection_posture_payload(
         )
         if posture == "watch":
             synced["mode"] = "observe"
-            # Re-selecting Watch while already in Watch restarts the revert window.
-            synced["watch_entered_at"] = _utc_now_iso()
+            # Entering Watch stamps the revert window. Re-selecting Watch while
+            # already in Watch restarts it only on an explicit request, so a
+            # full settings save never extends Watch on its own.
+            if (
+                current_config.protection_posture != "watch"
+                or not current_config.watch_entered_at
+                or _requests_watch_restart(incoming)
+            ):
+                synced["watch_entered_at"] = _utc_now_iso()
         else:
             synced.pop("watch_entered_at", None)
             if "mode" not in incoming:
@@ -1195,6 +1205,19 @@ def _sync_protection_posture_payload(
     return synced
 
 
+_FULL_SETTINGS_SAVE_KEYS = frozenset({"mode", "security_level", "risk_actions", "protection_posture_explicit"})
+
+
+def _requests_watch_restart(incoming: Mapping[str, object]) -> bool:
+    """True for a targeted Watch re-selection, never for a full settings save.
+
+    ``hol-guard settings set protection watch`` sends only the posture;
+    the dashboard sends its whole draft, which carries the full-save keys.
+    """
+
+    return not (_FULL_SETTINGS_SAVE_KEYS & set(incoming))
+
+
 def _incoming_selects_protection_posture(
     incoming: Mapping[str, object],
     current_config: GuardConfig,
@@ -1209,7 +1232,9 @@ def _incoming_selects_protection_posture(
         incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))
         if not current_config.protection_posture_explicit:
             return True
-        return incoming_posture != current_config.protection_posture or incoming_posture == "watch"
+        return incoming_posture != current_config.protection_posture or (
+            incoming_posture == "watch" and _requests_watch_restart(incoming)
+        )
     if not {"mode", "security_level", "risk_actions"} & set(incoming):
         return True
     incoming_posture = coerce_protection_posture(incoming.get("protection_posture"))

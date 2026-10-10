@@ -225,3 +225,54 @@ def test_sidecar_without_postures_removes_stale_file(tmp_path: Path) -> None:
     write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={})
     assert read_harness_postures_sidecar(store, generation=1, policy_digest=digest) == {}
     assert not (tmp_path / "guard-home" / "native-runtime" / "harness-postures-v1.json").exists()
+
+
+def test_full_settings_save_keeps_global_watch_timer(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    first = update_guard_settings(guard_home, {"protection_posture": "watch"})
+    assert first.watch_entered_at is not None
+    config_path = guard_home / "config.toml"
+    stale = (datetime.now(timezone.utc) - timedelta(hours=20)).isoformat()
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(first.watch_entered_at, stale), encoding="utf-8"
+    )
+    dashboard_save = {
+        "mode": "observe",
+        "security_level": first.security_level,
+        "protection_posture": "watch",
+        "protection_posture_explicit": True,
+        "watch_auto_revert_hours": 12,
+    }
+    assert update_guard_settings(guard_home, dashboard_save).watch_entered_at == stale
+    assert update_guard_settings(guard_home, {"protection_posture": "watch"}).watch_entered_at != stale
+
+
+def test_extra_careful_override_floors_app_risk_actions(tmp_path: Path) -> None:
+    guard_home = tmp_path / ".hol-guard"
+    config = update_guard_settings(
+        guard_home,
+        {
+            "protection_posture": "protected",
+            "harness_postures": {"codex": "extra_careful"},
+            "harness_risk_actions": {"codex": {"network_egress": "allow"}},
+        },
+    )
+    assert resolve_risk_action(config, "network_egress", harness="codex") == "require-reapproval"
+
+
+def test_failed_sidecar_write_binds_no_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import codex_plugin_scanner.guard.native_policy_snapshot_harness_postures as sidecar_module
+
+    store = GuardStore(tmp_path / "guard-home")
+    store._policy_integrity_secret_material(create=True)
+    digest = "d" * 64
+    assert write_harness_postures_sidecar(store, generation=1, policy_digest=digest, postures={"codex": "watch"}) == {
+        "codex": "watch"
+    }
+
+    def _fail(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(sidecar_module, "_write_private_file", _fail)
+    assert write_harness_postures_sidecar(store, generation=2, policy_digest=digest, postures={"codex": "watch"}) == {}
+    assert read_harness_postures_sidecar(store, generation=2, policy_digest=digest) == {}
