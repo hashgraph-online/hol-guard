@@ -2,9 +2,9 @@ use guard_command::CommandModelRequestV1;
 use guard_contracts::{
     ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
     ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
-    ApprovalReuseRequestV1, ApprovalValidateRequestV3, ApprovalValidateRequestV4,
-    ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1, CompoundGitInspectionRequestV1,
-    ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
+    ApprovalProofRequestV1, ApprovalReuseRequestV1, ApprovalValidateRequestV3,
+    ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1, CommandEffectRequestV1,
+    CompoundGitInspectionRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
     ContainedPackageScriptExecuteRequestV1, ContainedTestHookRequestV1,
     ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
     ContextDigestRequestV1, DataFlowAnalyzeRequestV1, GitExecutionSafetyRequestV1,
@@ -91,6 +91,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::COMPOUND_GIT_INSPECTION_FEATURE.into(),
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
+        guard_contracts::APPROVAL_PROOF_FEATURE.into(),
         guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_MCP_GRANT_FEATURE.into(),
     ];
@@ -175,6 +176,7 @@ pub(crate) enum ResidentOperationV1 {
     CompoundGitInspection(CompoundGitInspectionRequestV1),
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
+    ApprovalProofDecide(ApprovalProofRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
     LocalMcpGrantDecide(LocalMcpGrantRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
