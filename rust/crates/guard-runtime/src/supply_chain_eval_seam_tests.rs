@@ -22,6 +22,8 @@ fn request() -> SupplyChainEvalRequestV1 {
         package_entitlement_override: None,
         registry_metadata_override: None,
         saved_policy_probe: None,
+        egress_supplied: None,
+        egress_spool_dir: None,
     }
 }
 

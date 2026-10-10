@@ -33,7 +33,7 @@ use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
     EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
-    PackageIdentityApi, RegistryMetadataApi, RestrictedArchiveApi,
+    PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
     SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
@@ -48,6 +48,15 @@ use guard_contracts::{
 };
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
+
+use crate::supply_chain_egress::{enter_scope, required_reply};
+use crate::supply_chain_eval_seams::*;
+
+#[path = "supply_chain_eval_op.rs"]
+mod supply_chain_eval_op;
+pub(crate) use supply_chain_eval_op::evaluate_supply_chain_eval;
+#[cfg(test)]
+pub(crate) use supply_chain_eval_op::evaluate_supply_chain_eval_with_seams;
 // ---------------------------------------------------------------------------
 // Shared result helpers
 // ---------------------------------------------------------------------------
@@ -135,7 +144,7 @@ impl ResidentSupplyChainStore {
     }
 
     fn conn(&self) -> Result<Connection, rusqlite::Error> {
-        Connection::open(&self.store_path)
+        crate::supply_chain_egress::open_store(&self.store_path)
     }
 
     fn oauth_local_credentials(&self) -> Option<Value> {
@@ -1874,9 +1883,10 @@ impl PackageIdentityApi for ResidentPackageIdentity {
     }
 }
 
-/// Restricted-archive seam — bounded public-HTTPS-only acquisition via the
-/// `guard_command::restricted_archive` policy engine over the ureq-backed
-/// pinned transport.
+/// Restricted-archive seam. The download is performed by the caller under its
+/// managed network policy (`egress_broker`); this process never dials out for
+/// it. The resident cannot inspect an archive, so a success carries no blob:
+/// only the caller's refusal (`Failure`) changes the verdict.
 struct ResidentRestrictedArchive;
 
 impl RestrictedArchiveApi for ResidentRestrictedArchive {
@@ -1886,37 +1896,30 @@ impl RestrictedArchiveApi for ResidentRestrictedArchive {
         max_bytes: u64,
         max_redirects: u32,
         timeout_seconds: f64,
-        temp_dir: Option<&Path>,
+        _temp_dir: Option<&Path>,
     ) -> EvalResult<RestrictedArchiveDownloadResult> {
-        let resolver = guard_command::restricted_archive_transport::SystemDnsResolver;
-        let transport = guard_command::restricted_archive_transport::UreqPinnedTransport;
-        Ok(
-            match guard_command::restricted_archive::download_restricted_archive(
-                source_url,
-                max_bytes,
-                max_redirects,
-                timeout_seconds,
-                temp_dir,
-                &resolver,
-                &transport,
-            ) {
-                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Success(
-                    blob,
-                ) => RestrictedArchiveDownloadResult::Success(EvalRestrictedArchiveDownload {
-                    path: blob.path,
-                    sha256: blob.sha256,
-                    size: blob.size,
-                    source_url: blob.source_url,
-                    final_url: blob.final_url,
-                }),
-                guard_command::restricted_archive::RestrictedArchiveDownloadResult::Failure(
-                    failure,
-                ) => RestrictedArchiveDownloadResult::Failure(RestrictedArchiveFailure {
-                    code: failure.code,
-                    message: failure.message,
-                }),
-            },
-        )
+        use guard_command::egress_broker::{exchange_archive, ArchiveExchange};
+        match exchange_archive(source_url, max_bytes, max_redirects, timeout_seconds) {
+            ArchiveExchange::Downloaded {
+                sha256,
+                size,
+                final_url,
+            } => Ok(RestrictedArchiveDownloadResult::Success(
+                EvalRestrictedArchiveDownload {
+                    path: PathBuf::new(),
+                    sha256,
+                    size,
+                    source_url: source_url.to_owned(),
+                    final_url,
+                },
+            )),
+            ArchiveExchange::Failed { code, message } => {
+                Ok(RestrictedArchiveDownloadResult::Failure(
+                    RestrictedArchiveFailure { code, message },
+                ))
+            }
+            ArchiveExchange::Unavailable(reason) => Err(EvalError::Internal(reason)),
+        }
     }
 }
 
@@ -1972,7 +1975,7 @@ struct ResidentStoreExtras {
 
 impl ResidentStoreExtras {
     fn conn(&self) -> Result<Connection, rusqlite::Error> {
-        Connection::open(&self.store_path)
+        crate::supply_chain_egress::open_store(&self.store_path)
     }
 
     /// `oauth_local_credentials` sync_state payload (`state_key` =
@@ -2385,23 +2388,6 @@ impl EntitlementRefreshApi for ResidentEntitlementRefresh {
     }
 }
 
-/// Public-registry metadata for range resolution. The fetch is the shared
-/// plain-GET transport; the test override replaces it wholesale.
-struct ResidentRegistryMetadata {
-    metadata_override: Option<Map<String, Value>>,
-}
-
-impl RegistryMetadataApi for ResidentRegistryMetadata {
-    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<Map<String, Value>> {
-        match &self.metadata_override {
-            Some(fixtures) => fixtures.get(url).and_then(Value::as_object).cloned(),
-            None => {
-                guard_command::registry_metadata_transport::fetch_registry_metadata(url, accept)
-            }
-        }
-    }
-}
-
 /// Aggregate `SupplyChainEvalDeps` wired to the resident impls.
 pub struct ResidentEvalDeps {
     guard_sync: ResidentGuardSyncRunner,
@@ -2802,228 +2788,6 @@ pub(crate) fn evaluate_apply_stored_package_policy(
     crate::encode_response(&payload)
 }
 
-/// `SupplyChainEval` — `evaluate_package_request_artifact` port.
-pub(crate) fn evaluate_supply_chain_eval(
-    request: &SupplyChainEvalRequestV1,
-) -> Result<Vec<u8>, String> {
-    let test_overrides = test_seams_enabled_from(|name| std::env::var_os(name));
-    evaluate_supply_chain_eval_with_seams(request, test_overrides)
-}
-
-/// Dedicated opt-in for the supply-chain test seams. It is deliberately not
-/// `HOL_GUARD_NATIVE_DIAGNOSTIC`: diagnostics widen what the resident reports,
-/// and must never also let a request supply auth, entitlement, or registry
-/// fixtures. The resident only sees this variable when the spawner's isolated
-/// environment allowlist forwards it.
-pub(crate) const RESIDENT_TEST_SEAMS_ENV: &str = "HOL_GUARD_RESIDENT_TEST_SEAMS";
-
-/// Whether the supply-chain test seams are enabled for this resident. Only
-/// the dedicated variable counts; the lookup is injected so tests can prove
-/// diagnostics alone never enable them without mutating the process env.
-pub(crate) fn test_seams_enabled_from(lookup: impl Fn(&str) -> Option<std::ffi::OsString>) -> bool {
-    lookup(RESIDENT_TEST_SEAMS_ENV).is_some()
-}
-
-const TEST_SEAM_MAX_BYTES: usize = 8192;
-const TEST_ENTITLEMENT_KEYS: [&str; 4] = ["allowed", "reason", "tier", "upgrade_cta"];
-const TEST_REGISTRY_URL_PREFIXES: [&str; 2] =
-    ["https://registry.npmjs.org/", "https://pypi.org/pypi/"];
-const TEST_AUTH_KEYS: [&str; 5] = [
-    "sync_url",
-    "access_token",
-    "issuer",
-    "dpop_key_material",
-    "error",
-];
-
-/// A test-seam override is honored only when it is a small JSON object of known
-/// keys. Anything else is refused outright rather than half-applied, so the
-/// test-only path cannot carry an unbounded or unexpected shape into a request.
-fn test_seam_overrides_are_valid(request: &SupplyChainEvalRequestV1) -> bool {
-    let bounded = |value: &Value| {
-        serde_json::to_vec(value).is_ok_and(|bytes| bytes.len() <= TEST_SEAM_MAX_BYTES)
-    };
-    let auth_valid = request
-        .sync_auth_context_override
-        .as_ref()
-        .is_none_or(|auth| {
-            bounded(auth)
-                && auth.as_object().is_some_and(|map| {
-                    map.iter().all(|(key, value)| {
-                        TEST_AUTH_KEYS.contains(&key.as_str())
-                            && match key.as_str() {
-                                "dpop_key_material" => value.is_null() || value.is_object(),
-                                _ => value.is_string(),
-                            }
-                    })
-                })
-        });
-    let entitlement_valid =
-        request
-            .package_entitlement_override
-            .as_ref()
-            .is_none_or(|entitlement| {
-                bounded(entitlement)
-                    && entitlement.as_object().is_some_and(|map| {
-                        map.iter().all(|(key, value)| {
-                            TEST_ENTITLEMENT_KEYS.contains(&key.as_str())
-                                && match key.as_str() {
-                                    "allowed" => value.is_boolean(),
-                                    "upgrade_cta" => value.is_null() || value.is_string(),
-                                    _ => value.is_string(),
-                                }
-                        })
-                    })
-            });
-    let registry_valid = request
-        .registry_metadata_override
-        .as_ref()
-        .is_none_or(|fixtures| {
-            bounded(fixtures)
-                && fixtures.as_object().is_some_and(|map| {
-                    map.iter().all(|(url, value)| {
-                        TEST_REGISTRY_URL_PREFIXES
-                            .iter()
-                            .any(|prefix| url.starts_with(prefix))
-                            && (value.is_null() || value.is_object())
-                    })
-                })
-        });
-    auth_valid && entitlement_valid && registry_valid
-}
-
-/// `evaluate_supply_chain_eval` with the test-seam gate injected, so in-process
-/// tests can honor the auth/entitlement overrides without mutating the
-/// process environment.
-pub(crate) fn evaluate_supply_chain_eval_with_seams(
-    request: &SupplyChainEvalRequestV1,
-    test_overrides: bool,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest(request)?;
-    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
-        return serde_json::to_vec(&err_result(
-            &request.request_id,
-            &request_sha256,
-            "schema_mismatch",
-        ))
-        .map_err(|e| e.to_string());
-    }
-    if let Some(rejected) = reject_empty_resident_paths(
-        &request.request_id,
-        &request_sha256,
-        &request.store_path,
-        &request.guard_home,
-    ) {
-        return rejected;
-    }
-    if test_overrides && !test_seam_overrides_are_valid(request) {
-        return serde_json::to_vec(&err_result(
-            &request.request_id,
-            &request_sha256,
-            "native_supply_chain_eval_test_seam_invalid",
-        ))
-        .map_err(|e| e.to_string());
-    }
-    let store_path = PathBuf::from(&request.store_path);
-    let guard_home = PathBuf::from(&request.guard_home);
-    let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
-    let Some(saved_policy) = saved_policy_probe(request) else {
-        return serde_json::to_vec(&err_result(
-            &request.request_id,
-            &request_sha256,
-            "native_supply_chain_eval_saved_policy_invalid",
-        ))
-        .map_err(|e| e.to_string());
-    };
-    let deps_holder = ResidentEvalDeps::with_sync_auth_override(
-        &store_path,
-        &guard_home,
-        request
-            .sync_auth_context_override
-            .as_ref()
-            .filter(|_| test_overrides)
-            .and_then(Value::as_object)
-            .cloned(),
-        request
-            .package_entitlement_override
-            .as_ref()
-            .filter(|_| test_overrides)
-            .and_then(Value::as_object)
-            .cloned(),
-    )
-    .with_registry_metadata_override(
-        request
-            .registry_metadata_override
-            .as_ref()
-            .filter(|_| test_overrides)
-            .and_then(Value::as_object)
-            .cloned(),
-    )
-    .with_saved_policy(saved_policy);
-    let deps = deps_holder.as_deps();
-    let mut artifact = artifact_from_value(&request.artifact);
-    if let Some(private) = &request.runtime_private_metadata {
-        artifact.runtime_private_metadata = private.clone();
-    }
-    let workspace = request.workspace_dir.as_deref().map(Path::new);
-    let result = match evaluate_package_request_artifact(
-        &artifact,
-        &store,
-        &deps,
-        workspace,
-        request.now.as_deref(),
-        request.external_archive_network_authorized,
-        request.retain_external_archive_blob,
-    ) {
-        Ok(eval) => SupplyChainEvalResultV1 {
-            schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-            request_id: request.request_id.clone(),
-            request_sha256,
-            status: "ok".to_owned(),
-            code: "ok".to_owned(),
-            payload: Some(eval.to_dict()),
-        },
-        Err(EvalError::SavedPolicyProbeRequired(cached)) => SupplyChainEvalResultV1 {
-            schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-            request_id: request.request_id.clone(),
-            request_sha256,
-            // The envelope is answered (status ok) so the transport accepts it;
-            // the code, not the status, tells the caller this is a question and
-            // not a verdict.
-            status: "ok".to_owned(),
-            code: "saved_policy_probe_required".to_owned(),
-            payload: Some(Value::Object(*cached)),
-        },
-        Err(e) => SupplyChainEvalResultV1 {
-            schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
-            request_id: request.request_id.clone(),
-            request_sha256,
-            status: "error".to_owned(),
-            code: format!("native_supply_chain_eval_failed:{}", eval_error_code(&e)),
-            payload: None,
-        },
-    };
-    crate::encode_response(&result)
-}
-
-const SAVED_POLICY_MAX_BYTES: usize = 65536;
-
-/// The caller's hydrated saved-policy lookup. An absent probe asks the caller
-/// for one; a present row must be a bounded JSON object, otherwise the request
-/// is refused rather than treated as "no saved policy".
-fn saved_policy_probe(request: &SupplyChainEvalRequestV1) -> Option<SavedPolicyProbe> {
-    let Some(probe) = request.saved_policy_probe.as_ref() else {
-        return Some(SavedPolicyProbe::Required);
-    };
-    match probe.decision.as_ref() {
-        None | Some(Value::Null) => Some(SavedPolicyProbe::Supplied(None)),
-        Some(decision @ Value::Object(_)) => serde_json::to_vec(decision)
-            .is_ok_and(|bytes| bytes.len() <= SAVED_POLICY_MAX_BYTES)
-            .then(|| SavedPolicyProbe::Supplied(Some(decision.clone()))),
-        Some(_) => None,
-    }
-}
-
 /// `PackageAuthorityDecide` — parse → artifact → eval in one call.
 pub(crate) fn evaluate_package_authority_decide(
     request: &PackageAuthorityDecideRequestV1,
@@ -3074,6 +2838,10 @@ pub(crate) fn evaluate_package_authority_decide(
     let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
     let deps_holder = ResidentEvalDeps::new(&store_path, &guard_home);
     let deps = deps_holder.as_deps();
+    // This op cannot ask a caller to perform an exchange, so the evaluation
+    // sees the network as unreachable instead of dialing out.
+    let _no_egress = crate::supply_chain_egress::deny_egress()
+        .map_err(|code| format!("native_package_authority_decide_{code}"))?;
     let result = match evaluate_package_request_artifact(
         &artifact,
         &store,

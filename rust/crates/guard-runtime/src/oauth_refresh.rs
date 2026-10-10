@@ -654,9 +654,8 @@ pub(crate) fn refresh_oauth_access_token(
                 if attempt >= INVALID_GRANT_MAX_ATTEMPTS {
                     break;
                 }
-                std::thread::sleep(std::time::Duration::from_secs_f64(
-                    INVALID_GRANT_RETRY_DELAY_SECONDS,
-                ));
+                // The caller waits before it performs the retry exchange.
+                guard_command::egress_broker::pause(INVALID_GRANT_RETRY_DELAY_SECONDS);
                 if let Some((rt, mat)) = credential_reloader() {
                     let pk = mat
                         .get("private_key_pem")

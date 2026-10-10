@@ -11,7 +11,7 @@ use std::cell::RefCell;
 use std::path::Path;
 
 use guard_command::supply_chain_package_eval::{
-    resolve_registry_target_version, RegistryMetadataApi,
+    resolve_registry_target_version, RegistryDocument, RegistryMetadataApi,
 };
 use serde_json::{json, Map, Value};
 
@@ -28,12 +28,22 @@ struct FakeRegistry {
 }
 
 impl RegistryMetadataApi for FakeRegistry {
-    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<Map<String, Value>> {
+    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<RegistryDocument> {
         self.seen
             .borrow_mut()
             .push((url.to_owned(), accept.to_owned()));
         match self.response["kind"].as_str() {
-            Some("payload") => self.response["payload"].as_object().cloned(),
+            Some("payload") => self.response["payload"].as_object().cloned().map(|object| {
+                let version_order = object
+                    .get("versions")
+                    .and_then(Value::as_object)
+                    .map(|versions| versions.keys().cloned().collect())
+                    .unwrap_or_default();
+                RegistryDocument {
+                    object,
+                    version_order,
+                }
+            }),
             _ => None,
         }
     }

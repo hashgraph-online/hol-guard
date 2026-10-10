@@ -15,7 +15,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 
 use guard_contracts::{
-    SupplyChainEvalRequestV1, SupplyChainEvalResultV1, PACKAGE_AUTHORITY_REQUEST_SCHEMA,
+    EgressNeedV1, EgressOutcomeV1, EgressRequiredV1, EgressSuppliedV1, SupplyChainEvalRequestV1,
+    SupplyChainEvalResultV1, EGRESS_REQUIRED_CODE, PACKAGE_AUTHORITY_REQUEST_SCHEMA,
 };
 use rusqlite::types::Value as SqlValue;
 use serde_json::{json, Value};
@@ -225,6 +226,8 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
         package_entitlement_override: None,
         registry_metadata_override: None,
         saved_policy_probe: None,
+        egress_supplied: None,
+        egress_spool_dir: None,
     };
     if let Some(server) = &server {
         request.sync_auth_context_override = Some(json!({
@@ -236,7 +239,7 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
     if !case["entitlement"].is_null() {
         request.package_entitlement_override = Some(case["entitlement"].clone());
     }
-    let mut result = decode(&evaluate_supply_chain_eval_with_seams(&request, true)?)?;
+    let mut result = drive(&mut request)?;
     // A cached Cloud validation error needs the saved-policy lookup only the
     // caller can hydrate. The vector records what the Python lookup returned.
     let asked = result.code == "saved_policy_probe_required";
@@ -258,7 +261,7 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
             serde_json::from_value(case["saved_policy_probe"].clone())
                 .map_err(|e| format!("{name}: probe vector: {e}"))?,
         );
-        result = decode(&evaluate_supply_chain_eval_with_seams(&request, true)?)?;
+        result = drive(&mut request)?;
     }
     let sent = server.map(CloudServer::finish).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&root);
@@ -269,6 +272,90 @@ fn evaluate_case(vectors: &Value, case: &Value) -> Result<(Value, Vec<(String, V
         ));
     }
     Ok((result.payload.unwrap_or(Value::Null), sent))
+}
+
+/// What the Python caller does: perform each need the resident asks for and
+/// repeat the request with the outcomes, until the resident answers. The
+/// exchanges go to a loopback server through a hand-written client so the
+/// transport under test is never the thing that fulfils it.
+fn drive(request: &mut SupplyChainEvalRequestV1) -> Result<SupplyChainEvalResultV1, String> {
+    for _ in 0..24 {
+        let result = decode(&evaluate_supply_chain_eval_with_seams(request, true)?)?;
+        if result.code != EGRESS_REQUIRED_CODE {
+            return Ok(result);
+        }
+        let required: EgressRequiredV1 =
+            serde_json::from_value(result.payload.ok_or("egress answer without needs")?)
+                .map_err(|e| e.to_string())?;
+        if required.needs.is_empty() {
+            return Err("egress answer with no needs".to_owned());
+        }
+        let supplied = request.egress_supplied.get_or_insert_with(Vec::new);
+        for need in required.needs {
+            supplied.push(EgressSuppliedV1 {
+                outcome: perform_on_loopback(&need)?,
+                class: need.class,
+                method: need.method,
+                url: need.url,
+                body_sha256: need.body_sha256,
+                occurrence: need.occurrence,
+            });
+        }
+    }
+    Err("evaluation did not settle in 24 rounds".to_owned())
+}
+
+fn perform_on_loopback(need: &EgressNeedV1) -> Result<EgressOutcomeV1, String> {
+    let rest = need
+        .url
+        .strip_prefix("http://127.0.0.1:")
+        .ok_or_else(|| format!("not a loopback url: {}", need.url))?;
+    let (port, path) = rest.split_once('/').ok_or("url without a path")?;
+    let mut stream =
+        TcpStream::connect(("127.0.0.1", port.parse::<u16>().map_err(|e| e.to_string())?))
+            .map_err(|e| e.to_string())?;
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
+    let body = need.body.clone().unwrap_or_default();
+    let mut head = format!(
+        "{} /{path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nContent-Length: {}\r\nConnection: close\r\n",
+        need.method,
+        body.len()
+    );
+    for (name, value) in &need.headers {
+        head.push_str(&format!("{name}: {value}\r\n"));
+    }
+    head.push_str("\r\n");
+    stream
+        .write_all(head.as_bytes())
+        .and_then(|()| stream.write_all(body.as_bytes()))
+        .map_err(|e| e.to_string())?;
+    let mut raw = Vec::new();
+    let _ = stream.read_to_end(&mut raw);
+    let Some(split) = raw.windows(4).position(|window| window == b"\r\n\r\n") else {
+        return Ok(EgressOutcomeV1::Error {
+            message: "connection closed without a response".to_owned(),
+        });
+    };
+    let head = String::from_utf8_lossy(&raw[..split]).into_owned();
+    let status = head
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse::<u16>().ok())
+        .ok_or("no status line")?;
+    let headers = head
+        .lines()
+        .skip(1)
+        .filter_map(|line| line.split_once(':'))
+        .map(|(name, value)| (name.trim().to_owned(), value.trim().to_owned()))
+        .collect();
+    Ok(EgressOutcomeV1::Response {
+        status,
+        headers,
+        body: Some(String::from_utf8_lossy(&raw[split + 4..]).into_owned()),
+        body_file: None,
+    })
 }
 
 fn check_cloud_requests(name: &str, case: &Value, sent: &[(String, Value)]) -> Result<(), String> {

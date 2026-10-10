@@ -100,6 +100,8 @@ pub use authoritative_decision::*;
 
 mod package_authority;
 pub use package_authority::*;
+mod supply_chain_egress;
+pub use supply_chain_egress::*;
 
 mod contained_execution;
 pub use contained_execution::*;

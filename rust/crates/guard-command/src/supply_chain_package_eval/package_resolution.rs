@@ -165,15 +165,12 @@ fn npm_registry_resolved_version(
         NPM_REGISTRY_METADATA_BASE_URL.trim_end_matches('/'),
         quote_registry_path_segment(package_name)
     );
-    let payload = deps
+    let document = deps
         .registry
         .fetch_registry_metadata(&url, "application/vnd.npm.install-v1+json")?;
-    let versions: Vec<String> = payload
-        .get("versions")?
-        .as_object()?
-        .keys()
-        .cloned()
-        .collect();
+    // Document order, not the sorted `Map` order: Python walks the `versions`
+    // dict in insertion order, which decides a tie between equal versions.
+    let versions = document.version_order;
     if versions.is_empty() {
         return None;
     }
@@ -193,7 +190,8 @@ fn pypi_registry_resolved_version(
     );
     let payload = deps
         .registry
-        .fetch_registry_metadata(&url, "application/json")?;
+        .fetch_registry_metadata(&url, "application/json")?
+        .object;
     let releases = payload.get("releases")?.as_object()?;
     let specifier =
         crate::pep440::SpecifierSet::parse(&normalized_pypi_requested_range(requested_range)?)

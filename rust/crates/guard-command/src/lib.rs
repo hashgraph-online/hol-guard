@@ -411,6 +411,8 @@ pub mod decisions;
 pub mod detectors;
 #[cfg(unix)]
 pub mod direct_vitest;
+pub mod egress_broker;
+mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
 pub mod hook_evidence_writer;

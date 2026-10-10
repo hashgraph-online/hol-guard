@@ -90,9 +90,9 @@ pub use bundle_contracts::{
 #[path = "supply_chain_package_eval/runtime_contracts.rs"]
 mod runtime_contracts;
 pub use runtime_contracts::{
-    ConfigLoaderApi, EntitlementRefreshApi, NativeArchiveApi, RegistryMetadataApi,
-    RestrictedArchiveApi, RestrictedArchiveDownload, RestrictedArchiveDownloadResult,
-    RestrictedArchiveFailure, StoreExtrasApi, WorkspaceIoApi,
+    ConfigLoaderApi, EntitlementRefreshApi, NativeArchiveApi, RegistryDocument,
+    RegistryMetadataApi, RestrictedArchiveApi, RestrictedArchiveDownload,
+    RestrictedArchiveDownloadResult, RestrictedArchiveFailure, StoreExtrasApi, WorkspaceIoApi,
 };
 #[path = "supply_chain_package_eval/evaluation.rs"]
 mod evaluation;

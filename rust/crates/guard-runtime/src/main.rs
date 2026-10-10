@@ -127,6 +127,8 @@ mod state_directory_lock;
 mod strict_json;
 #[cfg(test)]
 mod supply_chain_cloud_vectors_tests;
+mod supply_chain_egress;
+mod supply_chain_eval_seams;
 mod totp;
 mod workflow_capability_store;
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypeGuard
@@ -29,10 +30,15 @@ from .native_package_authority import (
 )
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure
+from .native_supply_chain_egress import EGRESS_REQUIRED_CODE, EgressExchanger, EgressProtocolError, private_spool_dir
 
 SUPPLY_CHAIN_EVAL_FEATURE = "supply-chain-eval-v1"
 _EVAL_TIMEOUT_SECONDS = 25.0
 _PROBE_REQUIRED_CODE = "saved_policy_probe_required"
+# Each round either performs the exchanges the resident asked for or answers its
+# saved-policy question. The resident collects every registry lookup of a round
+# at once, so a normal evaluation settles in a handful of rounds.
+_MAX_ROUNDS = 24
 _UNAVAILABLE_CODE = "native_supply_chain_eval_unavailable"
 _UNAVAILABLE_MESSAGE = (
     "HOL Guard blocked this package request because its native package policy engine was unavailable."
@@ -209,17 +215,47 @@ def native_supply_chain_eval_payload(
     if private_metadata:
         request["runtime_private_metadata"] = dict(private_metadata)
     request.update(_test_seam_overrides())
-    response = _send_eval_request(request, guard_home)
-    if (
-        response.get("status") == "ok"
-        and response.get("code") == _PROBE_REQUIRED_CODE
-        and saved_policy_lookup is not None
-        and isinstance(response.get("payload"), dict)
-    ):
-        decision = saved_policy_lookup(response["payload"])
-        probe: dict[str, object] = {} if decision is None else {"decision": decision}
-        request = {**request, "request_id": _request_id(), "now": _now_text(now), "saved_policy_probe": probe}
+    fixed_now = _now_text(now)
+    exchanger: EgressExchanger | None = None
+    probed = False
+    with ExitStack() as stack:
         response = _send_eval_request(request, guard_home)
+        for _round in range(_MAX_ROUNDS):
+            answered_ok = response.get("status") == "ok"
+            if answered_ok and response.get("code") == EGRESS_REQUIRED_CODE:
+                # The resident cannot reach the network itself: perform what it asked
+                # for under the managed network policy and replay with the outcomes.
+                if exchanger is None:
+                    exchanger = EgressExchanger(stack.enter_context(private_spool_dir()))
+                try:
+                    exchanger.fulfil(response.get("payload"))
+                except EgressProtocolError as error:
+                    _record_unbound_answer(guard_home)
+                    raise NativeSupplyChainEvalError("Native package evaluation egress request invalid") from error
+                request = {
+                    **request,
+                    "request_id": _request_id(),
+                    "now": fixed_now,
+                    "egress_supplied": list(exchanger.supplied),
+                    "egress_spool_dir": str(exchanger.spool_dir),
+                }
+            elif (
+                answered_ok
+                and response.get("code") == _PROBE_REQUIRED_CODE
+                and saved_policy_lookup is not None
+                and isinstance(response.get("payload"), dict)
+                and not probed
+            ):
+                probed = True
+                decision = saved_policy_lookup(response["payload"])
+                probe: dict[str, object] = {} if decision is None else {"decision": decision}
+                request = {**request, "request_id": _request_id(), "now": fixed_now, "saved_policy_probe": probe}
+            else:
+                break
+            response = _send_eval_request(request, guard_home)
+        else:
+            _record_unbound_answer(guard_home)
+            raise NativeSupplyChainEvalError("Native package evaluation did not settle")
     if response.get("status") != "ok" or response.get("code") != "ok":
         raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
     payload = response.get("payload")

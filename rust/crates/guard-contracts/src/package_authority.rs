@@ -136,6 +136,14 @@ pub struct SupplyChainEvalRequestV1 {
     /// `saved_policy_probe_required` for a cached Cloud validation error.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub saved_policy_probe: Option<SavedPolicyProbeV1>,
+    /// Outcomes of the network exchanges the resident asked the caller to
+    /// perform under its managed network policy (`supply_chain_egress_required`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub egress_supplied: Option<Vec<crate::EgressSuppliedV1>>,
+    /// Caller-owned private directory holding response bodies too large to
+    /// inline. The resident reads plain file names inside it and never writes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub egress_spool_dir: Option<String>,
 }
 
 /// The `lookup["decision"]` row the caller read for a cached Cloud validation

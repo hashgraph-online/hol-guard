@@ -158,5 +158,17 @@ pub trait RegistryMetadataApi {
     /// GET `url` with the given `Accept` header and return the top-level JSON
     /// object, or `None` for any failure (timeout, HTTP error, non-object or
     /// undecodable body). The caller owns URL selection and version choice.
-    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<Map<String, Value>>;
+    fn fetch_registry_metadata(&self, url: &str, accept: &str) -> Option<RegistryDocument>;
+}
+
+/// A registry metadata document: its top-level object plus the order of the
+/// `versions` keys as the registry sent them. `Map` sorts its keys, but Python
+/// iterates the `versions` dict in insertion order, and a tie between equally
+/// ranked versions resolves to the earlier one.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RegistryDocument {
+    pub object: Map<String, Value>,
+    /// Keys of the top-level `versions` object in document order; empty when
+    /// `versions` is absent or not an object.
+    pub version_order: Vec<String>,
 }
