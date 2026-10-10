@@ -92,6 +92,31 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.42.0](https://github.com/hashgraph-online/hol-guard/compare/v3.41.0...v3.42.0) (2026-10-10)
+
+
+### Features
+
+* **guard:** move policy bundle authority to the native resident ([#3938](https://github.com/hashgraph-online/hol-guard/issues/3938)) ([acc0451](https://github.com/hashgraph-online/hol-guard/commit/acc0451a4e025e65d9f1799a95e83941ced18e5b))
+* **guard:** move review event outbox persistence into the native resident ([#3935](https://github.com/hashgraph-online/hol-guard/issues/3935)) ([692072d](https://github.com/hashgraph-online/hol-guard/commit/692072d00ca9b05110a04a084a05677967bd7af3))
+* **guard:** parse a bounded PowerShell subset for Windows command controls ([#3948](https://github.com/hashgraph-online/hol-guard/issues/3948)) ([adb624f](https://github.com/hashgraph-online/hol-guard/commit/adb624fea3378bba9e5cdda4b40c73b8a0943285))
+
+
+### Bug Fixes
+
+* **extensions:** preserve public records and isolate generated outputs ([#3882](https://github.com/hashgraph-online/hol-guard/issues/3882)) ([11f7380](https://github.com/hashgraph-online/hol-guard/commit/11f73801e1582363a3fc2e0b96f7cfde448b528c))
+* **guard:** back off Guard Cloud token refresh after any rejected refresh request ([#3944](https://github.com/hashgraph-online/hol-guard/issues/3944)) ([20a475b](https://github.com/hashgraph-online/hol-guard/commit/20a475b30fd81dbd4c12ae0f078461a91fd2cd20))
+* **guard:** flag prompts that request secret values, not ones that name them ([#3947](https://github.com/hashgraph-online/hol-guard/issues/3947)) ([5df7c36](https://github.com/hashgraph-online/hol-guard/commit/5df7c36cb4d1ce10544e5985988b601f86e81eaf))
+* **guard:** treat a missing Windows state directory as an unprovisioned home ([#3957](https://github.com/hashgraph-online/hol-guard/issues/3957)) ([8fe5569](https://github.com/hashgraph-online/hol-guard/commit/8fe55699c4c0420677cd96ec24c0d880e42c4b4a))
+
+
+### Performance Improvements
+
+* **ci:** dedupe decision-diff corpus evals and raise eval parallelism ([#3941](https://github.com/hashgraph-online/hol-guard/issues/3941)) ([d9d76ba](https://github.com/hashgraph-online/hol-guard/commit/d9d76ba0b3928552ced5bef36ca14717ea0332ed))
+* **ci:** isolate 131s capability-cleanup gate to serial lane ([#3946](https://github.com/hashgraph-online/hol-guard/issues/3946)) ([53eda59](https://github.com/hashgraph-online/hol-guard/commit/53eda59b09a8f7d640a0a94863c7666d2b6592f3))
+* **guard:** reuse verified business source and exact-action token in native review ([#3954](https://github.com/hashgraph-online/hol-guard/issues/3954)) ([5d52b80](https://github.com/hashgraph-online/hol-guard/commit/5d52b800a959cc3c1a4436932b8597adfce21d12))
+* **guard:** share one store connection across desktop bootstrap ([#3945](https://github.com/hashgraph-online/hol-guard/issues/3945)) ([8b8671c](https://github.com/hashgraph-online/hol-guard/commit/8b8671cc3b179b19d965ce18564230105198a0d9))
+
 ## [3.41.0](https://github.com/hashgraph-online/hol-guard/compare/v3.40.0...v3.41.0) (2026-10-10)
 
 
