@@ -17,6 +17,18 @@ mod business_source_codec;
 mod claim_approval_reuse_op;
 mod claim_reuse;
 mod command_effect;
+mod compound_git_args;
+mod compound_git_chain;
+mod compound_git_facts;
+#[cfg(test)]
+mod compound_git_facts_tests;
+mod compound_git_inspection_op;
+#[cfg(test)]
+mod compound_git_inspection_op_tests;
+#[cfg(test)]
+mod compound_git_inspection_vectors_tests;
+mod compound_git_paths;
+mod compound_git_segments;
 #[cfg(unix)]
 mod contained_op;
 mod context_digest;
@@ -61,6 +73,7 @@ mod native_runtime_resilience;
 mod oauth_refresh;
 mod oauth_secret_authority;
 mod oneshot;
+mod package_authority_config;
 mod package_authority_op;
 mod package_evaluation_compose_op;
 mod policy_decision_lookup_op;

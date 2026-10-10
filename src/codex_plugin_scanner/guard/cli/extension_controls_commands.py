@@ -29,6 +29,7 @@ from ..runtime.extension_control_proof import (
 from ..store import GuardStore
 from .approval_gate_prompt import prompt_for_approval_gate
 from .commands_support_prompts import _shell_join
+from .extension_catalog_reads import catalog_list, catalog_show, pattern_extensions
 
 
 def _client(guard_home: Path) -> GuardSurfaceDaemonClient:
@@ -230,7 +231,6 @@ def _recover_authority(
 
 
 def _patterns(client: GuardSurfaceDaemonClient, args: argparse.Namespace, output_stream: TextIO | None) -> int:
-    catalog = client.extension_control_catalog()
     effective = client.effective_extension_controls()
     local_states: dict[str, str] = {}
     layers = effective.get("layers")
@@ -251,15 +251,8 @@ def _patterns(client: GuardSurfaceDaemonClient, args: argparse.Namespace, output
     query = str(getattr(args, "query", "") or "").strip().lower()
     tool = str(getattr(args, "tool", "") or "").strip().lower() or None
     rows: list[dict[str, object]] = []
-    extensions = catalog.get("extensions")
-    if not isinstance(extensions, list):
-        raise ValueError("daemon returned an invalid catalog")
-    for extension in extensions:
-        if not isinstance(extension, dict):
-            continue
+    for extension in pattern_extensions(client, tool, query):
         extension_id = str(extension.get("extension_id", ""))
-        if tool and extension_id != tool:
-            continue
         permissions = extension.get("permissions")
         if not isinstance(permissions, list):
             continue
@@ -356,19 +349,12 @@ def run_extension_controls_command(
         if command == "status":
             _emit(client.effective_extension_controls(), output_stream)
             return 0
-        if command in {"list", "show"}:
-            catalog = client.extension_control_catalog()
-            if command == "list":
-                _emit(catalog, output_stream)
-                return 0
-            target_id = str(args.target_id)
-            extensions = catalog.get("extensions")
-            if isinstance(extensions, list):
-                for extension in extensions:
-                    if isinstance(extension, dict) and extension.get("extension_id") == target_id:
-                        _emit(extension, output_stream)
-                        return 0
-            raise ValueError(f"unknown extension target: {target_id}")
+        if command == "list":
+            _emit(catalog_list(client), output_stream)
+            return 0
+        if command == "show":
+            _emit(catalog_show(client, str(args.target_id)), output_stream)
+            return 0
         effective = client.effective_extension_controls()
         payload = _mutation_payload(effective, args)
         if command in {"preview", "global-preview"}:

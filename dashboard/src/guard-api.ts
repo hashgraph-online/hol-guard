@@ -1049,6 +1049,22 @@ export async function fetchExtensionControlApi(input: RequestInfo, init?: Reques
   return fetchWithGuardAuth(input, init);
 }
 
+export async function fetchExtensionCatalogV2Api(input: string, init?: RequestInit): Promise<Response> {
+  const approvedPath =
+    /^\/v2\/extension-controls\/catalog\/(?:index|permissions|extensions\/command\.[a-z0-9.-]+(?:\/(?:permissions|rules|mcp-tools))?)(?:\?[^#]*)?$/.test(
+      input,
+    );
+  if (!approvedPath) {
+    throw new Error("Invalid extension catalog API path");
+  }
+  return fetchWithGuardAuth(input, init);
+}
+
+/** Partition key for in-memory read caches: one daemon origin and session. */
+export function guardApiCacheScope(): string {
+  return `${readGuardDaemonOrigin() ?? ""}|${readGuardToken() ?? ""}`;
+}
+
 export async function fetchLocalCliApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const approvedPath =
     typeof input === "string" &&
