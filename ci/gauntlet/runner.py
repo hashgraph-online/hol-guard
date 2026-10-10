@@ -105,7 +105,7 @@ def run_case(
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             case["agent_context_sha256"] = sha256_bytes(authorization.encode())
             agent_dir = private / "agent"
-            write_agent_configuration(agent_dir, relay)
+            write_agent_configuration(agent_dir, relay, wait_for_tasks=scenario.id == "omp-native-task-readonly-lookup")
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
                     raise ValueError("Watch fixture contract changed")

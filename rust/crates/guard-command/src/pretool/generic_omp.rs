@@ -6,6 +6,8 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+#[path = "generic_omp_yield.rs"]
+mod yield_report;
 
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result};
@@ -13,6 +15,10 @@ use crate::native_command_controls::CompiledNativeCommandControls;
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 use serde_json::{Map, Value};
 use std::time::Instant;
+
+pub(super) fn yield_signal_payload(payload: &Value) -> Option<Value> {
+    yield_report::signal_payload(payload)
+}
 
 pub(super) struct OmpContext<'a> {
     pub(super) harness: &'a str,
@@ -57,6 +63,18 @@ pub(super) fn evaluate(
     }
     let tool = signals.tool_name.as_deref()?;
     match tool {
+        "yield" => {
+            yield_report::signal_payload(payload)?;
+            Some({
+                let readable = yield_report::references_are_readable(&signals.path_values, context);
+                generic_result(
+                    generic_action(context.harness, context.event, PreToolActionTypeV1::Harness, PreToolOperationV1::Set, true, false),
+                    if readable { "allow" } else { "review" },
+                    if readable { "native_omp_yield_metadata" } else { "native_omp_yield_report_review" },
+                    "The Rust authority verified this bounded result report and every file reference; submitted content retains output scanning and policy floors.",
+                )
+            })
+        }
         "task" | "wait" | "todo" | "todo_write" => {
             // Delegated work runs through its own guarded tool calls. A
             // path-bearing input is not a delegation envelope.
