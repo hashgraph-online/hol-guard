@@ -1651,10 +1651,12 @@ def test_guard_package_shim_preserves_argv_cwd_env_exitcode_and_stdio(
     assert result.stdout.strip() == "fake-manager-stdout"
 
 
-def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_local_approval(
+@pytest.mark.parametrize("as_json", [True, False])
+def test_guard_protect_terminal_cloud_auth_error_offers_reconnect_not_approval(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys,
+    as_json: bool,
 ) -> None:
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
@@ -1687,7 +1689,7 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
                 str(home_dir),
                 "--workspace",
                 str(workspace_dir),
-                "--json",
+                *(["--json"] if as_json else []),
                 "--dry-run",
                 "npm",
                 "install",
@@ -1697,15 +1699,22 @@ def test_guard_protect_json_terminal_block_on_cloud_auth_error_does_not_queue_lo
     finally:
         _stop_cloud_eval_server(server, thread)
 
-    payload = json.loads(capsys.readouterr().out)
+    output = capsys.readouterr().out
     store = GuardStore(home_dir)
     stored_receipt = store.list_receipts(limit=1)[0]
 
     assert rc == 2
-    assert payload["verdict"]["action"] == "block"
-    assert "approval_center_url" not in payload
-    assert "primary_approval_request_id" not in payload
-    assert payload["receipt"]["approval_request_id"] is None
+    if as_json:
+        payload = json.loads(output)
+        assert payload["verdict"]["action"] == "block"
+        assert "approval_center_url" not in payload
+        assert "primary_approval_request_id" not in payload
+        assert payload["receipt"]["approval_request_id"] is None
+    else:
+        assert "Run hol-guard connect" in output
+        assert "needs review" not in output
+        assert "approve or keep this blocked" not in output
+        assert "http://127.0.0.1:5474/requests/" not in output
     assert stored_receipt["approval_request_id"] is None
     assert store.list_approval_requests(limit=None) == []
 
