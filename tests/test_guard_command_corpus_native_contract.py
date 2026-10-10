@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 from dataclasses import replace
 from itertools import chain
@@ -145,6 +146,13 @@ def native_samples() -> dict[str, tuple[CommandCorpusCase, OracleRecord, NativeC
         for marker in HARNESS_ENV_MARKERS:
             attribution.delenv(marker, raising=False)
         attribution.setenv("__CFBundleIdentifier", "com.apple.Terminal")
+        # Command composition is resident-only; this module fixture runs before the
+        # function-scoped autouse native-mode fixture, so select the compiled
+        # authority the same way that fixture does for regression jobs.
+        attribution.setenv("HOL_GUARD_TEST_MODE", "1")
+        attribution.setenv("HOL_GUARD_NATIVE_DIAGNOSTIC", "1")
+        if "HOL_GUARD_NATIVE" not in os.environ and os.environ.get("HOL_GUARD_NATIVE_REGRESSION") == "1":
+            attribution.setenv("HOL_GUARD_NATIVE", "force")
         attribution.setattr(package_protect_projection, "resolve_parent_process_harness", lambda: None)
         # GitHub CLI classification is resident-only; answer it from the same Rust classifier
         # without leaking the stub module or its memoized answers into other tests.

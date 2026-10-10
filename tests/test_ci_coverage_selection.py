@@ -317,7 +317,7 @@ def test_cli_publishes_only_the_selected_numeric_artifact_ids(tmp_path, monkeypa
 
     def wait(repository, run, attempt, **kwargs):
         calls.append((repository, run, attempt))
-        assert kwargs["poll_seconds"] == 1
+        assert kwargs["poll_seconds"] == 30
 
     monkeypatch.setattr(selection.barrier, "wait_for_shards", wait)
     monkeypatch.setattr(selection, "select_with_retries", lambda *args: expected)

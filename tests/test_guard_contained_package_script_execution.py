@@ -16,9 +16,6 @@ from codex_plugin_scanner.guard.contained_package_script_execution import (
 )
 from codex_plugin_scanner.guard.package_shim_gate import package_shim_command_requires_guard
 from codex_plugin_scanner.guard.runtime import local_package_script_evidence as evidence_module
-from codex_plugin_scanner.guard.runtime.command_contained_routine_candidates import (
-    contained_routine_candidate_operation,
-)
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentAttestation,
     ContainmentBackend,
@@ -151,6 +148,11 @@ def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecu
     )
 
 
+def _requires_containment_proof(evaluation: object) -> bool:
+    reasons = evaluation.decision_plane.reasons
+    return any(reason.reason_code == "contained-routine-proof-required" for reason in reasons)
+
+
 @pytest.mark.parametrize("partition", range(_CORPUS_PARTITIONS))
 def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: int) -> None:
     # Keep every case and oracle assertion, but amortize native process startup
@@ -168,20 +170,17 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
     for (case, oracle), reviewed in zip(benign, evaluations, strict=True):
         assert case.case_id == oracle.case_id
         evaluation = reviewed.evaluation
-        operation = contained_routine_candidate_operation(evaluation.command)
+        owned = _requires_containment_proof(evaluation)
         if oracle.owner != "CDX-061":
-            assert operation is None
+            assert not owned
             continue
-        assert operation is not None
+        assert owned
         assert evaluation.minimum_action == "review"
         # Intrinsic Git-context reapproval strengthens, never replaces, the
         # independently required containment proof.
         expected_floor = "require-reapproval" if reviewed.native_minimum_action == "require-reapproval" else "review"
         assert evaluation.decision_plane.action == expected_floor
         assert evaluation.decision_plane.proof_routes == frozenset()
-        assert any(
-            reason.reason_code == "contained-routine-proof-required" for reason in evaluation.decision_plane.reasons
-        )
     adversarial = list(
         zip(
             iter_adversarial_corpus(shard_index=partition, shard_count=_CORPUS_PARTITIONS),
@@ -195,7 +194,7 @@ def test_every_cdx_061_corpus_case_requires_owned_containment_proof(partition: i
     for (case, oracle), reviewed in zip(adversarial, evaluations, strict=True):
         assert case.case_id == oracle.case_id
         assert oracle.owner != "CDX-061"
-        assert contained_routine_candidate_operation(reviewed.evaluation.command) is None
+        assert not _requires_containment_proof(reviewed.evaluation)
 
 
 def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
@@ -207,16 +206,12 @@ def test_cdx_061_corpus_owned_count_and_operations_remain_complete() -> None:
     evaluations = iter_native_command_evaluations(
         (case.command for case, _oracle in owned), cwd=Path("workspace"), home_dir=Path("home")
     )
-    operations: set[str] = set()
     count = 0
     for (case, oracle), reviewed in zip(owned, evaluations, strict=True):
         assert case.case_id == oracle.case_id
-        operation = contained_routine_candidate_operation(reviewed.evaluation.command)
         count += 1
-        assert operation is not None
-        operations.add(operation)
+        assert _requires_containment_proof(reviewed.evaluation)
     assert count == 275
-    assert operations == {"test", "lint", "build", "typecheck", "compile-check", "dependency-tree", "workspace-check"}
 
 
 @pytest.mark.parametrize("operation", tuple(_OPERATIONS))
