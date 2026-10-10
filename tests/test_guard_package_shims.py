@@ -2514,6 +2514,115 @@ def test_guard_protect_denied_retry_with_cloud_block_surfaces_saved_block_clear_
     assert resolved == []
 
 
+def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpinned_package(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    home_dir = tmp_path / "guard-home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir(parents=True, exist_ok=True)
+    marker_path = tmp_path / "npm-somepkg-marker.json"
+    write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
+    package_name = "somepkg"
+    monkeypatch.setattr(
+        native_supply_chain_eval_module,
+        "_test_registry_metadata_override",
+        {f"https://registry.npmjs.org/{package_name}": {"dist-tags": {"latest": "1.0.0"}, "versions": {"1.0.0": {}}}},
+    )
+    server, thread, sync_url = _start_cloud_eval_server(
+        decision="allow",
+        package_name=package_name,
+        evaluate_status=401,
+    )
+    monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
+    try:
+        store = GuardStore(home_dir)
+        _seed_bundle_cache_only(
+            home_dir=home_dir,
+            ecosystem="npm",
+            package_name=package_name,
+            package_version="1.0.0",
+            action="allow",
+        )
+        _seed_workspace_sync_credentials(home_dir, sync_url)
+
+        with monkeypatch.context() as unpaid_context:
+            _force_unpaid_entitlement(unpaid_context)
+            first_payload, first_exit_code = build_protect_payload(
+                command=["npm", "install", package_name],
+                store=store,
+                workspace_dir=workspace_dir,
+                dry_run=True,
+                now="2026-05-19T00:00:00Z",
+            )
+
+        assert first_exit_code == 0
+        assert first_payload["verdict"]["action"] == "allow"
+        receipt = first_payload["receipt"]
+        assert isinstance(receipt, dict)
+        store.upsert_policy(
+            PolicyDecision(
+                harness="guard-cli",
+                scope="artifact",
+                action="allow",
+                artifact_id=str(receipt["artifact_id"]),
+                artifact_hash=str(receipt["artifact_hash"]),
+                workspace=None,
+                publisher=None,
+                reason="reviewed",
+            ),
+            "2026-05-19T00:00:00Z",
+        )
+
+        response = _bundle_response(
+            action="block",
+            ecosystem="npm",
+            package_name=package_name,
+            package_version="1.0.0",
+            feed_snapshot_hash="feed-snapshot-block-2",
+            policy_hash="policy-hash-block-2",
+            bundle_version="1747612801000-shim-proof",
+        )
+        store.cache_supply_chain_bundle(WORKSPACE_ID, response, "2026-05-19T01:00:00Z")
+        bundle = response["bundle"]
+        assert isinstance(bundle, dict)
+        store.set_sync_payload(
+            "supply_chain_bundle_entitlement",
+            {
+                "bundle_version": bundle["bundleVersion"],
+                "key_id": bundle["keyId"],
+                "policy_hash": bundle["policyHash"],
+                "tier": bundle["tier"],
+                "workspace_id": WORKSPACE_ID,
+            },
+            "2026-05-19T01:00:00Z",
+        )
+
+        original_path = os.environ.get("PATH", "")
+        monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
+        retry_payload, retry_exit_code = build_protect_payload(
+            command=["npm", "install", package_name],
+            store=store,
+            workspace_dir=workspace_dir,
+            dry_run=False,
+            now="2026-05-19T01:00:00Z",
+        )
+    finally:
+        _stop_cloud_eval_server(server, thread)
+
+    assert retry_exit_code == 2
+    assert retry_payload["executed"] is False
+    assert retry_payload["verdict"]["action"] == "block"
+    assert marker_path.exists() is False
+    assert not any(
+        isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
+        for reason in retry_payload["supply_chain_evaluation"]["reasons"]
+    )
+
+
 @pytest.mark.usefixtures("native_hook_force")
 def test_guard_protect_saved_allow_never_lowers_current_cached_advisory_block(
     tmp_path: Path,
