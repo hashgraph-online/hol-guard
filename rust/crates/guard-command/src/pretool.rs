@@ -415,9 +415,11 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard blocked a destructive command before execution.",
         ));
     }
-    if model.segments.iter().any(|segment| {
-        crate::command_critical_floors::guard_control_block_reason(segment).is_some()
-    }) {
+    if crate::command_critical_floors::guard_control_block_in_launcher_text(normalized)
+        || crate::command_critical_floors::guard_control_block_in_command(
+            &crate::canonical_command::CanonicalCommand::from_v1(&model),
+        )
+    {
         return Ok(pretool_decision(
             model,
             "block",
