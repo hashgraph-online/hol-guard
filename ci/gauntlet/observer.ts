@@ -139,7 +139,7 @@ export default function (api: {
     if ((event.message as JsonRecord | undefined)?.role === "assistant") observe(event);
   });
   const evals = new Set<string>();
-  const bridges = new Map<string, string>();
+  const bridges = new Map<string, string[]>();
   api.on("tool_execution_start", event => {
     if (event.toolName === "eval" && typeof event.toolCallId === "string") evals.add(event.toolCallId);
     observe(event);
@@ -152,16 +152,18 @@ export default function (api: {
   // tool_call/tool_result hooks, but no agent-core execution events.
   api.on("tool_call", event => {
     if (typeof event.toolCallId !== "string" || !event.toolCallId.startsWith("js-")) return;
-    if (evals.size !== 1) throw new Error("ambiguous eval bridge parent");
-    const parent = [...evals][0];
-    bridges.set(event.toolCallId, parent);
-    observe({ type: "eval_bridge_start", parentToolCallId: parent, event });
+    // These SDK hooks expose no parent identity. Record the actual candidates
+    // without guessing or interrupting overlapping executions.
+    const parents = [...evals];
+    bridges.set(event.toolCallId, parents);
+    observe({ type: "eval_bridge_start", parentToolCallId: parents.length === 1 ? parents[0] : null,
+      parentToolCallIds: parents, event });
   });
   api.on("tool_result", event => {
     if (typeof event.toolCallId !== "string" || !event.toolCallId.startsWith("js-")) return;
-    const parent = bridges.get(event.toolCallId);
-    if (!parent || !evals.has(parent)) throw new Error("unbound eval bridge completion");
-    observe({ type: "eval_bridge_end", parentToolCallId: parent, event });
+    const parents = bridges.get(event.toolCallId) ?? [];
+    observe({ type: "eval_bridge_end", parentToolCallId: parents.length === 1 ? parents[0] : null,
+      parentToolCallIds: parents, event });
     bridges.delete(event.toolCallId);
   });
 }

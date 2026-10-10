@@ -20,6 +20,9 @@ def bridge_calls(events: list[dict[str, Any]], parents: list[dict[str, Any]]) ->
             active.remove(key)
         elif kind in {"eval_bridge_start", "eval_bridge_end"}:
             parent, event = row.get("parentToolCallId"), row.get("event")
+            candidates = row.get("parentToolCallIds")
+            if candidates != [parent]:
+                raise ValueError("ambiguous SDK eval bridge parent")
             if not isinstance(parent, str) or active != {parent} or not isinstance(event, dict):
                 raise ValueError("eval bridge lacks an executing model parent")
             key, name = event.get("toolCallId"), event.get("toolName")

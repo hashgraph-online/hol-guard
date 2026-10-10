@@ -38,15 +38,32 @@ test("eval bridge hooks retain actual arguments and the executing parent", () =>
   const start = { type: "tool_call", toolCallId: "js-read-123", toolName: "read", input: { path: "README.md" } };
   const end = { type: "tool_result", toolCallId: "js-read-123", toolName: "read", input: start.input,
     content: [{ type: "text", text: "inert fixture" }], isError: false };
-  expect(() => handlers.get("tool_call")!(start)).toThrow("ambiguous eval bridge parent");
+  expect(handlers.get("tool_call")!(start)).toBeUndefined();
   handlers.get("tool_execution_start")!({ type: "tool_execution_start", toolCallId: "eval", toolName: "eval" });
   expect(handlers.get("tool_call")!(start)).toBeUndefined();
   expect(handlers.get("tool_result")!(end)).toBeUndefined();
   const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
   expect(events.slice(-2)).toEqual([
-    { type: "eval_bridge_start", parentToolCallId: "eval", event: start },
-    { type: "eval_bridge_end", parentToolCallId: "eval", event: end },
+    { type: "eval_bridge_start", parentToolCallId: "eval", parentToolCallIds: ["eval"], event: start },
+    { type: "eval_bridge_end", parentToolCallId: "eval", parentToolCallIds: ["eval"], event: end },
   ]);
   handlers.get("tool_execution_end")!({ type: "tool_execution_end", toolCallId: "eval", toolName: "eval" });
-  expect(() => handlers.get("tool_result")!(end)).toThrow("unbound eval bridge completion");
+  expect(handlers.get("tool_result")!(end)).toBeUndefined();
+});
+
+test("overlapping eval calls are observed without changing execution", () => {
+  const handlers = new Map<string, (event: Record<string, unknown>) => void>();
+  install({ on: (name, callback) => { handlers.set(name, callback); } });
+  for (const id of ["first", "second"]) {
+    handlers.get("tool_execution_start")!({ type: "tool_execution_start", toolCallId: id, toolName: "eval" });
+  }
+  const start = { type: "tool_call", toolCallId: "js-read-overlap", toolName: "read", input: { path: "README.md" } };
+  expect(handlers.get("tool_call")!(start)).toBeUndefined();
+  const end = { type: "tool_result", toolCallId: start.toolCallId, toolName: "read", input: start.input,
+    content: [], isError: false };
+  expect(handlers.get("tool_result")!(end)).toBeUndefined();
+  const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  expect(events.slice(-2).map(event => [event.parentToolCallId, event.parentToolCallIds])).toEqual([
+    [null, ["first", "second"]], [null, ["first", "second"]],
+  ]);
 });
