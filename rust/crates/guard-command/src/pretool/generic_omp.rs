@@ -23,6 +23,23 @@ pub(super) struct OmpContext<'a> {
     pub(super) execution_environment: Option<&'a guard_contracts::GuardExecutionEnvironmentV1>,
 }
 
+/// The acknowledgement of a delegated task adds no executable operation.
+/// Any returned content still needs the normal output scan and policy floors.
+pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
+    let Ok(signals) = super::extract::extract_generic_signals(payload) else {
+        return false;
+    };
+    matches!(
+        signals.tool_name.as_deref(),
+        Some("task" | "wait" | "todo" | "todo_write")
+    ) && !signals.sensitive_target
+        && signals.command.is_none()
+        && !signals.package_present
+        && signals.url_values.is_empty()
+        && signals.path_values.is_empty()
+        && strict_tool_input(payload).is_some()
+}
+
 /// `Some` only when a bounded proof applies; `None` keeps the normal path.
 pub(super) fn evaluate(
     payload: &Value,
