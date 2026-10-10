@@ -722,8 +722,18 @@ if '--exercise' in sys.argv:
                                     except OSError:
                                         chunk = b''
                                     if not chunk:
-                                        _, status = os.waitpid(pid, 0)
-                                        rc = os.waitstatus_to_exitcode(status)
+                                        # PTY EOF does not guarantee the child exited;
+                                        # reap with a bounded WNOHANG poll so a stalled
+                                        # child cannot hang the probe. If it is still
+                                        # alive, rc stays None and the deadline path
+                                        # below terminates it.
+                                        eof_deadline = time.monotonic() + 5
+                                        while time.monotonic() < eof_deadline:
+                                            wpid, status = os.waitpid(pid, os.WNOHANG)
+                                            if wpid == pid:
+                                                rc = os.waitstatus_to_exitcode(status)
+                                                break
+                                            time.sleep(0.05)
                                         break
                                     output += chunk
                                     low = bytes(output).lower()
