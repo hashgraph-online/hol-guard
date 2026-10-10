@@ -8,8 +8,8 @@ function assert(condition: boolean, message: string): void {
 
 const daemonErrorCopy = buildDaemonErrorCopy();
 assert(
-  daemonErrorCopy.primaryCta === "Retry" && daemonErrorCopy.secondaryCta === "Go to Settings",
-  "daemon error copy gives recoverable Home actions",
+  daemonErrorCopy.primaryCta === "Retry connection" && daemonErrorCopy.secondaryCta === "Troubleshoot",
+  "daemon error copy gives connection retry and recovery actions",
 );
 
 const sessionErrorCopy = buildHomeRuntimeErrorCopy("unauthorized (401)");
@@ -26,7 +26,7 @@ assert(
 
 const unreachableErrorCopy = buildHomeRuntimeErrorCopy("Failed to fetch");
 assert(
-  unreachableErrorCopy.kind === "daemon" && unreachableErrorCopy.primaryCta === "Retry",
+  unreachableErrorCopy.kind === "daemon" && unreachableErrorCopy.primaryCta === "Retry connection",
   "unreachable Home errors keep a Retry action",
 );
 

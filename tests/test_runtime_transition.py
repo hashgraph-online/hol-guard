@@ -2210,18 +2210,25 @@ def test_real_process_exit_releases_owner_and_recovers_transition_pair(tmp_path:
     assert store.get_managed_install("codex") == install_row("codex", "previous")
 
 
-def test_production_driver_restores_bindings_when_candidate_start_fails(transition):
+def test_production_driver_restores_bindings_when_candidate_start_fails(transition, monkeypatch):
     """A4: candidate start and predecessor restart both fail on the production driver.
 
     The executable is a real spawned program that exits. Admission, state
     authentication, and the coordinator stay on the production path. The
     result keeps the original start failure and the rollback start failure.
+
+    The launch exits before its process identity can be recorded, so no signed
+    launch receipt exists and the retirement proof stays exact. A launch whose
+    identity was recorded keeps its receipt until containment is proven, which
+    is covered by the daemon manager launch-containment tests.
     """
+    from codex_plugin_scanner.guard.daemon import manager as daemon_manager
     from codex_plugin_scanner.guard.runtime_transition_coordinator import RuntimeTransitionCoordinator
     from codex_plugin_scanner.guard.runtime_transition_daemon import TransitionDaemonDriver
 
     runtime, plan, bindings, pointer = transition
     script = b"#!/bin/sh\nexit 1\n"
+    monkeypatch.setattr(daemon_manager, "process_start_token", lambda _pid, **_kwargs: None)
     dependencies = []
     for _side, artifact in (("candidate", plan.candidate), ("predecessor", plan.predecessor)):
         path = Path(artifact["path"])

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 import pytest
@@ -135,6 +136,31 @@ def test_process_tree_rss_includes_nested_worker_descendants(
     )
 
     assert process_tree_rss_bytes((10,)) == 175 * 1024
+
+
+def test_process_tree_rss_uses_bounded_headroom_for_a_slow_ps_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(capacity_module.shutil, "which", lambda _name: "/usr/bin/ps")
+    monkeypatch.setattr(capacity_module, "is_trusted_absolute_command_path", lambda *_args, **_kwargs: True)
+
+    def run_ps(*_args, **kwargs):
+        timeout = kwargs["timeout"]
+        simulated_ps_latency = 0.3
+        if timeout < simulated_ps_latency:
+            raise capacity_module.subprocess.TimeoutExpired(cmd="ps", timeout=timeout)
+        assert timeout <= 0.5
+        time.sleep(simulated_ps_latency)
+        return capacity_module.subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="10 1 100\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(capacity_module.subprocess, "run", run_ps)
+
+    assert process_tree_rss_bytes((10,)) == 100 * 1024
 
 
 def test_process_tree_rss_rejects_path_shadowed_ps(

@@ -1,0 +1,20 @@
+{
+  "schema": "hol-guard-recovery.v1",
+  "capabilities": ["inspect", "restart", "status", "diagnostics"],
+  "operationId": "22222222-2222-4222-8222-222222222222",
+  "sequence": 7,
+  "startedAt": "2026-09-20T00:00:00+00:00",
+  "updatedAt": "2026-09-20T00:01:00+00:00",
+  "phase": "timed_out_waiting",
+  "activeElapsedMs": 60000,
+  "workerActive": true,
+  "retryAllowed": false,
+  "outcome": "not_recovered",
+  "reasonCode": "worker_exit_unconfirmed",
+  "service": "unknown",
+  "protection": "unknown",
+  "requiresHumanAction": true,
+  "checks": [
+    {"id": "process_identity", "result": "unknown", "reasonCode": "worker_exit_unconfirmed"}
+  ]
+}

@@ -7,10 +7,10 @@ export function buildDaemonErrorCopy(): {
   secondaryCta: string;
 } {
   return {
-    title: "Guard is not responding",
-    body: "The local Guard service is not reachable. Retry the connection, or open Settings if you need to repair protection.",
-    primaryCta: "Retry",
-    secondaryCta: "Go to Settings",
+    title: "We can't connect to Guard.",
+    body: "Retry the connection, or troubleshoot the local service without changing your protection settings.",
+    primaryCta: "Retry connection",
+    secondaryCta: "Troubleshoot",
   };
 }
 

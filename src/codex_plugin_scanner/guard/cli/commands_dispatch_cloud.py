@@ -601,6 +601,7 @@ def _run_guard_daemon_command(
     config: GuardConfig | None = None,
     input_text: str | None = None,
     output_stream: TextIO | None = None,
+    error_stream: TextIO | None = None,
 ) -> int:
     return _dispatch_guard_daemon_command(
         args,
@@ -608,6 +609,8 @@ def _run_guard_daemon_command(
         workspace=workspace,
         context=context,
         store=store,
+        output_stream=output_stream,
+        error_stream=error_stream,
     )
 
 

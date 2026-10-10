@@ -16,22 +16,32 @@ def _manager():
     return manager
 
 
-def guard_recovery_is_disabled(guard_home: Path) -> bool:
-    """Do not restart a daemon when local protection is explicitly off."""
+def guard_recovery_posture(guard_home: Path) -> str:
+    """Return "on", "off" or "unknown" for local protection.
+
+    "unknown" means the config could not be read. Callers that perform a
+    privileged mutation must refuse on it; automatic hook recovery treats it as
+    not disabled so a broken config cannot suppress a valid recovery.
+    """
 
     try:
         from ..config import load_guard_config
         from ..protection_posture import protection_is_off
 
         config = load_guard_config(guard_home)
-    except Exception as error:
-        # Invalid or unavailable config must not suppress a valid recovery.
-        del error
-        return False
-    # A harness overridden to Protected keeps enforcing under a global Watch, so
-    # its hooks still need a recoverable daemon.
-    enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
-    return protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
+        # A harness overridden to Protected keeps enforcing under a global Watch, so
+        # its hooks still need a recoverable daemon.
+        enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
+        off = protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
+    except Exception:
+        return "unknown"
+    return "off" if off else "on"
+
+
+def guard_recovery_is_disabled(guard_home: Path) -> bool:
+    """Do not restart a daemon when local protection is explicitly off."""
+
+    return guard_recovery_posture(guard_home) == "off"
 
 
 def recover_guard_daemon_after_hook_failure(
@@ -299,6 +309,7 @@ def terminate_recovery_worker(process: subprocess.Popen[bytes]) -> bool:
 __all__ = [
     "authenticated_live_current_daemon_url",
     "guard_recovery_is_disabled",
+    "guard_recovery_posture",
     "recover_guard_daemon_after_hook_failure",
     "schedule_guard_daemon_recovery",
     "terminate_recovery_worker",

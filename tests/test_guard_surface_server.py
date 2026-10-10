@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -1313,9 +1314,12 @@ class TestGuardSurfaceServer:
             # "could not complete local review" and the deadline-exhaust
             # denial are transient admission misses, not a wrong decision -
             # retry after the worker pool has capacity.
-            if str(hook_payload.get("reason", "")).startswith(
-                "HOL Guard blocked this action because isolated local review could not complete safely."
-            ) or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted":
+            if (
+                str(hook_payload.get("reason", "")).startswith(
+                    "HOL Guard blocked this action because isolated local review could not complete safely."
+                )
+                or hook_payload.get("reason_code") == "daemon_hook_deadline_exhausted"
+            ):
                 assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
                     minimum_workers=1, timeout_seconds=15
                 )
@@ -2353,6 +2357,103 @@ class TestGuardSurfaceServer:
         assert response.status == 200
         assert payload == {}
         assert captured == {"workspace": None}
+
+    def test_late_hook_review_is_rejected_if_capacity_sampling_crosses_deadline(self, tmp_path) -> None:
+        from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview
+
+        receipts: list[dict[str, object]] = []
+        review_payload = {"continue": True, "reason_code": "review_complete"}
+        server = SimpleNamespace(
+            runtime_hook_process_scheduler=SimpleNamespace(
+                acquire=lambda **_kwargs: SimpleNamespace(permit=nullcontext(), reason_code=None),
+                stats=lambda: {"queue_wait_p95_ms": 0.0, "queued": 0},
+            ),
+            hook_process_runner=SimpleNamespace(
+                review=lambda **_kwargs: HookProcessReview(
+                    review_payload,
+                    None,
+                    {"decision_id": "late-review"},
+                ),
+                observe_load=lambda **_kwargs: time.sleep(0.15),
+            ),
+            runtime_hook_evidence_writer=SimpleNamespace(
+                submit_native_decision_receipt=lambda receipt: receipts.append(receipt) or True,
+            ),
+            store=GuardStore(tmp_path / "guard-home"),
+        )
+        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
+        handler.server = server
+        responses: list[dict[str, object]] = []
+        handler._write_json = lambda payload, **_kwargs: responses.append(payload)
+
+        handler._handle_runtime_hook_compatibility_cli(
+            {"hook_event_name": "UserPromptSubmit"},
+            {},
+            hook_env={},
+            default_harness="codex",
+            home_dir=str(tmp_path),
+            guard_home=str(server.store.guard_home),
+            workspace=None,
+            deadline=time.monotonic() + 0.1,
+        )
+
+        assert len(responses) == 1
+        # An expired prompt review is rendered through the availability policy, which denies the prompt
+        # with the native prompt-unavailable code instead of returning the late review payload.
+        assert responses[0].get("reason_code") == "native_prompt_unavailable"
+        assert responses[0] is not review_payload
+        assert receipts == []
+
+    def test_runtime_hook_does_not_wait_for_rss_sampling(self, tmp_path, monkeypatch) -> None:
+        from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
+        from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview
+
+        rss_samples: list[None] = []
+        review_payload = {"continue": True, "reason_code": "review_complete"}
+
+        def slow_rss_sample() -> None:
+            time.sleep(0.3)
+            rss_samples.append(None)
+            return None
+
+        runner = HookProcessRunner(rss_bytes_provider=slow_rss_sample)
+        monkeypatch.setattr(
+            runner,
+            "review",
+            lambda **_kwargs: HookProcessReview(review_payload, None),
+        )
+        server = SimpleNamespace(
+            runtime_hook_process_scheduler=SimpleNamespace(
+                acquire=lambda **_kwargs: SimpleNamespace(permit=nullcontext(), reason_code=None),
+                stats=lambda: {"queue_wait_p95_ms": 0.0, "queued": 0},
+            ),
+            hook_process_runner=runner,
+            runtime_hook_evidence_writer=SimpleNamespace(
+                submit_native_decision_receipt=lambda _receipt: True,
+            ),
+            store=GuardStore(tmp_path / "guard-home"),
+        )
+        handler = object.__new__(daemon_server_module._GuardDaemonHandler)
+        handler.server = server
+        responses: list[dict[str, object]] = []
+        handler._write_json = lambda payload, **_kwargs: responses.append(payload)
+
+        try:
+            handler._handle_runtime_hook_compatibility_cli(
+                {"hook_event_name": "UserPromptSubmit"},
+                {},
+                hook_env={},
+                default_harness="codex",
+                home_dir=str(tmp_path),
+                guard_home=str(server.store.guard_home),
+                workspace=None,
+                deadline=time.monotonic() + 0.15,
+            )
+        finally:
+            runner.close()
+
+        assert responses == [review_payload]
+        assert rss_samples == []
 
     @pytest.mark.usefixtures("native_hook_force")
     def test_guard_daemon_claude_hook_endpoint_preserves_workspace_trailing_none_sentinel(
