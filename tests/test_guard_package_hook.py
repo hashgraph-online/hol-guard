@@ -14,13 +14,13 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
-import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+import codex_plugin_scanner.guard.native_supply_chain_egress as egress_module
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
+from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
@@ -393,7 +393,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
         raise TimeoutError("cloud evaluation timed out")
 
     monkeypatch.setattr(guard_commands_module, "load_guard_surface_daemon_client", fail_daemon)
-    monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", timeout)
+    monkeypatch.setattr(egress_module, "managed_urlopen", timeout)
 
     rc = main(
         [

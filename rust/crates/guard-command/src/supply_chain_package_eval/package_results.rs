@@ -130,14 +130,20 @@ pub(super) fn heuristic_package_result_with(
     r
 }
 
-#[allow(dead_code)]
+/// Python `_target_is_external_https_archive`: npm/pypi targets whose source
+/// URL is a non-git external HTTPS archive.
 pub(super) fn target_is_external_https_archive(target: &Map<String, Value>) -> bool {
+    let ecosystem = optional_string(target.get("ecosystem"))
+        .unwrap_or_default()
+        .to_lowercase();
+    if ecosystem != "npm" && ecosystem != "pypi" {
+        return false;
+    }
     let Some(url) = optional_string(target.get("source_url")) else {
         return false;
     };
-    url.starts_with("https://")
-        && (url.ends_with(".tar.gz")
-            || url.ends_with(".tgz")
-            || url.ends_with(".tar")
-            || url.ends_with(".zip"))
+    if npm_source_spec(Some(&url), &ecosystem).is_some_and(|spec| spec.is_git()) {
+        return false;
+    }
+    super::source_identity::is_external_https_tarball_source(&url)
 }

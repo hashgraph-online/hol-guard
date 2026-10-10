@@ -6,6 +6,7 @@ to ``hol-guard-runtime``; it never downloads a binary or sends hook material.
 
 from __future__ import annotations
 
+import functools
 import importlib.metadata
 import json
 import math
@@ -69,10 +70,14 @@ def native_mode() -> NativeMode:
     return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
 
 
+@functools.lru_cache(maxsize=1)
+def _installed_package_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
 def _bundled_runtime_candidate() -> Path:
     executable = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
-    package_root = Path(__file__).resolve().parents[1]
-    return package_root / "_native" / executable
+    return _installed_package_root() / "_native" / executable
 
 
 def _runtime_candidates() -> tuple[Path, ...]:

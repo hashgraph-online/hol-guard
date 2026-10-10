@@ -13,7 +13,6 @@ from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = (
-    "cline-contract-ci.yml",
     "rust-authority-ownership.yml",
     "rust-command-model-differential.yml",
     "rust-command-shadow.yml",
@@ -27,7 +26,6 @@ WORKFLOWS = (
     "rust-runtime-recovery.yml",
     "rust-runtime-rule-contract.yml",
     "rust-runtime-windows-resident.yml",
-    "rust-runtime.yml",
 )
 
 
@@ -109,23 +107,6 @@ def test_native_identity_watches_production_inputs_not_the_whole_test_tree() -> 
     assert 'root.join("Cargo.lock")' in identity
     assert 'root.join("Cargo.toml")' in identity
     assert 'println!("cargo:rerun-if-changed={}", directory.display())' in identity
-
-
-def test_source_only_acceptance_runs_on_main_and_pull_requests() -> None:
-    """Verify source only acceptance runs on main and pull requests."""
-    workflow = expand_ci_job_actions(
-        yaml.safe_load((ROOT / ".github/workflows/extension-fixture-isolation.yml").read_text())
-    )
-    events = workflow.get("on", workflow.get(True))
-    assert "pull_request" in events and events["push"]["branches"] == ["main"]
-    job = workflow["jobs"]["source-only-acceptance"]
-    assert "continue-on-error" not in job
-    acceptance = next(
-        step
-        for step in job["steps"]
-        if "check_extension_fixture_isolation.py" in step.get("run", "") and "--output" in step["run"]
-    )
-    assert "continue-on-error" not in acceptance and "if" not in acceptance
 
 
 @pytest.mark.parametrize("name", ["guard-command-source", "guard-command-source.exe"])

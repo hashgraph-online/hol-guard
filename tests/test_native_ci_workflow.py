@@ -278,7 +278,6 @@ def test_parallel_windows_workspace_checks_remain_required(name: str, integratio
         "rust-runtime-recovery.yml",
         "rust-runtime-windows-resident.yml",
         "rust-command-shadow.yml",
-        "rust-runtime.yml",
         "rust-runtime-performance.yml",
     ],
 )

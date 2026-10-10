@@ -20,7 +20,12 @@ def write_agent_configuration(path: Path, relay: InferenceRelay) -> None:
     model materializes inert defaults that add notice lines to every output.
     """
     path.mkdir(mode=0o700)
-    (path / "config.yml").write_text(json.dumps({"launch": {"enabled": False}}), encoding="utf-8")
+    # The eval scenario exercises the guarded JavaScript session-tool bridge;
+    # Python/raw filesystem cells have a different admission contract.
+    (path / "config.yml").write_text(
+        json.dumps({"launch": {"enabled": False}, "eval": {"py": False, "js": True}}),
+        encoding="utf-8",
+    )
     configuration = {
         "providers": {
             "gauntlet-live": {

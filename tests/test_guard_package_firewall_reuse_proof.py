@@ -27,11 +27,11 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import (
 from codex_plugin_scanner.guard.runtime.package_intent_parser import (
     parse_package_intent,
 )
-from codex_plugin_scanner.guard.runtime.supply_chain import detect_supply_chain_risk
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
 )
+from codex_plugin_scanner.guard.runtime.supply_chain import detect_supply_chain_risk
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_supply_chain import (
     supply_chain_bundle_schema_statement,

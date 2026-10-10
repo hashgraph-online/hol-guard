@@ -242,30 +242,31 @@ def _exercise_mode_invariants(
     workspace: Path,
 ) -> dict[str, dict[str, object]]:
     mode_invariants: dict[str, dict[str, object]] = {}
+    post_tool_payload: dict[str, object] = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Read",
+        "tool_response": [{"type": "text", "text": "mode invariant\n"}],
+    }
     try:
+        os.environ.pop("HOL_GUARD_NATIVE", None)
+        baseline = _installed_hook_request(
+            daemon, guard_home, workspace, "claude-code", "PostToolUse", dict(post_tool_payload)
+        )
+        if not isinstance(baseline, dict):
+            raise RuntimeError(f"native_default_auto_probe_failed: invalid baseline response: {baseline}")
         for mode in ("off", "shadow"):
             os.environ["HOL_GUARD_NATIVE"] = mode
             response = _installed_hook_request(
-                daemon,
-                guard_home,
-                workspace,
-                "claude-code",
-                "PostToolUse",
-                {
-                    "hook_event_name": "PostToolUse",
-                    "tool_name": "Read",
-                    "tool_response": [{"type": "text", "text": "mode invariant\n"}],
-                },
+                daemon, guard_home, workspace, "claude-code", "PostToolUse", dict(post_tool_payload)
             )
             if not isinstance(response, dict):
                 raise RuntimeError(f"native_default_auto_probe_failed: invalid mode response: {response}")
             # Legacy values are accepted but resolve to auto: the native
-            # resident decides exactly as it does with the variable unset.
+            # resident must decide exactly as it does with the variable unset.
             _require(
                 response.get("continue") is True
-                and response.get("policy_action") == "allow"
-                and response.get("reason_code") not in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
-                {"mode": mode, "response": response},
+                and all(response.get(key) == baseline.get(key) for key in ("decision", "policy_action", "reason_code")),
+                {"mode": mode, "response": response, "baseline": baseline},
             )
             mode_invariants[mode] = {
                 "decision": response.get("decision"),

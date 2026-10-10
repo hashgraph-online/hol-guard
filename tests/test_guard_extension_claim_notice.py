@@ -51,6 +51,9 @@ def listing_v2(extension_id: str, ids: list[str]) -> dict[str, Any]:
 
 
 class FakeGitHub:
+    repo = "hashgraph-online/hol-guard"
+    base_url = "https://api.github.com/repos/hashgraph-online/hol-guard"
+
     def __init__(self) -> None:
         self.default_branch = "main"
         self.merged = True
@@ -67,6 +70,9 @@ class FakeGitHub:
 
     def repo_metadata(self) -> dict[str, Any]:
         return {"default_branch": self.default_branch}
+
+    def _request(self, url: str) -> Any:
+        raise MODULE.ClaimProvenanceError("Fixture has no verified introducing history")
 
     def pull_request(self, number: int) -> dict[str, Any]:
         return {
@@ -86,6 +92,11 @@ class FakeGitHub:
         return self.files
 
     def file_json(self, path: str, ref: str, *, missing_ok: bool = False) -> dict[str, Any] | None:
+        if path.startswith("contracts/extensions/trust/") and (ref, path) not in self.file_payloads:
+            runtime_id = path.removeprefix("contracts/extensions/trust/").removesuffix(".v1.json")
+            return {
+                "schemaVersion": "guard.extension-trust-binding.v1", "extension": runtime_id, "trustClass": "external",
+            }
         value = self.file_payloads.get((ref, path))
         if value is None and not missing_ok:
             raise AssertionError(f"unexpected missing file: {path}@{ref}")
@@ -173,8 +184,9 @@ def configure_new_command_source(client: FakeGitHub, extension_id: str) -> str:
         {"status": "added", "filename": source_path},
         {"status": "added", "filename": f"tests/fixtures/command-source-{extension_id[8:]}.v1.json"},
     ]
-    client.file_payloads[(MERGE_SHA, source_path)] = {"schema": "guard.command-extension-source.v1"}
-    client.file_payloads[(client.default_branch, source_path)] = {"schema": "guard.command-extension-source.v1"}
+    source = {"schema": "guard.command-extension-source.v1", "extension": {"extension_id": extension_id}}
+    client.file_payloads[(MERGE_SHA, source_path)] = source
+    client.file_payloads[(client.default_branch, source_path)] = source
     return source_path
 
 

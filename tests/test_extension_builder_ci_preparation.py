@@ -283,3 +283,9 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
         "test_extension_builder_ci_preparation.py",
     ):
         assert path in steps[tests]["run"]
+    verifier = "scripts/ci/verify_extension_builder_install.py"
+    install_wheel = next(step for step in steps if verifier in step.get("run", ""))
+    assert (ROOT / verifier).is_file()
+    quality = next(step for step in steps if step.get("name") == "Check authoring source quality")
+    assert verifier in quality["run"]
+    assert verifier in install_wheel["run"]

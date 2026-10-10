@@ -496,7 +496,7 @@
   {
    "old_node": "tests/test_rust_pretool_authority.py::test_hook_worker_returns_native_allow",
    "replacement_nodes": [
-    "tests/test_native_legacy_modes.py::test_legacy_values_fail_closed_without_a_native_runtime"
+    "tests/test_native_pretool_generic.py::test_generic_allow_result_renders_grok_decision_json"
    ],
    "status": "native_behavior_ported_requires_ci"
   },

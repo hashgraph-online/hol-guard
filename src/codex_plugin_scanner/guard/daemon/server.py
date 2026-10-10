@@ -184,6 +184,7 @@ from ..package_firewall_entitlement import (
 )
 from ..package_firewall_receipts import package_firewall_receipt_metadata
 from ..package_shim_status import record_package_shim_audit_result
+from ..path_resolution_cache import cached_realpath
 from ..policy_bundle_activation import activate_with_reason
 from ..policy_bundle_delivery import policy_bundle_acknowledgement_payload
 from ..policy_bundle_parser import policy_bundle_is_enforceable, policy_bundle_rejection_message
@@ -7582,7 +7583,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_root = trusted_temporary_root_for_path(Path(candidate))
         except OSError:
             temporary_root = None
-        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
             return None
         return candidate
 
@@ -7605,7 +7606,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             temporary_root = trusted_temporary_root_for_path(Path(candidate))
         except OSError:
             temporary_root = None
-        if temporary_root is not None and os.path.realpath(candidate) == os.path.realpath(temporary_root):
+        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
             return True, None
         return True, candidate
 
@@ -7640,10 +7641,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if not os.path.isabs(expanded):
             raise _HookPathValidationError("guard-home", "relative_path")
         try:
-            candidate = os.path.realpath(expanded)
+            candidate = cached_realpath(expanded)
         except OSError:
             raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
-        expected = os.path.realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
+        expected = cached_realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
         if candidate != expected:
             raise _HookPathValidationError("guard-home", "unexpected_guard_home")
         return expected

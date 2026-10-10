@@ -250,7 +250,6 @@ fn listings_allow_verified_directories_only() {
             json!({"path": "../../../etc"}),
             json!({"path": "/etc"}),
             json!({"path": "~/missing-directory"}),
-            json!({"path": "~/clean/*"}),
             json!({"path": ".", "pattern": "../../.ssh/*"}),
             json!({"path": ".", "pattern": "/etc/*"}),
             json!({"path": ".", "pattern": "~/.ssh/*"}),
@@ -266,6 +265,48 @@ fn listings_allow_verified_directories_only() {
         "glob",
         json!({"path": "~/clean"})
     )));
+}
+
+#[test]
+fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
+    let f = fixture();
+    for path in ["src/**/*.ts", "src/*.rs", "~/clean/*"] {
+        let result = omp(
+            &f,
+            "glob",
+            json!({"path": path, "hidden": true, "gitignore": false, "limit": 1000}),
+        );
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_directory_listing");
+    }
+    for path in [
+        "src/**/../../.ssh/*",
+        "../clean/*",
+        "~/.ssh/*",
+        "/etc/*",
+        "~/missing/*",
+        "src/$HOME/*",
+        "src/{safe,../clean}/*",
+        "src/*../clean/*",
+        "src/[.][.]/clean/*",
+        "~/.ss*/*",
+        "~/*/*",
+        "*.py",
+    ] {
+        assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
+    }
+    for tool in ["find", "ls", "read", "grep"] {
+        assert!(
+            !allowed(&omp(&f, tool, json!({"path": "src/**/*.ts"}))),
+            "{tool}"
+        );
+    }
+    let link = f.project.join("linked");
+    std::os::unix::fs::symlink(f.home.join("clean"), &link).unwrap();
+    assert!(!allowed(&omp(&f, "glob", json!({"path": "linked/*"}))));
+    assert!(!allowed(&omp(&f, "glob", json!({"path": "linke?/*"}))));
+    write(f.project.join("src/.env"), "synthetic marker\n");
+    assert!(!allowed(&omp(&f, "glob", json!({"path": "src/**/*.ts"}))));
 }
 
 #[test]

@@ -220,6 +220,11 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::ApprovalResolutionPlan(request) => {
+                crate::approval_resolution_plan_op::evaluate_approval_resolution_plan_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
             }
