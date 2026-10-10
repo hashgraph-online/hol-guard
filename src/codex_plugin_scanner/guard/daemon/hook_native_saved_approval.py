@@ -89,6 +89,13 @@ _MAX_BOUND_OPERANDS = 16
 _MAX_BOUND_OPERAND_BYTES = 4_194_304
 
 
+class TokenUnset:
+    """Sentinel type: distinguishes "not supplied" from a computed ``None`` token."""
+
+
+TOKEN_UNSET = TokenUnset()
+
+
 def native_exact_action_token(
     *,
     harness: str,
@@ -236,17 +243,26 @@ def native_saved_review_response(
     native_receipt: Mapping[str, object] | None,
     workspace: Path | None,
     home_dir: Path | None,
+    precomputed_token: str | None | TokenUnset = TOKEN_UNSET,
 ) -> dict[str, object] | None:
-    """Return the saved exact-action outcome for a paused native review."""
+    """Return the saved exact-action outcome for a paused native review.
 
-    token = native_exact_action_token(
-        harness=harness,
-        tool_name=tool_name,
-        payload=payload,
-        native_result=native_result,
-        native_receipt=native_receipt,
-        workspace=workspace,
-        home_dir=home_dir,
+    ``precomputed_token`` lets the caller reuse the token it already derived for
+    this exact request instead of repeating its filesystem and resident work.
+    """
+
+    token = (
+        native_exact_action_token(
+            harness=harness,
+            tool_name=tool_name,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            home_dir=home_dir,
+        )
+        if isinstance(precomputed_token, TokenUnset)
+        else precomputed_token
     )
     return native_saved_decision_response(
         store,
@@ -386,6 +402,8 @@ def _launch_cwd(payload: Mapping[str, object], workspace: Path | None) -> Path |
 
 __all__ = [
     "EXACT_ACTION_CONTEXT_TOKEN_KEY",
+    "TOKEN_UNSET",
+    "TokenUnset",
     "native_exact_action_token",
     "native_saved_decision_response",
     "native_saved_review_response",
