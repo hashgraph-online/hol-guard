@@ -14,10 +14,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import (
     _bound_external_archive_launch_command,
+    evaluate_package_request_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
-from codex_plugin_scanner.guard.runtime import supply_chain_package_services as package_services
 from codex_plugin_scanner.guard.runtime.package_intent import (
     PackageIntent,
     PackageIntentTarget,
@@ -26,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.package_intent import (
 )
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_archive_fakes import forbid_download, install_download, install_inspection
 
 pytestmark = pytest.mark.usefixtures("archive_package_intent_native")
 
@@ -111,28 +111,9 @@ def test_external_archive_private_source_is_preserved_for_authorized_scan(
     source_url = "https://packages.example.com/demo.tgz?token=PRIVATE_DOWNLOAD_TOKEN"
     artifact = _package_artifact(workspace, f"npm install demo@{source_url}")
     scanned_sources: list[str] = []
-
-    def clean_scan(
-        scanned_url: str,
-        *,
-        retain_download: bool = False,
-        request_deadline: float | None = None,
-        guard_home: Path | None = None,
-    ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download, guard_home
-        scanned_sources.append(scanned_url)
-        return (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External tarball source requires review.",
-                "severity": "medium",
-            },
-            None,
-        )
-
-    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
-    evaluator.evaluate_package_request_artifact(
+    install_download(monkeypatch, tmp_path, calls=scanned_sources)
+    install_inspection(monkeypatch)
+    evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
@@ -179,13 +160,9 @@ def test_external_archive_private_source_mutation_fails_closed_before_scan(
     private_target = private_targets[0]
     assert isinstance(private_target, dict)
     private_target["source_url"] = "https://changed.example.com/demo.tgz"
-    monkeypatch.setattr(
-        package_services,
-        "_scan_external_tarball",
-        lambda *_args, **_kwargs: pytest.fail("mutated private source reached archive scan"),
-    )
+    forbid_download(monkeypatch, "mutated private source reached archive scan")
 
-    result = evaluator.evaluate_package_request_artifact(
+    result = evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,
@@ -219,28 +196,9 @@ def test_direct_pip_signed_url_preserves_exact_private_download_and_binding_sour
     assert isinstance(public_target, dict)
     assert "PRIVATE_PIP_TOKEN" not in json.dumps(public_target)
     scanned_sources: list[str] = []
-
-    def clean_scan(
-        scanned_url: str,
-        *,
-        retain_download: bool = False,
-        request_deadline: float | None = None,
-        guard_home: Path | None = None,
-    ) -> tuple[dict[str, str], None]:
-        del request_deadline, retain_download, guard_home
-        scanned_sources.append(scanned_url)
-        return (
-            {
-                "decision": "ask",
-                "code": "external_tarball_source",
-                "message": "External archive source requires review.",
-                "severity": "medium",
-            },
-            None,
-        )
-
-    monkeypatch.setattr(package_services, "_scan_external_tarball", clean_scan)
-    evaluator.evaluate_package_request_artifact(
+    install_download(monkeypatch, tmp_path, calls=scanned_sources)
+    install_inspection(monkeypatch)
+    evaluate_package_request_artifact(
         artifact=artifact,
         store=GuardStore(tmp_path / "guard-home"),
         workspace_dir=workspace,

@@ -15,6 +15,7 @@ import json
 import os
 from collections.abc import Callable
 from contextlib import ExitStack
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, TypeGuard
@@ -30,7 +31,10 @@ from .native_package_authority import (
 )
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure
+from .native_supply_chain_archive import ArchiveFulfilment
 from .native_supply_chain_egress import EGRESS_REQUIRED_CODE, EgressExchanger, EgressProtocolError, private_spool_dir
+from .runtime.package_request_evaluation import _persist_evidence
+from .runtime.restricted_archive_contract import RestrictedArchiveDownload
 
 SUPPLY_CHAIN_EVAL_FEATURE = "supply-chain-eval-v1"
 # Replayed egress outcomes (up to EGRESS_MAX_SUPPLIED) ride in every round's request, so the
@@ -192,8 +196,13 @@ def native_supply_chain_eval_payload(
     now: str | None,
     external_archive_network_authorized: bool,
     saved_policy_lookup: Callable[[dict[str, Any]], dict[str, Any] | None] | None = None,
+    retained_downloads: list[RestrictedArchiveDownload] | None = None,
 ) -> dict[str, Any]:
     """Return the resident's bound evaluation payload or raise ``NativeSupplyChainEvalError``.
+
+    With ``retained_downloads`` the verified external-archive blobs the resident's
+    answer asks the caller to keep are appended to it (the caller owns their
+    cleanup); every other blob is removed here, also when the evaluation fails.
 
     When the resident holds a cached Cloud validation error it asks for the
     saved-policy lookup it cannot hydrate itself (``saved_policy_probe_required``).
@@ -207,7 +216,7 @@ def native_supply_chain_eval_payload(
         "guard_home": str(guard_home),
         "artifact": artifact.to_dict(),
         "external_archive_network_authorized": bool(external_archive_network_authorized),
-        "retain_external_archive_blob": False,
+        "retain_external_archive_blob": retained_downloads is not None,
     }
     # The resident digests its typed request, which omits absent optional
     # fields, so an absent value must be omitted here rather than sent as null.
@@ -221,8 +230,10 @@ def native_supply_chain_eval_payload(
     request.update(_test_seam_overrides())
     fixed_now = _now_text(now)
     exchanger: EgressExchanger | None = None
+    archives: ArchiveFulfilment | None = None
     probed = False
     with ExitStack() as stack:
+        stack.callback(lambda: archives.discard() if archives is not None else None)
         response = _send_eval_request(request, guard_home)
         # The initial request plus at most _MAX_ROUNDS follow-ups; the response to the last
         # follow-up is inspected as well, so a verdict reached on it is not discarded.
@@ -246,7 +257,11 @@ def native_supply_chain_eval_payload(
                 # The resident cannot reach the network itself: perform what it asked
                 # for under the managed network policy and replay with the outcomes.
                 if exchanger is None:
-                    exchanger = EgressExchanger(stack.enter_context(private_spool_dir()))
+                    spool_dir = stack.enter_context(private_spool_dir())
+                    archives = ArchiveFulfilment(
+                        guard_home=guard_home, scratch_dir=spool_dir, retain=retained_downloads is not None
+                    )
+                    exchanger = EgressExchanger(spool_dir, archives)
                 try:
                     exchanger.fulfil(response.get("payload"))
                 except EgressProtocolError as error:
@@ -267,13 +282,23 @@ def native_supply_chain_eval_payload(
             else:  # pragma: no cover - unreachable: the loop broke above when neither was needed
                 raise NativeSupplyChainEvalError("Native package evaluation did not settle")
             response = _send_eval_request(request, guard_home)
-    if response.get("status") != "ok" or response.get("code") != "ok":
-        raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
-    payload = response.get("payload")
-    if not _payload_is_complete(payload):
-        _record_unbound_answer(guard_home)
-        raise NativeSupplyChainEvalError("Native package evaluation payload invalid")
-    return payload
+        if response.get("status") != "ok" or response.get("code") != "ok":
+            raise NativeSupplyChainEvalError("Native package evaluation unavailable or invalid")
+        payload = response.get("payload")
+        if not _payload_is_complete(payload):
+            _record_unbound_answer(guard_home)
+            raise NativeSupplyChainEvalError("Native package evaluation payload invalid")
+        if retained_downloads is not None:
+            descriptors = payload.get("external_archive_inspection")
+            try:
+                if archives is not None:
+                    retained_downloads.extend(archives.claim(descriptors))
+                elif descriptors:
+                    raise LookupError("resident named an archive this caller does not hold")
+            except LookupError as error:
+                _record_unbound_answer(guard_home)
+                raise NativeSupplyChainEvalError("Native package evaluation archive binding invalid") from error
+        return payload
 
 
 def _saved_policy_decision(
@@ -319,7 +344,7 @@ def _saved_policy_decision(
 def unavailable_block_evaluation(artifact: GuardArtifact) -> Any:
     """Constant fail-closed block; it is not a verdict computation."""
 
-    from .runtime.supply_chain_package_eval import PackageRequestEvaluation, SupplyChainUserCopy
+    from .runtime.package_request_evaluation import PackageRequestEvaluation, SupplyChainUserCopy
 
     reason: dict[str, object] = {
         "code": _UNAVAILABLE_CODE,
@@ -357,13 +382,20 @@ def evaluate_package_request_native(
     workspace_dir: Path | None,
     now: str | None = None,
     external_archive_network_authorized: bool = False,
+    retain_external_archive_blob: bool = False,
 ) -> Any:
-    """Evaluate one package request in the resident; fail closed when it cannot answer."""
+    """Evaluate one package request in the resident; fail closed when it cannot answer.
+
+    With ``retain_external_archive_blob`` the evaluation carries the verified
+    external-archive blobs the resident asked the caller to keep; the caller
+    removes them with ``download.cleanup()``.
+    """
 
     guard_home = getattr(store, "guard_home", None)
     store_path = getattr(store, "path", None)
     if not isinstance(guard_home, Path) or not isinstance(store_path, Path):
         return unavailable_block_evaluation(artifact)
+    downloads: list[RestrictedArchiveDownload] = []
     try:
         payload = native_supply_chain_eval_payload(
             artifact=artifact,
@@ -372,6 +404,7 @@ def evaluate_package_request_native(
             workspace_dir=workspace_dir,
             now=now,
             external_archive_network_authorized=external_archive_network_authorized,
+            retained_downloads=downloads if retain_external_archive_blob else None,
             saved_policy_lookup=lambda cached: _saved_policy_decision(
                 store=store,
                 artifact=artifact,
@@ -382,11 +415,25 @@ def evaluate_package_request_native(
         )
         evaluation = evaluation_from_native_payload(payload)
     except (NativeSupplyChainEvalError, TypeError, ValueError, KeyError, AttributeError):
+        _cleanup(downloads)
         return unavailable_block_evaluation(artifact)
-    from .runtime.supply_chain_package_eval import _persist_evidence
-
-    _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=_now_text(now))
+    except BaseException:
+        _cleanup(downloads)
+        raise
+    try:
+        if downloads:
+            evaluation = replace(evaluation, external_archive_downloads=tuple(downloads))
+        _persist_evidence(store=store, artifact=artifact, evaluation=evaluation, now=_now_text(now))
+    except BaseException:
+        _cleanup(downloads)
+        raise
     return evaluation
+
+
+def _cleanup(downloads: list[RestrictedArchiveDownload]) -> None:
+    for download in downloads:
+        download.cleanup()
+    downloads.clear()
 
 
 __all__ = [

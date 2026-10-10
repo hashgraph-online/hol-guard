@@ -48,6 +48,7 @@ from .native_runtime_values import (
     decode_runtime_manifest,
     native_output_sha256,  # noqa: F401
     parity_signature,  # noqa: F401
+    warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
 from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
@@ -65,6 +66,7 @@ _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
 
 def native_mode() -> NativeMode:
+    warn_legacy_hook_fast_path_once(os.environ.get("HOL_GUARD_HOOK_FAST_PATH"))
     return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
 
 
@@ -82,7 +84,7 @@ def _runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
     candidates: list[Path] = []
     override = os.environ.get(_NATIVE_BINARY_ENV)
-    if override and mode in {"shadow", "force"}:
+    if override and mode == "force":
         candidate = Path(override).expanduser()
         if candidate.is_absolute():
             candidates.append(candidate)
@@ -92,7 +94,7 @@ def _runtime_candidates() -> tuple[Path, ...]:
     # Developer compatibility: a separately installed runtime distribution is
     # validation-only. Automatic production selection must use the runtime
     # bundled inside the version-matched hol-guard wheel and its manifest.
-    if mode in {"shadow", "force"}:
+    if mode == "force":
         try:
             distribution = importlib.metadata.distribution("hol-guard-runtime")
         except importlib.metadata.PackageNotFoundError:
@@ -367,13 +369,6 @@ def _compute_runtime_status(
     deadline_monotonic: float | None = None,
 ) -> NativeRuntimeStatus:
     mode = native_mode()
-    if mode == "off":
-        return NativeRuntimeStatus(
-            mode=mode,
-            available=False,
-            compatible=False,
-            reason="native_disabled",
-        )
     for candidate in candidates:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             break
@@ -434,7 +429,7 @@ def _compute_runtime_status(
                 )
         expected_version = _python_package_version()
         version_compatible = expected_version is None or capabilities.runtime_version == expected_version
-        compatible = version_compatible or mode in {"shadow", "force"}
+        compatible = version_compatible or mode == "force"
         return NativeRuntimeStatus(
             mode=mode,
             available=True,

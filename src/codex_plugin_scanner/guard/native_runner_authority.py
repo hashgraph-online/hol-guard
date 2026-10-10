@@ -70,8 +70,7 @@ def native_runner_authority(kind: str, args: Mapping[str, Any], guard_home: Path
     }
     status = _native_runtime_status_memo()
     if (
-        status.mode == "off"
-        or not status.available
+        not status.available
         or not status.compatible
         or status.identity is None
         or status.capabilities is None

@@ -9,6 +9,7 @@ mod approval_gate_settings;
 mod approval_gate_state;
 mod approval_gate_verify;
 mod approval_proof_op;
+mod approval_resolution_plan_op;
 mod approval_reuse;
 mod approval_reuse_diagnostic_op;
 mod approval_reuse_diagnostic_probes;
@@ -16,6 +17,7 @@ mod approval_reuse_diagnostic_probes;
 mod approval_reuse_diagnostic_vectors_tests;
 mod archive_inspect;
 mod archive_inspect_containment;
+mod archive_verdict_seam;
 #[cfg(test)]
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
@@ -27,6 +29,14 @@ mod claim_reuse_binding;
 mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
+mod cloud_action_envelope;
+mod cloud_action_envelope_fields;
+mod cloud_request_payload;
+mod cloud_request_snapshot;
+mod cloud_request_text;
+#[cfg(test)]
+mod cloud_request_vectors_tests;
+mod cloud_sync_privacy;
 mod codex_tool_output_git;
 mod codex_tool_output_op;
 #[cfg(all(test, unix))]
@@ -50,6 +60,7 @@ mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
+mod cursor_observer_proof_op;
 mod daemon_handler_digits;
 mod daemon_handler_fields;
 mod daemon_handler_headless;

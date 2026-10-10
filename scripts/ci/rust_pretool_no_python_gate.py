@@ -89,22 +89,6 @@ def _called_node(node: ast.AST, name: str) -> ast.Call | None:
     )
 
 
-def _guard_if_before(node: ast.FunctionDef, helper: str, line: int) -> ast.If | None:
-    return next(
-        (
-            child
-            for child in ast.walk(node)
-            if isinstance(child, ast.If)
-            and child.lineno < line
-            and isinstance(child.test, ast.Call)
-            and isinstance(child.test.func, ast.Name)
-            and child.test.func.id == helper
-            and any(isinstance(item, ast.Return) for item in ast.walk(child))
-        ),
-        None,
-    )
-
-
 def _exception_handler(node: ast.FunctionDef, exception_name: str) -> ast.ExceptHandler | None:
     return next(
         (
@@ -135,33 +119,13 @@ def _server_graph_failures(root: Path) -> list[str]:
         failures.append("daemon hook ingress hydrates a payload before native dispatch")
     if _called_node(server_execute, "hydrate_hook_payload_reference") is not None:
         failures.append("daemon hook execution hydrates a payload before native dispatch")
-    compatibility_call = _called_node(server_execute, "_handle_runtime_hook_compatibility_cli")
-    if compatibility_call is None:
-        failures.append("server execute path has no explicit compatibility boundary")
-    elif _guard_if_before(server_execute, "_native_mode_requires_rust", compatibility_call.lineno) is None:
-        failures.append("server execute path can reach compatibility CLI without a native-mode return guard")
-    if "_native_mode_requires_rust" not in function_calls(server_execute):
-        failures.append("server execute path does not branch on native mode before compatibility dispatch")
+    if _function_node_or_none(server, "_handle_runtime_hook_compatibility_cli", class_name="_GuardDaemonHandler"):
+        failures.append("server still carries the retired compatibility CLI hook path")
+    if "_native_mode_requires_rust" in function_calls(server_execute):
+        failures.append("server execute path still consults a retired native-mode predicate")
     generic = _exception_handler(server_fast, "Exception")
     if generic is None or "_runtime_hook_fail_safe_response" not in function_calls(generic):
         failures.append("server fast path worker exception has no fail-safe response")
-    return failures
-
-
-def _resident_graph_failures(root: Path) -> list[str]:
-    failures: list[str] = []
-    entrypoint = root / "src/codex_plugin_scanner/guard/daemon/hook_process_entrypoint.py"
-    resident = _function_node_or_none(entrypoint, "_run_resident_hook_request")
-    if resident is None:
-        failures.append("resident hook entrypoint is missing")
-        return failures
-    if _called_node(resident, "_run_guard_hook_command") is not None:
-        failures.append("resident entrypoint can still reach the Python CLI")
-    if _called_node(resident, "review_http_payload") is None:
-        failures.append("resident entrypoint does not route hooks through the native worker")
-    generic = _exception_handler(resident, "Exception")
-    if generic is None or "_native_worker_fail_safe_result" not in function_calls(generic):
-        failures.append("resident worker exception has no fail-safe response")
     return failures
 
 
@@ -185,8 +149,8 @@ def _native_cli_graph_failures(root: Path) -> list[str]:
     for retired in ("_try_source_ref_fast_path", "record_python_semantic_hook_route", "evaluate_source_file_ref"):
         if _called_node(native_route, retired) is not None:
             failures.append(f"CLI native route still calls retired Python route {retired}")
-    if "_native_mode_requires_rust" not in function_calls(native_route):
-        failures.append("CLI native route has no native-mode guard")
+    if "_native_mode_requires_rust" in function_calls(native_route):
+        failures.append("CLI native route still consults a retired native-mode predicate")
     if not _has_typed_fail_safe(native_route):
         failures.append("CLI native route has no fail-safe native terminal")
     return failures
@@ -230,7 +194,6 @@ def _graph_failures(root: Path) -> list[str]:
     failures: list[str] = []
     for check in (
         _server_graph_failures,
-        _resident_graph_failures,
         _native_cli_graph_failures,
         _hook_cli_graph_failures,
         _payload_graph_failures,
@@ -255,7 +218,7 @@ def _contract_failures(root: Path) -> list[str]:
             ("native_pre_tool_unknown_review", "PreToolResultV1"),
         ),
         (
-            root / "rust/crates/guard-runtime/src/main.rs",
+            root / "rust/crates/guard-runtime/src/runtime_cli.rs",
             ('command == "pre-tool"',),
         ),
         (
@@ -328,10 +291,7 @@ def _worker_failures(root: Path) -> list[str]:
     failures.extend(
         required_tokens(
             hook_worker,
-            (
-                "from ..native_hook_edge import review_raw_hook_native",
-                'if event_name == "PreToolUse":',
-            ),
+            ("from ..native_hook_edge import review_raw_hook_native",),
         )
     )
     failures.extend(required_tokens(native_hook, ("native_pre_tool_unavailable",)))

@@ -187,3 +187,58 @@ fn denied_archive_egress_fails_the_download_instead_of_aborting_the_operation() 
         Err(error) => panic!("a denied archive download must be a failure result: {error:?}"),
     }
 }
+
+#[test]
+fn archive_inspection_is_the_verdict_the_caller_reported_for_that_digest() {
+    use guard_contracts::{ArchiveVerdictV1, EgressOutcomeV1, EgressSuppliedV1};
+    let url = "https://registry.example/pkg.tgz";
+    let sha = "ab".repeat(32);
+    let supplied = EgressSuppliedV1 {
+        class: "archive".to_owned(),
+        method: "GET".to_owned(),
+        url: url.to_owned(),
+        body_sha256: String::new(),
+        occurrence: 1,
+        outcome: EgressOutcomeV1::Archive {
+            sha256: sha.clone(),
+            size: 9,
+            final_url: url.to_owned(),
+            inspection: Some(ArchiveVerdictV1 {
+                status: "blocked".to_owned(),
+                code: "external_archive_unsafe".to_owned(),
+                message: "unsafe".to_owned(),
+                severity: "high".to_owned(),
+            }),
+        },
+    };
+    let _scope =
+        guard_command::egress_broker::EgressScope::enter(&[supplied], None).expect("scope");
+    let inspect = |digest: &str| {
+        ResidentNativeArchive.inspect_archive_native(
+            Path::new(""),
+            digest,
+            Path::new(""),
+            2.0,
+            1024,
+            500,
+            u64::MAX,
+            u64::MAX,
+            1024,
+            u64::MAX,
+            f64::MAX,
+            u64::MAX,
+            u64::MAX,
+        )
+    };
+    assert!(
+        inspect(&sha).is_err(),
+        "no verdict before the download is replayed"
+    );
+    ResidentRestrictedArchive
+        .download_restricted_archive(url, 1024, 3, 2.0, None)
+        .expect("download");
+    let verdict = inspect(&sha).expect("verdict");
+    assert_eq!(verdict["status"], "blocked");
+    assert_eq!(verdict["code"], "external_archive_unsafe");
+    assert!(inspect(&"cd".repeat(32)).is_err());
+}

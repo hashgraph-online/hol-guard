@@ -18,8 +18,8 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
     """Inspect existing selection without chmod, installation or launch override.
 
     Production auto mode retains bundled manifest/version admission. Force
-    mode remains the explicit developer fixture path. Shadow/off cannot prove
-    protection. The capabilities probe keeps its existing one-second stage cap
+    mode remains the explicit developer fixture path. Legacy shadow/off values
+    resolve to auto. The capabilities probe keeps its existing one-second stage cap
     within the parent's original deadline and process containment.
     """
 
@@ -33,8 +33,6 @@ def inspect_codex_repair_native_runtime(*, deadline_monotonic: float) -> NativeR
 
     check_deadline()
     mode = native.native_mode()
-    if mode not in {"auto", "force"}:
-        raise TransitionError("authority_repair_native_mode_invalid")
     with inverse_recovery_budget(deadline_monotonic), hook_validation_deadline(deadline_monotonic):
         for candidate in native._runtime_candidates():
             check_deadline()

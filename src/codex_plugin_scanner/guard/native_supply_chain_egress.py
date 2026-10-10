@@ -6,7 +6,7 @@ Cloud, the OAuth endpoint, a public registry or an external archive it answers
 performs them under the managed network policy (destination allow-list,
 policy proxy, CA bundle, proxy credentials, system proxies) through the same
 transports Python used before: ``managed_urlopen`` for HTTP and
-``download_restricted_archive`` for archives. It only moves bytes; the resident
+``native_supply_chain_archive`` for archives. It only moves bytes; the resident
 parses every response and owns every decision.
 """
 
@@ -23,8 +23,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from .mdm.network_transport import ManagedNetworkError, managed_urlopen, resolved_network_policy, validate_destination
-from .runtime.restricted_archive_download import RestrictedArchiveFailure, download_restricted_archive
+from .mdm.network_transport import ManagedNetworkError, managed_urlopen
+from .native_supply_chain_archive import ArchiveFulfilment
 
 EGRESS_REQUIRED_CODE = "supply_chain_egress_required"
 # Resident-side limits (``EGRESS_MAX_*`` in guard-contracts supply_chain_egress.rs).
@@ -63,8 +63,10 @@ _NEED_KEYS = frozenset(
         "max_redirects",
         "max_response_bytes",
         "delay_seconds",
+        "inspect",
     }
 )
+_INSPECT_KEYS = frozenset({"timeout_seconds", "aggregate_timeout_seconds", "max_files", "max_package_json_bytes"})
 _CLASSES = frozenset({"oauth", "cloud", "registry", "archive"})
 _MAX_RESPONSE_BYTES_CEILING = 64 * 1024 * 1024
 _MAX_TIMEOUT_SECONDS = 60.0
@@ -103,8 +105,9 @@ class EgressProtocolError(ValueError):
 class EgressExchanger:
     """Performs needs and keeps what the next request must carry."""
 
-    def __init__(self, spool_dir: Path) -> None:
+    def __init__(self, spool_dir: Path, archives: ArchiveFulfilment) -> None:
         self.spool_dir = spool_dir
+        self.archives = archives
         self.supplied: list[dict[str, object]] = []
         self._inline_used = 0
         self._spool_count = 0
@@ -119,7 +122,7 @@ class EgressExchanger:
         delay = min(max(float(need["delay_seconds"]), 0.0), MAX_DELAY_SECONDS)
         if delay > 0:
             time.sleep(delay)
-        outcome = self._archive(need) if need["class"] == "archive" else self._http(need)
+        outcome = self.archives.fulfil(need) if need["class"] == "archive" else self._http(need)
         return {
             "class": need["class"],
             "method": need["method"],
@@ -217,28 +220,6 @@ class EgressExchanger:
         outcome["body_file"] = name
         return outcome
 
-    def _archive(self, need: Mapping[str, Any]) -> dict[str, object]:
-        url = str(need["url"])
-        try:
-            policy, _managed = resolved_network_policy(None)
-            validate_destination(url, policy)
-        except ManagedNetworkError as error:
-            return {"kind": "archive_failure", "code": str(error)[:128], "message": "Managed network policy refused"}
-        with tempfile.TemporaryDirectory(prefix="archive-", dir=self.spool_dir) as scratch:
-            result = download_restricted_archive(
-                url,
-                max_bytes=int(need["max_response_bytes"]),
-                max_redirects=int(need["max_redirects"]),
-                timeout_seconds=float(need["timeout_seconds"]),
-                temp_dir=Path(scratch),
-            )
-            if isinstance(result, RestrictedArchiveFailure):
-                return {"kind": "archive_failure", "code": result.code, "message": result.message}
-            try:
-                return {"kind": "archive", "sha256": result.sha256, "size": result.size, "final_url": result.final_url}
-            finally:
-                result.cleanup()
-
 
 def _read_bounded(stream: Any, limit: int, deadline: float) -> bytes:
     """Read at most ``limit + 1`` bytes (so an oversized body is detectable) before ``deadline``."""
@@ -277,7 +258,7 @@ def parse_needs(payload: object) -> list[Mapping[str, Any]]:
 def _checked_need(need: object) -> Mapping[str, Any]:
     if not isinstance(need, dict) or not set(need) <= _NEED_KEYS:
         raise EgressProtocolError("egress need invalid")
-    required = _NEED_KEYS - {"body"}
+    required = _NEED_KEYS - {"body", "inspect"}
     if not required <= set(need):
         raise EgressProtocolError("egress need incomplete")
     headers = need["headers"]
@@ -297,10 +278,25 @@ def _checked_need(need: object) -> Mapping[str, Any]:
         and _is_count(need["max_response_bytes"], 1, _MAX_RESPONSE_BYTES_CEILING)
         and _is_number(need["delay_seconds"], 0.0, 3600.0)
         and (need.get("body") is None or isinstance(need["body"], str))
+        and _inspect_is_valid(need.get("inspect"), need["class"])
     )
     if not valid:
         raise EgressProtocolError("egress need invalid")
     return need
+
+
+def _inspect_is_valid(spec: object, need_class: str) -> bool:
+    if spec is None:
+        return True
+    return (
+        need_class == "archive"
+        and isinstance(spec, dict)
+        and set(spec) == _INSPECT_KEYS
+        and _is_number(spec["timeout_seconds"], 0.0, _MAX_TIMEOUT_SECONDS, exclusive_low=True)
+        and _is_number(spec["aggregate_timeout_seconds"], 0.0, _MAX_TIMEOUT_SECONDS, exclusive_low=True)
+        and _is_count(spec["max_files"], 1, 1 << 20)
+        and _is_count(spec["max_package_json_bytes"], 1, 1 << 30)
+    )
 
 
 def _is_count(value: object, low: int, high: int) -> bool:

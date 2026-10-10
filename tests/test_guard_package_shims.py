@@ -37,7 +37,7 @@ from codex_plugin_scanner.guard.package_shim_gate import (
 )
 from codex_plugin_scanner.guard.package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from codex_plugin_scanner.guard.protect import build_protect_payload
-from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as supply_chain_package_eval_module
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import PackageRequestEvaluation, SupplyChainUserCopy
 from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PROBE_ENV_VAR
 from codex_plugin_scanner.guard.shims import build_shim_content_hash, install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
@@ -1767,35 +1767,6 @@ def test_guard_protect_allows_codex_install_with_local_intelligence_when_cloud_a
     assert store.list_approval_requests(limit=None) == []
 
 
-def test_cloud_reconnect_copy_preserves_existing_package_remediation() -> None:
-    evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
-        decision="ask",
-        policy_action="require-reapproval",
-        enforcement="premium_cloud",
-        entitlement_state="premium",
-        cache_status="cloud-error",
-        package_intent_hash="a" * 64,
-        policy_version="local:none",
-        bundle_version=None,
-        workspace_fingerprint=None,
-        reasons=(),
-        packages=(),
-        risk_summary="Guard paused the package request for review.",
-        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
-            title="Review required",
-            summary="A safer package version is required.",
-            next_step="npm install example@2.0.0",
-            dashboard_url=None,
-            harness_message="Install the safer package version.",
-        ),
-    )
-
-    updated = supply_chain_package_eval_module._with_cloud_auth_reconnect_copy(evaluation)
-
-    assert updated.user_copy.next_step == "npm install example@2.0.0"
-    assert "hol-guard connect" in updated.user_copy.harness_message
-
-
 def test_guard_protect_probe_skips_local_approval_queue_on_block(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -2556,18 +2527,10 @@ def test_guard_protect_saved_approval_does_not_bypass_new_bundle_block_for_unpin
     marker_path = tmp_path / "npm-somepkg-marker.json"
     write_fake_manager_script(fake_bin=fake_bin, manager="npm", marker_path=marker_path, exit_code=0)
     package_name = "somepkg"
-    original_resolved_target_version = supply_chain_package_eval_module._resolved_target_version
-
-    def _resolve_somepkg_version(**kwargs: object) -> str | None:
-        target = kwargs.get("target")
-        if isinstance(target, dict) and str(target.get("normalized_name")) == package_name:
-            return "1.0.0"
-        return original_resolved_target_version(**kwargs)
-
     monkeypatch.setattr(
-        supply_chain_package_eval_module,
-        "_resolved_target_version",
-        _resolve_somepkg_version,
+        native_supply_chain_eval_module,
+        "_test_registry_metadata_override",
+        {f"https://registry.npmjs.org/{package_name}": {"dist-tags": {"latest": "1.0.0"}, "versions": {"1.0.0": {}}}},
     )
     server, thread, sync_url = _start_cloud_eval_server(
         decision="allow",
@@ -2762,7 +2725,7 @@ def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority
     original_path = os.environ.get("PATH", "")
     monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     store = GuardStore(home_dir)
-    review_evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+    review_evaluation = PackageRequestEvaluation(
         decision="ask",
         policy_action="review",
         enforcement="local",
@@ -2775,7 +2738,7 @@ def test_guard_protect_same_cached_advisory_id_review_to_block_changes_authority
         reasons=({"code": "package_review", "message": "Review package."},),
         packages=({"name": "badpkg", "requestedVersion": "1.0.0", "decision": "ask"},),
         risk_summary="Review package.",
-        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+        user_copy=SupplyChainUserCopy(
             title="Review package",
             summary="Review package.",
             next_step="Review the package request.",
@@ -2877,7 +2840,7 @@ def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
     original_path = os.environ.get("PATH", "")
     monkeypatch.setenv("PATH", os.pathsep.join(filter(None, [str(fake_bin), original_path])))
     store = GuardStore(home_dir)
-    review_evaluation = supply_chain_package_eval_module.PackageRequestEvaluation(
+    review_evaluation = PackageRequestEvaluation(
         decision="ask",
         policy_action="review",
         enforcement="local",
@@ -2890,7 +2853,7 @@ def test_guard_protect_reloads_cached_advisory_authority_after_atomic_claim(
         reasons=({"code": "package_review", "message": "Review package."},),
         packages=({"name": "badpkg", "requestedVersion": "1.0.0", "decision": "ask"},),
         risk_summary="Review package.",
-        user_copy=supply_chain_package_eval_module.SupplyChainUserCopy(
+        user_copy=SupplyChainUserCopy(
             title="Review package",
             summary="Review package.",
             next_step="Review the package request.",

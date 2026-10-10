@@ -145,14 +145,6 @@ def test_scope_does_not_cache_unavailable_statuses(
     assert scope == {}
 
 
-def test_scope_does_not_cache_off_mode_statuses(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
-    with native_status_request_scope() as scope:
-        assert native_runtime_status().reason == "native_disabled"
-        assert native_runtime_status().reason == "native_disabled"
-    assert scope == {}
-
-
 def test_scope_recomputes_when_the_native_mode_changes(
     status_probe: tuple[Path, list[Path]],
     monkeypatch: pytest.MonkeyPatch,
@@ -160,11 +152,11 @@ def test_scope_recomputes_when_the_native_mode_changes(
     _binary, calls = status_probe
     with native_status_request_scope():
         first = native_runtime_status()
-        monkeypatch.setenv("HOL_GUARD_NATIVE", "shadow")
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "auto")
         second = native_runtime_status()
     assert len(calls) == 2
     assert second is not first
-    assert second.mode == "shadow"
+    assert second.mode == "auto"
 
 
 def test_scope_recomputes_when_the_candidate_set_changes(

@@ -53,6 +53,35 @@ pub struct EgressNeedV1 {
     /// Seconds the caller waits before performing the exchange (a retry pause
     /// the resident would otherwise have slept).
     pub delay_seconds: f64,
+    /// For `archive` only: the caller inspects the downloaded blob offline
+    /// under these limits and reports the verdict in the outcome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inspect: Option<ArchiveInspectionSpecV1>,
+}
+
+/// Limits for the offline inspection of one downloaded external archive. The
+/// archive byte cap is the need's `max_response_bytes`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ArchiveInspectionSpecV1 {
+    /// Time the inspector may take for one archive.
+    pub timeout_seconds: f64,
+    /// Time every external archive of one request may take together, download
+    /// and inspection included.
+    pub aggregate_timeout_seconds: f64,
+    pub max_files: u64,
+    pub max_package_json_bytes: u64,
+}
+
+/// What the offline inspector reported for the downloaded archive.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ArchiveVerdictV1 {
+    /// `clean`, `blocked` or `incomplete`.
+    pub status: String,
+    pub code: String,
+    pub message: String,
+    pub severity: String,
 }
 
 /// Payload of an [`EGRESS_REQUIRED_CODE`] answer.
@@ -101,6 +130,9 @@ pub enum EgressOutcomeV1 {
         sha256: String,
         size: u64,
         final_url: String,
+        /// The inspector's verdict, present when the need asked for one.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        inspection: Option<ArchiveVerdictV1>,
     },
     /// An external archive download was refused or failed.
     ArchiveFailure { code: String, message: String },

@@ -19,28 +19,22 @@ class RequestRouteTracker:
     registered before each request; no payload, receipt, or caller data is retained.
     Late results cannot recreate a completed token or grow the active map.
 
-    The runner must expose review and _record_route_metric; an optional worker
-    must expose review_http_payload and metrics.record_route. Missing methods
-    are harness errors and must fail before any instrumentation is installed.
-    Only private benchmark instances may be passed; this is not a daemon API.
+    The worker must expose review_http_payload and metrics.record_route; a
+    missing method is a harness error and fails before any instrumentation is
+    installed. Only private benchmark instances may be passed; this is not a
+    daemon API.
     """
 
-    def __init__(self, runner: Any, worker: Any = None) -> None:
-        self._runner = runner
-        self._review = runner.review
-        self._record = runner._record_route_metric
+    def __init__(self, worker: Any) -> None:
         self._worker = worker
-        self._worker_review = worker.review_http_payload if worker is not None else None
-        self._worker_record = worker.metrics.record_route if worker is not None else None
+        self._worker_review = worker.review_http_payload
+        self._worker_record = worker.metrics.record_route
         self._local = threading.local()
         self._lock = threading.Lock()
         self._active: dict[str, str | None] = {}
         self._closed = False
-        runner.review = self._tracked_review
-        runner._record_route_metric = self._tracked_record
-        if worker is not None:
-            worker.review_http_payload = self._tracked_worker_review
-            worker.metrics.record_route = self._tracked_worker_record
+        worker.review_http_payload = self._tracked_worker_review
+        worker.metrics.record_route = self._tracked_worker_record
 
     def begin(self, payload: Mapping[str, object]) -> tuple[dict[str, object], str]:
         """Reject use after shutdown; a closed harness is not a native sample."""
@@ -55,23 +49,13 @@ class RequestRouteTracker:
         with self._lock:
             return self._active.pop(token, None) or "native_fail_safe"
 
-    def _tracked_record(self, route: object) -> None:
-        self._record(route)
-        self._capture_route(route)
-
     def _tracked_worker_record(self, route: object) -> None:
-        record = self._worker_record
-        if record is None:
-            raise RuntimeError("native_installed_slo_failed: route worker is unavailable")
-        record(route)
+        self._worker_record(route)
         self._capture_route(route)
 
     def _capture_route(self, route: object) -> None:
         if getattr(self._local, "depth", 0):
             self._local.route = route if isinstance(route, str) and route in SAFE_ROUTE_NAMES else None
-
-    def _tracked_review(self, *args: Any, **kwargs: Any) -> Any:
-        return self._invoke(self._review, *args, **kwargs)
 
     def _tracked_worker_review(self, *args: Any, **kwargs: Any) -> Any:
         return self._invoke(self._worker_review, *args, **kwargs)
@@ -104,8 +88,5 @@ class RequestRouteTracker:
                 return
             self._closed = True
             self._active.clear()
-        self._runner.review = self._review
-        self._runner._record_route_metric = self._record
-        if self._worker is not None:
-            self._worker.review_http_payload = self._worker_review
-            self._worker.metrics.record_route = self._worker_record
+        self._worker.review_http_payload = self._worker_review
+        self._worker.metrics.record_route = self._worker_record

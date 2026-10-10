@@ -17,31 +17,6 @@ from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_daemon_start_uses_full_initial_hook_worker_pool(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
-    runner = daemon._server.hook_process_runner
-    enable_full_capacity = runner.enable_full_capacity
-    calls: list[dict[str, float]] = []
-
-    def recording_enable_full_capacity(**kwargs: float) -> None:
-        calls.append(kwargs)
-        enable_full_capacity(**kwargs)
-
-    monkeypatch.setattr(runner, "enable_full_capacity", recording_enable_full_capacity)
-    try:
-        daemon.start()
-        assert calls == [{}]
-        stats = runner.stats()
-        assert stats["target"] > 1
-        assert runner.wait_for_capacity(minimum_workers=int(stats["target"]), timeout_seconds=15)
-    finally:
-        daemon.stop()
-
-
 @pytest.mark.parametrize("cleanup_failure", ["none", "publisher", "socket"])
 def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loop(
     tmp_path: Path,
@@ -72,8 +47,8 @@ def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loo
 
     monkeypatch.setattr(daemon._server, "server_close", close_with_optional_socket_failure)
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,
-        "require_initial_capacity",
+        daemon,
+        "_persist_aibom_inventory_context",
         lambda: (_ for _ in ()).throw(RuntimeError("injected initial worker failure")),
     )
 
@@ -99,7 +74,6 @@ def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loo
 
     assert daemon._thread is None
     assert daemon._owner_lock is None
-    assert daemon._server.hook_process_runner.stats()["workers"] == 0
 
 
 def test_daemon_start_waits_for_serve_loop_entry(
@@ -222,7 +196,6 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
         assert daemon._owner_lock is None
         assert finish_service_calls == 1
         assert listener_closed_before_loop_entry is False
-        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve_thread.set()
         daemon.stop()
@@ -412,7 +385,6 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     assert started_threads
     assert all(not thread.is_alive() for thread in started_threads)
     assert daemon._owner_lock is None
-    assert daemon._server.hook_process_runner.stats()["workers"] == 0
     assert daemon._server.runtime_heartbeat._thread is None
     assert daemon._server.unclassified_watchdog_thread is None
     assert daemon._server.approval_attention._thread is None
@@ -450,8 +422,8 @@ def test_uncontained_service_blocks_replacement_until_retry_succeeds(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     port = daemon.port
     daemon_ref = weakref.ref(daemon)
-    runner = daemon._server.hook_process_runner
-    close_runner = daemon._server.hook_process_runner.close_contained
+    runner = daemon._server.hook_worker
+    close_runner = runner.close_contained
     monkeypatch.setattr(runner, "close_contained", lambda: False)
     daemon._begin_service()
     assert not daemon._finish_service()

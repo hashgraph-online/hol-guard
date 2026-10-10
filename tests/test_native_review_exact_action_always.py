@@ -279,8 +279,6 @@ def _hook_worker(
 ) -> tuple[HookWorker, GuardStore]:
     from codex_plugin_scanner.guard.config import update_guard_settings
 
-    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.hook_worker.native_mode", lambda: "auto")
-
     def review_raw_hook_native(*_args: object, **_kwargs: object) -> dict[str, object]:
         bound_receipt = copy.deepcopy(receipt)
         bound_receipt["decision_id"] = hashlib.sha256(canonical_receipt_bytes(bound_receipt)).hexdigest()

@@ -10,6 +10,8 @@ from datetime import datetime
 from pathlib import Path
 from threading import Barrier
 
+import pytest
+
 from codex_plugin_scanner.guard.continuation_contract import ContinuationOffer, ContinuationResult
 from codex_plugin_scanner.guard.continuation_payload import continuation_payload
 from codex_plugin_scanner.guard.continuation_runtime import continuation_offer_payload
@@ -301,6 +303,7 @@ def test_public_continuation_snapshot_contains_no_raw_retry_lineage(tmp_path: Pa
     assert set(snapshot) == {"correlationId", "capability", "hookAttached", "opaqueTargetId", "waitDeadline"}
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_public_and_cloud_serialization_omit_retry_lineage(tmp_path: Path) -> None:
     lineage = capture_retry_lineage(_payload(), harness="pi")
     assert lineage is not None

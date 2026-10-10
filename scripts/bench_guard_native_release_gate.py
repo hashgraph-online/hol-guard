@@ -1,15 +1,12 @@
 #!/usr/bin/env python3
-"""Release-gate benchmark for Python hook workers versus the Rust runtime.
+"""Release-gate benchmark for the Rust hook runtime.
 
 Only aggregate synthetic measurements are emitted; benchmark output excludes
 user commands, file contents, secrets, and machine paths.
 
-The enforced warm comparison measures the production adapter-to-decision path
-against a persistent Python worker; direct resident IPC is also reported as a diagnostic.
-The Python reference disables native authority and varies synthetic samples to avoid cache distortion.
-Relative speed remains informative because trivial allow payloads can favor Python, while release acceptance follows
-the contract: native p95 must stay below the absolute ceiling or materially improve over the pinned Python
-reference. Cold comparison retains the stronger relative-speedup gate.
+The enforced warm measurement covers the production adapter-to-decision path over
+a warm resident; direct resident IPC is reported as a diagnostic. Cold one-shot
+and resident readiness are held to absolute ceilings.
 """
 
 from __future__ import annotations
@@ -21,12 +18,10 @@ import statistics
 import sys
 import tempfile
 import time
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Mapping
 from pathlib import Path
 
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
-from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessRunner
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents, native_resident_client_request
 from codex_plugin_scanner.guard.native_route_receipt import native_hook_route, reset_native_hook_route
@@ -37,24 +32,9 @@ from codex_plugin_scanner.guard.native_runtime import (
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
-_MIN_WARM_P95_SPEEDUP = 1.15
 _MAX_WARM_P95_MS = 20.0
-_MIN_COLD_P95_SPEEDUP = 5.0
 _MAX_COLD_P95_MS = 150.0
 _MAX_NATIVE_READINESS_MS = 400.0
-
-
-@contextmanager
-def _python_reference_mode() -> Iterator[None]:
-    previous = os.environ.get("HOL_GUARD_NATIVE")
-    os.environ["HOL_GUARD_NATIVE"] = "off"
-    try:
-        yield
-    finally:
-        if previous is None:
-            os.environ.pop("HOL_GUARD_NATIVE", None)
-        else:
-            os.environ["HOL_GUARD_NATIVE"] = previous
 
 
 def _percentile(values: list[float], quantile: float) -> float:
@@ -178,57 +158,6 @@ def _stop_native_resident(runtime: Path, state_dir: Path, workspace: Path) -> No
         raise RuntimeError("Native resident teardown left state behind")
 
 
-def _python_review(
-    runner: HookProcessRunner,
-    *,
-    workspace: Path,
-    guard_home: Path,
-    sample: int | None = None,
-) -> None:
-    result = runner.review(
-        payload=_payload(sample),
-        harness="claude-code",
-        home_dir=workspace,
-        guard_home=guard_home,
-        workspace=workspace,
-        hook_env={},
-        deadline=time.monotonic() + 5.0,
-    )
-    if result.payload is None:
-        raise RuntimeError(f"Python hook process did not return a decision: {result.reason_code}")
-
-
-def _bench_python_warm(
-    runner: HookProcessRunner,
-    *,
-    workspace: Path,
-    guard_home: Path,
-    iterations: int,
-) -> list[float]:
-    values: list[float] = []
-    for index in range(iterations):
-        started = time.perf_counter()
-        _python_review(runner, workspace=workspace, guard_home=guard_home, sample=index)
-        values.append((time.perf_counter() - started) * 1_000.0)
-    return values
-
-
-def _bench_python_warm_reference(*, workspace: Path, guard_home: Path, iterations: int) -> list[float]:
-    with _python_reference_mode():
-        runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
-        runner.start()
-        try:
-            _python_review(runner, workspace=workspace, guard_home=guard_home)
-            return _bench_python_warm(
-                runner,
-                workspace=workspace,
-                guard_home=guard_home,
-                iterations=iterations,
-            )
-        finally:
-            runner.close()
-
-
 def _bench_native_warm(
     *,
     workspace: Path,
@@ -312,21 +241,6 @@ def _bench_native_warm_production(
     return values
 
 
-def _bench_python_cold(*, workspace: Path, guard_home: Path, iterations: int) -> list[float]:
-    values: list[float] = []
-    with _python_reference_mode():
-        for _ in range(iterations):
-            runner = HookProcessRunner(guard_home=guard_home, process_limit=1)
-            started = time.perf_counter()
-            runner.start()
-            try:
-                _python_review(runner, workspace=workspace, guard_home=guard_home)
-                values.append((time.perf_counter() - started) * 1_000.0)
-            finally:
-                runner.close()
-    return values
-
-
 def _bench_native_oneshot(
     *,
     runtime: Path,
@@ -356,10 +270,6 @@ def _bench_native_oneshot(
     return values
 
 
-def _speedup(slower_p95: float, faster_p95: float) -> float:
-    return round(slower_p95 / max(faster_p95, 0.001), 2)
-
-
 def _validated_runtime(path: Path) -> Path:
     lexical = path.expanduser()
     if lexical.is_symlink():
@@ -387,18 +297,12 @@ def _readiness_failure(response: object) -> RuntimeError:
 
 def _run_benchmarks(
     *, runtime: Path, warm_iterations: int, cold_iterations: int
-) -> tuple[list[float], list[float], list[float], list[float], list[float], float]:
+) -> tuple[list[float], list[float], list[float], float]:
     short_temp_root = "/tmp" if os.name != "nt" and Path("/tmp").is_dir() else None
     with tempfile.TemporaryDirectory(prefix="hg-native-bench-", dir=short_temp_root) as temp_dir:
         workspace = Path(temp_dir)
         guard_home = workspace / "guard-home"
         guard_home.mkdir(mode=0o700)
-
-        python_warm = _bench_python_warm_reference(
-            workspace=workspace,
-            guard_home=guard_home,
-            iterations=warm_iterations,
-        )
 
         close_native_residents()
         try:
@@ -435,22 +339,17 @@ def _run_benchmarks(
             _stop_native_resident(runtime, guard_home / "native-runtime", workspace)
             close_native_residents()
 
-        python_cold = _bench_python_cold(
-            workspace=workspace,
-            guard_home=guard_home,
-            iterations=cold_iterations,
-        )
         native_oneshot = _bench_native_oneshot(
             runtime=runtime,
             workspace=workspace,
             guard_home=guard_home,
             iterations=cold_iterations,
         )
-    return python_warm, native_warm, native_warm_ipc, python_cold, native_oneshot, native_readiness_ms
+    return native_warm, native_warm_ipc, native_oneshot, native_readiness_ms
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Benchmark the Python and Rust hook paths")
+    parser = argparse.ArgumentParser(description="Benchmark the Rust hook runtime")
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--warm-iterations", type=int, default=100)
     parser.add_argument("--cold-iterations", type=int, default=3)
@@ -460,37 +359,26 @@ def main() -> int:
     if args.warm_iterations < 10 or args.cold_iterations < 2:
         parser.error("benchmark iteration counts are too small")
     runtime = _validated_runtime(args.runtime)
-    python_warm, native_warm, native_warm_ipc, python_cold, native_oneshot, native_readiness_ms = _run_benchmarks(
+    native_warm, native_warm_ipc, native_oneshot, native_readiness_ms = _run_benchmarks(
         runtime=runtime,
         warm_iterations=args.warm_iterations,
         cold_iterations=args.cold_iterations,
     )
-    python_warm_summary = _summary(python_warm)
     native_warm_summary = _summary(native_warm)
     native_warm_ipc_summary = _summary(native_warm_ipc)
-    python_cold_summary = _summary(python_cold)
     native_oneshot_summary = _summary(native_oneshot)
-    warm_speedup = _speedup(python_warm_summary["p95_ms"], native_warm_summary["p95_ms"])
-    cold_speedup = _speedup(python_cold_summary["p95_ms"], native_oneshot_summary["p95_ms"])
     result = {
         "schema": "hol-guard-native-performance.v1",
         "warm": {
-            "python_hook_process": python_warm_summary,
             "native_resident": native_warm_summary,
             "native_resident_ipc_diagnostic": native_warm_ipc_summary,
-            "p95_speedup": warm_speedup,
         },
         "cold": {
-            "python_hook_process": python_cold_summary,
             "native_oneshot": native_oneshot_summary,
-            "p95_speedup": cold_speedup,
         },
         "native_readiness_ms": round(native_readiness_ms, 3),
         "gates": {
-            "warm_acceptance": "p95_ms_lte_maximum_or_speedup_gte_minimum",
-            "minimum_warm_p95_speedup": _MIN_WARM_P95_SPEEDUP,
             "maximum_warm_p95_ms": _MAX_WARM_P95_MS,
-            "minimum_cold_p95_speedup": _MIN_COLD_P95_SPEEDUP,
             "maximum_cold_p95_ms": _MAX_COLD_P95_MS,
             "maximum_native_readiness_ms": _MAX_NATIVE_READINESS_MS,
         },
@@ -504,14 +392,8 @@ def main() -> int:
     if not args.enforce:
         return 0
     failures: list[str] = []
-    if warm_speedup < _MIN_WARM_P95_SPEEDUP and native_warm_summary["p95_ms"] > _MAX_WARM_P95_MS:
-        failures.append(
-            "warm native resident p95 neither meets the "
-            f"{_MAX_WARM_P95_MS:.0f}ms ceiling nor improves by "
-            f"{_MIN_WARM_P95_SPEEDUP:.2f}x"
-        )
-    if cold_speedup < _MIN_COLD_P95_SPEEDUP:
-        failures.append(f"cold native one-shot p95 speedup is below {_MIN_COLD_P95_SPEEDUP:.0f}x")
+    if native_warm_summary["p95_ms"] > _MAX_WARM_P95_MS:
+        failures.append(f"warm native resident p95 exceeds {_MAX_WARM_P95_MS:.0f}ms")
     if native_oneshot_summary["p95_ms"] > _MAX_COLD_P95_MS:
         failures.append(f"cold native one-shot p95 exceeds {_MAX_COLD_P95_MS:.0f}ms")
     if native_readiness_ms > _MAX_NATIVE_READINESS_MS:

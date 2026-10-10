@@ -8,7 +8,6 @@ import os
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -87,42 +86,6 @@ def stabilized_process_resources(pid: int) -> tuple[int, int, int] | None:
         max(sample[1] for sample in samples),
         max(sample[2] for sample in samples),
     )
-
-
-def healthz_details(execution: StressExecution) -> Mapping[str, object] | None:
-    """Read the authenticated bounded capacity report for one stress daemon."""
-
-    request = urllib.request.Request(
-        f"{execution.daemon_url}/v1/healthz/details",
-        headers={"X-Guard-Token": execution.auth_token},
-        method="GET",
-    )
-    try:
-        with cast(HTTPResponse, urllib.request.urlopen(request, timeout=1)) as response:
-            body = response.read(_MAX_RESPONSE_BYTES + 1)
-    except (OSError, urllib.error.URLError):
-        return None
-    if len(body) > _MAX_RESPONSE_BYTES:
-        return None
-    try:
-        payload = cast(object, json.loads(body.decode("utf-8")))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return cast(Mapping[str, object], payload) if isinstance(payload, Mapping) else None
-
-
-def worker_capacity(details: Mapping[str, object] | None) -> tuple[int, int, int, int, int] | None:
-    """Extract only bounded worker-capacity counts from the health report."""
-
-    if details is None:
-        return None
-    workers = details.get("hook_workers")
-    if not isinstance(workers, Mapping):
-        return None
-    values = tuple(workers.get(name) for name in ("configured", "target", "workers", "ready", "busy"))
-    if not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in values):
-        return None
-    return cast(tuple[int, int, int, int, int], values)
 
 
 def stress_request(endpoint: str, auth_token: str) -> float:
@@ -359,7 +322,6 @@ __all__ = [
     "finalize_stress_runtime",
     "health_is_ready",
     "health_probe_status",
-    "healthz_details",
     "pid_is_running",
     "process_tree_resources",
     "record_resources",
@@ -372,5 +334,4 @@ __all__ = [
     "update_pid_stability",
     "wait_for_process_resources",
     "wait_until_health_ready",
-    "worker_capacity",
 ]

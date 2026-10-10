@@ -23,6 +23,7 @@ from .proofs import (
     task_calls_in_scope,
     task_tools_match,
 )
+from .task_arguments import task_arguments_match
 from .transport import reconcile_rounds
 
 TRANSCRIPT_LIMIT = 16 * 1024 * 1024
@@ -123,7 +124,12 @@ def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
         # OMP may consume its own intent field or add defaults. Task-bearing
         # arguments must still be the actual model-selected values.
         for key, value in model_args.items():
-            if key not in {"i", "intent"} and args.get(key) != value:
+            matches = (
+                task_arguments_match(value, args.get(key))
+                if name == "task" and key == "tasks"
+                else args.get(key) == value
+            )
+            if key not in {"i", "intent"} and not matches:
                 errors.append("model-host-arguments-mismatch")
         if type(end.get("isError")) is not bool:
             errors.append("missing-tool-completion-status")

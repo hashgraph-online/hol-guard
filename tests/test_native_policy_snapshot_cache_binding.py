@@ -191,7 +191,6 @@ def _ready_worker(
 ) -> hook_worker_module.HookWorker:
     store = GuardStore(guard_home)
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (master, "master-id"))
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(
         hook_worker_module,
         "get_native_policy_snapshot_publisher",

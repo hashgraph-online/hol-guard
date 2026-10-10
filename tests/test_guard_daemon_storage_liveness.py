@@ -66,6 +66,9 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", empty_inventory)
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Hold the native hook edge unavailable so the burst exercises storage
+    # contention rather than real native review latency.
+    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
     # Route policy is answered by the resident; start its stream before the
     # store is locked so the test measures storage contention only.
@@ -134,6 +137,9 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Hold the native hook edge unavailable so the burst exercises storage
+    # contention rather than real native review latency.
+    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
     # Route policy is answered by the resident, which needs the home's verifier
     # key (provisioned through the store) and a started stream. Establish both
@@ -162,6 +168,9 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
                     "hook_event_name": "PreToolUse",
                     "tool_name": "Bash",
                     "tool_input": {"command": f"echo bounded-{index}"},
+                    # Keep the daemon deadline inside the client timeout so the
+                    # burst measures bounded fail-safe denial, not native review.
+                    "guard_remaining_seconds": 1.0,
                 }
             ).encode(),
             headers={
@@ -187,17 +196,12 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         blocker.close()
 
     try:
-        assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
-        )
-        worker_stats = daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
+        scheduler_stats = daemon._server.runtime_hook_scheduler.stats()  # pyright: ignore[reportPrivateUsage]
         resumed_payload, resumed_elapsed = review(100)
-        assert worker_stats["timeouts"] == 0
-        assert worker_stats["ready"] >= 1
-        # Storage recovery does not enable the explicitly disabled native authority.
+        assert scheduler_stats["active"] == 0
+        assert scheduler_stats["queued"] == 0
+        # Storage recovery never turns an unavailable native authority into an allow.
         assert resumed_payload.get("policy_action") == "block"
-        assert resumed_payload.get("reason_code") == "native_hook_disabled"
         assert resumed_elapsed < 1.0
     finally:
         daemon.stop()

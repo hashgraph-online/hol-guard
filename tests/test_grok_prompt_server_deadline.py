@@ -51,7 +51,6 @@ def test_server_deadline_includes_elapsed_admission_and_missing_policy_blocks(
         "from_remaining_hint",
         make_deadline,
     )
-    monkeypatch.setattr(server, "_native_mode_requires_rust", lambda: True)
     daemon = SimpleNamespace(
         request_deadline=lambda request, cap: caps.append(cap) or 100.0 + cap,
         store=SimpleNamespace(get_managed_install=lambda _: {"active": True}, connection_scope=nullcontext),
