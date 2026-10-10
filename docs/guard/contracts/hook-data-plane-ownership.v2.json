@@ -507,7 +507,6 @@
    "paths": [
     ".github/workflows/native-wheel-ci.yml",
     ".github/workflows/rust-daemon-edge-hardening.yml",
-    ".github/workflows/rust-runtime.yml",
     ".github/workflows/rust-authority-ownership.yml",
     ".github/workflows/rust-pretool-authority-acceptance.yml",
     ".github/workflows/rust-posttool-authority-acceptance.yml",
@@ -614,7 +613,6 @@
   "src/codex_plugin_scanner/guard/cli/commands_support_*.py",
   ".github/workflows/native-wheel-ci.yml",
   ".github/workflows/rust-daemon-edge-hardening.yml",
-  ".github/workflows/rust-runtime.yml",
   ".github/workflows/rust-authority-ownership.yml",
   ".github/workflows/rust-pretool-authority-acceptance.yml",
   ".github/workflows/rust-posttool-authority-acceptance.yml",

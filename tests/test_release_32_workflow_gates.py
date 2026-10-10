@@ -13,12 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
 RELEASE_BRANCH = "release/3.2"
 
 PR_GATE_WORKFLOWS = (
-    ".github/workflows/cline-contract-ci.yml",
     ".github/workflows/ci.yml",
     ".github/workflows/publish.yml",
     ".github/workflows/native-release-contract.yml",
     ".github/workflows/native-wheel-ci.yml",
-    ".github/workflows/guard-network-remediation-proof.yml",
     ".github/workflows/guard-gvisor-reference.yml",
     ".github/workflows/extension-control-center-installed-ci.yml",
 )

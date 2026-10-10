@@ -135,7 +135,7 @@ behavior changes. A documentation-only correction needs accurate commands and wo
 not a new runtime test.
 
 For Rust changes, use the same formatting, lint, and test gates as the
-[Rust runtime workflow](.github/workflows/rust-runtime.yml):
+[CI workflow](.github/workflows/ci.yml):
 
 ```bash
 cargo +1.88.0 fmt --manifest-path rust/Cargo.toml --all --check
