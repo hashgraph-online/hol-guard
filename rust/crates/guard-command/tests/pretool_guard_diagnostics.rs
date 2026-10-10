@@ -72,6 +72,7 @@ fn guard_repairs_controls_and_unbound_launches_stay_reviewed() {
         }
         for command in [
             "hol-guard uninstall",
+            "hol-guard hooks remove --all",
             "hol-guard policy disable",
             "hol-guard clear --all",
         ] {

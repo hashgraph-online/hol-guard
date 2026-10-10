@@ -415,6 +415,16 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard blocked a destructive command before execution.",
         ));
     }
+    if model.segments.iter().any(|segment| {
+        crate::command_critical_floors::guard_control_block_reason(segment).is_some()
+    }) {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_guard_self_protection",
+            "HOL Guard blocked a command that would remove or weaken Guard protection. Run it yourself in a terminal.",
+        ));
+    }
     if ps::sensitive_exfiltration(&model, sensitive_command, exfiltration_command) {
         return Ok(pretool_decision(
             model,

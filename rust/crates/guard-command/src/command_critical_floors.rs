@@ -729,12 +729,33 @@ fn contains_ordered(arguments: &[String], first: &str, second: &str) -> bool {
     arguments[first_index + 1..].iter().any(|a| a == second)
 }
 
+/// Reason code for a Guard control command the critical floors classify as a
+/// block, so the native pre-tool path can refuse it exactly like the composite
+/// evaluation instead of leaving it as a reviewable action.
+pub(crate) fn guard_control_block_reason(segment: &CommandSegmentV1) -> Option<&'static str> {
+    let executable = executable_name(segment);
+    if executable != "hol-guard" && executable != "plugin-guard" {
+        return None;
+    }
+    let normalized: Vec<String> = segment
+        .arguments
+        .iter()
+        .map(|item| item.to_lowercase())
+        .collect();
+    match guard_control_floor(&normalized) {
+        Some((GuardAction::Block, reason)) => Some(reason),
+        _ => None,
+    }
+}
+
 /// `_guard_control_floor` (:473).
 fn guard_control_floor(arguments: &[String]) -> Option<(GuardAction, &'static str)> {
     let control_tokens = ["capability", "clear", "policy", "uninstall"];
-    if arguments
+    let is_control = arguments
         .iter()
         .any(|a| control_tokens.contains(&a.as_str()))
+        || contains_ordered(arguments, "hooks", "remove");
+    if is_control
         && arguments
             .iter()
             .any(|item| ["help", "--help", "-h"].contains(&item.as_str()))

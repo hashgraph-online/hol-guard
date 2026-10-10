@@ -152,6 +152,30 @@ def is_guard_hook_handler(handler: object) -> bool:
     return False
 
 
+CLAUDE_GUARD_REQUIRED_HOOK_EVENTS = ("PreToolUse", "PermissionRequest")
+
+
+def missing_guard_hook_events(payload: dict[str, object]) -> list[str]:
+    """Required hook events with no Guard-managed handler in a settings payload."""
+
+    hooks = payload.get("hooks")
+    missing: list[str] = []
+    for event in CLAUDE_GUARD_REQUIRED_HOOK_EVENTS:
+        entries = hooks.get(event) if isinstance(hooks, dict) else None
+        if not isinstance(entries, list) or not any(_entry_has_guard_handler(entry) for entry in entries):
+            missing.append(event)
+    return missing
+
+
+def _entry_has_guard_handler(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if is_guard_hook_handler(entry):
+        return True
+    handlers = entry.get("hooks")
+    return isinstance(handlers, list) and any(is_guard_hook_handler(handler) for handler in handlers)
+
+
 def merge_hook_group(
     entries: list[object],
     matcher: str | None,

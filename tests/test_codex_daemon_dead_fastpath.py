@@ -43,6 +43,16 @@ def test_missing_state_and_dead_pid_are_provably_dead(tmp_path: Path) -> None:
     assert fastpath.daemon_provably_dead(_state(tmp_path, _dead_pid()))
 
 
+def test_tombstone_state_is_provably_dead(tmp_path: Path) -> None:
+    state = tmp_path / "daemon-state.json"
+    state.write_text("{}", encoding="utf-8")
+    assert fastpath.daemon_provably_dead(state)
+    state.write_text(json.dumps({"state": {}}), encoding="utf-8")
+    assert fastpath.daemon_provably_dead(state)
+    fastpath.record_start_failure(state)
+    assert fastpath.should_fail_fast(state)
+
+
 def test_live_pid_and_unreadable_state_are_not_provably_dead(tmp_path: Path) -> None:
     assert not fastpath.daemon_provably_dead(_state(tmp_path, os.getpid()))
     (tmp_path / "daemon-state.json").write_text("{not json", encoding="utf-8")
@@ -117,6 +127,28 @@ def test_second_hook_after_failed_start_denies_fast_with_repair_message(
     output = second["hookSpecificOutput"]
     assert output["permissionDecision"] == "deny"
     assert "hol-guard repair" in output["permissionDecisionReason"]
+
+
+def test_tombstone_state_after_failed_restart_records_marker_and_fails_fast(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    (guard_home / "daemon-state.json").write_text("{}", encoding="utf-8")
+    calls = _failing_flow(monkeypatch)
+
+    _run_main(guard_home, monkeypatch, "PreToolUse")
+    capsys.readouterr()
+    assert (guard_home / fastpath.FAILED_START_MARKER).exists()
+
+    calls.clear()
+    _run_main(guard_home, monkeypatch, "PreToolUse")
+    second = json.loads(capsys.readouterr().out)
+
+    assert calls == ["request"]
+    assert "hol-guard repair" in second["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_permission_request_still_fails_closed_on_fast_path(
