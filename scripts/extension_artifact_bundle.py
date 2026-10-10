@@ -65,6 +65,17 @@ def create_bundle(root: Path, output: Path, expected_sha: str) -> dict:
     if actual != expected_sha:
         raise ValueError("snapshot checkout does not match the requested source")
     files = {path.relative_to(root).as_posix(): path.read_bytes() for path in selected_files(root)}
+    for name, data in files.items():
+        if name.startswith(("contributions/", "contracts/extensions/trust/")):
+            committed = subprocess.run(
+                ["git", "show", f"{expected_sha}:{name}"],
+                cwd=root,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            if committed.returncode or committed.stdout != data:
+                raise ValueError(f"snapshot public input must match its committed source: {name}")
     scripts_dir = str(Path(__file__).resolve().parent)
     sys.path.insert(0, scripts_dir)
     try:
