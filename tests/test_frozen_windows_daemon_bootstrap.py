@@ -139,7 +139,7 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
         bootstrap = _json_result(_run_core(executable, bootstrap_args, env=env))
         assert bootstrap["schema"] == "guard-desktop-bootstrap.v1"
         first_status = _json_result(_run_core(executable, status_args, env=env))
-        assert first_status["running"] is True, first_status
+        assert first_status["running"] is True, (first_status, bootstrap, _diagnostics(env))
         first_pid = first_status["pid"]
 
         _stop_and_assert_process_stopped(
@@ -152,7 +152,7 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
         retry_bootstrap = _json_result(_run_core(executable, bootstrap_args, env=env))
         assert retry_bootstrap["schema"] == "guard-desktop-bootstrap.v1"
         retry_status = _json_result(_run_core(executable, status_args, env=env))
-        assert retry_status["running"] is True
+        assert retry_status["running"] is True, (retry_status, retry_bootstrap, _diagnostics(env))
         retry_pid = retry_status["pid"]
         _stop_and_assert_process_stopped(
             executable,
@@ -164,7 +164,7 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path) -> Non
         repaired = _json_result(_run_core(executable, repair_args, env=env))
         assert repaired["runtime_status"] == "restarted"
         repaired_status = _json_result(_run_core(executable, status_args, env=env))
-        assert repaired_status["running"] is True
+        assert repaired_status["running"] is True, (repaired_status, repaired, _diagnostics(env))
     finally:
         cleanup = _run_core(executable, stop_args, env=env)
         assert cleanup.returncode == 0, f"stdout={cleanup.stdout!r}\nstderr={cleanup.stderr!r}"
