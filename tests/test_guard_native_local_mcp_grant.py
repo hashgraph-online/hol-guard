@@ -151,3 +151,17 @@ def test_relative_path_entries_are_anchored_to_the_callers_directory(
 
     assert anchored == os.pathsep.join([os.path.join(os.getcwd(), "node_modules/.bin"), absolute, ""])
     assert local_mcp_grant_decision._caller_launcher_path(None) is None
+
+
+def test_unreadable_working_directory_fails_closed_only_when_a_relative_entry_needs_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def deleted_cwd() -> str:
+        raise FileNotFoundError("cwd removed")
+
+    monkeypatch.setattr(os, "getcwd", deleted_cwd)
+    absolute = str(tmp_path / "abs")
+
+    assert local_mcp_grant_decision._caller_launcher_path(absolute) == absolute
+    with pytest.raises(LocalCliIdentityUnavailableError):
+        local_mcp_grant_decision._caller_launcher_path(os.pathsep.join(["node_modules/.bin", absolute]))

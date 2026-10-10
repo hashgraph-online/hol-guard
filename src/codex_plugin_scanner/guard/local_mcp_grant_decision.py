@@ -86,10 +86,15 @@ def _caller_launcher_path(path_value: str | None) -> str | None:
 
     if path_value is None:
         return None
-    cwd = os.getcwd()
-    return os.pathsep.join(
-        part if not part or os.path.isabs(part) else os.path.join(cwd, part) for part in path_value.split(os.pathsep)
-    )
+    parts = path_value.split(os.pathsep)
+    if all(not part or os.path.isabs(part) for part in parts):
+        return path_value
+    try:
+        cwd = os.getcwd()
+    except OSError as error:
+        # A deleted working directory cannot anchor relative entries; hold for review.
+        raise LocalCliIdentityUnavailableError("native_local_mcp_grant_unavailable") from error
+    return os.pathsep.join(part if not part or os.path.isabs(part) else os.path.join(cwd, part) for part in parts)
 
 
 def _tool_authority_hash(artifact: GuardArtifact) -> str | None:
