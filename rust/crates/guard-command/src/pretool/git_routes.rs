@@ -31,8 +31,11 @@ pub(crate) fn git_route_within_workspace(target: &str, context: super::PathConte
     let Ok(target) = std::fs::canonicalize(target) else {
         return false;
     };
-    if !target.is_dir() || !target.starts_with(&workspace) {
+    if !target.is_dir() {
         return false;
+    }
+    if !target.starts_with(&workspace) {
+        return registered_worktree_of_workspace(&target, &workspace);
     }
     target
         .ancestors()
@@ -96,11 +99,23 @@ fn linked_worktree_git_entry_within_workspace(
     admin: &std::path::Path,
     workspace: &std::path::Path,
 ) -> bool {
+    // The administrative directory is named after the worktree that owns this
+    // `.git` entry, which may be a `-C` target below the workspace rather than
+    // the workspace itself. The entry is already contained in the workspace.
     // Shape/backlink checks establish a linked-worktree route, not authenticity.
     // The separate Git configuration probe must still reject executable helpers,
     // including a forged but well-formed external common directory. Native home
     // writes cannot plant `.git` metadata and shell redirections remain guarded.
-    if admin.file_name() != workspace.file_name() || !admin.is_dir() {
+    let Some(worktree) = std::fs::canonicalize(entry)
+        .ok()
+        .and_then(|entry| entry.parent().map(std::path::Path::to_path_buf))
+    else {
+        return false;
+    };
+    if !worktree.starts_with(workspace)
+        || admin.file_name() != worktree.file_name()
+        || !admin.is_dir()
+    {
         return false;
     }
     let Some(common) = bounded_git_metadata(&admin.join("commondir"))
@@ -125,4 +140,85 @@ fn bounded_git_metadata(path: &std::path::Path) -> Option<String> {
         .read_to_string(&mut contents)
         .ok()?;
     (contents.len() <= 4096).then_some(contents)
+}
+
+// A linked worktree outside the working directory is routable only when the
+// repository that contains the working directory registers exactly that path.
+// Authenticity comes from the working directory's own repository metadata: its
+// `worktrees/<name>/gitdir` must point at the target's `.git` file, and that
+// file must point back at the same administrative directory.
+fn registered_worktree_of_workspace(target: &std::path::Path, workspace: &std::path::Path) -> bool {
+    const MAX_WORKTREES: usize = 256;
+    let entry = target.join(".git");
+    let Ok(metadata) = std::fs::symlink_metadata(&entry) else {
+        return false;
+    };
+    if !metadata.is_file() {
+        return false;
+    }
+    let Some(pointer) = bounded_git_metadata(&entry)
+        .and_then(|contents| {
+            let mut lines = contents.lines();
+            let pointer = lines.next()?.strip_prefix("gitdir: ")?.trim().to_owned();
+            lines.next().is_none().then_some(pointer)
+        })
+        .and_then(|pointer| {
+            let pointer = std::path::Path::new(&pointer);
+            let pointer = if pointer.is_absolute() {
+                pointer.to_path_buf()
+            } else {
+                target.join(pointer)
+            };
+            std::fs::canonicalize(pointer).ok()
+        })
+    else {
+        return false;
+    };
+    let Ok(entry) = std::fs::canonicalize(&entry) else {
+        return false;
+    };
+    let Some(common) = workspace
+        .ancestors()
+        .find_map(|path| {
+            let dot_git = path.join(".git");
+            let metadata = std::fs::symlink_metadata(&dot_git).ok()?;
+            if metadata.file_type().is_symlink() {
+                return Some(None);
+            }
+            let git_dir = if metadata.is_dir() {
+                dot_git
+            } else {
+                let contents = bounded_git_metadata(&dot_git)?;
+                let pointer = contents.lines().next()?.strip_prefix("gitdir: ")?.trim();
+                let pointer = std::path::Path::new(pointer);
+                std::fs::canonicalize(if pointer.is_absolute() {
+                    pointer.to_path_buf()
+                } else {
+                    path.join(pointer)
+                })
+                .ok()?
+            };
+            let common = match bounded_git_metadata(&git_dir.join("commondir")) {
+                Some(relative) => std::fs::canonicalize(git_dir.join(relative.trim())).ok(),
+                None => std::fs::canonicalize(&git_dir).ok(),
+            };
+            Some(common)
+        })
+        .flatten()
+    else {
+        return false;
+    };
+    if !pointer.starts_with(common.join("worktrees")) {
+        return false;
+    }
+    let Ok(registered) = std::fs::read_dir(common.join("worktrees")) else {
+        return false;
+    };
+    registered.take(MAX_WORKTREES).flatten().any(|admin| {
+        let admin = admin.path();
+        std::fs::canonicalize(&admin).is_ok_and(|admin| admin == pointer)
+            && bounded_git_metadata(&admin.join("gitdir"))
+                .and_then(|path| std::fs::canonicalize(admin.join(path.trim())).ok())
+                .is_some_and(|backlink| backlink == entry)
+    })
 }
