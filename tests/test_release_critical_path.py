@@ -179,6 +179,42 @@ def test_legacy_publication_requires_the_entire_attested_run_to_succeed(monkeypa
         assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is expected
 
 
+@pytest.mark.parametrize(
+    "jobs,expected",
+    [
+        ("1 success\n2 skipped\n", True),
+        ("1 failure\n2 success\n", True),
+        ("1 failure\n2 null\n", False),
+        ("1 failure\n2 skipped\n", None),
+        ("1 success\n1 success\n", "invalid"),
+        ("0 success\n", "invalid"),
+    ],
+)
+def test_publication_counts_the_attempt_that_uploaded_to_pypi(monkeypatch, jobs, expected):
+    run = {
+        "path": ".github/workflows/publish.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "a" * 40,
+        "conclusion": "success",
+    }
+
+    def api(args, **kwargs):
+        if "--paginate" in args:
+            assert "filter=all" in args[3]
+            return jobs
+        return json.dumps(run)
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    if expected is None:
+        with pytest.raises(ValueError, match="withholding updater"):
+            publication_ready("hashgraph-online/hol-guard", "123", "a" * 40)
+    elif expected == "invalid":
+        with pytest.raises(ValueError, match="invalid publication job attempt"):
+            publication_ready("hashgraph-online/hol-guard", "123", "a" * 40)
+    else:
+        assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is expected
+
+
 def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path):
     for name in ("pyproject.toml", "uv.lock", "src/codex_plugin_scanner/version.py", "scripts/sync_repo_version.py"):
         destination = tmp_path / name
@@ -393,7 +429,7 @@ def test_signed_core_waits_for_the_exact_registry_publish_job(monkeypatch, concl
     }
 
     def api(args, **kwargs):
-        return conclusion + "\n" if "--paginate" in args else json.dumps(run)
+        return f"1 {conclusion}\n" if "--paginate" in args else json.dumps(run)
 
     monkeypatch.setattr(subprocess, "check_output", api)
     if expected is None:

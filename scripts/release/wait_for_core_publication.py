@@ -92,24 +92,32 @@ def publication_ready(repo: str, run_id: str, source_sha: str) -> bool:
         or result["head_sha"] != source_sha
     ):
         raise ValueError("publication run is not the authorized release dispatch")
-    conclusions = subprocess.check_output(
+    # A rerun of an already published release skips every job, so the latest
+    # attempt alone can hide the attempt that actually uploaded to PyPI.
+    attempts: dict[int, str] = {}
+    for line in subprocess.check_output(
         [
             "gh",
             "api",
             "--paginate",
-            f"repos/{repo}/actions/runs/{run_id}/jobs?per_page=100",
+            f"repos/{repo}/actions/runs/{run_id}/jobs?filter=all&per_page=100",
             "--jq",
-            '.jobs[] | select(.name == "Publish main release to PyPI") | .conclusion',
+            '.jobs[] | select(.name == "Publish main release to PyPI") | "\\(.run_attempt) \\(.conclusion)"',
         ],
         text=True,
         timeout=20,
-    ).splitlines()
-    if conclusions == ["success"]:
+    ).splitlines():
+        attempt, _, conclusion = line.partition(" ")
+        if not re.fullmatch(r"[1-9][0-9]*", attempt) or int(attempt) in attempts:
+            raise ValueError("invalid publication job attempt")
+        attempts[int(attempt)] = conclusion
+    if "success" in attempts.values():
         return True
-    if not conclusions and result["conclusion"] == "success":
+    if not attempts and result["conclusion"] == "success":
         # Older publish workflows used different job names; require the entire run.
         return True
-    if any(value not in {"null", ""} for value in conclusions) or result["conclusion"] in {"failure", "cancelled"}:
+    latest = attempts[max(attempts)] if attempts else "null"
+    if latest not in {"null", ""} or result["conclusion"] in {"failure", "cancelled"}:
         raise ValueError("stable registry publication failed; withholding updater assets")
     return False
 
