@@ -18,6 +18,7 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization
+from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import (
     FIXTURE_SYSTEM_CONTEXT,
@@ -40,6 +41,7 @@ from .input_evidence import (
     public_native_receipt,
 )
 from .latency import summarize_hook_latency
+from .native_tools import cleanup_private_temp
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
@@ -62,7 +64,8 @@ def run_case(
     """Exercise one independent scenario, retaining failures and all evidence."""
     from ci.native_runtime import probe_installed_native_extensions as native_probe
 
-    fixture = create_fixture(root / scenario_fixture_name(scenario.id))
+    first_contact = scenario.oracle == "native-tools"
+    fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=first_contact)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
@@ -96,7 +99,9 @@ def run_case(
                 {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": collector.url}
             )
             prompt = _scenario_prompt(rendered)
-            authorization = fixture_authorization(fixture, collector.url, rendered) + "\n" + FIXTURE_SYSTEM_CONTEXT
+            authorization = fixture_authorization(fixture, collector.url, rendered) + (
+                "" if first_contact else "\n" + FIXTURE_SYSTEM_CONTEXT
+            )
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             case["agent_context_sha256"] = sha256_bytes(authorization.encode())
             agent_dir = private / "agent"
@@ -112,6 +117,7 @@ def run_case(
                 home=fixture.home,
                 workspace=fixture.workspace,
                 identity=identity,
+                register_workspace_policy=not first_contact,
             )
             if scenario.oracle == "blocked-extension":
                 case["extension_control"] = configure_extension_permission_denial(
@@ -119,7 +125,10 @@ def run_case(
                 )
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, fixture.root / "guard-home")
-            policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            # Benign first-contact scenarios run with no pre-bound workspace policy, like a fresh install.
+            policy_snapshot = (
+                None if first_contact else probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            )
             if scenario.id in BUSINESS_CASES:
                 publisher = daemon._server.hook_worker.policy_snapshot_publisher
                 case["business_policy"] = bind_business_snapshot(
@@ -160,7 +169,7 @@ def run_case(
                     for row in worker.store.list_approval_requests(status=None, limit=200)
                     if isinstance(row, dict) and row.get("request_id")
                 }
-                if scenario.oracle == "mixed-read-batch"
+                if scenario.oracle in {"mixed-read-batch", "native-tools"}
                 else set()
             )
             extension = private / "hol-guard.ts"
@@ -222,6 +231,8 @@ def run_case(
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
+            if first_contact:
+                case["approval_rows"] = approval_rows(worker.store, approval_ids_before)
             if scenario.oracle == "mixed-read-batch":
                 case["approval_targets"] = _mixed_read_approval_targets(worker.store, approval_ids_before)
             case["inference"] = relay.evidence(wait_seconds=3)
@@ -278,6 +289,8 @@ def run_case(
         case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
         if daemon is not None:
             case.update(cleanup_case_resources(daemon, identity, fixture.root / "guard-home", private))
+    if first_contact:
+        cleanup_private_temp(case.get("events", []))
     case["elapsed_seconds"] = round(time.monotonic() - started, 3)
     case["hook_latency"] = summarize_hook_latency(case["guard_observations"])
     case["assessment"] = assess_case(scenario, case)

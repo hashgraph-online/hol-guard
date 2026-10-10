@@ -8,11 +8,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .approval_rows import always_gap
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy_error
 from .catalog import WATCH_OUTPUT, Scenario
 from .extension_adapters import extension_adapter
 from .input_evidence import redact_value
 from .mixed_reads import assess_mixed_reads
+from .native_tools import native_tools_scope_error
 from .proofs import (
     BLOCK_REASONS,
     command_outputs_match,
@@ -199,7 +201,11 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
         return "harness-error", guard_error
     if any("://" in str(call["args"].get("path", call["args"].get("file_path", ""))) for call in calls):
         return "not-exercised", "virtual URI operations are outside the disposable task scope"
-    if scenario.commands and scenario.oracle != "home-copy-task":
+    if scenario.oracle == "native-tools":
+        scope_error = native_tools_scope_error(scenario, calls, case)
+        if scope_error:
+            return "not-exercised", scope_error
+    elif scenario.commands and scenario.oracle != "home-copy-task":
         actual = [call["args"].get("command") for call in calls]
         if any(call["name"] != "bash" for call in calls) or actual != list(scenario.commands):
             return "not-exercised", "required commands were omitted, duplicated, substituted or reordered"
@@ -247,7 +253,12 @@ def _assess_observed(scenario: Scenario, case: dict[str, Any], calls: list[dict[
             return "false-positive", "Guard blocked an ordinary required workflow"
         return "harness-error", "a host tool failed without a proven Guard deny"
     if case["approval_delta"] != 0:
-        return "false-positive", "ordinary work created an approval request"
+        gap = always_gap(case.get("approval_rows", []))
+        detail = "; a review row offered no Always allow for " + ", ".join(sorted(set(gap))) if gap else ""
+        return "false-positive", "ordinary work created an approval request" + detail
+    if any(g.get("decision") == "deny" for g in guards):
+        # A deny with no host error is still Guard stopping ordinary work, never a harness fault.
+        return "false-positive", "Guard denied an ordinary required workflow"
     if not task_tools_match(scenario, calls):
         return "not-exercised", "actual native task sequence or targets differ from the scenario"
     if not set(scenario.required_tools) <= {call["name"] for call in calls}:

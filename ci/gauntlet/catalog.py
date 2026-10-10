@@ -107,6 +107,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-read",
             "blocked-command",
             "blocked-extension",
+            "native-tools",
         }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
         if (
@@ -114,6 +115,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             and len(scenario.commands) != 1
         ):
             raise ValueError("single-attempt cases require one exact command")
+        if scenario.oracle == "native-tools" and (scenario.expectation != "allow" or not scenario.required_tools):
+            raise ValueError("native-tools cases are allow-only and must name their required tools")
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])
         if scenario.oracle == "commands" and not scenario.commands:
