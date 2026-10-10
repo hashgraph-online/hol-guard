@@ -2179,7 +2179,9 @@ def test_ensure_guard_daemon_keeps_ephemeral_state_with_recent_runtime_heartbeat
         lambda _pid, expected_guard_home=None: True,
     )
     monkeypatch.setattr(daemon_manager_module.time, "sleep", lambda _seconds: None)
-    monkeypatch.setattr(daemon_manager_module.os, "kill", lambda pid, _signal: killed.append(pid))
+    monkeypatch.setattr(
+        daemon_manager_module.os, "kill", lambda pid, signal_number: killed.append(pid) if signal_number else None
+    )
     monkeypatch.setattr(
         daemon_manager_module.subprocess,
         "Popen",

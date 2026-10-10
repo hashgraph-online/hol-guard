@@ -91,3 +91,29 @@ def remember_scoped_status(key: _RequestKey, status: NativeRuntimeStatus) -> Non
     scope = _REQUEST_STATUS.get()
     if scope is not None and status.identity is not None:
         scope[key] = status
+
+
+_AUTHORITY_FORCED: ContextVar[bool] = ContextVar("guard_native_runtime_authority_forced", default=False)
+
+
+def native_authority_forced() -> bool:
+    """True inside :func:`native_authority_scope`."""
+
+    return _AUTHORITY_FORCED.get()
+
+
+@contextmanager
+def native_authority_scope() -> Iterator[None]:
+    """Resolve a disabled native runtime as ``force`` for authority-only decisions.
+
+    ``HOL_GUARD_NATIVE=off`` switches the native hook-review path off; it must
+    not remove the only implementation of a decision the resident owns, such as
+    the daemon lifecycle verdicts. Inside this scope a disabled runtime resolves
+    like ``force`` so such a decision still gets an authoritative answer.
+    """
+
+    token = _AUTHORITY_FORCED.set(True)
+    try:
+        yield
+    finally:
+        _AUTHORITY_FORCED.reset(token)

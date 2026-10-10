@@ -32,6 +32,7 @@ from .native_context import _canonical_request_sha256, _resolve_digest_home, ens
 from .native_execution import _resident_request
 from .native_resident_client import native_resident_client_failure_code
 from .native_runtime import native_runtime_status
+from .native_runtime_request_scope import native_authority_scope
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 DAEMON_LIFECYCLE_FEATURE = "daemon-lifecycle-decision-v1"
@@ -161,7 +162,20 @@ def native_daemon_lifecycle(
 ) -> dict[str, Any]:
     """Return the resident's verdict for one ``check``, resolving fact requests."""
 
-    home = _resolve_digest_home(guard_home)
+    with native_authority_scope():
+        return _decide(check, query, resolve_fact, guard_home, platform)
+
+
+def _decide(
+    check: str,
+    query: Mapping[str, object],
+    resolve_fact: FactResolver | None,
+    guard_home: Path | None,
+    platform: str | None,
+) -> dict[str, Any]:
+    # Verdicts are pure, so a home that does not exist yet must not be created
+    # (or get its own resident) just to be asked a question; use the context home.
+    home = _resolve_digest_home(guard_home if guard_home is not None and guard_home.is_dir() else None)
     platform = platform or ("nt" if os.name == "nt" else "posix")
     # The resident digests its typed decoding of the request, which omits unset
     # optional fields; omit them here too so both sides hash identical bytes.

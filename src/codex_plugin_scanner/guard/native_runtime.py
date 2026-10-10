@@ -23,7 +23,12 @@ from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_response_decoder import response_from_payload as _response_from_payload
 from .native_route_receipt import record_native_hook_result
-from .native_runtime_request_scope import _resolved_candidate_path, remember_scoped_status, scoped_status
+from .native_runtime_request_scope import (
+    _resolved_candidate_path,
+    native_authority_forced,
+    remember_scoped_status,
+    scoped_status,
+)
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
     native_record_integrity_failure,
@@ -64,7 +69,8 @@ _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 
 
 def native_mode() -> NativeMode:
-    return _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
+    mode = _resolve_native_mode(os.environ.get(_NATIVE_MODE_ENV), _DEFAULT_NATIVE_MODE)
+    return "force" if mode == "off" and native_authority_forced() else mode
 
 
 def _bundled_runtime_candidate() -> Path:
