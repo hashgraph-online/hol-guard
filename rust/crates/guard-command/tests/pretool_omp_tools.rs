@@ -328,6 +328,7 @@ fn eval_allows_literal_tool_programs() {
         "const r = await tool.bash({command: \"cat calc.py\", cwd: \".\"}); log(JSON.stringify({r}));",
         "await tool.read({path:'artifact://3'})",
         "display(await tool.read({path:'calc.py', limit: 20, offset: 1}));;",
+        "const r = await tool.read({path:'calc.py'})\ndisplay(r)",
     ] {
         let result = eval_code(&f, code);
         assert!(allowed(&result), "{code}: {}", result.reason_code);
@@ -401,6 +402,12 @@ fn eval_reviews_everything_outside_the_literal_grammar() {
         "display(1)",
         "",
         "   ",
+        // Adjacent expressions chain in JavaScript, even across a newline.
+        "await tool.read({path:'calc.py'});\n''['constructor']['constructor']('return 1')(0)",
+        "display(await tool.read({path:'calc.py'}))\n(0)",
+        "display(await tool.read({path:'calc.py'}))\n['x']",
+        "await tool.read({path:'calc.py'}) 'x'",
+        "const r = await tool.read({path:'calc.py'})\ninstanceof r",
     ] {
         let result = eval_code(&f, code);
         assert!(!allowed(&result), "{code}");

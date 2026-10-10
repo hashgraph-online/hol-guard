@@ -164,6 +164,7 @@ const RESERVED: &[&str] = &[
     "yield",
     "with",
     "in",
+    "instanceof",
     "of",
     "true",
     "false",
@@ -212,6 +213,15 @@ impl Parser {
                 continue;
             }
             self.statement()?;
+            // A `(`, `[`, `.`, operator or (template) string after an
+            // expression continues it even across a newline, so the host would
+            // run a different program. Only `;`, the end, or a statement that
+            // starts with a word (where JavaScript inserts the semicolon) may
+            // follow.
+            match self.peek() {
+                None | Some(Token::Punct(';')) | Some(Token::Ident(_)) => {}
+                Some(_) => return None,
+            }
         }
         Some(())
     }
