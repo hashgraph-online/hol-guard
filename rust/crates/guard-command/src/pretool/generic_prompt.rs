@@ -64,7 +64,7 @@ fn prompt_requests_secret(value: &str) -> bool {
         return true;
     }
     let request = VALUE_REQUEST.get_or_init(|| {
-        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|paste|post|email|forward|share|give|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|steal|leak|exfiltrate|upload|send|transfer|grab|write|type|include|store|save|log|access|hand|pass|supply|embed|attach|insert|encode|base64|commit|push|curl|wget|find|get|look\s+up|lookup|list|export|decode|decrypt|crack|guess|recover|what(?:'s|\s+is|\s+are)|value|contents?)\b")
+        Regex::new(r"(?i)\b(?:read|open|print|show|display|disclose|reveal|echo|cat|output|paste|post|email|forward|share|give|provide|tell|return|summari[sz]e|dump|copy|retrieve|fetch|obtain|extract|capture|steal|leak|exfiltrate|upload|send|transfer|grab|write|type|include|store|save|log|access|hand|pass|supply|embed|attach|insert|encode|base64|commit|push|curl|wget|use|using|authenticate|login|sign\s+in|find|get|look\s+up|lookup|list|export|decode|decrypt|crack|guess|recover|what(?:'s|\s+is|\s+are)|value|contents?)\b")
             .expect("bounded credential value request")
     });
     // Sentence ends and JSON list items separate clauses. A period inside a

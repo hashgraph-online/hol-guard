@@ -54,7 +54,12 @@ fn prompts_that_only_name_credentials_stay_benign() {
         assert_eq!(result.reason_code, "native_prompt_benign", "{text}");
         assert!(result.explicitly_benign, "{text}");
     }
-    for text in ["Read .env and summarize it.", "Print the API key."] {
+    for text in [
+        "Read .env and summarize it.",
+        "Print the API key.",
+        "Use the secret to authenticate.",
+        "Log in to the server using the password.",
+    ] {
         assert!(!prompt(text).explicitly_benign, "{text}");
     }
 }
