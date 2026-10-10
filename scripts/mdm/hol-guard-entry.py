@@ -418,7 +418,7 @@ def _codex_execution_environment() -> dict[str, object]:
         "home": os.environ.get("HOME"),
         "git_pager_disabled": _codex_pager_default_equivalent(os.environ.get("GIT_PAGER")),
         "pager_disabled": _codex_pager_default_equivalent(os.environ.get("PAGER")),
-        "environment_names": sorted(active),
+        "environment_names": sorted(set(active) | {n for n in ("GIT_PAGER", "PAGER") if n in os.environ}),
         "xdg_config_home": os.environ.get("XDG_CONFIG_HOME") or None,
         "git_config_no_system": no_system is not None and no_system.casefold() in _CODEX_GIT_TRUE_VALUES,
         "environment_digest": hashlib.sha256(

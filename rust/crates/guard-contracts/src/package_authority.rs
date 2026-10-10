@@ -17,6 +17,8 @@ pub const PACKAGE_AUTHORITY_REQUEST_SCHEMA: &str = "guard-package-authority-requ
 pub const PACKAGE_AUTHORITY_RESULT_SCHEMA: &str = "guard-package-authority-result.v1";
 /// Capability advertised by the runtime when these operations are available.
 pub const PACKAGE_AUTHORITY_FEATURE: &str = "package-authority-v1";
+/// Capability advertised when the package-evaluation composition op exists.
+pub const PACKAGE_EVALUATION_COMPOSE_FEATURE: &str = "package-evaluation-compose-v1";
 
 /// Largest canonical request serialization any of these ops will accept.
 pub const PACKAGE_AUTHORITY_MAX_BYTES: usize = 1024 * 1024;
@@ -252,4 +254,37 @@ pub struct PackageAdvisoryIdsRequestV1 {
     pub store_path: String,
     pub guard_home: String,
     pub artifact: Value,
+}
+
+/// Pure composition of a package verdict rewrite. The caller supplies only the
+/// evaluation fields the rewrite reads (`policy_action`, `reasons`,
+/// `packages`) plus the kind-specific facts; the runtime chooses every
+/// resulting decision, policy action, reason, and copy field.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageEvaluationComposeRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub guard_home: String,
+    /// `current_policy_action`, `rejected_reuse`, `saved_allow`,
+    /// `saved_block`, or `external_archive_override`.
+    pub kind: String,
+    pub evaluation: Value,
+    /// `current_policy_action` only: the current package policy action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_action: Option<String>,
+    /// `rejected_reuse`, `saved_allow`, `saved_block`: the reuse evidence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_reuse: Option<Value>,
+    /// `saved_allow` (`reused` | `claimed_revalidated`) and
+    /// `external_archive_override` (`launch_unbound` | `mcp_unbound` |
+    /// `binding_unavailable` | `shim_delegated`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub variant: Option<String>,
+    /// `saved_allow` `reused` only: `consumed` or `retained`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_disposition: Option<String>,
+    /// `saved_block` only: the saved-policy clear command shown to the user.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clear_command: Option<String>,
 }

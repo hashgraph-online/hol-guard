@@ -70,6 +70,7 @@ def _run_preparation(
             "SELECTOR_SCRIPT": str(ROOT / "scripts/ci/select_pytest_coverage.py"),
             "COMMAND_LOG": str(log),
             "FAIL_COMMAND": fail_command,
+            "CI_PYTEST_COVERAGE_SHARDS": "128",
         },
     )
     return result, log.read_text(encoding="utf-8").splitlines() if log.exists() else []

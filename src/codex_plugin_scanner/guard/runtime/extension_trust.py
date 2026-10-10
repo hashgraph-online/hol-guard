@@ -249,13 +249,3 @@ def filter_inert_external_observations(
         for item in observations
         if extension_is_active(item.extension.extension_id, layer_values, required=item.extension.required)
     )
-
-
-def reset_trust_map_cache() -> None:
-    from .extension_contribution import reset_contribution_cache
-
-    _trust_map.cache_clear()
-    reset_contribution_cache()
-    from .mcp_server_contribution import reset_mcp_contribution_cache
-
-    reset_mcp_contribution_cache()

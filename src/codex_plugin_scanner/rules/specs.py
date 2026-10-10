@@ -21,6 +21,3 @@ class RuleSpec:
     docs_url: str
     fixable: bool = False
     profiles: tuple[str, ...] = ("default", "public-marketplace", "strict-security")
-
-
-ALL_PROFILES: tuple[str, ...] = ("default", "public-marketplace", "strict-security")

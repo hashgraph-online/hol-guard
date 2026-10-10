@@ -8,7 +8,7 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from .redaction import redact_local_path, redact_sensitive_text, redact_text
 
@@ -253,20 +253,6 @@ def list_evidence(
     return [_row_to_record(r, include_details=include_details) for r in rows]
 
 
-def search_evidence(
-    conn: sqlite3.Connection,
-    query: str,
-    *,
-    limit: int = 100,
-) -> list[EvidenceRecord]:
-    pattern = f"%{query}%"
-    rows = conn.execute(
-        "select * from guard_evidence where lower(summary) like lower(?) order by created_at desc limit ?",
-        (pattern, limit),
-    ).fetchall()
-    return [_row_to_record(r) for r in rows]
-
-
 def count_evidence(
     conn: sqlite3.Connection,
     *,
@@ -390,19 +376,5 @@ def _sanitize_csv_formula_cell(value: object) -> object:
 
 def clear_evidence(conn: sqlite3.Connection) -> int:
     cursor = conn.execute("delete from guard_evidence")
-    conn.commit()
-    return cursor.rowcount
-
-
-def compact_evidence(conn: sqlite3.Connection, *, retain_days: int = 90) -> int:
-    cutoff = (
-        (datetime.now(timezone.utc) - timedelta(days=retain_days))
-        .isoformat(timespec="microseconds")
-        .replace("+00:00", "Z")
-    )
-    cursor = conn.execute(
-        "delete from guard_evidence where created_at < ?",
-        (cutoff,),
-    )
     conn.commit()
     return cursor.rowcount

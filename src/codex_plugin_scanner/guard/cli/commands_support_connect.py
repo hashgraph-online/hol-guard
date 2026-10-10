@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
@@ -17,15 +17,9 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
 from .connect_sync_result import apply_guard_connect_sync_result
-from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 
-def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
-    resolver = globals().get("_resolve_guard_sync_auth_context")
-    if callable(resolver):
-        return cast(dict[str, object], resolver(store))
-    return _local_resolve_guard_sync_auth_context(store)
 
 def _validate_policy_scope(
     scope: str,
