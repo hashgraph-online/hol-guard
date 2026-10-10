@@ -40,6 +40,23 @@ def _dict_payload(value: object) -> dict[str, object]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+_BUNDLE_KEYS = ("bundleVersion", "expiresAt", "feedSnapshotHash", "policyHash", "tier")
+
+
+def _bundle_projection(value: object) -> dict[str, object]:
+    """Only the identity fields the resident reads, never the advisory bodies.
+
+    A non-empty bundle with none of those fields stays non-empty so the resident
+    still tells a cached bundle apart from no bundle.
+    """
+
+    bundle = _dict_payload(value)
+    projection = {key: bundle[key] for key in _BUNDLE_KEYS if key in bundle}
+    if bundle and not projection:
+        projection["expiresAt"] = None
+    return projection
+
+
 def _hydrate(store: Any, config: GuardConfig, *, now: str | None) -> dict[str, object]:
     from .synced_policy import synced_policy_payload
 
@@ -50,7 +67,7 @@ def _hydrate(store: Any, config: GuardConfig, *, now: str | None) -> dict[str, o
         "summary": _dict_payload(store.get_sync_payload("supply_chain_bundle_summary")),
         "entitlement": _dict_payload(store.get_sync_payload("supply_chain_bundle_entitlement")),
         "remote_policy": _dict_payload(synced_policy_payload(store)),
-        "bundle_payload": _dict_payload(cached_bundle.get("bundle")) if isinstance(cached_bundle, dict) else {},
+        "bundle_payload": _bundle_projection(cached_bundle.get("bundle")) if isinstance(cached_bundle, dict) else {},
         "security_level": config.security_level,
     }
     for key, value in (

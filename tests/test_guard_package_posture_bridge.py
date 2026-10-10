@@ -75,6 +75,25 @@ def test_hydrates_store_facts_and_returns_the_native_posture(monkeypatch: pytest
 
 
 @pytest.mark.parametrize(
+    ("cached", "projected"),
+    [
+        (
+            {"bundleVersion": "b1", "tier": "pro", "advisories": [{"id": "a"}] * 3, "packages": [{"n": "p"}]},
+            {"bundleVersion": "b1", "tier": "pro"},
+        ),
+        ({"advisories": [{"id": "a"}]}, {"expiresAt": None}),
+        ({}, {}),
+    ],
+)
+def test_only_bundle_identity_fields_are_sent(
+    monkeypatch: pytest.MonkeyPatch, cached: dict[str, object], projected: dict[str, object]
+) -> None:
+    monkeypatch.setattr(_Store, "get_cached_supply_chain_bundle", lambda _self, _workspace_id: {"bundle": cached})
+    _posture, seen = _call(monkeypatch, dict(_REPLY))
+    assert seen[0]["bundle_payload"] == projected
+
+
+@pytest.mark.parametrize(
     "reply",
     [
         {key: value for key, value in _REPLY.items() if key != "detail"},
