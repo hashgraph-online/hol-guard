@@ -1,5 +1,5 @@
 use super::{
-    rejects_runtime_policy, retire_foreign_resident_rejecting_policy,
+    rejects_runtime_request, retire_foreign_resident_rejecting_request,
     retire_orphaned_foreign_resident, shutdown_acknowledged, wait_for_resident_stop_containment,
 };
 use crate::resident_state::{
@@ -123,33 +123,63 @@ fn stop_containment_leaves_a_replacement_resident_alone() {
 }
 
 #[test]
-fn only_a_runtime_identity_rejection_counts_as_rejecting_policy() {
-    assert!(rejects_runtime_policy(
+fn only_identity_and_unsupported_schema_rejections_count_as_rejecting_request() {
+    assert!(rejects_runtime_request(
         br#"{"error":"snapshot_runtime_identity_mismatch","retryable":false}"#
     ));
-    assert!(!rejects_runtime_policy(
+    assert!(rejects_runtime_request(
+        br#"{"error":"native_request_schema_unsupported","retryable":false}"#
+    ));
+    // Safe-error mapping folds unlisted errors into this code; it is not a
+    // version signal.
+    assert!(!rejects_runtime_request(
+        br#"{"error":"native_request_invalid_json","retryable":false}"#
+    ));
+    assert!(!rejects_runtime_request(
         br#"{"error":"snapshot_rule_digest_mismatch","retryable":false}"#
     ));
-    assert!(!rejects_runtime_policy(br#"{"status":"accepted"}"#));
-    assert!(!rejects_runtime_policy(b"not json"));
+    assert!(!rejects_runtime_request(br#"{"status":"accepted"}"#));
+    assert!(!rejects_runtime_request(b"not json"));
 }
 
 #[test]
-fn a_policy_rejection_retires_only_an_acknowledging_foreign_resident() {
+fn a_request_rejection_retires_only_an_acknowledging_foreign_resident() {
     let root = test_root("policy-rejection");
     let digest = runtime_digest().unwrap();
     let rejection = br#"{"error":"snapshot_runtime_identity_mismatch","retryable":false}"#;
     let deadline = Instant::now() + Duration::from_millis(200);
     // A resident of this runtime is never replaced by its own client.
-    assert!(!retire_foreign_resident_rejecting_policy(
+    assert!(!retire_foreign_resident_rejecting_request(
         &root,
         &state(&digest),
         &digest,
         rejection,
         deadline
     ));
+    let unsupported = br#"{"error":"native_request_schema_unsupported","retryable":false}"#;
+    assert!(!retire_foreign_resident_rejecting_request(
+        &root,
+        &state(&digest),
+        &digest,
+        unsupported,
+        deadline
+    ));
+    // A foreign resident that answers some other error, including the code
+    // every unlisted failure is rewritten to, keeps its clients' grants.
+    for other in [
+        &br#"{"error":"native_request_invalid_json","retryable":false}"#[..],
+        &br#"{"error":"native_resident_overloaded","retryable":true}"#[..],
+    ] {
+        assert!(!retire_foreign_resident_rejecting_request(
+            &root,
+            &state(&"f".repeat(64)),
+            &digest,
+            other,
+            deadline
+        ));
+    }
     // Any other answer from a foreign resident is returned to the caller.
-    assert!(!retire_foreign_resident_rejecting_policy(
+    assert!(!retire_foreign_resident_rejecting_request(
         &root,
         &state(&"f".repeat(64)),
         &digest,
@@ -157,7 +187,7 @@ fn a_policy_rejection_retires_only_an_acknowledging_foreign_resident() {
         deadline
     ));
     // A foreign resident that does not acknowledge the shutdown stays.
-    assert!(!retire_foreign_resident_rejecting_policy(
+    assert!(!retire_foreign_resident_rejecting_request(
         &root,
         &state(&"f".repeat(64)),
         &digest,

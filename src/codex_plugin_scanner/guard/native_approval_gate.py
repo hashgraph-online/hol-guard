@@ -1,27 +1,30 @@
 """Resident bridge for the ``approval_gate`` op (RTM-009(e)).
 
 Mirrors ``native_pretool.review_pre_tool_native``: each ``approval_gate.py``
-free fn calls :func:`approval_gate_native` first; when the resident answers it
+free fn calls :func:`approval_gate_native`; when the resident answers it
 returns the decoded payload. When no native runtime is provisioned (off,
-missing, incompatible, or capability absent) it returns ``None`` and the caller
-uses the in-process Python body.
+missing, incompatible, capability absent, or an unprovisioned guard home) it
+returns ``None`` and ``approval_gate.py`` decides what that means: nothing is
+recomputed in Python.
 
 The bridge raises ``ApprovalGateError`` (reconstructed from the op's
-``code``/``status``/``message``) for business-rule rejections — those are
+``code``/``status``/``message``) for business-rule rejections - those are
 deterministic and must propagate. A provisioned runtime that fails to answer
-(timeout, overload, malformed or mismatched envelope) is not a reason to
-recompute authority in Python: it raises ``native_approval_gate_unavailable``
-and the caller fails closed.
+(timeout, overload, malformed or mismatched envelope) raises
+``native_approval_gate_unavailable`` and the caller fails closed.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_failure_code, native_resident_client_request
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
@@ -35,11 +38,19 @@ if TYPE_CHECKING:  # pragma: no cover - import cycle guard
 
 _MAX_REQUEST_BYTES = 64 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-_APPROVAL_GATE_FEATURE = "approval-gate-v1"
+_APPROVAL_GATE_FEATURE = "approval-gate-v2"
 _REQUEST_SCHEMA = "guard-approval-gate-request.v1"
 _RESULT_SCHEMA = "guard-approval-gate-result.v1"
 
 _request_counter = 0
+_TOTP_SESSION_ENV_KEYS = (
+    "TERM_SESSION_ID",
+    "WT_SESSION",
+    "WEZTERM_PANE",
+    "KITTY_WINDOW_ID",
+    "TMUX_PANE",
+    "SSH_TTY",
+)
 _UNAVAILABLE_CODE = "native_approval_gate_unavailable"
 # Resident errors meaning this guard home was never provisioned for a resident
 # (no verifier key, no private state directory). They are the same answer as
@@ -97,6 +108,30 @@ def _is_unprovisioned_envelope(envelope: object) -> bool:
     )
 
 
+def _session_signals() -> list[str]:
+    """This process's local OS-session facts; the resident hashes them.
+
+    Only the calling process can observe its own session, so the facts cross
+    the wire and Rust owns the binding digest and its comparison.
+    """
+    signals: list[str] = []
+    getsid = getattr(os, "getsid", None)
+    if callable(getsid):
+        with suppress(OSError):
+            signals.append(f"sid={getsid(0)}")
+    for key in _TOTP_SESSION_ENV_KEYS:
+        value = os.environ.get(key)
+        if value:
+            signals.append(f"{key}={value}")
+    if not signals:
+        try:
+            parent_pid = os.getppid()
+        except (AttributeError, OSError):
+            parent_pid = 0
+        signals.append(f"ppid={parent_pid}" if parent_pid > 0 else f"pid={os.getpid()}")
+    return signals
+
+
 def _unavailable_error():
     return _gate_error_cls()(
         _UNAVAILABLE_CODE,
@@ -143,7 +178,7 @@ def _grant_to_wire(grant: ApprovalGateGrant | None) -> dict[str, object] | None:
         # answer is the fail-closed `approval_gate_required` when a gate is
         # actually enabled, and "no gate required" otherwise.
         return None
-    return {
+    wire: dict[str, object] = {
         "grant_id": grant.grant_id,
         "purpose": grant.purpose,
         "issued_at": grant.issued_at,
@@ -155,10 +190,12 @@ def _grant_to_wire(grant: ApprovalGateGrant | None) -> dict[str, object] | None:
         "factor_set": list(grant.factor_set),
         "strict": bool(grant.strict),
         "used_cooldown": bool(grant.used_cooldown),
-        "cooldown_expires_at": grant.cooldown_expires_at,
         "password_verified": bool(grant.password_verified),
         "totp_verified": bool(grant.totp_verified),
     }
+    if grant.cooldown_expires_at is not None:
+        wire["cooldown_expires_at"] = grant.cooldown_expires_at
+    return wire
 
 
 def approval_gate_native(
@@ -174,6 +211,7 @@ def approval_gate_native(
     duration_seconds: int | None = None,
     device_label: str | None = None,
     timeout_seconds: float = 5.0,
+    provision_prerequisite: bool = False,
 ) -> dict[str, object] | None:
     """Run one approval-gate method in the resident.
 
@@ -194,12 +232,23 @@ def approval_gate_native(
         or _APPROVAL_GATE_FEATURE not in status.capabilities.features
     ):
         return None
+    # Only an explicit configuration operation may establish the home's verifier
+    # key. Passive checks (policy-write, grant and eligibility probes made from
+    # store write paths) must not mint it as a side effect: the policy store and
+    # its publisher own that key, and one derived early from a different store
+    # instance would later conflict with them (for example across a policy
+    # integrity key rotation). Without a key the resident answers "unprovisioned",
+    # which the caller reads as no native authority.
+    if provision_prerequisite and not ensure_resident_prerequisite(Path(guard_home)):
+        return None
 
     request: dict[str, object] = {
         "schema": _REQUEST_SCHEMA,
         "request_id": f"ag-{_request_counter}",
         "guard_home": str(guard_home),
         "method": method,
+        "strict": bool(strict),
+        "session_signals": _session_signals(),
     }
     _request_counter += 1
     if params:
@@ -210,8 +259,6 @@ def approval_gate_native(
     grant_wire = _grant_to_wire(approval_gate_grant)
     if grant_wire is not None:
         request["approval_gate_grant"] = grant_wire
-    if strict:
-        request["strict"] = True
     if purpose is not None:
         request["purpose"] = purpose
     if now is not None:
@@ -262,6 +309,16 @@ def approval_gate_native(
     if not isinstance(envelope, dict) or envelope.get("schema") != _RESULT_SCHEMA:
         native_record_resident_failure(
             status.identity.sha256, guard_home, reason="native_approval_gate_schema_mismatch"
+        )
+        raise _unavailable_error()
+
+    try:
+        expected_digest = "sha256:" + _canonical_request_sha256(request)
+    except (TypeError, ValueError):
+        raise _unavailable_error() from None
+    if envelope.get("request_id") != request["request_id"] or envelope.get("request_sha256") != expected_digest:
+        native_record_resident_failure(
+            status.identity.sha256, guard_home, reason="native_approval_gate_request_binding_mismatch"
         )
         raise _unavailable_error()
 

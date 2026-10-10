@@ -311,6 +311,7 @@ NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES = frozenset(
         "native_resident_spawn_failed",
         "native_resident_spawn_stdin_failed",
         "native_resident_start_in_progress",
+        "native_request_schema_unsupported",
         "native_resident_start_timeout",
         "native_resident_client_retirement_failed",
         "native_resident_state_dir_create_failed",

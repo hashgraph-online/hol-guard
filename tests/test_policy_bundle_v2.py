@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
+import pytest
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
@@ -492,6 +493,7 @@ def test_runtime_canonical_enforcement_compiles_signed_v2_payload() -> None:
     ]
 
 
+@pytest.mark.usefixtures("native_approval_reuse_runtime")
 def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
     legacy = [
         PolicyDecision(
@@ -528,9 +530,9 @@ def test_policy_shadow_comparison_uses_bounded_semantic_reason_codes() -> None:
         ),
     ]
 
-    assert guard_runner._policy_shadow_mismatch_reason_codes([], equivalent) == ("legacy_unavailable",)
-    assert guard_runner._policy_shadow_mismatch_reason_codes(legacy, equivalent) == ()
-    assert guard_runner._policy_shadow_mismatch_reason_codes(legacy, changed) == (
+    assert guard_runner._authority.policy_shadow_mismatch([], equivalent) == ("legacy_unavailable",)
+    assert guard_runner._authority.policy_shadow_mismatch(legacy, equivalent) == ()
+    assert guard_runner._authority.policy_shadow_mismatch(legacy, changed) == (
         "row_count",
         "selector_set",
         "action",
