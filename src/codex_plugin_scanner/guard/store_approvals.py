@@ -267,6 +267,7 @@ def approval_schema_statement() -> str:
           desktop_notified_at text,
           raw_command_text text,
           continuation_snapshot_json text,
+          extension_allow_hint_json text,
           guard_version text,
           first_seen_guard_version text,
           last_seen_guard_version text,
@@ -344,7 +345,7 @@ def list_approval_requests(
                 risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
                 launch_summary, risk_headline, action_envelope_json, decision_v2_json,
                 fallback_cli_command, scanner_evidence_json, watch_only_observation,
-                browser_intent_json, continuation_snapshot_json,
+                browser_intent_json, continuation_snapshot_json, extension_allow_hint_json,
                 review_command,
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
                 raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
@@ -383,6 +384,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 {_column_expr(columns, "watch_only_observation", "0")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 {_column_expr(columns, "continuation_snapshot_json", "NULL")},
+                {_column_expr(columns, "extension_allow_hint_json", "NULL")},
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -426,6 +428,18 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
             ):
                 payload["superseded_by_request_id"] = replacement
     return payload
+
+
+def get_approval_extension_allow_hint(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
+    """Return the private queue-time hint; it never rides along on request payloads."""
+
+    if "extension_allow_hint_json" not in _approval_columns(connection):
+        return None
+    row = connection.execute(
+        "select extension_allow_hint_json from approval_requests where request_id = ?",
+        (request_id,),
+    ).fetchone()
+    return _json_object(row[0]) if row is not None else None
 
 
 def _approval_columns(connection: sqlite3.Connection) -> set[str]:

@@ -47,7 +47,7 @@ from ..runtime.extension_control_proof import (
     issue_extension_control_proof,
 )
 from ..runtime.extension_control_resolver import compose_control_layers
-from ..runtime.extension_control_runtime import ExtensionControlRuntime
+from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from .extension_control_errors import ExtensionControlApiError
 from .extension_control_request import request_needs_proof, required_request_string
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
@@ -94,6 +94,9 @@ class ExtensionControlApiService:
         self._apply_lock = threading.Lock()
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
+
+    def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
+        return self._registry, self._runtime.current()
 
     def catalog(self) -> dict[str, object]:
         limits = advertised_extension_control_limits()

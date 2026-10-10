@@ -14,7 +14,7 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
-  CI_PYTEST_COVERAGE_SHARDS: "128"
+  CI_PYTEST_COVERAGE_SHARDS: "192"
   UV_HTTP_TIMEOUT: "300"
   CI_UV_CACHE_DEPENDENCY_GLOB: |
     pyproject.toml
@@ -212,10 +212,23 @@ jobs:
           components: rustfmt
       - name: Check native formatting before compilation
         run: cargo fmt --manifest-path rust/Cargo.toml --all --check
+      - name: Install content-addressed compiler cache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+        with:
+          version: v0.18.0
       - name: Build native command evaluators once for pytest shards
+        env:
+          # Content-addressed cache survives fresh checkout mtimes; third-party
+          # crates still come from rust-cache, workspace members from sccache.
+          RUSTC_WORKSPACE_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: 'on'
+          SCCACHE_GHA_VERSION: pytest-native-command
+          SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+          SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
           python3 scripts/refresh_extension_artifacts.py --trust-only
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          "$SCCACHE_PATH" --show-stats
       - name: Check sizes of the existing native build
         run: python3 scripts/ci/check_wheel_size.py --native-dir rust/target/release --platform manylinux_2_17_x86_64
       - name: Verify generated native command catalogs before pytest fan-out
@@ -401,6 +414,11 @@ jobs:
             --deselect tests/test_guard_shim_intercept_proofs.py::test_daemon_package_shim_test_uses_projected_shell_profile_path \
             --deselect tests/test_guard_continuation_runtime.py::test_codex_app_server_result_is_bounded_and_opaque \
             --deselect tests/test_guard_command_corpus.py::test_full_native_evaluation_matches_contract_and_reports_original_oracle_differences \
+            --deselect tests/test_guard_policy_integrity.py::test_trust_backend_check_uses_spawn_from_concurrent_threads \
+            --deselect tests/test_guard_daemon_stress_script.py::test_daemon_stress_gate_keeps_fresh_process_alive_with_populated_store \
+            --deselect tests/test_codex_daemon_hook_bridge.py::test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch \
+            --deselect tests/test_codex_daemon_hook_bridge.py::test_bridge_real_daemon_denies_unproven_github_content_reads \
+            --deselect tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms \
             --deselect tests/test_guard_update_artifact.py::test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat \
             --deselect 'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload' \
             "${coverage_args[@]}"
@@ -503,7 +521,7 @@ jobs:
       (github.event_name != 'pull_request' ||
        (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

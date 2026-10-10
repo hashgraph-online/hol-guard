@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import importlib
-import re
 from dataclasses import asdict, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -15,6 +14,7 @@ from ..native_context import (
     is_unbound_context_digest,
     native_context_failure_reason,
 )
+from ..native_mcp_runtime_evidence import argument_entries, native_runtime_action_record, runtime_action_key
 from .approval_context import build_configured_environment_hash
 from .mcp_protection import (
     McpServerIdentity,
@@ -29,16 +29,6 @@ if TYPE_CHECKING:
 
 def _skill_protection_module():
     return importlib.import_module(".skill_protection", __package__)
-
-
-_PACKAGE_MANAGER_PATTERN = re.compile(
-    r"\b(npm|pnpm|yarn|bun|pip|uv|cargo|gem|brew)\b",
-    re.IGNORECASE,
-)
-_SENSITIVE_CLASS_PATTERN = re.compile(
-    r"(secret|token|credential|password|api[_-]?key|pii|phi|payment)",
-    re.IGNORECASE,
-)
 
 
 def _descriptor_digest(material: object) -> str:
@@ -201,38 +191,21 @@ def build_runtime_action_record(
     action_envelope: GuardActionEnvelope | None = None,
     risk_categories: tuple[str, ...] = (),
 ) -> dict[str, object] | None:
-    files_touched = _redacted_paths(_argument_paths(arguments))
-    domains: list[str] = []
-    subprocesses: list[str] = []
-    package_managers: list[str] = []
-    if action_envelope is not None:
-        files_touched.extend(_redacted_paths(action_envelope.target_paths))
-        domains.extend(list(action_envelope.network_hosts))
-        if action_envelope.package_manager:
-            package_managers.append(action_envelope.package_manager)
-        if action_envelope.command:
-            subprocesses.append(action_envelope.command.split()[0])
-    claimed = _claimed_capabilities(artifact)
-    observed = list(risk_categories)
-    sensitive = [
-        category for category in (*risk_categories, *claimed, *observed) if _SENSITIVE_CLASS_PATTERN.search(category)
-    ]
-    for subprocess in subprocesses:
-        match = _PACKAGE_MANAGER_PATTERN.search(subprocess)
-        if match is not None:
-            package_managers.append(match.group(1).lower())
-    payload: dict[str, object] = {
-        "claimedCapabilities": claimed,
-        "domainsContacted": _unique_strings(domains),
-        "filesTouched": _unique_strings(files_touched),
-        "observedCapabilities": observed,
-        "packageManagersInvoked": _unique_strings(package_managers),
-        "sensitiveDataClasses": _unique_strings(sensitive),
-        "subprocessesSpawned": _unique_strings(subprocesses),
-    }
-    if not any(payload.values()):
-        return None
-    return payload
+    """Return the native-owned ``runtimeAction`` evidence record for a tool call."""
+    description = artifact.metadata.get("tool_description")
+    return native_runtime_action_record(
+        tool_description=description if isinstance(description, str) else None,
+        arguments=argument_entries(arguments, mapping_type=dict, relevant=runtime_action_key),
+        risk_categories=risk_categories,
+        envelope=None
+        if action_envelope is None
+        else {
+            "target_paths": list(action_envelope.target_paths),
+            "network_hosts": list(action_envelope.network_hosts),
+            "package_manager": action_envelope.package_manager,
+            "command": action_envelope.command,
+        },
+    )
 
 
 def enrich_artifact_with_mcp_skill_firewall(artifact: GuardArtifact) -> GuardArtifact:
@@ -462,45 +435,6 @@ def _read_text_file(path: str) -> str | None:
         return Path(path).read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
-
-
-def _argument_paths(arguments: object) -> list[str]:
-    if not isinstance(arguments, dict):
-        return []
-    paths: list[str] = []
-    for key, value in arguments.items():
-        normalized = str(key).lower()
-        if any(token in normalized for token in ("path", "file", "target", "source")) and isinstance(value, str):
-            paths.append(value)
-    return paths
-
-
-def _redacted_paths(paths: tuple[str, ...] | list[str]) -> list[str]:
-    redacted: list[str] = []
-    for path in paths:
-        normalized = path.replace("\\", "/")
-        segments = [segment for segment in normalized.split("/") if segment]
-        redacted.append(f"[redacted]/{segments[-1]}" if segments else "[redacted-path]")
-    return redacted
-
-
-def _claimed_capabilities(artifact: GuardArtifact) -> list[str]:
-    description = artifact.metadata.get("tool_description")
-    if isinstance(description, str) and description.strip():
-        return ["tool_description"]
-    return []
-
-
-def _unique_strings(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        normalized = value.strip()
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        ordered.append(normalized)
-    return ordered
 
 
 __all__ = [
