@@ -17,6 +17,8 @@ mod compound_git_inspection;
 pub use compound_git_inspection::*;
 mod approval_reuse_diagnostic;
 pub use approval_reuse_diagnostic::*;
+mod policy_bundle_authority;
+pub use policy_bundle_authority::*;
 mod claim_approval_reuse;
 pub use claim_approval_reuse::*;
 mod guard_store;

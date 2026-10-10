@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
@@ -18,8 +18,11 @@ from .managed_controls_policy_bundle import (
     managed_controls_layers_from_activation_state,
     managed_controls_revision_from_state,
 )
+from .native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
 from .policy_bundle_activation import (
     PolicyBundleActivationRejectionError,
+    PrecomputedVerdicts,
+    ResidentVerdictRequiredError,
     composed_managed_authority,
     encoded_delivery_acknowledgement,
     managed_delivery_matches_base,
@@ -70,6 +73,7 @@ _LOGGER = logging.getLogger(__name__)
 APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON = "approval_reuse_integrity_failure"
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
+_RESIDENT_VERDICT_ATTEMPTS = 6
 
 
 def _memory_artifact_is_shell_command(
@@ -379,7 +383,37 @@ class StorePolicyMixin:
         with self._connect() as connection:
             self._replace_remote_policy_rows_locked(connection, rows)
 
-    def apply_policy_bundle_authority(
+    def apply_policy_bundle_authority(self, *args: Any, **kwargs: Any) -> dict[str, object] | None:
+        """Activate one authenticated policy bundle atomically.
+
+        The resident computes the delivery acknowledgement and the anti-downgrade
+        verdict, which can take seconds. They must never run while the authority
+        lock and the SQLite write transaction are held, so they are computed
+        between attempts. Each attempt re-reads the state those verdicts depend
+        on under the lock and only uses a precomputed result that was derived
+        from exactly that state.
+        """
+
+        verdicts = PrecomputedVerdicts()
+        for _attempt in range(_RESIDENT_VERDICT_ATTEMPTS):
+            try:
+                return self._apply_policy_bundle_authority_attempt(*args, verdicts=verdicts, **kwargs)
+            except ResidentVerdictRequiredError as required:
+                try:
+                    verdicts.fill(required)
+                except PolicyBundleNativeUnavailableError:
+                    raise
+                except (json.JSONDecodeError, TypeError, ValueError, PolicyBundleNativeError):
+                    return self._reject_policy_bundle_activation(required.invalid_reason, kwargs)
+        return self._reject_policy_bundle_activation("policy_bundle_activation_contended", kwargs)
+
+    @staticmethod
+    def _reject_policy_bundle_activation(reason: str, kwargs: Mapping[str, Any]) -> None:
+        if kwargs.get("raise_on_rejection"):
+            raise PolicyBundleActivationRejectionError(reason)
+        return None
+
+    def _apply_policy_bundle_authority_attempt(
         self,
         decisions: list[PolicyDecision],
         now: str,
@@ -399,6 +433,7 @@ class StorePolicyMixin:
         raise_on_rejection: bool = False,
         approval_gate_grant: ApprovalGateGrant | None = None,
         remote_write_authorized: bool = False,
+        verdicts: PrecomputedVerdicts | None = None,
     ) -> dict[str, object] | None:
         """Atomically activate one authenticated policy bundle and its rows.
 
@@ -473,7 +508,11 @@ class StorePolicyMixin:
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
                     return reject("managed_controls_authority_key_unavailable", connection)
-            checkpoint_rejection = policy_checkpoint_rejection(connection, policy_bundle)
+            try:
+                checkpoint_rejection = policy_checkpoint_rejection(connection, policy_bundle, verdicts)
+            except ResidentVerdictRequiredError:
+                connection.rollback()
+                raise
             if checkpoint_rejection is not None:
                 return reject(checkpoint_rejection, connection)
             active_row = connection.execute(
@@ -603,7 +642,11 @@ class StorePolicyMixin:
                         policy_bundle=policy_bundle,
                         published_authority=published_authority,
                         observed_at=normalized_now,
+                        verdicts=verdicts,
                     )
+                except ResidentVerdictRequiredError:
+                    connection.rollback()
+                    raise
                 except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
             continuity_rejection = apply_continuity_rejection(

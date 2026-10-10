@@ -36,7 +36,10 @@ uv run --no-sync python scripts/prepare_extension_contribution.py \
 ```
 
 The command validates the exact source/fixture binding through native evaluation with zero target
-command execution and synchronizes the checked-in projections. Follow it with the handoff check:
+command execution and generates that extension's public JSON record. Include this record in the
+same contribution PR: it preserves the public metadata, publisher links, and contribution evidence.
+Runtime projections go to ignored build directories; this command does not update the shared
+directory catalogs or unrelated public descriptors. Follow it with the handoff check:
 
 ```sh
 uv run --no-sync hol-guard extensions handoff --repo . \
@@ -51,6 +54,12 @@ Use `--check` with the preparation command to verify an already prepared change.
 credit, upstream, and claim-readiness metadata belongs in
 `contributions/extension-listings/command.<name>.json`; it is documented in
 [publisher metadata](publisher-metadata.md). Contributor credit never grants claim authority.
+
+Required CI verifies public descriptors against the committed source before generating runtime
+files, so a missing or stale record fails the original contribution PR. After merges, the existing
+publication workflow builds an immutable directory snapshot automatically; no follow-up publication
+PR is needed. `--publish-directory` is reserved for a complete publication preview in CI or a
+maintainer workspace.
 
 When a ready-for-review PR has a mechanical source, fixture, schema, or generated-projection
 problem, Gitar can apply the deterministic repair. It does not choose matcher semantics, trust

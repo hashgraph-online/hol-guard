@@ -23,6 +23,7 @@ hex.workspace = true
 fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
+rsa.workspace = true
 rusqlite.workspace = true
 guard-secure-fs = { path = "../guard-secure-fs" }
 serde.workspace = true

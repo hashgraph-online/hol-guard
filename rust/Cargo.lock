@@ -844,6 +844,7 @@ dependencies = [
  "nix",
  "pbkdf2",
  "ring",
+ "rsa",
  "rusqlite",
  "scrypt",
  "seccompiler",
