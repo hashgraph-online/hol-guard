@@ -44,11 +44,6 @@ _LIFECYCLE_CANONICAL_BY_COMPACT = {
 }
 
 
-def lifecycle_event_is_observe_only(event_name: str) -> bool:
-    compact = _compact_hook_event_name(event_name)
-    return compact in _LIFECYCLE_CANONICAL_BY_COMPACT and compact not in {"userpromptsubmit", "userpromptsubmitted"}
-
-
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
     """True when native miss must pause the harness instead of continuing the turn."""
 
@@ -292,6 +287,5 @@ __all__ = [
     "hook_event_pauses_when_unavailable",
     "hook_reason_continues_session",
     "hook_review_is_recording_only",
-    "lifecycle_event_is_observe_only",
     "recording_only_pre_tool_response",
 ]

@@ -109,30 +109,11 @@ def normalize_browser_mcp_intent(
     )
 
 
-def browser_intent_display_target(
-    intent: GuardBrowserAutomationIntentV1,
-    arguments: object,
-) -> str:
-    return context_browser_mcp(
-        {
-            "operation": "display",
-            "intent": {
-                "intent": intent.intent,
-                "operation": intent.operation,
-                "target_domain": intent.target_domain,
-                "target_origin": intent.target_origin,
-            },
-            "arguments": _argument_dto(arguments),
-        }
-    )["target"]
-
-
 __all__ = [
     "BrowserIntent",
     "BrowserMethod",
     "BrowserProfileMode",
     "GuardBrowserAutomationIntentV1",
-    "browser_intent_display_target",
     "classify_browser_operation",
     "is_browser_mcp_server",
     "normalize_browser_mcp_intent",

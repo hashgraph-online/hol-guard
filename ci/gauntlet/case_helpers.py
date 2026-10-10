@@ -11,6 +11,7 @@ from .agent_prompt import scenario_prompt
 from .catalog import Scenario
 from .evidence import public_events, read_events
 from .fixtures import Fixture
+from .host_evidence import complete_host_events
 from .input_evidence import fixture_path_aliases, public_observations
 
 FIXTURE_SYSTEM_CONTEXT = (
@@ -81,7 +82,9 @@ def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
     return replacements
 
 
-def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str]) -> None:
+def read_case_logs(
+    case: dict[str, Any], raw_log: Path, guard_log: Path, replacements: dict[str, str], host_log: Path | None = None
+) -> None:
     """Retain Guard timings even when the independently parsed host transcript fails."""
     if guard_log.exists():
         try:
@@ -91,7 +94,11 @@ def read_case_logs(case: dict[str, Any], raw_log: Path, guard_log: Path, replace
             case["guard_observations"] = public_observations(rows, replacements)
         except (OSError, UnicodeError, ValueError, TypeError) as exc:
             case["guard_observation_error"] = type(exc).__name__
+    # Keep independently parsed parent evidence available for precise cleanup
+    # even if the complete SDK lifecycle does not reconcile.
     case["events"] = public_events(read_events(raw_log), replacements)
+    if host_log is not None:
+        case["events"], case["delegated_call_ids"] = complete_host_events(raw_log, host_log, replacements)
 
 
 def _scenario_prompt(scenario: Scenario) -> str:

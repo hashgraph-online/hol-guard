@@ -1005,10 +1005,6 @@ def _post_tool_package_request_was_already_evaluated(
     return pre_execution_result is not None
 
 
-def _codex_text_contains_sensitive_path_token(text: str, *, cwd: Path | None) -> bool:
-    return bool(_codex_sensitive_path_matches_in_text(text, cwd=cwd))
-
-
 def _codex_command_may_read_local_content(command_text: str, *, cwd: Path | None) -> bool:
     execution_context = model_shell_execution_context(command_text, cwd=cwd, workspace_root=cwd)
     if execution_context.directory_change_present:
@@ -1043,7 +1039,6 @@ __all__ = [
     "_codex_post_tool_output_artifact",
     "_codex_sensitive_local_source_matches",
     "_codex_sensitive_path_matches_in_text",
-    "_codex_text_contains_sensitive_path_token",
     "_codex_token_is_url",
     "_codex_token_prefix_is_url_scheme",
     "_codex_url_like_local_path_tokens",
