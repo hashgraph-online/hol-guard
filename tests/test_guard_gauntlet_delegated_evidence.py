@@ -62,7 +62,12 @@ def test_eval_bridge_requires_complete_hooks_inside_actual_model_eval() -> None:
     calls, errors = reconcile(events)
     assert not errors and len(calls) == 2
     assert calls[1]["bridge_parent_id"] == "eval"
-    for broken in [events[:-1], events[:2] + events[3:], [*events[:2], events[2], events[2], *events[3:]]]:
+    for broken in [
+        events[:-1],
+        events[:2] + events[3:],
+        [*events[:2], events[2], events[2], *events[3:]],
+        [*events, events[-1]],
+    ]:
         assert reconcile(broken)[1]
     altered = deepcopy(events)
     altered[3]["event"]["input"]["path"] = ".env"
