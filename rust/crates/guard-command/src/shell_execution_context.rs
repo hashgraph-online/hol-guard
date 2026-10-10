@@ -9,6 +9,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use crate::shell_execution_context_support::*;
+pub use crate::shell_execution_context_support::{ShellPathIdentity, ShellPathProof};
 
 fn shell_directory_command_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
