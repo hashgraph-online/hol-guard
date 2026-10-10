@@ -150,7 +150,17 @@ def select(
         raise ValueError("Invalid run identity")
     base = f"/repos/{repository}/actions/runs/{run_id}"
     deadline = clock() + timeout
-    while clock() < deadline:
+
+    def wait() -> bool:
+        # Sleep no further than the deadline, then poll once more so an
+        # artifact uploaded during the last sleep is still found.
+        remaining = deadline - clock()
+        if remaining <= 0:
+            return False
+        sleep(min(_POLL_SECONDS, remaining))
+        return True
+
+    while True:
         run = fetch(base, 10.0)
         if (
             not isinstance(run, dict)
@@ -171,7 +181,8 @@ def select(
         if not jobs:
             if run.get("status") == "completed":
                 raise ValueError("Current attempt has no Clippy producer")
-            sleep(_POLL_SECONDS)
+            if not wait():
+                break
             continue
         job = jobs[0]
         if (
@@ -181,13 +192,15 @@ def select(
         ):
             raise ValueError("Clippy producer identity mismatch")
         if barrier._job_state(job, "Clippy producer") != "success":
-            sleep(_POLL_SECONDS)
+            if not wait():
+                break
             continue
         barrier._require_current_execution(job, "Clippy producer")
         name = f"clippy-report-{attempt}"
         artifacts = [item for item in _pages(f"{base}/artifacts", "artifacts", fetch) if item.get("name") == name]
         if not artifacts:
-            sleep(_POLL_SECONDS)
+            if not wait():
+                break
             continue
         if len(artifacts) != 1:
             raise ValueError("Ambiguous Clippy artifact")
