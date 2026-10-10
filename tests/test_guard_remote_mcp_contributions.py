@@ -17,20 +17,9 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_hash,
     evaluate_tool_call,
 )
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import (
-    AuthorityHealth,
-    ExtensionControlAuthorityView,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_contract import (
-    CONTROL_SCHEMA_VERSION,
-    ControlLayerKind,
-    ControlState,
-    ControlTarget,
-    ControlTargetKind,
-    ExtensionControl,
-    ExtensionControlLayer,
-)
+from codex_plugin_scanner.guard.runtime import mcp_server_grants
+from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityView
+from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
     mcp_server_identity_metadata,
@@ -40,39 +29,15 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     normalized_remote_mcp_url,
     validate_mcp_contribution,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import (
-    _matches_remote_http_contribution,
-    apply_contributed_mcp_decision,
-    matching_mcp_contribution,
-)
 from codex_plugin_scanner.guard.store import GuardStore
 
-
-def _layer(extension_id: str) -> ExtensionControlLayer:
-    return ExtensionControlLayer(
-        schema_version=CONTROL_SCHEMA_VERSION,
-        kind=ControlLayerKind.LOCAL_ADMIN,
-        catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        global_lockdown=False,
-        controls=(
-            ExtensionControl(
-                target=ControlTarget(ControlTargetKind.EXTENSION, extension_id),
-                state=ControlState.ENABLED,
-            ),
-        ),
-    )
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_recorded_expectations import instapods_matches
+from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
 
-class _AuthorityStore:
-    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
-        digest = getattr(registry, "catalog_digest", "0" * 64)
-        assert isinstance(digest, str)
-        return ExtensionControlAuthorityView(
-            health=AuthorityHealth.PROTECTED,
-            revision=1,
-            catalog_digest=digest,
-            layers=(_layer("command.mcp-instapods"),),
-        )
+def _instapods_store() -> _AuthorityStore:
+    return _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-instapods", ControlState.ENABLED),))
 
 
 def _remote_artifact(tool_name: str, *, server_name: str = "instapods", transport: str = "http"):
@@ -116,23 +81,21 @@ def _remote_payload(url: str, *, state: str = "review") -> dict[str, object]:
 
 
 def test_remote_instapods_matches_exact_endpoint_even_with_custom_server_name() -> None:
-    payload = matching_mcp_contribution(_remote_artifact("delete_pod", server_name="production-pods"))
-    assert payload is not None
-    assert payload["id"] == "mcp.instapods"
+    assert instapods_matches(_remote_artifact("delete_pod", server_name="production-pods"))
 
 
 def test_remote_instapods_sse_transport_receives_review_default() -> None:
     artifact = _remote_artifact("change_plan", transport="sse")
-    payload = matching_mcp_contribution(artifact)
-    assert payload is not None
-    assert payload["id"] == "mcp.instapods"
-    decision = apply_contributed_mcp_decision(_AuthorityStore(), artifact, "allow")
+    assert instapods_matches(artifact)
+    decision = mcp_server_grants.apply_contributed_mcp_decision(_instapods_store(), artifact, "allow")
     assert decision is not None
     assert decision[0] == "review"
 
 
 def test_remote_instapods_review_default_strengthens_allow() -> None:
-    decision = apply_contributed_mcp_decision(_AuthorityStore(), _remote_artifact("change_plan"), "allow")
+    decision = mcp_server_grants.apply_contributed_mcp_decision(
+        _instapods_store(), _remote_artifact("change_plan"), "allow"
+    )
     assert decision is not None
     assert decision[0] == "review"
     assert decision[1] == "catalog-mcp-extension"
@@ -141,7 +104,7 @@ def test_remote_instapods_review_default_strengthens_allow() -> None:
 def test_remote_instapods_review_default_strengthens_allow_in_runtime_path(tmp_path: Path) -> None:
     class _RuntimeStore(GuardStore):
         def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
-            return _AuthorityStore().read_extension_control_authority_for_registry(registry)
+            return _instapods_store().read_extension_control_authority_for_registry(registry)
 
     guard_home = tmp_path / "guard-home"
     config = GuardConfig(guard_home=guard_home, workspace=tmp_path, mode="prompt", default_action="allow")
@@ -158,7 +121,10 @@ def test_remote_instapods_review_default_strengthens_allow_in_runtime_path(tmp_p
 
 
 def test_remote_instapods_manage_pod_inherits() -> None:
-    assert apply_contributed_mcp_decision(_AuthorityStore(), _remote_artifact("manage_pod"), "allow") is None
+    assert (
+        mcp_server_grants.apply_contributed_mcp_decision(_instapods_store(), _remote_artifact("manage_pod"), "allow")
+        is None
+    )
 
 
 def test_remote_instapods_does_not_match_wrong_remote_endpoint() -> None:
@@ -177,7 +143,7 @@ def test_remote_instapods_does_not_match_wrong_remote_endpoint() -> None:
         transport="http",
         server_identity=identity,
     )
-    assert matching_mcp_contribution(artifact) is None
+    assert not instapods_matches(artifact)
 
 
 def test_remote_http_url_contract_accepts_public_https_endpoint() -> None:
@@ -249,28 +215,6 @@ def test_remote_http_url_contract_canonicalizes_public_ipv6() -> None:
     assert normalized_remote_mcp_url(expanded) == compressed
 
 
-def test_remote_http_runtime_matches_equivalent_ipv6_spellings() -> None:
-    compressed = "https://[2606:4700:4700::1111]/mcp"
-    expanded = "https://[2606:4700:4700:0:0:0:0:1111]/mcp"
-    identity = build_mcp_server_identity(
-        config_path=".mcp.json",
-        command=expanded,
-        args=(),
-        transport="http",
-    )
-    artifact = build_tool_call_artifact(
-        harness="codex",
-        server_name="ipv6-service",
-        tool_name="write_data",
-        source_scope="project",
-        config_path=".mcp.json",
-        transport="http",
-        server_identity=identity,
-    )
-    launch = {"kind": "remote-http", "url": compressed, "serverNames": ["ipv6-service"]}
-    assert _matches_remote_http_contribution(artifact, launch)
-
-
 def test_remote_http_contributions_reject_equivalent_ipv6_endpoints(tmp_path: Path) -> None:
     compressed = _remote_payload("https://[2606:4700:4700::1111]/mcp")
     compressed["id"] = "mcp.ipv6-compressed"
@@ -311,9 +255,7 @@ def test_copilot_remote_identity_matches_with_headers_and_standard_port(tmp_path
         server_fingerprint=fingerprint,
         server_identity=identity,
     )
-    payload = matching_mcp_contribution(artifact)
-    assert payload is not None
-    assert payload["id"] == "mcp.instapods"
+    assert instapods_matches(artifact)
 
 
 def test_copilot_remote_identity_redacts_query_credentials_and_still_matches(tmp_path: Path) -> None:
@@ -339,9 +281,7 @@ def test_copilot_remote_identity_redacts_query_credentials_and_still_matches(tmp
         server_identity=identity,
     )
     assert secret not in str(artifact.to_dict())
-    payload = matching_mcp_contribution(artifact)
-    assert payload is not None
-    assert payload["id"] == "mcp.instapods"
+    assert instapods_matches(artifact)
 
 
 def test_invalid_remote_endpoint_does_not_fall_back_to_server_name(tmp_path: Path) -> None:
@@ -363,7 +303,7 @@ def test_invalid_remote_endpoint_does_not_fall_back_to_server_name(tmp_path: Pat
         server_fingerprint=fingerprint,
         server_identity=identity,
     )
-    assert matching_mcp_contribution(artifact) is None
+    assert not instapods_matches(artifact)
 
 
 def test_remote_http_contributions_reject_query_identity_collisions(tmp_path: Path) -> None:

@@ -1,15 +1,29 @@
-"""Side-effect-free shell working-directory execution context modeling."""
+"""Shell working-directory execution context: native adapter.
+
+The resident owns path resolution, symlink and descriptor identity checks, the
+directory-change model, and every context hash. This module only keeps the
+public dataclass shapes and converts the resident's wire reply into them. A
+context is a claim: validation and hashing go back to the resident, and an
+unavailable resident yields an incomplete context (never an allow).
+"""
 
 from __future__ import annotations
 
 import shlex
-from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from ..native_context import context_sha256_digest
+from ..native_context import _UNBOUND_PREFIX
+from ..native_request_context import (
+    NativeRequestContextFailure,
+    RequestContextSource,
+    native_request_context_build,
+    native_shell_hashes,
+    native_shell_validate_segment,
+)
 from ._shell_execution_context_support import (
-    MAX_DIRECTORY_STACK_DEPTH,
     SHELL_CWD_AMBIGUOUS_STACK,
     SHELL_CWD_MISSING_DIRECTORY,
     SHELL_CWD_NOT_DIRECTORY,
@@ -23,20 +37,13 @@ from ._shell_execution_context_support import (
     SHELL_CWD_UNRESOLVED_SYNTAX,
     SHELL_CWD_WORKSPACE_ESCAPE,
     SHELL_DIRECTORY_COMMAND,
-    DirectoryOperation,
     ShellPathIdentity,
     ShellPathProof,
-    control_sequence_reason,
-    directory_operation,
-    existing_directory,
-    is_within,
     last_flow_operator,
-    ordered_segments,
-    parent_shell_cwd_construct_reason,
-    resolve_directory_operand,
     shell_path_identity_payload,
-    split_shell_tokens,
 )
+
+SHELL_CWD_NATIVE_UNAVAILABLE = "shell_cwd_native_unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,6 +73,16 @@ class ShellExecutionSegment:
 
 
 @dataclass(frozen=True, slots=True)
+class _NativeBinding:
+    """Resident-issued hashes, valid only for the exact wire form they cover."""
+
+    wire: Mapping[str, Any]
+    context_hash: str
+    segment_hashes: tuple[str, ...]
+    metadata: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
 class ShellExecutionContext:
     """Canonical, immutable directory context for an entire shell command."""
 
@@ -77,6 +94,7 @@ class ShellExecutionContext:
     complete: bool
     reason_code: str | None
     directory_change_present: bool
+    native: _NativeBinding | None = field(default=None, compare=False, repr=False)
 
     @property
     def effective_cwds(self) -> tuple[Path, ...]:
@@ -93,21 +111,154 @@ class ShellExecutionContext:
         return shell_execution_context_hash(self)
 
 
-@dataclass(frozen=True, slots=True)
-class _ShellState:
-    cwd: Path | None
-    cwd_identity: ShellPathIdentity | None
-    cwd_path_proofs: tuple[ShellPathProof, ...]
-    cwd_source: str
-    stack: tuple[_DirectoryStackEntry, ...]
-    reason_code: str | None = None
+def _flag(value: object) -> bool:
+    if not isinstance(value, bool):
+        raise ValueError("shell context flag must be a boolean")
+    return value
 
 
-@dataclass(frozen=True, slots=True)
-class _DirectoryStackEntry:
-    cwd: Path
-    cwd_identity: ShellPathIdentity
-    cwd_path_proofs: tuple[ShellPathProof, ...]
+def _strings(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise ValueError("shell context field must be a list of strings")
+    return tuple(value)
+
+
+def _text(value: object) -> str:
+    if not isinstance(value, str):
+        raise ValueError("shell context field must be a string")
+    return value
+
+
+def _index(value: object) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError("shell context index must be an integer")
+    return value
+
+
+def _optional_str(value: object) -> str | None:
+    if value is not None and not isinstance(value, str):
+        raise ValueError("shell context field must be a string")
+    return value
+
+
+def _identity_from_wire(value: Mapping[str, Any] | None) -> ShellPathIdentity | None:
+    if value is None:
+        return None
+    return ShellPathIdentity(
+        device=value["device"],
+        inode=value["inode"],
+        mode=value["mode"],
+        change_time_ns=value["change_time_ns"],
+        creation_time_ns=value["creation_time_ns"],
+    )
+
+
+def _required_identity(value: Mapping[str, Any]) -> ShellPathIdentity:
+    identity = _identity_from_wire(value)
+    if identity is None:
+        raise ValueError("shell path proof identity is required")
+    return identity
+
+
+def _optional_text(path: Path | None) -> str | None:
+    return str(path) if path is not None else None
+
+
+def _segment_wire(segment: ShellExecutionSegment) -> dict[str, Any]:
+    return {
+        "tokens": list(segment.tokens),
+        "segment_index": segment.segment_index,
+        "control_before": list(segment.control_before),
+        "control_after": list(segment.control_after),
+        "effective_cwd": _optional_text(segment.effective_cwd),
+        "cwd_identity": shell_path_identity_payload(segment.cwd_identity),
+        "cwd_path_proofs": [
+            {
+                "lexical_path": str(proof.lexical_path),
+                "resolved_path": str(proof.resolved_path),
+                "identity": shell_path_identity_payload(proof.identity),
+            }
+            for proof in segment.cwd_path_proofs
+        ],
+        "cwd_source": segment.cwd_source,
+        "directory_stack": [str(path) for path in segment.directory_stack],
+        "complete": segment.complete,
+        "reason_code": segment.reason_code,
+        "directory_operation": segment.directory_operation,
+    }
+
+
+def _context_wire(
+    context: ShellExecutionContext,
+    segments: Sequence[ShellExecutionSegment] | None = None,
+) -> dict[str, Any]:
+    return {
+        "command_text": context.command_text,
+        "initial_cwd": _optional_text(context.initial_cwd),
+        "workspace_root": _optional_text(context.workspace_root),
+        "workspace_identity": shell_path_identity_payload(context.workspace_identity),
+        "segments": [_segment_wire(segment) for segment in (context.segments if segments is None else segments)],
+        "complete": context.complete,
+        "reason_code": context.reason_code,
+        "directory_change_present": context.directory_change_present,
+    }
+
+
+def _segment_from_wire(value: Mapping[str, Any]) -> ShellExecutionSegment:
+    return ShellExecutionSegment(
+        tokens=_strings(value["tokens"]),
+        segment_index=_index(value["segment_index"]),
+        control_before=_strings(value["control_before"]),
+        control_after=_strings(value["control_after"]),
+        effective_cwd=Path(value["effective_cwd"]) if value["effective_cwd"] is not None else None,
+        cwd_identity=_identity_from_wire(value["cwd_identity"]),
+        cwd_path_proofs=tuple(
+            ShellPathProof(
+                lexical_path=Path(proof["lexical_path"]),
+                resolved_path=Path(proof["resolved_path"]),
+                identity=_required_identity(proof["identity"]),
+            )
+            for proof in value["cwd_path_proofs"]
+        ),
+        cwd_source=_text(value["cwd_source"]),
+        directory_stack=tuple(Path(item) for item in _strings(value["directory_stack"])),
+        complete=_flag(value["complete"]),
+        reason_code=_optional_str(value["reason_code"]),
+        directory_operation=_optional_str(value["directory_operation"]),
+    )
+
+
+def _context_from_report(report: Mapping[str, Any]) -> ShellExecutionContext:
+    wire = report["context"]
+    return ShellExecutionContext(
+        command_text=_text(wire["command_text"]),
+        initial_cwd=Path(wire["initial_cwd"]) if wire["initial_cwd"] is not None else None,
+        workspace_root=Path(wire["workspace_root"]) if wire["workspace_root"] is not None else None,
+        workspace_identity=_identity_from_wire(wire["workspace_identity"]),
+        segments=tuple(_segment_from_wire(segment) for segment in wire["segments"]),
+        complete=_flag(wire["complete"]),
+        reason_code=_optional_str(wire["reason_code"]),
+        directory_change_present=_flag(wire["directory_change_present"]),
+        native=_NativeBinding(
+            wire=wire,
+            context_hash=report["context_hash"],
+            segment_hashes=tuple(report["segment_hashes"]),
+            metadata=report["metadata"],
+        ),
+    )
+
+
+def _unavailable_context(command_text: str, code: str) -> ShellExecutionContext:
+    return ShellExecutionContext(
+        command_text=command_text,
+        initial_cwd=None,
+        workspace_root=None,
+        workspace_identity=None,
+        segments=(),
+        complete=False,
+        reason_code=code or SHELL_CWD_NATIVE_UNAVAILABLE,
+        directory_change_present=True,
+    )
 
 
 def model_shell_execution_context(
@@ -116,137 +267,24 @@ def model_shell_execution_context(
     cwd: Path | None = None,
     workspace_root: Path | None = None,
     home_dir: Path | None = None,
+    source: RequestContextSource = "hook",
 ) -> ShellExecutionContext:
-    """Model literal shell directory changes without executing shell code."""
+    """Ask the resident to model literal shell directory changes."""
 
-    directory_change_present = bool(SHELL_DIRECTORY_COMMAND.search(command_text))
-    initial_input = cwd or Path.cwd()
-    root_input = workspace_root or initial_input
-    initial_cwd, initial_identity, initial_reason = existing_directory(initial_input)
-    root, root_identity, root_reason = existing_directory(root_input)
-    reason_code = initial_reason or root_reason
-    if reason_code is None and initial_cwd is not None and root is not None and not is_within(initial_cwd, root):
-        reason_code = SHELL_CWD_WORKSPACE_ESCAPE
+    result = native_request_context_build(
+        source=source,
+        script=command_text,
+        cwd=cwd,
+        workspace=workspace_root,
+        home_dir=home_dir,
+    )
+    if isinstance(result, NativeRequestContextFailure) or result.shell is None:
+        return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)
     try:
-        tokens = split_shell_tokens(command_text)
-    except ValueError:
-        return ShellExecutionContext(
-            command_text=command_text,
-            initial_cwd=initial_cwd,
-            workspace_root=root,
-            workspace_identity=root_identity,
-            segments=(),
-            complete=not directory_change_present,
-            reason_code=SHELL_CWD_UNRESOLVED_SYNTAX if directory_change_present else None,
-            directory_change_present=directory_change_present,
-        )
-
-    raw_segments, trailing_controls = ordered_segments(tokens)
-    parent_shell_reason = parent_shell_cwd_construct_reason(raw_segments, trailing_controls)
-    if parent_shell_reason is not None:
-        reason_code = reason_code or parent_shell_reason
-        directory_change_present = True
-    if not raw_segments:
-        return ShellExecutionContext(
-            command_text=command_text,
-            initial_cwd=initial_cwd,
-            workspace_root=root,
-            workspace_identity=root_identity,
-            segments=(),
-            complete=reason_code is None and not directory_change_present,
-            reason_code=reason_code or (SHELL_CWD_UNRESOLVED_SYNTAX if directory_change_present else None),
-            directory_change_present=directory_change_present,
-        )
-
-    state = _ShellState(
-        cwd=initial_cwd if reason_code is None else None,
-        cwd_identity=initial_identity if reason_code is None else None,
-        cwd_path_proofs=(),
-        cwd_source="workspace" if cwd is not None else "process",
-        stack=(),
-        reason_code=reason_code,
-    )
-    group_states: list[tuple[str, _ShellState | None]] = []
-    segments: list[ShellExecutionSegment] = []
-    first_reason = reason_code
-
-    for index, (segment_tokens, controls_before) in enumerate(raw_segments):
-        controls_after = raw_segments[index + 1][1] if index + 1 < len(raw_segments) else trailing_controls
-        state, boundary_reason = _apply_group_boundaries_before_segment(
-            state,
-            controls_before,
-            group_states=group_states,
-        )
-        segment_reason = state.reason_code or boundary_reason or control_sequence_reason(controls_before)
-        operation = directory_operation(segment_tokens)
-        if operation is not None:
-            directory_change_present = True
-            flow_before = last_flow_operator(controls_before)
-            previous_segment = segments[-1] if segments else None
-            if flow_before in {"&&", "||"} and (
-                previous_segment is None
-                or previous_segment.directory_operation is None
-                or not previous_segment.complete
-                or flow_before == "||"
-            ):
-                operation = replace(operation, reason_code=SHELL_CWD_UNRESOLVED_CONTROL_FLOW)
-            segment_reason = segment_reason or operation.reason_code
-        segment = ShellExecutionSegment(
-            tokens=segment_tokens,
-            segment_index=index,
-            control_before=controls_before,
-            control_after=controls_after,
-            effective_cwd=state.cwd,
-            cwd_identity=state.cwd_identity,
-            cwd_path_proofs=state.cwd_path_proofs,
-            cwd_source=state.cwd_source,
-            directory_stack=tuple(entry.cwd for entry in state.stack),
-            complete=segment_reason is None,
-            reason_code=segment_reason,
-            directory_operation=operation.name if operation is not None else None,
-        )
-        if operation is not None:
-            state, operation_reason = _apply_directory_operation(
-                operation,
-                state,
-                workspace_root=root,
-                home_dir=home_dir,
-                controls_before=controls_before,
-                controls_after=controls_after,
-            )
-            if operation_reason is not None:
-                segment = replace(segment, complete=False, reason_code=operation_reason)
-                segment_reason = operation_reason
-        segments.append(segment)
-        if first_reason is None and segment_reason is not None:
-            first_reason = segment_reason
-
-    _trailing_state, trailing_boundary_reason = _apply_group_boundaries_before_segment(
-        state,
-        trailing_controls,
-        group_states=group_states,
-    )
-    trailing_reason = trailing_boundary_reason or control_sequence_reason(trailing_controls, trailing=True)
-    if trailing_reason is None and any(token in {"(", "{"} for token in trailing_controls):
-        trailing_reason = SHELL_CWD_UNRESOLVED_SYNTAX
-    if group_states:
-        trailing_reason = trailing_reason or SHELL_CWD_UNRESOLVED_SYNTAX
-    if first_reason is None and trailing_reason is not None and directory_change_present:
-        first_reason = trailing_reason
-    complete = first_reason is None
-    if directory_change_present and trailing_reason is not None and segments:
-        segments[-1] = replace(segments[-1], complete=False, reason_code=trailing_reason)
-        complete = False
-    return ShellExecutionContext(
-        command_text=command_text,
-        initial_cwd=initial_cwd,
-        workspace_root=root,
-        workspace_identity=root_identity,
-        segments=tuple(segments),
-        complete=complete,
-        reason_code=first_reason,
-        directory_change_present=directory_change_present,
-    )
+        return _context_from_report(result.shell)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        # A reply that decodes badly is not a context: stay incomplete.
+        return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)
 
 
 def validate_shell_execution_segment(
@@ -259,19 +297,22 @@ def validate_shell_execution_segment(
         return None, segment.reason_code or context.reason_code or SHELL_CWD_PATH_CHANGED
     if context.workspace_root is None or context.workspace_identity is None:
         return None, context.reason_code or SHELL_CWD_PATH_CHANGED
-    root, root_identity, root_reason = existing_directory(context.workspace_root)
-    if root_reason is not None or root_identity != context.workspace_identity:
-        return None, SHELL_CWD_PATH_CHANGED
-    current, current_identity, current_reason = existing_directory(segment.effective_cwd)
-    if current_reason is not None or current_identity != segment.cwd_identity:
-        return None, SHELL_CWD_PATH_CHANGED
-    if root is None or current is None or not is_within(current, root):
-        return None, SHELL_CWD_WORKSPACE_ESCAPE
-    for proof in segment.cwd_path_proofs:
-        proof_current, proof_identity, proof_reason = existing_directory(proof.lexical_path)
-        if proof_reason is not None or proof_current != proof.resolved_path or proof_identity != proof.identity:
-            return None, SHELL_CWD_PATH_CHANGED
-    return current, None
+    wire = _single_segment_wire(context, segment)
+    result = native_shell_validate_segment(wire, 0)
+    if isinstance(result, NativeRequestContextFailure):
+        return None, SHELL_CWD_NATIVE_UNAVAILABLE
+    cwd, reason = result
+    return (Path(cwd) if cwd is not None else None), reason
+
+
+def _single_segment_wire(context: ShellExecutionContext, segment: ShellExecutionSegment) -> dict[str, Any]:
+    """Segment checks and hashes depend only on the workspace and the segment."""
+
+    return _context_wire(context, (segment,))
+
+
+def _unbound_hash(label: str) -> str:
+    return f"{_UNBOUND_PREFIX}{label}"
 
 
 def shell_execution_segment_hash(
@@ -280,185 +321,55 @@ def shell_execution_segment_hash(
 ) -> str:
     """Return an approval-safe identity for one segment and its full command."""
 
-    payload = {
-        "schema": "shell-execution-context-v1",
-        "command": context.command_text,
-        "workspace_root": str(context.workspace_root) if context.workspace_root is not None else None,
-        "workspace_identity": _identity_payload(context.workspace_identity),
-        "segment": _segment_payload(segment),
-    }
-    return _sha256_payload(payload)
+    wire = _single_segment_wire(context, segment)
+    binding = context.native
+    index = segment.segment_index
+    if binding is not None and 0 <= index < len(binding.segment_hashes):
+        issued = dict(binding.wire)
+        shared = ("command_text", "workspace_root", "workspace_identity")
+        if all(issued[key] == wire[key] for key in shared) and issued["segments"][index] == wire["segments"][0]:
+            return binding.segment_hashes[index]
+    result = native_shell_hashes(wire, 0)
+    if isinstance(result, NativeRequestContextFailure) or result[1] is None:
+        return _unbound_hash("shell-segment")
+    return result[1]
 
 
 def shell_execution_context_hash(context: ShellExecutionContext) -> str:
-    payload = {
-        "schema": "shell-execution-context-v1",
-        "command": context.command_text,
-        "initial_cwd": str(context.initial_cwd) if context.initial_cwd is not None else None,
-        "workspace_root": str(context.workspace_root) if context.workspace_root is not None else None,
-        "workspace_identity": _identity_payload(context.workspace_identity),
-        "complete": context.complete,
-        "reason_code": context.reason_code,
-        "segments": [_segment_payload(segment) for segment in context.segments],
-    }
-    return _sha256_payload(payload)
+    binding = context.native
+    wire = _context_wire(context)
+    if binding is not None and dict(binding.wire) == wire:
+        return binding.context_hash
+    result = native_shell_hashes(wire)
+    if isinstance(result, NativeRequestContextFailure):
+        return _unbound_hash("shell-context")
+    return result[0]
 
 
 def shell_execution_context_metadata(context: ShellExecutionContext) -> dict[str, object]:
     """Return bounded metadata suitable for runtime artifacts and approval identity."""
 
-    effective_cwds = [str(path) for path in context.effective_cwds]
-    return {
-        "shell_execution_context_hash": context.context_hash,
-        "shell_execution_context_complete": context.complete,
-        "shell_execution_context_reason_code": context.reason_code,
-        "shell_execution_effective_cwds": effective_cwds,
-        "effective_cwd": effective_cwds[-1] if effective_cwds else None,
-    }
-
-
-def _apply_group_boundaries_before_segment(
-    state: _ShellState,
-    controls: tuple[str, ...],
-    *,
-    group_states: list[tuple[str, _ShellState | None]],
-) -> tuple[_ShellState, str | None]:
-    reason: str | None = None
-    for control in controls:
-        if control == "(":
-            group_states.append(("(", state))
-        elif control == "{":
-            group_states.append(("{", None))
-        elif control == ")":
-            if not group_states or group_states[-1][0] != "(":
-                reason = SHELL_CWD_UNRESOLVED_SYNTAX
-            else:
-                _group, saved_state = group_states.pop()
-                if saved_state is not None:
-                    state = saved_state
-        elif control == "}":
-            if not group_states or group_states[-1][0] != "{":
-                reason = SHELL_CWD_UNRESOLVED_SYNTAX
-            else:
-                group_states.pop()
-    return state, reason
-
-
-def _apply_directory_operation(
-    operation: DirectoryOperation,
-    state: _ShellState,
-    *,
-    workspace_root: Path | None,
-    home_dir: Path | None,
-    controls_before: tuple[str, ...],
-    controls_after: tuple[str, ...],
-) -> tuple[_ShellState, str | None]:
-    if operation.reason_code is not None:
-        return replace(state, cwd=None, cwd_identity=None, reason_code=operation.reason_code), operation.reason_code
-    if state.cwd is None or state.cwd_identity is None or workspace_root is None:
-        reason = state.reason_code or SHELL_CWD_UNRESOLVED_CONTROL_FLOW
-        return replace(state, reason_code=reason), reason
-    if operation.name == "popd":
-        if not state.stack:
-            reason = SHELL_CWD_AMBIGUOUS_STACK
-            return replace(state, cwd=None, cwd_identity=None, reason_code=reason), reason
-        stack_entry = state.stack[-1]
-        next_state = _ShellState(
-            cwd=stack_entry.cwd,
-            cwd_identity=stack_entry.cwd_identity,
-            cwd_path_proofs=stack_entry.cwd_path_proofs,
-            cwd_source="shell_popd",
-            stack=state.stack[:-1],
-        )
-    else:
-        if operation.operand is None:
-            return replace(state, cwd=None, cwd_identity=None, reason_code=SHELL_CWD_UNRESOLVED_EXPRESSION), (
-                SHELL_CWD_UNRESOLVED_EXPRESSION
-            )
-        destination, destination_identity, destination_proof, reason = resolve_directory_operand(
-            operation.operand,
-            current_cwd=state.cwd,
-            workspace_root=workspace_root,
-            home_dir=home_dir,
-        )
-        if reason is not None or destination is None or destination_identity is None or destination_proof is None:
-            failure_reason = reason or SHELL_CWD_MISSING_DIRECTORY
-            return replace(state, cwd=None, cwd_identity=None, reason_code=failure_reason), failure_reason
-        stack = state.stack
-        if operation.name == "pushd":
-            if len(stack) >= MAX_DIRECTORY_STACK_DEPTH:
-                return replace(state, cwd=None, cwd_identity=None, reason_code=SHELL_CWD_STACK_LIMIT), (
-                    SHELL_CWD_STACK_LIMIT
-                )
-            stack = (
-                *stack,
-                _DirectoryStackEntry(
-                    cwd=state.cwd,
-                    cwd_identity=state.cwd_identity,
-                    cwd_path_proofs=state.cwd_path_proofs,
-                ),
-            )
-        next_state = _ShellState(
-            cwd=destination,
-            cwd_identity=destination_identity,
-            cwd_path_proofs=(*state.cwd_path_proofs, destination_proof),
-            cwd_source=f"shell_{operation.name}",
-            stack=stack,
-        )
-    flow_before = last_flow_operator(controls_before)
-    flow = last_flow_operator(controls_after)
-    if flow_before in {"|", "|&"}:
-        return state, None
-    if flow in {"|", "|&", "&"}:
-        return state, None
-    if flow == "||":
-        reason = SHELL_CWD_UNRESOLVED_CONTROL_FLOW
-        return replace(next_state, cwd=None, cwd_identity=None, reason_code=reason), reason
-    return next_state, None
-
-
-_identity_payload = shell_path_identity_payload
-
-
-def _segment_payload(segment: ShellExecutionSegment) -> dict[str, object]:
-    return {
-        "tokens": list(segment.tokens),
-        "segment_index": segment.segment_index,
-        "control_before": list(segment.control_before),
-        "control_after": list(segment.control_after),
-        "effective_cwd": str(segment.effective_cwd) if segment.effective_cwd is not None else None,
-        "cwd_identity": _identity_payload(segment.cwd_identity),
-        "cwd_path_proofs": [
-            {
-                "lexical_path": str(proof.lexical_path),
-                "resolved_path": str(proof.resolved_path),
-                "identity": _identity_payload(proof.identity),
-            }
-            for proof in segment.cwd_path_proofs
-        ],
-        "cwd_source": segment.cwd_source,
-        "directory_stack": [str(path) for path in segment.directory_stack],
-        "complete": segment.complete,
-        "reason_code": segment.reason_code,
-        "directory_operation": segment.directory_operation,
-    }
-
-
-def _sha256_payload(payload: Mapping[str, object]) -> str:
-    # Canonical-JSON SHA-256 owned by the native context_digest op.  The result
-    # is byte-identical to a local json.dumps+sha256 when the resident is up,
-    # and degrades to a guard-context-unbound digest (fails every equality and
-    # validation path) when it is not — preserving the prior infallibility.
-    return context_sha256_digest(
-        dict(payload),
-        prefix="sha256:",
-        unbound_label="shell-execution-payload",
-    )
+    binding = context.native
+    wire = _context_wire(context)
+    if binding is not None and dict(binding.wire) == wire:
+        return dict(binding.metadata)
+    result = native_shell_hashes(wire)
+    if isinstance(result, NativeRequestContextFailure):
+        effective = [str(path) for path in context.effective_cwds]
+        return {
+            "shell_execution_context_hash": _unbound_hash("shell-context"),
+            "shell_execution_context_complete": False,
+            "shell_execution_context_reason_code": SHELL_CWD_NATIVE_UNAVAILABLE,
+            "shell_execution_effective_cwds": effective,
+            "effective_cwd": effective[-1] if effective else None,
+        }
+    return dict(result[2])
 
 
 __all__ = [
     "SHELL_CWD_AMBIGUOUS_STACK",
     "SHELL_CWD_MISSING_DIRECTORY",
+    "SHELL_CWD_NATIVE_UNAVAILABLE",
     "SHELL_CWD_NOT_DIRECTORY",
     "SHELL_CWD_PATH_CHANGED",
     "SHELL_CWD_STACK_LIMIT",
@@ -469,6 +380,7 @@ __all__ = [
     "SHELL_CWD_UNRESOLVED_PARENT_SHELL",
     "SHELL_CWD_UNRESOLVED_SYNTAX",
     "SHELL_CWD_WORKSPACE_ESCAPE",
+    "SHELL_DIRECTORY_COMMAND",
     "ShellExecutionContext",
     "ShellExecutionSegment",
     "model_shell_execution_context",

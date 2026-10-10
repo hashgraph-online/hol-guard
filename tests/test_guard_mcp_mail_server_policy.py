@@ -35,7 +35,7 @@ from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_i
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_payload_for_catalog_id, mcp_tool_state
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
 
 _CATALOG_ID = "command.mcp-mail-server"
 _DELETE_TOOLS = ("delete_message", "delete_messages")
@@ -89,6 +89,8 @@ class _AuthorityStore:
 
     def __init__(self, layers: tuple[ExtensionControlLayer, ...] = ()) -> None:
         self.layers = layers
+        self.guard_home = native_test_guard_home()
+        self.path = self.guard_home / "guard.db"
 
     def has_local_cli_grant_rules(self) -> bool:
         """No device grant rows exist, so an unavailable resident cannot hide one."""

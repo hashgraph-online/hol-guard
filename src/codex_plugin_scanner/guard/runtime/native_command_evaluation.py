@@ -10,6 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..native_command_effect import NativeCommandEffectMalformedError
 from ..native_command_model import _canonical_command_from_native
 from ..native_pretool import review_pre_tool_native
 from .command_evaluation import CompositeCommandEvaluation, evaluate_command
@@ -65,8 +66,9 @@ def review_command_native(
             workflow_authorization=workflow_authorization,
             extension_control_snapshot=snapshot,
             native_extension_evidence=native,
+            guard_home=guard_home,
         )
-    except NativeCommandExtensionEvidenceError:
+    except (NativeCommandExtensionEvidenceError, NativeCommandEffectMalformedError):
         return None
     # Native classification and host policy resolution are distinct stages:
     # an authenticated permission/workflow proof can authorize a review-class

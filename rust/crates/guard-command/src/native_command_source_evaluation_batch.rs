@@ -26,6 +26,11 @@ struct Request {
     global_lockdown: bool,
     #[serde(default)]
     managed_global_lockdown: bool,
+    /// Binds the synthetic snapshot to a non-default authority health so
+    /// offline fixtures can exercise the host health floor with evidence that
+    /// matches the unhealthy binding. Admission still validates the value.
+    #[serde(default)]
+    health: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -90,7 +95,7 @@ pub fn evaluate_batch(bytes: &[u8]) -> Result<Value, &'static str> {
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema":"guard.native-command-control-binding.v1",
         "program_digest":program.program_digest,"catalog_digest":program.catalog_digest,
-        "trust_digest":program.trust_digest,"health":"protected","revision":1,
+        "trust_digest":program.trust_digest,"health":request.health.as_deref().unwrap_or("protected"),"revision":1,
         "managed_revision":if managed_layer {1} else {0},
         "effective_digest":"","layers":layers,
     }))
@@ -204,6 +209,24 @@ mod tests {
             evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap_err(),
             "native_command_control_target_unknown"
         );
+    }
+
+    #[test]
+    fn health_is_bound_into_the_synthetic_snapshot_and_validated() {
+        let mut input: Value =
+            serde_json::from_slice(&request(serde_json::json!([{"id":"a","command":"pwd"}])))
+                .unwrap();
+        let protected = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(protected["control_binding"]["health"], "protected");
+        input["health"] = serde_json::json!("tampered");
+        let tampered = evaluate_batch(&serde_json::to_vec(&input).unwrap()).unwrap();
+        assert_eq!(tampered["control_binding"]["health"], "tampered");
+        assert_ne!(
+            protected["control_binding"]["effective_digest"],
+            tampered["control_binding"]["effective_digest"]
+        );
+        input["health"] = serde_json::json!("healthy");
+        assert!(evaluate_batch(&serde_json::to_vec(&input).unwrap()).is_err());
     }
 
     #[test]
