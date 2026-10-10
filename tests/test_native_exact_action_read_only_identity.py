@@ -78,6 +78,9 @@ def test_read_only_git_is_eligible(
         "git worktree add ../x",
         "git diff --output=out.txt",
         "git log --ext-diff",
+        "git log --show-signature",
+        "git log --format=%G?",
+        "git show --pretty format:%GS HEAD",
         "git -p status",
         "git -C /nonexistent/dir status",
     ],
@@ -172,6 +175,9 @@ def test_git_token_follows_nested_includes_in_any_file_name(
         '[filter "lfs"]\n\tclean = ./c\n',
         "[interactive]\n\tdiffFilter = ./f\n",
         "[core] fsmonitor = ./hook\n",
+        "[log]\n\tshowSignature = true\n",
+        "[format]\n\tpretty = %h %G?\n",
+        "[pretty]\n\tsigned = %h %GS\n",
     ],
 )
 def test_helper_selecting_git_config_stays_once_only(
@@ -210,6 +216,25 @@ def test_git_lfs_filter_and_global_hooks_path_keep_always(
     assert _token("git status", workspace) not in {None, before}
     (home / ".gitconfig").write_text('[filter "lfs"]\n\tprocess = git-lfs filter-process --verbose\n')
     assert native_exact_action_decision_reason("git status", workspace) == "git_helper_config"
+
+
+def test_gpg_program_alone_keeps_always_and_cache_trees_are_skipped(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _repo(tmp_path, monkeypatch)
+    # Signature verification is refused per command, so a configured gpg program is inert.
+    (workspace / ".git" / "config").write_text('[gpg "ssh"]\n\tprogram = /opt/signer\n')
+    before = _token("git status", workspace)
+    assert before is not None
+    cache = workspace / "target"
+    (cache / "debug").mkdir(parents=True)
+    (cache / "CACHEDIR.TAG").write_text("Signature: 8a477f597d28d172789f06886806bc55\n")
+    (cache / "debug" / ".gitattributes").write_text("* filter=lfs\n")
+    assert _token("git status", workspace) == before
+    nested = workspace / "src"
+    nested.mkdir()
+    (nested / ".gitattributes").write_text("* filter=lfs\n")
+    assert _token("git status", workspace) not in {None, before}
 
 
 def test_absent_file_operand_is_bound_to_the_token(

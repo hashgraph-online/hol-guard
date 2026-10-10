@@ -82,8 +82,11 @@ _FORBIDDEN_PREFIXES = (
     "--textconv",
     "--namespace",
     "--super-prefix",
+    "--show-signature",
     "-O",
 )
+# A ``%G`` placeholder in a log/show format verifies signatures with gpg.program.
+_SIGNATURE_PLACEHOLDER = "%G"
 _BRANCH_FLAGS = frozenset(
     {"-a", "-r", "-v", "-vv", "--all", "--remotes", "--verbose", "--list", "--show-current", "--no-color", "--color"}
 )
@@ -109,6 +112,8 @@ _HELPER_KEYS: dict[str, frozenset[str] | None] = {
     "filter": None,
     "diff": frozenset({"command", "textconv", "external"}),
     "interactive": frozenset({"difffilter"}),
+    # Signature verification runs gpg.program (or gpg.<format>.program).
+    "log": frozenset({"showsignature"}),
 }
 _INCLUDE_PATH = re.compile(r"^\s*path\s*=\s*(.+?)\s*$", re.IGNORECASE)
 
@@ -164,7 +169,10 @@ def git_readonly_identity(arguments: Sequence[str], *, cwd: Path, home_dir: Path
 
 
 def _subcommand_is_read_only(subcommand: str, rest: list[str]) -> bool:
-    if any(argument.startswith(_FORBIDDEN_PREFIXES) or argument == "-c" for argument in rest):
+    if any(
+        argument.startswith(_FORBIDDEN_PREFIXES) or argument == "-c" or _SIGNATURE_PLACEHOLDER in argument
+        for argument in rest
+    ):
         return False
     if subcommand in _READ_SUBCOMMANDS:
         return True
@@ -299,8 +307,15 @@ def _nested_attribute_digests(root: Path) -> dict[str, str]:
     digests: dict[str, str] = {}
     visited = 0
     for current, directories, files in os.walk(root):
-        # Ignored dependency trees are not read by git status/diff; keep the walk bounded.
-        directories[:] = [name for name in directories if name not in {".git", "node_modules"}]
+        # Dependency and build-cache trees are untracked, so git status/diff never
+        # read their attributes; skipping them keeps the walk small. Attributes
+        # alone cannot name a helper program: the config keys that define drivers
+        # are fail-closed in ``_scan_config``.
+        directories[:] = [
+            name
+            for name in directories
+            if name not in {".git", "node_modules"} and not _is_cache_tree(Path(current, name))
+        ]
         visited += 1
         if visited > _MAX_ATTRIBUTE_DIRECTORIES:
             raise OnceOnlyError(UNPROVEN_LAUNCH)
@@ -314,6 +329,12 @@ def _nested_attribute_digests(root: Path) -> dict[str, str]:
         except OSError as error:
             raise OnceOnlyError(UNPROVEN_LAUNCH) from error
     return digests
+
+
+def _is_cache_tree(directory: Path) -> bool:
+    """A build cache (``CACHEDIR.TAG``, e.g. Cargo ``target``) or a Python virtual environment."""
+
+    return (directory / "CACHEDIR.TAG").is_file() or (directory / "pyvenv.cfg").is_file()
 
 
 def _config_path(value: str, config_path: Path, home_dir: Path | None) -> Path:
@@ -350,6 +371,9 @@ def _scan_config(text: str, config_path: Path, home_dir: Path | None, hook_dirs:
                 raise OnceOnlyError(GIT_HELPER_CONFIG)
             hook_dirs.append(_config_path(value, config_path, home_dir))
             continue
+        if _SIGNATURE_PLACEHOLDER in value:
+            # A default or aliased format (format.pretty, pretty.<name>) that verifies signatures.
+            raise OnceOnlyError(GIT_HELPER_CONFIG)
         if section in _HELPER_KEYS:
             keys = _HELPER_KEYS[section]
             if keys is None or name in keys:
