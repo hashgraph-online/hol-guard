@@ -73,11 +73,6 @@ them as independent inputs:
 - `contracts/extensions/native-command-program.v1.json`;
 - `contracts/extensions/command-catalog.v1.json`.
 
-These outputs are ignored by Git. Do not add generated descriptors to a PR,
-including when a native build creates descriptors for recently merged sources.
-CI stages them from the current sources, and package builds include freshly
-compiled descriptors in wheels and source archives.
-
 Before submitting, create the external binding and verify the authored inventory.
 After source review, preparation validates the exact source/fixture binding and
 synchronizes the derived files. CI verifies ownership before preparing the PR

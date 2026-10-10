@@ -55,8 +55,8 @@ class CommandProjectionBuildHook(BuildHookInterface):
                 command.extend(["--compiler", str(compiler_path)])
             subprocess.run(command, cwd=root, check=True)
             subprocess.run([*command, "--check"], cwd=root, check=True)
-        # Only compiler outputs become package metadata. Ignore any descriptors
-        # staged by development tooling; regenerate from authored sources.
+        # Keep legacy tracked copies available to existing PRs. Only compiler
+        # outputs become package metadata; do not overwrite the contributor tree.
         build_data["force_include"].pop("contributions/extensions", None)
         build_data["force_include"].pop(str(root / "contributions/extensions"), None)
         build_data["force_include"][str(descriptors)] = (

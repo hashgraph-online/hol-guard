@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from tests.support.extension_contributions import command_descriptor_fixture
 
 
 def copy_projected_contribution_sources(source: Path, destination: Path) -> None:
@@ -19,17 +17,7 @@ def copy_projected_contribution_sources(source: Path, destination: Path) -> None
         ("command-sources", "command.*.json"),
     ):
         directory = destination / "contributions" / family
-        source_directory = source / "contributions" / family
-        if family == "extensions" and not source_directory.exists():
-            directory.mkdir(parents=True)
-            # Directory contract fixtures need metadata for the loaded registry,
-            # even when development has staged only the native catalog.
-            for path in (source / "contributions/command-sources").glob("command.*.json"):
-                if path.stem in catalog_ids:
-                    payload = command_descriptor_fixture(path.stem)
-                    (directory / path.name).write_text(json.dumps(payload))
-        else:
-            shutil.copytree(source_directory, directory)
+        shutil.copytree(source / "contributions" / family, directory)
         for path in directory.glob(pattern):
             identity = path.stem
             if family == "mcp-servers":

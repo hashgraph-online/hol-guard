@@ -1,11 +1,8 @@
 name: Restore current native command projections
-description: Restore generated resources from the matching native build.
+description: Restore ignored resources without replacing public contribution records.
 runs:
   using: composite
   steps:
-    - name: Remove stale generated descriptors before restoring derived resources
-      shell: bash
-      run: python -c 'from pathlib import Path; import shutil; p = Path("contributions/extensions"); shutil.rmtree(p) if p.exists() else None'
     - name: Download matching native command projections
       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
       with:

@@ -4,7 +4,7 @@ name: Extension artifact regen
 # derived from them (published descriptors and directory render) are maintainer-owned and
 # published here after merges so contribution PRs never conflict on them.
 #
-# Descriptors are ignored build outputs, included in packages and snapshots.
+# Compatibility copies remain tracked while existing PRs and readers migrate.
 # This workflow never commits generated files or opens regeneration PRs.
 
 permissions:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import importlib.util
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -12,7 +11,6 @@ import pytest
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution
 from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from tests.extension_builder_support import REPOSITORY
 from tests.support.extension_directory import copy_projected_contribution_sources
@@ -24,24 +22,6 @@ assert spec and spec.loader
 exporter = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = exporter
 spec.loader.exec_module(exporter)
-
-
-def test_directory_fixtures_stage_metadata_without_checkout_descriptors(tmp_path: Path) -> None:
-    """Unit fixtures can use canonical sources without a generated source directory."""
-    source = tmp_path / "source"
-    commands = source / "contributions/command-sources"
-    commands.mkdir(parents=True)
-    (source / "contributions/mcp-servers").mkdir()
-    shutil.copyfile(REPOSITORY / "contributions/command-sources/command.blitcp.json", commands / "command.blitcp.json")
-    destination = tmp_path / "fixture"
-    copy_projected_contribution_sources(source, destination)
-    descriptor = destination / "contributions/extensions/command.blitcp.json"
-    payload = json.loads(descriptor.read_text())
-    validate_contribution(payload, filename=descriptor.name)
-    assert payload["id"] == "command.blitcp"
-    assert (destination / "contributions/command-sources/command.blitcp.json").read_bytes() == (
-        commands / "command.blitcp.json"
-    ).read_bytes()
 
 
 def test_export_is_deterministic() -> None:

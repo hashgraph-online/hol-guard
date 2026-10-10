@@ -138,9 +138,25 @@ def main() -> int:
     )
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
     parser.add_argument(
-        "--descriptor-dir", type=Path, help="Generate descriptors outside the tracked contribution tree."
+        "--descriptor-dir",
+        type=Path,
+        help="Descriptor destination (default: ignored contracts/extensions/build-descriptors).",
+    )
+    parser.add_argument(
+        "--publish-descriptor",
+        action="append",
+        default=[],
+        metavar="ID",
+        help="Also prepare this extension's public JSON record for its contribution PR.",
+    )
+    parser.add_argument(
+        "--check-public-descriptors",
+        action="store_true",
+        help="Read-only check of public descriptor bytes in HEAD before scratch preparation.",
     )
     args = parser.parse_args()
+    if args.descriptor_dir and args.publish_descriptor:
+        parser.error("Use --publish-descriptor with the default runtime destination.")
     command = (
         [str(args.compiler.resolve(strict=True)), "compile"]
         if args.compiler
@@ -184,6 +200,27 @@ def main() -> int:
     trust = subprocess.run([*command[:-1], "export-trust"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False)
     if trust.returncode or json.loads(trust.stdout) != request_value["trust"]:
         raise ValueError("source compiler trust map does not match the authored bindings; rebuild it before staging")
+    public_directory = ROOT / "contributions/extensions"
+    descriptors = {descriptor["id"]: descriptor for descriptor in compiled["descriptors"]}
+    if set(args.publish_descriptor) - descriptors.keys():
+        raise ValueError("published descriptor has no canonical source")
+    if args.check_public_descriptors:
+        stale_public = []
+        for identity, descriptor in descriptors.items():
+            if "/" in identity or "\\" in identity or not identity.startswith("command."):
+                raise ValueError("invalid generated descriptor identity")
+            relative = f"contributions/extensions/{identity}.json"
+            blob = subprocess.run(
+                ["git", "show", f"HEAD:{relative}"],
+                cwd=ROOT,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            if blob.returncode or blob.stdout != canonical_bytes(descriptor):
+                stale_public.append(relative)
+        print(json.dumps({"ok": not stale_public, "stale_public_descriptors": sorted(stale_public)}, sort_keys=True))
+        return int(bool(stale_public))
     program = compiled["program"]
     catalog = {
         "schema": "guard.command-catalog.v1",
@@ -206,7 +243,9 @@ def main() -> int:
         {package_directory / path.name: content for path, content in tuple(outputs.items()) if path != trust_path}
     )
     outputs[package_directory / "trust-class-map.v1.json"] = outputs[trust_path]
-    descriptor_directory = args.descriptor_dir or ROOT / "contributions/extensions"
+    # A build is not a public contribution publication. Keep the public GitHub
+    # records intact unless a publication helper explicitly selects that path.
+    descriptor_directory = args.descriptor_dir or ROOT / "contracts/extensions/build-descriptors"
     if not descriptor_directory.is_absolute():
         descriptor_directory = ROOT / descriptor_directory
     if any(path.is_symlink() for path in (descriptor_directory, *descriptor_directory.parents) if path != ROOT):
@@ -218,6 +257,11 @@ def main() -> int:
         if "/" in identity or "\\" in identity or not identity.startswith("command."):
             raise ValueError("invalid generated descriptor identity")
         outputs[descriptor_directory / f"{identity}.json"] = canonical_bytes(descriptor)
+    for identity in args.publish_descriptor:
+        path = public_directory / f"{identity}.json"
+        if any(parent.is_symlink() for parent in (path.parent, *path.parent.parents) if parent != ROOT):
+            raise ValueError("public descriptor output cannot traverse a symlink")
+        outputs[path] = canonical_bytes(descriptors[identity])
     expected_descriptors = {path for path in outputs if path.parent == descriptor_directory}
     unexpected_descriptors = sorted(
         path
@@ -267,11 +311,16 @@ def main() -> int:
     else:
         if not args.projections_only:
             descriptor_directory.mkdir(parents=True, exist_ok=True)
+        if args.publish_descriptor:
+            public_directory.mkdir(parents=True, exist_ok=True)
         for path in unexpected_descriptors:
+            if path.parent == public_directory:
+                raise ValueError(
+                    "Public contribution records require explicit retirement; generation cannot delete them"
+                )
             path.unlink()
         for path, content in outputs.items():
-            if path.parent == package_directory:
-                package_directory.mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True)
             if not path.is_file() or path.read_bytes() != content:
                 path.write_bytes(content)
     print(

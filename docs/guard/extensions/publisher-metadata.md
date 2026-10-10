@@ -6,9 +6,8 @@ trust class, approves a command, or implies ownership of the upstream tool.
 
 ## Identity and eligibility
 
-The stable contribution ID is the public identity. `command.blitcp` is authored in
-`contributions/command-sources/command.blitcp.json`; builds generate its descriptor
-at `contributions/extensions/command.blitcp.json` without committing it. An MCP contribution such as
+The stable contribution ID is the public identity. `command.blitcp` uses
+`contributions/extensions/command.blitcp.json`. An MCP contribution such as
 `mcp.filesystem` keeps that identity even though its runtime catalog entry is
 `command.mcp-filesystem`.
 

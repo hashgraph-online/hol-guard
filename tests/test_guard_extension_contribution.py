@@ -17,11 +17,14 @@ from codex_plugin_scanner.guard.runtime.extension_contribution import (
 )
 from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_catalog_ids
-from tests.support.extension_contributions import command_descriptor_fixture
+
+_NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
 
 
 def _noodle_payload() -> dict[str, object]:
-    return command_descriptor_fixture("command.noodle")
+    payload = json.loads(_NOODLE.read_text(encoding="utf-8"))
+    assert isinstance(payload, dict)
+    return payload
 
 
 def _source_contribution_ids() -> frozenset[str]:
@@ -94,7 +97,9 @@ def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch:
     dest = tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions"
     contributions = dest / "contributions"
     contributions.mkdir(parents=True, exist_ok=True)
-    (contributions / "command.noodle.json").write_text(json.dumps(_noodle_payload()))
+    shutil.copyfile(
+        repo / "contributions" / "extensions" / "command.noodle.json", contributions / "command.noodle.json"
+    )
     shutil.copyfile(
         repo / "contracts" / "extensions" / "contribution.v2.schema.json",
         dest / "contribution.v2.schema.json",

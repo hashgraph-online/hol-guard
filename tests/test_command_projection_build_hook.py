@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import json
 import re
-import shlex
 import subprocess
 import sys
 import types
@@ -159,10 +157,6 @@ def test_generated_path_gate_permits_removal_but_rejects_reintroduction():
         for prefix in ("contracts/extensions", "src/codex_plugin_scanner/guard/contracts/data/extensions")
         for name in ("command-catalog", "native-command-program", "trust-class-map")
     ]
-    paths.extend(
-        f"contributions/extensions/command.{name}.json"
-        for name in ("macscope", "repro-surgeon", "storage-clearer", "where-are-we")
-    )
     files = [{"filename": path, "status": status} for path in paths for status in ("removed", "added", "modified")]
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
     owned = "".join(re.findall(r"owned\+?='([^']+)'", run))
@@ -182,100 +176,5 @@ def test_regeneration_prs_cannot_track_ignored_package_projections():
     path = "contracts/extensions/native-command-program.v1.json"
     files = [{"filename": path, "status": status} for status in ("removed", "added", "modified")]
     files.append({"filename": "contracts/extensions/trust-class-map.v1.json", "status": "modified"})
-    descriptor = "contributions/extensions/command.macscope.json"
-    files.extend({"filename": descriptor, "status": status} for status in ("removed", "added", "modified"))
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
-    assert result.stdout.splitlines() == [
-        path,
-        path,
-        "contracts/extensions/trust-class-map.v1.json",
-        descriptor,
-        descriptor,
-    ]
-
-
-@pytest.mark.parametrize("existing", [False, True])
-def test_ci_restore_accepts_absent_descriptors_and_removes_stale_outputs(tmp_path, existing):
-    """A fresh checkout and a previously staged checkout both accept current artifacts."""
-    root = Path(__file__).parents[1]
-    action = yaml.safe_load((root / ".github/actions/restore-command-projections/action.yml").read_text())
-    descriptors = tmp_path / "contributions/extensions"
-    if existing:
-        descriptors.mkdir(parents=True)
-        (descriptors / "command.stale.json").write_text("{}\n")
-    command = shlex.split(action["runs"]["steps"][0]["run"])
-    command[0] = sys.executable  # Use the test environment's configured Python.
-    subprocess.run(command, cwd=tmp_path, check=True)
-    assert not descriptors.exists()
-    # The artifact download creates the directory with only the current output.
-    descriptors.mkdir(parents=True)
-    (descriptors / "command.current.json").write_text("{}\n")
-    assert [path.name for path in descriptors.iterdir()] == ["command.current.json"]
-
-
-def test_generated_descriptors_are_untracked_build_outputs():
-    """Native staging cannot introduce contribution metadata into ordinary Git diffs."""
-    root = Path(__file__).parents[1]
-    tracked = subprocess.run(
-        ["git", "ls-files", "contributions/extensions"], cwd=root, text=True, capture_output=True, check=True
-    )
-    # During the retirement PR, deleted paths remain in the index until commit.
-    assert not any((root / path).exists() for path in tracked.stdout.splitlines())
-    result = subprocess.run(
-        ["git", "check-ignore", "--no-index", "contributions/extensions/command.new.json"],
-        cwd=root,
-        text=True,
-        capture_output=True,
-        check=True,
-    )
-    assert result.stdout.strip() == "contributions/extensions/command.new.json"
-
-
-@pytest.mark.parametrize("tracked", [False, True])
-def test_required_quality_rejects_tracked_descriptors_before_preparation(tmp_path, tracked):
-    """Scratch regeneration cannot conceal a committed projection in any PR."""
-    root = Path(__file__).parents[1]
-    action = yaml.safe_load((root / ".github/actions/ci-job-quality/action.yml").read_text())
-    steps = action["runs"]["steps"]
-    gate = steps[0]
-    assert gate["name"] == "Require generated command descriptors to remain untracked"
-    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
-    (tmp_path / ".gitignore").write_text("/contributions/extensions/\n")
-    descriptor = tmp_path / "contributions/extensions/command.example.json"
-    descriptor.parent.mkdir(parents=True)
-    descriptor.write_text("{}\n")
-    if tracked:
-        subprocess.run(["git", "add", "--force", str(descriptor)], cwd=tmp_path, check=True)
-    before = subprocess.check_output(["git", "status", "--porcelain"], cwd=tmp_path)
-    result = subprocess.run(["bash", "-e", "-c", gate["run"]], cwd=tmp_path, capture_output=True, text=True)
-    assert result.returncode == (1 if tracked else 0)
-    if tracked:
-        assert "Command descriptors are build outputs" in result.stdout
-        assert "contributions/extensions/command.example.json" in result.stdout
-    assert subprocess.check_output(["git", "status", "--porcelain"], cwd=tmp_path) == before
-    assert descriptor.read_text() == "{}\n"
-
-
-def test_contribution_intake_stages_authored_files_without_ignored_path_errors(tmp_path):
-    """Intake's real path list stages inputs without explicitly adding an ignored directory."""
-    root = Path(__file__).parents[1]
-    tree = ast.parse((root / "scripts/intake_contribution_pr.py").read_text())
-    commands = [
-        ast.literal_eval(node)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.List) and all(isinstance(item, ast.Constant) for item in node.elts)
-    ]
-    command = next(c for c in commands if c[:3] == ["git", "add", "-A"] and "contracts/extensions" in c)
-    subprocess.run(["git", "init", "--quiet", str(tmp_path)], check=True)
-    (tmp_path / ".gitignore").write_text("/contributions/extensions/\n")
-    for path in command[3:]:
-        directory = tmp_path / path
-        directory.mkdir(parents=True)
-        (directory / "authored.txt").write_text("input\n")
-    ignored = tmp_path / "contributions/extensions/command.example.json"
-    ignored.parent.mkdir(parents=True)
-    ignored.write_text("{}\n")
-    subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, check=True)
-    staged = subprocess.check_output(["git", "diff", "--cached", "--name-only"], cwd=tmp_path, text=True).splitlines()
-    assert "contracts/extensions/authored.txt" in staged
-    assert all(not p.startswith("contributions/extensions/") for p in staged)
+    assert result.stdout.splitlines() == [path, path, "contracts/extensions/trust-class-map.v1.json"]

@@ -9,8 +9,8 @@ permissions:
 jobs:
   regen-owned-paths:
     runs-on: ubuntu-24.04
-    # Only the regen workflow's own artifact PRs may touch generated paths;
-    # every other PR must leave them to post-merge regen. A fork cannot claim
+    # Shared outputs belong to automatic post-merge publication. Contribution
+    # PRs retain their own public JSON records. A fork cannot claim
     # the exemption since it requires a same-repo regen/artifacts-* branch.
     steps:
       - name: Reject changes to regen-owned generated paths
@@ -23,13 +23,15 @@ jobs:
           set -euo pipefail
           owned='^contracts/extensions/(native-command-program|command-catalog|trust-class-map)\.v1\.json$'
           owned+='|^contracts/extensions/(build-descriptors/|build-trust-class-map\.v1\.json$)'
-          owned+='|^contributions/extensions/'
+          owned+='|^docs/guard/extensions/catalog\.v[12]\.json$'
+          # Public per-extension contribution records remain tracked; builds
+          # and automated snapshots must not replace their reviewed Git blobs.
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/extensions/'
           owned+='|^src/codex_plugin_scanner/guard/contracts/data/mcp_servers/'
           # These projections are ignored build outputs. Permit their
           # removal, but reject adding them back even from a contribution PR.
           files=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
-            --jq '.[] | select((.status == "removed" and (.filename | test("^contributions/extensions/|^(contracts/extensions|src/codex_plugin_scanner/guard/contracts/data/extensions)/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$"))) | not) | .filename')
+            --jq '.[] | select((.status == "removed" and (.filename | test("^(contracts/extensions|src/codex_plugin_scanner/guard/contracts/data/extensions)/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$"))) | not) | .filename')
           changed=$(printf '%s\n' "${files}" | grep -E "${owned}" || [ $? -eq 1 ])
           if [ -n "${changed}" ]; then
             printf '%s\n' "::error::This PR modifies paths owned by the extension-artifact-regen workflow. Generated artifacts are regenerated on main after merge — drop them from this diff:" "${changed}"
@@ -43,7 +45,7 @@ jobs:
         run: |
           set -euo pipefail
           changed=$(gh api --paginate "repos/${GH_REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
-            --jq '.[] | select(.status != "removed") | select(.filename | test("^contributions/extensions/|^contracts/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$|^src/codex_plugin_scanner/guard/contracts/data/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$")) | .filename')
+            --jq '.[] | select(.status != "removed") | select(.filename | test("^contracts/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$|^src/codex_plugin_scanner/guard/contracts/data/extensions/(command-catalog|native-command-program|trust-class-map)\\.v1\\.json$")) | .filename')
           if [ -n "${changed}" ]; then
             printf '%s\n' "::error::Package projections must remain untracked, including in regeneration PRs:" "${changed}"
             exit 1

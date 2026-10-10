@@ -293,6 +293,7 @@ def main() -> int:
                 "-A",
                 "contracts/extensions",
                 "docs/guard/extensions",
+                "contributions/extensions",
                 "src/codex_plugin_scanner/guard/contracts/data/extensions",
                 "src/codex_plugin_scanner/guard/extension_builder",
             ]
