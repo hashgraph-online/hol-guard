@@ -30,6 +30,15 @@ regexes = [
   '''^[\t\r\n ]*curl \-H "Authorization: Bearer hol\-fake\-docs\-token\-example\-0000" \\\\[\t\r\n ]*$''',
 ]
 
+[[rules.allowlists]]
+description = "Synthetic bearer token recorded in the hook adapter parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-command/testdata/hook_adapter_vectors\.json$''']
+regexes = [
+  '''^abcdefghijkl12345$''',
+]
+
 [[rules]]
 id = "generic-api-key"
 

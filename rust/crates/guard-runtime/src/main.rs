@@ -72,6 +72,7 @@ mod guard_store_outbox_requeue;
 #[cfg(test)]
 mod guard_store_vectors_tests;
 mod hardening;
+mod hook_adapter_op;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_decision_compose;

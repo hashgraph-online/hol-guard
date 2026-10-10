@@ -43,6 +43,8 @@ mod local_cli_identity;
 pub use local_cli_identity::*;
 mod approval_proof;
 pub use approval_proof::*;
+mod hook_adapter;
+pub use hook_adapter::*;
 mod hook_artifact_compose;
 pub use hook_artifact_compose::*;
 mod local_cli_grant;

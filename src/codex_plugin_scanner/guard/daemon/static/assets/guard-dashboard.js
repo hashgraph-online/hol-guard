@@ -14219,12 +14219,28 @@ function retryCannotReuseApproval(item) {
 function oneTimeRetryWindowMinutes(item) {
   return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
 }
+function allowPermissionLabels(item) {
+  const recommendation = item.extension_recommendation;
+  if (recommendation?.status !== "available") return null;
+  const labels = recommendation.permissions.map((permission2) => permission2.label).filter((label) => label.length > 0);
+  if (labels.length === 0) return null;
+  return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
 function retryCannotReuseApprovalHint(item, harness) {
   const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
-  return item.exact_action_persistence_eligible === true ? `${base} To let ${harness} run this exact command, choose "Always allow exact action".` : `${base} To let ${harness} run commands like this, set the matching command pattern to Allow in Extensions, or copy the command and run it yourself.`;
+  if (item.exact_action_persistence_eligible === true) {
+    return `${base} To let ${harness} run this exact command, choose "Always allow exact action".`;
+  }
+  const labels = allowPermissionLabels(item);
+  return labels === null ? `${base} Copy the command and run it yourself.` : `${base} To let ${harness} run commands like this, set ${labels} to Allow in Extensions, or copy the command and run it yourself.`;
 }
 function retryBlockedApprovalCopy(item, harness) {
-  return item.exact_action_persistence_eligible === true ? `Decision recorded. ${harness} will still be blocked on this command. To let it run this exact command, approve it with "Always allow exact action", or run it yourself.` : `Decision recorded. ${harness} will still be blocked on this command. To let it run commands like this, set the matching command pattern to Allow in Extensions, or run the command yourself.`;
+  const base = `Decision recorded. ${harness} will still be blocked on this command.`;
+  if (item.exact_action_persistence_eligible === true) {
+    return `${base} To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`;
+  }
+  const labels = allowPermissionLabels(item);
+  return labels === null ? `${base} Copy the command and run it yourself.` : `${base} To let it run commands like this, set ${labels} to Allow in Extensions, or run the command yourself.`;
 }
 function receiptDescribesRequest(item, receipt) {
   if (!item.artifact_id.includes(":native-pretool:")) return true;

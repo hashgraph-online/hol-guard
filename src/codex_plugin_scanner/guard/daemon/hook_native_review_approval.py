@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
+from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.actions import normalize_harness_payload
 from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
@@ -36,6 +37,7 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
 )
+from .native_review_allow_hint import native_review_extension_allow_hint
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -347,8 +349,10 @@ def queue_native_pre_tool_review(
         )
     except (OSError, RuntimeError, TypeError, ValueError, KeyError) as error:
         # Never make an action approvable when its details could not be safely presented.
-        # Exception messages can contain private tool input; log only the error class.
-        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, type(error).__name__)
+        # Exception messages can contain private tool input; log only the error class and, for
+        # native adapter outages, its fixed reason code (unavailable, deadline, size).
+        reason = error.code if isinstance(error, NativeHookAdapterError) else type(error).__name__
+        _LOGGER.warning("Native review presentation failed for %s (%s)", request_id, reason)
         return None
     if action_envelope is None:
         _LOGGER.warning("Native review presentation failed for %s (ValueError)", request_id)
@@ -385,6 +389,14 @@ def queue_native_pre_tool_review(
         risk_summary=reason,
         action_envelope_json=action_envelope,
         raw_command_text=pre_tool_command(payload),
+        extension_allow_hint=native_review_extension_allow_hint(
+            store,
+            payload=payload,
+            native_result=native_result,
+            workspace=workspace,
+            home_dir=home_dir,
+            deadline=deadline,
+        ),
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
