@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Final, Protocol, cast
 
+from .native_guard_store import NativeGuardStoreUnavailable
 from .runtime.command_activity_contract import (
     CommandActivity,
     CommandActivityEvidence,
@@ -26,6 +27,40 @@ from .runtime.command_activity_contract import (
 from .store_command_activity_wire import activity_from_wire, activity_wire, evidence_wire, handle_wire
 
 _ERROR_CODE: Final = re.compile(r"[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*")
+
+
+_MAX_COUNTER: Final = 2**63 - 1
+_ERROR_ACTIVE_COLUMN: Final = {
+    "maintenance_failed": "maintenance_error_active",
+    "shadow_evaluation_failed": "shadow_error_active",
+}
+
+
+def _count_failure_locally(owner: _ConnectionOwner, error_code: str, occurred_at: datetime) -> None:
+    """Outage-only counter write: bounded health bookkeeping, never a verdict."""
+
+    column = _ERROR_ACTIVE_COLUMN.get(error_code, "command_error_active")
+    with owner._connect() as connection:
+        connection.execute("begin immediate")
+        connection.execute(
+            "update command_activity_health "
+            "set dropped_event_count = min(dropped_event_count + 1, ?), "
+            "persistence_error_count = min(persistence_error_count + 1, ?), "
+            "last_error_code = ?, last_error_at = ? where singleton = 1",
+            (_MAX_COUNTER, _MAX_COUNTER, error_code, occurred_at.isoformat()),
+        )
+        connection.execute(f"update command_activity_health_active set {column} = 1 where singleton = 1")
+
+
+def _count_conflict_locally(owner: _ConnectionOwner, occurred_at: datetime) -> None:
+    with owner._connect() as connection:
+        connection.execute("begin immediate")
+        connection.execute(
+            "update command_activity_health "
+            "set dropped_event_count = min(dropped_event_count + 1, ?), "
+            "last_error_code = 'post_result_conflict', last_error_at = ? where singleton = 1",
+            (_MAX_COUNTER, occurred_at.isoformat()),
+        )
 
 
 class _ConnectionOwner(Protocol):
@@ -93,10 +128,14 @@ class StoreCommandActivityLifecycleMixin:
 
         _require_error_code(error_code)
         _require_utc_datetime(occurred_at)
-        self._native_store_call(
-            "record_command_activity_persistence_failure",
-            {"error_code": error_code, "occurred_at": occurred_at.isoformat()},
-        )
+        try:
+            self._native_store_call(
+                "record_command_activity_persistence_failure",
+                {"error_code": error_code, "occurred_at": occurred_at.isoformat()},
+            )
+        except NativeGuardStoreUnavailable:
+            # Health counters must still land when the resident is down.
+            _count_failure_locally(self, error_code, occurred_at)
 
     def record_command_activity_observation_conflict(
         self: _ConnectionOwner,
@@ -106,10 +145,13 @@ class StoreCommandActivityLifecycleMixin:
         """Retain one conflicting terminal observation without claiming a persistence outage."""
 
         _require_utc_datetime(occurred_at)
-        self._native_store_call(
-            "record_command_activity_observation_conflict",
-            {"occurred_at": occurred_at.isoformat()},
-        )
+        try:
+            self._native_store_call(
+                "record_command_activity_observation_conflict",
+                {"occurred_at": occurred_at.isoformat()},
+            )
+        except NativeGuardStoreUnavailable:
+            _count_conflict_locally(self, occurred_at)
 
     def get_command_activity_persistence_health(
         self: _ConnectionOwner,
