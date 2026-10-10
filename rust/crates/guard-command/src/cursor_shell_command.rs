@@ -119,9 +119,9 @@ pub fn normalize_cursor_shell_command(command: &str) -> CursorShellNormalization
     CursorShellNormalization::Command(stripped.to_owned())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
-    use std::io::{Read, Write};
+    use std::io::Write;
     use std::process::{Command, Stdio};
 
     use super::{normalize_cursor_shell_command, CursorShellNormalization};
@@ -171,33 +171,20 @@ json.dump(
             .stderr(Stdio::piped())
             .spawn()
             .expect("python3");
-        child
-            .stdin
-            .take()
-            .expect("stdin")
+        let mut stdin = child.stdin.take().expect("stdin");
+        stdin
             .write_all(
                 serde_json::to_string(&commands)
                     .expect("commands")
                     .as_bytes(),
             )
             .expect("write commands");
-        let mut stderr = String::new();
-        let mut stdout = String::new();
-        child
-            .stderr
-            .take()
-            .expect("stderr")
-            .read_to_string(&mut stderr)
-            .expect("read stderr");
-        child
-            .stdout
-            .take()
-            .expect("stdout")
-            .read_to_string(&mut stdout)
-            .expect("read stdout");
-        let status = child.wait().expect("wait");
-        assert!(status.success(), "python helper failed: {stderr}");
-        let parsed: Vec<(String, String)> = serde_json::from_str(&stdout).expect("python json");
+        drop(stdin);
+        let output = child.wait_with_output().expect("wait");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "python helper failed: {stderr}");
+        let parsed: Vec<(String, String)> =
+            serde_json::from_slice(&output.stdout).expect("python json");
         assert_eq!(parsed.len(), commands.len());
         for (command, (python_once, python_twice)) in commands.iter().zip(parsed) {
             let once = as_command(normalize_cursor_shell_command(command));
