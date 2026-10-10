@@ -372,45 +372,6 @@ def compute_cursor_after_shell_proof(
     )
 
 
-def verify_cursor_after_observer_proof(
-    *,
-    secret: bytes,
-    conversation_id: str,
-    command: str,
-    approval_binding: str,
-    proof: str,
-    observer_event: str,
-) -> bool:
-    if not proof.strip():
-        return False
-    expected = compute_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id=conversation_id,
-        command=command,
-        approval_binding=approval_binding,
-        observer_event=observer_event,
-    )
-    return hmac.compare_digest(expected, proof.strip())
-
-
-def verify_cursor_after_shell_proof(
-    *,
-    secret: bytes,
-    conversation_id: str,
-    command: str,
-    approval_binding: str,
-    proof: str,
-) -> bool:
-    return verify_cursor_after_observer_proof(
-        secret=secret,
-        conversation_id=conversation_id,
-        command=command,
-        approval_binding=approval_binding,
-        proof=proof,
-        observer_event=_AFTER_SHELL_PROOF_EVENT,
-    )
-
-
 def managed_cursor_hook_invocation(env: Mapping[str, str] | None = None) -> bool:
     source = os.environ if env is None else env
     return source.get(_MANAGED_HOOK_ENV) == "1"
@@ -447,23 +408,19 @@ def cursor_after_observer_trusted(
     proof = after_shell_proof_from_env(env)
     if proof is None:
         return False
-    expected_proof = pending.get("after_shell_proof")
-    if not isinstance(expected_proof, str) or not expected_proof.strip():
-        return False
-    if not hmac.compare_digest(expected_proof.strip(), proof.strip()):
-        return False
     observer_event = _optional_string(pending.get("observer_event")) or cursor_observer_event_for_payload(payload)
-    try:
-        secret = ensure_cursor_hook_attestation_secret(guard_home)
-    except OSError:
-        return False
-    return verify_cursor_after_observer_proof(
-        secret=secret,
+    expected_proof = pending.get("after_shell_proof")
+    from ..native_cursor_observer_proof import native_cursor_observer_proof_valid
+
+    return native_cursor_observer_proof_valid(
+        guard_home=guard_home,
         conversation_id=conversation_id,
-        command=normalize_cursor_shell_command(command),
+        command=command,
         approval_binding=payload_binding,
-        proof=proof,
         observer_event=observer_event,
+        proof=proof,
+        pending_proof=expected_proof if isinstance(expected_proof, str) else None,
+        require_pending_match=True,
     )
 
 
@@ -509,7 +466,5 @@ __all__ = [
     "read_cursor_shell_binding_file",
     "remove_cursor_shell_binding_file",
     "resolve_cursor_approval_binding",
-    "verify_cursor_after_observer_proof",
-    "verify_cursor_after_shell_proof",
     "write_cursor_shell_binding_file",
 ]

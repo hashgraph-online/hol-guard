@@ -20,6 +20,7 @@ pub mod command_action_risk_classes;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
+pub mod cursor_shell_command;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
 pub use codex_output_env::{Ctx, GitCheck, GitRun, InspectionHost};
 mod codex_output_fnmatch;
