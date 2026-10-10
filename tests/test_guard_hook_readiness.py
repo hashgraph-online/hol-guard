@@ -11,6 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
 
 class _FakeHandler:
@@ -148,7 +149,9 @@ def test_workspace_readiness_stays_fail_closed_when_native_ack_is_unready(monkey
     assert daemon.hook_process_runner.calls == []
 
 
-def test_pi_source_prepares_workspace_before_timed_tool_review(tmp_path: Path) -> None:
+def test_pi_source_prepares_workspace_before_timed_tool_review(
+    tmp_path: Path, native_approval_reuse_runtime: Path
+) -> None:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
         home_dir=tmp_path,
@@ -170,10 +173,9 @@ def test_pi_source_prepares_workspace_before_timed_tool_review(tmp_path: Path) -
     assert "native_route !== 'native_resident'" in source
     assert "if (connection === null || connection.stateId === null)" in source
     assert '"authenticated-control-plane-failure"' in source
-    assert daemon_server_module._GuardDaemonHandler._requires_header_token(
-        "/v1/hooks/omp/readiness",
-        ["v1", "hooks", "omp", "readiness"],
-    )
+    assert native_route_facts(
+        "POST", "/v1/hooks/omp/readiness", guard_home=native_approval_reuse_runtime
+    ).requires_header_token
     assert "'X-Guard-Token': connection.authToken" in source[readiness_request : readiness_request + 700]
     assert "prepareGuardWorkspaceForTurn(contextCwd(ctx) ?? process.cwd())" in source
     assert 'pi.on("session_start", async (_event, ctx) => {' in source

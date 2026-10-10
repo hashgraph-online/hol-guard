@@ -16,6 +16,8 @@ mod approval_reuse_diagnostic_probes;
 mod approval_reuse_diagnostic_vectors_tests;
 mod archive_inspect;
 mod archive_inspect_containment;
+#[cfg(test)]
+mod bundle_parse_reuse_tests;
 mod business_document_compile;
 mod business_source_codec;
 mod claim_approval_reuse_op;
@@ -45,6 +47,10 @@ mod context_digest_json;
 mod context_digest_local_cli;
 mod contributed_mcp_decision_op;
 mod daemon_policy_authority;
+mod daemon_route_op;
+mod daemon_route_paths;
+mod daemon_route_resolve;
+mod daemon_route_session;
 mod data_flow_analyze_op;
 mod edge;
 mod encrypted_secret_store;
@@ -77,6 +83,7 @@ mod guard_store_outbox_requeue;
 #[cfg(test)]
 mod guard_store_vectors_tests;
 mod hardening;
+mod hook_adapter_op;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
 mod hook_decision_compose;
@@ -151,6 +158,8 @@ mod policy_integrity_resolver;
 mod policy_snapshot_build;
 mod policy_store;
 mod prompt_analyze_op;
+#[cfg(test)]
+mod registry_vectors_tests;
 mod request_context_op;
 mod request_context_shell;
 mod resident_client;
@@ -187,6 +196,10 @@ mod state_directory_lock;
 #[cfg(test)]
 mod store_vectors_support_tests;
 mod strict_json;
+#[cfg(test)]
+mod supply_chain_cloud_vectors_tests;
+mod supply_chain_egress;
+mod supply_chain_eval_seams;
 mod totp;
 mod workflow_capability_store;
 

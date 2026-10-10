@@ -491,6 +491,42 @@ def test_managed_daemon_launch_disables_idle_shutdown(
     assert child_env["GUARD_DAEMON_IDLE_TIMEOUT_SECONDS"] == "0"
 
 
+@pytest.mark.parametrize(
+    ("mode", "forwarded"),
+    [("force", True), ("shadow", True), ("auto", False), ("off", False)],
+)
+def test_daemon_launch_forwards_only_a_pinned_native_runtime_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    forwarded: bool,
+) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+
+    child_env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path)
+
+    if forwarded:
+        assert child_env["HOL_GUARD_NATIVE"] == mode
+        assert child_env["HOL_GUARD_NATIVE_BINARY"] == str(runtime)
+    else:
+        assert "HOL_GUARD_NATIVE" not in child_env
+        assert "HOL_GUARD_NATIVE_BINARY" not in child_env
+
+
+def test_daemon_launch_drops_a_relative_native_runtime_override(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", "relative/hol-guard-runtime")
+
+    child_env = daemon_manager_module._daemon_launcher_env(home_dir=tmp_path)
+
+    assert "HOL_GUARD_NATIVE_BINARY" not in child_env
+
+
 def test_ephemeral_daemon_launch_retains_server_idle_default(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

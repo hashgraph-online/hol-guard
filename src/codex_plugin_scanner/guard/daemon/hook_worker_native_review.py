@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from .hook_native_review_fence import native_review_fence
 
 if TYPE_CHECKING:
@@ -127,7 +128,7 @@ def _review_native_edge_once(
     # posture. A local Watch edit cannot weaken an enforcing snapshot
     # before its replacement is accepted. A missing binding takes the
     # unavailable route and cannot establish recording-only authority.
-    recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+    recording_only = recording_only_for_binding(policy_snapshot, harness)
     fenced: bool | None = None
     capture_receipts: list[Mapping[str, object]] = []
     try:

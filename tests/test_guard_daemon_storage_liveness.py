@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.daemon.server import (
     GuardDaemonServer,
     _GuardDaemonHttpServer,
 )
+from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
 from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_override,
     sqlite_connect_timeout_seconds,
@@ -66,6 +67,9 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
+    # Route policy is answered by the resident; start its stream before the
+    # store is locked so the test measures storage contention only.
+    assert native_route_facts("POST", "/v1/daemon/identity-challenge", guard_home=store.guard_home)
     blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
@@ -115,6 +119,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
         daemon.stop()
 
 
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -130,6 +135,18 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
+    # Route policy is answered by the resident, which needs the home's verifier
+    # key (provisioned through the store) and a started stream. Establish both
+    # before the store is locked so the burst measures storage contention only.
+    # Warm one resident per ask slot at once, so the burst does not pay spawns.
+    with ThreadPoolExecutor(max_workers=_MAX_CONCURRENT_ASKS) as warmup:
+        warmed = list(
+            warmup.map(
+                lambda _index: native_route_facts("POST", "/v1/hooks/pi", guard_home=store.guard_home),
+                range(_MAX_CONCURRENT_ASKS * 2),
+            )
+        )
+    assert all(facts.requires_header_token for facts in warmed)
     blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
     _ = blocker.execute("begin exclusive")
     endpoint = (

@@ -45,6 +45,8 @@ mod local_cli_identity;
 pub use local_cli_identity::*;
 mod approval_proof;
 pub use approval_proof::*;
+mod hook_adapter;
+pub use hook_adapter::*;
 mod hook_artifact_compose;
 pub use hook_artifact_compose::*;
 mod local_cli_grant;
@@ -91,6 +93,8 @@ mod generic_hook_payload;
 pub use generic_hook_payload::*;
 mod hook_decision;
 pub use hook_decision::*;
+mod daemon_route;
+pub use daemon_route::*;
 
 mod workflow_capability;
 pub use workflow_capability::*;
@@ -110,6 +114,8 @@ pub use authoritative_decision::*;
 
 mod package_authority;
 pub use package_authority::*;
+mod supply_chain_egress;
+pub use supply_chain_egress::*;
 
 mod contained_execution;
 pub use contained_execution::*;

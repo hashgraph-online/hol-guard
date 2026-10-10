@@ -9,6 +9,7 @@ proof-bound extension-control mutation.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from .command_evaluation import evaluate_command
@@ -38,17 +39,20 @@ def compute_extension_allow_hint(
     cwd: Path | None = None,
     home_dir: Path | None = None,
     registry: CommandSafetyExtensionRegistry = BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+    deadline: float | None = None,
 ) -> dict[str, object] | None:
-    """Return permission ids whose Allow state would let this command run, or None."""
+    """Return permission ids whose Allow state would let this command run, or None.
+
+    ``deadline`` (``time.monotonic()``) bounds the optional reduction pass: once
+    it passes, the already verified full permission set is returned as-is.
+    """
 
     if snapshot.authority_failure is not None or evaluation.decision_plane.action != "review":
         return None
     if isinstance(native_evidence, dict) and native_evidence.get("minimum_action") == "block":
         return None
     already_enabled = set(evaluation.control_resolution.explicitly_enabled_permission_ids)
-    permission_ids: list[str] = []
-    rule_ids: list[str] = []
-    extension_ids: list[str] = []
+    owners: dict[str, tuple[str, str]] = {}
     relied_permission_ids: list[str] = []
     for owned in evaluation.matches:
         rule_id = owned.match.rule.rule_id
@@ -60,28 +64,44 @@ def compute_extension_allow_hint(
             if permission.permission_id not in relied_permission_ids:
                 relied_permission_ids.append(permission.permission_id)
             continue
-        if permission.permission_id not in permission_ids:
-            permission_ids.append(permission.permission_id)
+        owners.setdefault(permission.permission_id, (rule_id, permission.extension_id))
+    if not owners or len(owners) > MAX_HINT_PERMISSIONS or len(relied_permission_ids) > _MAX_HINT_IDS:
+        return None
+
+    def allows(permission_ids: tuple[str, ...]) -> bool:
+        try:
+            counterfactual = evaluate_command(
+                command_text,
+                canonical_command=evaluation.command,
+                cwd=cwd,
+                home_dir=home_dir,
+                native_extension_evidence=native_evidence,
+                extension_control_snapshot=snapshot,
+                counterfactual_enabled_permission_ids=permission_ids,
+            )
+        except (NativeCommandExtensionEvidenceError, RuntimeError, ValueError):
+            return False
+        return counterfactual.decision_plane.action == "allow" and counterfactual.minimum_action == "allow"
+
+    permission_ids = list(owners)
+    if not allows(tuple(permission_ids)):
+        return None
+    # A matched rule that does not gate (for example a disabled-by-default one)
+    # must not be named: keep only the permissions the Allow actually needs.
+    for permission_id in tuple(permission_ids):
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+        remaining = tuple(item for item in permission_ids if item != permission_id)
+        if remaining and allows(remaining):
+            permission_ids = list(remaining)
+    rule_ids: list[str] = []
+    extension_ids: list[str] = []
+    for permission_id in permission_ids:
+        rule_id, extension_id = owners[permission_id]
         if rule_id not in rule_ids:
             rule_ids.append(rule_id)
-        if permission.extension_id not in extension_ids:
-            extension_ids.append(permission.extension_id)
-    if not permission_ids or len(permission_ids) > MAX_HINT_PERMISSIONS or len(relied_permission_ids) > _MAX_HINT_IDS:
-        return None
-    try:
-        counterfactual = evaluate_command(
-            command_text,
-            canonical_command=evaluation.command,
-            cwd=cwd,
-            home_dir=home_dir,
-            native_extension_evidence=native_evidence,
-            extension_control_snapshot=snapshot,
-            counterfactual_enabled_permission_ids=tuple(permission_ids),
-        )
-    except (NativeCommandExtensionEvidenceError, RuntimeError, ValueError):
-        return None
-    if counterfactual.decision_plane.action != "allow" or counterfactual.minimum_action != "allow":
-        return None
+        if extension_id not in extension_ids:
+            extension_ids.append(extension_id)
     return {
         "schema": EXTENSION_ALLOW_HINT_SCHEMA,
         "permission_ids": permission_ids,

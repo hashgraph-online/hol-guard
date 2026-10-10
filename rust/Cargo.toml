@@ -3,6 +3,7 @@ exclude = ["crates/guard-command-build"]
 members = [
     "crates/guard-alloc-probe",
     "crates/guard-archive",
+    "crates/guard-contained-process",
     "crates/guard-command",
     "crates/guard-contracts",
     "crates/guard-google-identity",
@@ -37,7 +38,7 @@ caseless = "0.2.2"
 fs2 = "0.4.3"
 ring = "0.17.14"
 rsa = "0.9.8"
-getrandom = "0.3.3"
+getrandom = { version = "0.3.3", features = ["std"] }
 libc = "0.2.175"
 nix = { version = "0.31.3", features = ["fs", "poll", "process", "signal", "socket"] }
 regex = "1.11.2"

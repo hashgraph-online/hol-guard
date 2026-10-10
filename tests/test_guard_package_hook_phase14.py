@@ -491,6 +491,11 @@ def test_phase14_claude_compatibility_hook_enforces_package_install_without_node
         "HOL_GUARD_TEST_SYNC_AUTH_CONTEXT_JSON",
         json.dumps({"error": "authorization_expired"}, separators=(",", ":")),
     )
+    # This surface models a signed-in account whose sign-in expired, not an
+    # explicitly unpaid one, so drop the module-wide unpaid/unreachable Cloud
+    # seams that `bundle_first_cloud` exports for the resident.
+    monkeypatch.delenv("HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON", raising=False)
+    monkeypatch.delenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", raising=False)
 
     adapter = ClaudeCodeHarnessAdapter()
     command = adapter._daemon_hook_command_parts(context)
