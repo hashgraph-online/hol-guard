@@ -328,6 +328,8 @@ class GuardSurfaceDaemonClient:
                     return self._decode_json_response(payload.decode("utf-8"))
             except TimeoutError as retry_error:
                 raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error
+            except urllib.error.HTTPError as retry_error:
+                raise self._http_request_error(retry_error, deadline=deadline) from retry_error
             except urllib.error.URLError as retry_error:
                 if isinstance(retry_error.reason, TimeoutError):
                     raise GuardDaemonTimeoutError("Guard daemon request timed out") from retry_error

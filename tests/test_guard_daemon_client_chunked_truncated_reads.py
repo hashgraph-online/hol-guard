@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 
 from codex_plugin_scanner.guard.daemon.client import (
+    GuardDaemonRequestError,
     GuardDaemonResponseSchemaError,
     GuardDaemonTimeoutError,
     GuardDaemonTransportError,
@@ -50,6 +51,17 @@ def _truncated(body: bytes) -> Responder:
             "Connection: close\r\n\r\n".encode()
         )
         handler.wfile.write(body[: len(body) // 2])
+
+    return respond
+
+
+def _http_error(status: int, body: bytes) -> Responder:
+    def respond(handler: BaseHTTPRequestHandler) -> None:
+        handler.wfile.write(
+            f"HTTP/1.1 {status} ERR\r\nContent-Type: application/json\r\n"
+            f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n".encode()
+        )
+        handler.wfile.write(body)
 
     return respond
 
@@ -131,6 +143,22 @@ def test_second_truncation_fails_without_a_third_request() -> None:
     ):
         client._get("/v1/x", timeout=10, max_bytes=CAP)
     assert served == ["/v1/x", "/v1/x"]
+
+
+def test_retry_http_error_keeps_status_and_code() -> None:
+    body = _json_of_size(1024)
+    error_body = json.dumps({"error": "daemon_busy", "recovery": {"action": "retry"}}).encode()
+    with (
+        _server(_truncated(body), _http_error(503, error_body)) as (client, served),
+        pytest.raises(GuardDaemonRequestError) as caught,
+    ):
+        client._get("/v1/x", timeout=10, max_bytes=CAP)
+    assert served == ["/v1/x", "/v1/x"]
+    error = caught.value
+    assert type(error) is GuardDaemonRequestError
+    assert error.status == 503
+    assert error.code == "daemon_busy"
+    assert error.recovery_action == "retry"
 
 
 def test_retry_shares_the_original_deadline() -> None:
