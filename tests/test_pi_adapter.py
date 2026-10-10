@@ -986,6 +986,10 @@ class TestPiRuntime:
 
     def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard-home")
+        # The resident store may create its keyring file beside the home; keep it out of the
+        # workspace so the workspace identity stays stable between the two queued attempts.
+        workspace = tmp_path / "workspace"
+        workspace.mkdir()
         command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
 
         def queue_for(output: str) -> list[dict[str, object]]:
@@ -1000,7 +1004,7 @@ class TestPiRuntime:
                 payload=payload,
                 config_path="~/.pi/agent/settings.json",
                 source_scope="project",
-                cwd=tmp_path,
+                cwd=workspace,
                 home_dir=tmp_path,
             )
             assert artifact is not None
@@ -1029,7 +1033,7 @@ class TestPiRuntime:
                                 "pi",
                                 "PostToolUse",
                                 payload,
-                                workspace=tmp_path,
+                                workspace=workspace,
                                 home_dir=tmp_path,
                             ).to_dict(),
                         }
