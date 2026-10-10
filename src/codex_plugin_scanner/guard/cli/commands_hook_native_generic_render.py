@@ -186,13 +186,13 @@ def render_generic_hook(
     after = directive["after_json"]
     if after == "native_response":
         message = directive["system_message"]
-        system_message = (
-            _ensure_terminal_punctuation(reason)
-            if message == "claude_punctuated"
-            else _codex_prompt_block_system_message(policy_action=policy_action, native_reason=reason)
-            if message == "codex_prompt"
-            else None
-        )
+        system_message: str | None
+        if message == "claude_punctuated":
+            system_message = _ensure_terminal_punctuation(reason)
+        elif message == "codex_prompt":
+            system_message = _codex_prompt_block_system_message(policy_action=policy_action, native_reason=reason)
+        else:
+            system_message = None
         _emit_adapter(
             directive,
             harness=harness,

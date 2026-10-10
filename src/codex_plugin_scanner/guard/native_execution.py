@@ -136,6 +136,7 @@ def _resident_request(
             "local_cli_grant_decide",
             "local_mcp_grant_decide",
             "approval_proof_decide",
+            "hook_decide",
         }:
             accepted = frozenset({"ok", "error"})
         if accepted is not None:

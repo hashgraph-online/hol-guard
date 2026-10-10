@@ -22,14 +22,19 @@ pub(crate) fn evaluate_hook_decision_request(
     if request.schema != HOOK_DECISION_REQUEST_SCHEMA {
         return Err("native_hook_decision_schema_mismatch".to_owned());
     }
-    let payload = decide(&request.query)?;
+    // A rejected query is a bound `error` reply carrying its specific code, so
+    // the transport can tell a malformed request from a resident outage.
+    let (status, code, payload) = match decide(&request.query) {
+        Ok(payload) => ("ok", "ok".to_owned(), Some(payload)),
+        Err(code) => ("error", code, None),
+    };
     crate::resident_protocol::encode_response(&HookDecisionResultV1 {
         schema: HOOK_DECISION_RESULT_SCHEMA.to_owned(),
         request_id: request.request_id.clone(),
         request_sha256,
-        status: "ok".to_owned(),
-        code: "ok".to_owned(),
-        payload: Some(payload),
+        status: status.to_owned(),
+        code,
+        payload,
     })
 }
 

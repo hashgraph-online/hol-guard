@@ -809,6 +809,7 @@ def run_native_generic_payload(
     configured_narrow_override = config.resolve_artifact_or_publisher_action_override(artifact_id, publisher)
     command_text = _hook_command_text(payload_map)
     has_command_text = isinstance(command_text, str) and bool(command_text.strip())
+    command_str = command_text or ""
     cwd = runtime_workspace or Path.cwd()
     inputs = _generic_hook_composition_inputs(
         args,
@@ -834,7 +835,7 @@ def run_native_generic_payload(
         payload_map["permission_decision_reason"] = composition["permission_decision_reason"]
     local_tool_eligibility: LocalToolApprovalEligibility | None = None
     if composition["tool_eligibility_needed"]:
-        local_tool_eligibility = local_tool_approval_eligibility(command_text, cwd=cwd, home_dir=home_dir)
+        local_tool_eligibility = local_tool_approval_eligibility(command_str, cwd=cwd, home_dir=home_dir)
     grant_lookups_allowed = composition["grant_lookups_allowed"]
     local_tool_grant = (
         matching_local_tool_grant(
@@ -849,11 +850,11 @@ def run_native_generic_payload(
     tool_grant_applied = local_tool_grant is not None and local_tool_eligibility is not None
     current_policy_action = composition["action_with_tool_grant" if tool_grant_applied else "action_without_tool_grant"]
     if has_command_text:
-        observe_unlisted_cli(store=store, command=command_text, cwd=cwd, home_dir=home_dir)
+        observe_unlisted_cli(store=store, command=command_str, cwd=cwd, home_dir=home_dir)
         if grant_lookups_allowed:
             current_policy_action = apply_local_cli_grant(
                 store=store,
-                command=command_text,
+                command=command_str,
                 cwd=cwd,
                 home_dir=home_dir,
                 current_action=current_policy_action,
@@ -1138,8 +1139,8 @@ def run_native_generic_payload(
             artifact=observed_artifact,
             artifact_hash=runtime_artifact_hash,
             changed_fields=changed_capabilities or ["tool_action"],
-            executable_action=policy_action,
-            observed_policy_action=observed_policy_action,
+            executable_action=cast(GuardAction, policy_action),
+            observed_policy_action=cast(GuardAction, observed_policy_action),
             redaction_level=config.receipt_redaction_level,
             risk_summary="Watch-only mode allowed an action that current policy would stop.",
             scanner_evidence=scanner_evidence,

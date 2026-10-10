@@ -292,6 +292,7 @@ def run_native_hook_pipeline(
                 event_name=event_name,
                 reason_code=error.code,
                 worker=worker,
+                recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
             )
 
     def revalidate_generic_after_claim(claimed_artifact_hash: str, claimed_approval: Mapping[str, object]) -> int:
