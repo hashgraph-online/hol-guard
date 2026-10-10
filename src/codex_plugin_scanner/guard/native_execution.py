@@ -162,6 +162,7 @@ def _resident_request(
             "claim_approval_reuse_decisions",
             "approval_reuse_diagnostic",
             "daemon_route",
+            "daemon_handler",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

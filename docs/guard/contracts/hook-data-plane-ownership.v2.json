@@ -365,6 +365,7 @@
     "src/codex_plugin_scanner/guard/native_store_policy.py",
     "src/codex_plugin_scanner/guard/native_hook_decision.py",
     "src/codex_plugin_scanner/guard/native_daemon_route.py",
+    "src/codex_plugin_scanner/guard/native_daemon_handler.py",
     "src/codex_plugin_scanner/guard/native_resident_decision.py",
     "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
     "src/codex_plugin_scanner/guard/native_hook_adapter.py",
