@@ -10,8 +10,8 @@ No workspace policy is pre-bound, so every case takes the first-contact path.
 Cases live in ``tests/fixtures/benign_false_positive_gate.json``. Benign cases
 must allow with zero approval rows and no ``native_*_review`` reason. Negative
 controls must still not allow. ``pending_fix`` names cases that are known to
-fail until a sibling fix lands; the gate fails if a listed case starts passing
-so stale markers get removed rather than hiding regressions.
+fail until a sibling fix lands; on CI the gate fails if a listed case starts
+passing so stale markers get removed rather than hiding regressions.
 """
 
 from __future__ import annotations
@@ -51,7 +51,10 @@ _FIXED_TOOLS = {
     "todo_write": "todo_write",
     "ls": "ls",
 }
-_ALLOWED_PR = {"#3958", "#3959", "#3960", "#3961", "pending-shell-github-extension", "unassigned"}
+_ALLOWED_PR = {"#3958", "#3959", "#3960", "#3961", "#3973", "unassigned"}
+# Pending entries are recorded against the Linux CI host. Git helper context and
+# temp-directory proofs differ on other hosts, so only CI fails a stale entry.
+_ENFORCE_STALE_PENDING = bool(os.environ.get("CI"))
 _PENDING_PR: dict[str, str] = _DOCUMENT["pending_pr"]
 _PENDING_ALWAYS: dict[str, str] = _DOCUMENT["pending_always"]
 
@@ -225,6 +228,8 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
     passed = _quiet_allow(result, approvals)
     gap = always_gap(_ROWS.get(case.case_id, [])) if _always_expected(case) else []
     if case.case_id in _PENDING_FIX:
+        if passed and not _ENFORCE_STALE_PENDING:
+            pytest.skip(f"pending_fix {case.case_id} allows on this host; CI decides staleness")
         assert not passed, (
             f"stale pending_fix: {case.case_id} now allows quietly; remove it from pending_fix "
             f"({_PENDING_FIX[case.case_id]})"
