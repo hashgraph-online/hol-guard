@@ -28,7 +28,6 @@ use crate::context_digest::{parse_context_token, python_strip, validate_context_
 use crate::package_authority_op::{request_digest, ResidentPackageEval};
 use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluation, patch};
 
-/// `package_protect_projection.LOCAL_SUPPLY_CHAIN_HARNESS`.
 const LOCAL_HARNESS: &str = "guard-cli";
 const EVALUATION_KEYS: [&str; 3] = ["policy_action", "reasons", "packages"];
 
