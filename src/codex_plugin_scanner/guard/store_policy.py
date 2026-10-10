@@ -49,13 +49,14 @@ from .memory_pattern_fingerprint import (
     build_memory_pattern_fingerprint,
 )
 from .models import GUARD_ACTION_VALUES
+from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from .native_policy_snapshot_windows_support import _runtime_state_directory
 from .runtime.approval_context import approval_context_tokens_validation_reason
 from .store_base import *
-from .store_event_receipts import _local_once_approval_is_reusable, _verify_local_once_approval
+from .store_event_receipts import _verify_local_once_approval
 from .store_local_once_authority import LOCAL_ONCE_LEGACY_AUTHORITY_KIND
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
@@ -1712,33 +1713,17 @@ class StorePolicyMixin:
 
         return self.claim_approval_reuse_decisions((decision,), now=now)
 
-    @staticmethod
     def approval_reuse_claim_disposition(
+        self,
         decision: Mapping[str, object],
     ) -> Literal["consumed", "retained"] | None:
         """Describe what a successful claim does to this selected allow.
 
-        Package local-once approvals are reusable and remain in their table.
-        Expiring ``approval-gate`` policy rows are the only policy decisions
-        atomically deleted by the claim transaction. All other valid policy
-        allows remain authoritative and therefore must still exist when a
-        caller revalidates immediately before launch.
+        The resident decides; ``None`` means the row is not a claimable allow or
+        the resident gave no authoritative answer, and callers must not claim.
         """
 
-        if decision.get("action") != "allow":
-            return None
-        approval_id = decision.get("approval_id")
-        if isinstance(approval_id, str) and approval_id:
-            artifact_id = decision.get("artifact_id")
-            if not isinstance(artifact_id, str) or not artifact_id:
-                return None
-            return "retained" if _local_once_approval_is_reusable(artifact_id) else "consumed"
-        decision_id = decision.get("decision_id")
-        if not isinstance(decision_id, int) or isinstance(decision_id, bool):
-            return None
-        if decision.get("source") == _APPROVAL_GATE_POLICY_SOURCE and decision.get("expires_at") is not None:
-            return "consumed"
-        return "retained"
+        return native_claim_disposition(decision, guard_home=getattr(self, "guard_home", None))
 
     def claim_approval_reuse_decisions(
         self,
@@ -1786,6 +1771,14 @@ class StorePolicyMixin:
         if not unique_decisions:
             return True
         assert expected_revision is not None
+        # Resolve dispositions before taking the write lock: the resident call
+        # must not run while a transaction is open. No answer means no claim.
+        dispositions: list[Literal["consumed", "retained"]] = []
+        for decision in unique_decisions:
+            claim_disposition = self.approval_reuse_claim_disposition(decision)
+            if claim_disposition is None:
+                return False
+            dispositions.append(claim_disposition)
         local_integrity_key: bytes | None = None
         local_integrity_key_id: str | None = None
         if has_local_once:
@@ -1803,10 +1796,11 @@ class StorePolicyMixin:
                 policy_bundle_decision_identities = self._cached_policy_bundle_decision_identities(
                     now=_parse_utc_timestamp(current_time).timestamp(),
                 )
-            for decision in unique_decisions:
+            for decision, claim_disposition in zip(unique_decisions, dispositions, strict=True):
                 if not self._claim_approval_reuse_decision_locked(
                     connection,
                     decision=decision,
+                    claim_disposition=claim_disposition,
                     current_time=current_time,
                     local_integrity_key=local_integrity_key,
                     local_integrity_key_id=local_integrity_key_id,
@@ -1821,6 +1815,7 @@ class StorePolicyMixin:
         connection: sqlite3.Connection,
         *,
         decision: Mapping[str, object],
+        claim_disposition: Literal["consumed", "retained"],
         current_time: str,
         local_integrity_key: bytes | None,
         local_integrity_key_id: str | None,
@@ -1832,9 +1827,6 @@ class StorePolicyMixin:
         decision_id = decision.get("decision_id")
         if isinstance(approval_id, str) and approval_id:
             if decision.get("authority_kind") != LOCAL_ONCE_LEGACY_AUTHORITY_KIND:
-                return False
-            claim_disposition = self.approval_reuse_claim_disposition(decision)
-            if claim_disposition is None:
                 return False
             claimed = self._claim_local_once_approval_by_id_locked(
                 connection,
@@ -1947,9 +1939,8 @@ class StorePolicyMixin:
         )
         if any(current_payload.get(key) != decision.get(key) for key in identity_keys):
             return False
-        claim_disposition = self.approval_reuse_claim_disposition(current_payload)
-        if claim_disposition is None:
-            return False
+        # The identity keys above pin the row, so the precomputed disposition
+        # of the selected decision is the disposition of the locked row.
         if claim_disposition == "consumed":
             cursor = connection.execute(
                 "delete from policy_decisions where decision_id = ? and action = 'allow'",

@@ -42,21 +42,23 @@ from ..local_supply_chain import (
     package_external_archive_override,
     package_request_policy_hash,
 )
-from ..mcp_fresh_approval import fresh_claim_allows_reapproval
 from ..mcp_tool_calls import (
-    ApprovalReuseClaimDisposition,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
     build_tool_call_artifact,
     build_tool_call_hash,
-    claimed_approval_authorizes_postclaim_review,
     evaluate_tool_call,
     resolve_tool_call_policy_action,
     tool_call_risk_categories,
     tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_approval_proof import (
+    ApprovalReuseClaimDisposition,
+    claimed_approval_authorizes_postclaim_review,
+    fresh_claim_allows_reapproval,
+)
 from ..native_execution import (
     mcp_stdio_session_close_native,
     mcp_stdio_session_open_native,
@@ -2248,11 +2250,13 @@ class RuntimeMcpGuardProxy:
                 claim_disposition=claimed_tool_disposition,
                 claimed_decision=claimed_tool_decision,
                 current_decision=postclaim_tool_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             package_claim_authorizes_review = claimed_approval_authorizes_postclaim_review(
                 claim_disposition=claimed_package_disposition,
                 claimed_decision=claimed_package_decision,
                 current_decision=postclaim_package_resolution.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             postclaim_tool_evidence = _postclaim_claim_evidence(
                 postclaim_tool_evidence,
@@ -2998,6 +3002,7 @@ class RuntimeMcpGuardProxy:
                 claim_disposition=claim_disposition,
                 claimed_decision=pending,
                 current_decision=fresh_decision.pending_approval_reuse_decision,
+                guard_home=self.store.guard_home,
             )
             postclaim_evidence = _postclaim_claim_evidence(
                 postclaim_evidence,
@@ -3038,6 +3043,7 @@ class RuntimeMcpGuardProxy:
                         decision=pending,
                         artifact=fresh_authority.artifact,
                         artifact_hash=fresh_authority.artifact_hash,
+                        guard_home=self.store.guard_home,
                     )
                 )
                 or (fresh_action == "review" and not claim_authorizes_review)

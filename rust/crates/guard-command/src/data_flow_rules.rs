@@ -53,8 +53,8 @@ pub static CURL_DATA_FILE_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 #[allow(clippy::invalid_regex)]
-static CURL_DATA_STDIN_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(
+static CURL_DATA_STDIN_PATTERN: LazyLock<FancyRegex> = LazyLock::new(|| {
+    FancyRegex::new(
         r#"(?s)(?:^|[\s;&|])(?i:curl|curl\.exe)\b[^\r\n;&|]*?(?:(?:--data(?:-binary|-raw|-urlencode)?|-d)\s*@-|(?:--form|-F)(?:=|\s*)[^\s;&|]*@[.-](?=$|[\s;&|])|--upload-file(?:=|\s+)[.-](?=$|[\s;&|])|-T\s*[.-](?=$|[\s;&|]))"#,
     )
     .expect("CURL_DATA_STDIN_PATTERN")
@@ -802,35 +802,35 @@ pub fn detect_data_flow_exfiltration(
     if scp_sends_secret(command, workspace) {
         findings.push(data_flow_signal(
             "scp-secret",
-            "scp copies a local secret to a remote host",
-            "This command sends a sensitive local file over scp.",
-            "scp source is a sensitive local path",
+            "SCP sends a local secret file",
+            "This command copies a local secret file to a remote host.",
+            "scp command references a sensitive local source",
             RiskSignalCategory::Network,
         ));
     }
     if git_remote_adds_token_url(command) {
         findings.push(data_flow_signal(
-            "git-token-url",
-            "Git remote URL embeds a credential",
-            "This command adds a git remote URL that embeds a token or password.",
-            "git remote add URL carries token-like credentials",
-            RiskSignalCategory::Network,
+            "git-remote-token",
+            "Git remote URL contains an access token",
+            "This command stores a token-bearing URL in git remote configuration.",
+            "git remote add URL includes credentials before host",
+            RiskSignalCategory::Secret,
         ));
     }
     if npm_publish_with_token_source(command, workspace) {
         findings.push(data_flow_signal(
-            "npm-publish-token",
-            "npm publish uses token sources in the environment",
-            "This command publishes an npm package while token material is exposed.",
-            "npm publish runs alongside token source references",
+            "npm-publish-token-source",
+            "NPM publish uses local token material",
+            "This command publishes a package while local npm token material is in scope.",
+            "npm publish appears with npm token source evidence",
             RiskSignalCategory::Network,
         ));
     }
     if clipboard_receives_secret(&pipes, command, workspace) {
         findings.push(data_flow_signal(
             "clipboard-secret",
-            "Clipboard command receives a local secret",
-            "This command pipes a local secret into a clipboard tool.",
+            "Clipboard receives a local secret",
+            "This command copies local secret contents into the clipboard.",
             "clipboard command receives sensitive source through a pipe",
             RiskSignalCategory::Secret,
         ));
@@ -1026,7 +1026,9 @@ fn has_secret_pipe_to_http_upload(
 fn has_http_upload(command: &str) -> bool {
     command_execution_segments(command).iter().any(|segment| {
         segment_executes_command(segment, &["curl", "curl.exe"])
-            && CURL_DATA_STDIN_PATTERN.is_match(segment)
+            // A backtracking-limit error means the segment could not be ruled
+            // out as an upload, so fail closed instead of dropping the signal.
+            && CURL_DATA_STDIN_PATTERN.is_match(segment).unwrap_or(true)
     })
 }
 
