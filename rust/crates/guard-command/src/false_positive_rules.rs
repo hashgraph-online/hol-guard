@@ -539,6 +539,16 @@ pub fn target_is_known_skill_doc_path(target: &str, home_dir: Option<&Path>) -> 
         }
         return true;
     }
+    for suffix in KNOWN_AGENT_DOC_SUFFIXES {
+        let expected = format!("{home}/{suffix}");
+        if normalized == expected
+            && Path::new(&expected).is_file()
+            && !is_link(&home)
+            && !path_has_symlink_component(&normalized, &home)
+        {
+            return true;
+        }
+    }
     false
 }
 

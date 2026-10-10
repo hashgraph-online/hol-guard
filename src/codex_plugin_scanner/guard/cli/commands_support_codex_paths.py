@@ -2,12 +2,19 @@
 
 # pyright: reportImportCycles=false
 
-# ruff: noqa: E402, F403, F405
+# ruff: noqa: F403, F405
 
 from __future__ import annotations
 
+from ._commands_shared import *
+from .commands_parser_helpers import *
+
 _CODEX_TOOL_RESPONSE_MAX_DEPTH = 5
+
+
 _CODEX_TOOL_RESPONSE_TEXT_LIMIT = 5 * 1024 * 1024
+
+
 _CODEX_PROMPT_FILE_FINGERPRINT_LENGTH = 24
 
 
@@ -33,333 +40,6 @@ def _truncate_codex_display_text(value: str, *, limit: int) -> str:
     from .commands_support_runtime_resolution import _truncate_codex_display_text as resolve
 
     return resolve(value, limit=limit)
-
-
-def _codex_search_constants():
-    from . import commands_support_codex_commands as commands
-
-    return (
-        commands._CODEX_SEARCH_OPTION_VALUE_FLAGS,
-        commands._CODEX_SEARCH_OPTION_VALUE_FLAGS_BY_EXECUTABLE,
-        commands._CODEX_SEARCH_PATTERN_VALUE_FLAGS,
-        commands._CODEX_SEARCH_UNSAFE_FLAGS,
-        commands._CODEX_SEARCH_UNSAFE_SHORT_FLAGS_BY_EXECUTABLE,
-    )
-
-
-def _codex_sed_args_are_bounded_filter(args: list[str]) -> bool:
-    from .commands_support_codex_reads import _codex_sed_args_are_bounded_filter as resolve
-
-    return resolve(args)
-
-
-from ._commands_shared import *
-from .commands_parser_helpers import *
-
-
-def _git_config_value_without_inline_comment(raw_value: str) -> str:
-    value = raw_value.strip()
-    if not value:
-        return value
-    quote = value[0] if value[0] in {"'", '"'} else None
-    if quote is not None:
-        escaped = False
-        parsed: list[str] = []
-        for char in value[1:]:
-            if escaped:
-                parsed.append(char)
-                escaped = False
-                continue
-            if char == "\\":
-                escaped = True
-                continue
-            if char == quote:
-                return "".join(parsed)
-            parsed.append(char)
-        return "".join(parsed)
-    for index, char in enumerate(value):
-        if char in {"#", ";"} and (index == 0 or value[index - 1].isspace()):
-            return value[:index].strip()
-    return value
-
-
-def _git_config_enables_diff_helper(config_text: str) -> bool:
-    return any(
-        re.match(r"(?i)^\s*(?:command|external|textconv)\s*=", line) for line in _git_config_logical_lines(config_text)
-    )
-
-
-def _git_config_logical_lines(config_text: str) -> tuple[str, ...]:
-    lines: list[str] = []
-    pending = ""
-    for raw_line in config_text.splitlines():
-        line = raw_line.rstrip()
-        if _git_config_line_continues(line):
-            pending = f"{pending}{line[:-1]}"
-            continue
-        if pending:
-            lines.append(f"{pending}{line.lstrip()}")
-            pending = ""
-            continue
-        lines.append(line)
-    if pending:
-        lines.append(pending)
-    return tuple(lines)
-
-
-def _git_config_line_continues(line: str) -> bool:
-    backslashes = 0
-    for char in reversed(line):
-        if char != "\\":
-            break
-        backslashes += 1
-    return backslashes % 2 == 1
-
-
-def _git_grep_uses_external_execution(args: list[str]) -> bool:
-    return any(
-        arg == "-O"
-        or (arg.startswith("-O") and len(arg) > 2)
-        or arg == "--open-files-in-pager"
-        or arg.startswith("--open-files-in-pager=")
-        or arg in {"--textconv", "--ext-grep"}
-        for arg in args
-    )
-
-
-def _shell_wrapper_script_index(parts: list[str]) -> int | None:
-    for index, arg in enumerate(parts[1:], start=1):
-        if arg == "-c":
-            return index + 1
-        if arg.startswith("-") and not arg.startswith("--") and "c" in arg[1:]:
-            return index + 1
-    return None
-
-
-def _codex_command_has_unquoted_shell_control(command: str) -> bool:
-    quote: str | None = None
-    escaped = False
-    for char in command:
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\":
-            escaped = True
-            continue
-        if quote is not None:
-            if char == quote:
-                quote = None
-            if quote == '"' and char == "`":
-                return True
-            if quote == '"' and char == "$":
-                return True
-            continue
-        if char in {"'", '"'}:
-            quote = char
-            continue
-        if char in {"\n", "\r"}:
-            return True
-        if char in {"|", "&", ";", ">", "<", "`"}:
-            return True
-        if char == "$":
-            return True
-    return False
-
-
-def _codex_search_targets_are_source_like(
-    args: list[str],
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-    executable: str,
-) -> bool:
-    targets = _codex_search_targets(args, executable=executable)
-    if not targets:
-        return False
-    from ..runtime.source_paths import source_path_is_allowed
-
-    allow_external_source = executable == "grep"
-    decisions = tuple(
-        source_path_is_allowed(
-            target,
-            cwd=cwd,
-            home_dir=home_dir,
-            allow_external_source=allow_external_source,
-        )
-        for target in targets
-    )
-    if not all(decision.allowed for decision in decisions):
-        return False
-    has_external_target = any(decision.reason_code == "external_source_path" for decision in decisions)
-    return not (has_external_target and executable == "grep" and _codex_grep_args_request_recursive_search(args))
-
-
-def _codex_fd_targets_are_source_like(args: list[str], *, cwd: Path | None, home_dir: Path | None) -> bool:
-    if fd_args_follow_symlinks(args):
-        return False
-    targets = _codex_fd_targets(args)
-    if not targets:
-        return False
-    return all(_codex_search_target_is_source_like(target, cwd=cwd, home_dir=home_dir) for target in targets)
-
-
-def _codex_fd_targets(args: list[str]) -> tuple[str, ...]:
-    return fd_search_targets(args) or ("__guard_unsafe_fd_args__",)
-
-
-def _codex_fd_exec_is_bounded_read_only(args: list[str]) -> bool:
-    if fd_args_follow_symlinks(args):
-        return False
-    parsed = split_fd_args_and_exec(args)
-    if parsed is None:
-        return not any(fd_arg_requests_exec(arg) for arg in args)
-    _fd_args, exec_parts = parsed
-    if not exec_parts or not fd_exec_token_is_plain_sed(exec_parts[0]):
-        return False
-    if exec_parts.count("{}") != 1:
-        return False
-    sed_args = [arg for arg in exec_parts[1:] if arg != "{}"]
-    return _codex_sed_args_are_bounded_filter(sed_args)
-
-
-def _codex_grep_args_request_recursive_search(args: list[str]) -> bool:
-    _, _, pattern_value_flags, _, _ = _codex_search_constants()
-    skip_next = False
-    for index, arg in enumerate(args):
-        if skip_next:
-            skip_next = False
-            continue
-        if arg == "--":
-            return False
-        if arg in pattern_value_flags:
-            skip_next = True
-            continue
-        if any(arg.startswith(flag) and len(arg) > len(flag) for flag in ("-e", "-f")):
-            continue
-        if arg in {"--dereference-recursive", "--recursive"}:
-            return True
-        if arg == "-d":
-            if index + 1 >= len(args) or args[index + 1] not in {"read", "skip"}:
-                return True
-            skip_next = True
-            continue
-        if arg.startswith("-d"):
-            if arg.removeprefix("-d") not in {"read", "skip"}:
-                return True
-            continue
-        if arg == "--directories":
-            if index + 1 >= len(args) or args[index + 1] not in {"read", "skip"}:
-                return True
-            skip_next = True
-            continue
-        if arg.startswith("--directories="):
-            if arg.removeprefix("--directories=") not in {"read", "skip"}:
-                return True
-            continue
-        if arg.startswith("-") and not arg.startswith("--") and "r" in arg[1:]:
-            return True
-    return False
-
-
-def _codex_search_targets(args: list[str], *, executable: str) -> tuple[str, ...]:
-    option_flags, option_flags_by_executable, pattern_value_flags, _, _ = _codex_search_constants()
-    positional: list[str] = []
-    skip_next = False
-    pattern_from_option = False
-    after_option_terminator = False
-    option_value_flags = option_flags | option_flags_by_executable.get(executable, frozenset())
-    for arg in args:
-        if skip_next:
-            skip_next = False
-            continue
-        if after_option_terminator:
-            positional.append(arg)
-            continue
-        if arg == "--":
-            after_option_terminator = True
-            continue
-        if _codex_search_arg_is_unsafe(arg, executable=executable, option_value_flags=option_value_flags):
-            return ()
-        if arg in pattern_value_flags:
-            pattern_from_option = True
-            skip_next = True
-            continue
-        if any(arg.startswith(flag) and len(arg) > len(flag) for flag in ("-e", "-f")):
-            pattern_from_option = True
-            continue
-        if arg in option_value_flags:
-            skip_next = True
-            continue
-        if any(arg.startswith(f"{flag}=") for flag in pattern_value_flags):
-            pattern_from_option = True
-            continue
-        if any(arg.startswith(f"{flag}=") for flag in option_value_flags):
-            continue
-        if arg.startswith("-"):
-            continue
-        positional.append(arg)
-    if pattern_from_option:
-        return tuple(positional)
-    if len(positional) >= 2:
-        return tuple(positional[1:])
-    return ()
-
-
-def _codex_search_arg_is_unsafe(arg: str, *, executable: str, option_value_flags: frozenset[str]) -> bool:
-    _, _, _, unsafe_flags, unsafe_short_flags_by_executable = _codex_search_constants()
-    if arg in unsafe_flags:
-        return True
-    if any(arg.startswith(f"{flag}=") for flag in unsafe_flags):
-        return True
-    if not arg.startswith("-") or arg.startswith("--"):
-        return False
-    unsafe_short_flags = unsafe_short_flags_by_executable.get(executable, frozenset())
-    for flag in arg[1:]:
-        if flag in unsafe_short_flags:
-            return True
-        if f"-{flag}" in option_value_flags:
-            return False
-    return False
-
-
-def _codex_search_target_is_source_like(
-    target: str,
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-    allow_external_source: bool = False,
-) -> bool:
-    from ..runtime.source_paths import source_path_is_allowed
-
-    return source_path_is_allowed(
-        target,
-        cwd=cwd,
-        home_dir=home_dir,
-        allow_external_source=allow_external_source,
-    ).allowed
-
-
-def _codex_search_target_is_external_source_like(
-    target: str,
-    *,
-    cwd: Path | None,
-    home_dir: Path | None,
-) -> bool:
-    from ..runtime.source_paths import source_path_is_allowed
-
-    decision = source_path_is_allowed(
-        target,
-        cwd=cwd,
-        home_dir=home_dir,
-        allow_external_source=True,
-    )
-    return decision.reason_code == "external_source_path"
-
-
-def _codex_resolve_source_like_path(target: str, *, cwd: Path | None, home_dir: Path | None) -> Path | None:
-    from ..runtime.source_paths import resolve_source_candidate_path
-
-    return resolve_source_candidate_path(target, cwd=cwd, home_dir=home_dir)
 
 
 def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
@@ -400,9 +80,12 @@ _PROMPT_PATH_TOKEN_PATTERN = re.compile(
     r"(?:~|\.{1,2}|/)[^\s'\"`<>|;(){}\[\]]{0,255}"
 )
 
+
 _PROMPT_FILE_READ_VERB_PATTERN = re.compile(r"\b(?:read|open|print|show|dump|cat|head|tail|less|view|display)\b", re.I)
 
+
 _PROMPT_CONTENT_SCAN_MAX_BYTES = 64 * 1024
+
 
 _PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(
     {
@@ -413,6 +96,7 @@ _PROMPT_CONTENT_SCAN_SKIP_BASENAMES = frozenset(
         ".git-credentials",
     }
 )
+
 
 _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS = frozenset(
     {
@@ -425,6 +109,8 @@ _PROMPT_CONTENT_SCAN_SECRET_BASENAME_MARKERS = frozenset(
         "token",
     }
 )
+
+
 _CODEX_PROMPT_RETRY_BOILERPLATE_PATTERNS = (
     re.compile(
         r"Warning:\s*HOL Guard flagged this prompt because it asks for direct local secret access and is protecting "
@@ -557,27 +243,11 @@ __all__ = [
     "_PROMPT_FILE_READ_VERB_PATTERN",
     "_PROMPT_PATH_TOKEN_PATTERN",
     "_codex_absolute_search_target_is_source_like",
-    "_codex_command_has_unquoted_shell_control",
-    "_codex_fd_exec_is_bounded_read_only",
-    "_codex_fd_targets",
-    "_codex_fd_targets_are_source_like",
     "_codex_prompt_credential_file_artifact",
     "_codex_prompt_display_text",
-    "_codex_resolve_source_like_path",
-    "_codex_search_arg_is_unsafe",
-    "_codex_search_target_is_external_source_like",
-    "_codex_search_target_is_source_like",
-    "_codex_search_targets",
-    "_codex_search_targets_are_source_like",
     "_collect_codex_tool_response_text",
-    "_git_config_enables_diff_helper",
-    "_git_config_line_continues",
-    "_git_config_logical_lines",
-    "_git_config_value_without_inline_comment",
-    "_git_grep_uses_external_execution",
     "_path_contains_symlink",
     "_prompt_path_looks_secret_bearing",
     "_sanitize_codex_display_text",
-    "_shell_wrapper_script_index",
     "_with_codex_prompt_display_metadata",
 ]

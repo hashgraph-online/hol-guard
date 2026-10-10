@@ -27,6 +27,10 @@ mod claim_reuse_binding;
 mod claim_reuse_binding_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
+mod codex_tool_output_git;
+mod codex_tool_output_op;
+#[cfg(all(test, unix))]
+mod codex_tool_output_vectors_tests;
 mod command_effect;
 mod compound_git_args;
 mod compound_git_chain;
