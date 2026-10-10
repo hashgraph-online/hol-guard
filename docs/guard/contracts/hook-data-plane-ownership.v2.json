@@ -309,7 +309,6 @@
    "paths": [
     "src/codex_plugin_scanner/guard/daemon/server.py",
     "src/codex_plugin_scanner/guard/daemon/hook_request_auth.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_process_runner_lifecycle.py",
     "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_deadline.py",
     "src/codex_plugin_scanner/guard/daemon/runtime_hook_scheduler.py",
