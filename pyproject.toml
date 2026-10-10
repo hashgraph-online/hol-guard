@@ -84,6 +84,7 @@ ci-test = [
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-xdist>=3.8.0",
+    "pytest-rerunfailures>=14.0",
     "ruff>=0.15.15",
 ]
 cisco-mcp = [
