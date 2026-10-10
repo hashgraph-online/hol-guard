@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.ccm",
+  "version": "1.0.0",
+  "name": "CCM (Cognitive Codebase Matrix)",
+  "description": "Reviews CCM code-graph indexing tools: background and blocking project indexing that writes index data into the project. Read-only navigation tools stay on inherit. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.senoldogann",
+    "displayName": "Senol Dogan",
+    "url": "https://github.com/senoldogann/LLM-Context-Manager"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCube", "background": "#0B1220" },
+  "homepage": "https://github.com/senoldogann/LLM-Context-Manager",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@senoldogann/context-manager"
+  },
+  "riskClasses": ["external-codebase-read", "external-index-file-write", "external-background-indexing"],
+  "tools": [
+    { "name": "index_project", "state": "review" },
+    { "name": "index_now", "state": "review" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/senoldogann/LLM-Context-Manager",
+    "https://github.com/senoldogann/LLM-Context-Manager/blob/main/SKILL.md",
+    "https://www.npmjs.com/package/@senoldogann/context-manager"
+  ],
+  "saferAlternatives": [
+    "Keep index_project and index_now on Review: both write index artifacts into the project, and index_project can run heavy background indexing.",
+    "Read-only tools (get_context, read_graph, find_usages, impact_of_change, trace_call_chain, search_code, find_nodes, diff_context) stay on inherit; prefer them when the index is fresh."
+  ]
+}
