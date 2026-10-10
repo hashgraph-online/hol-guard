@@ -48,6 +48,7 @@ from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import (
 )
 from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _workspace_fingerprint
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.silent_cloud_server import silent_cloud_sync_url
 from tests.support.network import stub_authenticated_urlopen
 
 
@@ -102,6 +103,9 @@ def _force_cloud_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
         raise TimeoutError("cloud unreachable")
 
     monkeypatch.setattr(evaluator_module, "_urlopen_json_with_timeout_retry", cloud_timeout)
+    # The resident evaluates Cloud requests itself, so point its sync endpoint at
+    # a loopback server that never answers and let the real timeout fire.
+    monkeypatch.setenv("HOL_GUARD_TEST_CLOUD_UNREACHABLE_URL", silent_cloud_sync_url())
 
 
 def _force_unpaid_entitlement(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -113,6 +117,10 @@ def _force_unpaid_entitlement(monkeypatch: pytest.MonkeyPatch) -> None:
             "reason": "paid_guard_cloud_required",
             "tier": "free",
         },
+    )
+    monkeypatch.setenv(
+        "HOL_GUARD_TEST_PACKAGE_ENTITLEMENT_JSON",
+        json.dumps({"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"}),
     )
 
 

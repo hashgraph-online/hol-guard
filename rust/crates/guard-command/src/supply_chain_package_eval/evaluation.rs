@@ -42,6 +42,24 @@ pub struct SupplyChainEvalDeps<'a> {
     pub store_extras: &'a dyn StoreExtrasApi,
     pub entitlement: &'a dyn EntitlementRefreshApi,
     pub config: &'a dyn ConfigLoaderApi,
+    pub saved_policy: &'a SavedPolicyProbe,
+}
+
+/// Saved-policy lookup state for a cached `cloud_validation_error` evaluation.
+///
+/// Python reuses such a cached error only while a saved `block` policy covers
+/// the request. The lookup key is the approval-identity hash and the lookup
+/// itself reads the signed approval store through the integrity keyring, both
+/// of which the caller hydrates. The decision stays here: whether a hydrated
+/// row is stale, and whether its action keeps the cached block.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SavedPolicyProbe {
+    /// The caller cannot hydrate a lookup, so a cached error is re-evaluated.
+    Unsupported,
+    /// The caller can hydrate a lookup but has not supplied it yet.
+    Required,
+    /// The hydrated `lookup["decision"]` row, or `None` when no row matched.
+    Supplied(Option<Value>),
 }
 
 // ---------------------------------------------------------------------------
@@ -77,7 +95,7 @@ pub fn evaluate_package_request_artifact(
     );
     match (result, error) {
         (Some(result), _) => Ok(result),
-        (None, Some(message)) => Err(EvalError::Internal(message)),
+        (None, Some(error)) => Err(error),
         (None, None) => Err(EvalError::Internal(
             "evaluate_package_request_artifact: no result".into(),
         )),

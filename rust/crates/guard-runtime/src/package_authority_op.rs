@@ -35,8 +35,9 @@ use guard_command::supply_chain_package_eval::{
     JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
     PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
-    RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
-    SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
+    RestrictedArchiveFailure, RiskDetectApi, SavedPolicyProbe, StoreExtrasApi,
+    SupplyChainBundleApi, SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps,
+    WorkspaceIoApi,
 };
 use guard_command::supply_chain_package_identity;
 use guard_contracts::{
@@ -109,6 +110,7 @@ fn eval_error_code(e: &EvalError) -> &'static str {
         EvalError::NotFound(_) => "not_found",
         EvalError::Internal(_) => "internal",
         EvalError::HttpStatus(_, _) => "http_status",
+        EvalError::SavedPolicyProbeRequired(_) => "saved_policy_probe_required",
     }
 }
 
@@ -2380,6 +2382,7 @@ pub struct ResidentEvalDeps {
     store_extras: ResidentStoreExtras,
     entitlement: ResidentEntitlementRefresh,
     config: ResidentConfigLoader,
+    saved_policy: SavedPolicyProbe,
 }
 
 impl ResidentEvalDeps {
@@ -2416,7 +2419,14 @@ impl ResidentEvalDeps {
                 entitlement_override,
             },
             config: ResidentConfigLoader,
+            saved_policy: SavedPolicyProbe::Unsupported,
         }
+    }
+
+    /// The caller can hydrate a saved-policy lookup for a cached Cloud error.
+    pub fn with_saved_policy(mut self, probe: SavedPolicyProbe) -> Self {
+        self.saved_policy = probe;
+        self
     }
 
     pub fn as_deps(&self) -> SupplyChainEvalDeps<'_> {
@@ -2434,6 +2444,7 @@ impl ResidentEvalDeps {
             store_extras: &self.store_extras,
             entitlement: &self.entitlement,
             config: &self.config,
+            saved_policy: &self.saved_policy,
         }
     }
 }
@@ -2748,8 +2759,46 @@ pub(crate) fn evaluate_apply_stored_package_policy(
 pub(crate) fn evaluate_supply_chain_eval(
     request: &SupplyChainEvalRequestV1,
 ) -> Result<Vec<u8>, String> {
-    let test_overrides = std::env::var_os("HOL_GUARD_RESIDENT_TEST_SEAMS").is_some();
+    let test_overrides = crate::resident_diagnostics::enabled();
     evaluate_supply_chain_eval_with_seams(request, test_overrides)
+}
+
+const TEST_SEAM_MAX_BYTES: usize = 8192;
+const TEST_AUTH_KEYS: [&str; 5] = [
+    "sync_url",
+    "access_token",
+    "issuer",
+    "dpop_key_material",
+    "error",
+];
+
+/// A test-seam override is honored only when it is a small JSON object of known
+/// keys. Anything else is refused outright rather than half-applied, so the
+/// test-only path cannot carry an unbounded or unexpected shape into a request.
+fn test_seam_overrides_are_valid(request: &SupplyChainEvalRequestV1) -> bool {
+    let bounded = |value: &Value| {
+        serde_json::to_vec(value).is_ok_and(|bytes| bytes.len() <= TEST_SEAM_MAX_BYTES)
+    };
+    let auth_valid = request
+        .sync_auth_context_override
+        .as_ref()
+        .is_none_or(|auth| {
+            bounded(auth)
+                && auth.as_object().is_some_and(|map| {
+                    map.iter().all(|(key, value)| {
+                        TEST_AUTH_KEYS.contains(&key.as_str())
+                            && match key.as_str() {
+                                "dpop_key_material" => value.is_null() || value.is_object(),
+                                _ => value.is_string(),
+                            }
+                    })
+                })
+        });
+    let entitlement_valid = request
+        .package_entitlement_override
+        .as_ref()
+        .is_none_or(|entitlement| bounded(entitlement) && entitlement.is_object());
+    auth_valid && entitlement_valid
 }
 
 /// `evaluate_supply_chain_eval` with the test-seam gate injected, so in-process
@@ -2776,9 +2825,25 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
     ) {
         return rejected;
     }
+    if test_overrides && !test_seam_overrides_are_valid(request) {
+        return serde_json::to_vec(&err_result(
+            &request.request_id,
+            &request_sha256,
+            "native_supply_chain_eval_test_seam_invalid",
+        ))
+        .map_err(|e| e.to_string());
+    }
     let store_path = PathBuf::from(&request.store_path);
     let guard_home = PathBuf::from(&request.guard_home);
     let store = ResidentSupplyChainStore::new(&store_path, &guard_home);
+    let Some(saved_policy) = saved_policy_probe(request) else {
+        return serde_json::to_vec(&err_result(
+            &request.request_id,
+            &request_sha256,
+            "native_supply_chain_eval_saved_policy_invalid",
+        ))
+        .map_err(|e| e.to_string());
+    };
     let deps_holder = ResidentEvalDeps::with_sync_auth_override(
         &store_path,
         &guard_home,
@@ -2794,7 +2859,8 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
             .filter(|_| test_overrides)
             .and_then(Value::as_object)
             .cloned(),
-    );
+    )
+    .with_saved_policy(saved_policy);
     let deps = deps_holder.as_deps();
     let mut artifact = artifact_from_value(&request.artifact);
     if let Some(private) = &request.runtime_private_metadata {
@@ -2818,6 +2884,17 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
             code: "ok".to_owned(),
             payload: Some(eval.to_dict()),
         },
+        Err(EvalError::SavedPolicyProbeRequired(cached)) => SupplyChainEvalResultV1 {
+            schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
+            request_id: request.request_id.clone(),
+            request_sha256,
+            // The envelope is answered (status ok) so the transport accepts it;
+            // the code, not the status, tells the caller this is a question and
+            // not a verdict.
+            status: "ok".to_owned(),
+            code: "saved_policy_probe_required".to_owned(),
+            payload: Some(Value::Object(*cached)),
+        },
         Err(e) => SupplyChainEvalResultV1 {
             schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
             request_id: request.request_id.clone(),
@@ -2828,6 +2905,24 @@ pub(crate) fn evaluate_supply_chain_eval_with_seams(
         },
     };
     crate::encode_response(&result)
+}
+
+const SAVED_POLICY_MAX_BYTES: usize = 65536;
+
+/// The caller's hydrated saved-policy lookup. An absent probe asks the caller
+/// for one; a present row must be a bounded JSON object, otherwise the request
+/// is refused rather than treated as "no saved policy".
+fn saved_policy_probe(request: &SupplyChainEvalRequestV1) -> Option<SavedPolicyProbe> {
+    let Some(probe) = request.saved_policy_probe.as_ref() else {
+        return Some(SavedPolicyProbe::Required);
+    };
+    match probe.decision.as_ref() {
+        None | Some(Value::Null) => Some(SavedPolicyProbe::Supplied(None)),
+        Some(decision @ Value::Object(_)) => serde_json::to_vec(decision)
+            .is_ok_and(|bytes| bytes.len() <= SAVED_POLICY_MAX_BYTES)
+            .then(|| SavedPolicyProbe::Supplied(Some(decision.clone()))),
+        Some(_) => None,
+    }
 }
 
 /// `PackageAuthorityDecide` — parse → artifact → eval in one call.
@@ -3169,3 +3264,7 @@ mod package_advisory_tests {
 #[cfg(test)]
 #[path = "apply_stored_package_policy_tests.rs"]
 mod apply_stored_package_policy_tests;
+
+#[cfg(test)]
+#[path = "supply_chain_eval_seam_tests.rs"]
+mod supply_chain_eval_seam_tests;

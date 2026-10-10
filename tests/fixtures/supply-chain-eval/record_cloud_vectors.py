@@ -15,6 +15,7 @@ result. The vectors are language-neutral; nothing here is replayed in tests.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import sys
 import tempfile
@@ -25,6 +26,7 @@ from typing import ClassVar
 
 from cloud_vector_cases import BASE_COMMIT, CONNECTED, NOW, TABLES, WORKSPACE_ID, cases
 
+from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as evaluator
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
@@ -103,12 +105,16 @@ def record(spec: dict[str, object], root: Path) -> tuple[dict[str, object], dict
     workspace.mkdir()
     for file_name, text in spec["files"].items():
         (workspace / file_name).write_text(text, encoding="utf-8")
+    os.environ["HOL_GUARD_TEST_KEYRING_FILE"] = str(root / spec["name"] / "keyring.json")
     store = GuardStore(home)
     store.set_sync_payload("oauth_local_credentials", CONNECTED, NOW)
     artifact = artifact_for(spec["targets"], spec["lockfile_paths"])
     if spec["bundle"] is not None:
         store.cache_supply_chain_bundle(WORKSPACE_ID, spec["bundle"], spec["bundle_cached_at"])
     if spec["eval_cache"]:
+        cached_code = (
+            "cloud_validation_error" if spec["eval_cache"] == "cloud_validation_error" else "known_malware_or_kev"
+        )
         intent_hash = str(artifact.artifact_id).rsplit(":", 1)[-1]
         fingerprint = _workspace_fingerprint(
             WORKSPACE_ID, workspace_dir=workspace, artifact=artifact, bundle_meta={"policy_hash": "policy-hash-1"}
@@ -127,7 +133,7 @@ def record(spec: dict[str, object], root: Path) -> tuple[dict[str, object], dict
                 "entitlement_state": "premium",
                 "cache_status": "hit",
                 "workspace_fingerprint": fingerprint,
-                "reasons": [{"code": "known_malware_or_kev", "message": "Prototype pollution in minimist"}],
+                "reasons": [{"code": cached_code, "message": "Prototype pollution in minimist"}],
                 "packages": [{"name": "minimist", "decision": "block", "recommendedFixVersion": "1.2.9"}],
                 "matched_rule_id": None,
                 "exception_id": None,
@@ -145,6 +151,11 @@ def record(spec: dict[str, object], root: Path) -> tuple[dict[str, object], dict
         )
     db_path = home / "guard.db"
     rows = snapshot(db_path)
+    if spec["policy"] is not None:
+        store.upsert_policy(
+            PolicyDecision(harness="codex", scope="global", action=spec["policy"]["action"], source="manual"),
+            NOW,
+        )
     server = None
     network = spec["network"]
     _Handler.seen = []
@@ -159,6 +170,15 @@ def record(spec: dict[str, object], root: Path) -> tuple[dict[str, object], dict
             "dpop_key_material": None,
         }
     original_entitlement = evaluator.resolve_package_firewall_entitlement
+    lookups: list[object] = []
+    original_lookup = store.resolve_policy_decision_lookup
+
+    def recording_lookup(*args: object, **kwargs: object) -> object:
+        lookup = original_lookup(*args, **kwargs)
+        lookups.append(lookup["decision"])
+        return lookup
+
+    store.resolve_policy_decision_lookup = recording_lookup
     if spec["entitlement"] is not None:
         evaluator.resolve_package_firewall_entitlement = lambda _store: dict(spec["entitlement"])
     try:
@@ -176,6 +196,8 @@ def record(spec: dict[str, object], root: Path) -> tuple[dict[str, object], dict
         "artifact": artifact.to_dict(),
         "files": {file_name: {"text": text} for file_name, text in spec["files"].items()},
         "rows": rows,
+        "saved_policy": spec["policy"],
+        "saved_policy_probe": {"decision": lookups[0]} if lookups else None,
         "entitlement": spec["entitlement"],
         "network": network,
         "cloud_request_paths": [seen["path"] for seen in _Handler.seen],
@@ -187,6 +209,9 @@ def record(spec: dict[str, object], root: Path) -> tuple[dict[str, object], dict
 
 
 def main() -> None:
+    # The store honors a file-backed test keyring under pytest only; it mints the
+    # policy integrity key the saved-policy lookup needs.
+    os.environ["PYTEST_CURRENT_TEST"] = "record_cloud_vectors"
     out = Path(sys.argv[1])
     records = []
     schema: dict[str, str] = {}

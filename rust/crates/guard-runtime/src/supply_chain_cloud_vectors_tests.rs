@@ -202,6 +202,7 @@ fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
         runtime_private_metadata: None,
         sync_auth_context_override: None,
         package_entitlement_override: None,
+        saved_policy_probe: None,
     };
     if let Some(server) = &server {
         request.sync_auth_context_override = Some(json!({
@@ -213,11 +214,32 @@ fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
     if !case["entitlement"].is_null() {
         request.package_entitlement_override = Some(case["entitlement"].clone());
     }
-    let reply = evaluate_supply_chain_eval_with_seams(&request, true)?;
+    let mut result = decode(&evaluate_supply_chain_eval_with_seams(&request, true)?)?;
+    // A cached Cloud validation error needs the saved-policy lookup only the
+    // caller can hydrate. The vector records what the Python lookup returned.
+    let asked = result.code == "saved_policy_probe_required";
+    let recorded_probe = !case["saved_policy_probe"].is_null();
+    if asked != recorded_probe {
+        return Err(format!(
+            "{name}: saved-policy probe asked={asked} but vector probe is {}",
+            case["saved_policy_probe"]
+        ));
+    }
+    if asked {
+        if result.status != "ok" || result.payload.is_none() {
+            return Err(format!(
+                "{name}: probe request malformed: {}",
+                result.status
+            ));
+        }
+        request.saved_policy_probe = Some(
+            serde_json::from_value(case["saved_policy_probe"].clone())
+                .map_err(|e| format!("{name}: probe vector: {e}"))?,
+        );
+        result = decode(&evaluate_supply_chain_eval_with_seams(&request, true)?)?;
+    }
     let sent = server.map(CloudServer::finish).unwrap_or_default();
     let _ = std::fs::remove_dir_all(&root);
-    let result: SupplyChainEvalResultV1 =
-        serde_json::from_slice(&reply).map_err(|e| e.to_string())?;
     if result.status != "ok" {
         return Err(format!(
             "{name}: status {} code {}",
@@ -255,6 +277,10 @@ fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
         ));
     }
     Ok(())
+}
+
+fn decode(reply: &[u8]) -> Result<SupplyChainEvalResultV1, String> {
+    serde_json::from_slice(reply).map_err(|e| e.to_string())
 }
 
 fn diff(expected: &Value, actual: &Value) -> String {

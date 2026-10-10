@@ -101,7 +101,9 @@ use evaluation::{
     decision_rank, decision_to_guard_action_variant, empty_package_material_result,
     normalize_package_name, parse_evaluation_timestamp, reason_severity, severity_rank_value,
 };
-pub use evaluation::{evaluate_package_request_artifact, EvaluationDraft, SupplyChainEvalDeps};
+pub use evaluation::{
+    evaluate_package_request_artifact, EvaluationDraft, SavedPolicyProbe, SupplyChainEvalDeps,
+};
 
 #[path = "supply_chain_package_eval/decisions.rs"]
 mod decisions;
@@ -269,6 +271,9 @@ use cloud_transport::cloud_http_fail_closed_evaluation_full;
 #[path = "supply_chain_package_eval/cloud_evaluation.rs"]
 mod cloud_evaluation;
 use cloud_evaluation::evaluate_with_cloud;
+#[path = "supply_chain_package_eval/saved_policy.rs"]
+mod saved_policy;
+use saved_policy::{saved_policy_keeps_cached_error, SavedPolicyOutcome};
 #[path = "supply_chain_package_eval/orchestration.rs"]
 mod orchestration;
 use orchestration::evaluate_package_request_artifact_uncached;

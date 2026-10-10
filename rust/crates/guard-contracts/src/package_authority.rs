@@ -124,6 +124,21 @@ pub struct SupplyChainEvalRequestV1 {
     /// Python-only resolver the resident never runs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_entitlement_override: Option<Value>,
+    /// Saved-policy lookup the caller hydrated after the resident answered
+    /// `saved_policy_probe_required` for a cached Cloud validation error.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_policy_probe: Option<SavedPolicyProbeV1>,
+}
+
+/// The `lookup["decision"]` row the caller read for a cached Cloud validation
+/// error, or `None` when no saved policy matched. The resident applies the
+/// stale-family and block-only rules; it does not trust the row for anything
+/// else.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct SavedPolicyProbeV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

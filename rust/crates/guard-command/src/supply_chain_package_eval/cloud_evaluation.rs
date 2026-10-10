@@ -23,7 +23,9 @@ fn classify_post_failure(error: EvalError) -> PostFailure {
         EvalError::HttpStatus(code, _) => PostFailure::Http(code),
         EvalError::Internal(message) if message == INVALID_PAYLOAD => PostFailure::Invalid,
         EvalError::Internal(message) => PostFailure::Os(EvalError::Internal(message)),
-        EvalError::Validation(_) | EvalError::NotFound(_) => PostFailure::Invalid,
+        EvalError::Validation(_)
+        | EvalError::NotFound(_)
+        | EvalError::SavedPolicyProbeRequired(_) => PostFailure::Invalid,
     }
 }
 

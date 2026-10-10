@@ -230,6 +230,7 @@ def case(name: str, targets: list[str], **fields: object) -> dict[str, object]:
         "bundle_cached_at": fields.pop("bundle_cached_at", NOW),
         "eval_cache": fields.pop("eval_cache", False),
         "network": fields.pop("network", None),
+        "policy": fields.pop("policy", None),
         **fields,
     }
 
@@ -295,6 +296,21 @@ def cases() -> list[dict[str, object]]:
         case(f"unpaid_unreachable_{name}", targets, entitlement=UNPAID, network={"mode": "dropped"}, **extra)
         for name, targets, extra in scenarios
     ]
+    for label, policy in (
+        ("saved_block", {"action": "block"}),
+        ("saved_allow", {"action": "allow"}),
+        ("saved_warn", {"action": "warn"}),
+        ("no_policy", None),
+    ):
+        out.append(
+            case(
+                f"cached_cloud_error_{label}",
+                minimist,
+                bundle=block_bundle,
+                eval_cache="cloud_validation_error",
+                policy=policy,
+            )
+        )
     ok = {"mode": "http", "status": 200}
     for status in (500, 401, 403, 422):
         for label, entitlement, extra in (
