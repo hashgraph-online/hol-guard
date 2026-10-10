@@ -7,9 +7,10 @@ import hashlib
 import json
 import re
 import sqlite3
+from typing import cast
 
 from .approval_resolution import approval_resolution_block_reason
-from .approval_scope_support import request_scope_contract_payload, supported_request_scopes
+from .approval_scope_support import request_scope_contract_payloads
 from .decision_boundaries import canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
@@ -357,7 +358,7 @@ def list_approval_requests(
         rows = connection.execute(query, params).fetchall()
     else:
         rows = connection.execute(f"{query}\nlimit ?", (*params, limit)).fetchall()
-    return [_row_to_payload(row) for row in rows]
+    return _rows_to_payloads(rows)
 
 
 def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
@@ -537,6 +538,37 @@ def count_approval_requests(
 
 
 def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
+    return _rows_to_payloads([row])[0]
+
+
+def _rows_to_payloads(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
+    """Build payloads, asking the resident for every row's scope contract in one call."""
+
+    drafts = [_row_to_draft(row) for row in rows]
+    if not drafts:
+        return []
+    contracts = request_scope_contract_payloads([draft for draft, _error in drafts])
+    payloads: list[dict[str, object]] = []
+    for (payload, contract_error), contract in zip(drafts, contracts, strict=True):
+        payload.update(contract)
+        if contract_error is not None:
+            payload["decision_contract_error"] = contract_error
+        allowed = cast(dict[str, object], payload["allowed_scopes_by_action"])
+        payload["allowed_scopes"] = list(cast(list[str], allowed["allow"]))
+        recommendations = payload["recommended_scope_by_action"]
+        if isinstance(recommendations, dict):
+            payload["recommended_scope"] = recommendations.get("allow")
+        decision_v2 = payload.get("decision_v2_json")
+        if isinstance(decision_v2, dict):
+            payload["decision_v2_json"] = {
+                **decision_v2,
+                "approval_scopes": list(cast(list[str], payload["allowed_scopes"])),
+            }
+        payloads.append(payload)
+    return payloads
+
+
+def _row_to_draft(row: sqlite3.Row) -> tuple[dict[str, object], str | None]:
     parsed_decision_v2 = _optional_json_object(row["decision_v2_json"])
     parsed_action_envelope = _optional_json_object(row["action_envelope_json"])
     canonical_decision = canonical_approval_surfaces(
@@ -599,20 +631,7 @@ def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
         "created_at": str(row["created_at"]),
         "resolved_at": row["resolved_at"],
     }
-    payload.update(request_scope_contract_payload(payload))
-    if canonical_decision.contract_error is not None:
-        payload["decision_contract_error"] = canonical_decision.contract_error
-    payload["allowed_scopes"] = list(supported_request_scopes(payload))
-    recommendations = payload["recommended_scope_by_action"]
-    if isinstance(recommendations, dict):
-        payload["recommended_scope"] = recommendations.get("allow")
-    decision_v2 = payload.get("decision_v2_json")
-    if isinstance(decision_v2, dict):
-        payload["decision_v2_json"] = {
-            **decision_v2,
-            "approval_scopes": list(payload["allowed_scopes"]),
-        }
-    return payload
+    return payload, canonical_decision.contract_error
 
 
 def _safe_json_list(value: object) -> list[object]:
