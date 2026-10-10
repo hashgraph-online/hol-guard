@@ -24,8 +24,7 @@ from codex_plugin_scanner.guard.runtime import cloud_request_native as cloud
 _VECTORS = Path(__file__).parent / "fixtures" / "cloud_request_authority" / "vectors.json.gz"
 _KINDS = (
     "cloud_scrub_texts",
-    "cloud_sync_texts",
-    "cloud_sync_scrub_envelope",
+    "cloud_sync_receipt_payloads",
     "cloud_review_event_display",
     "cloud_request_payload",
     "local_request_snapshot",
@@ -68,10 +67,6 @@ def test_typed_adapters_return_the_owner_answer() -> None:
         "plain",
     ]
     assert cloud.cloud_scrub_texts([]) == []
-    assert cloud.cloud_sync_command_display_part("  ls   -la \n") == "ls -la"
-    assert cloud.cloud_sync_sanitize_text("def run(): pass", fallback="withheld") == "withheld"
-    envelope = {"command": "rm -rf x", "redacted_command": "rm --token abc", "kind": "shell"}
-    assert cloud.cloud_sync_scrub_envelope_commands(envelope, redaction_level="full") == {"kind": "shell"}
     row = {"request_id": "r1", "harness": "codex", "policy_action": "allow", "command_text": "echo hi"}
     payload = cloud.cloud_safe_local_request_payload(row, redaction_level="none")
     assert payload["command_text"] == "echo hi"
@@ -100,12 +95,13 @@ def test_native_unavailable_fails_closed(monkeypatch: pytest.MonkeyPatch) -> Non
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
     cloud._scrubbed.cache_clear()
-    cloud._synced_text.cache_clear()
     monkeypatch.setattr(cloud, "native_runner_authority", refuse)
     with pytest.raises(NativeRunnerAuthorityError):
         cloud.cloud_scrub_text("token abc")
     with pytest.raises(NativeRunnerAuthorityError):
-        cloud.cloud_sync_command_display_part("ls")
+        cloud.cloud_sync_receipt_payloads(
+            [{"receipt_id": "r"}], device_id="d", device_name="n", redaction_level="full", now="2026-01-01T00:00:00Z"
+        )
     with pytest.raises(NativeRunnerAuthorityError):
         cloud.cloud_safe_local_request_payload({"request_id": "r"}, redaction_level="full")
 

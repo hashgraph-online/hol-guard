@@ -111,28 +111,52 @@ def cloud_scrub_text(value: str) -> str:
     return _scrubbed(value)
 
 
-@lru_cache(maxsize=_MEMO_SIZE)
-def _synced_text(value: str, mode: str, fallback: str) -> str:
-    item: dict[str, object] = {"value": value, "mode": mode}
-    if mode == "sanitize":
-        item["fallback"] = fallback
-    return _text_list(_call("cloud_sync_texts", {"items": [item]}), 1)[0]
+_TOO_LARGE_CODES = frozenset(
+    {"native_runner_authority_request_too_large", "native_runner_authority_response_too_large"}
+)
 
 
-def cloud_sync_sanitize_text(value: str, *, fallback: str) -> str:
-    return _synced_text(value, "sanitize", fallback)
+def cloud_sync_receipt_payloads(
+    receipts: Sequence[Mapping[str, object]],
+    *,
+    device_id: str,
+    device_name: str,
+    redaction_level: str,
+    now: str,
+) -> list[dict[str, object]]:
+    """Cloud receipt payloads for stored receipt rows, in one resident round trip.
 
+    A batch that exceeds a resident byte cap is halved until it fits, so only a
+    single receipt larger than the cap is refused.
+    """
 
-def cloud_sync_command_display_part(value: str) -> str:
-    return _synced_text(value, "display", "")
-
-
-def cloud_sync_scrub_envelope_commands(envelope: Mapping[str, object], *, redaction_level: str) -> dict[str, object]:
-    payload = _call("cloud_sync_scrub_envelope", {"envelope": dict(envelope), "redaction_level": redaction_level})
-    scrubbed = payload.get("envelope")
-    if not isinstance(scrubbed, dict):
+    if not receipts:
+        return []
+    args = {
+        "receipts": [dict(receipt) for receipt in receipts],
+        "device_id": device_id,
+        "device_name": device_name,
+        "redaction_level": redaction_level,
+        "now": now,
+    }
+    try:
+        payloads = _call("cloud_sync_receipt_payloads", args).get("payloads")
+    except NativeRunnerAuthorityError as error:
+        if str(error) not in _TOO_LARGE_CODES or len(receipts) == 1:
+            raise
+        middle = len(receipts) // 2
+        common = {"device_id": device_id, "device_name": device_name, "redaction_level": redaction_level, "now": now}
+        return [
+            *cloud_sync_receipt_payloads(receipts[:middle], **common),
+            *cloud_sync_receipt_payloads(receipts[middle:], **common),
+        ]
+    if (
+        not isinstance(payloads, list)
+        or len(payloads) != len(receipts)
+        or not all(isinstance(payload, dict) for payload in payloads)
+    ):
         raise _invalid()
-    return scrubbed
+    return payloads
 
 
 def cloud_safe_local_request_payload(

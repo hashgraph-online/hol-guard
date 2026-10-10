@@ -31,6 +31,9 @@ mod claim_reuse_binding_tests;
 mod claim_reuse_vectors_tests;
 mod cloud_action_envelope;
 mod cloud_action_envelope_fields;
+mod cloud_receipt_payload;
+#[cfg(test)]
+mod cloud_receipt_vectors_tests;
 mod cloud_request_payload;
 mod cloud_request_snapshot;
 mod cloud_request_text;

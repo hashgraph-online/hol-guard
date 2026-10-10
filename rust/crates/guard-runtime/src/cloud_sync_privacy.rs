@@ -52,7 +52,7 @@ fn looks_like_source_excerpt(value: &str) -> bool {
 }
 
 /// `cloud_sync_sanitize_text`.
-fn sanitize_text(value: &str, fallback: &str) -> String {
+pub(crate) fn sanitize_text(value: &str, fallback: &str) -> String {
     let redacted = redact_sensitive_text(value);
     let stripped = py_strip(&redacted);
     if stripped.is_empty() || looks_like_source_excerpt(stripped) {
@@ -66,7 +66,7 @@ fn sanitize_text(value: &str, fallback: &str) -> String {
 }
 
 /// `cloud_sync_command_display_part`.
-fn command_display_part(value: &str) -> String {
+pub(crate) fn command_display_part(value: &str) -> String {
     let sanitized = sanitize_text(&cloud_scrub_text(value), "");
     sanitized
         .split(py_isspace)
@@ -75,43 +75,12 @@ fn command_display_part(value: &str) -> String {
         .join(" ")
 }
 
-/// Kind `cloud_sync_texts`: `{items: [{value, fallback?, mode}]}` where mode is
-/// `display` (command display part) or `sanitize` (text with fallback).
-pub(crate) fn cloud_sync_texts(args: &Value) -> KindResult {
-    let items = args_object(args)?
-        .get("items")
-        .and_then(Value::as_array)
-        .ok_or(ERR_INVALID)?;
-    let mut texts = Vec::with_capacity(items.len());
-    for entry in items {
-        let entry = args_object(entry)?;
-        let value = entry
-            .get("value")
-            .and_then(Value::as_str)
-            .ok_or(ERR_INVALID)?;
-        texts.push(match entry.get("mode").and_then(Value::as_str) {
-            Some("display") => command_display_part(value),
-            Some("sanitize") => {
-                let fallback = entry
-                    .get("fallback")
-                    .and_then(Value::as_str)
-                    .ok_or(ERR_INVALID)?;
-                sanitize_text(value, fallback)
-            }
-            _ => return Err(ERR_INVALID),
-        });
-    }
-    Ok(json!({ "texts": texts }))
-}
-
-/// Kind `cloud_sync_scrub_envelope`: `cloud_sync_scrub_envelope_commands`.
-pub(crate) fn cloud_sync_scrub_envelope(args: &Value) -> KindResult {
-    let args = args_object(args)?;
-    let mut safe = args_object(args.get("envelope").ok_or(ERR_INVALID)?)?.clone();
-    let level = args
-        .get("redaction_level")
-        .and_then(Value::as_str)
-        .ok_or(ERR_INVALID)?;
+/// `cloud_sync_scrub_envelope_commands`.
+pub(crate) fn scrub_envelope_commands(
+    envelope: &Map<String, Value>,
+    level: &str,
+) -> Map<String, Value> {
+    let mut safe = envelope.clone();
     for key in RECEIPT_COMMAND_KEYS {
         let Some(Value::String(value)) = safe.get(key) else {
             continue;
@@ -123,7 +92,7 @@ pub(crate) fn cloud_sync_scrub_envelope(args: &Value) -> KindResult {
             safe.insert(key.to_owned(), Value::String(display));
         }
     }
-    Ok(json!({ "envelope": safe }))
+    safe
 }
 
 fn utf16_units(value: &str) -> usize {
