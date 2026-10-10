@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -512,14 +513,14 @@ def test_live_managed_anchor_overrides_user_store_key_collision(
 @pytest.mark.parametrize(
     "managed_state",
     [
-        _managed_policy_state(None),
-        _managed_policy_state(policy_bundle_keyring_payload((), workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID)),
-        ManagedPolicyState(
+        lambda: _managed_policy_state(None),
+        lambda: _managed_policy_state(policy_bundle_keyring_payload((), workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID)),
+        lambda: ManagedPolicyState(
             "invalid",
             "managed-policy-test",
             reason_code="managed_policy_invalid",
         ),
-        ManagedPolicyState(
+        lambda: ManagedPolicyState(
             "inaccessible",
             "managed-policy-test",
             reason_code="managed_policy_inaccessible",
@@ -529,11 +530,12 @@ def test_live_managed_anchor_overrides_user_store_key_collision(
 )
 def test_managed_policy_without_usable_anchor_ignores_user_store_keyring(
     monkeypatch: pytest.MonkeyPatch,
-    managed_state: ManagedPolicyState,
+    managed_state: Callable[[], ManagedPolicyState],
 ) -> None:
+    state = managed_state()
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.mdm.policy.load_managed_policy",
-        lambda: managed_state,
+        lambda: state,
     )
 
     validated_bundle, reason, anchored_keys = validate_synced_policy_bundle(

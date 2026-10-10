@@ -53,6 +53,22 @@ mod git_execution_safety_repo_tests;
 mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_runtime_authorization;
+mod guard_store_args;
+mod guard_store_db;
+mod guard_store_json;
+mod guard_store_op;
+mod guard_store_outbox_append;
+mod guard_store_outbox_binding;
+mod guard_store_outbox_decode;
+mod guard_store_outbox_identity;
+mod guard_store_outbox_queries;
+mod guard_store_outbox_reads;
+#[cfg(test)]
+mod guard_store_outbox_reads_tests;
+mod guard_store_outbox_recover;
+mod guard_store_outbox_requeue;
+#[cfg(test)]
+mod guard_store_vectors_tests;
 mod hardening;
 mod hook_artifact_compose_op;
 mod hook_artifact_compose_reuse;
@@ -69,6 +85,16 @@ mod local_once_store;
 mod local_store_read;
 mod managed_resident;
 mod mcp_probe_op;
+mod mcp_proxy_actions;
+mod mcp_proxy_catalog;
+mod mcp_proxy_decision_op;
+#[cfg(test)]
+mod mcp_proxy_decision_tests;
+#[cfg(test)]
+mod mcp_proxy_decision_vectors_tests;
+mod mcp_proxy_package;
+mod mcp_proxy_postclaim;
+mod mcp_proxy_route;
 mod mcp_runtime_evidence_op;
 mod mcp_stdio_session_op;
 mod mcp_tool_evidence_op;
@@ -87,6 +113,31 @@ mod oneshot;
 mod package_authority_config;
 mod package_authority_op;
 mod package_evaluation_compose_op;
+mod policy_bundle_crypto;
+mod policy_bundle_decisions;
+mod policy_bundle_delivery;
+mod policy_bundle_families;
+mod policy_bundle_json;
+mod policy_bundle_keys;
+mod policy_bundle_keys_ctx;
+mod policy_bundle_op;
+mod policy_bundle_op_delivery;
+mod policy_bundle_op_keys;
+mod policy_bundle_op_page;
+#[cfg(test)]
+mod policy_bundle_op_page_tests;
+mod policy_bundle_op_synced;
+#[cfg(test)]
+mod policy_bundle_op_tests;
+mod policy_bundle_op_validate;
+#[cfg(test)]
+mod policy_bundle_op_vectors_tests;
+mod policy_bundle_py;
+mod policy_bundle_time;
+mod policy_bundle_v1;
+mod policy_bundle_v1_rules;
+mod policy_bundle_v2;
+mod policy_bundle_v2_ack;
 mod policy_decision_lookup_op;
 mod policy_enforcement;
 mod policy_integrity_resolver;
@@ -110,6 +161,10 @@ mod resident_state_encoding;
 mod resident_transport;
 mod resident_transport_service;
 mod resident_update_lock;
+mod runner_authority_detector;
+mod runner_authority_evaluation;
+mod runner_authority_op;
+mod runner_authority_signature;
 mod runtime_cli;
 mod shim_op;
 #[cfg(unix)]

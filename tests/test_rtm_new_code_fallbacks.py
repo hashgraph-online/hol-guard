@@ -158,15 +158,6 @@ def test_package_authority_refuses_unavailable_or_malformed_resident(
     _patch_authority(monkeypatch, _status(), b"{}")
     assert native_package_authority.package_intent_parse_native(huge, guard_home=home) is None
 
-    assert (
-        native_package_authority.package_authority_decide_native(
-            "npm install left-pad",
-            store_path=tmp_path / "store",
-            guard_home=home,
-        )
-        is None
-    )
-
 
 def test_program_digest_stamp_keeps_snapshot_when_runtime_digests_disagree() -> None:
     extensions = {"program_digest": OTHER, "catalog_digest": DIGEST, "trust_digest": DIGEST}

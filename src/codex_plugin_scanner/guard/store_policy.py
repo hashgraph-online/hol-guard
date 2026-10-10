@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
@@ -17,8 +17,11 @@ from .managed_controls_policy_bundle import (
     managed_controls_layers_from_activation_state,
     managed_controls_revision_from_state,
 )
+from .native_policy_bundle import PolicyBundleNativeError, PolicyBundleNativeUnavailableError
 from .policy_bundle_activation import (
     PolicyBundleActivationRejectionError,
+    PrecomputedVerdicts,
+    ResidentVerdictRequiredError,
     composed_managed_authority,
     encoded_delivery_acknowledgement,
     managed_delivery_matches_base,
@@ -60,9 +63,8 @@ from .store_event_receipts import _verify_local_once_approval
 from .store_local_once_authority import LOCAL_ONCE_LEGACY_AUTHORITY_KIND
 
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
-_NON_CONSUMING_POLICY_MATCH_LIMIT = 256
+_RESIDENT_VERDICT_ATTEMPTS = 6
 _APPROVAL_REUSE_DIAGNOSTIC_LIMIT = 32
-_APPROVAL_CONTEXT_SQL_PATTERN = "guard-approval-context:v1:%"
 _POLICY_LOOKUP_COLUMNS = """
     decision_id, harness, scope, artifact_id, action, artifact_hash, workspace, publisher, source,
     reason, owner, expires_at, updated_at, integrity_version, integrity_generation,
@@ -93,44 +95,6 @@ def _memory_artifact_is_shell_command(
 
 def _distinct_non_null(values: Sequence[str | None]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(value for value in values if value is not None))
-
-
-def _execute_unordered_bounded_probes(
-    connection: sqlite3.Connection,
-    *,
-    table: str,
-    columns: str,
-    probes: Sequence[_SqlProbe],
-    limit: int,
-    current_time: str,
-    explain: bool,
-) -> list[sqlite3.Row]:
-    """Execute exact probes while bounding each branch by the remaining cap."""
-
-    rows: list[sqlite3.Row] = []
-    for predicate, parameters, index_name in probes:
-        remaining = limit - len(rows)
-        query = f"""
-            select {columns}
-            from {table} indexed by {index_name}
-            where {predicate}
-              and (expires_at is null or julianday(expires_at) > julianday(?))
-            limit ?
-        """
-        if explain:
-            rows.extend(
-                connection.execute(
-                    f"explain query plan {query}",
-                    (*parameters, current_time, limit),
-                ).fetchall()
-            )
-            continue
-        if remaining <= 0:
-            break
-        rows.extend(connection.execute(query, (*parameters, current_time, remaining)).fetchall())
-        if len(rows) >= limit:
-            break
-    return rows
 
 
 def _execute_ordered_probe_groups(
@@ -185,181 +149,6 @@ def _execute_ordered_probe_groups(
         if len(rows) >= limit:
             break
     return rows
-
-
-def _hash_partition_probes(
-    *,
-    base_predicate: str,
-    base_parameters: tuple[object, ...],
-    exact_hashes: Sequence[str | None],
-    exact_index: str,
-    legacy_index: str | None,
-    exact_first: bool = False,
-) -> list[_SqlProbe]:
-    """Partition nullable, exact, and legacy hashes into disjoint probes.
-
-    ``exact_first`` is used for scopes whose equal-action precedence is exact
-    context, then family-bound context. Artifact and publisher probes retain
-    their established nullable-first ordering.
-    """
-
-    nullable_probe: _SqlProbe = (
-        f"{base_predicate} and artifact_hash is null",
-        base_parameters,
-        exact_index,
-    )
-    distinct_hashes = _distinct_non_null(exact_hashes)
-    exact_probes: list[_SqlProbe] = [
-        (
-            f"{base_predicate} and artifact_hash = ?",
-            (*base_parameters, exact_hash),
-            exact_index,
-        )
-        for exact_hash in distinct_hashes
-    ]
-    probes = [*exact_probes, nullable_probe] if exact_first else [nullable_probe, *exact_probes]
-    if legacy_index is not None:
-        legacy_predicate = (
-            f"{base_predicate} and artifact_hash is not null "
-            f"and artifact_hash not like '{_APPROVAL_CONTEXT_SQL_PATTERN}'"
-        )
-        legacy_parameters = list(base_parameters)
-        for exact_hash in distinct_hashes:
-            legacy_predicate += " and artifact_hash <> ?"
-            legacy_parameters.append(exact_hash)
-        probes.append((legacy_predicate, tuple(legacy_parameters), legacy_index))
-    return probes
-
-
-def _bounded_non_consuming_policy_rows(
-    connection: sqlite3.Connection,
-    *,
-    harness: str,
-    artifact_id: str | None,
-    artifact_hash: str | None,
-    runtime_exact_match_key: str | None,
-    global_runtime_exact_match_key: str | None,
-    workspace_key: str | None,
-    workspace: str | None,
-    publisher: str | None,
-    action_family_key: str | None,
-    current_time: str,
-    _explain: bool = False,
-) -> list[sqlite3.Row]:
-    """Read at most one-over-limit matches through disjoint exact probes.
-
-    Every branch fixes the scope, harness selector, scope selector, and hash
-    partition.  This prevents a miss for one artifact from walking all rows for
-    the same harness.  Within workspace, harness, and global scopes, exact
-    artifact selectors precede family selectors, exact hashes precede nullable
-    or legacy family matches, and broad selectors run last.  Legacy non-context
-    hashes use dedicated partial indexes, while nullable and exact hashes use
-    the regular scope indexes.
-    """
-
-    probes: list[_SqlProbe] = []
-    harness_selectors = _distinct_non_null((harness, "*"))
-    if artifact_id is not None:
-        for harness_selector in harness_selectors:
-            probes.extend(
-                _hash_partition_probes(
-                    base_predicate="scope = 'artifact' and artifact_id = ? and harness = ?",
-                    base_parameters=(artifact_id, harness_selector),
-                    exact_hashes=(artifact_hash, runtime_exact_match_key),
-                    exact_index="idx_policy_decisions_lookup_artifact",
-                    legacy_index=None,
-                )
-            )
-
-    workspace_selectors = _distinct_non_null((workspace_key, workspace))
-    for workspace_selector in workspace_selectors:
-        for harness_selector in harness_selectors:
-            for artifact_selector in _distinct_non_null((artifact_id, action_family_key)):
-                probes.extend(
-                    _hash_partition_probes(
-                        base_predicate=("scope = 'workspace' and workspace = ? and harness = ? and artifact_id = ?"),
-                        base_parameters=(workspace_selector, harness_selector, artifact_selector),
-                        exact_hashes=(artifact_hash,),
-                        exact_index="idx_policy_decisions_lookup_workspace",
-                        legacy_index=None,
-                        exact_first=True,
-                    )
-                )
-            probes.append(
-                (
-                    "scope = 'workspace' and workspace = ? and harness = ? and artifact_id is null",
-                    (workspace_selector, harness_selector),
-                    "idx_policy_decisions_lookup_workspace",
-                )
-            )
-
-    if publisher is not None:
-        for harness_selector in harness_selectors:
-            probes.extend(
-                _hash_partition_probes(
-                    base_predicate="scope = 'publisher' and publisher = ? and harness = ?",
-                    base_parameters=(publisher, harness_selector),
-                    exact_hashes=(artifact_hash,),
-                    exact_index="idx_policy_decisions_lookup_publisher",
-                    legacy_index="idx_policy_decisions_lookup_publisher_legacy",
-                )
-            )
-
-    for harness_selector in harness_selectors:
-        for artifact_selector in _distinct_non_null((artifact_id, action_family_key)):
-            probes.extend(
-                _hash_partition_probes(
-                    base_predicate="scope = 'harness' and harness = ? and artifact_id = ?",
-                    base_parameters=(harness_selector, artifact_selector),
-                    exact_hashes=(artifact_hash, runtime_exact_match_key),
-                    exact_index="idx_policy_decisions_lookup_harness",
-                    legacy_index="idx_policy_decisions_lookup_harness_legacy",
-                    exact_first=True,
-                )
-            )
-        probes.extend(
-            _hash_partition_probes(
-                base_predicate="scope = 'harness' and harness = ? and artifact_id is null",
-                base_parameters=(harness_selector,),
-                exact_hashes=(artifact_hash, runtime_exact_match_key),
-                exact_index="idx_policy_decisions_lookup_harness",
-                legacy_index="idx_policy_decisions_lookup_harness_legacy",
-                exact_first=True,
-            )
-        )
-
-    for harness_selector in harness_selectors:
-        for artifact_selector in _distinct_non_null((artifact_id, action_family_key)):
-            probes.extend(
-                _hash_partition_probes(
-                    base_predicate="scope = 'global' and harness = ? and artifact_id = ?",
-                    base_parameters=(harness_selector, artifact_selector),
-                    exact_hashes=(artifact_hash, global_runtime_exact_match_key),
-                    exact_index="idx_policy_decisions_lookup_global",
-                    legacy_index="idx_policy_decisions_lookup_global_legacy",
-                    exact_first=True,
-                )
-            )
-        probes.extend(
-            _hash_partition_probes(
-                base_predicate="scope = 'global' and harness = ? and artifact_id is null",
-                base_parameters=(harness_selector,),
-                exact_hashes=(artifact_hash, global_runtime_exact_match_key),
-                exact_index="idx_policy_decisions_lookup_global",
-                legacy_index="idx_policy_decisions_lookup_global_legacy",
-                exact_first=True,
-            )
-        )
-
-    return _execute_unordered_bounded_probes(
-        connection,
-        table="policy_decisions",
-        columns=_POLICY_LOOKUP_COLUMNS,
-        probes=probes,
-        limit=_NON_CONSUMING_POLICY_MATCH_LIMIT + 1,
-        current_time=current_time,
-        explain=_explain,
-    )
 
 
 def _append_exclusions(
@@ -902,7 +691,37 @@ class StorePolicyMixin:
         with self._connect() as connection:
             self._replace_remote_policy_rows_locked(connection, rows)
 
-    def apply_policy_bundle_authority(
+    def apply_policy_bundle_authority(self, *args: Any, **kwargs: Any) -> dict[str, object] | None:
+        """Activate one authenticated policy bundle atomically.
+
+        The resident computes the delivery acknowledgement and the anti-downgrade
+        verdict, which can take seconds. They must never run while the authority
+        lock and the SQLite write transaction are held, so they are computed
+        between attempts. Each attempt re-reads the state those verdicts depend
+        on under the lock and only uses a precomputed result that was derived
+        from exactly that state.
+        """
+
+        verdicts = PrecomputedVerdicts()
+        for _attempt in range(_RESIDENT_VERDICT_ATTEMPTS):
+            try:
+                return self._apply_policy_bundle_authority_attempt(*args, verdicts=verdicts, **kwargs)
+            except ResidentVerdictRequiredError as required:
+                try:
+                    verdicts.fill(required)
+                except PolicyBundleNativeUnavailableError:
+                    raise
+                except (json.JSONDecodeError, TypeError, ValueError, PolicyBundleNativeError):
+                    return self._reject_policy_bundle_activation(required.invalid_reason, kwargs)
+        return self._reject_policy_bundle_activation("policy_bundle_activation_contended", kwargs)
+
+    @staticmethod
+    def _reject_policy_bundle_activation(reason: str, kwargs: Mapping[str, Any]) -> None:
+        if kwargs.get("raise_on_rejection"):
+            raise PolicyBundleActivationRejectionError(reason)
+        return None
+
+    def _apply_policy_bundle_authority_attempt(
         self,
         decisions: list[PolicyDecision],
         now: str,
@@ -922,6 +741,7 @@ class StorePolicyMixin:
         raise_on_rejection: bool = False,
         approval_gate_grant: ApprovalGateGrant | None = None,
         remote_write_authorized: bool = False,
+        verdicts: PrecomputedVerdicts | None = None,
     ) -> dict[str, object] | None:
         """Atomically activate one authenticated policy bundle and its rows.
 
@@ -996,7 +816,11 @@ class StorePolicyMixin:
                 managed_authority_key = self._authority_key(required=True)
                 if managed_authority_key is None:
                     return reject("managed_controls_authority_key_unavailable", connection)
-            checkpoint_rejection = policy_checkpoint_rejection(connection, policy_bundle)
+            try:
+                checkpoint_rejection = policy_checkpoint_rejection(connection, policy_bundle, verdicts)
+            except ResidentVerdictRequiredError:
+                connection.rollback()
+                raise
             if checkpoint_rejection is not None:
                 return reject(checkpoint_rejection, connection)
             active_row = connection.execute(
@@ -1126,7 +950,11 @@ class StorePolicyMixin:
                         policy_bundle=policy_bundle,
                         published_authority=published_authority,
                         observed_at=normalized_now,
+                        verdicts=verdicts,
                     )
+                except ResidentVerdictRequiredError:
+                    connection.rollback()
+                    raise
                 except (json.JSONDecodeError, TypeError, ValueError):
                     return reject("managed_controls_delivery_ack_invalid", connection)
             continuity_rejection = apply_continuity_rejection(
