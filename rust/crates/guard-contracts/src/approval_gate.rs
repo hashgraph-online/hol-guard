@@ -153,6 +153,12 @@ pub struct ApprovalGateRequestV1 {
     /// `device_label` for begin_totp_enrollment.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub device_label: Option<String>,
+    /// Caller's local OS-session signals (`sid=..`, terminal env, `ppid=..`).
+    /// Only the calling process can observe its own session; the resident
+    /// hashes these into the recent-TOTP binding. Absent for older callers,
+    /// in which case the resident falls back to its own process.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_signals: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

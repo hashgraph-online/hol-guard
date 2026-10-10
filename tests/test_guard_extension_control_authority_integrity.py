@@ -6,10 +6,12 @@ import json
 import os
 import subprocess
 import sys
+import types
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import store_extension_control_authority_support
 from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -329,7 +331,13 @@ def test_credential_store_failure_requires_explicit_degraded_acknowledgement(tmp
 
 
 def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sys, "platform", "linux")
+    # Only the store's secret-store selection sees a non-macOS platform; the
+    # resident that decides the approval gate keeps the real one.
+    monkeypatch.setattr(
+        store_extension_control_authority_support,
+        "sys",
+        types.SimpleNamespace(platform="linux"),
+    )
     monkeypatch.setattr(
         SystemKeyringSecretStore,
         "get_secret",

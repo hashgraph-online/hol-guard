@@ -91,11 +91,7 @@ fn factor_generation(state: &Value) -> i64 {
 /// `_cooldown_seconds` (:1374-1375) → `coerce_cooldown_seconds`.
 fn cooldown_seconds(state: &Value) -> Result<i64, ApprovalGateErrorV1> {
     coerce_cooldown_seconds(state.get("cooldown_seconds"))
-        .map_err(|_| ApprovalGateErrorV1 {
-            code: "approval_gate_invalid_cooldown".to_owned(),
-            message: "Approval cooldown must be 0 (every approval), 900 (15 minutes), or 3600 (1 hour) seconds.".to_owned(),
-            status: 400,
-        })
+        .map_err(|_| crate::approval_gate_settings::invalid_cooldown())
 }
 
 /// `_current_totp_session_binding` (:1305-1321) — `sid`/`ppid`/`pid` +
@@ -127,20 +123,46 @@ fn proc_self_ppid_sid() -> (i64, i64) {
     (ppid, sid)
 }
 
+thread_local! {
+    static CALLER_SESSION_SIGNALS: std::cell::RefCell<Option<Vec<String>>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Scope guard binding the caller-supplied session signals to the current
+/// request; restores the prior value on drop.
+pub(crate) struct SessionSignalsScope(Option<Vec<String>>);
+
+impl SessionSignalsScope {
+    pub(crate) fn enter(signals: Option<&[String]>) -> Self {
+        let next = signals.filter(|s| !s.is_empty()).map(<[String]>::to_vec);
+        Self(CALLER_SESSION_SIGNALS.with(|cell| cell.replace(next)))
+    }
+}
+
+impl Drop for SessionSignalsScope {
+    fn drop(&mut self) {
+        let previous = self.0.take();
+        CALLER_SESSION_SIGNALS.with(|cell| {
+            cell.replace(previous);
+        });
+    }
+}
+
+fn hash_session_signals(signals: &[String]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(signals.join("\0").as_bytes());
+    hex::encode(h.finalize())
+}
+
 #[cfg(unix)]
-pub(crate) fn current_totp_session_binding() -> Option<String> {
+fn own_process_signals() -> Vec<String> {
     let mut signals: Vec<String> = Vec::new();
     let (_ppid, sid) = proc_self_ppid_sid();
     if sid >= 0 {
         signals.push(format!("sid={sid}"));
     }
-    for key in TOTP_SESSION_ENV_KEYS {
-        if let Ok(value) = std::env::var(key) {
-            if !value.is_empty() {
-                signals.push(format!("{key}={value}"));
-            }
-        }
-    }
+    signals.extend(env_signals());
     if signals.is_empty() {
         let (parent_pid, _sid) = proc_self_ppid_sid();
         if parent_pid > 0 {
@@ -149,29 +171,35 @@ pub(crate) fn current_totp_session_binding() -> Option<String> {
             signals.push(format!("pid={}", std::process::id()));
         }
     }
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(signals.join("\0").as_bytes());
-    Some(hex::encode(h.finalize()))
+    signals
 }
 
 #[cfg(not(unix))]
-fn current_totp_session_binding() -> Option<String> {
-    let mut signals: Vec<String> = Vec::new();
-    for key in TOTP_SESSION_ENV_KEYS {
-        if let Ok(value) = std::env::var(key) {
-            if !value.is_empty() {
-                signals.push(format!("{key}={value}"));
-            }
-        }
-    }
+fn own_process_signals() -> Vec<String> {
+    let mut signals = env_signals();
     if signals.is_empty() {
         signals.push(format!("pid={}", std::process::id()));
     }
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(signals.join("\0").as_bytes());
-    Some(hex::encode(h.finalize()))
+    signals
+}
+
+fn env_signals() -> Vec<String> {
+    TOTP_SESSION_ENV_KEYS
+        .iter()
+        .filter_map(|key| match std::env::var(key) {
+            Ok(value) if !value.is_empty() => Some(format!("{key}={value}")),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The recent-TOTP session binding: the caller's signals when the request
+/// carried them, else this process's own.
+pub(crate) fn current_totp_session_binding() -> Option<String> {
+    let caller = CALLER_SESSION_SIGNALS.with(|cell| cell.borrow().clone());
+    Some(hash_session_signals(
+        &caller.unwrap_or_else(own_process_signals),
+    ))
 }
 
 /// `_validate_totp_state_or_raise` (:1204-1218).
@@ -354,8 +382,23 @@ pub(crate) fn recent_totp_satisfied_locked(
     expires_epoch > now_epoch
 }
 
+/// `_raise_if_locked` (:1144-1147).
+pub(crate) fn raise_if_locked(state: &Value, now_epoch: f64) -> Result<(), ApprovalGateErrorV1> {
+    if is_future(
+        optional_string(state.get("locked_until")).as_deref(),
+        now_epoch,
+    ) {
+        return Err(err(
+            "approval_gate_locked",
+            "Approval gate is temporarily locked.",
+            423,
+        ));
+    }
+    Ok(())
+}
+
 /// `_verify_password_stage` (:1155-1175).
-fn verify_password_stage(
+pub(crate) fn verify_password_stage(
     guard_home: &Path,
     state: &mut Value,
     password: Option<&str>,
@@ -509,14 +552,7 @@ pub(crate) fn verify_or_raise_locked(
     now: Option<&str>,
 ) -> Result<ApprovalGateGrantV1, ApprovalGateErrorV1> {
     let now_epoch = epoch(now);
-    let locked_until = optional_string(state.get("locked_until"));
-    if is_future(locked_until.as_deref(), now_epoch) {
-        return Err(err(
-            "approval_gate_locked",
-            "Approval gate is temporarily locked.",
-            423,
-        ));
-    }
+    raise_if_locked(state, now_epoch)?;
     let gate_input = approval_gate_input.cloned().unwrap_or_default();
     if verifier(state).is_none() {
         return Err(err(
@@ -545,16 +581,24 @@ pub(crate) fn verify_or_raise_locked(
         );
     }
     let mut accepted_counter: Option<i64> = None;
+    let mut factor_set: Vec<String> = vec!["password".to_owned()];
     if totp_enabled(state) {
         if gate_input.totp_code.is_none() {
-            // Python `_verify_or_raise` (:1300-1308): with TOTP enabled and no
-            // code supplied, the gate requires a recent satisfied proof
-            // regardless of whether a password was sent — the password is not a
+            // Python `_verify_or_raise_locked`: with TOTP enabled and no code,
+            // only an unexpired same-session recent proof can stand in, and
+            // never when the caller demands a fresh code. A password is not a
             // substitute second factor.
-            if recent_totp_satisfied_locked(guard_home, state, now_epoch) {
-                // Reuse the recent TOTP proof without re-entering a code.
-                accepted_counter = optional_int(state.get("totp_last_counter"));
-            } else {
+            if gate_input.require_fresh_totp
+                || !recent_totp_satisfied_locked(guard_home, state, now_epoch)
+            {
+                return Err(err(
+                    "approval_gate_totp_required",
+                    "TOTP code is required.",
+                    403,
+                ));
+            }
+            accepted_counter = optional_int(state.get("totp_last_counter"));
+            if accepted_counter.is_none() {
                 return Err(err(
                     "approval_gate_totp_required",
                     "TOTP code is required.",
@@ -563,52 +607,42 @@ pub(crate) fn verify_or_raise_locked(
             }
         } else {
             let code = gate_input.totp_code.as_deref().unwrap();
-            accepted_counter = Some(verify_totp_or_raise(
-                guard_home, state, code, now_epoch, true,
-            )?);
-            if let Some(obj) = state.as_object_mut() {
-                obj.insert(
-                    "totp_last_counter".into(),
-                    Value::Number(accepted_counter.unwrap().into()),
-                );
-            }
-            record_recent_totp_satisfaction(
+            let counter = verify_totp_or_raise(
                 guard_home,
                 state,
-                accepted_counter.unwrap(),
+                code,
                 now_epoch,
-            );
+                !gate_input.require_fresh_totp,
+            )?;
+            accepted_counter = Some(counter);
+            if let Some(obj) = state.as_object_mut() {
+                obj.insert("totp_last_counter".into(), Value::Number(counter.into()));
+            }
+            record_recent_totp_satisfaction(guard_home, state, counter, now_epoch);
         }
-        if gate_input.password.is_some() {
-            verify_password_stage(guard_home, state, gate_input.password.as_deref(), now)?;
+        factor_set = vec!["totp".to_owned()];
+        if let Some(obj) = state.as_object_mut() {
+            obj.remove("cooldown_expires_at");
         }
     } else {
         verify_password_stage(guard_home, state, gate_input.password.as_deref(), now)?;
     }
     reset_failed_attempts(state);
-    let cooldown_seconds_val = cooldown_seconds(state)?;
     let mut cooldown_expires_at: Option<String> = None;
-    let mut used_cooldown = false;
-    if cooldown_seconds_val > 0 && !totp_enabled(state) && !strict {
-        let expiry = now_epoch + cooldown_seconds_val as f64;
-        cooldown_expires_at = Some(iso_from_epoch(expiry));
-        if let Some(obj) = state.as_object_mut() {
-            obj.insert(
-                "cooldown_expires_at".into(),
-                Value::String(cooldown_expires_at.clone().unwrap()),
-            );
+    if !totp_enabled(state) && !strict {
+        let seconds = cooldown_seconds(state)?;
+        if seconds > 0 && gate_input.use_cooldown != Some(false) {
+            let expiry = now_epoch + seconds as f64;
+            cooldown_expires_at = Some(iso_from_epoch(expiry));
+            if let Some(obj) = state.as_object_mut() {
+                obj.insert(
+                    "cooldown_expires_at".into(),
+                    Value::String(cooldown_expires_at.clone().unwrap()),
+                );
+            }
         }
-        used_cooldown = true;
     }
-    let factor_set: Vec<String> = if totp_enabled(state) && accepted_counter.is_some() {
-        if gate_input.password.is_some() {
-            vec!["totp".into(), "password".into()]
-        } else {
-            vec!["totp".into()]
-        }
-    } else {
-        vec!["password".into()]
-    };
+    let used_cooldown = false;
     write_state(guard_home, state, now).map_err(|_| {
         err(
             "approval_gate_state_io",
