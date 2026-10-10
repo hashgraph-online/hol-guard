@@ -258,11 +258,9 @@ fn same_named_linked_worktrees_with_suffixed_admin_names_are_routed() {
             result.reason_code
         );
     }
-    // Beneath the workspace, where the admin name differs from the directory name.
-    let nested = repository.join("sub").join("feature");
-    std::fs::create_dir_all(nested.parent().unwrap()).unwrap();
-    add_worktree(&repository, &nested, "three");
-    let result = decide(&repository, &home, "git -C sub/feature status --short");
+    // Beneath a workspace that is not the repository, so the suffixed admin
+    // directory (`feature1`) lies outside it and the linked-worktree check runs.
+    let result = decide(&home.join("b"), &home, "git -C feature status --short");
     assert_eq!(result.decision, "allow", "{}", result.reason_code);
     // Swapping the backlinks breaks the two-way link and must stay reviewed.
     let forged = home.join("c").join("feature");
