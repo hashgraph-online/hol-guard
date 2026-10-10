@@ -26,6 +26,7 @@ from .codex_hook_launch_runtime import (
 from .fork_safety import forget_in_child
 from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
 from .native_resident_stream import _PersistentNativeClient, _StreamFailure
+from .path_resolution_cache import cached_realpath
 
 # Retain the old runner name as a test seam. Production always leaves this
 # binding untouched and uses the persistent Rust client below.
@@ -275,7 +276,7 @@ def _pinned_state_dir(state_dir: Path) -> Path:
 
     candidate = state_dir.expanduser()
     if _is_directory(candidate):
-        return candidate.resolve()
+        return Path(cached_realpath(os.fspath(candidate)))
     absolute = Path(os.path.abspath(candidate))
     if _is_directory(absolute):
         try:
