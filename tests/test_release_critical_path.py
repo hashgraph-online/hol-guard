@@ -405,6 +405,28 @@ def test_signed_core_waits_for_the_exact_registry_publish_job(monkeypatch, concl
         publication_ready("hashgraph-online/hol-guard", "123", "b" * 40)
 
 
+def test_signed_core_reads_the_publish_job_from_the_first_attempt(monkeypatch):
+    # Publish jobs run only on attempt 1. Rerunning a later failed job marks them
+    # skipped in the latest attempt, which must not withhold updater assets.
+    run = {
+        "path": ".github/workflows/publish.yml",
+        "event": "workflow_dispatch",
+        "head_sha": "a" * 40,
+        "conclusion": "success",
+    }
+    job_paths = []
+
+    def api(args, **kwargs):
+        if "--paginate" not in args:
+            return json.dumps(run)
+        job_paths.append(next(arg for arg in args if "/jobs" in arg))
+        return "success\n" if "/attempts/1/jobs" in job_paths[-1] else "skipped\n"
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is True
+    assert job_paths == ["repos/hashgraph-online/hol-guard/actions/runs/123/attempts/1/jobs?per_page=100"]
+
+
 def test_no_public_release_is_created_before_manual_registry_success(tmp_path, monkeypatch):
     for key, value in {
         "VERSION": "3.34.1",

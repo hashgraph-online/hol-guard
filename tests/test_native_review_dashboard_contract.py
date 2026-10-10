@@ -59,7 +59,7 @@ def test_native_review_displays_eval_input() -> None:
         "omp",
         {"tool_name": "eval", "tool_input": {"code": "1 + 1"}},
     )
-    assert envelope["action_type"] == "config_change"
+    assert envelope["action_type"] == "shell_command"
     assert "1 + 1" in json.dumps(envelope["raw_payload_redacted"])
 
 

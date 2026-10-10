@@ -10,7 +10,7 @@ from collections import OrderedDict
 from collections.abc import Mapping
 from pathlib import Path
 
-from .hook_native_saved_approval import _launch_cwd
+from .hook_native_launch_identity import launch_cwd as _launch_cwd
 from .hook_request_parsing import pre_tool_command
 
 _LOGGER = logging.getLogger(__name__)
