@@ -20,8 +20,34 @@ if [[ -n "$REQUESTED_CORE_VERSION" ]]; then
   gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v${REQUESTED_CORE_VERSION}" \
     --jq "$RELEASE_FILTER" > "$INVENTORY"
 else
-  gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
-    --jq ".[] | $RELEASE_FILTER" > "$INVENTORY"
+  # Stable tags come from the git protocol, which costs no REST quota. Read
+  # releases newest version first and stop at the first ready one: that is the
+  # same release the full scan would select. Paginate only as a fallback.
+  : > "$INVENTORY"
+  STABLE_TAGS=$(
+    git ls-remote --tags --refs "${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY}.git" 'v*' |
+      sed -n 's#^[0-9a-f]*[[:space:]]*refs/tags/##p' |
+      grep -E '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$' |
+      sort -t. -k1.2,1nr -k2,2nr -k3,3nr |
+      head -n 20 || true
+  )
+  found=false
+  for tag in $STABLE_TAGS; do
+    if ! release=$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" --jq "$RELEASE_FILTER" 2>"$RUNNER_TEMP/release-tag.err"); then
+      grep -q "Not Found" "$RUNNER_TEMP/release-tag.err" || { cat "$RUNNER_TEMP/release-tag.err" >&2; exit 1; }
+      continue
+    fi
+    [[ -n "$release" ]] || continue
+    printf '%s\n' "$release" > "$INVENTORY"
+    if [[ -n "$(python3 -I scripts/release/ready_core_releases.py --inventory "$INVENTORY" --platform "$PLATFORM")" ]]; then
+      found=true
+      break
+    fi
+  done
+  if [[ "$found" != true ]]; then
+    gh api --paginate "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+      --jq ".[] | $RELEASE_FILTER" > "$INVENTORY"
+  fi
 fi
 python3 -I scripts/release/ready_core_releases.py --inventory "$INVENTORY" --platform "$PLATFORM" > "$TAGS"
 ARGS=(--tags "$TAGS")
