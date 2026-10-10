@@ -18,7 +18,6 @@ from ..native_resident_client import (
 from ..native_runtime import NativeRuntimeStatus, native_mode
 from ..runtime.structured_output_mediation import (
     StructuredContentMediation,
-    StructuredOutputBinding,
     StructuredOutputResolution,
     canonical_harness_name,
     mediate_native_post_tool_content,
@@ -250,26 +249,6 @@ class HookWorkerNativeMixin:
     """Native edge paths kept out of the worker facade."""
 
     _last_native_decision_receipt: dict[str, object] | None = None
-
-    def _structured_output_binding(
-        self: _HookWorkerNativeHost,
-        *,
-        guard_home: Path,
-        workspace: Path | None,
-        harness: str,
-    ) -> StructuredOutputBinding | None:
-        """Read the active machine binding without creating a local authority.
-
-        This compatibility wrapper intentionally drops the required-state
-        detail; the native PostToolUse path uses ``_structured_output_resolution``
-        when it must distinguish optional-off from fail-closed authority.
-        """
-
-        return self._structured_output_resolution(
-            guard_home=guard_home,
-            workspace=workspace,
-            harness=harness,
-        ).binding
 
     def _structured_output_resolution(
         self: _HookWorkerNativeHost,

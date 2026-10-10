@@ -39,22 +39,19 @@ pub(super) fn evaluate_package_request_artifact_uncached(
     if let Some(workspace_dir) = workspace_dir {
         let parse_results = lockfile_parse_results(deps, workspace_dir, artifact);
         if let Some(incomplete) = first_incomplete_lockfile_result(&parse_results) {
-            let workspace_id = store.get_cloud_workspace_id();
-            let workspace_fingerprint = workspace_fingerprint(
-                deps,
-                workspace_id.as_deref().unwrap_or(""),
-                Some(workspace_dir),
-                artifact,
-                None,
-            );
+            let target = targets
+                .first()
+                .cloned()
+                .unwrap_or_else(|| incomplete_lockfile_fallback_target(incomplete));
             return (
                 Some(finalize_incomplete_lockfile_evaluation(
                     deps,
                     artifact,
                     store,
+                    &target,
+                    Some(workspace_dir),
                     incomplete,
-                    workspace_id.as_deref(),
-                    &workspace_fingerprint,
+                    &package_intent_hash,
                     &now_value,
                 )),
                 None,

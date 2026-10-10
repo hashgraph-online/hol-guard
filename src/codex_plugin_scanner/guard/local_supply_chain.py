@@ -261,6 +261,24 @@ def _native_package_authority_module():
     return importlib.import_module(".native_package_authority", __package__)
 
 
+def _native_supply_chain_eval_module():
+    return importlib.import_module(".native_supply_chain_eval", __package__)
+
+
+def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Resident-owned package verdict rewrite; raises when the resident cannot answer."""
+
+    module = importlib.import_module(".native_package_evaluation_compose", __package__)
+    return module.compose_package_evaluation(kind, evaluation, **facts)
+
+
+def compose_blocking_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Resident-owned rewrite on a blocking path; a resident failure yields a terminal block."""
+
+    module = importlib.import_module(".native_package_evaluation_compose", __package__)
+    return module.compose_blocking_package_evaluation(kind, evaluation, **facts)
+
+
 def _supply_chain_package_eval_module():
     return importlib.import_module(".runtime.supply_chain_package_eval", __package__)
 
@@ -285,11 +303,40 @@ def _resolve_guard_sync_auth_context(store: GuardStore):
     return _runtime_runner_module()._resolve_guard_sync_auth_context(store)
 
 
-def evaluate_package_request_artifact(*args: object, **kwargs: object):
-    native = _evaluate_package_request_artifact_native(args, kwargs)
-    if native is not None:
-        return native
-    return _supply_chain_package_eval_module().evaluate_package_request_artifact(*args, **kwargs)
+def evaluate_package_request_artifact(
+    *,
+    artifact: GuardArtifact,
+    store: GuardStore,
+    workspace_dir: Path | None,
+    now: str | None = None,
+    external_archive_network_authorized: bool = False,
+    retain_external_archive_blob: bool = False,
+):
+    """Evaluate a package request; the resident owns every locally-decidable verdict.
+
+    The resident answers (or the request is blocked) for workspaces without a
+    Guard Cloud workspace. Two paths still run the Python evaluator because
+    their Rust ports are not complete: requests for a Cloud-connected workspace
+    (signed bundle, policy rules and the Cloud service call) and the
+    second-phase external-archive acquisition that must hand a live retained
+    blob to the caller (RTM-029/030).
+    """
+    if retain_external_archive_blob or store.get_cloud_workspace_id() is not None:
+        return _supply_chain_package_eval_module().evaluate_package_request_artifact(
+            artifact=artifact,
+            store=store,
+            workspace_dir=workspace_dir,
+            now=now,
+            external_archive_network_authorized=external_archive_network_authorized,
+            retain_external_archive_blob=retain_external_archive_blob,
+        )
+    return _native_supply_chain_eval_module().evaluate_package_request_native(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        now=now,
+        external_archive_network_authorized=external_archive_network_authorized,
+    )
 
 
 def _parse_package_intent_native(
@@ -314,108 +361,6 @@ def _parse_package_intent_native(
     except Exception:
         return None
     return intent if isinstance(intent, PackageIntent) else None
-
-
-def _native_cloud_transport_unavailable(payload: dict[str, object]) -> bool:
-    """The resident cloud client is still a stub. Treat that miss as transport
-    failure so the Python evaluator can observe the real timeout or network error.
-    """
-    reasons = payload.get("reasons")
-    if not isinstance(reasons, list):
-        return False
-    return any(isinstance(reason, dict) and reason.get("code") == "cloud_network_error" for reason in reasons)
-
-
-def _python_cloud_auth_failed(store: GuardStore) -> bool:
-    """A patched auth seam is the test contract for expired cloud sessions.
-    Production keeps the resident path and does not refresh tokens here.
-    """
-    from .runtime import runner
-    from .runtime import supply_chain_package_eval as package_eval
-    from .runtime.runner import GuardSyncAuthorizationExpiredError
-
-    resolver = package_eval._resolve_guard_sync_auth_context
-    if resolver is runner._resolve_guard_sync_auth_context:
-        return False
-    try:
-        resolver(store, allow_primary_repair=False)
-    except GuardSyncAuthorizationExpiredError:
-        return True
-    except Exception:
-        return False
-    return False
-
-
-def _evaluate_package_request_artifact_native(args: tuple[Any, ...], kwargs: dict[str, Any]) -> Any | None:
-    """Best-effort native evaluation through the resident package authority.
-
-    ``None`` means transport failure (or an unsupported call shape), so the
-    caller falls back to the Python evaluator. Business errors propagate.
-    """
-    if args:
-        return None
-    artifact = kwargs.get("artifact")
-    store = kwargs.get("store")
-    if artifact is None or store is None:
-        return None
-    to_dict = getattr(artifact, "to_dict", None)
-    if not callable(to_dict):
-        return None
-    guard_home = getattr(store, "guard_home", None)
-    store_path = getattr(store, "path", None)
-    if not isinstance(guard_home, Path) or not isinstance(store_path, Path):
-        return None
-    workspace_dir = kwargs.get("workspace_dir")
-    if workspace_dir is not None and not isinstance(workspace_dir, Path):
-        return None
-    now = kwargs.get("now")
-    if now is not None and not isinstance(now, str):
-        return None
-    if bool(kwargs.get("retain_external_archive_blob", False)):
-        return None
-    if _python_cloud_auth_failed(store):
-        return None
-    native_authority = _native_package_authority_module()
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is not None and not native_authority.supply_chain_cloud_transport_available():
-        # Cloud service calls remain in Python until the native client supports
-        # both credential resolution and HTTP. Do not let the current stub
-        # persist a false terminal verdict before the real client runs.
-        return None
-    payload = native_authority.supply_chain_eval_native(
-        artifact=to_dict(),
-        guard_home=guard_home,
-        store_path=store_path,
-        workspace_dir=workspace_dir,
-        now=now,
-        external_archive_network_authorized=bool(kwargs.get("external_archive_network_authorized", False)),
-        retain_external_archive_blob=bool(kwargs.get("retain_external_archive_blob", False)),
-        runtime_private_metadata=getattr(artifact, "runtime_private_metadata", None),
-    )
-    if payload is None:
-        return None
-    if _native_cloud_transport_unavailable(payload):
-        return None
-    # The resident returns the decision; the Python store still owns the
-    # evidence row. A payload that cannot be reconstructed falls back to the
-    # Python evaluator; a persist failure propagates — the Python evaluator
-    # would hit the same store error, so swallowing it just re-runs the eval.
-    now_text = now if isinstance(now, str) else None
-    if now_text is None:
-        from datetime import datetime, timezone
-
-        now_text = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    try:
-        evaluation = native_authority.evaluation_from_native_payload(payload)
-    except (TypeError, ValueError, KeyError, AttributeError):
-        return None
-    _supply_chain_package_eval_module()._persist_evidence(
-        store=store,
-        artifact=artifact,
-        evaluation=evaluation,
-        now=now_text,
-    )
-    return evaluation
 
 
 def _is_package_request_evaluation(value: object) -> TypeGuard[Any]:
@@ -1794,19 +1739,11 @@ def _final_package_protect_authority(
         if reuse is None:
             return current, current_evaluation
         if reuse.accepted and reuse.saved_action == "allow":
-            return current, _package_policy_override_evaluation(
+            return current, compose_package_evaluation(
+                "saved_allow",
                 current_evaluation,
-                decision="allow",
-                policy_action="allow",
-                title="Allowed by saved approval",
-                summary="HOL Guard reused your saved approval for this package request.",
-                harness_message=(
-                    "HOL Guard revalidated the repository, package manager, dependency files, settings, "
-                    "registry environment, and current advisory authority after atomically claiming approval."
-                ),
-                reason_code="saved_package_approval",
-                reason_message="HOL Guard reused your saved approval for this package request.",
-                approval_reuse=reuse,
+                variant="claimed_revalidated",
+                approval_reuse=reuse.to_evidence(),
             )
         return current, _package_evaluation_with_rejected_reuse(current_evaluation, reuse)
     if validation_reason is not None:
@@ -2157,42 +2094,39 @@ def build_package_protect_payload(
         denied_evaluation = (
             final_authority.evaluation
             if reuse is None
-            else _package_evaluation_with_rejected_reuse(final_authority.evaluation, reuse)
+            else compose_blocking_package_evaluation(
+                "rejected_reuse", final_authority.evaluation, approval_reuse=reuse.to_evidence()
+            )
         )
-        denied = _package_protect_denied_after_final_boundary(
-            payload=payload,
-            authority=final_authority,
-            evaluation=denied_evaluation,
-            command=command,
-            store=store,
-            now=now,
-        )
-        _cleanup_external_archive_downloads(final_evaluation)
+        try:
+            denied = _package_protect_denied_after_final_boundary(
+                payload=payload,
+                authority=final_authority,
+                evaluation=denied_evaluation,
+                command=command,
+                store=store,
+                now=now,
+            )
+        finally:
+            _cleanup_external_archive_downloads(final_evaluation)
         return denied
     bound_launch_command = _bound_external_archive_launch_command(
         launch_command,
         evaluation=final_evaluation,
     )
     if bound_launch_command is None:
-        denied_evaluation = _package_policy_override_evaluation(
-            final_evaluation,
-            decision="block",
-            policy_action="block",
-            title="External archive blocked",
-            summary="The inspected external archive could not be bound to the installer launch.",
-            harness_message="HOL Guard blocked an external archive whose digest-bound blob was unavailable.",
-            reason_code="external_archive_digest_mismatch",
-            reason_message="The inspected external archive changed or was not present in the installer command.",
-        )
-        denied = _package_protect_denied_after_final_boundary(
-            payload=payload,
-            authority=final_authority,
-            evaluation=denied_evaluation,
-            command=command,
-            store=store,
-            now=now,
-        )
-        _cleanup_external_archive_downloads(final_evaluation)
+        denied_evaluation = package_external_archive_override(final_evaluation, variant="launch_unbound")
+        try:
+            denied = _package_protect_denied_after_final_boundary(
+                payload=payload,
+                authority=final_authority,
+                evaluation=denied_evaluation,
+                command=command,
+                store=store,
+                now=now,
+            )
+        finally:
+            _cleanup_external_archive_downloads(final_evaluation)
         return denied
     authority = final_authority
     artifact = authority.artifact
@@ -2515,20 +2449,12 @@ def _resolve_stored_package_policy_override(
                 _package_evaluation_with_rejected_reuse(current_evaluation, failed_reuse)
             )
         return _StoredPackagePolicyResolution(
-            _package_policy_override_evaluation(
+            compose_package_evaluation(
+                "saved_allow",
                 current_evaluation,
-                decision="allow",
-                policy_action="allow",
-                title="Allowed by saved approval",
-                summary="HOL Guard reused your saved approval for this package request.",
-                harness_message=(
-                    "HOL Guard verified the same repository, package manager, dependency files, settings, and "
-                    "registry environment before reusing your saved approval."
-                ),
-                reason_code="saved_package_approval",
-                reason_message="HOL Guard reused your saved approval for this package request.",
-                approval_reuse=reuse,
-                approval_claim_disposition=claim_disposition,
+                variant="reused",
+                approval_reuse=reuse.to_evidence(),
+                claim_disposition=claim_disposition,
             ),
             approval_reuse_decision=decision,
             claim_disposition=claim_disposition,
@@ -2542,20 +2468,11 @@ def _resolve_stored_package_policy_override(
             workspace_dir=workspace_dir,
         )
         return _StoredPackagePolicyResolution(
-            _package_policy_override_evaluation(
+            compose_blocking_package_evaluation(
+                "saved_block",
                 current_evaluation,
-                decision="block",
-                policy_action="block",
-                title="Blocked by saved policy",
-                summary="HOL Guard kept this package blocked because a saved package policy already exists.",
-                harness_message=(
-                    "HOL Guard kept this package blocked because a saved package policy already exists. "
-                    f"To reconsider, run `{clear_command}`, then retry the install."
-                ),
-                next_step=clear_command,
-                reason_code="saved_package_block",
-                reason_message="HOL Guard kept this package blocked because a saved package policy already exists.",
-                approval_reuse=reuse,
+                approval_reuse=reuse.to_evidence(),
+                clear_command=clear_command,
             )
         )
     return _StoredPackagePolicyResolution(_package_evaluation_with_rejected_reuse(current_evaluation, reuse))
@@ -2641,62 +2558,14 @@ def _package_evaluation_with_current_policy_action(
     *,
     current_action: GuardAction,
 ) -> Any:
-    """Apply current package policy before consulting remembered user state."""
+    """Apply current package policy before consulting remembered user state.
+
+    The resident owns the rewrite; an unavailable resident raises.
+    """
 
     if current_action == evaluation.policy_action:
         return evaluation
-    decision = _package_decision_for_action(current_action)
-    rewritten_packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    action_label = {
-        "block": "blocks",
-        "sandbox-required": "requires sandbox enforcement for",
-        "require-reapproval": "requires fresh approval for",
-        "review": "requires review for",
-        "warn": "warns about",
-        "allow": "allows",
-    }[current_action]
-    package_label = "this package request"
-    package_label_entries = getattr(evaluation, "packages", ())
-    if (
-        isinstance(package_label_entries, tuple)
-        and package_label_entries
-        and isinstance(package_label_entries[0], dict)
-    ):
-        primary_package = package_label_entries[0]
-        package_name = primary_package.get("name")
-        package_version = primary_package.get("requestedVersion") or primary_package.get("resolvedVersion")
-        if isinstance(package_name, str) and package_name:
-            package_ref = (
-                f"{package_name}@{package_version}"
-                if isinstance(package_version, str) and package_version
-                else package_name
-            )
-            package_label = f"`{package_ref}`"
-    summary = f"HOL Guard's current package policy {action_label} {package_label}."
-    reason = {
-        "code": "current_package_policy",
-        "message": summary,
-        "severity": "high" if current_action in {"block", "sandbox-required"} else "medium",
-        "source": "guard-local",
-        "policy_action": current_action,
-    }
-    needs_review = current_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=current_action,
-        reasons=(reason, *tuple(item for item in evaluation.reasons if item.get("code") != reason["code"])),
-        packages=rewritten_packages,
-        risk_summary=summary,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title="Current package policy",
-            summary=summary,
-            next_step="Review the current package request in HOL Guard, then retry." if needs_review else None,
-            dashboard_url=None,
-            harness_message=summary,
-        ),
-        record_monitor_evidence=False,
-    )
+    return compose_package_evaluation("current_policy_action", evaluation, current_action=current_action)
 
 
 def _package_evaluation_with_rejected_reuse(
@@ -2705,81 +2574,16 @@ def _package_evaluation_with_rejected_reuse(
 ) -> Any:
     """Retain current package evidence while recording rejected saved state."""
 
-    reason = {
-        "code": reuse.reason_code,
-        "message": _approval_reuse_reason_message(reuse),
-        "severity": "high" if reuse.status == "rejected" else "low",
-        "source": "guard-local",
-        "approval_reuse": reuse.to_evidence(),
-    }
-    reasons = (reason, *tuple(item for item in evaluation.reasons if item.get("code") != reuse.reason_code))
-    if reuse.action == evaluation.policy_action:
-        return replace(evaluation, reasons=reasons)
-    decision = _package_decision_for_action(reuse.action)
-    packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    summary = _approval_reuse_reason_message(reuse)
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=reuse.action,
-        reasons=reasons,
-        packages=packages,
-        risk_summary=summary,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title="Saved approval not reusable",
-            summary=summary,
-            next_step="Review the current package request in HOL Guard, then retry.",
-            dashboard_url=None,
-            harness_message=summary,
-        ),
-        record_monitor_evidence=False,
-    )
+    return compose_package_evaluation("rejected_reuse", evaluation, approval_reuse=reuse.to_evidence())
 
 
-def _approval_reuse_reason_message(reuse: ApprovalReuseDecision) -> str:
-    messages = {
-        "approval_reuse_current_block": (
-            "Saved approval was rejected because current package policy blocks this request."
-        ),
-        "approval_reuse_sandbox_required": (
-            "Saved approval was rejected because current package policy requires sandbox enforcement."
-        ),
-        "approval_reuse_reapproval_required": (
-            "Saved approval was rejected because current package policy requires fresh approval."
-        ),
-        "approval_reuse_integrity_failure": (
-            "Saved approval was rejected because its integrity could not be verified."
-        ),
-        "approval_reuse_identity_changed": (
-            "Saved approval was rejected because the current package identity or scope changed."
-        ),
-        "approval_reuse_content_changed": (
-            "Saved approval was rejected because the current package content or execution context changed."
-        ),
-        "approval_reuse_claim_failed": (
-            "Saved approval was rejected because it changed, expired, or was already consumed."
-        ),
-        "approval_reuse_context_changed_after_claim": (
-            "Saved approval was rejected because retained authority changed after it was claimed."
-        ),
-        "approval_reuse_saved_action_unknown": (
-            "Saved approval was rejected because its action is unknown or malformed."
-        ),
-    }
-    return messages.get(
-        reuse.reason_code,
-        f"Saved package policy was not reused ({reuse.reason_code}).",
-    )
+def package_external_archive_override(evaluation: Any, *, variant: str) -> Any:
+    """Resident-owned external-archive binding verdict (block or shim delegation).
 
+    Every variant fails closed: an unavailable resident yields a terminal block.
+    """
 
-def _package_decision_for_action(action: GuardAction) -> str:
-    if action == "block":
-        return "block"
-    if action in {"review", "require-reapproval", "sandbox-required"}:
-        return "ask"
-    if action == "warn":
-        return "warn"
-    return "allow"
+    return compose_blocking_package_evaluation("external_archive_override", evaluation, variant=variant)
 
 
 def _package_policy_workspace_candidates(
@@ -2832,12 +2636,6 @@ def _stored_package_policy_is_stale_policy_bundle_family(decision: dict[str, obj
     from .policy_bundle_decisions import policy_bundle_rule_saved_decision_families
 
     return not any("package-request" in policy_bundle_rule_saved_decision_families(rule) for rule in matching_rules)
-
-
-def _stored_package_policy_evaluation_requires_review(evaluation: Any) -> bool:
-    policy_action = _string_value(getattr(evaluation, "policy_action", None))
-    decision = _string_value(getattr(evaluation, "decision", None))
-    return policy_action in {"block", "require-reapproval"} or decision in {"block", "ask"}
 
 
 def _saved_package_policy_clear_command(
@@ -3219,49 +3017,6 @@ def _package_approval_reuse_evidence(evaluation: Any) -> tuple[dict[str, object]
     return tuple(evidence_items)
 
 
-def _package_policy_override_evaluation(
-    evaluation: Any,
-    *,
-    decision: str,
-    policy_action: str,
-    title: str,
-    summary: str,
-    harness_message: str,
-    next_step: str | None = None,
-    reason_code: str,
-    reason_message: str,
-    approval_reuse: ApprovalReuseDecision | None = None,
-    approval_claim_disposition: _PackageApprovalClaimDisposition | None = None,
-) -> Any:
-    reason: dict[str, object] = {
-        "code": reason_code,
-        "message": reason_message,
-        "severity": "low",
-        "source": "guard-local",
-    }
-    if approval_reuse is not None:
-        reason["approval_reuse"] = approval_reuse.to_evidence()
-    if approval_claim_disposition is not None:
-        reason["approval_claim_disposition"] = approval_claim_disposition
-    packages = tuple({**package, "decision": decision} for package in evaluation.packages)
-    return replace(
-        evaluation,
-        decision=decision,
-        policy_action=policy_action,
-        reasons=(reason, *tuple(item for item in evaluation.reasons if item != reason)),
-        packages=packages,
-        risk_summary=harness_message,
-        user_copy=_supply_chain_package_eval_module().SupplyChainUserCopy(
-            title=title,
-            summary=summary,
-            next_step=next_step,
-            dashboard_url=None,
-            harness_message=harness_message,
-        ),
-        record_monitor_evidence=False,
-    )
-
-
 def redacted_command_tokens(command: Sequence[str]) -> tuple[str, ...]:
     return tuple(_redact_command_token(str(token)) for token in command)
 
@@ -3411,32 +3166,6 @@ def _workspace_files(workspace_dir: Path) -> tuple[tuple[str, ...], tuple[str, .
         existing_relative_paths(workspace_dir, _MANIFEST_CANDIDATES),
         existing_relative_paths(workspace_dir, _LOCKFILE_CANDIDATES),
     )
-
-
-def _targets_from_workspace_manifests(
-    workspace_dir: Path,
-    manifest_paths: Sequence[str],
-) -> tuple[PackageIntentTarget, ...]:
-    seen: set[tuple[str, str | None, str, str | None]] = set()
-    targets: list[PackageIntentTarget] = []
-    for manifest_path in manifest_paths:
-        disk_path = workspace_dir / manifest_path
-        try:
-            manifest_text = disk_path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        dependency_map = parse_manifest_dependencies(path=manifest_path, text=manifest_text)
-        ecosystem = _ECOSYSTEM_BY_MANIFEST.get(Path(manifest_path).name)
-        if ecosystem is None:
-            continue
-        for package_name, version in dependency_map.items():
-            target = _target_from_manifest_dependency(ecosystem, package_name, version)
-            fingerprint = (target.ecosystem, target.package_name, target.raw_spec, target.source_url)
-            if fingerprint in seen:
-                continue
-            seen.add(fingerprint)
-            targets.append(target)
-    return tuple(targets)
 
 
 def _workspace_audit_inventory(
@@ -4462,25 +4191,6 @@ def sync_supply_chain_cloud_state(
     payload["workspace_audits"] = workspace_audits
     payload.setdefault("synced_at", workspace_audits.get("synced_at"))
     return payload
-
-
-def _target_from_manifest_dependency(ecosystem: str, package_name: str, version: str) -> PackageIntentTarget:
-    clean_name = package_name.strip()
-    clean_version = version.strip()
-    if ecosystem == "npm":
-        spec = clean_name if not clean_version else f"{clean_name}@{clean_version}"
-        return js_target(spec)
-    if ecosystem == "pypi":
-        spec = clean_name if not clean_version else f"{clean_name}{clean_version}"
-        return python_target(spec)
-    if ecosystem == "maven":
-        spec = clean_name if not clean_version else f"{clean_name}:{clean_version}"
-        return coordinate_target(ecosystem, spec)
-    if ecosystem == "packagist":
-        spec = clean_name if not clean_version else f"{clean_name}:{clean_version}"
-        return composer_target(spec)
-    spec = clean_name if not clean_version else f"{clean_name}@{clean_version}"
-    return version_target(ecosystem, spec)
 
 
 def _target_for_package_spec(ecosystem: str, package_spec: str) -> PackageIntentTarget:

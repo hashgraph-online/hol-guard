@@ -1,0 +1,62 @@
+apiVersion: guard.hashgraphonline.com/v1alpha1
+kind: GuardPolicy
+metadata:
+  id: policy.business-selector
+  name: Business selector vector
+  revision: 1
+spec:
+  defaults:
+    mode: enforce
+    defaultAction: block
+  rolloutState: draft
+  rules:
+    - id: rule.review-confidential-mail
+      description: Review confidential mail to more than one named recipient
+      enabled: true
+      effect: review
+      match:
+        business:
+          schema: guard.business-policy-match.v1
+          version: 1
+          services:
+            - google_gmail
+          operations:
+            - mail_send
+          accountBindings:
+            - aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          audienceKinds:
+            - named
+          recipientDomains:
+            - partner.example
+            - example.test
+          sensitivityLabels:
+            - confidential
+          minRecipientCount: 2
+          minRecordCount: 1
+          minByteCount: 128
+      lifetime:
+        mode: permanent
+        expiresAt: null
+      provenance:
+        source: local
+        createdAt: 2026-10-01T00:00:00Z
+    - id: rule.block-public-share
+      description: Block public Drive sharing
+      enabled: true
+      effect: block
+      match:
+        business:
+          schema: guard.business-policy-match.v1
+          version: 1
+          services:
+            - google_drive
+          operations:
+            - drive_share
+          audienceKinds:
+            - public
+      lifetime:
+        mode: permanent
+        expiresAt: null
+      provenance:
+        source: local
+        createdAt: 2026-10-01T00:00:00Z

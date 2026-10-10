@@ -181,8 +181,18 @@ def build_hook_review_request(
     )
 
 
+def pre_tool_input(payload: Mapping[str, object]) -> Mapping[str, object] | None:
+    """Return the tool input for snake_case and camelCase (ZCode, Devin, Grok) payloads."""
+
+    for key in ("tool_input", "toolInput"):
+        candidate = payload.get(key)
+        if isinstance(candidate, Mapping):
+            return candidate
+    return None
+
+
 def pre_tool_command(payload: Mapping[str, object]) -> str | None:
-    for candidate in (payload.get("tool_input"), payload.get("arguments"), payload):
+    for candidate in (pre_tool_input(payload), payload.get("arguments"), payload):
         if not isinstance(candidate, Mapping):
             continue
         for key in ("command", "cmd", "shell_command", "shellCommand"):
@@ -202,5 +212,6 @@ __all__ = [
     "parse_source_ref",
     "payload_kind",
     "pre_tool_command",
+    "pre_tool_input",
     "runtime_hook_event_name",
 ]

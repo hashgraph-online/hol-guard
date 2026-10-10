@@ -2,6 +2,7 @@ import type {
   EffectiveExtensionControls,
   ExtensionCatalogItem,
   ExtensionCatalogResponse,
+  ExtensionCatalogSummary,
   ExtensionControlLayer,
   ExtensionControlTerminalCommands,
   ExtensionPermission,
@@ -79,6 +80,8 @@ function publisher(value: unknown, label: string): { id: string; displayName: st
 function icon(value: unknown, label: string): { kind: "react-icon" | "svg-ref" | "none"; name?: string; background?: string } {
   if (value === undefined || value === null) return { kind: "none" };
   const item = record(value, label);
+  // Display-only: a newer daemon may send an icon kind this UI cannot draw.
+  if (typeof item.kind === "string" && !["react-icon", "svg-ref", "none"].includes(item.kind)) return { kind: "none" };
   const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"] as const);
   const name = item.name === undefined ? undefined : string(item.name, `${label}.name`);
   const background = item.background === undefined ? undefined : string(item.background, `${label}.background`);
@@ -211,6 +214,11 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
 
 function mcpLaunch(value: unknown, label: string): McpLaunch {
   const item = record(value, label);
+  // Forward-compat: a newer daemon may emit launch kinds this UI does not know.
+  // Keep the entry and show it as unsupported; no launch representation is trusted.
+  if (typeof item.kind === "string" && !["package-launcher", "direct-command", "remote-http"].includes(item.kind)) {
+    return { kind: "unsupported" };
+  }
   const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "direct-command", "remote-http"] as const);
   if (kind === "direct-command") {
     return { kind, command: string(item.command, `${label}.command`) };
@@ -242,6 +250,8 @@ function mcpCatalogFields(
   label: string,
 ): Pick<ExtensionCatalogItem, "surface" | "mcp_launch" | "mcp_tools"> {
   if (item.surface === undefined) return {};
+  // Unknown surfaces from a newer daemon are kept but not rendered as MCP or commands.
+  if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
   const surface = enumValue(item.surface, `${label}.surface`, ["mcp"] as const);
   const launch = item.mcp_launch === undefined ? undefined : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
   const tools = item.mcp_tools === undefined
@@ -309,6 +319,43 @@ function extension(value: unknown, label: string): ExtensionCatalogItem {
     permission_count: permissionCount,
     permissions,
     ...mcpCatalogFields(item, label),
+  };
+}
+
+export function normalizeExtensionCatalogItem(value: unknown, label = "extension"): ExtensionCatalogItem {
+  return extension(value, label);
+}
+
+export function normalizeExtensionPermission(value: unknown, label = "permission"): ExtensionPermission {
+  return permission(value, id(record(value, label).extension_id, `${label}.extension_id`, EXTENSION_ID), label);
+}
+
+/** A v2 index row: list fields only, with packaged defaults under catalog_defaults. */
+export function normalizeExtensionCatalogSummary(value: unknown, label = "summary"): ExtensionCatalogSummary {
+  const item = record(value, label);
+  const defaults = record(item.catalog_defaults, `${label}.catalog_defaults`);
+  const { surface } = mcpCatalogFields({ surface: item.surface }, label);
+  return {
+    extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
+    name: string(item.name, `${label}.name`),
+    description: string(item.description, `${label}.description`),
+    enabled: bool(defaults.enabled, `${label}.catalog_defaults.enabled`),
+    required: bool(item.required, `${label}.required`),
+    trust_class: enumValue(item.trust_class, `${label}.trust_class`, ["first-party", "trusted-library", "external"] as const),
+    activation: enumValue(defaults.activation, `${label}.catalog_defaults.activation`, ["default-on", "opt-in"] as const),
+    publisher: publisher(item.publisher, `${label}.publisher`),
+    icon: icon(item.icon, `${label}.icon`),
+    source: enumValue(item.source, `${label}.source`, ["built-in", "local-admin", "signed-cloud"] as const),
+    version: version(item.version, `${label}.version`),
+    aliases: idList(item.aliases, `${label}.aliases`, EXTENSION_ID),
+    ecosystem_ids: stringList(item.ecosystem_ids, `${label}.ecosystem_ids`),
+    executables: stringList(item.executables, `${label}.executables`),
+    action_classes: stringList(item.action_classes, `${label}.action_classes`),
+    risk_classes: stringList(item.risk_classes, `${label}.risk_classes`),
+    rule_count: integer(item.rule_count, `${label}.rule_count`),
+    permission_count: integer(item.permission_count, `${label}.permission_count`),
+    ...(surface ? { surface } : {}),
+    content_revision: string(item.content_revision, `${label}.content_revision`),
   };
 }
 

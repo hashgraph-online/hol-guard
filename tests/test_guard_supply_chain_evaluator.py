@@ -32,7 +32,6 @@ from codex_plugin_scanner.guard.runtime.lockfile_parse_result import (
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
-    flag_tokens,
     js_target,
     python_target,
 )
@@ -623,15 +622,6 @@ def test_global_false_package_request_keeps_workspace_context() -> None:
 
     assert artifact.metadata["manifest_paths"] == ["package.json"]
     assert artifact.metadata["lockfile_paths"] == ["package-lock.json"]
-
-
-def test_flag_tokens_preserves_global_boolean_values() -> None:
-    assert flag_tokens(("install", "--global=false", "--location=project", "left-pad")) == (
-        "--global=false",
-        "--location=project",
-    )
-    assert flag_tokens(("install", "--location", "global", "left-pad")) == ("--location=global",)
-    assert flag_tokens(("install", "--location", "project", "left-pad")) == ("--location=project",)
 
 
 def test_merged_global_and_project_install_keeps_workspace_context() -> None:

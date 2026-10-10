@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard.native_business_source_retention import (
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.store_base import FallbackSecretStore
+from codex_plugin_scanner.guard.store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
 class MemoryCopy:
@@ -60,3 +61,17 @@ def test_success_requires_readback_from_both_existing_backends():
     assert read_retained_business_source_anchor(store) is None
     write_retained_business_source_anchor(store, b"bounded-fixture-marker")
     assert read_retained_business_source_anchor(store) == b"bounded-fixture-marker"
+
+
+def test_windows_vault_retains_the_marker_when_credential_manager_is_unreachable():
+    # SSH and service logons cannot write Credential Manager; the vault is the source of truth.
+    credential_manager = MemoryCopy(unavailable=True)
+    credential_manager._load_keyring_module_or_none = lambda: None
+    vault = MemoryCopy()
+    store = SimpleNamespace(
+        _policy_integrity_secret_store=WindowsPolicyIntegritySecretStore(credential_manager, vault),
+        _build_scoped_secret_ref=lambda prefix: prefix + ":synthetic-home",
+    )
+    write_retained_business_source_anchor(store, b"bounded-fixture-marker")
+    assert read_retained_business_source_anchor(store) == b"bounded-fixture-marker"
+    assert vault.value == "bounded-fixture-marker"

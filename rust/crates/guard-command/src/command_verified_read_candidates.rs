@@ -150,7 +150,8 @@ fn rg_candidate(args: &[String]) -> bool {
         return false;
     }
     let positional: Vec<&String> = args.iter().filter(|arg| !arg.starts_with('-')).collect();
-    let targets = &positional[1..];
+    // A flag-only search (`rg --files`) has no positional operand at all.
+    let targets = positional.get(1..).unwrap_or_default();
     !positional.is_empty()
         && !targets.is_empty()
         && args.iter().all(|arg| !dynamic(arg))
@@ -232,4 +233,17 @@ fn dynamic(value: &str) -> bool {
     value
         .chars()
         .any(|c| matches!(c, '$' | '`' | '<' | '>' | '|' | ';' | '&' | '\x00'))
+}
+
+#[cfg(test)]
+mod flag_only_search_tests {
+    use super::rg_candidate;
+
+    #[test]
+    fn flag_only_search_is_not_a_candidate_and_does_not_panic() {
+        for args in [&["--files"][..], &["--version"], &["-n", "--no-heading"]] {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            assert!(!rg_candidate(&args), "{args:?}");
+        }
+    }
 }

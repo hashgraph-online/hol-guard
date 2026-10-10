@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from ..action_lattice import coerce_guard_action, most_restrictive_guard_action
+from ..action_lattice import coerce_guard_action
 from ..models import GuardAction, GuardArtifact
+from ..native_hook_artifact_compose import native_hook_compose
 from ..native_mode import native_mode_requires_rust
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
@@ -82,11 +83,10 @@ def _ensure_native_resident_verifier(
         return
 
 
-def attach_native_pre_tool_floor(
+def native_pre_tool_floor(
     event_name: str,
     payload: Mapping[str, object],
     action_envelope: GuardActionEnvelope | None,
-    current_action_inputs: list[GuardAction],
     *,
     guard_home: Path,
     cwd: Path | None,
@@ -96,21 +96,19 @@ def attach_native_pre_tool_floor(
     command = _runtime_package_raw_command(payload, action_envelope)
     if event_name == "PreToolUse" and command is not None:
         _ensure_native_resident_verifier(store, guard_home)
-    floor = native_pre_tool_floor_action(
+    return native_pre_tool_floor_action(
         event_name,
         command,
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
     )
-    if floor is not None:
-        current_action_inputs.append(floor)
-    return floor
 
 
-def apply_local_grant_then_native_floor(
+def settle_local_grants(
     *,
     store: GuardStore,
+    guard_home: Path,
     command: str | None,
     cwd: Path,
     home_dir: Path,
@@ -118,8 +116,16 @@ def apply_local_grant_then_native_floor(
     policy_action: GuardAction,
     approval_context_policy_action: GuardAction,
     grant_allowed: bool,
+    tool_grant_applied: bool,
     native_floor: GuardAction | None,
 ) -> tuple[GuardAction, GuardAction, GuardAction]:
+    """Gather the local grant evidence; the resident settles the actions."""
+
+    if tool_grant_applied:
+        applied = native_hook_compose("tool_grant_apply", {}, guard_home=guard_home)
+        current_policy_action = cast(GuardAction, applied["current_policy_action"])
+        policy_action = cast(GuardAction, applied["policy_action"])
+        approval_context_policy_action = cast(GuardAction, applied["approval_context_policy_action"])
     granted = local_cli_grant_action(
         store=store,
         command=command,
@@ -128,24 +134,21 @@ def apply_local_grant_then_native_floor(
         current_action=current_policy_action,
         grant_allowed=grant_allowed,
     )
-    if granted != current_policy_action:
-        current_policy_action = granted
-        policy_action = granted
-        approval_context_policy_action = granted
-    if native_floor is None:
-        return policy_action, current_policy_action, approval_context_policy_action
-    # The floor already entered ``current_action_inputs``, so
-    # ``policy_action`` and ``current_policy_action`` carry it whenever no
-    # grant settled the review.  Re-flooring ``policy_action`` here would make
-    # every saved approval or granted tool re-flag the identical request
-    # forever, and re-flooring ``current_policy_action`` feeds that floor back
-    # into approval-reuse evaluation which then clobbers the settled allow.
-    # Only the approval-context action is re-floored: it binds the identity of
-    # the review the floor demanded so saved approvals still match exactly.
+    settled = native_hook_compose(
+        "grant_settle",
+        {
+            "current_action": current_policy_action,
+            "policy_action": policy_action,
+            "approval_context_action": approval_context_policy_action,
+            "granted_action": granted,
+            "native_floor": native_floor,
+        },
+        guard_home=guard_home,
+    )
     return (
-        policy_action,
-        current_policy_action,
-        most_restrictive_guard_action(approval_context_policy_action, native_floor),
+        cast(GuardAction, settled["policy_action"]),
+        cast(GuardAction, settled["current_policy_action"]),
+        cast(GuardAction, settled["approval_context_policy_action"]),
     )
 
 

@@ -150,7 +150,10 @@ def test_evaluate_detection_queues_access_graph_snapshot_without_syncing(
     assert any(entity["entityType"] == "mcp_server" for entity in payload["payload"]["entities"])
 
 
-def test_evaluate_detection_queues_instruction_access_graph_edges(tmp_path: Path) -> None:
+def test_evaluate_detection_queues_instruction_access_graph_edges(
+    tmp_path: Path,
+    native_context_digest: Path,
+) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-alpha")
     instruction_path = tmp_path / "workspace" / "AGENTS.md"

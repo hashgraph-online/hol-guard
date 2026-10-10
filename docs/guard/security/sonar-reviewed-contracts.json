@@ -27,7 +27,6 @@
     ["AaBsqHGdkSbnfNaazfuY", "variadic", "guard/adapters/claude_hook_config.py", "handler_identity"],
     ["AaBsqHKQkSbnfNaazfvP", "variadic", "guard/consumer/service.py", "_skill_directory_identity_evidence"],
     ["AaBsqG7UkSbnfNaazftC", "variadic", "guard/runtime/cisco_preflight.py", "scan_action_for_cisco_evidence"],
-    ["AaBsqG5-kSbnfNaazfs6", "variadic", "guard/runtime/command_workspace_write_candidates.py", "workspace_write_candidate_factors"],
     ["AaBsqG9lkSbnfNaazftS", "variadic", "guard/runtime/js_semver.py", "_expand_primitive_comparator"],
     ["AaBsqG9lkSbnfNaazftT", "variadic", "guard/runtime/js_semver.py", "_expand_caret"],
     ["AaBsqG9lkSbnfNaazftU", "variadic", "guard/runtime/js_semver.py", "_expand_tilde"],

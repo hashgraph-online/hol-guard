@@ -34,7 +34,7 @@ COMMAND = [
     "--all-targets",
     "--no-cfg-coverage",
     "--test-threads",
-    "2",
+    "4",
     "--retries",
     "0",
     "--no-fail-fast",

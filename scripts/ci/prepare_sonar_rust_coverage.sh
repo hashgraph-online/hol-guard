@@ -26,6 +26,6 @@ cd "$repo_root/rust"
 # The pinned tool clears workspace binaries/profiles itself, retaining only
 # reusable instrumented dependencies. Never --no-clean a restored workspace.
 cargo +"$toolchain" llvm-cov nextest --locked --workspace --all-targets --no-cfg-coverage \
-    --test-threads 2 --retries 0 --no-fail-fast --lcov --output-path ../rust-coverage/rust-lcov.info
+    --test-threads 4 --retries 0 --no-fail-fast --lcov --output-path ../rust-coverage/rust-lcov.info
 cd "$repo_root"
 python -m scripts.ci.rust_coverage_report bind

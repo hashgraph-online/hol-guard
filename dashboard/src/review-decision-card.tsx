@@ -16,6 +16,13 @@ import {
   isWatchOnlyObservation,
   requestResolutionBlockReason,
 } from "./approval-center-utils";
+import {
+  oneTimeRetryWindowMinutes,
+  receiptDescribesRequest,
+  retryCannotReuseApproval,
+  retryCannotReuseApprovalHint,
+} from "./approval-retry-guidance";
+import { approvalGateRefreshNeeded, resolvedStateForItem, useShownRequestCheck } from "./review-decision-state";
 import { GuardRequestResolutionError } from "./guard-api";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import {
@@ -52,6 +59,7 @@ import {
 import { buildWhatWouldHappen, pastDecisionVerb, PrimaryActionCard } from "./review-states";
 import type { ReviewViewModel, ReviewWorkspaceProps } from "./review-workspace";
 import { BusinessReviewSummaryPanel } from "./business-review-summary-panel";
+import { ApprovalExtensionRecommendationCard } from "./approval-extension-recommendation-card";
 
 const commonScopeValues = new Set<DecisionScope>(["artifact", "workspace"]);
 
@@ -84,7 +92,15 @@ export function ReviewDecisionCard(props: {
   const [allowScope, setAllowScope] = useState<DecisionScope>("artifact");
   const [blockScope, setBlockScope] = useState<DecisionScope>("artifact");
   const [submitting, setSubmitting] = useState<"allow" | "block" | null>(null);
-  const [resolved, setResolved] = useState<{ action: "allow" | "block"; persistedExactAction: boolean } | null>(null);
+  // Keyed by request id: the parent may show the next request before onResolve settles.
+  const [resolvedState, setResolved] = useState<{
+    requestId: string;
+    action: "allow" | "block";
+    persistedExactAction: boolean;
+    message?: string;
+  } | null>(null);
+  const resolved = resolvedStateForItem(resolvedState, item);
+  const isStillShown = useShownRequestCheck(item?.request_id ?? null);
   const [showConsequences, setShowConsequences] = useState(false);
   const [showEvidence, setShowEvidence] = useState(false);
   const [lastAction, setLastAction] = useState<"allow" | "block" | null>(null);
@@ -93,6 +109,7 @@ export function ReviewDecisionCard(props: {
   const [approvalTotpCode, setApprovalTotpCode] = useState("");
   const [useCooldown, setUseCooldown] = useState(false);
   const [pendingAction, setPendingAction] = useState<"allow" | "block" | null>(null);
+  const [extensionDialogActive, setExtensionDialogActive] = useState(false);
   const [pendingContractKey, setPendingContractKey] = useState<string | null>(null);
   const [rememberExactAction, setRememberExactAction] = useState(false);
   const [effectiveApprovalGate, setEffectiveApprovalGate] = useState(props.approvalGate);
@@ -161,6 +178,7 @@ export function ReviewDecisionCard(props: {
   const handleResolve = useCallback(
     async (action: "allow" | "block") => {
       if (!item || resolutionBlockReason !== null) return;
+      const requestId = item.request_id;
       const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = approvalGate;
       const gateRequired = approvalGateRequiredForResolution(gate, action, requestedScope);
@@ -201,20 +219,19 @@ export function ReviewDecisionCard(props: {
           ...proof,
           ...(includeGateFields ? { approval_gate_use_cooldown: useCooldown } : {}),
         });
-        setResolved({ action, persistedExactAction: persistExactAction });
+        // The next request may already be on screen; never reset its form for this decision.
+        if (!isStillShown(requestId)) return;
+        setResolved({ requestId, action, persistedExactAction: persistExactAction });
         setApprovalPassword("");
         setApprovalTotpCode("");
         setUseCooldown(false);
         setPendingAction(null);
         setPendingContractKey(null);
       } catch (err) {
+        if (!isStillShown(requestId)) return;
         const message = err instanceof Error ? err.message : "Something went wrong. Try again.";
         setErrorMessage(message);
-        if (
-          err instanceof GuardRequestResolutionError &&
-          err.status === 423 &&
-          err.payload?.["error"] === "approval_gate_locked"
-        ) {
+        if (approvalGateRefreshNeeded(err)) {
           setSubmitting(null);
           try {
             const refreshedGate = await fetchResolvedApprovalGate();
@@ -224,11 +241,12 @@ export function ReviewDecisionCard(props: {
           }
         }
       } finally {
-        setSubmitting(null);
+        if (isStillShown(requestId)) setSubmitting(null);
       }
     },
     [
       item,
+      isStillShown,
       allowScope,
       blockScope,
       watchOnlyObservation,
@@ -287,6 +305,8 @@ export function ReviewDecisionCard(props: {
           void handleResolve(action);
           return;
         }
+        // The dialog renders from this state; keep the fresh gate so it asks for a code.
+        if (fresh) setEffectiveApprovalGate(fresh);
         setPendingAction(action);
         setPendingContractKey(decisionContractKey);
       })();
@@ -312,7 +332,15 @@ export function ReviewDecisionCard(props: {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (submitting !== null || pendingAction !== null || resolved !== null || resolutionBlockReason !== null) return;
+      if (
+        submitting !== null ||
+        pendingAction !== null ||
+        extensionDialogActive ||
+        resolved !== null ||
+        resolutionBlockReason !== null
+      ) {
+        return;
+      }
       const target = event.target as HTMLElement;
       if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) return;
 
@@ -332,7 +360,15 @@ export function ReviewDecisionCard(props: {
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [availableScopeChoices, handleRequestResolve, pendingAction, resolutionBlockReason, resolved, submitting]);
+  }, [
+    availableScopeChoices,
+    extensionDialogActive,
+    handleRequestResolve,
+    pendingAction,
+    resolutionBlockReason,
+    resolved,
+    submitting,
+  ]);
 
   const handleModalSubmit = useCallback(() => {
     if (pendingAction === null || submitting !== null) {
@@ -374,6 +410,15 @@ export function ReviewDecisionCard(props: {
   const handleApprovalTotpCodeChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setApprovalTotpCode(event.target.value);
   }, []);
+
+  const reviewedRequestId = item?.request_id ?? null;
+  const handleExtensionApproved = useCallback(
+    (message: string) => {
+      if (reviewedRequestId === null) return;
+      setResolved({ requestId: reviewedRequestId, action: "allow", persistedExactAction: false, message });
+    },
+    [reviewedRequestId],
+  );
 
   const handleUseCooldownChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     setUseCooldown(event.target.checked);
@@ -448,7 +493,7 @@ export function ReviewDecisionCard(props: {
             aria-hidden="true"
           />
           <p className={`text-sm font-medium ${resolved.action === "allow" ? "text-brand-green-text" : "text-brand-attention"}`}>
-            {resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
+            {resolved.message ?? resolvedActionCopy(item, resolved.action, resolved.persistedExactAction)}
           </p>
         </div>
       )}
@@ -469,6 +514,11 @@ export function ReviewDecisionCard(props: {
 
         {!nativeDisplayOnly && <PrimaryActionCard item={item} />}
         {nativeDisplayOnly && <BusinessReviewSummaryPanel key={item.request_id} requestId={item.request_id} />}
+        {resolved === null && retryCannotReuseApproval(item) && !rememberExactAction ? (
+          <p className="mt-4 text-sm leading-6 text-brand-dark">
+            {retryCannotReuseApprovalHint(item, harnessName)}
+          </p>
+        ) : null}
         {item.scope_restrictions?.includes("provider_account_unverified_once_only") ? (
           <p className="mt-4 text-sm leading-6 text-brand-dark">
             Guard cannot verify this provider account. Approval applies once to this exact call; remembered approvals are unavailable.
@@ -528,6 +578,19 @@ export function ReviewDecisionCard(props: {
           </div>
         )}
 
+        {resolutionBlockReason === null && resolved === null && !watchOnlyObservation && (
+          <ApprovalExtensionRecommendationCard
+            key={item.request_id}
+            item={item}
+            approvalGate={approvalGate}
+            allowScope={allowScope}
+            disabled={!hasAllowScope || submitting !== null || pendingAction !== null}
+            onResolve={props.onResolve}
+            onApproved={handleExtensionApproved}
+            onDialogActiveChange={setExtensionDialogActive}
+          />
+        )}
+
         {resolutionBlockReason === null && resolved === null && (
           <ReviewScopeControls
             commonScopeOptions={commonScopeOptions}
@@ -538,6 +601,8 @@ export function ReviewDecisionCard(props: {
             taskCapabilityCopy={taskCapabilityCopy}
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
             rememberExactAction={rememberExactAction}
+            oneTimeRetryBlocked={retryCannotReuseApproval(item)}
+            retryWindowMinutes={oneTimeRetryWindowMinutes(item)}
             allowScope={allowScope}
             blockScope={blockScope}
             onAllowScopeChange={setAllowScope}
@@ -626,7 +691,7 @@ export function ReviewDecisionCard(props: {
         </div>
       )}
 
-      {detail.receipt && (
+      {detail.receipt && receiptDescribesRequest(item, detail.receipt) && (
         <div className="rounded-xl border border-slate-100 p-4 sm:p-5">
           <SectionLabel>Last time</SectionLabel>
           <p className="mt-2 text-sm text-muted-foreground">

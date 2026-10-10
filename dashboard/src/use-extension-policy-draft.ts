@@ -4,12 +4,12 @@ import {
   applyExtensionMutation,
   ExtensionControlApiError,
   fetchEffectiveExtensionControls,
-  fetchExtensionCatalog,
   previewExtensionMutation,
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
   type ExtensionMutationPreview,
 } from "./extension-controls-api";
+import { loadCatalogReadModel } from "./extension-catalog-v2";
 import {
   buildExtensionPolicyDraftMutation,
   extensionPolicyDraftIsDirty,
@@ -233,15 +233,19 @@ export function useExtensionPolicyDraft(props: {
     setPreviewBusy(true);
     setError(null);
     try {
-      const [latestCatalog, latestEffective] = await Promise.all([fetchExtensionCatalog(), fetchEffectiveExtensionControls()]);
-      const pairs = oldExtensions
+      const [latestCatalog, latestEffective] = await Promise.all([loadCatalogReadModel(), fetchEffectiveExtensionControls()]);
+      // Match on index rows, then read details only for the affected extensions.
+      const matches = oldExtensions
         .map((oldExtension) => {
           const exact = latestCatalog.extensions.find((item) => item.extension_id === oldExtension.extension_id);
-          if (exact) return { oldExtension, latestExtension: exact };
+          if (exact) return { oldExtension, latestId: exact.extension_id };
           const aliasMatches = latestCatalog.extensions.filter((item) => item.aliases.includes(oldExtension.extension_id));
-          return aliasMatches.length === 1 ? { oldExtension, latestExtension: aliasMatches[0]! } : null;
+          return aliasMatches.length === 1 ? { oldExtension, latestId: aliasMatches[0]!.extension_id } : null;
         })
-        .filter((pair): pair is { oldExtension: ExtensionCatalogItem; latestExtension: ExtensionCatalogItem } => Boolean(pair));
+        .filter((match): match is { oldExtension: ExtensionCatalogItem; latestId: string } => Boolean(match));
+      const pairs = await Promise.all(matches.map(async ({ oldExtension, latestId }) => (
+        { oldExtension, latestExtension: await latestCatalog.detail(latestId) }
+      )));
       if (!pairs.length) {
         setError("These extensions no longer exist in the authoritative catalog. Discard the draft and refresh before continuing.");
         return;

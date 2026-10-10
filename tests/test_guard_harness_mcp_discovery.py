@@ -27,6 +27,8 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import McpCatalogResult
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def _artifact(
     *,

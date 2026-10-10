@@ -186,3 +186,54 @@ def test_invalid_hook_input_is_rejected_before_evaluation(tmp_path, monkeypatch,
         monkeypatch.setattr(sys, "stdin", stream)
         with pytest.raises(error):
             namespace["_read_hook_input"](time.monotonic() + 1)
+
+
+def test_hook_input_drops_the_utf8_bom_windows_powershell_prepends(tmp_path, monkeypatch):
+    namespace = _hook_namespace(tmp_path)
+    input_path = tmp_path / "input"
+    input_path.write_bytes(b'\xef\xbb\xbf{"command":"echo hi"}\r\n')
+    with input_path.open("r", encoding="utf-8") as stream:
+        monkeypatch.setattr(sys, "stdin", stream)
+        raw = namespace["_read_hook_input"](time.monotonic() + 1)
+    assert json.loads(raw) == {"command": "echo hi"}
+
+
+@pytest.mark.parametrize("alive", [True, False])
+def test_windows_daemon_liveness_never_sends_a_console_signal(tmp_path, monkeypatch, alive):
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import windows_paths
+
+    namespace = _hook_namespace(tmp_path)
+
+    def console_signal(_pid, _signal):
+        raise AssertionError("os.kill(pid, 0) sends CTRL_C_EVENT on Windows")
+
+    namespace["os"] = SimpleNamespace(name="nt", kill=console_signal)
+    monkeypatch.setattr(windows_paths, "windows_process_liveness", lambda pid: alive if pid == 4242 else None)
+    assert namespace["_daemon_pid_is_alive"](4242) is alive
+    # Unproven liveness still falls through to the healthz and HMAC checks.
+    assert namespace["_daemon_pid_is_alive"](7) is True
+
+
+def test_daemon_payload_carries_the_agent_execution_environment(tmp_path, monkeypatch):
+    namespace = _hook_namespace(tmp_path)
+    monkeypatch.setenv("GIT_PAGER", "cat")
+    raw = json.dumps({"hook_event_name": "beforeShellExecution", "command": "git -C src status --short"})
+    namespace["_read_hook_input"] = lambda _deadline: raw
+    sent: list[dict] = []
+
+    class _StopError(Exception):
+        pass
+
+    def capture(payload_json, **_kwargs):
+        sent.append(json.loads(payload_json))
+        raise _StopError
+
+    namespace["_daemon_hook_result"] = capture
+    with pytest.raises(_StopError):
+        namespace["_main_inner"]()
+    # Without the stamp the daemon would judge Git configuration against its own environment.
+    environment = sent[0]["guard_execution_environment"]
+    assert environment["git_pager_disabled"] is True
+    assert "GIT_PAGER" in environment["environment_names"]

@@ -11,6 +11,8 @@ from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     tmp_path: Path,

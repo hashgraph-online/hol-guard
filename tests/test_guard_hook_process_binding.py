@@ -99,6 +99,7 @@ def test_main_binds_authenticated_daemon_request_to_bridge_process(
     assert captured_hook_payload.pop("guard_remaining_ms") in range(1, 4_001)
     assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_PROCESS_KEY) == bridge_process
     assert captured_hook_payload.pop(CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY) == 1
+    assert isinstance(captured_hook_payload.pop("guard_execution_environment"), dict)
     assert captured_hook_payload == hook_payload
     assert json.loads(str(_DaemonHandler.captured_hook_body))["tool_input"]["command"] == complete_command
     assert _ProxyHandler.captured_paths == []

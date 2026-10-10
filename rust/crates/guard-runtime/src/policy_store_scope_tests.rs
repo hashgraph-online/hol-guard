@@ -160,3 +160,133 @@ fn resident_accepts_signed_same_scope_generation_advance() {
     assert_eq!(store.current_generation(), Some(2));
     fs::remove_dir_all(root).unwrap();
 }
+
+fn apply_stored_policy_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
+    let home = guard_home.to_string_lossy();
+    serde_json::to_vec(&serde_json::json!({
+        "operation": "apply_stored_package_policy",
+        "request": {
+            "schema": guard_contracts::PACKAGE_AUTHORITY_REQUEST_SCHEMA,
+            "request_id": "guard-home-pin",
+            "store_path": store_path.to_string_lossy(),
+            "guard_home": home,
+            "evaluation": {},
+            "artifact": {},
+            "artifact_hash": "deadbeef",
+            "workspace_dir": home,
+            "now": "2026-10-06T00:00:00Z",
+            "runtime_private_metadata": null,
+            "current_action": null,
+            "claim_saved_approval": false,
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn resident_refuses_operations_for_another_guard_home() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let other = std::env::temp_dir().join(format!("hol-guard-foreign-home-{}", std::process::id()));
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let refused: Result<(), String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &apply_stored_policy_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&other, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &root.join("other.db")), mismatch);
+    assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
+    assert_eq!(store.require_guard_home(&root.to_string_lossy()), Ok(()));
+    assert_eq!(
+        store.require_store_path(&root.join("guard.db").to_string_lossy()),
+        Ok(())
+    );
+    assert_eq!(
+        store.require_store_path(&root.join("nested").join("guard.db").to_string_lossy()),
+        refused
+    );
+    assert_eq!(store.require_store_path("guard.db"), refused);
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn local_cli_grant_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
+    let source = guard_contracts::LocalCliIdentitySourceV1::RegistryPackage {
+        name: "cowsay".to_owned(),
+        package_name: "cowsay".to_owned(),
+    };
+    serde_json::to_vec(&serde_json::json!({
+        "operation": "local_cli_grant_decide",
+        "request": {
+            "schema": guard_contracts::LOCAL_CLI_GRANT_REQUEST_SCHEMA,
+            "request_id": "guard-home-pin",
+            "store_path": store_path.to_string_lossy(),
+            "guard_home": guard_home.to_string_lossy(),
+            "current_action": "allow",
+            "source": source,
+            "command_id": null,
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn resident_refuses_local_cli_grant_for_another_guard_home() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let other =
+        std::env::temp_dir().join(format!("hol-guard-foreign-grant-{}", std::process::id()));
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &local_cli_grant_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&other, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
+    let _ = fs::remove_dir_all(&root);
+}
+
+fn local_mcp_grant_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "operation": "local_mcp_grant_decide",
+        "request": {
+            "schema": guard_contracts::LOCAL_MCP_GRANT_REQUEST_SCHEMA,
+            "request_id": "mcp-grant-home-pin",
+            "store_path": store_path.to_string_lossy(),
+            "guard_home": guard_home.to_string_lossy(),
+            "current_action": "allow",
+            "harness": "codex",
+            "tool_name": "read_file",
+            "server": {},
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn resident_refuses_mcp_grant_decisions_for_another_guard_home() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let other = std::env::temp_dir().join(format!("hol-guard-foreign-mcp-{}", std::process::id()));
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &local_mcp_grant_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&other, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &root.join("other.db")), mismatch);
+    assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
+    let _ = fs::remove_dir_all(&root);
+}

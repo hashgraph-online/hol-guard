@@ -29,7 +29,7 @@ from .hook_native_saved_approval import (
     native_exact_action_token,
     native_saved_review_response,
 )
-from .hook_request_parsing import pre_tool_command
+from .hook_request_parsing import pre_tool_command, pre_tool_input
 from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
@@ -603,8 +603,8 @@ def _native_review_launch_target(payload: Mapping[str, object]) -> str:
     command = pre_tool_command(payload)
     if command is not None:
         return command
-    tool_input = payload.get("tool_input")
-    if isinstance(tool_input, Mapping):
+    tool_input = pre_tool_input(payload)
+    if tool_input is not None:
         for key in ("url", "path", "file_path", "target"):
             value = tool_input.get(key)
             if isinstance(value, str) and value.strip():

@@ -205,6 +205,11 @@ pub(crate) fn serve_managed(
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
     let owner_lock = acquire_managed_owner_lock(state_base)?;
+    // Build the immutable catalog read snapshot off the request path so the
+    // first catalog_read does not pay for it; failures surface on that read.
+    thread::spawn(|| {
+        let _ = guard_command::catalog_read_model::packaged_catalog_read_snapshot();
+    });
     // Initialize before fallible policy startup so every client can see a
     // resident still starting. This guard drops before owner_lock on all exits.
     let _diagnostic_lifetime =
@@ -379,12 +384,26 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
         .ok_or_else(|| "native_resident_owner_process_invalid".to_owned())
 }
 
+/// Upper bound on a caller-supplied deadline. Every operation is capped at nine
+/// seconds except the skill-directory scan, whose bounded tree walk may
+/// legitimately read hundreds of megabytes and is granted a longer ceiling.
+const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
+const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
+
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
-    let budget = crate::strict_json_value(payload)
-        .ok()
+    let value = crate::strict_json_value(payload).ok();
+    let ceiling = match value
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+    {
+        Some("skill_directory_identity") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        _ => CLIENT_TIMEOUT_CEILING_MS,
+    };
+    let budget = value
+        .as_ref()
         .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
         .unwrap_or(750)
-        .clamp(1, 9_000);
+        .clamp(1, ceiling);
     Duration::from_millis(budget)
 }
 

@@ -10,18 +10,17 @@ from pathlib import Path
 from typing import Literal, Protocol
 
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.native_data_flow import NativeDataFlowError, detect_data_flow_exfiltration
+from codex_plugin_scanner.guard.native_false_positive_rules import (
+    DETECTOR_ID as FALSE_POSITIVE_DETECTOR_ID,
+)
+from codex_plugin_scanner.guard.native_false_positive_rules import (
+    native_false_positive_signals,
+    validate_false_positive_signals,
+)
 from codex_plugin_scanner.guard.native_prompt import NativePromptAnalysisError
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.cisco_preflight import CiscoMcpPreflightDetector, CiscoSkillPreflightDetector
-from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
-from codex_plugin_scanner.guard.runtime.false_positive_rules import (
-    classify_docs_example_source,
-    classify_health_endpoint_fetch,
-    classify_package_metadata_access,
-    classify_read_only_http_fetch,
-    classify_source_search_command,
-    classify_version_file_access,
-)
 from codex_plugin_scanner.guard.runtime.persistence_rules import detect_persistence_mechanisms
 from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
 from codex_plugin_scanner.guard.runtime.safe_decode import SAFE_DECODE_DETECTOR_VERSION, DecodeResult, decode_layers
@@ -74,6 +73,7 @@ class DetectorContext:
     threat_intel: Mapping[str, object]
     redaction_settings: Mapping[str, object]
     approved_scan_roots: tuple[Path, ...] = ()
+    guard_home: Path | None = None
 
 
 class GuardDetector(Protocol):
@@ -159,7 +159,7 @@ class DetectorRegistry:
             try:
                 detector_signals = detector.detect(action, context)
                 elapsed_ms = _elapsed_ms(started_at, self._clock())
-            except NativePromptAnalysisError:
+            except (NativePromptAnalysisError, NativeDataFlowError):
                 raise
             except Exception as error:
                 elapsed_ms = _elapsed_ms(started_at, self._clock())
@@ -189,7 +189,7 @@ class DataFlowExfiltrationDetector:
     categories: tuple[RiskSignalCategory, ...] = ("secret", "network")
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
-        return detect_data_flow_exfiltration(action, workspace=context.workspace)
+        return detect_data_flow_exfiltration(action, workspace=context.workspace, guard_home=context.guard_home)
 
 
 class PromptInjectionDetector:
@@ -370,146 +370,27 @@ class FalsePositiveSuppressorDetector:
     policy composition rules and operators can use to reduce unnecessary blocks.
     """
 
-    detector_id = "false_positive.suppressor"
+    detector_id = FALSE_POSITIVE_DETECTOR_ID
     categories: tuple[RiskSignalCategory, ...] = ("false_positive",)
 
     def detect(self, action: GuardActionEnvelope, context: DetectorContext) -> tuple[RiskSignalV2, ...]:
-        del context
-        signals: list[RiskSignalV2] = []
+        """Return the resident's false-positive signals; raise when it cannot answer.
 
-        if action.action_type == "shell_command" and action.command is not None:
-            classification = classify_source_search_command(action.command)
-            if classification.is_source_search:
-                signals.append(
-                    RiskSignalV2(
-                        signal_id=f"fp:source-search:{classification.tool}",
-                        category="false_positive",
-                        severity="info",
-                        confidence="strong",
-                        detector=self.detector_id,
-                        title="Read-only code or filesystem search",
-                        plain_reason=(
-                            f"This command uses '{classification.tool}' to search code or the filesystem "
-                            "and does not access secret files or pipe output to the network."
-                        ),
-                        technical_detail=classification.reason,
-                        evidence_ref="command",
-                        redaction_level="none",
-                        false_positive_hint=None,
-                        advisory_id=None,
-                    )
-                )
-
-            if classify_health_endpoint_fetch(action.command):
-                signals.append(
-                    RiskSignalV2(
-                        signal_id="fp:health-endpoint-fetch",
-                        category="false_positive",
-                        severity="info",
-                        confidence="strong",
-                        detector=self.detector_id,
-                        title="Localhost health or readiness check",
-                        plain_reason=(
-                            "This command fetches a localhost health or readiness endpoint,"
-                            " which is a normal development pattern."
-                        ),
-                        technical_detail="matched localhost health endpoint pattern",
-                        evidence_ref="command",
-                        redaction_level="none",
-                        false_positive_hint=None,
-                        advisory_id=None,
-                    )
-                )
-
-            read_only_http_tool = classify_read_only_http_fetch(action.command)
-            if read_only_http_tool is not None:
-                signals.append(
-                    RiskSignalV2(
-                        signal_id=f"fp:read-only-http-fetch:{read_only_http_tool}",
-                        category="false_positive",
-                        severity="info",
-                        confidence="strong",
-                        detector=self.detector_id,
-                        title="Read-only HTTP page probe",
-                        plain_reason=(
-                            "This command fetches a page and inspects the response locally without uploading data "
-                            "or reading secret files."
-                        ),
-                        technical_detail="matched read-only HTTP fetch pattern",
-                        evidence_ref="command",
-                        redaction_level="none",
-                        false_positive_hint=None,
-                        advisory_id=None,
-                    )
-                )
-
-        if action.action_type == "file_read" and action.target_paths:
-            if classify_version_file_access(list(action.target_paths)):
-                signals.append(
-                    RiskSignalV2(
-                        signal_id="fp:version-file-access",
-                        category="false_positive",
-                        severity="info",
-                        confidence="strong",
-                        detector=self.detector_id,
-                        title="Version pin file access",
-                        plain_reason=(
-                            "Reading a version pin file (.nvmrc, .python-version, etc.) is a normal"
-                            " toolchain operation with no sensitive data."
-                        ),
-                        technical_detail="matched version pin file pattern",
-                        evidence_ref="target_paths",
-                        redaction_level="none",
-                        false_positive_hint=None,
-                        advisory_id=None,
-                    )
-                )
-
-            if classify_package_metadata_access(list(action.target_paths)):
-                signals.append(
-                    RiskSignalV2(
-                        signal_id="fp:package-metadata-access",
-                        category="false_positive",
-                        severity="info",
-                        confidence="strong",
-                        detector=self.detector_id,
-                        title="Package manifest or lock file access",
-                        plain_reason=(
-                            "Reading package.json, requirements.txt, or similar manifests is a normal"
-                            " dependency management operation."
-                        ),
-                        technical_detail="matched package metadata file pattern",
-                        evidence_ref="target_paths",
-                        redaction_level="none",
-                        false_positive_hint=None,
-                        advisory_id=None,
-                    )
-                )
-
-            for path in action.target_paths:
-                if classify_docs_example_source(path):
-                    signals.append(
-                        RiskSignalV2(
-                            signal_id=f"fp:docs-example-source:{path[:40]}",
-                            category="false_positive",
-                            severity="info",
-                            confidence="strong",
-                            detector=self.detector_id,
-                            title="Access to docs or example file",
-                            plain_reason=(
-                                "The file path points to documentation, examples, or fixture data,"
-                                " which rarely contains real credentials or sensitive content."
-                            ),
-                            technical_detail=f"matched docs/example path: {path}",
-                            evidence_ref="target_paths",
-                            redaction_level="none",
-                            false_positive_hint=None,
-                            advisory_id=None,
-                        )
-                    )
-                    break
-
-        return tuple(signals)
+        The registry records a raised error as a detector failure with no
+        signals, so an unavailable resident never suppresses anything.
+        """
+        has_command = action.action_type == "shell_command" and action.command is not None
+        has_paths = action.action_type == "file_read" and bool(action.target_paths)
+        if not has_command and not has_paths:
+            return ()
+        payloads = native_false_positive_signals(
+            action_type=action.action_type,
+            command=action.command if has_command else None,
+            target_paths=action.target_paths if has_paths else (),
+            guard_home=context.config.guard_home,
+            timeout_seconds=context.config.runtime_detector_timeout_ms / 1_000,
+        )
+        return validate_false_positive_signals(payloads)
 
 
 class PersistenceDetector:

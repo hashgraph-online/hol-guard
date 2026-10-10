@@ -105,6 +105,30 @@ def test_token_is_stable_across_sessions_and_binds_the_installed_runner(
     assert _token("npx wrangler --version", workspace) not in {None, first}
 
 
+def test_camel_case_harness_payload_offers_the_same_token(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # ZCode, Devin and Grok send ``toolInput``; the daemon receives that shape unchanged.
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    expected = _token("npx wrangler --version", workspace)
+    assert expected is not None
+    result, receipt = _verdict()
+    camel = native_exact_action_token(
+        harness=_HARNESS,
+        tool_name="Bash",
+        payload={
+            "toolName": "run_terminal_command",
+            "toolInput": {"command": "npx wrangler --version"},
+            "cwd": str(workspace),
+        },
+        native_result=result,
+        native_receipt=receipt,
+        workspace=workspace,
+        home_dir=workspace.parent / "home",
+    )
+    assert camel == expected
+
+
 def test_token_changes_when_native_rules_change(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:

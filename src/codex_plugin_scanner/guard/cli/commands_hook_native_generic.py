@@ -35,9 +35,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
     return resolve(payload)
 
 
-_GUIDED_POLICY_ACTIONS = frozenset({"block", "review", "require-reapproval", "sandbox-required"})
-
-
 def _embedded_script_evidence(command_text: str | None) -> list[dict[str, object]]:
     """Hash-addressed audit entries for heredoc script bodies (lazy import)."""
 
@@ -91,58 +88,22 @@ def _observed_action_detail(
 
 
 if TYPE_CHECKING:
-    from ._commands_shared import (
-        _HOOK_DAEMON_FAIL_MODES,
-        _HOOK_DAEMON_FAILURE_STATUSES,
-        _HOOK_DAEMON_PRESERVED_DENY_REASON,
-        _HOOK_DAEMON_STRICT_REASON,
-        _hook_command_text,
-        _now,
-    )
-    from .commands_support_claude_approval import _claude_native_pretooluse_terminal_notice
-    from .commands_support_hook_payload import (
-        _apply_native_edge_envelope_fields,
-        _coalesce_string,
-        _emit_native_hook_block_stderr,
-        _emit_native_hook_json_document,
-        _emit_native_hook_notification_stderr,
-        _emit_native_hook_response,
-        _emit_native_post_tool_envelope,
-        _hook_command_has_encoded_markers,
-        _native_hook_json_document,
-    )
-    from .commands_support_interaction import (
-        _emit,
-        _record_harness_usage_for_hook,
-        _should_emit_claude_native_pretooluse_notice,
-        _should_emit_copilot_hook_response,
-        _should_emit_native_hook_exit_block,
-        _should_emit_native_hook_json_response,
-        _should_emit_native_hook_response,
-    )
+    from ._commands_shared import _hook_command_text, _now
+    from .commands_support_hook_payload import _hook_command_has_encoded_markers
+    from .commands_support_interaction import _record_harness_usage_for_hook
     from .commands_support_prompts import (
-        _codex_prompt_block_system_message,
         _copilot_hook_reason,
         _decision_v2_harness_message,
         _emit_copilot_hook_response,
     )
-    from .commands_support_runtime_policy import (
-        _ensure_terminal_punctuation,
-        _localize_pending_approval_copy,
-        _native_hook_reason,
-        _native_hook_reason_for_harness,
-    )
-    from .commands_support_runtime_resolution import _canonical_harness_name, _copilot_hook_stage
+    from .commands_support_runtime_policy import _localize_pending_approval_copy
+    from .commands_support_runtime_resolution import _canonical_harness_name
 
 
-from ..action_lattice import (
-    guard_action_severity,
-    most_restrictive_guard_action,
-    normalize_guard_action,
-    normalize_guard_action_result,
-)
+from ..action_lattice import guard_action_severity
 from ..local_cli_hook import apply_local_cli_grant, observe_unlisted_cli
 from ..models import GuardAction, GuardArtifact, HarnessDetection
+from ..native_hook_decision import native_compose_current, native_finalize, native_post_claim_reuse
 from ..retry_lineage import capture_retry_lineage
 from ..runtime.actions import _command_detail
 from ..runtime.approval_context import (
@@ -152,7 +113,6 @@ from ..runtime.approval_context import (
 )
 from ..runtime.approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
     ApprovalReuseDecision,
     ApprovalReuseValidationFailure,
     approval_reuse_authority_unavailable,
@@ -166,21 +126,16 @@ from ..trusted_local_tools import (
     matching_local_tool_grant,
 )
 from ._commands_shared import *
+from .commands_hook_native_generic_facts import composition_inputs, hook_classifiers
+from .commands_hook_native_generic_render import directive_exit_code, render_generic_hook
 from .commands_parser_helpers import *
-from .commands_support_apply_patch_policy import verified_non_sensitive_codex_apply_patch
-from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
-from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 from .commands_support_command_activity import (
-    command_activity_was_prompted,
-    hook_is_post_event,
-    hook_is_pre_event,
     hook_post_succeeded,
     record_post_hook_command_activity_best_effort,
     record_pre_hook_command_activity_best_effort,
 )
 from .commands_support_observe_queue import queue_observe_mode_request
 from .commands_support_runtime_policy import _runtime_hook_effective_policy_config
-from .native_hook_exit_code import native_hook_verdict_exit_code
 
 # Bump when generic-hook classification or action-composition semantics change.
 _GENERIC_HOOK_EVALUATOR_POLICY_VERSION = "generic-hook-evaluation-v3"
@@ -217,52 +172,6 @@ _GENERIC_HOOK_NON_CONTENT_FIELDS = frozenset(
         "user_override",
     }
 )
-
-_COPILOT_VERIFIED_BENIGN_PAYLOAD_HINT_REASON = "untrusted_hook_payload_hint_ignored_guard_verified_benign"
-_VERIFIED_BENIGN_DEFAULT_DISPOSITION_REASON = "configured_default_relaxed_guard_verified_benign"
-_UNTRUSTED_DAEMON_PERMISSIVE_REASON = (
-    "HOL Guard received an unauthenticated hint that the daemon was unreachable in permissive mode; "
-    "the current local policy action was preserved."
-)
-_UNTRUSTED_DAEMON_PERMISSIVE_REASON_CODE = "untrusted_daemon_permissive_hint_preserved_current_action"
-_UNTRUSTED_DAEMON_STRICT_REASON_CODE = "untrusted_daemon_strict_hint_tightened_to_block"
-
-
-def _generic_hook_ignored_payload_action_reason(
-    *,
-    args: argparse.Namespace,
-    home_dir: Path | None,
-    payload: dict[str, object],
-    payload_action_recognized: bool,
-    runtime_workspace: Path | None,
-) -> str | None:
-    """Explain why a legacy Copilot policy hint is not an authority input.
-
-    ``policyAction`` is not part of Copilot's native pre-tool input contract,
-    and generic hook stdin has no authenticated provenance.  Retain it as a
-    conservative hint for opaque actions, but omit it from policy composition
-    when Guard's own command classifier has positively established that the
-    generic fallback action is read-only.
-
-    Unknown action spellings remain fail-closed through the normalizer.  The
-    caller reaches this generic path only after modeled runtime artifacts,
-    package requests, and data-flow signals have been evaluated.
-    """
-
-    if (
-        not payload_action_recognized
-        or _canonical_harness_name(args.harness) != "copilot"
-        or _copilot_hook_stage(payload) != "pretooluse"
-    ):
-        return None
-    if not is_explicitly_benign_tool_action_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-        cwd=runtime_workspace,
-        home_dir=home_dir,
-    ):
-        return None
-    return _COPILOT_VERIFIED_BENIGN_PAYLOAD_HINT_REASON
 
 
 def _generic_hook_payload_digest(payload: Mapping[str, object]) -> str:
@@ -406,10 +315,7 @@ def _generic_hook_approval_context_token(
     artifact_id: str,
     artifact_name: str,
     config: GuardConfig,
-    current_action: GuardAction,
-    current_config_action: GuardAction,
-    daemon_hint_disposition: str | None,
-    daemon_hint_reason_code: str | None,
+    current_action: str,
     daemon_status: str | None,
     fail_mode: str | None,
     harness: str,
@@ -417,12 +323,12 @@ def _generic_hook_approval_context_token(
     payload: Mapping[str, object],
     publisher: str | None,
     runtime_workspace: Path | None,
-    trusted_cli_action: GuardAction | None,
-    untrusted_payload_action: GuardAction | None,
-    untrusted_payload_action_disposition: str | None,
-    untrusted_payload_action_reason: str | None,
+    token: Mapping[str, object],
 ) -> str:
-    """Bind a generic fallback approval to its exact recomputed context."""
+    """Bind a generic fallback approval to its exact recomputed context.
+
+    ``token`` carries the composition values the resident decided.
+    """
 
     launch_cwd = runtime_workspace or Path.cwd()
     return build_approval_context_token(
@@ -456,15 +362,15 @@ def _generic_hook_approval_context_token(
             "evaluator_policy_version": _GENERIC_HOOK_EVALUATOR_POLICY_VERSION,
             "composition": {
                 "current_action": current_action,
-                "current_config_action": current_config_action,
-                "daemon_hint_disposition": daemon_hint_disposition,
-                "daemon_hint_reason_code": daemon_hint_reason_code,
+                "current_config_action": token["current_config_action"],
+                "daemon_hint_disposition": token["daemon_hint_disposition"],
+                "daemon_hint_reason_code": token["daemon_hint_reason_code"],
                 "daemon_status": daemon_status,
                 "fail_mode": fail_mode,
-                "trusted_cli_action": trusted_cli_action,
-                "untrusted_payload_action": untrusted_payload_action,
-                "untrusted_payload_action_disposition": untrusted_payload_action_disposition,
-                "untrusted_payload_action_reason": untrusted_payload_action_reason,
+                "trusted_cli_action": token["trusted_cli_action"],
+                "untrusted_payload_action": token["untrusted_payload_action"],
+                "untrusted_payload_action_disposition": token["untrusted_payload_action_disposition"],
+                "untrusted_payload_action_reason": token["untrusted_payload_action_reason"],
             },
         },
         sandbox={
@@ -628,77 +534,230 @@ def _generic_hook_approval_reuse(
     return reuse, saved_present
 
 
-def _should_relax_configured_default(
+def _generic_hook_changed_capabilities(payload_map: Mapping[str, object]) -> list[str]:
+    changed_capabilities = _string_list(payload_map.get("changed_capabilities"))
+    if not changed_capabilities and isinstance(payload_map.get("event"), str):
+        changed_capabilities = [str(payload_map["event"])]
+    return changed_capabilities
+
+
+def _generic_hook_tool_artifact(
     *,
-    configured_action: GuardAction,
-    harness: str = "codex",
-    has_narrow_override: bool,
+    action_class: str,
+    artifact_id: str,
+    artifact_name: str,
+    command: str | None,
+    config_path: str,
+    harness: str,
+    request_summary: str,
+) -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id=artifact_id,
+        name=artifact_name,
+        harness=harness,
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path=config_path,
+        command=command,
+        metadata={"action_class": action_class, "request_summary": request_summary},
+    )
+
+
+def _generic_hook_detection(harness: str, config_path: str, artifact: GuardArtifact) -> HarnessDetection:
+    return HarnessDetection(
+        harness=harness,
+        installed=True,
+        command_available=True,
+        config_paths=(config_path,),
+        artifacts=(artifact,),
+    )
+
+
+def _generic_hook_evaluation_artifact(
+    *,
+    action_envelope: GuardActionEnvelope | None,
+    artifact: GuardArtifact,
+    artifact_hash: str,
+    artifact_id: str,
+    artifact_name: str,
+    changed_fields: list[str],
+    command: str | None,
+    policy_action: str,
+    risk_summary: str,
+    scanner_evidence: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    entry: dict[str, object] = {
+        "artifact_id": artifact_id,
+        "artifact_name": artifact_name,
+        "artifact_hash": artifact_hash,
+        "artifact_type": artifact.artifact_type,
+        "source_scope": artifact.source_scope,
+        "config_path": artifact.config_path,
+        "policy_action": policy_action,
+        "changed_fields": changed_fields,
+        "launch_target": command,
+        "risk_summary": risk_summary,
+        "action_envelope_json": (
+            action_envelope.with_pre_execution_result(None).to_dict() if action_envelope is not None else None
+        ),
+    }
+    if scanner_evidence is not None:
+        entry["scanner_evidence"] = scanner_evidence
+    return entry
+
+
+def _queue_generic_hook_approval(
+    args: argparse.Namespace,
+    *,
+    action_envelope: GuardActionEnvelope | None,
+    artifact_hash: str,
+    artifact_id: str,
+    artifact_name: str,
+    changed_capabilities: list[str],
+    command_text: str | None,
+    config: GuardConfig,
+    hook_event_name: str,
     home_dir: Path | None,
-    guard_home: Path | None = None,
-    payload: Mapping[str, object],
-    runtime_artifact_checked: bool = False,
+    local_tool_eligibility: LocalToolApprovalEligibility | None,
+    payload_map: dict[str, object],
+    policy_action: str,
     runtime_workspace: Path | None,
-) -> bool:
-    if has_narrow_override or configured_action not in {"review", "require-reapproval"}:
-        return False
-    event_name = _hook_event_name(dict(payload))
-    if event_name == "UserPromptSubmit":
-        prompt_text = payload.get("prompt")
-        if not isinstance(prompt_text, str) or not prompt_text.strip():
-            return False
-        if extract_prompt_requests(prompt_text, guard_home=guard_home):
-            return False
-        if (
-            _codex_prompt_credential_file_artifact(
-                prompt_text=prompt_text,
-                cwd=runtime_workspace,
-                config_path="<runtime>",
-            )
-            is not None
-        ):
-            return False
-        return (
-            home_dir is None
-            or _codex_prompt_attachment_artifact(
-                prompt_text=prompt_text,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                config_path="<runtime>",
-            )
-            is None
-        )
-    if event_name == "PostToolUse" and runtime_artifact_checked and _canonical_harness_name(harness) == "codex":
-        from .commands_support_codex_commands import _codex_post_tool_command_is_read_only_source_inspection
+    store: GuardStore,
+) -> None:
+    approval_center_url = schedule_guard_daemon_ensure(store.guard_home, home_dir=home_dir)
+    redacted_command_text = _command_detail(command_text, home_dir=home_dir)
+    config_path = str(runtime_workspace) if runtime_workspace is not None else ""
+    artifact = _generic_hook_tool_artifact(
+        action_class="unmatched tool action",
+        artifact_id=artifact_id,
+        artifact_name=artifact_name,
+        command=redacted_command_text,
+        config_path=config_path,
+        harness=args.harness,
+        request_summary="Guard requires approval because no command rule matched this tool action.",
+    )
+    queued_at = _now()
+    hook_metadata: dict[str, object] = {
+        "tool_name": str(payload_map.get("tool_name", "")),
+        "hook_event_name": hook_event_name,
+        "workspace": str(runtime_workspace) if runtime_workspace else None,
+    }
+    retry_lineage = capture_retry_lineage(
+        payload_map,
+        harness=str(args.harness),
+        workspace=str(runtime_workspace) if runtime_workspace else None,
+        action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
+    )
+    if retry_lineage is not None:
+        hook_metadata["retry_lineage"] = retry_lineage
+    queued = queue_blocked_approvals(
+        detection=_generic_hook_detection(args.harness, config_path, artifact),
+        evaluation={
+            "artifacts": [
+                _generic_hook_evaluation_artifact(
+                    action_envelope=action_envelope,
+                    artifact=artifact,
+                    artifact_hash=artifact_hash,
+                    artifact_id=artifact_id,
+                    artifact_name=artifact_name,
+                    changed_fields=changed_capabilities or ["tool_action"],
+                    command=redacted_command_text,
+                    policy_action=policy_action,
+                    risk_summary="No command rule matched this tool action.",
+                    scanner_evidence=[local_tool_eligibility.to_evidence()]
+                    if local_tool_eligibility is not None
+                    else [],
+                )
+            ]
+        },
+        store=store,
+        approval_center_url=approval_center_url,
+        now=queued_at,
+        redaction_level=config.receipt_redaction_level,
+        continuation_operation={
+            "created_at": queued_at,
+            "harness": args.harness,
+            "metadata": hook_metadata,
+            "status": "waiting_on_approval",
+            "updated_at": queued_at,
+        },
+    )
+    payload_map["approval_requests"] = queued
+    payload_map["approval_center_url"] = approval_center_url
 
-        return _codex_post_tool_command_is_read_only_source_inspection(
-            payload=dict(payload),
-            cwd=runtime_workspace,
-            home_dir=home_dir,
-        )
-    if verified_non_sensitive_codex_apply_patch(
-        canonical_harness=_canonical_harness_name(harness),
-        event_name=event_name,
-        home_dir=home_dir,
-        payload=payload,
+
+def _record_generic_hook_silent_review(
+    args: argparse.Namespace,
+    *,
+    action_envelope: GuardActionEnvelope | None,
+    artifact_hash: str,
+    artifact_id: str,
+    artifact_name: str,
+    changed_capabilities: list[str],
+    command_text: str | None,
+    config: GuardConfig,
+    home_dir: Path | None,
+    review: Mapping[str, str],
+    runtime_workspace: Path | None,
+    store: GuardStore,
+) -> None:
+    from ..approvals import record_unprompted_review
+
+    redacted_command_text = _command_detail(command_text, home_dir=home_dir)
+    config_path = str(runtime_workspace) if runtime_workspace is not None else ""
+    artifact = _generic_hook_tool_artifact(
+        action_class="unmatched tool action",
+        artifact_id=artifact_id,
+        artifact_name=artifact_name,
+        command=redacted_command_text,
+        config_path=config_path,
+        harness=args.harness,
+        request_summary="Guard recorded a blocked review without prompting.",
+    )
+    record_unprompted_review(
+        detection=_generic_hook_detection(args.harness, config_path, artifact),
+        evaluation={
+            "artifacts": [
+                _generic_hook_evaluation_artifact(
+                    action_envelope=action_envelope,
+                    artifact=artifact,
+                    artifact_hash=artifact_hash,
+                    artifact_id=artifact_id,
+                    artifact_name=artifact_name,
+                    changed_fields=changed_capabilities or ["tool_action"],
+                    command=redacted_command_text,
+                    policy_action=review["action"],
+                    risk_summary=review["reason"],
+                )
+            ]
+        },
+        store=store,
+        redaction_level=config.receipt_redaction_level,
+    )
+
+
+def _generic_hook_composition_inputs(
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    configured_narrow_override: object,
+    configured_override: object,
+    command_text: str | None,
+    native_edge_result: Mapping[str, object] | None,
+    payload_map: Mapping[str, object],
+    runtime_artifact_checked: bool,
+) -> dict[str, object]:
+    return composition_inputs(
+        cli_action=getattr(args, "policy_action", None),
+        canonical_harness=_canonical_harness_name(args.harness),
+        configured_action=configured_override if configured_override is not None else config.default_action,
+        harness=args.harness,
+        has_command_text=isinstance(command_text, str) and bool(command_text.strip()),
+        has_configured_override=configured_override is not None,
+        has_narrow_override=configured_narrow_override is not None,
+        native_edge_result=native_edge_result,
+        payload=payload_map,
         runtime_artifact_checked=runtime_artifact_checked,
-        runtime_workspace=runtime_workspace,
-    ):
-        return True
-    if event_name == "PreToolUse" and _canonical_harness_name(harness) in {"claude-code", "codex"}:
-        from ..runtime.secret_file_requests import is_explicitly_benign_native_file_read_request
-
-        if is_explicitly_benign_native_file_read_request(
-            payload.get("tool_name"),
-            payload.get("tool_input", payload.get("arguments")),
-            cwd=runtime_workspace,
-            home_dir=home_dir,
-        ):
-            return True
-    return event_name == "PreToolUse" and is_explicitly_benign_tool_action_request(
-        payload.get("tool_name"),
-        payload.get("tool_input", payload.get("arguments")),
-        cwd=runtime_workspace,
-        home_dir=home_dir,
     )
 
 
@@ -721,6 +780,13 @@ def run_native_generic_payload(
     native_edge_result: Mapping[str, object] | None = None,
     native_edge_receipt: Mapping[str, object] | None = None,
 ) -> int:
+    """Gather facts, ask the resident to decide, execute IO, render the directive.
+
+    Raises ``NativeHookDecisionError`` when the resident cannot decide; the
+    pipeline converts that into the harness outage response.
+    """
+
+    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
     from ..native_context import bind_context_digest_home
 
     bind_context_digest_home(getattr(store, "guard_home", None))
@@ -739,210 +805,81 @@ def run_native_generic_payload(
         artifact_id,
     )
     publisher = _optional_string(payload_map.get("publisher"))
-    configured_override = config.resolve_action_override(
-        args.harness,
-        artifact_id,
-        publisher,
-    )
-    configured_narrow_override = config.resolve_artifact_or_publisher_action_override(
-        artifact_id,
-        publisher,
-    )
-    configured_policy_normalization = normalize_guard_action_result(
-        configured_override if configured_override is not None else config.default_action,
-        unknown_action="require-reapproval",
-    )
-    hook_event_name = _hook_event_name(payload_map)
+    configured_override = config.resolve_action_override(args.harness, artifact_id, publisher)
+    configured_narrow_override = config.resolve_artifact_or_publisher_action_override(artifact_id, publisher)
     command_text = _hook_command_text(payload_map)
-    local_tool_eligibility: LocalToolApprovalEligibility | None = None
-    if hook_event_name == "PreToolUse" and isinstance(command_text, str) and command_text.strip():
-        local_tool_eligibility = local_tool_approval_eligibility(
-            command_text,
-            cwd=runtime_workspace or Path.cwd(),
-            home_dir=home_dir,
-        )
-    verified_benign_classifier = "is_explicitly_benign_tool_action_request"
-    if hook_event_name == "PostToolUse":
-        verified_benign_classifier = "_codex_post_tool_command_is_read_only_source_inspection"
-    elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "read":
-        verified_benign_classifier = "is_explicitly_benign_native_file_read_request"
-    elif hook_event_name == "PreToolUse" and str(payload_map.get("tool_name", "")).strip().lower() == "apply_patch":
-        verified_benign_classifier = "runtime_artifact_verified_non_sensitive_apply_patch"
-    verified_benign_default = _should_relax_configured_default(
-        configured_action=configured_policy_normalization.action,
-        harness=args.harness,
-        has_narrow_override=configured_narrow_override is not None,
-        home_dir=home_dir,
+    has_command_text = isinstance(command_text, str) and bool(command_text.strip())
+    command_str = command_text or ""
+    cwd = runtime_workspace or Path.cwd()
+    inputs = _generic_hook_composition_inputs(
+        args,
+        config=config,
+        configured_narrow_override=configured_narrow_override,
+        configured_override=configured_override,
+        command_text=command_text,
+        native_edge_result=native_edge_result,
+        payload_map=payload_map,
+        runtime_artifact_checked=runtime_artifact_checked,
+    )
+    classifiers = hook_classifiers(
+        canonical_harness=_canonical_harness_name(args.harness),
         guard_home=store.guard_home,
+        home_dir=home_dir,
         payload=payload_map,
         runtime_artifact_checked=runtime_artifact_checked,
         runtime_workspace=runtime_workspace,
     )
-    current_config_normalization = (
-        normalize_guard_action_result("warn", unknown_action="require-reapproval")
-        if verified_benign_default
-        else configured_policy_normalization
-    )
-    cli_action = getattr(args, "policy_action", None)
-    cli_action_normalization = (
-        normalize_guard_action_result(cli_action, unknown_action="require-reapproval")
-        if cli_action is not None
-        else None
-    )
-    payload_action_normalization = (
-        normalize_guard_action_result(payload_map.get("policy_action"), unknown_action="require-reapproval")
-        if "policy_action" in payload_map
-        else None
-    )
-    ignored_payload_action_reason = _generic_hook_ignored_payload_action_reason(
-        args=args,
-        home_dir=home_dir,
-        payload=payload_map,
-        payload_action_recognized=(
-            payload_action_normalization.recognized if payload_action_normalization is not None else False
-        ),
-        runtime_workspace=runtime_workspace,
-    )
-    payload_action_disposition = (
-        "ignored"
-        if ignored_payload_action_reason is not None
-        else "applied"
-        if payload_action_normalization is not None
-        else None
-    )
-    current_action_inputs: list[GuardAction] = [current_config_normalization.action]
-    if cli_action_normalization is not None:
-        current_action_inputs.append(cli_action_normalization.action)
-    if payload_action_normalization is not None and ignored_payload_action_reason is None:
-        # Hook payloads are untrusted hints. They may make local policy stricter
-        # but can never lower the current configured action.
-        current_action_inputs.append(payload_action_normalization.action)
-    native_edge_action: GuardAction | None = None
-    if isinstance(native_edge_result, Mapping):
-        edge_action_value = native_edge_result.get("policy_action") or native_edge_result.get("minimum_action")
-        if edge_action_value:
-            # The edge result is an enforcement input: a present but
-            # unrecognized action fails closed instead of skipping the floor.
-            native_edge_action = normalize_guard_action(edge_action_value, unknown_action="block")
-        elif native_edge_result.get("decision") == "deny":
-            native_edge_action = "block"
-        if hook_event_name == "PostToolUse":
-            if native_edge_action in {"block", "sandbox-required"}:
-                # PostToolUse cannot undo the finished action; the edge deny masks
-                # the emitted output while the policy surface stays reviewable.
-                native_edge_action = "require-reapproval"
-        elif native_edge_action not in {"block", "sandbox-required"}:
-            # On PreToolUse/UserPromptSubmit the edge's review-tier "unproven"
-            # verdict is provenance — local grants, explicit permissions, and
-            # configured policy settle reviewability. Only a hard native
-            # enforcement verdict floors the emitted decision.
-            native_edge_action = None
-        if native_edge_action is not None:
-            # The edge action is a floor on the composed action, not a final
-            # verdict: local grants, saved decisions, and approval reuse are
-            # the recognized mechanisms that settle the review it demands.
-            current_action_inputs.append(native_edge_action)
-    policy_action = most_restrictive_guard_action(*current_action_inputs)
-    daemon_status = _optional_string(payload_map.get("daemon_status"))
-    fail_mode = _optional_string(payload_map.get("fail_mode"))
-    daemon_failure_reason: str | None = None
-    daemon_hint_disposition: str | None = None
-    daemon_hint_reason_code: str | None = None
-    if daemon_status in _HOOK_DAEMON_FAILURE_STATUSES and fail_mode in _HOOK_DAEMON_FAIL_MODES:
-        if fail_mode == "strict":
-            previous_action = policy_action
-            policy_action = most_restrictive_guard_action(policy_action, "block")
-            daemon_hint_disposition = "preserved_current_block" if previous_action == "block" else "tightened_to_block"
-            daemon_hint_reason_code = _UNTRUSTED_DAEMON_STRICT_REASON_CODE
-            daemon_failure_reason = _HOOK_DAEMON_STRICT_REASON
-            payload_map["permission_decision_reason"] = daemon_failure_reason
-        else:
-            daemon_hint_disposition = "preserved_current_action"
-            daemon_hint_reason_code = _UNTRUSTED_DAEMON_PERMISSIVE_REASON_CODE
-            if policy_action in {"review", "require-reapproval", "sandbox-required", "block"}:
-                daemon_failure_reason = _coalesce_string(
-                    payload_map.get("permission_decision_reason"),
-                    _HOOK_DAEMON_PRESERVED_DENY_REASON,
-                )
-                payload_map["permission_decision_reason"] = daemon_failure_reason
-            else:
-                daemon_failure_reason = _UNTRUSTED_DAEMON_PERMISSIVE_REASON
-                payload_map["permission_decision_reason"] = daemon_failure_reason
-    current_policy_action = policy_action
+    composition, facts = native_compose_current(inputs, classifiers, guard_home=store.guard_home)
+    inputs["facts"] = facts
+    if composition["permission_decision_reason"] is not None:
+        payload_map["permission_decision_reason"] = composition["permission_decision_reason"]
+    local_tool_eligibility: LocalToolApprovalEligibility | None = None
+    if composition["tool_eligibility_needed"]:
+        local_tool_eligibility = local_tool_approval_eligibility(command_str, cwd=cwd, home_dir=home_dir)
+    grant_lookups_allowed = composition["grant_lookups_allowed"]
     local_tool_grant = (
         matching_local_tool_grant(
             store=store,
             harness=args.harness,
             eligibility=local_tool_eligibility,
-            current_action=current_policy_action,
+            current_action=composition["composed_action"],
         )
-        if configured_override is None
-        and configured_narrow_override is None
-        and cli_action_normalization is None
-        and (payload_action_normalization is None or ignored_payload_action_reason is not None)
-        and daemon_hint_disposition != "tightened_to_block"
+        if grant_lookups_allowed
         else None
     )
-    if local_tool_grant is not None and local_tool_eligibility is not None:
-        current_policy_action = "allow"
-        policy_action = "allow"
-    if native_edge_action == "block":
-        current_policy_action = "block"
-        policy_action = "block"
-    if isinstance(command_text, str) and command_text.strip():
-        observe_unlisted_cli(
-            store=store,
-            command=command_text,
-            cwd=runtime_workspace or Path.cwd(),
-            home_dir=home_dir,
-        )
-        if (
-            configured_override is None
-            and configured_narrow_override is None
-            and cli_action_normalization is None
-            and (payload_action_normalization is None or ignored_payload_action_reason is not None)
-            and daemon_hint_disposition != "tightened_to_block"
-        ):
-            granted = apply_local_cli_grant(
+    tool_grant_applied = local_tool_grant is not None and local_tool_eligibility is not None
+    current_policy_action = composition["action_with_tool_grant" if tool_grant_applied else "action_without_tool_grant"]
+    if has_command_text:
+        observe_unlisted_cli(store=store, command=command_str, cwd=cwd, home_dir=home_dir)
+        if grant_lookups_allowed:
+            current_policy_action = apply_local_cli_grant(
                 store=store,
-                command=command_text,
-                cwd=runtime_workspace or Path.cwd(),
+                command=command_str,
+                cwd=cwd,
                 home_dir=home_dir,
                 current_action=current_policy_action,
             )
-            if granted != current_policy_action:
-                current_policy_action = granted
-                policy_action = granted
     runtime_artifact_hash = _generic_hook_approval_context_token(
         action_envelope=action_envelope,
         artifact_id=artifact_id,
         artifact_name=artifact_name,
         config=config,
         current_action=current_policy_action,
-        current_config_action=current_config_normalization.action,
-        daemon_hint_disposition=daemon_hint_disposition,
-        daemon_hint_reason_code=daemon_hint_reason_code,
-        daemon_status=daemon_status,
-        fail_mode=fail_mode,
+        daemon_status=_optional_string(payload_map.get("daemon_status")),
+        fail_mode=_optional_string(payload_map.get("fail_mode")),
         harness=args.harness,
         home_dir=home_dir,
         payload=payload_map,
         publisher=publisher,
         runtime_workspace=runtime_workspace,
-        trusted_cli_action=(cli_action_normalization.action if cli_action_normalization is not None else None),
-        untrusted_payload_action=(
-            payload_action_normalization.action if payload_action_normalization is not None else None
-        ),
-        untrusted_payload_action_disposition=payload_action_disposition,
-        untrusted_payload_action_reason=ignored_payload_action_reason,
+        token=composition["token"],
     )
-    legacy_artifact_hash = _optional_string(payload_map.get("artifact_hash"))
     stored_policy_decision, ignored_integrity = _generic_hook_saved_decision(
         artifact_hash=runtime_artifact_hash,
         artifact_id=artifact_id,
         artifact_name=artifact_name,
         harness=args.harness,
-        legacy_artifact_hash=legacy_artifact_hash,
+        legacy_artifact_hash=_optional_string(payload_map.get("artifact_hash")),
         payload=payload_map,
         publisher=publisher,
         runtime_workspace=runtime_workspace,
@@ -980,10 +917,7 @@ def run_native_generic_payload(
             # racing with it) cannot inherit the stale pre-claim allow.
             if post_claim_revalidator is not None:
                 try:
-                    refreshed_result = post_claim_revalidator(
-                        runtime_artifact_hash,
-                        stored_policy_decision,
-                    )
+                    refreshed_result = post_claim_revalidator(runtime_artifact_hash, stored_policy_decision)
                 except Exception:
                     refreshed_result = None
                 if refreshed_result is not None:
@@ -1005,34 +939,11 @@ def run_native_generic_payload(
                 _claim_saved_approval=False,
                 _post_claim_refresh_failed=_post_claim_refresh_failed,
             )
-    policy_action = approval_reuse.action
-    stored_policy_action = (
-        _optional_string(stored_policy_decision.get("action")) if stored_policy_decision is not None else None
-    )
-    approval_reuse_source = (
-        "saved_policy_decision"
-        if stored_policy_decision is not None
-        else "saved_policy_integrity"
-        if ignored_integrity is not None
-        else "invalidated_saved_policy"
-        if saved_decision_present
-        else None
-    )
     if _claimed_saved_allow_hash is not None:
-        context_changed = approval_context_tokens_validation_reason(
-            _claimed_saved_allow_hash,
-            runtime_artifact_hash,
-        )
-        claimed_validation_reason: ApprovalReuseValidationFailure | None = (
-            APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM
-            if _post_claim_refresh_failed or context_changed is not None
-            else None
-        )
-        if ignored_integrity is not None:
-            claimed_validation_reason = "approval_reuse_integrity_failure"
+        claimed = _claimed_saved_approval or {}
         # Native lookup re-authenticates the row. Unrelated authority writes
         # advance global revision and integrity ledger counters, not the grant.
-        if _claimed_saved_approval is None or (
+        claim_row_invalid = _claimed_saved_approval is None or (
             store.approval_reuse_claim_disposition(_claimed_saved_approval) != "consumed"
             and (
                 stored_policy_decision is None
@@ -1042,239 +953,111 @@ def run_native_generic_payload(
                     if key not in {"_approval_authority_revision", "integrity_generation"}
                 )
             )
-        ):
-            claimed_validation_reason = APPROVAL_REUSE_CLAIM_FAILED
-
-        # An unclaimed allow found by the fresh lookup is evidence only. The
-        # already-claimed exact row may satisfy a freshly recomputed review;
-        # fresh blocks and terminal current actions remain authoritative.
-        post_claim_current_action = policy_action
-        if approval_reuse.saved_action == "allow" and approval_reuse.action == "allow":
-            post_claim_current_action = current_policy_action
-        if claimed_validation_reason is not None:
-            post_claim_current_action = most_restrictive_guard_action(
-                post_claim_current_action,
-                "require-reapproval",
-            )
+        )
+        post_claim_action, post_claim_reason = native_post_claim_reuse(
+            {
+                "current_policy_action": current_policy_action,
+                "reuse_action": approval_reuse.action,
+                "reuse_saved_action": approval_reuse.saved_action,
+                "post_claim_refresh_failed": bool(_post_claim_refresh_failed),
+                "context_changed": approval_context_tokens_validation_reason(
+                    _claimed_saved_allow_hash, runtime_artifact_hash
+                )
+                is not None,
+                "has_ignored_integrity": ignored_integrity is not None,
+                "claim_row_invalid": claim_row_invalid,
+            },
+            guard_home=store.guard_home,
+        )
         post_claim_reuse = evaluate_approval_reuse(
-            post_claim_current_action,
+            post_claim_action,
             "allow",
             saved_decision_present=True,
-            validation_reason=claimed_validation_reason,
-            fresh_local_approval=(_claimed_saved_approval or {}).get("fresh_local_approval") is True,
-            durable_exact_approval=(_claimed_saved_approval or {}).get("durable_exact_approval") is True,
+            validation_reason=cast(ApprovalReuseValidationFailure | None, post_claim_reason),
+            fresh_local_approval=claimed.get("fresh_local_approval") is True,
+            durable_exact_approval=claimed.get("durable_exact_approval") is True,
         )
         approval_reuse = with_saved_artifact_hash_provenance(
             post_claim_reuse
             if post_claim_reuse is not None
             # Resident unreachable after the atomic claim: keep the consumed
             # claim's projected action rather than inventing a new grant.
-            else approval_reuse_authority_unavailable(post_claim_current_action),
+            else approval_reuse_authority_unavailable(post_claim_action),
             _claimed_saved_allow_hash,
         )
-        policy_action = approval_reuse.action
-        approval_reuse_source = "claimed_saved_policy_decision"
-    observed_policy_action: GuardAction | None = None
-    if config.mode == "observe" and policy_action not in {"allow", "warn"}:
-        observed_policy_action = policy_action
-        policy_action = "allow"
-    policy_composition = {
-        "current_config_action": current_config_normalization.action,
-        "configured_policy_action": configured_policy_normalization.action,
-        "configured_default_disposition": ("relaxed_verified_benign" if verified_benign_default else "applied"),
-        "configured_default_disposition_reason_code": (
-            _VERIFIED_BENIGN_DEFAULT_DISPOSITION_REASON if verified_benign_default else None
-        ),
-        "trusted_cli_override": cli_action_normalization.action if cli_action_normalization is not None else None,
-        "untrusted_hook_payload_hint": (
-            payload_action_normalization.action if payload_action_normalization is not None else None
-        ),
-        "untrusted_hook_payload_hint_disposition": payload_action_disposition,
-        "untrusted_hook_payload_hint_reason_code": ignored_payload_action_reason,
-        "daemon_hint_disposition": daemon_hint_disposition,
-        "daemon_hint_reason_code": daemon_hint_reason_code,
-        "daemon_hint_trust": ("untrusted_hook_payload" if daemon_hint_disposition is not None else None),
-        "daemon_status": daemon_status,
-        "fail_mode": fail_mode,
-        "current_composed_action": current_policy_action,
-        "saved_policy_action": stored_policy_action,
-        "approval_reuse_source": approval_reuse_source,
-        "local_tool_grant": local_tool_grant is not None,
-        "authoritative_action": policy_action,
-        "observed_policy_action": observed_policy_action,
-    }
+    final = native_finalize(
+        inputs,
+        {
+            "current_policy_action": current_policy_action,
+            "tool_grant_applied": tool_grant_applied,
+            "tool_grant_identity": (
+                {
+                    "tool_identity_hash": local_tool_eligibility.tool_identity_hash,
+                    "capability": local_tool_eligibility.capability,
+                }
+                if tool_grant_applied and local_tool_eligibility is not None
+                else None
+            ),
+            "reuse_action": approval_reuse.action,
+            "reuse_status": approval_reuse.status,
+            "has_stored_decision": stored_policy_decision is not None,
+            "has_ignored_integrity": ignored_integrity is not None,
+            "saved_decision_present": bool(saved_decision_present),
+            "stored_policy_action": (
+                _optional_string(stored_policy_decision.get("action")) if stored_policy_decision is not None else None
+            ),
+            "claimed_context": _claimed_saved_allow_hash is not None,
+            "asks_for_approval": asks_for_approval(config),
+            "observe_mode": config.mode == "observe",
+            "has_approval_requests_list": isinstance(payload_map.get("approval_requests"), list),
+            "json_requested": bool(getattr(args, "json", False)),
+            "output_stream_present": output_stream is not None,
+            "replay_artifact_id": isinstance(payload_map.get("artifact_id"), str),
+            "payload_action_is_string": isinstance(payload_map.get("policy_action"), str),
+        },
+        guard_home=store.guard_home,
+    )
+    policy_action: str = final["policy_action"]
+    observed_policy_action: str | None = final["observed_policy_action"]
+    hook_event_name: str = final["effective_event_name"]
+    directive: dict[str, object] = final["directive"]
+    policy_composition: dict[str, object] = final["policy_composition"]
     scanner_evidence: list[dict[str, object]] = [
         {
             "source": "approval_reuse",
-            "input_source": approval_reuse_source,
+            "input_source": final["approval_reuse_source"],
             **approval_reuse.to_evidence(),
         },
-        {
-            "source": "policy_composition",
-            **policy_composition,
-        },
+        {"source": "policy_composition", **policy_composition},
+        *_embedded_script_evidence(command_text),
+        *([local_tool_eligibility.to_evidence()] if local_tool_eligibility is not None else []),
+        *final["evidence_tail"],
     ]
-    scanner_evidence.extend(_embedded_script_evidence(command_text))
-    if local_tool_eligibility is not None:
-        scanner_evidence.append(local_tool_eligibility.to_evidence())
-    if local_tool_grant is not None and local_tool_eligibility is not None:
-        scanner_evidence.append(
-            {
-                "source": "trusted_local_tool_grant",
-                "applied": True,
-                "tool_identity_hash": local_tool_eligibility.tool_identity_hash,
-                "capability": local_tool_eligibility.capability,
-            }
-        )
-    if ignored_payload_action_reason is not None:
-        scanner_evidence.append(
-            {
-                "source": "hook_payload_trust",
-                "input_source": "untrusted_hook_payload_hint",
-                "status": "ignored",
-                "reason_code": ignored_payload_action_reason,
-                "classifier": "is_explicitly_benign_tool_action_request",
-            }
-        )
-    if verified_benign_default:
-        scanner_evidence.append(
-            {
-                "source": "configured_default",
-                "input_source": "local_config",
-                "status": "relaxed_verified_benign",
-                "reason_code": _VERIFIED_BENIGN_DEFAULT_DISPOSITION_REASON,
-                "classifier": verified_benign_classifier,
-            }
-        )
-    if daemon_hint_disposition is not None:
-        scanner_evidence.append(
-            {
-                "source": "daemon_hint_trust",
-                "input_source": "untrusted_hook_payload",
-                "status": "monotonic-only",
-                "disposition": daemon_hint_disposition,
-                "reason_code": daemon_hint_reason_code,
-            }
-        )
-    if observed_policy_action is not None:
-        scanner_evidence.append(
-            {
-                "source": "observe_mode",
-                "observed_policy_action": observed_policy_action,
-                "authoritative_action": "allow",
-            }
-        )
-    for input_source, normalization in (
-        ("current_config_action", current_config_normalization),
-        ("trusted_cli_override", cli_action_normalization),
-        ("untrusted_hook_payload_hint", payload_action_normalization),
-    ):
-        if normalization is not None and not normalization.recognized:
-            scanner_evidence.append(
-                {
-                    "source": "guard_action_normalizer",
-                    "input_source": input_source,
-                    "reason_code": normalization.reason_code,
-                    "original_action": normalization.original_action,
-                    "original_type": normalization.original_type,
-                    "normalized_action": normalization.action,
-                }
-            )
-    hook_event_name = hook_event_name or "PreToolUse"
-    from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
-
-    silent_review_action: str | None = None
-    silent_review_reason = ""
-    if (
-        hook_is_pre_event(hook_event_name)
-        and policy_action in {"review", "require-reapproval"}
-        and not asks_for_approval(config)
-    ):
-        if approval_reuse.status == "rejected":
-            policy_reason = "A saved approval does not cover this action under current protection."
-        elif configured_policy_normalization.action in {"review", "require-reapproval"}:
-            policy_reason = "Current local policy requires review for this action."
-        elif cli_action_normalization is not None and cli_action_normalization.action in {
-            "review",
-            "require-reapproval",
-        }:
-            policy_reason = "The trusted hook invocation requires review for this action."
-        else:
-            policy_reason = "No applicable policy or valid saved approval allows this action."
-        silent_review_action = policy_action
-        silent_review_reason = policy_reason
-        policy_action = "block"
-        payload_map.update(
-            policy_action="block",
-            approval_requests=[],
-            prompted=False,
-        )
-        blocked_request_guidance = safe_alternative_reason(policy_reason)
+    changed_capabilities = _generic_hook_changed_capabilities(payload_map)
+    silent_review = final["silent_review"]
+    if silent_review is not None:
+        payload_map.update(policy_action="block", approval_requests=[], prompted=False)
+        blocked_request_guidance = safe_alternative_reason(silent_review["reason"])
         payload_map["blocked_request_guidance"] = blocked_request_guidance
-    changed_capabilities = _string_list(payload_map.get("changed_capabilities"))
-    if not changed_capabilities and isinstance(payload_map.get("event"), str):
-        changed_capabilities = [str(payload_map["event"])]
-    if silent_review_action is not None:
-        from ..approvals import record_unprompted_review
-
-        redacted_command_text = _command_detail(command_text, home_dir=home_dir)
-        config_path = str(runtime_workspace) if runtime_workspace is not None else ""
-        silent_artifact = GuardArtifact(
+        _record_generic_hook_silent_review(
+            args,
+            action_envelope=action_envelope,
+            artifact_hash=runtime_artifact_hash,
             artifact_id=artifact_id,
-            name=artifact_name,
-            harness=args.harness,
-            artifact_type="tool_action_request",
-            source_scope="project",
-            config_path=config_path,
-            command=redacted_command_text,
-            metadata={
-                "action_class": "unmatched tool action",
-                "request_summary": "Guard recorded a blocked review without prompting.",
-            },
-        )
-        record_unprompted_review(
-            detection=HarnessDetection(
-                harness=args.harness,
-                installed=True,
-                command_available=True,
-                config_paths=(config_path,),
-                artifacts=(silent_artifact,),
-            ),
-            evaluation={
-                "artifacts": [
-                    {
-                        "artifact_id": artifact_id,
-                        "artifact_name": artifact_name,
-                        "artifact_hash": runtime_artifact_hash,
-                        "artifact_type": silent_artifact.artifact_type,
-                        "source_scope": silent_artifact.source_scope,
-                        "config_path": config_path,
-                        "policy_action": silent_review_action,
-                        "changed_fields": changed_capabilities or ["tool_action"],
-                        "launch_target": redacted_command_text,
-                        "risk_summary": silent_review_reason,
-                        "action_envelope_json": (
-                            action_envelope.with_pre_execution_result(None).to_dict()
-                            if action_envelope is not None
-                            else None
-                        ),
-                    }
-                ]
-            },
+            artifact_name=artifact_name,
+            changed_capabilities=changed_capabilities,
+            command_text=command_text,
+            config=config,
+            home_dir=home_dir,
+            review=silent_review,
+            runtime_workspace=runtime_workspace,
             store=store,
-            redaction_level=config.receipt_redaction_level,
         )
-    should_record_generic_hook_receipt = not (
-        args.harness == "codex"
-        and hook_event_name == "PreToolUse"
-        and policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}
-        and observed_policy_action is None
-    )
     effective_action_envelope = (
         action_envelope.with_pre_execution_result(policy_action) if action_envelope is not None else None
     )
     command_activity_receipt_id: str | None = None
-    if should_record_generic_hook_receipt:
+    if final["record_receipt"]:
         receipt = build_receipt(
             harness=args.harness,
             artifact_id=artifact_id,
@@ -1303,49 +1086,34 @@ def run_native_generic_payload(
         payload=payload_map,
         policy_action=policy_action,
     )
-    if hook_is_post_event(hook_event_name):
+    activity = final["activity"]
+    canonical_harness = _canonical_harness_name(args.harness)
+    if activity["phase"] == "post":
         record_post_hook_command_activity_best_effort(
             store=store,
             guard_home=store.guard_home,
-            harness=_canonical_harness_name(args.harness),
+            harness=canonical_harness,
             event=hook_event_name,
             payload=payload_map,
             succeeded=hook_post_succeeded(hook_event_name, payload_map),
         )
-    elif hook_is_pre_event(hook_event_name):
-        command_activity_reuse_status = (
-            ActivityApprovalReuseStatus(approval_reuse.status)
-            if approval_reuse.status in {item.value for item in ActivityApprovalReuseStatus}
-            else ActivityApprovalReuseStatus.NOT_APPLICABLE
-        )
+    elif activity["phase"] == "pre":
         record_pre_hook_command_activity_best_effort(
             store=store,
             guard_home=store.guard_home,
-            harness=_canonical_harness_name(args.harness),
+            harness=canonical_harness,
             event=hook_event_name,
             payload=payload_map,
             policy_action=cast(GuardAction, policy_action),
             receipt_id=command_activity_receipt_id,
-            prompted=(
-                False
-                if blocked_request_guidance is not None
-                else command_activity_was_prompted(
-                    cast(GuardAction, policy_action),
-                    command_activity_reuse_status,
-                )
-            ),
-            approval_reuse_status=command_activity_reuse_status,
+            prompted=activity["prompted"],
+            approval_reuse_status=ActivityApprovalReuseStatus(activity["reuse_status"]),
             cwd=runtime_workspace,
             home_dir=home_dir,
         )
-    if (
-        _canonical_harness_name(args.harness) == "codex"
-        and hook_event_name == "PostToolUse"
-        and not getattr(args, "json", False)
-        and policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}
-    ):
+    if directive["route"] == "silent_exit":
         return 0
-    if _should_emit_copilot_hook_response(args):
+    if directive["route"] == "copilot":
         _emit_copilot_hook_response(
             policy_action=policy_action,
             reason=(
@@ -1355,214 +1123,54 @@ def run_native_generic_payload(
             ),
             output_stream=output_stream,
         )
-        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-    if config.mode == "observe" and hook_is_pre_event(hook_event_name) and observed_policy_action is not None:
-        observed_artifact = GuardArtifact(
+        return directive_exit_code(directive, policy_action)
+    if directive["queue_observe_request"]:
+        observed_artifact = _generic_hook_tool_artifact(
+            action_class="observed tool action",
             artifact_id=artifact_id,
-            name=artifact_name,
-            harness=args.harness,
-            artifact_type="tool_action_request",
-            source_scope="project",
+            artifact_name=artifact_name,
+            command=_observed_action_detail(command_text, action_envelope=action_envelope, home_dir=home_dir),
             config_path=str(runtime_workspace) if runtime_workspace is not None else "",
-            command=_observed_action_detail(
-                command_text,
-                action_envelope=action_envelope,
-                home_dir=home_dir,
-            ),
-            metadata={
-                "action_class": "observed tool action",
-                "request_summary": "Guard recorded what watch-only mode would have stopped.",
-            },
+            harness=args.harness,
+            request_summary="Guard recorded what watch-only mode would have stopped.",
         )
         queue_observe_mode_request(
             action_envelope=action_envelope,
             artifact=observed_artifact,
             artifact_hash=runtime_artifact_hash,
             changed_fields=changed_capabilities or ["tool_action"],
-            executable_action=policy_action,
-            observed_policy_action=observed_policy_action,
+            executable_action=cast(GuardAction, policy_action),
+            observed_policy_action=cast(GuardAction, observed_policy_action),
             redaction_level=config.receipt_redaction_level,
             risk_summary="Watch-only mode allowed an action that current policy would stop.",
             scanner_evidence=scanner_evidence,
             store=store,
         )
-    if (
-        hook_is_pre_event(hook_event_name)
-        and policy_action in {"review", "require-reapproval"}
-        and not isinstance(payload_map.get("approval_requests"), list)
-    ):
-        approval_center_url = schedule_guard_daemon_ensure(
-            store.guard_home,
-            home_dir=home_dir,
-        )
-        redacted_command_text = _command_detail(command_text, home_dir=home_dir)
-        config_path = str(runtime_workspace) if runtime_workspace is not None else ""
-        artifact = GuardArtifact(
+    if directive["queue_approval_request"]:
+        _queue_generic_hook_approval(
+            args,
+            action_envelope=action_envelope,
+            artifact_hash=runtime_artifact_hash,
             artifact_id=artifact_id,
-            name=artifact_name,
-            harness=args.harness,
-            artifact_type="tool_action_request",
-            source_scope="project",
-            config_path=config_path,
-            command=redacted_command_text,
-            metadata={
-                "action_class": "unmatched tool action",
-                "request_summary": "Guard requires approval because no command rule matched this tool action.",
-            },
-        )
-        queued_at = _now()
-        hook_metadata: dict[str, object] = {
-            "tool_name": str(payload_map.get("tool_name", "")),
-            "hook_event_name": hook_event_name,
-            "workspace": str(runtime_workspace) if runtime_workspace else None,
-        }
-        retry_lineage = capture_retry_lineage(
-            payload_map,
-            harness=str(args.harness),
-            workspace=str(runtime_workspace) if runtime_workspace else None,
-            action_envelope=action_envelope.to_dict() if action_envelope is not None else None,
-        )
-        if retry_lineage is not None:
-            hook_metadata["retry_lineage"] = retry_lineage
-        queued = queue_blocked_approvals(
-            detection=HarnessDetection(
-                harness=args.harness,
-                installed=True,
-                command_available=True,
-                config_paths=(config_path,),
-                artifacts=(artifact,),
-            ),
-            evaluation={
-                "artifacts": [
-                    {
-                        "artifact_id": artifact_id,
-                        "artifact_name": artifact_name,
-                        "artifact_hash": runtime_artifact_hash,
-                        "artifact_type": artifact.artifact_type,
-                        "source_scope": artifact.source_scope,
-                        "config_path": config_path,
-                        "policy_action": policy_action,
-                        "changed_fields": changed_capabilities or ["tool_action"],
-                        "launch_target": redacted_command_text,
-                        "risk_summary": "No command rule matched this tool action.",
-                        "action_envelope_json": (
-                            action_envelope.with_pre_execution_result(None).to_dict()
-                            if action_envelope is not None
-                            else None
-                        ),
-                        "scanner_evidence": (
-                            [local_tool_eligibility.to_evidence()] if local_tool_eligibility is not None else []
-                        ),
-                    }
-                ]
-            },
+            artifact_name=artifact_name,
+            changed_capabilities=changed_capabilities,
+            command_text=command_text,
+            config=config,
+            hook_event_name=hook_event_name,
+            home_dir=home_dir,
+            local_tool_eligibility=local_tool_eligibility,
+            payload_map=payload_map,
+            policy_action=policy_action,
+            runtime_workspace=runtime_workspace,
             store=store,
-            approval_center_url=approval_center_url,
-            now=queued_at,
-            redaction_level=config.receipt_redaction_level,
-            continuation_operation={
-                "created_at": queued_at,
-                "harness": args.harness,
-                "metadata": hook_metadata,
-                "status": "waiting_on_approval",
-                "updated_at": queued_at,
-            },
         )
-        payload_map["approval_requests"] = queued
-        payload_map["approval_center_url"] = approval_center_url
     _localize_pending_approval_copy(payload_map, harness=args.harness)
     incoming_reason = (
         blocked_request_guidance
-        or daemon_failure_reason
+        or composition["daemon_failure_reason"]
         or _decision_v2_harness_message(payload_map)
         or payload_map.get("permission_decision_reason")
     )
-    approval_context = live_hook_approval_context(payload_map, harness=args.harness, guard_home=store.guard_home)
-    if _should_emit_native_hook_exit_block(args, event_name=hook_event_name, policy_action=policy_action):
-        block_reason = _native_hook_reason_for_harness(
-            args.harness,
-            incoming_reason,
-            approval_context,
-            _embedded_script_remediation(command_text),
-        )
-        if _canonical_harness_name(args.harness) in {"kimi", "hermes"}:
-            _emit_native_hook_response(
-                harness=args.harness,
-                policy_action=policy_action,
-                event_name=hook_event_name,
-                reason=block_reason,
-                output_stream=output_stream,
-            )
-        elif _canonical_harness_name(args.harness) == "grok":
-            from ..adapters.grok_hooks import emit_grok_hook_response
-
-            emit_grok_hook_response(
-                policy_action=policy_action,
-                reason=block_reason,
-                event_name=hook_event_name,
-                output_stream=output_stream,
-            )
-            exit_code = native_hook_verdict_exit_code(
-                _canonical_harness_name(args.harness), policy_action, hook_event_name
-            )
-            if exit_code != 0:
-                _emit_native_hook_block_stderr(block_reason)
-            return exit_code
-        elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
-            from ..adapters.pi_hooks import emit_pi_hook_response
-
-            emit_pi_hook_response(
-                policy_action=policy_action,
-                reason=block_reason,
-                approval_payload=payload_map,
-                output_stream=output_stream,
-            )
-        elif _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response
-
-            emit_zcode_hook_response(
-                policy_action=policy_action,
-                reason=block_reason,
-                event_name=hook_event_name,
-                payload=payload_map,
-                output_stream=output_stream,
-            )
-        elif _canonical_harness_name(args.harness) == "devin":
-            from ..adapters.devin_hooks import emit_devin_hook_response
-
-            emit_devin_hook_response(
-                policy_action=policy_action,
-                reason=block_reason,
-                event_name=hook_event_name,
-                payload=payload_map,
-                output_stream=output_stream,
-            )
-        # Kimi surfaces stderr to the user as the blocking explanation.
-        _emit_native_hook_block_stderr(block_reason)
-        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-    if _canonical_harness_name(args.harness) == "codex" and (
-        hook_event_name == "UserPromptSubmit" or approval_context is not None
-    ):
-        reason = _native_hook_reason(
-            incoming_reason,
-            approval_context,
-            _embedded_script_remediation(command_text) if policy_action in _GUIDED_POLICY_ACTIONS else None,
-        )
-    else:
-        reason = _native_hook_reason_for_harness(
-            args.harness,
-            incoming_reason,
-            approval_context,
-            _embedded_script_remediation(command_text) if policy_action in _GUIDED_POLICY_ACTIONS else None,
-        )
-    if _should_emit_claude_native_pretooluse_notice(
-        args,
-        event_name=hook_event_name,
-        policy_action=policy_action,
-    ):
-        _emit_native_hook_notification_stderr(
-            _claude_native_pretooluse_terminal_notice(payload=payload_map, reason=reason)
-        )
     hook_envelope: dict[str, object] = {
         "recorded": True,
         "artifact_id": artifact_id,
@@ -1577,129 +1185,24 @@ def run_native_generic_payload(
     if blocked_request_guidance is not None:
         hook_envelope["blocked_request_guidance"] = blocked_request_guidance
         hook_envelope["prompted"] = False
-    if getattr(args, "json", False) and output_stream is None:
-        json_result = _native_hook_json_document(
-            args,
-            event_name=hook_event_name,
-            policy_action=policy_action,
-            reason=reason,
-            envelope=hook_envelope,
-            generic_path=True,
-            native_protocol_payload="hook_event_name" in payload_map or "event" not in payload_map,
-            content_flagged=_hook_command_has_encoded_markers(command_text),
-            command_surface=action_envelope is not None and action_envelope.action_type == "shell_command",
-            verified_benign=(
-                hook_event_name == "PreToolUse"
-                and is_explicitly_benign_tool_action_request(
-                    payload_map.get("tool_name"),
-                    payload_map.get("tool_input", payload_map.get("arguments")),
-                    cwd=runtime_workspace,
-                    home_dir=home_dir,
-                )
-            ),
-        )
-        if json_result is not None:
-            json_doc, json_rc = json_result
-            if json_doc:
-                _emit_native_hook_json_document(
-                    json_doc,
-                    compact=_canonical_harness_name(args.harness) == "copilot",
-                    output_stream=output_stream,
-                )
-            return json_rc
-    if _should_emit_native_hook_response(args) or _should_emit_native_hook_json_response(
+    return render_generic_hook(
         args,
+        action_envelope=action_envelope,
+        approval_context=live_hook_approval_context(payload_map, harness=args.harness, guard_home=store.guard_home),
+        canonical_harness=canonical_harness,
+        coalesce=_coalesce_string,
+        content_flagged=_hook_command_has_encoded_markers(command_text),
+        directive=directive,
+        envelope=hook_envelope,
         event_name=hook_event_name,
+        incoming_reason=incoming_reason,
+        native_edge_result=native_edge_result,
         output_stream=output_stream,
-    ):
-        if _canonical_harness_name(args.harness) == "grok":
-            from ..adapters.grok_hooks import emit_grok_hook_response
-
-            emit_grok_hook_response(
-                policy_action=policy_action,
-                reason=reason,
-                event_name=hook_event_name,
-                output_stream=output_stream,
-            )
-            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-        if _canonical_harness_name(args.harness) in {"pi", "omp"}:
-            from ..adapters.pi_hooks import emit_pi_hook_response
-
-            emit_pi_hook_response(
-                policy_action=policy_action,
-                reason=reason,
-                approval_payload=payload_map,
-                output_stream=output_stream,
-            )
-            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-        if _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response
-
-            emit_zcode_hook_response(
-                policy_action=policy_action,
-                reason=reason,
-                event_name=hook_event_name,
-                payload=payload_map,
-                output_stream=output_stream,
-            )
-            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-        if _canonical_harness_name(args.harness) == "devin":
-            from ..adapters.devin_hooks import emit_devin_hook_response
-
-            emit_devin_hook_response(
-                policy_action=policy_action,
-                reason=reason,
-                event_name=hook_event_name,
-                payload=payload_map,
-                output_stream=output_stream,
-            )
-            return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-        system_message = None
-        canonical_harness = _canonical_harness_name(args.harness)
-        if (
-            canonical_harness == "claude-code"
-            and hook_event_name in {"UserPromptSubmit", "PreToolUse"}
-            and policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-        ):
-            system_message = _ensure_terminal_punctuation(reason)
-        elif canonical_harness == "codex" and hook_event_name == "UserPromptSubmit":
-            system_message = _codex_prompt_block_system_message(
-                policy_action=policy_action,
-                native_reason=reason,
-            )
-        _emit_native_hook_response(
-            harness=args.harness,
-            policy_action=policy_action,
-            event_name=hook_event_name,
-            reason=reason,
-            system_message=system_message,
-            output_stream=output_stream,
-        )
-        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-    if hook_event_name == "PostToolUse":
-        _apply_native_edge_envelope_fields(hook_envelope, native_edge_result)
-        _emit_native_post_tool_envelope(
-            args.harness,
-            policy_action=policy_action,
-            reason=_coalesce_string(incoming_reason, reason) or reason,
-            response_payload=hook_envelope,
-            output_stream=output_stream,
-            as_json=getattr(args, "json", False),
-        )
-        return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
-    blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    hook_envelope["continue"] = True
-    hook_envelope["decision"] = "block" if blocking else "allow"
-    _emit(
-        "hook",
-        hook_envelope,
-        getattr(args, "json", False),
+        payload=payload_map,
+        policy_action=policy_action,
+        remediation=lambda: _embedded_script_remediation(command_text),
+        verified_benign=lambda: hook_event_name == "PreToolUse" and classifiers["benign_tool_action"](hook_event_name),
     )
-    if isinstance(payload_map.get("artifact_id"), str) and isinstance(payload_map.get("policy_action"), str):
-        # The caller replayed a decision that was already recorded upstream;
-        # the envelope acknowledges it without re-blocking the harness.
-        return 0
-    return native_hook_verdict_exit_code(_canonical_harness_name(args.harness), policy_action, hook_event_name)
 
 
 __all__ = [

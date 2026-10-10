@@ -27,12 +27,11 @@ from codex_plugin_scanner.guard.managed_install_proof import (
     bind_managed_install_proof,
     verify_managed_install_proof,
 )
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.test_guard_command_decision_routing import _synthetic_native_fixture
+from tests.native_command_test_support import real_native_command_evaluation
 
 _NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
 
@@ -52,15 +51,8 @@ def _ctx(tmp_path: Path) -> HarnessContext:
 
 
 def _bound_native_repair_evaluation():
-    registry, snapshot, command, native_payload = _synthetic_native_fixture()
-    evaluation = evaluate_command(
-        command.normalized_text,
-        canonical_command=command,
-        registry=registry,
-        extension_control_snapshot=snapshot,
-        native_extension_evidence=native_payload,
-    )
-    return snapshot, evaluation
+    reviewed = real_native_command_evaluation("aws apigateway delete-rest-api --rest-api-id abc")
+    return reviewed.snapshot, reviewed.evaluation
 
 
 def _native_grok_command(context: HarnessContext) -> str:

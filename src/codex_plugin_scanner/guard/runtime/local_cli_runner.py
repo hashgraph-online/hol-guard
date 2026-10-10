@@ -8,6 +8,7 @@ that never carries a persistent allow.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -96,7 +97,14 @@ def runner_local_bin(
     version = installed_package_version(Path(resolved), package_name)
     if version is None:
         return None
-    return {
+    bin_target = None
+    if _is_bin_shim(Path(resolved)):
+        # A shim only launches the package's bin script, so its own hash says
+        # nothing about the code that runs; bind the script it launches too.
+        bin_target = shim_bin_target(Path(resolved).parent.parent, package_name, target)
+        if bin_target is None:
+            return None
+    record: dict[str, object] = {
         "package_name": package_name,
         "executable_name": getattr(evidence, "executable_name", None),
         "installed_version": version,
@@ -109,6 +117,9 @@ def runner_local_bin(
         "manifests": file_hashes(getattr(evidence, "manifests", ())),
         "lockfiles": file_hashes(getattr(evidence, "lockfiles", ())),
     }
+    if bin_target is not None:
+        record["bin_target"] = bin_target
+    return record
 
 
 def unwrap_local_runner(
@@ -162,6 +173,10 @@ def installed_package_version(resolved_bin: Path, package_name: object) -> str |
 
     if not isinstance(package_name, str) or not package_name:
         return None
+    if _is_bin_shim(resolved_bin):
+        # npm on Windows and pnpm write regular-file shims into ``.bin``
+        # instead of symlinks, so the owning package sits beside ``.bin``.
+        return _shim_package_version(resolved_bin.parent.parent, package_name)
     for parent in resolved_bin.parents:
         if parent.name == "node_modules":
             return None
@@ -172,6 +187,52 @@ def installed_package_version(resolved_bin: Path, package_name: object) -> str |
             version = data.get("version")
             return version if isinstance(version, str) and version else None
     return None
+
+
+def shim_bin_target(node_modules: Path, package_name: object, executable_name: str) -> dict[str, object] | None:
+    """Hash the package bin script a ``node_modules/.bin`` shim launches."""
+
+    if not isinstance(package_name, str) or not _PACKAGE_NAME.fullmatch(package_name):
+        return None
+    package_dir = node_modules.joinpath(*package_name.split("/"))
+    data = _read_manifest(package_dir / "package.json")
+    if not isinstance(data, dict) or data.get("name") != package_name:
+        return None
+    bin_field = data.get("bin")
+    if isinstance(bin_field, str) and executable_name == package_name.rsplit("/", 1)[-1]:
+        entry: object = bin_field
+    elif isinstance(bin_field, dict):
+        entry = bin_field.get(executable_name)
+    else:
+        return None
+    if not isinstance(entry, str) or not entry.strip():
+        return None
+    try:
+        root = package_dir.resolve(strict=True)
+        script = (root / entry).resolve(strict=True)
+        if not script.is_relative_to(root) or not script.is_file():
+            return None
+        digest = hashlib.sha256()
+        with script.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except (OSError, RuntimeError):
+        return None
+    return {"resolved_path": str(script), "content_hash": f"sha256:{digest.hexdigest()}"}
+
+
+def _is_bin_shim(resolved_bin: Path) -> bool:
+    return resolved_bin.parent.name == ".bin" and resolved_bin.parent.parent.name == "node_modules"
+
+
+def _shim_package_version(node_modules: Path, package_name: str) -> str | None:
+    if not _PACKAGE_NAME.fullmatch(package_name):
+        return None
+    data = _read_manifest(node_modules.joinpath(*package_name.split("/"), "package.json"))
+    if not isinstance(data, dict) or data.get("name") != package_name:
+        return None
+    version = data.get("version")
+    return version if isinstance(version, str) and version else None
 
 
 def is_direct_dependency(cwd: Path, package_name: str) -> bool:
@@ -248,5 +309,6 @@ __all__ = [
     "runner_local_bin",
     "runner_name",
     "runner_target",
+    "shim_bin_target",
     "unwrap_local_runner",
 ]

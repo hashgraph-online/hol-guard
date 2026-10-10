@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from ..native_local_cli_identity import LocalCliIdentityUnavailableError
 from .hook_native_saved_approval import _launch_cwd, _native_review_is_overridable, _saved_block_response
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import harness_json_from_native_pre_tool
@@ -40,7 +41,16 @@ def native_local_cli_block_response(
 
     if native_result.get("minimum_action") != "allow" or not _has_block_rules(store):
         return None
-    match = _matching_grant(store, payload=payload, workspace=workspace, home_dir=home_dir, current_action="allow")
+    try:
+        match = _matching_grant(store, payload=payload, workspace=workspace, home_dir=home_dir, current_action="allow")
+    except LocalCliIdentityUnavailableError:
+        # A block rule exists and this command's identity cannot be checked.
+        return _saved_block_response(
+            harness,
+            native_result,
+            reason_code="local_cli_extension_unverified",
+            reason="Guard could not check this command against your custom extension rules.",
+        )
     if match is None or match[1] != "blocked":
         return None
     return _custom_block_response(harness, native_result, match[0].name)
@@ -85,7 +95,10 @@ def native_local_cli_grant_response(
 
     if native_result.get("policy_action") not in {"review", "require-reapproval"}:
         return None
-    match = _matching_grant(store, payload=payload, workspace=workspace, home_dir=home_dir, current_action="review")
+    try:
+        match = _matching_grant(store, payload=payload, workspace=workspace, home_dir=home_dir, current_action="review")
+    except LocalCliIdentityUnavailableError:
+        return None
     if match is None:
         return None
     identity, state = match
@@ -122,6 +135,8 @@ def _matching_grant(
             home_dir=home_dir,
             current_action=current_action,
         )
+    except LocalCliIdentityUnavailableError:
+        raise
     except Exception:
         _LOGGER.warning("custom extension grant lookup failed", exc_info=True)
         return None
