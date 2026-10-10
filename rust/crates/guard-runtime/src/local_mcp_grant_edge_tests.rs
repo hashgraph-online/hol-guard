@@ -76,6 +76,25 @@ fn shlex_split_follows_posix_rules() {
     assert_eq!(split("trail\\"), None);
 }
 
+/// The compound Git inspection reuses this lexer, so its Python `shlex.split`
+/// edge cases are pinned here.
+#[test]
+fn shlex_split_keeps_python_edge_cases() {
+    let words = |input| shlex_split(input);
+    assert_eq!(words("a''"), Some(vec!["a".to_owned()]));
+    assert_eq!(words("''"), Some(vec![String::new()]));
+    assert_eq!(words("a  b\tc\nd").map(|w| w.len()), Some(4));
+    assert_eq!(words("a\u{a0}b"), Some(vec!["a\u{a0}b".to_owned()]));
+    assert_eq!(words("a\x0cb"), Some(vec!["a\x0cb".to_owned()]));
+    assert_eq!(words("a #b"), Some(vec!["a".to_owned(), "#b".to_owned()]));
+    assert_eq!(words(r#""a\$b""#), Some(vec![r"a\$b".to_owned()]));
+    assert_eq!(words(r#""a\"b""#), Some(vec![r#"a"b"#.to_owned()]));
+    assert_eq!(words(r#""a\\b""#), Some(vec![r"a\b".to_owned()]));
+    assert_eq!(words(r"a\ b"), Some(vec!["a b".to_owned()]));
+    assert_eq!(words(r"'a\b'"), Some(vec![r"a\b".to_owned()]));
+    assert_eq!(words("\"open"), None);
+}
+
 #[test]
 fn unbound_environments_and_missing_pieces_match_nothing() {
     let (rig, server) = allowed_rig(Some("allow"));

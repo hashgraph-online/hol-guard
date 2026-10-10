@@ -14,12 +14,14 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use crate::package_authority_config::ResidentConfigLoader;
+
 use guard_command::local_supply_chain::{
     apply_stored_package_policy_override, resolve_package_firewall_entitlement,
     resolve_package_firewall_entitlement_with_refresh, ApprovalContextApi, CommandExecution,
-    GuardConfig, LocalSupplyChainError, PackageEvalApi, PackageFirewallEntitlementApi,
-    PackageIntentParserApi, PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup,
-    RuntimeRunnerApi, SupplyChainStore,
+    LocalSupplyChainError, PackageEvalApi, PackageFirewallEntitlementApi, PackageIntentParserApi,
+    PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup, RuntimeRunnerApi,
+    SupplyChainStore,
 };
 use guard_command::package_intent_common::{
     build_package_request_artifact, resolve_path_within_workspace, GuardArtifact, PackageIntent,
@@ -29,9 +31,9 @@ use guard_command::pep440::{SpecifierSet, Version};
 use guard_command::supply_chain_bundle;
 use guard_command::supply_chain_package_eval::{
     evaluate_package_request_artifact, CanonicalPackageIdentity as EvalCanonicalPackageIdentity,
-    ConfigLoaderApi, EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest,
-    GuardSyncRunnerApi, JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi,
-    NativeArchiveApi, PackageIdentityApi, RestrictedArchiveApi,
+    EntitlementRefreshApi, EvalError, EvalResult, GuardSyncRequest, GuardSyncRunnerApi,
+    JsSemverApi, LockfileParseApi, LockfileParseResult, ManifestDepsApi, NativeArchiveApi,
+    PackageIdentityApi, RestrictedArchiveApi,
     RestrictedArchiveDownload as EvalRestrictedArchiveDownload, RestrictedArchiveDownloadResult,
     RestrictedArchiveFailure, RiskDetectApi, StoreExtrasApi, SupplyChainBundleApi,
     SupplyChainBundleResponse as EvalBundleResponse, SupplyChainEvalDeps, WorkspaceIoApi,
@@ -1560,10 +1562,9 @@ impl GuardSyncRunnerApi for ResidentGuardSyncRunner {
     }
 }
 
-/// Lockfile parse seam — delegates to the ported
-/// `package_manifest_diff::parse_manifest_dependencies` for formats with a
-/// native parser; everything else returns `incomplete` like Python's
-/// `incomplete_lockfile_result` degrade path.
+/// Lockfile parse seam. The complete-or-fail contract (format validation,
+/// limits, error reasons, workspace containment) lives in
+/// `guard_command::supply_chain_package_eval::lockfile_parse`.
 struct ResidentLockfileParse;
 
 impl LockfileParseApi for ResidentLockfileParse {
@@ -1574,36 +1575,12 @@ impl LockfileParseApi for ResidentLockfileParse {
         budget_ms: f64,
         parse_text_result: &dyn Fn(&str, &[u8]) -> LockfileParseResult,
     ) -> Vec<LockfileParseResult> {
-        let mut results = Vec::new();
-        let Some(ws) = workspace_dir else {
-            return results;
-        };
-        let Some(Value::Array(paths)) = lockfile_paths else {
-            return results;
-        };
-        for rel in paths.iter().filter_map(Value::as_str) {
-            let Some(resolved) = resolve_path_within_workspace(ws, rel) else {
-                results.push(self.incomplete_lockfile_result(
-                    rel,
-                    b"",
-                    "path outside workspace",
-                    budget_ms,
-                    0.0,
-                ));
-                continue;
-            };
-            match std::fs::read(&resolved) {
-                Ok(bytes) => results.push(parse_text_result(rel, &bytes)),
-                Err(e) => results.push(self.incomplete_lockfile_result(
-                    rel,
-                    b"",
-                    &format!("read failed: {e}"),
-                    budget_ms,
-                    0.0,
-                )),
-            }
-        }
-        results
+        guard_command::supply_chain_package_eval::collect_lockfile_parse_results(
+            workspace_dir,
+            lockfile_paths,
+            budget_ms,
+            parse_text_result,
+        )
     }
 
     fn parse_lockfile_with_budget(
@@ -1612,49 +1589,11 @@ impl LockfileParseApi for ResidentLockfileParse {
         source_text: &[u8],
         budget_seconds: f64,
     ) -> LockfileParseResult {
-        let text = String::from_utf8_lossy(source_text);
-        let budget_ms = (budget_seconds * 1000.0).max(1.0);
-        let map = guard_command::package_manifest_diff::parse_manifest_dependencies(
+        guard_command::supply_chain_package_eval::parse_lockfile_with_budget(
             path,
-            &text,
-            text.len(),
-            budget_ms as u64,
-        );
-        if map.is_empty() {
-            return self.incomplete_lockfile_result(
-                path,
-                source_text,
-                "no parser produced entries",
-                budget_ms,
-                0.0,
-            );
-        }
-        let entries = map
-            .into_iter()
-            .map(|(dependency_path, version)| {
-                guard_command::supply_chain_package_eval::LockfileDependencyEntry {
-                    dependency_path,
-                    package_name: String::new(),
-                    version,
-                    direct: false,
-                }
-            })
-            .collect();
-        LockfileParseResult {
-            entries,
-            complete: true,
-            format: Path::new(path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("")
-                .to_owned(),
-            source_hash: guard_policy_snapshot::digest_bytes(source_text),
-            elapsed_ms: 0.0,
-            budget_ms,
-            warnings: Vec::new(),
-            error_reason: None,
-            parser_version: "resident-lockfile-parse-v1".into(),
-        }
+            source_text,
+            budget_seconds,
+        )
     }
 
     fn incomplete_lockfile_result(
@@ -1665,25 +1604,13 @@ impl LockfileParseApi for ResidentLockfileParse {
         budget_ms: f64,
         elapsed_ms: f64,
     ) -> LockfileParseResult {
-        LockfileParseResult {
-            entries: Vec::new(),
-            complete: false,
-            format: Path::new(path)
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("")
-                .to_owned(),
-            source_hash: if source.is_empty() {
-                String::new()
-            } else {
-                guard_policy_snapshot::digest_bytes(source)
-            },
-            elapsed_ms,
+        guard_command::supply_chain_package_eval::incomplete_lockfile_result(
+            path,
+            source,
+            error_reason,
             budget_ms,
-            warnings: Vec::new(),
-            error_reason: Some(error_reason.to_owned()),
-            parser_version: "resident-lockfile-parse-v1".into(),
-        }
+            elapsed_ms,
+        )
     }
 }
 
@@ -2430,23 +2357,6 @@ impl EntitlementRefreshApi for ResidentEntitlementRefresh {
             .as_object()
             .cloned()
             .ok_or_else(|| EvalError::Internal("entitlement resolution failed".into()))
-    }
-}
-
-/// Config seam — `load_guard_config` is not ported; error → callers substitute
-/// `GuardConfig::default()`, matching Python's missing-config path.
-struct ResidentConfigLoader;
-
-impl ConfigLoaderApi for ResidentConfigLoader {
-    fn load_guard_config(
-        &self,
-        _guard_home: &Path,
-        _workspace: Option<&Path>,
-        _require_canonical_workspace: bool,
-    ) -> EvalResult<GuardConfig> {
-        Err(EvalError::Internal(
-            "guard config loader unavailable in resident".into(),
-        ))
     }
 }
 

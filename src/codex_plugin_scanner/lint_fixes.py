@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .marketplace_support import LEGACY_MARKETPLACE_PATH, PREFERRED_MARKETPLACE_PATH
-from .path_support import normalize_codex_relative_path
+from .path_support import LICENSE_FILENAMES, normalize_codex_relative_path, path_entry_exists
 
 _TEMPLATE_FILES: dict[str, str] = {
     ".codexignore": "# Local Codex scanner ignore list\n",
@@ -76,6 +76,10 @@ def apply_safe_autofixes(plugin_dir: Path) -> list[str]:
     changes: list[str] = []
 
     for relative_path, template in _TEMPLATE_FILES.items():
+        if relative_path == "LICENSE" and any(
+            path_entry_exists(plugin_dir / filename) for filename in LICENSE_FILENAMES
+        ):
+            continue
         target = plugin_dir / relative_path
         if not target.exists():
             target.write_text(template, encoding="utf-8")

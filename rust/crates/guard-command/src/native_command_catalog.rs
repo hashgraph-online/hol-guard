@@ -26,6 +26,12 @@ const EMBEDDED_CATALOG: &[u8] =
 #[cfg(guard_source_bootstrap)]
 const EMBEDDED_CATALOG: &[u8] = &[];
 
+/// The verified-at-build catalog bytes, for read-only projections such as
+/// [`crate::catalog_read_model`] that need fields this module does not type.
+pub(crate) fn embedded_catalog_bytes() -> &'static [u8] {
+    EMBEDDED_CATALOG
+}
+
 /// One rule's metadata — the fields `GeneratedCommandRule` exposes that the
 /// compiled `ProgramRule` does not carry.
 #[derive(Debug, Deserialize, PartialEq)]
