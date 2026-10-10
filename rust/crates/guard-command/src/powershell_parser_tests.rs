@@ -188,3 +188,30 @@ fn unparsed_cmdlet_stays_uncertain_on_windows() {
         assert!(model.uncertainty_reason.is_some(), "{command}");
     }
 }
+
+#[test]
+fn constant_text_encoding_argument_is_accepted() {
+    for command in [
+        "[System.IO.File]::WriteAllText('docs/change.md', \"x`n\", [System.Text.UTF8Encoding]::new($false))",
+        "[IO.File]::AppendAllText('docs/change.md', 'x', [Text.Encoding]::UTF8)",
+        "[IO.File]::ReadAllText('docs/change.md', [System.Text.Encoding]::UTF8)",
+    ] {
+        let model = parse_command(&request(command, "powershell")).unwrap();
+        assert_eq!(model.confidence, "exact", "{command}");
+        assert_eq!(model.segments.len(), 1, "{command}");
+        assert!(model.segments[0].tokens.contains(&"docs/change.md".to_owned()), "{command}");
+    }
+    for command in [
+        "[IO.File]::WriteAllText('a', 'x', [Text.UTF8Encoding]::new($x))",
+        "[IO.File]::WriteAllText('a', 'x', [Text.Encoding]::GetEncoding('x'))",
+        "[IO.File]::WriteAllText('a', 'x', [Text.Encoding]::UTF8, 'b')",
+        "[IO.File]::WriteAllText('a', 'x', [Text.Encoding]::UTF8.GetString())",
+        "[IO.File]::WriteAllBytes('a', 'x', [Text.Encoding]::UTF8)",
+        "[IO.File]::Delete('a', [Text.Encoding]::UTF8)",
+        "[IO.File]::WriteAllText([Text.Encoding]::UTF8, 'a', 'x')",
+        "[IO.File]::WriteAllText('a', [Text.Encoding]::UTF8)",
+    ] {
+        let model = parse_command(&request(command, "powershell")).unwrap();
+        assert_eq!(model.confidence, "uncertain", "{command}");
+    }
+}

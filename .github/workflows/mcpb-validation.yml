@@ -3,6 +3,10 @@ name: MCPB pull request validation
 on:
   pull_request:
     branches: [main, release/3.0]
+    paths:
+      - "distributions/mcpb/**"
+      - ".github/tools/mcpb-cli/**"
+      - ".github/workflows/mcpb-validation.yml"
 
 permissions:
   contents: read

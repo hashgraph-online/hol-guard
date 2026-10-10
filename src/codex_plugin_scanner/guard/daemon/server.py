@@ -31,7 +31,6 @@ from typing import Any, BinaryIO, ClassVar, TypeAlias, TypedDict, TypeGuard, cas
 from urllib.parse import parse_qs, parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from ...version import __version__
-from ..action_lattice import is_guard_action as _is_guard_action
 from ..adapters import get_adapter
 from ..adapters.base import HarnessContext
 from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
@@ -141,11 +140,17 @@ from ..local_supply_chain import (
 )
 from ..managed_controls_policy_fields import ParsedManagedControlsPolicy
 from ..models import (
-    DECISION_SCOPE_VALUES,
-    DecisionScope,
     GuardRuntimeRegistration,
     PolicyDecision,
     format_local_http_origin,
+)
+from ..native_daemon_handler import (
+    HandlerDecision,
+    NativeDaemonHandlerError,
+    native_body_handler,
+    native_events_cursor,
+    native_harness_action,
+    native_requests_list,
 )
 from ..native_daemon_route import (
     NativeDaemonRouteError,
@@ -163,6 +168,7 @@ from ..native_policy_bundle import (
     PolicyBundleNativeUnavailableError,
     native_rejection_code,
 )
+from ..native_runtime_request_scope import native_status_request_scope
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -246,7 +252,6 @@ from ..shims import (
     uninstall_package_shims,
 )
 from ..sqlite_recovery import quarantined_store_summary
-from ..sqlite_tuning import sqlite_connect_timeout_override
 from ..stable_digest import stable_digest_hex
 from ..store import GuardStore
 from ..store_approvals import InvalidApprovalCursorError
@@ -264,7 +269,11 @@ from ..supply_chain_repair import (
     coordinate_supply_chain_repair,
     repair_sync_intelligence,
 )
+from . import repair_api, repair_self_check
 from .aibom_inventory_persist import persist_aibom_inventory_context
+from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
+from .audit_persistence import WRITTEN as AUDIT_WRITTEN
+from .audit_persistence import AuditPersistence
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from .cloud_review_settings import cloud_review_reconnect_required
@@ -390,10 +399,6 @@ def _build_snapshot_payload(context: HarnessContext) -> dict[str, object]:
             "unsupported_managers": [],
         }
     }
-
-
-def _is_decision_scope(value: str) -> TypeGuard[DecisionScope]:
-    return value in DECISION_SCOPE_VALUES
 
 
 def _is_string_object_dict(value: object) -> TypeGuard[dict[str, object]]:
@@ -522,6 +527,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     package_firewall_connect_state: dict[str, object] | None
     package_firewall_connect_state_lock: threading.Lock
     onefile_extraction_status: dict[str, object] | None
+    repair_self_check_status: dict[str, object] | None
     guard_cloud_connect_state: dict[str, object] | None
     guard_cloud_connect_state_lock: threading.Lock
     guard_cloud_browser_session_lock: threading.Lock
@@ -579,6 +585,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     diagnostics: DaemonDiagnostics
     auth_audit_lock: threading.Lock
     denial_audit_lock: threading.Lock
+    audit_persistence: AuditPersistence
     auth_audit_windows: dict[_AuthAuditKey, _AuthAuditWindow]
     command_queue_lifecycle: GuardDaemonServer | None
     home_dir: Path
@@ -599,6 +606,9 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
 
     def server_close(self) -> None:
         _ = self._stop_request_executors()
+        audit_persistence = getattr(self, "audit_persistence", None)
+        if audit_persistence is not None:
+            audit_persistence.close()
         hook_worker = getattr(self, "hook_worker", None)
         if hook_worker is not None:
             with suppress(Exception):
@@ -648,10 +658,14 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
         self.diagnostics = diagnostics
         self.auth_audit_lock, self.denial_audit_lock = threading.Lock(), threading.Lock()
         self.auth_audit_windows = {}
+        self.audit_persistence = AuditPersistence(
+            store, diagnostics, attempt_timeout_seconds=_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS
+        )
         self.command_queue_lifecycle = None
         self.package_firewall_connect_state = None
         self.package_firewall_connect_state_lock = threading.Lock()
         self.onefile_extraction_status = None
+        self.repair_self_check_status = None
         self.guard_cloud_connect_state = None
         self.guard_cloud_connect_state_lock = threading.Lock()
         self.guard_cloud_browser_session_lock = threading.Lock()
@@ -2678,7 +2692,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
-            self._stream_events(_int_query_value(parsed.query, "cursor"))
+            cursor_decision = self._native_handler_decision(
+                lambda: native_events_cursor(parsed.query, guard_home=store.guard_home)
+            )
+            if cursor_decision is None:
+                return
+            self._stream_events(cursor_decision.fields["cursor"])
             return
         if parsed.path == "/v1/command-activity/events":
             if self._query_has_guard_token(parsed.query):
@@ -2909,7 +2928,12 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_mcp_policy_request_get(path_parts[3])
             return
         if parsed.path == "/v1/events":
-            self._write_json({"items": store.list_events_after(_int_query_value(parsed.query, "cursor"), limit=200)})
+            cursor_decision = self._native_handler_decision(
+                lambda: native_events_cursor(parsed.query, guard_home=store.guard_home)
+            )
+            if cursor_decision is None:
+                return
+            self._write_json({"items": store.list_events_after(cursor_decision.fields["cursor"], limit=200)})
             return
         if parsed.path == "/v1/requests":
             self._handle_requests_list(parsed.query)
@@ -3323,7 +3347,10 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             handle_command_activity_feedback(self, payload)
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
-            self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            # One hook request shares a single native-binary validation across
+            # its decision, approval/review, queue, and response handling.
+            with native_status_request_scope():
+                self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
             self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])
@@ -3412,6 +3439,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return
         if parsed.path == "/v1/protection/repair":
             self._handle_protection_repair(payload)
+            return
+        if parsed.path in {"/v1/repair", "/v1/protection/remove-hooks"}:
+            self._handle_repair_api(parsed.path, payload)
             return
         if parsed.path == "/v1/supply-chain/repair":
             self._run_package_firewall_mutation("repair_all", lambda: self._handle_supply_chain_repair(payload))
@@ -4987,53 +5017,29 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         }
 
     def _handle_policy_clear(self, payload: dict[str, object]) -> None:
-        harness = self._optional_string(payload.get("harness"))
-        source = self._optional_string(payload.get("source"))
-        scope = self._optional_string(payload.get("scope"))
-        artifact_id = self._optional_string(payload.get("artifact_id"))
-        artifact_hash = self._optional_string(payload.get("artifact_hash"))
-        workspace = self._optional_string(payload.get("workspace"))
-        publisher = self._optional_string(payload.get("publisher"))
-        try:
-            clear_all = self._optional_bool(payload.get("all"), default=False)
-            artifact_id_is_null = self._optional_bool(payload.get("artifact_id_is_null"), default=False)
-            artifact_hash_is_null = self._optional_bool(payload.get("artifact_hash_is_null"), default=False)
-        except ValueError:
-            self._write_json({"error": "invalid_clear_payload", "cleared": 0}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("policy_clear", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
-        if scope is not None and scope not in {"artifact", "workspace", "publisher", "harness", "global"}:
-            self._write_json({"error": "invalid_scope", "cleared": 0, "scope": scope}, status=400)
-            return
-        if clear_all and harness is not None:
-            self._write_json(
-                {
-                    "error": "choose_all_or_harness",
-                    "cleared": 0,
-                    "harness": harness,
-                    "source": source,
-                },
-                status=400,
-            )
-            return
-        if not clear_all and harness is None:
-            self._write_json({"error": "missing_harness_or_all", "cleared": 0}, status=400)
-            return
+        fields = verdict.fields
         try:
             approval_gate_grant = require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
+                guard_home,
                 purpose="policy_clear",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
             cleared = self.server.store.clear_policy_decisions(  # type: ignore[attr-defined]
-                None if clear_all else harness,
-                source,
-                scope=scope,
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                artifact_id_is_null=artifact_id_is_null,
-                artifact_hash_is_null=artifact_hash_is_null,
-                workspace=workspace,
-                publisher=publisher,
+                fields["harness"],
+                fields["source"],
+                scope=fields["scope"],
+                artifact_id=fields["artifact_id"],
+                artifact_hash=fields["artifact_hash"],
+                artifact_id_is_null=fields["artifact_id_is_null"],
+                artifact_hash_is_null=fields["artifact_hash_is_null"],
+                workspace=fields["workspace"],
+                publisher=fields["publisher"],
                 approval_gate_grant=approval_gate_grant,
             )
         except ApprovalGateError as error:
@@ -5041,35 +5047,24 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["cleared"] = 0
             self._write_json(payload, status=error.status)
             return
-        self._write_json(
-            {
-                "cleared": cleared,
-                "harness": None if clear_all else harness,
-                "source": source,
-                "scope": scope,
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-                "artifact_id_is_null": artifact_id_is_null,
-                "artifact_hash_is_null": artifact_hash_is_null,
-                "workspace": workspace,
-                "publisher": publisher,
-            }
-        )
+        self._write_json({"cleared": cleared, **verdict.body})
 
     def _handle_requests_clear(self, payload: dict[str, object]) -> None:
-        status = self._optional_string(payload.get("status")) or "pending"
-        harness = self._optional_string(payload.get("harness"))
-        if status not in {"pending", "resolved"}:
-            self._write_json({"error": "invalid_status", "cleared": 0, "status": status}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("requests_clear", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
+        status = verdict.fields["status"]
         try:
             require_high_risk(
-                self.server.store.guard_home,  # type: ignore[attr-defined]
+                guard_home,
                 purpose="queue_clear",
                 approval_gate_input=approval_gate_input_from_mapping(payload),
             )
             cleared = self.server.store.clear_approval_requests(  # type: ignore[attr-defined]
-                harness=harness,
+                harness=verdict.fields["harness"],
                 status=status,
             )
         except ApprovalGateError as error:
@@ -5078,17 +5073,16 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             payload["status"] = status
             self._write_json(payload, status=error.status)
             return
-        self._write_json({"cleared": cleared, "status": status, "harness": harness})
+        self._write_json({"cleared": cleared, **verdict.body})
 
     def _handle_bulk_allow_read_once(self, payload: dict[str, object]) -> None:
-        request_ids = payload.get("request_ids")
-        if not isinstance(request_ids, list) or len(request_ids) == 0:
-            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("bulk_allow", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
-        normalized_ids = [str(item).strip() for item in request_ids if isinstance(item, str) and str(item).strip()]
-        if len(normalized_ids) == 0:
-            self._write_json({"error": "missing_request_ids", "resolved_count": 0, "failed": []}, status=400)
-            return
+        normalized_ids = verdict.fields["request_ids"]
         try:
             result = bulk_allow_read_only_once(
                 store=self.server.store,  # type: ignore[attr-defined]
@@ -5124,8 +5118,9 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         )
 
     def _handle_harness_action(self, harness: str, action: str, payload: dict[str, object]) -> None:
-        if action not in {"install", "verify", "repair", "uninstall"}:
-            self._write_json({"error": "not_found"}, status=404)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(lambda: native_harness_action(action, payload, guard_home=guard_home))
+        if verdict is None:
             return
         context = self._harness_context(payload)
         if action == "verify":
@@ -5134,11 +5129,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             except ValueError as error:
                 self._write_json({"error": str(error)}, status=404)
             return
-        try:
-            dry_run = self._optional_bool(payload.get("dry_run"), default=True)
-        except ValueError:
-            self._write_json({"error": "invalid_dry_run"}, status=400)
-            return
+        dry_run = verdict.fields["dry_run"]
         try:
             adapter = get_adapter(harness)
         except ValueError as error:
@@ -5224,19 +5215,11 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         self._write_json(desktop_notification_setup_payload(result, guidance=guidance))
 
     def _handle_requests_list(self, query_string: str) -> None:
-        limit = self._query_limit(query_string, default=200, maximum=200)
-        if limit is None:
-            self._write_json({"error": "invalid_limit"}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(lambda: native_requests_list(query_string, guard_home=guard_home))
+        if verdict is None:
             return
-        status = self._query_string(query_string, "status") or "pending"
-        if status == "all":
-            status_filter = None
-        elif status in {"pending", "resolved"}:
-            status_filter = status
-        else:
-            self._write_json({"error": "invalid_status"}, status=400)
-            return
-        include_totals = self._query_bool(query_string, "include_totals", default=True)
+        options = verdict.fields
         from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
 
         try:
@@ -5245,14 +5228,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 if self._is_hosted_dashboard_origin()
                 else (lambda **options: local_request_page(self.server.store, **options))
             )
-            page = read_page(
-                status=status_filter,
-                limit=limit,
-                cursor=self._query_string(query_string, "cursor"),
-                harness=self._query_string(query_string, "harness"),
-                search=self._query_string(query_string, "search"),
-                include_totals=include_totals,
-            )
+            page = read_page(**options)
         except NativeBusinessReviewQueueReadError:
             self._write_json(
                 {"error": "native_local_business_queue_read_failed"},
@@ -5413,6 +5389,22 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _record_incomplete_protection_repair(self, check_reasons: Mapping[str, str]) -> None:
         record_incomplete_protection_repair(self._daemon_server().diagnostics, check_reasons)
+
+    def _handle_repair_api(self, path: str, payload: dict[str, object]) -> None:
+        server = self._daemon_server()
+        handler = repair_api.repair_request if path == "/v1/repair" else repair_api.removal_request
+        try:
+            result = handler(server.store, payload, home_dir=server.home_dir, workspace_dir=server.workspace_dir)
+        except ApprovalGateError as error:
+            self._write_approval_gate_error(error)
+            return
+        except repair_api.RemovalConfirmationError:
+            self._write_json(
+                {"error": "confirmation_required", "confirm": repair_api.REMOVE_CONFIRMATION},
+                status=400,
+            )
+            return
+        self._write_json(result, extra_headers={"Cache-Control": "no-store, max-age=0"})
 
     def _handle_protection_repair(self, payload: dict[str, object]) -> None:
         check_id = self._optional_string(payload.get("check_id"))
@@ -7281,23 +7273,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 "persisted": False,
             }
             daemon_server.auth_audit_windows[key] = window
-        try:
-            with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                daemon_server.store.add_event("daemon.auth.unauthorized", payload, _now())
-        except Exception:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["suppressed_count"] += 1
-            daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-        else:
-            with daemon_server.auth_audit_lock:
-                current = daemon_server.auth_audit_windows.get(key)
-                if current is window:
-                    window["pending"] = False
-                    window["persisted"] = True
-                    window["suppressed_count"] -= reported_suppressed_count
+        outcome = daemon_server.audit_persistence.persist("daemon.auth.unauthorized", payload, _now())
+        with daemon_server.auth_audit_lock:
+            if daemon_server.auth_audit_windows.get(key) is not window:
+                return
+            window["pending"] = False
+            if outcome == AUDIT_NOT_PERSISTED:
+                window["suppressed_count"] += 1
+                return
+            # A queued row carries the suppressed count, but its retry can still
+            # fail, so only a confirmed write lets the window coalesce later events.
+            window["suppressed_count"] -= reported_suppressed_count
+            window["persisted"] = outcome == AUDIT_WRITTEN
 
     def _record_query_token_rejection(self) -> None:
         self._record_bounded_denial_event(
@@ -7319,23 +7306,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def _record_bounded_denial_event(self, event_name: str, payload: dict[str, object]) -> None:
         daemon_server = self._daemon_server()
         with daemon_server.denial_audit_lock:
-            for attempt in range(2):
-                try:
-                    with sqlite_connect_timeout_override(_AUTH_AUDIT_SQLITE_TIMEOUT_SECONDS):
-                        daemon_server.store.add_event(event_name, payload, _now())
-                except TimeoutError:
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_timeout")
-                    return
-                except sqlite3.OperationalError as error:
-                    if attempt == 0 and any(
-                        marker in str(error).lower() for marker in ("database is locked", "database table is locked")
-                    ):
-                        continue
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-                except sqlite3.DatabaseError:
-                    daemon_server.diagnostics.record_exception("auth_audit_persistence_failed")
-                else:
-                    return
+            _ = daemon_server.audit_persistence.persist(event_name, payload, _now())
 
     def _route_home(self) -> Path | None:
         return getattr(getattr(self.server, "store", None), "guard_home", None)
@@ -7753,6 +7724,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             "sqlite_migration_gate": sqlite_migration_gate,
             "quarantined_store": quarantined_store_summary(store.guard_home),
             "onefile_extraction": daemon_server.onefile_extraction_status,
+            "repair_self_check": daemon_server.repair_self_check_status,
             "uptime_seconds": uptime,
             "pid": os.getpid(),
             "tables": store.list_table_names(),
@@ -7889,56 +7861,32 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return None
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
+    def _native_handler_decision(self, ask: Callable[[], HandlerDecision]) -> HandlerDecision | None:
+        """Ask the resident to validate a request.
+
+        A rejection is written as the resident shaped it; so is the fail-closed
+        reply when the resident cannot answer. Both return ``None``.
+        """
+
+        try:
+            decision = ask()
+        except NativeDaemonHandlerError:
+            self._write_json({"error": "native_handler_policy_unavailable"}, status=503)
+            return None
+        if decision.rejected:
+            self._write_json(decision.body, status=decision.status)
+            return None
+        return decision
+
     def _handle_policy_upsert(self, payload: dict[str, object]) -> None:
-        harness = payload.get("harness")
-        scope = payload.get("scope")
-        action = payload.get("action")
-        if (
-            not isinstance(harness, str)
-            or not harness.strip()
-            or not isinstance(scope, str)
-            or not scope.strip()
-            or not isinstance(action, str)
-            or not action.strip()
-        ):
-            self._write_json({"saved": False, "error": "missing_required_fields"}, status=400)
-            return
-        normalized_harness = harness.strip()
-        normalized_scope = scope.strip()
-        normalized_action = action.strip()
-        if not _is_decision_scope(normalized_scope) or not _is_guard_action(normalized_action):
-            self._write_json({"saved": False, "error": "unsupported_policy_value"}, status=400)
-            return
-        if normalized_scope == "global" and normalized_action == "allow":
-            self._write_json({"saved": False, "error": "broad_allow_requires_narrow_scope"}, status=400)
-            return
-        record = {
-            "harness": normalized_harness,
-            "scope": normalized_scope,
-            "action": normalized_action,
-            "artifact_id": self._optional_string(payload.get("artifact_id")),
-            "workspace": self._optional_string(payload.get("workspace")),
-            "publisher": self._optional_string(payload.get("publisher")),
-            "reason": self._optional_string(payload.get("reason")),
-        }
-        if not self._scope_target_is_valid(
-            normalized_scope,
-            artifact_id=record["artifact_id"],
-            workspace=record["workspace"],
-            publisher=record["publisher"],
-        ):
-            self._write_json({"saved": False, "error": "missing_scope_target"}, status=400)
+        guard_home = self.server.store.guard_home  # type: ignore[attr-defined]
+        verdict = self._native_handler_decision(
+            lambda: native_body_handler("policy_upsert", payload, guard_home=guard_home)
+        )
+        if verdict is None:
             return
         store = self.server.store  # type: ignore[attr-defined]
-        decision = PolicyDecision(
-            harness=normalized_harness,
-            scope=normalized_scope,
-            action=normalized_action,
-            artifact_id=record["artifact_id"],
-            workspace=record["workspace"],
-            publisher=record["publisher"],
-            reason=record["reason"],
-        )
+        decision = PolicyDecision(**verdict.fields)
         try:
             approval_gate_grant = require_high_risk(
                 store.guard_home,
@@ -7958,7 +7906,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"saved": False, "error": str(error)}, status=400)
             return
-        self._write_json({"saved": True, "decision": record})
+        self._write_json(verdict.body)
 
     def _handle_policy_resolve(self, payload: dict[str, object]) -> None:
         from .policy_authority_api import PolicyAuthorityApiError, resolve_policy_decision
@@ -8011,19 +7959,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if normalized in {"0", "false", "no", "off"}:
             return False
         return default
-
-    @staticmethod
-    def _query_limit(query_string: str, *, default: int, maximum: int) -> int | None:
-        raw_value = parse_qs(query_string).get("limit", [None])[-1]
-        if raw_value is None:
-            return default
-        try:
-            value = int(raw_value)
-        except (TypeError, ValueError):
-            return None
-        if value < 1:
-            return None
-        return min(value, maximum)
 
     def _validated_hook_directory_string(
         self,
@@ -8123,24 +8058,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
 
     def _hook_safe_roots(self) -> tuple[Path, ...]:
         return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
-
-    @staticmethod
-    def _scope_target_is_valid(
-        scope: str,
-        *,
-        artifact_id: str | None,
-        workspace: str | None,
-        publisher: str | None,
-    ) -> bool:
-        if scope in {"global", "harness"}:
-            return True
-        if scope == "artifact":
-            return artifact_id is not None
-        if scope == "workspace":
-            return workspace is not None
-        if scope == "publisher":
-            return publisher is not None
-        return False
 
     def _write_json(
         self,
@@ -8593,6 +8510,7 @@ class GuardDaemonServer:
             )
             self._start_command_activity_maintenance()
             self._start_onefile_extraction_reclaim()
+            self._start_repair_self_check()
             self._record_lifecycle("ready")
             self._owned_service_ready = True
             self._diagnostics.record("daemon_ready")
@@ -8781,6 +8699,17 @@ class GuardDaemonServer:
         )
         self._onefile_extraction_reclaim_thread.start()
 
+    def _start_repair_self_check(self) -> None:
+        def publish(status: dict[str, object]) -> None:
+            self._server.repair_self_check_status = status
+
+        repair_self_check.start_self_check(
+            self._server.store,
+            publish=publish,
+            stop=self._shutdown_started,
+            on_error=self._diagnostics.record_exception,
+        )
+
     def _onefile_extraction_reclaim_loop(self) -> None:
         while not self._shutdown_started.is_set():
             self._reclaim_onefile_extraction_dirs_once()
@@ -8790,12 +8719,14 @@ class GuardDaemonServer:
     def _reclaim_onefile_extraction_dirs_once(self) -> None:
         try:
             from ..onefile_extraction import reclaim_orphaned_extraction_dirs
+            from ..onefile_open_paths import scan_open_extraction_dirs
 
             result = reclaim_orphaned_extraction_dirs(
                 temp_root=Path(tempfile.gettempdir()),
                 current_meipass=getattr(sys, "_MEIPASS", None),
                 now=datetime.now(timezone.utc),
                 should_stop=self._shutdown_started.is_set,
+                open_path_scanner=scan_open_extraction_dirs,
             )
         except Exception:
             self._diagnostics.record_exception("onefile_extraction_reclaim_failed")
@@ -8811,6 +8742,9 @@ class GuardDaemonServer:
             "killed_launches_last_run": result.killed_launches,
             "unmarked_legacy_count": result.unmarked_count,
             "unmarked_legacy_bytes_estimate": result.unmarked_bytes_estimate,
+            "unmarked_reclaimed_count": result.unmarked_reclaimed_count,
+            "unmarked_reclaimed_bytes": result.unmarked_reclaimed_bytes,
+            "unmarked_scan": result.unmarked_scan,
             "error_count": len(result.errors),
         }
         self._diagnostics.record(
@@ -9431,15 +9365,6 @@ def _guard_daemon_idle_timeout_seconds(
 def _guard_home_is_ephemeral(guard_home: Path) -> bool:
     resolved_parts = guard_home.resolve().parts
     return any(part.startswith("pytest-") or "pytest-of-" in part for part in resolved_parts)
-
-
-def _int_query_value(query: str, key: str) -> int:
-    values = parse_qs(query).get(key, ["0"])
-    raw_value = values[-1]
-    try:
-        return int(str(raw_value))
-    except ValueError:
-        return 0
 
 
 forget_in_child(GuardDaemonServer._quarantined_services)

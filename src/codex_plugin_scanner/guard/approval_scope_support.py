@@ -123,6 +123,7 @@ class ApprovalScopeContract:
     task_capability_eligible: bool = False
     task_capability_reason_codes: tuple[str, ...] = ("task_capability_not_enabled",)
     exact_action_persistence_eligible: bool = False
+    once_only_reason: str | None = None
     version: str = APPROVAL_SCOPE_CONTRACT_VERSION
 
     def to_dict(self) -> dict[str, object]:
@@ -143,6 +144,7 @@ class ApprovalScopeContract:
                 "reason_codes": list(self.task_capability_reason_codes),
             },
             "exact_action_persistence_eligible": self.exact_action_persistence_eligible,
+            "once_only_reason": self.once_only_reason,
         }
 
 
@@ -161,6 +163,7 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
     trusted_family = _request_scoped_family_key(request)
     task_capability_eligible = _github_workflow_task_capability_eligible(request)
     exact_action_persistence_eligible = exact_action_allow_persistence_eligible(request)
+    once_only_reason = None if exact_action_persistence_eligible else exact_action_once_only_reason(request)
     task_capability_reason_codes = (
         ("exact_github_workflow_record",) if task_capability_eligible else ("task_capability_not_enabled",)
     )
@@ -207,6 +210,7 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
         task_capability_eligible=task_capability_eligible,
         task_capability_reason_codes=task_capability_reason_codes,
         exact_action_persistence_eligible=exact_action_persistence_eligible,
+        once_only_reason=once_only_reason,
     )
 
 
@@ -302,6 +306,35 @@ def tool_call_exact_context_token(request: Mapping[str, object]) -> str | None:
     return token if parse_approval_context_token(token) is not None else None
 
 
+def exact_action_once_only_reason(request: Mapping[str, object]) -> str | None:
+    """Return the stable code for why an allow cannot be saved as one exact action."""
+
+    from .daemon.hook_native_exact_identity import (
+        GUARD_CONTROL_ACTION_TYPES,
+        NO_COMMAND_IDENTITY,
+        NON_OVERRIDABLE,
+        ONCE_ONLY_REASONS,
+        UNPROVEN_LAUNCH,
+    )
+
+    if _unverified_provider_execution(request):
+        return "provider_unverified"
+    if _allow_is_non_overridable(request):
+        envelope = request.get("action_envelope_json")
+        action_type = envelope.get("action_type") if isinstance(envelope, Mapping) else None
+        return "guard_control" if action_type in GUARD_CONTROL_ACTION_TYPES else NON_OVERRIDABLE
+    artifact_type = _string_or_none(request.get("artifact_type"))
+    if artifact_type == "package_request":
+        return "package_action"
+    if artifact_type != "tool_call":
+        return None
+    envelope = request.get("action_envelope_json")
+    stored = envelope.get("once_only_reason") if isinstance(envelope, Mapping) else None
+    if isinstance(stored, str) and stored in ONCE_ONLY_REASONS:
+        return stored
+    return UNPROVEN_LAUNCH if _string_or_none(request.get("raw_command_text")) else NO_COMMAND_IDENTITY
+
+
 def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bool:
     """Return whether an artifact allow can be saved as one exact action."""
 
@@ -313,10 +346,12 @@ def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bo
     if artifact_type == "package_request":
         return bool(artifact_id and artifact_hash and artifact_hash != "unknown")
     if artifact_type == "tool_call":
+        envelope = request.get("action_envelope_json")
+        tool_target = isinstance(envelope, Mapping) and envelope.get("exact_identity_kind") == "tool-target"
         return bool(
             artifact_id
             and tool_call_exact_context_token(request) is not None
-            and _string_or_none(request.get("raw_command_text"))
+            and (_string_or_none(request.get("raw_command_text")) or tool_target)
         )
     if artifact_type != "tool_action_request":
         return False

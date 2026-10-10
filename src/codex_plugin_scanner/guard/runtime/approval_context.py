@@ -222,50 +222,6 @@ def parse_approval_context_token(token: object) -> ApprovalContextToken | None:
     )
 
 
-def approval_context_validation_reason(
-    saved_token: object,
-    *,
-    identity: object,
-    content: object,
-    capabilities: object,
-    policy: object,
-    sandbox: object,
-) -> ApprovalContextValidationFailure | None:
-    """Return the first changed context dimension for saved approval evidence."""
-
-    for name, value in (
-        ("identity", identity),
-        ("content", content),
-        ("capabilities", capabilities),
-        ("policy", policy),
-        ("sandbox", sandbox),
-    ):
-        _require_json_component(name, value)
-    if not _json_serializable(saved_token):
-        return "approval_reuse_content_changed"
-    try:
-        result = _context_digest_result(
-            "validate_approval_context",
-            {
-                "saved_token": saved_token,
-                "components": {
-                    "identity": identity,
-                    "content": content,
-                    "capabilities": capabilities,
-                    "policy": policy,
-                    "sandbox": sandbox,
-                    "extension_control_digest": current_extension_control_binding_digest(),
-                },
-            },
-        )
-    except (NativeContextDigestUnavailableError, TypeError):
-        # The resident being unreachable — or a component it cannot express —
-        # can never prove context is unchanged.  Deny reuse instead of
-        # crashing the enforcement caller.
-        return "approval_reuse_content_changed"
-    return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
-
-
 def approval_context_tokens_validation_reason(
     saved_token: object,
     current_token: object,

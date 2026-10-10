@@ -33,11 +33,8 @@ from .extension_control_limits import (
 
 _FAILURE_REASON = "control.resolver-failure"
 _TRUSTED_LOCKDOWN_SURFACES = frozenset({ControlSurface.TRUSTED_LOCAL_RECOVERY, ControlSurface.TRUSTED_LOCAL_PROOF})
-_MAX_LAYERS = len(ControlLayerKind)
 _MAX_CONTROLS_PER_LAYER = 512
-_MAX_RESOLUTION_IDS = 1024
 _MAX_OBSERVATIONS = 2048
-_MAX_INPUT_TEXT_LENGTH = 256
 
 
 def compose_control_layers(layers: Iterable[ExtensionControlLayer]) -> ComposedExtensionControls:

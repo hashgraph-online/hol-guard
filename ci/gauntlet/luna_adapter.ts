@@ -69,6 +69,29 @@ export function finishReason(stopReason: string) {
   return 'stop';
 }
 
+// SSE comments keep the HTTP transport alive while native inference is silent.
+// They contain no completion, model selection, usage or tool arguments.
+export function keepStreamAlive(
+  enqueue: (chunk: Uint8Array) => void,
+  fail: (error: unknown) => void,
+  schedule: (tick: () => void) => () => void = tick => {
+    const timer = setInterval(tick, 15_000);
+    return () => clearInterval(timer);
+  },
+) {
+  let stopped = false;
+  let cancel = () => {};
+  const stop = () => { if (!stopped) { stopped = true; cancel(); } };
+  const tick = () => {
+    if (stopped) return;
+    try { enqueue(new TextEncoder().encode(': native-luna keepalive\n\n')); }
+    catch (error) { stop(); fail(error); }
+  };
+  tick();
+  if (!stopped) cancel = schedule(tick);
+  return stop;
+}
+
 // The relay presents a per-run bearer token, so no other local process can use
 // the adapter's ChatGPT login. The token is never a provider credential.
 export function authorized(header: string | null, token: string) {
@@ -207,12 +230,18 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       promptCacheKey: promptCacheKey(request.headers.get('x-opencode-session')),
     });
     active.add(agent);
-    const timer = setTimeout(() => agent.abort(), 240_000);
+    let stopKeepalive = () => {};
+    const timer = setTimeout(() => { stopKeepalive(); agent.abort(); }, 240_000);
     const stream = new ReadableStream<Uint8Array>({
       start(sink) {
         let finished = false;
         let bytes = 0;
         const indices = new Map<number, number>();
+        stopKeepalive = keepStreamAlive(chunk => {
+          bytes += chunk.byteLength;
+          if (bytes > 4_000_000) throw new Error('Transport response limit');
+          sink.enqueue(chunk);
+        }, () => agent.abort());
         const send = (delta: any, finish_reason: string | null = null, usage?: any) => {
           const data = `data: ${JSON.stringify({ id: 'native-luna', object: 'chat.completion.chunk',
             // The real backend identity, recorded by the relay as the response model.
@@ -236,6 +265,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
               send({}, finishReason(event.message.stopReason), usageChunk(event.message.usage));
               sink.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
               finished = true;
+              stopKeepalive();
               sink.close();
               // Stop the outer SDK before tool dispatch. The real Gauntlet
               // agent receives the untouched selection and owns execution.
@@ -243,6 +273,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
             }
           } catch {
             finished = true;
+            stopKeepalive();
             sink.error(new Error('Native transport failed'));
             agent.abort();
           }
@@ -252,13 +283,14 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
         Promise.resolve(agent.prompt(messages.slice(-1))).catch(() => {
           if (!finished) sink.error(new Error('Native inference failed'));
         }).finally(() => {
+          stopKeepalive();
           if (!finished) sink.error(new Error('Native inference ended without completion'));
           unsubscribe(); clearTimeout(timer); active.delete(agent);
         });
       },
-      cancel() { agent.abort(); controller.abort(); },
+      cancel() { stopKeepalive(); agent.abort(); controller.abort(); },
     });
-    request.signal.addEventListener('abort', () => agent.abort(), { once: true });
+    request.signal.addEventListener('abort', () => { stopKeepalive(); agent.abort(); }, { once: true });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream' } });
   },
 });

@@ -480,3 +480,7 @@ mod script_regressions;
 #[cfg(test)]
 #[path = "native_command_powershell_tests.rs"]
 mod powershell_regressions;
+
+#[cfg(test)]
+#[path = "native_command_read_permission_tests.rs"]
+mod read_permission_regressions;

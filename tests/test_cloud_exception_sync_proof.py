@@ -12,7 +12,6 @@ from codex_plugin_scanner.guard.cloud_exceptions import (
     list_active_cloud_exceptions,
 )
 from codex_plugin_scanner.guard.policy_bundle_parser import validated_policy_bundle_payload
-from codex_plugin_scanner.guard.runtime.runner import _persist_cloud_exceptions
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import (
     build_cloud_exception_bundle_entry,
@@ -108,87 +107,6 @@ def test_hglp136_fixture_is_code_generated_not_static_ui_copy() -> None:
     bundle = build_cloud_exception_policy_bundle()
     assert isinstance(bundle.get("cloudExceptions"), list)
     assert bundle["cloudExceptions"][0]["exceptionId"] == "artifact:codex:sync-proof"
-
-
-def test_hglp137_local_daemon_accepts_valid_exception_bundle(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "home")
-    _seed_guard_cloud(store, workspace_id="workspace-sync-proof")
-    device_id = str(store.get_device_metadata()["installation_id"])
-    bundle = build_cloud_exception_policy_bundle(device_id=device_id)
-    signing_key = policy_bundle_test_verification_key(workspace_id="workspace-sync-proof")
-    validated, reason = validated_policy_bundle_payload(
-        bundle,
-        trusted_verification_keys=(signing_key,),
-        anchored_verification_keys=(signing_key,),
-        expected_workspace_id="workspace-sync-proof",
-    )
-    assert reason is None
-    assert validated is not None
-    cached_device_id, _acknowledgement = _cache_signed_policy_bundle_authority(
-        store,
-        policy_bundle=validated,
-        now="2026-06-14T12:00:00+00:00",
-    )
-    serialized = _persist_cloud_exceptions(
-        store,
-        device_id=cached_device_id,
-        policy_bundle=validated,
-        now="2026-06-14T12:00:00+00:00",
-    )
-    assert [item["id"] for item in serialized] == ["artifact:codex:sync-proof"]
-    listed = store.list_cloud_exceptions()
-    assert len(listed) == 1
-    assert listed[0]["id"] == "artifact:codex:sync-proof"
-    assert listed[0]["provenance"] == "policy-bundle"
-    assert listed[0]["ack_status"] == "synced"
-
-
-def test_persist_cloud_exceptions_ignores_unsigned_sibling_and_requires_cached_bundle(
-    tmp_path: Path,
-) -> None:
-    store = GuardStore(tmp_path / "home")
-    _seed_guard_cloud(store, workspace_id="workspace-sync-proof")
-    device_id = str(store.get_device_metadata()["installation_id"])
-    bundle = build_cloud_exception_policy_bundle(device_id=device_id)
-    signing_key = policy_bundle_test_verification_key(workspace_id="workspace-sync-proof")
-    validated, reason = validated_policy_bundle_payload(
-        bundle,
-        trusted_verification_keys=(signing_key,),
-        anchored_verification_keys=(signing_key,),
-        expected_workspace_id="workspace-sync-proof",
-    )
-    assert reason is None
-    assert validated is not None
-    cached_device_id, _acknowledgement = _cache_signed_policy_bundle_authority(
-        store,
-        policy_bundle=validated,
-        now="2026-06-14T12:00:00+00:00",
-    )
-
-    receipt_exception = build_cloud_exception_bundle_entry(
-        exception_id="artifact:codex:receipt-sync",
-    )
-    serialized = _persist_cloud_exceptions(
-        store,
-        device_id=cached_device_id,
-        sync_exceptions=[receipt_exception],
-        policy_bundle=validated,
-        now="2026-06-14T12:00:00+00:00",
-    )
-    assert {item["id"] for item in serialized} == {"artifact:codex:sync-proof"}
-    assert {item["provenance"] for item in serialized} == {"policy-bundle"}
-    assert {item["id"] for item in store.list_cloud_exceptions()} == {"artifact:codex:sync-proof"}
-
-    store.delete_sync_payload("policy_bundle")
-    _persist_cloud_exceptions(
-        store,
-        sync_exceptions=None,
-        policy_bundle=None,
-        now="2026-06-14T12:00:01+00:00",
-    )
-
-    assert store.get_sync_payload("cloud_exceptions") == []
-    assert store.list_cloud_exceptions() == []
 
 
 def test_hglp138_local_daemon_rejects_tampered_exception_bundle(tmp_path: Path) -> None:

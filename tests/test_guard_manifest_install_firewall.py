@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from dataclasses import replace
 from pathlib import Path
 
 from codex_plugin_scanner.guard.local_supply_chain import (
@@ -17,6 +19,7 @@ from tests.manifest_install_fixtures import (
     _native_package_intent,  # noqa: F401 -- registers the module autouse fixture
     _write_pnpm_workspace,
 )
+from tests.native_workspace import bind_workspace
 
 
 def test_parse_package_intent_supports_pnpm_install_alias(tmp_path: Path) -> None:
@@ -74,6 +77,62 @@ def test_evaluate_package_request_artifact_requires_review_for_unsynced_manifest
         isinstance(reason, dict) and reason.get("code") == "manifest_lockfile_unsynced" for reason in result.reasons
     )
     assert any(package.get("name") == "evilpkg" for package in result.packages)
+
+
+def test_manifest_targets_scope_lockfile_versions_to_their_workspace(tmp_path: Path) -> None:
+    workspace_dir = tmp_path / "workspace"
+    app_dir = workspace_dir / "app"
+    service_dir = workspace_dir / "service"
+    app_dir.mkdir(parents=True)
+    service_dir.mkdir()
+    (app_dir / "package.json").write_text(
+        json.dumps({"dependencies": {"lodash": "^1.0.0"}}),
+        encoding="utf-8",
+    )
+    (app_dir / "package-lock.json").write_text(
+        json.dumps(
+            {
+                "lockfileVersion": 3,
+                "packages": {"node_modules/lodash": {"version": "1.0.0"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (service_dir / "package.json").write_text(
+        json.dumps({"dependencies": {"lodash": "^2.0.0"}}),
+        encoding="utf-8",
+    )
+    intent = parse_package_intent("npm install", workspace=app_dir)
+    assert intent is not None
+    artifact = build_package_request_artifact(
+        "guard-cli",
+        intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+    )
+    artifact = replace(
+        artifact,
+        metadata={
+            **artifact.metadata,
+            "manifest_paths": ["app/package.json", "service/package.json"],
+            "lockfile_paths": ["app/package-lock.json"],
+        },
+    )
+
+    store = GuardStore(tmp_path / "guard-home")
+    bind_workspace(store, "workspace-1")
+    result = evaluate_package_request_artifact(
+        artifact=artifact,
+        store=store,
+        workspace_dir=workspace_dir,
+        now="2026-06-14T00:00:00Z",
+    )
+
+    lodash = [package for package in result.packages if package.get("name") == "lodash"]
+    assert [(package.get("requestedVersion"), package.get("resolvedVersion")) for package in lodash] == [
+        ("1.0.0", "1.0.0"),
+        ("^2.0.0", None),
+    ]
 
 
 def test_build_package_protect_payload_reprompts_after_manifest_edit_despite_saved_allow(

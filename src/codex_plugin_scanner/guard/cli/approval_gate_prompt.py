@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import getpass
+import json
 import os
 import sys
 from pathlib import Path
+from typing import TextIO
 
 from ..approval_gate import ApprovalGateError, ApprovalGateInput, public_config, recent_totp_satisfied
 
@@ -94,3 +96,13 @@ def approval_gate_cli_payload(error: ApprovalGateError) -> dict[str, object]:
     payload = error.to_payload()
     payload["exit_code"] = 4
     return payload
+
+
+def print_approval_gate_error(error: ApprovalGateError, *, as_json: bool, output_stream: TextIO | None = None) -> int:
+    """Report a refused approval gate the way every lifecycle command does; return exit code 4."""
+
+    if as_json:
+        print(json.dumps(approval_gate_cli_payload(error), sort_keys=True), file=output_stream or sys.stdout)
+    else:
+        print(f"Error: {error}", file=sys.stderr)
+    return 4

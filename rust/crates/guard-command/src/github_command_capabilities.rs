@@ -1441,7 +1441,12 @@ pub fn classify_github_api(args: &[String]) -> GitHubCommandAssessment {
         );
     }
     let method = parsed.method.as_deref().map(|m| m.to_uppercase());
-    if endpoint.eq_ignore_ascii_case("graphql") {
+    // `gh api /graphql` is the same endpoint as `gh api graphql`.
+    if endpoint
+        .strip_prefix('/')
+        .unwrap_or(endpoint)
+        .eq_ignore_ascii_case("graphql")
+    {
         return classify_graphql(&parsed, method.as_deref(), args);
     }
     if parsed

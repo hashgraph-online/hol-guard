@@ -1138,16 +1138,31 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             Ok(c) => c,
             Err(_) => return false,
         };
+        let resolved_home =
+            std::fs::canonicalize(&self.guard_home).unwrap_or_else(|_| self.guard_home.clone());
+        let mut secret_store =
+            crate::encrypted_secret_store::EncryptedFileSecretStore::new(&resolved_home);
+        let (material, state) = crate::policy_integrity_resolver::resolve_integrity_state(
+            &mut secret_store,
+            &resolved_home,
+        );
+        let evidence = crate::claim_reuse::ClaimEvidence {
+            integrity_state: Some(&state),
+            integrity_key: material.as_ref().map(|m| m.raw_key.as_slice()),
+            integrity_key_id: material.as_ref().map(|m| m.key_id.as_str()),
+            local_once_key: material.as_ref().map(|m| m.raw_key.as_slice()),
+            local_once_key_id: material.as_ref().map(|m| m.key_id.as_str()),
+            policy_bundle_identities: None,
+        };
         crate::claim_reuse::claim_approval_reuse_decisions(
             &conn,
             std::slice::from_ref(decision),
-            Some(now),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
+            now,
+            &evidence,
+            // The resident resolves this evidence itself, in-process, and ships no
+            // policy-bundle identities, so there is no caller-gathered evidence
+            // whose sources could move before the claim's write lock.
+            &|_, _| Ok(true),
         )
         .unwrap_or(false)
     }

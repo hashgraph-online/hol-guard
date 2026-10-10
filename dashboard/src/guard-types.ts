@@ -255,6 +255,7 @@ export type GuardApprovalRequest = {
   scope_restrictions?: string[];
   task_capability_eligibility?: GuardTaskCapabilityEligibility;
   exact_action_persistence_eligible?: boolean;
+  once_only_reason?: string | null;
   risk_headline?: string;
   risk_summary?: string;
   risk_signals?: string[];

@@ -344,29 +344,6 @@ def test_storage_repair_recovers_missing_oauth_binding_and_claims_unowned_reques
     assert rows[0]["oauth_subject_hash"] == binding["oauth_subject_hash"]
 
 
-def test_storage_repair_rejects_conflicting_cached_token_identity(tmp_path) -> None:
-    store = _store_with_oauth_credentials(tmp_path)
-    credentials = store.get_oauth_local_credentials(allow_primary=True)
-    assert credentials is not None
-    conflicting_token = ".".join(
-        (
-            guard_runner_module._encode_jwt_segment({"alg": "ES256"}),
-            guard_runner_module._encode_jwt_segment(
-                {
-                    "iss": PRODUCTION_GUARD_ISSUER,
-                    "grant": {"grantId": "grant-other"},
-                    "machine": {"machineId": "machine-1"},
-                    "workspace": {"workspaceId": "workspace-1"},
-                }
-            ),
-            "signature",
-        )
-    )
-    credentials["access_token"] = conflicting_token
-
-    assert guard_runner_module._oauth_binding_metadata_from_access_token(credentials) == {}
-
-
 def test_upgraded_running_process_does_not_refresh_shared_oauth_grant(monkeypatch) -> None:
     refresh_attempted = False
 

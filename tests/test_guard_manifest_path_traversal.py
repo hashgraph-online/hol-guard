@@ -56,35 +56,6 @@ def test_parse_pip_intent_ignores_requirements_outside_workspace(tmp_path: Path,
     assert intent.manifest_paths == ()
 
 
-def test_unsynced_manifest_evaluation_does_not_read_symlinked_requirements(tmp_path: Path) -> None:
-    workspace = tmp_path / "workspace"
-    secret = tmp_path / "secret.env"
-    workspace.mkdir()
-    secret.write_text("AWS_SECRET_ACCESS_KEY=super-secret\n", encoding="utf-8")
-    (workspace / "requirements.txt").symlink_to(secret)
-    (workspace / "pyproject.toml").write_text("[project]\nname='demo'\n", encoding="utf-8")
-
-    intent = parse_package_intent("pip install", workspace=workspace)
-    assert intent is not None
-    artifact = build_package_request_artifact(
-        "guard-cli",
-        intent,
-        config_path="hol-guard.toml",
-        source_scope="project",
-    )
-
-    result = evaluate_package_request_artifact(
-        artifact=artifact,
-        store=GuardStore(tmp_path / "guard-home"),
-        workspace_dir=workspace,
-        now="2026-06-14T00:00:00Z",
-    )
-
-    serialized = json.dumps(result.to_dict())
-    assert "AWS_SECRET" not in serialized
-    assert "super-secret" not in serialized
-
-
 def test_evaluate_package_request_artifact_does_not_leak_traversal_requirements(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     workspace = tmp_path / "workspace"

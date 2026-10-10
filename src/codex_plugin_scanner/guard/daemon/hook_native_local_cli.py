@@ -10,7 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..native_local_cli_identity import LocalCliIdentityUnavailableError
-from .hook_native_saved_approval import _launch_cwd, _native_review_is_overridable, _saved_block_response
+from .hook_native_launch_identity import launch_cwd as _launch_cwd
+from .hook_native_saved_approval import _native_review_is_overridable, _saved_block_response
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import harness_json_from_native_pre_tool
 

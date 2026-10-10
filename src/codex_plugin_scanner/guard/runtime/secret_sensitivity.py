@@ -12,22 +12,7 @@ from .home_path_text import expand_home, normalize_path
 SecretSensitivity = Literal["high", "critical"]
 SecretContentSensitivity = Literal["medium", "high", "critical"]
 
-_AWS_CREDENTIALS_MARKER = "/".join((".aws", "credentials"))
-_DOCKER_CONFIG_MARKER = "/".join((".docker", "config.json"))
-_KUBE_CONFIG_MARKER = "/".join((".kube", "config"))
 
-SECRET_PATH_TEXT_MARKERS: tuple[tuple[str, str], ...] = (
-    (".env", "local .env file"),
-    (".npmrc", "npm registry credentials"),
-    (".pypirc", "Python package credentials"),
-    (_AWS_CREDENTIALS_MARKER, "AWS shared credentials file"),
-    (".ssh/", "SSH private key"),
-    (".gnupg/", "GnuPG key material"),
-    (_DOCKER_CONFIG_MARKER, "Docker client config"),
-    (_KUBE_CONFIG_MARKER, "Kubernetes config"),
-    ("terraform.tfvars", "Terraform variable secrets"),
-    (".git-credentials", "Git credential store"),
-)
 LEGACY_SECRET_PATH_TEXT_MARKERS: tuple[tuple[str, str], ...] = (
     (".env", "local .env file"),
     (".npmrc", "npm registry credentials"),

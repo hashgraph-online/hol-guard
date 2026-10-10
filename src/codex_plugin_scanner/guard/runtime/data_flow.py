@@ -6,7 +6,6 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from itertools import pairwise
-from typing import Literal
 
 from .shell_structure import (
     ShellCommandSubstitution as ShellCommandSubstitution,
@@ -36,122 +35,8 @@ from .shell_structure import (
     mask_heredoc_bodies as mask_heredoc_bodies,
 )
 
-DataSourceType = Literal[
-    "secret_file",
-    "env",
-    "clipboard",
-    "keychain",
-    "command_output",
-    "prompt",
-    "generated_file",
-]
-DataSinkType = Literal[
-    "http_post",
-    "http_get_query",
-    "dns",
-    "webhook",
-    "paste",
-    "git_remote",
-    "package_publish",
-    "clipboard",
-    "local_log",
-]
-
-_VALID_SOURCE_TYPES = frozenset(
-    {
-        "secret_file",
-        "env",
-        "clipboard",
-        "keychain",
-        "command_output",
-        "prompt",
-        "generated_file",
-    }
-)
-_VALID_SINK_TYPES = frozenset(
-    {
-        "http_post",
-        "http_get_query",
-        "dns",
-        "webhook",
-        "paste",
-        "git_remote",
-        "package_publish",
-        "clipboard",
-        "local_log",
-    }
-)
-_HTTP_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"})
 _INPUT_REDIRECT_PATTERN = re.compile(r"(?<![<])(?:\d*)<\s*(?![<&])(?P<target>\"[^\"]+\"|'[^']+'|[^ \t\r\n;&|<>]+)")
 _URL_PATTERN = re.compile(r"https?://[^\s\"'<>)}\]]+", re.IGNORECASE)
-_CURL_METHOD_PATTERN = re.compile(
-    r"(?i)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*?"
-    + r"(?:--request(?:=|\s+)|-X\s*)['\"]?(?P<method>[a-z]+)['\"]?\b"
-)
-_FETCH_METHOD_PATTERN = re.compile(r"(?i)\bmethod\s*:\s*['\"](?P<method>[a-z]+)['\"]")
-_REQUESTS_METHOD_PATTERN = re.compile(r"(?i)\brequests\.(?P<method>get|post|put|patch|delete|head|options)\s*\(")
-_CURL_DATA_PATTERN = re.compile(
-    r"(?i)(?:^|[\s;&|])(?:curl|curl\.exe)\b[^\r\n;&|]*(?:\s-d\b|\s--data(?:-raw|-binary|-urlencode)?\b)"
-)
-
-
-@dataclass(frozen=True, slots=True)
-class DataSource:
-    """Redacted local data source referenced by a runtime action."""
-
-    source_type: DataSourceType
-    value: str
-    description: str
-    evidence: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.source_type not in _VALID_SOURCE_TYPES:
-            raise ValueError("source_type must be a known Guard data source type")
-        if not self.value.strip():
-            raise ValueError("value must be a non-empty redacted source identifier")
-        if not self.description.strip():
-            raise ValueError("description must be a non-empty source description")
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "source_type": self.source_type,
-            "value": self.value,
-            "description": self.description,
-            "evidence": self.evidence,
-        }
-
-
-@dataclass(frozen=True, slots=True)
-class DataSink:
-    """Redacted destination where local data may leave the trusted context."""
-
-    sink_type: DataSinkType
-    value: str
-    description: str
-    method: str | None = None
-    evidence: str | None = None
-
-    def __post_init__(self) -> None:
-        if self.sink_type not in _VALID_SINK_TYPES:
-            raise ValueError("sink_type must be a known Guard data sink type")
-        if not self.value.strip():
-            raise ValueError("value must be a non-empty redacted sink identifier")
-        if not self.description.strip():
-            raise ValueError("description must be a non-empty sink description")
-        if self.method is not None:
-            normalized = self.method.upper()
-            if normalized not in _HTTP_METHODS:
-                raise ValueError("method must be a known HTTP method")
-            object.__setattr__(self, "method", normalized)
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            "sink_type": self.sink_type,
-            "value": self.value,
-            "description": self.description,
-            "method": self.method,
-            "evidence": self.evidence,
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,22 +81,6 @@ def extract_command_segments(command: str) -> tuple[str, ...]:
     return _split_top_level_commands(command)
 
 
-def extract_urls(command: str) -> tuple[str, ...]:
-    """Return HTTP(S) URLs while preserving first-seen order."""
-
-    urls = [_strip_url_suffix(match.group(0)) for match in _URL_PATTERN.finditer(command)]
-    return _dedupe(url for url in urls if url)
-
-
-def extract_url_ranges(command: str) -> tuple[tuple[int, int], ...]:
-    """Return HTTP(S) URL character ranges in shell text."""
-
-    return tuple(
-        (match.start(), match.start() + len(_strip_url_suffix(match.group(0))))
-        for match in _URL_PATTERN.finditer(command)
-    )
-
-
 def _dedupe(values: Iterable[str]) -> tuple[str, ...]:
     seen: set[str] = set()
     result: list[str] = []
@@ -228,10 +97,6 @@ def _strip_shell_quotes(value: str) -> str:
     if len(stripped) >= 2 and stripped[0] == stripped[-1] and stripped[0] in {"'", '"'}:
         return stripped[1:-1]
     return stripped
-
-
-def _strip_url_suffix(value: str) -> str:
-    return value.rstrip(".,;")
 
 
 def _split_top_level_commands(command: str) -> tuple[str, ...]:

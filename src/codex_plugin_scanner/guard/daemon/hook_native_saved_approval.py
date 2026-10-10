@@ -8,21 +8,24 @@ the reviewed command, or the Rust rules that judged it change.
 
 from __future__ import annotations
 
-import hashlib
 import logging
-import os
 import sqlite3
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..runtime.approval_context import (
-    build_approval_context_token,
-    build_runtime_launch_identity,
-    parse_approval_context_token,
-    runtime_launch_identity_is_reusable,
-)
-from ..runtime.local_cli_runner import LOCAL_BIN_RUNNERS, runner_local_bin
+from ..runtime.approval_context import build_approval_context_token, parse_approval_context_token
 from ..store_policy_decision import policy_decision_hash_exists
+from .hook_native_exact_identity import (
+    GUARD_CONTROL,
+    GUARD_CONTROL_ACTION_TYPES,
+    NO_COMMAND_IDENTITY,
+    NON_OVERRIDABLE,
+    PACKAGE_ACTION,
+    UNPROVEN_LAUNCH,
+    OnceOnlyError,
+    tool_target_identity,
+)
+from .hook_native_launch_identity import launch_cwd, launch_identity
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
 from .hook_worker_responses import harness_json_from_native_pre_tool
@@ -30,63 +33,9 @@ from .hook_worker_responses import harness_json_from_native_pre_tool
 _LOGGER = logging.getLogger(__name__)
 
 EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
+EXACT_ACTION_IDENTITY_KIND_KEY = "exact_identity_kind"
+ONCE_ONLY_REASON_KEY = "once_only_reason"
 _NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
-# Runners whose target is accepted only when it resolves to a content-hashed
-# project-local binary. Registry and cache fetches stay once-only.
-_LOCAL_BIN_RUNNERS = LOCAL_BIN_RUNNERS
-# Interpreters, task runners and wrappers beyond the once-retry list whose
-# launch identity does not bind the code they load or run.
-_EXTRA_MUTABLE_LAUNCHERS = frozenset(
-    {
-        "nodejs",
-        "php",
-        "go",
-        "tsx",
-        "ts-node",
-        "vite-node",
-        "jiti",
-        "esno",
-        "babel-node",
-        "nodemon",
-        "zx",
-        "docker",
-        "podman",
-        # git runs aliases, hooks and config-defined helpers from mutable files.
-        "git",
-        "awk",
-        "gawk",
-        "mawk",
-        "nawk",
-        "xargs",
-        "parallel",
-        "env",
-        "sudo",
-        "doas",
-        "nohup",
-        "timeout",
-        "watch",
-        "osascript",
-        "pwsh",
-        "powershell",
-        "java",
-        "dotnet",
-        "lua",
-        "rscript",
-        "julia",
-        "swift",
-        "r",
-        # Tools that load project code or config the token cannot bind.
-        *("terraform", "tofu", "terragrunt", "pulumi", "ansible", "ansible-playbook"),
-        *("pytest", "py.test", "tox", "nox", "jest", "vitest", "mocha", "rake", "gradle", "mvn"),
-        # GNU sed can run shell commands from its script (``e``).
-        "sed",
-    }
-)
-_FIND_EXEC_OPTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
-# Existing file operands are content-bound so an edited script, program or
-# input re-prompts. Larger or more numerous operands stay once-only.
-_MAX_BOUND_OPERANDS = 16
-_MAX_BOUND_OPERAND_BYTES = 4_194_304
 
 
 class TokenUnset:
@@ -108,28 +57,78 @@ def native_exact_action_token(
 ) -> str | None:
     """Return a persistent exact-action token, or ``None`` when only once is safe."""
 
+    return native_exact_action_decision(
+        harness=harness,
+        tool_name=tool_name,
+        payload=payload,
+        native_result=native_result,
+        native_receipt=native_receipt,
+        workspace=workspace,
+        home_dir=home_dir,
+    )[0]
+
+
+def native_exact_action_decision(
+    *,
+    harness: str,
+    tool_name: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    workspace: Path | None,
+    home_dir: Path | None,
+) -> tuple[str | None, str | None]:
+    """Return ``(token, once_only_reason)``; exactly one of them is set."""
+
+    try:
+        return _exact_action_token(
+            harness=harness,
+            tool_name=tool_name,
+            payload=payload,
+            native_result=native_result,
+            native_receipt=native_receipt,
+            workspace=workspace,
+            home_dir=home_dir,
+        ), None
+    except OnceOnlyError as once_only:
+        return None, once_only.reason
+
+
+def _exact_action_token(
+    *,
+    harness: str,
+    tool_name: str,
+    payload: Mapping[str, object],
+    native_result: Mapping[str, object],
+    native_receipt: Mapping[str, object] | None,
+    workspace: Path | None,
+    home_dir: Path | None,
+) -> str:
     if not _native_review_is_overridable(native_result):
-        return None
+        raise OnceOnlyError(_non_overridable_reason(native_result))
     command = pre_tool_command(payload)
-    if command is None or not command.strip():
-        return None
+    has_command = command is not None and bool(command.strip())
     try:
         policy_binding = native_review_policy_binding(
             harness=harness, native_result=native_result, verified_receipt=native_receipt
         )
-    except ValueError:
-        return None
+    except ValueError as error:
+        raise OnceOnlyError(UNPROVEN_LAUNCH if has_command else NO_COMMAND_IDENTITY) from error
+    cwd = launch_cwd(payload, workspace)
+    if not has_command:
+        if cwd is None:
+            raise OnceOnlyError(NO_COMMAND_IDENTITY)
+        launch, content = tool_target_identity(tool_name, payload, cwd=cwd, workspace=workspace, home_dir=home_dir)
+    else:
+        if cwd is None:
+            raise OnceOnlyError(UNPROVEN_LAUNCH)
+        try:
+            launch = launch_identity(str(command), cwd=cwd, home_dir=home_dir)
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            raise OnceOnlyError(UNPROVEN_LAUNCH) from error
+        content = {"command": command}
     if policy_binding is None:
-        return None
-    cwd = _launch_cwd(payload, workspace)
-    if cwd is None:
-        return None
-    try:
-        launch = _launch_identity(command, cwd=cwd, home_dir=home_dir)
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return None
-    if launch is None:
-        return None
+        raise OnceOnlyError(UNPROVEN_LAUNCH)
     action = native_result.get("action")
     action_type = action.get("action_type") if isinstance(action, Mapping) else None
     try:
@@ -141,7 +140,7 @@ def native_exact_action_token(
                 "cwd": str(cwd),
                 "launch": launch,
             },
-            content={"command": command},
+            content=content,
             capabilities={
                 "action_type": action_type if isinstance(action_type, str) else None,
                 "minimum_action": str(native_result.get("minimum_action") or ""),
@@ -155,9 +154,21 @@ def native_exact_action_token(
             },
             sandbox={"required": native_result.get("minimum_action") == "sandbox-required"},
         )
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return None
-    return token if parse_approval_context_token(token) is not None else None
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
+        raise OnceOnlyError(UNPROVEN_LAUNCH) from error
+    if parse_approval_context_token(token) is None:
+        raise OnceOnlyError(UNPROVEN_LAUNCH)
+    return token
+
+
+def _non_overridable_reason(native_result: Mapping[str, object]) -> str:
+    action = native_result.get("action")
+    action_type = action.get("action_type") if isinstance(action, Mapping) else None
+    if action_type in GUARD_CONTROL_ACTION_TYPES:
+        return GUARD_CONTROL
+    if action_type == "package":
+        return PACKAGE_ACTION
+    return NON_OVERRIDABLE
 
 
 def native_saved_decision_response(
@@ -297,113 +308,16 @@ def _native_review_is_overridable(native_result: Mapping[str, object]) -> bool:
         return False
     action = native_result.get("action")
     action_type = action.get("action_type") if isinstance(action, Mapping) else None
-    return action_type not in {"guard_control", "guard-control", "guard_control_operation", "package"}
-
-
-def _launch_identity(command: str, *, cwd: Path, home_dir: Path | None) -> dict[str, object] | None:
-    from ..runtime.command_model import parse_shell_command
-    from ..runtime.command_tokens import executable_name
-    from ..runtime.local_cli_identity import unlisted_cli_invocation_is_safe
-
-    try:
-        model = parse_shell_command(command, cwd=cwd, home_dir=home_dir)
-    except ValueError:
-        return None
-    if not unlisted_cli_invocation_is_safe(model):
-        return None
-    segment = model.segments[0]
-    name = (executable_name(segment.executable) or "").lower()
-    for suffix in (".exe", ".cmd"):
-        name = name.removesuffix(suffix)
-    arguments = list(segment.arguments)
-    operands = _file_operand_hashes(arguments, cwd=cwd)
-    if operands is None:
-        return None
-    if name in _LOCAL_BIN_RUNNERS:
-        local_bin = _runner_local_bin(command, name, arguments, cwd=cwd, home_dir=home_dir)
-        if local_bin is None:
-            return None
-        return {"kind": "runner-local-bin", "runner": name, "local_bin": local_bin, "operands": operands}
-    if _loads_unbound_code(name, arguments):
-        return None
-    launch = build_runtime_launch_identity(
-        segment.executable,
-        args=segment.arguments,
-        structured_command=True,
-        cwd=cwd,
-        home_dir=home_dir,
-    )
-    if not runtime_launch_identity_is_reusable(launch):
-        return None
-    return {"kind": "direct", "identity": launch, "operands": operands}
-
-
-def _loads_unbound_code(name: str, arguments: list[str]) -> bool:
-    from .hook_native_review_approval import (
-        _FILE_BACKED_PROGRAM_COMMANDS,
-        _rg_executes_unreviewed_preprocessor,
-        _uses_file_backed_program,
-    )
-
-    if _is_mutable_launcher(name):
-        return True
-    if name == "find" and any(argument in _FIND_EXEC_OPTIONS for argument in arguments):
-        return True
-    if name in _FILE_BACKED_PROGRAM_COMMANDS and _uses_file_backed_program(arguments):
-        return True
-    return name == "rg" and _rg_executes_unreviewed_preprocessor(arguments)
-
-
-def _is_mutable_launcher(name: str) -> bool:
-    from .hook_native_review_approval import _MUTABLE_CODE_LAUNCHERS, _PYTHON_LAUNCHER
-
-    return name in _MUTABLE_CODE_LAUNCHERS or name in _EXTRA_MUTABLE_LAUNCHERS or bool(_PYTHON_LAUNCHER.fullmatch(name))
-
-
-def _runner_local_bin(
-    command: str, runner: str, arguments: list[str], *, cwd: Path, home_dir: Path | None
-) -> dict[str, object] | None:
-    # A local interpreter or task runner loads code its identity does not bind.
-    return runner_local_bin(command, runner, arguments, cwd=cwd, home_dir=home_dir, reject_target=_is_mutable_launcher)
-
-
-def _file_operand_hashes(arguments: list[str], *, cwd: Path) -> list[dict[str, str]] | None:
-    """Hash existing regular-file operands, or ``None`` when they cannot be bound."""
-
-    bound: list[dict[str, str]] = []
-    for argument in arguments:
-        value = argument.partition("=")[2] if argument.startswith("-") else argument
-        if not value or value.startswith("-"):
-            continue
-        candidate = Path(value) if os.path.isabs(value) else cwd / value
-        try:
-            if not candidate.is_file():
-                continue
-            if candidate.stat().st_size > _MAX_BOUND_OPERAND_BYTES or len(bound) >= _MAX_BOUND_OPERANDS:
-                return None
-            digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
-        except (OSError, ValueError):
-            return None
-        bound.append({"argument": argument, "sha256": digest})
-    return bound
-
-
-def _launch_cwd(payload: Mapping[str, object], workspace: Path | None) -> Path | None:
-    raw = payload.get("cwd")
-    candidate = Path(raw) if isinstance(raw, str) and raw.strip() else workspace
-    if candidate is None or not candidate.is_absolute():
-        return None
-    try:
-        resolved = candidate.resolve(strict=True)
-    except OSError:
-        return None
-    return resolved if os.path.isdir(resolved) else None
+    return action_type not in {*GUARD_CONTROL_ACTION_TYPES, "package"}
 
 
 __all__ = [
     "EXACT_ACTION_CONTEXT_TOKEN_KEY",
+    "EXACT_ACTION_IDENTITY_KIND_KEY",
+    "ONCE_ONLY_REASON_KEY",
     "TOKEN_UNSET",
     "TokenUnset",
+    "native_exact_action_decision",
     "native_exact_action_token",
     "native_saved_decision_response",
     "native_saved_review_response",

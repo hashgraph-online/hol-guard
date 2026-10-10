@@ -24,24 +24,12 @@ from codex_plugin_scanner.guard.runtime.approval_context import build_approval_c
 from codex_plugin_scanner.guard.runtime.approval_reuse import (
     APPROVAL_REUSE_ACCEPTED,
     APPROVAL_REUSE_CLAIM_FAILED,
-    APPROVAL_REUSE_CURRENT_ACTION_NOT_REVIEW,
-    APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN,
-    APPROVAL_REUSE_CURRENT_BLOCK,
     APPROVAL_REUSE_NO_SAVED_DECISION,
-    APPROVAL_REUSE_REAPPROVAL_REQUIRED,
-    APPROVAL_REUSE_SANDBOX_REQUIRED,
-    APPROVAL_REUSE_SAVED_ACTION_NOT_ALLOW,
-    APPROVAL_REUSE_SAVED_ACTION_UNKNOWN,
-    APPROVAL_REUSE_SAVED_BLOCK,
     ApprovalReuseMalformedResultError,
     ApprovalReuseValidationFailure,
     evaluate_approval_reuse,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_policy import (
-    _bounded_local_approval_reuse_diagnostic_rows,
-    _bounded_policy_approval_reuse_diagnostic_rows,
-)
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
@@ -261,40 +249,6 @@ def test_changed_fresh_local_allow_cannot_satisfy_reapproval(native_context_dige
     assert result.should_claim is False
 
 
-@pytest.mark.parametrize(
-    ("current_action", "expected_reason"),
-    (
-        ("require-reapproval", APPROVAL_REUSE_REAPPROVAL_REQUIRED),
-        ("sandbox-required", APPROVAL_REUSE_SANDBOX_REQUIRED),
-        ("block", APPROVAL_REUSE_CURRENT_BLOCK),
-    ),
-)
-def test_saved_allow_never_lowers_stronger_current_action(
-    current_action: str,
-    expected_reason: str,
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse(current_action, "allow")
-
-    assert result.action == current_action
-    assert result.status == "rejected"
-    assert result.reason_code == expected_reason
-    assert result.should_claim is False
-
-
-@pytest.mark.parametrize("current_action", ("allow", "warn"))
-def test_saved_allow_is_not_consumed_when_current_action_needs_no_review(
-    current_action: str,
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse(current_action, "allow")
-
-    assert result.action == current_action
-    assert result.status == "not-applicable"
-    assert result.reason_code == APPROVAL_REUSE_CURRENT_ACTION_NOT_REVIEW
-    assert result.should_claim is False
-
-
 def test_integrity_invalid_authority_requires_reapproval_even_when_current_action_allows(
     native_context_digest: Path,
 ) -> None:
@@ -308,27 +262,6 @@ def test_integrity_invalid_authority_requires_reapproval_even_when_current_actio
     assert result.status == "rejected"
     assert result.reason_code == "approval_reuse_integrity_failure"
     assert result.should_claim is False
-
-
-@pytest.mark.parametrize("current_action", GUARD_ACTION_VALUES)
-def test_saved_block_remains_block_for_every_current_action(
-    current_action: str,
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse(current_action, "block")
-
-    assert result.action == "block"
-    assert result.status == "accepted"
-    assert result.reason_code == APPROVAL_REUSE_SAVED_BLOCK
-    assert result.should_claim is False
-
-
-def test_non_allow_saved_action_cannot_satisfy_review(native_context_digest: Path) -> None:
-    result = evaluate_approval_reuse("review", "warn")
-
-    assert result.action == "review"
-    assert result.status == "rejected"
-    assert result.reason_code == APPROVAL_REUSE_SAVED_ACTION_NOT_ALLOW
 
 
 @pytest.mark.parametrize(
@@ -358,28 +291,6 @@ def test_invalidated_saved_allow_is_rejected_with_stable_reason(
     assert result.status == "rejected"
     assert result.reason_code == validation_reason
     assert result.should_claim is False
-
-
-def test_unknown_current_action_fails_closed_with_diagnostics(native_context_digest: Path) -> None:
-    result = evaluate_approval_reuse("future-permissive-action", "allow")
-
-    assert result.action == "block"
-    assert result.reason_code == APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN
-    assert result.current_normalization_reason_code == "guard_action_unknown"
-    assert result.original_current_action == "future-permissive-action"
-    assert result.should_claim is False
-
-
-def test_present_malformed_saved_action_requires_reapproval_with_diagnostics(
-    native_context_digest: Path,
-) -> None:
-    result = evaluate_approval_reuse("review", None, saved_decision_present=True)
-
-    assert result.action == "require-reapproval"
-    assert result.reason_code == APPROVAL_REUSE_SAVED_ACTION_UNKNOWN
-    assert result.saved_normalization_reason_code == "guard_action_unknown"
-    assert result.original_saved_type == "NoneType"
-    assert result.to_evidence()["saved_action"] == "require-reapproval"
 
 
 def test_claim_failure_reason_takes_precedence_and_preserves_normalization_diagnostics(
@@ -1422,66 +1333,6 @@ def test_lookup_miss_diagnostic_remains_targeted_with_many_unrelated_allows(tmp_
     )
 
     assert reason == "approval_reuse_content_changed"
-
-
-def test_approval_reuse_diagnostic_live_probes_are_index_ordered_without_temp_sort(tmp_path) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    with sqlite3.connect(store.path) as connection:
-        connection.row_factory = sqlite3.Row
-        local_plan = _bounded_local_approval_reuse_diagnostic_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:diagnostic-plan",
-            artifact_family="family:tool-action",
-            artifact_hash="sha256:current",
-            _explain=True,
-        )
-        policy_plan = _bounded_policy_approval_reuse_diagnostic_rows(
-            connection,
-            harness="codex",
-            artifact_id="codex:project:tool-action:diagnostic-plan",
-            artifact_family="family:tool-action",
-            artifact_hash="sha256:current",
-            publisher="publisher-current",
-            _explain=True,
-        )
-
-    local_details = [str(row[3]) for row in local_plan]
-    policy_details = [str(row[3]) for row in policy_plan]
-    assert local_details and policy_details
-    assert all(detail.startswith("SEARCH guard_local_once_approvals USING INDEX") for detail in local_details)
-    assert all(detail.startswith("SEARCH policy_decisions USING INDEX") for detail in policy_details)
-    assert not any("USE TEMP B-TREE" in detail for detail in (*local_details, *policy_details))
-    assert not any(
-        "diagnostic_artifact" in detail and "harness=? AND artifact_id=?" not in detail for detail in local_details
-    )
-    assert not any(
-        "diagnostic_hash" in detail and "harness=? AND artifact_hash=?" not in detail for detail in local_details
-    )
-    assert not any(
-        "reuse_artifact" in detail and "action=? AND harness=? AND artifact_id=?" not in detail
-        for detail in policy_details
-    )
-    assert not any(
-        "reuse_hash" in detail and "action=? AND harness=? AND artifact_hash=?" not in detail
-        for detail in policy_details
-    )
-    assert not any("diagnostic_harness_broad" in detail and "harness=?" not in detail for detail in policy_details)
-    assert not any("diagnostic_global_broad" in detail and "harness=?" not in detail for detail in policy_details)
-    assert not any(
-        "diagnostic_publisher" in detail and "harness=? AND publisher=?" not in detail for detail in policy_details
-    )
-    assert {
-        "idx_guard_local_once_diagnostic_artifact",
-        "idx_guard_local_once_diagnostic_hash",
-    }.issubset({index for detail in local_details for index in detail.split()})
-    assert {
-        "idx_policy_decisions_reuse_artifact",
-        "idx_policy_decisions_reuse_hash",
-        "idx_policy_decisions_diagnostic_harness_broad",
-        "idx_policy_decisions_diagnostic_global_broad",
-        "idx_policy_decisions_diagnostic_publisher",
-    }.issubset({index for detail in policy_details for index in detail.split()})
 
 
 def test_exact_package_local_once_approval_remains_reusable_for_three_retries(

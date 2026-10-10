@@ -9,7 +9,6 @@ from hashlib import sha256
 from typing import Final, Literal, cast
 
 from .models import PolicyDecision
-from .runtime.browser_mcp_intent import GuardBrowserAutomationIntentV1
 
 TemporaryMcpGrantTarget = Literal["exact", "category", "server"]
 TemporaryMcpGrantDuration = Literal["15m", "1h", "5h"]
@@ -22,7 +21,6 @@ _INTENT_CATEGORIES: Final = {
     "browser.inspect": "browser_inspection",
     "browser.interact": "browser_interaction",
 }
-_ELIGIBLE_CATEGORIES: Final = frozenset(_INTENT_CATEGORIES.values())
 _INFORMATIONAL_CATEGORIES: Final = frozenset({"browser_external_domain"})
 _HARD_RISK_EXCLUSIONS: Final = (
     "browser_transfer",
@@ -92,24 +90,6 @@ def eligibility_from_browser_intent(value: object) -> TemporaryMcpApprovalEligib
         intent_payload.get("target_origin")
     )
     return TemporaryMcpApprovalEligibility(identity_hash, server_name, category, target_label)
-
-
-def eligibility_for_runtime_call(
-    browser_intent: GuardBrowserAutomationIntentV1 | None,
-    risk_categories: Sequence[str],
-) -> TemporaryMcpApprovalEligibility | None:
-    if browser_intent is None:
-        return None
-    return eligibility_from_browser_intent(
-        {
-            "intent": browser_intent.intent,
-            "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-            "mcp_server_name": browser_intent.mcp_server_name,
-            "target_domain": browser_intent.target_domain,
-            "target_origin": browser_intent.target_origin,
-            "risk_categories": list(risk_categories),
-        }
-    )
 
 
 def parse_temporary_mcp_grant_selection(
@@ -186,23 +166,6 @@ def temporary_mcp_grant_covers_request(
     if eligibility is None or eligibility.server_identity_hash != selection.eligibility.server_identity_hash:
         return False
     return selection.target == "server" or eligibility.category == selection.eligibility.category
-
-
-def runtime_grant_selectors(
-    browser_intent: GuardBrowserAutomationIntentV1 | None,
-    risk_categories: Sequence[str],
-    *,
-    artifact_id: str,
-    artifact_hash: str,
-) -> tuple[str, ...]:
-    eligibility = eligibility_for_runtime_call(browser_intent, risk_categories)
-    if eligibility is None:
-        return ()
-    return (
-        temporary_mcp_exact_grant_selector(artifact_id, artifact_hash),
-        temporary_mcp_grant_selector(eligibility.server_identity_hash, eligibility.category),
-        temporary_mcp_grant_selector(eligibility.server_identity_hash),
-    )
 
 
 def _nonempty_string(value: object) -> str | None:
