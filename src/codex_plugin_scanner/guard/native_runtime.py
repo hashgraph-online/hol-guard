@@ -14,9 +14,7 @@ import stat
 import sys
 import threading
 import time
-from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
-from contextvars import ContextVar
+from collections.abc import Mapping
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
@@ -25,6 +23,7 @@ from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
 from .native_response_decoder import response_from_payload as _response_from_payload
 from .native_route_receipt import record_native_hook_result
+from .native_runtime_request_scope import _resolved_candidate_path, remember_scoped_status, scoped_status
 from .native_runtime_resilience import (
     NativeRuntimeHealthSnapshot,
     native_record_integrity_failure,
@@ -324,67 +323,41 @@ def _capabilities_for_identity(
     return capabilities
 
 
-def _status_binary_unchanged(status: NativeRuntimeStatus) -> bool:
-    """True while the on-disk binary still matches the validated identity.
+def _scoped_manifest_still_valid(status: NativeRuntimeStatus) -> bool:
+    """True while a bundled status's manifest still decodes identically.
 
-    ``stat()`` is cheap relative to re-hashing the whole binary, so checking
-    ``size``/``mtime_ns`` per read keeps a reused status honest against a
-    mid-request binary swap without paying the full re-validation cost.
+    ``stat()`` metadata cannot see a manifest-only rewrite, so the bounded
+    manifest JSON (<= 16 KiB) is re-read on a hit rather than trusted blindly.
     """
 
+    manifest = status.manifest
     identity = status.identity
-    if identity is None:
-        # Nothing was validated (mode=off / unavailable); there is no file to
-        # keep fresh.
+    if manifest is None:
         return True
-    try:
-        meta = Path(identity.path).stat()
-    except OSError:
+    if identity is None:
         return False
-    return meta.st_size == identity.size and meta.st_mtime_ns == identity.mtime_ns
-
-
-# One hook request validates the runtime binary once: review paths probe
-# ``native_runtime_status`` from several call sites, and every probe re-hashes
-# the whole binary.  The request-scoped store shares that single validation.
-# Every new hook request still re-validates, and Windows keeps uncached
-# hashing across requests (``native_binary_identity._CACHE_ENABLED`` is
-# POSIX-only).
-_REQUEST_STATUS: ContextVar[dict[str, NativeRuntimeStatus] | None] = ContextVar(
-    "guard_native_runtime_status_request",
-    default=None,
-)
-
-
-@contextmanager
-def native_status_request_scope() -> Iterator[dict[str, NativeRuntimeStatus]]:
-    """Bind a per-request status store; nested scopes share the active one."""
-
-    existing = _REQUEST_STATUS.get()
-    if existing is not None:
-        yield existing
-        return
-    scope: dict[str, NativeRuntimeStatus] = {}
-    token = _REQUEST_STATUS.set(scope)
-    try:
-        yield scope
-    finally:
-        _REQUEST_STATUS.reset(token)
+    current, error = _manifest_for_bundled_identity(identity)
+    return error is None and current == manifest
 
 
 def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
-    scope = _REQUEST_STATUS.get()
-    if scope is not None:
-        for cached in scope.values():
-            if cached.identity is not None and _status_binary_unchanged(cached):
-                return cached
-    status = _compute_runtime_status(deadline_monotonic=deadline_monotonic)
-    if scope is not None and status.identity is not None:
-        scope[str(status.identity.path)] = status
+    candidates = _runtime_candidates()
+    key = (native_mode(), tuple(str(candidate) for candidate in candidates))
+    if (cached := scoped_status(key)) is not None:
+        identity = cached.identity
+        resolved = {_resolved_candidate_path(candidate) for candidate in candidates}
+        if identity is not None and identity.path in resolved and _scoped_manifest_still_valid(cached):
+            return cached
+    status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
+    remember_scoped_status(key, status)
     return status
 
 
-def _compute_runtime_status(*, deadline_monotonic: float | None = None) -> NativeRuntimeStatus:
+def _compute_runtime_status(
+    candidates: tuple[Path, ...],
+    *,
+    deadline_monotonic: float | None = None,
+) -> NativeRuntimeStatus:
     mode = native_mode()
     if mode == "off":
         return NativeRuntimeStatus(
@@ -393,7 +366,7 @@ def _compute_runtime_status(*, deadline_monotonic: float | None = None) -> Nativ
             compatible=False,
             reason="native_disabled",
         )
-    for candidate in _runtime_candidates():
+    for candidate in candidates:
         if deadline_monotonic is not None and time.monotonic() >= deadline_monotonic:
             break
         _restore_bundled_runtime_execute_bit(candidate)

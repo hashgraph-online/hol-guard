@@ -32,12 +32,8 @@ from .native_resident_client import (
     native_resident_client_transport,
 )
 from .native_response_decoder import native_error as _native_error
-from .native_runtime import (
-    NativeRuntimeStatus,
-    _isolated_environment,
-    _status_binary_unchanged,
-    native_runtime_status,
-)
+from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
+from .native_runtime_request_scope import _status_binary_unchanged
 from .native_runtime_resilience import (
     native_record_overload,
     native_record_resident_failure,

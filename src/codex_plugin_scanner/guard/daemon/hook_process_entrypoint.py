@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, NoReturn, cast
 
 from ..codex_hook_windows_job import assign_current_process_to_windows_hook_job
 from ..native_route_receipt import native_hook_route, record_native_hook_route, reset_native_hook_route
-from ..native_runtime import native_status_request_scope
+from ..native_runtime_request_scope import native_status_request_scope
 from ..sqlite_profile import sqlite_error_is_busy_locked
 from .hook_process_protocol import (
     as_string_object_dict,

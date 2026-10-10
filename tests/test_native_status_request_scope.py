@@ -19,9 +19,9 @@ from pathlib import Path
 import pytest
 
 import codex_plugin_scanner.guard.native_runtime as native_runtime_module
-from codex_plugin_scanner.guard.native_runtime import (
+from codex_plugin_scanner.guard.native_runtime import native_runtime_status
+from codex_plugin_scanner.guard.native_runtime_request_scope import (
     _REQUEST_STATUS,
-    native_runtime_status,
     native_status_request_scope,
 )
 
@@ -151,6 +151,154 @@ def test_scope_does_not_cache_off_mode_statuses(monkeypatch: pytest.MonkeyPatch)
         assert native_runtime_status().reason == "native_disabled"
         assert native_runtime_status().reason == "native_disabled"
     assert scope == {}
+
+
+def test_scope_recomputes_when_the_native_mode_changes(
+    status_probe: tuple[Path, list[Path]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _binary, calls = status_probe
+    with native_status_request_scope():
+        first = native_runtime_status()
+        monkeypatch.setenv("HOL_GUARD_NATIVE", "shadow")
+        second = native_runtime_status()
+    assert len(calls) == 2
+    assert second is not first
+    assert second.mode == "shadow"
+
+
+def test_scope_recomputes_when_the_candidate_set_changes(
+    status_probe: tuple[Path, list[Path]],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binary, calls = status_probe
+    other = tmp_path / "other-runtime"
+    other.write_bytes(b"other-runtime")
+    other.chmod(0o700)
+    with native_status_request_scope():
+        first = native_runtime_status()
+        monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (other,))
+        second = native_runtime_status()
+        monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (binary,))
+        third = native_runtime_status()
+    assert len(calls) == 2
+    assert second is not first
+    assert second.identity is not None
+    assert second.identity.path == other.resolve()
+    assert third is first
+
+
+def test_scope_revalidates_when_the_candidate_path_repoints(
+    status_probe: tuple[Path, list[Path]],
+    tmp_path: Path,
+) -> None:
+    binary, calls = status_probe
+    with native_status_request_scope():
+        first = native_runtime_status()
+        assert first.identity is not None
+        # Swap the candidate for a symlink to a byte-identical, timestamp-
+        # identical file: stat() cannot tell them apart, but the resolved
+        # candidate path no longer matches the stored identity.
+        target = tmp_path / "target-runtime"
+        target.write_bytes(binary.read_bytes())
+        target.chmod(0o700)
+        metadata = binary.stat()
+        os.utime(target, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+        binary.unlink()
+        binary.symlink_to(target)
+        second = native_runtime_status()
+    assert len(calls) == 2
+    assert second is not first
+
+
+def _manifest_json(
+    binary: Path,
+    *,
+    package_version: str,
+    rule_digest: str,
+    source_sha: str,
+) -> str:
+    identity = _identity_for(binary)
+    return json.dumps(
+        {
+            "schema": "hol-guard-native-runtime.v1",
+            "protocol_version": 1,
+            "package_version": package_version,
+            "target": "x86_64-unknown-linux-musl",
+            "platform_tag": "linux_x86_64",
+            "source_sha": source_sha,
+            "rule_digest": rule_digest,
+            "runtime_sha256": identity.sha256,
+            "runtime_size": identity.size,
+        }
+    )
+
+
+def test_scope_hit_rechecks_the_bundled_manifest(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    binary = tmp_path / "hol-guard-runtime"
+    binary.write_bytes(b"bundled-request-scope-runtime")
+    binary.chmod(0o700)
+    calls: list[Path] = []
+    package_version = native_runtime_module._python_package_version() or "0.0.0"
+    source_sha = "a" * 40
+
+    def write_manifest(*, rule_digest: str = "b" * 64) -> None:
+        manifest_path = binary.with_name("runtime-manifest.json")
+        manifest_path.write_text(
+            _manifest_json(
+                binary,
+                package_version=package_version,
+                rule_digest=rule_digest,
+                source_sha=source_sha,
+            ),
+            encoding="utf-8",
+        )
+        if os.name != "nt":
+            manifest_path.chmod(0o600)
+
+    write_manifest()
+
+    def validate(candidate: Path) -> native_runtime_module.NativeRuntimeIdentity:
+        calls.append(candidate)
+        return _identity_for(candidate)
+
+    monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
+    monkeypatch.setattr(native_runtime_module, "_bundled_runtime_candidate", lambda: binary)
+    monkeypatch.setattr(native_runtime_module, "_runtime_candidates", lambda: (binary,))
+    monkeypatch.setattr(native_runtime_module, "_validate_binary", validate)
+    monkeypatch.setattr(
+        native_runtime_module,
+        "_capabilities_for_identity",
+        lambda *args, **kwargs: native_runtime_module.NativeRuntimeCapabilities(
+            protocol_version=1,
+            runtime_version=package_version,
+            rule_digest="b" * 64,
+            build_sha=source_sha,
+            target="x86_64-unknown-linux-musl",
+            features=(),
+        ),
+    )
+    native_runtime_module._clear_capabilities_probe_state()
+
+    with native_status_request_scope():
+        first = native_runtime_status()
+        assert first.manifest is not None
+        # Manifest unchanged: the hit re-reads the small JSON and reuses.
+        second = native_runtime_status()
+        # A manifest-only rewrite leaves the binary untouched; the hit check
+        # must recompute instead of serving the stale provenance.
+        write_manifest(rule_digest="c" * 64)
+        third = native_runtime_status()
+
+    assert second is first
+    assert len(calls) == 2
+    assert third is not first
+    assert third.reason == "native_manifest_rule_mismatch"
+    assert third.manifest is not None
 
 
 def test_scope_resets_after_an_exception() -> None:
