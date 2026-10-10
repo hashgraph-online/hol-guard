@@ -67,7 +67,7 @@ def _round_trip(query: Mapping[str, object], guard_home: Path) -> tuple[dict[str
         record_success=False,
     )
     if response is None:
-        # ``_resident_request`` already recorded the transport, malformed or
+        # ``_resident_request`` already recorded the transport, malformed, status or
         # schema failure; recording it again would double-count one outage.
         raise _fail("native_mcp_proxy_decision_unavailable")
     if (
