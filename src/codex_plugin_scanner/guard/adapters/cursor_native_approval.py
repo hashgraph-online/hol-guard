@@ -7,6 +7,7 @@ import hmac
 import os
 import secrets
 import shlex
+import stat
 from collections.abc import Mapping
 from contextlib import suppress
 from pathlib import Path
@@ -297,6 +298,13 @@ def ensure_cursor_hook_attestation_secret(guard_home: Path) -> bytes:
         except OSError:
             existing = b""
         if existing:
+            # The resident verifies proofs only with an owner-private key; an
+            # older or copied key with wider permissions would otherwise sign
+            # proofs the resident always rejects.
+            if not secret_path.is_symlink():
+                with suppress(OSError):
+                    if secret_path.stat().st_mode & 0o077:
+                        secret_path.chmod(0o600)
             return existing
     generated = secrets.token_bytes(32)
     _write_attestation_secret(secret_path, generated)
@@ -345,7 +353,7 @@ def compute_cursor_after_observer_proof(
     approval_binding: str,
     observer_event: str,
 ) -> str:
-    normalized_command = normalize_cursor_shell_command(command)
+    normalized_command = normalize_cursor_shell_command(normalize_cursor_shell_command(command))
     message = cursor_after_observer_proof_message(
         conversation_id=conversation_id,
         command=normalized_command,

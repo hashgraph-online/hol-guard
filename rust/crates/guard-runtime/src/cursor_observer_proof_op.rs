@@ -23,6 +23,7 @@ use sha2::Sha256;
 
 use crate::guard_store_json::py_strip;
 use crate::package_authority_op::request_digest_with_limit;
+use crate::resident_transport::constant_time_eq;
 
 const ATTESTATION_RELATIVE: [&str; 2] = ["secrets", "cursor-hook-attestation.key"];
 const MAX_KEY_BYTES: u64 = 4096;
@@ -53,7 +54,9 @@ fn verify(request: &CursorObserverProofRequestV1) -> bool {
     }
     if request.require_pending_match {
         let pending = request.pending_proof.as_deref().map(py_strip).unwrap_or("");
-        if pending.is_empty() || !constant_time_eq(pending.as_bytes(), proof.as_bytes()) {
+        if pending.is_empty()
+            || !crate::resident_transport::constant_time_eq(pending.as_bytes(), proof.as_bytes())
+        {
             return false;
         }
     }
@@ -74,7 +77,7 @@ fn verify(request: &CursorObserverProofRequestV1) -> bool {
             py_strip(&request.observer_event),
         ],
     );
-    constant_time_eq(expected.as_bytes(), proof.as_bytes())
+    crate::resident_transport::constant_time_eq(expected.as_bytes(), proof.as_bytes())
 }
 
 fn normalized_once_more(command: &str) -> Option<String> {
@@ -93,27 +96,25 @@ fn proof_hex(secret: &[u8], fields: &[&str]) -> String {
     hex::encode(mac.finalize().into_bytes())
 }
 
-fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    left.iter()
-        .zip(right)
-        .fold(0_u8, |difference, (a, b)| difference | (a ^ b))
-        == 0
-}
-
 /// The attestation key, only when it is a regular, non-empty, owner-private
 /// file reached without following a link. Anything else is no key.
+///
+/// The file is opened first and every check runs on the opened handle, so a
+/// path swapped after the check cannot supply bytes the checks never saw.
 fn read_attestation_key(guard_home: &Path) -> Option<Vec<u8>> {
     let path = ATTESTATION_RELATIVE
         .iter()
         .fold(guard_home.to_path_buf(), |base, part| base.join(part));
-    let metadata = fs::symlink_metadata(&path).ok()?;
-    if metadata.file_type().is_symlink() || !metadata.is_file() || metadata.len() == 0 {
-        return None;
+    let mut options = fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
     }
-    if metadata.len() > MAX_KEY_BYTES {
+    let file = options.open(&path).ok()?;
+    let metadata = file.metadata().ok()?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_KEY_BYTES {
         return None;
     }
     #[cfg(unix)]
@@ -124,20 +125,8 @@ fn read_attestation_key(guard_home: &Path) -> Option<Vec<u8>> {
             return None;
         }
     }
-    let mut options = fs::OpenOptions::new();
-    options.read(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-    }
     let mut bytes = Vec::new();
-    options
-        .open(&path)
-        .ok()?
-        .take(MAX_KEY_BYTES)
-        .read_to_end(&mut bytes)
-        .ok()?;
+    file.take(MAX_KEY_BYTES).read_to_end(&mut bytes).ok()?;
     (!bytes.is_empty()).then_some(bytes)
 }
 
