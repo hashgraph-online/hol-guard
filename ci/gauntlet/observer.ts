@@ -138,6 +138,30 @@ export default function (api: {
   api.on("message_end", event => {
     if ((event.message as JsonRecord | undefined)?.role === "assistant") observe(event);
   });
-  api.on("tool_execution_start", observe);
-  api.on("tool_execution_end", observe);
+  const evals = new Set<string>();
+  const bridges = new Map<string, string>();
+  api.on("tool_execution_start", event => {
+    if (event.toolName === "eval" && typeof event.toolCallId === "string") evals.add(event.toolCallId);
+    observe(event);
+  });
+  api.on("tool_execution_end", event => {
+    observe(event);
+    if (typeof event.toolCallId === "string") evals.delete(event.toolCallId);
+  });
+  // The pinned SDK invokes eval bridge tools directly: they emit extension
+  // tool_call/tool_result hooks, but no agent-core execution events.
+  api.on("tool_call", event => {
+    if (typeof event.toolCallId !== "string" || !event.toolCallId.startsWith("js-")) return;
+    if (evals.size !== 1) throw new Error("ambiguous eval bridge parent");
+    const parent = [...evals][0];
+    bridges.set(event.toolCallId, parent);
+    observe({ type: "eval_bridge_start", parentToolCallId: parent, event });
+  });
+  api.on("tool_result", event => {
+    if (typeof event.toolCallId !== "string" || !event.toolCallId.startsWith("js-")) return;
+    const parent = bridges.get(event.toolCallId);
+    if (!parent || !evals.has(parent)) throw new Error("unbound eval bridge completion");
+    observe({ type: "eval_bridge_end", parentToolCallId: parent, event });
+    bridges.delete(event.toolCallId);
+  });
 }

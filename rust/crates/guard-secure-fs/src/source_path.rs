@@ -72,6 +72,7 @@ const KNOWN_SKILL_DOC_ROOTS: &[&str] = &[
     ".codex/superpowers/skills",
     ".codex/skills",
     ".agents/skills",
+    ".agent/skills",
     ".claude/skills",
 ];
 

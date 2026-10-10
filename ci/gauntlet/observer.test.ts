@@ -31,3 +31,22 @@ test("SDK model and tool events survive telemetry unchanged", () => {
   handlers.get("message_end")!({ type: "message_end", message: { role: "user", content: "private prompt" } });
   expect(readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line))).toEqual(events);
 });
+
+test("eval bridge hooks retain actual arguments and the executing parent", () => {
+  const handlers = new Map<string, (event: Record<string, unknown>) => void>();
+  install({ on: (name, callback) => { handlers.set(name, callback); } });
+  const start = { type: "tool_call", toolCallId: "js-read-123", toolName: "read", input: { path: "README.md" } };
+  const end = { type: "tool_result", toolCallId: "js-read-123", toolName: "read", input: start.input,
+    content: [{ type: "text", text: "inert fixture" }], isError: false };
+  expect(() => handlers.get("tool_call")!(start)).toThrow("ambiguous eval bridge parent");
+  handlers.get("tool_execution_start")!({ type: "tool_execution_start", toolCallId: "eval", toolName: "eval" });
+  expect(handlers.get("tool_call")!(start)).toBeUndefined();
+  expect(handlers.get("tool_result")!(end)).toBeUndefined();
+  const events = readFileSync(log, "utf8").trim().split("\n").map(line => JSON.parse(line));
+  expect(events.slice(-2)).toEqual([
+    { type: "eval_bridge_start", parentToolCallId: "eval", event: start },
+    { type: "eval_bridge_end", parentToolCallId: "eval", event: end },
+  ]);
+  handlers.get("tool_execution_end")!({ type: "tool_execution_end", toolCallId: "eval", toolName: "eval" });
+  expect(() => handlers.get("tool_result")!(end)).toThrow("unbound eval bridge completion");
+});
