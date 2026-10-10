@@ -31,6 +31,9 @@ pub trait InspectionHost {
     fn git_executable(&self) -> Option<String>;
     /// One git execution safety decision.
     fn git_safety(&self, check: GitCheck, cwd: Option<&str>, arguments: &[String]) -> bool;
+    /// Whether this exact, already canonical `git` executable is trusted to run
+    /// in `cwd` (not under the home, temp or working directory, no loose modes).
+    fn git_binary_trusted(&self, git: &str, cwd: &str) -> bool;
     /// Run `git <args>` in `cwd` with the bounded pathspec profile.
     fn run_git(&self, git: &str, args: &[String], cwd: &str) -> GitRun;
 }

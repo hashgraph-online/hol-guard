@@ -8,7 +8,7 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use crate::codex_output_env::{Ctx, GitCheck, GitRun};
+use crate::codex_output_env::{Ctx, GitRun};
 use crate::codex_output_fs as pyfs;
 use crate::codex_output_identity::{selection_identity, IdentityPayload, WorktreeEntry};
 use crate::codex_output_py::{py_strip, PyPath};
@@ -223,13 +223,11 @@ fn resolve_inner(
     }
     let git_text = git_path.to_string();
     let cwd_text = effective_cwd.to_string();
-    // The resident only runs a `git` it has vetted for this directory. The
-    // caller's routing variables (`GIT_DIR`, `GIT_CONFIG_*`, ...) never reach
-    // the child, which runs with a scrubbed environment, so they need no check.
-    if !ctx
-        .host
-        .git_safety(GitCheck::ResolveBinary, Some(&cwd_text), &[])
-    {
+    // The vetted binary is the one that runs: the verdict is bound to this
+    // canonical path, not to a second PATH lookup. The caller's routing
+    // variables (`GIT_DIR`, `GIT_CONFIG_*`, ...) never reach the child, which
+    // runs with a scrubbed environment, so they need no check.
+    if !ctx.host.git_binary_trusted(&git_text, &cwd_text) {
         return fail("git_pathspec_git_unavailable");
     }
     let mut root_args: Vec<String> = global_modes.to_vec();

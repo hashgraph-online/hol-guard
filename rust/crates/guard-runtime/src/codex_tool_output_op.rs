@@ -31,22 +31,14 @@ struct ResidentInspectionHost<'a> {
     facts: &'a CodexToolOutputFactsV1,
 }
 
-impl InspectionHost for ResidentInspectionHost<'_> {
-    fn env(&self, name: &str) -> Option<String> {
-        self.facts.environment.get(name).cloned()
-    }
-
-    fn git_executable(&self) -> Option<String> {
-        self.facts.git_executable.clone()
-    }
-
-    fn git_safety(&self, check: GitCheck, cwd: Option<&str>, arguments: &[String]) -> bool {
-        let check = match check {
-            GitCheck::ResolveBinary => GitExecutionSafetyCheckV1::ResolveBinary,
-            GitCheck::ConfigEnvironmentClean => GitExecutionSafetyCheckV1::ConfigEnvironmentClean,
-            GitCheck::StatusArguments => GitExecutionSafetyCheckV1::StatusArguments,
-            GitCheck::StatusConfig => GitExecutionSafetyCheckV1::StatusConfig,
-        };
+impl ResidentInspectionHost<'_> {
+    fn decide_git(
+        &self,
+        check: GitExecutionSafetyCheckV1,
+        cwd: Option<&str>,
+        arguments: &[String],
+        git_path: Option<&str>,
+    ) -> bool {
         let request = GitExecutionSafetyRequestV1 {
             schema: GIT_EXECUTION_SAFETY_REQUEST_SCHEMA.to_owned(),
             request_id: String::new(),
@@ -57,12 +49,41 @@ impl InspectionHost for ResidentInspectionHost<'_> {
             groups: self.facts.groups.clone(),
             environment: self.facts.environment.clone(),
             git_binary: None,
-            git_path: None,
+            git_path: git_path.map(str::to_owned),
             arguments: arguments.to_vec(),
             branch: None,
             reference: None,
         };
         crate::git_execution_safety_checks::decide(&request).allowed
+    }
+}
+
+impl InspectionHost for ResidentInspectionHost<'_> {
+    fn env(&self, name: &str) -> Option<String> {
+        self.facts.environment.get(name).cloned()
+    }
+
+    fn git_executable(&self) -> Option<String> {
+        self.facts.git_executable.clone()
+    }
+
+    fn git_binary_trusted(&self, git: &str, cwd: &str) -> bool {
+        self.decide_git(
+            GitExecutionSafetyCheckV1::BinaryTrusted,
+            Some(cwd),
+            &[],
+            Some(git),
+        )
+    }
+
+    fn git_safety(&self, check: GitCheck, cwd: Option<&str>, arguments: &[String]) -> bool {
+        let check = match check {
+            GitCheck::ResolveBinary => GitExecutionSafetyCheckV1::ResolveBinary,
+            GitCheck::ConfigEnvironmentClean => GitExecutionSafetyCheckV1::ConfigEnvironmentClean,
+            GitCheck::StatusArguments => GitExecutionSafetyCheckV1::StatusArguments,
+            GitCheck::StatusConfig => GitExecutionSafetyCheckV1::StatusConfig,
+        };
+        self.decide_git(check, cwd, arguments, None)
     }
 
     fn run_git(&self, git: &str, args: &[String], cwd: &str) -> GitRun {

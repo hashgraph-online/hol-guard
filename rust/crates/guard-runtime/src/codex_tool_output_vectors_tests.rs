@@ -37,6 +37,10 @@ impl InspectionHost for PinnedHost {
         self.git.clone()
     }
 
+    fn git_binary_trusted(&self, _git: &str, _cwd: &str) -> bool {
+        self.trust_git
+    }
+
     fn git_safety(&self, check: GitCheck, _cwd: Option<&str>, arguments: &[String]) -> bool {
         if check != GitCheck::StatusArguments {
             return self.trust_git;
