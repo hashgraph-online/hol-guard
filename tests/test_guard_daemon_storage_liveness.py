@@ -67,6 +67,9 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
+    # Route policy is answered by the resident; start its stream before the
+    # store is locked so the test measures storage contention only.
+    assert native_route_facts("POST", "/v1/daemon/identity-challenge", guard_home=store.guard_home)
     blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:

@@ -28,7 +28,14 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from daemon_route_session_cases import session_cases
-from daemon_route_vector_cases import LOOPBACK, ORIGIN_PATHS, ORIGINS, resolve_cases, route_paths
+from daemon_route_vector_cases import (
+    LOOPBACK,
+    NARROWED_VERSION_SUFFIXES,
+    ORIGIN_PATHS,
+    ORIGINS,
+    resolve_cases,
+    route_paths,
+)
 
 BASE_COMMIT = "c412d841caf0d085943fd3a8ae2cad2a82d63b32"
 _RESOLVE_START = "        request_id, action, matched = self._resolve_request_action(path_parts, payload)\n"
@@ -266,11 +273,29 @@ def _build(base_src: Path) -> dict:
             query = _capture_query(kind, raw)
         else:
             query = _capture_query(kind, raw)
+        narrowed = None
+        if kind == "resolve_request" and raw["payload"].get("scope_contract_version") in NARROWED_VERSION_SUFFIXES:
+            # Deliberate, reviewed narrowing: the retired Python accepted this
+            # non-ASCII digit suffix, the resident rejects it. The oracle answer
+            # must still be "resolved" so the narrowing cannot go stale silently.
+            assert answer["outcome"] == "resolved", case["name"]
+            narrowed = "retired python accepted a non-ascii digit suffix via str.isdigit; resident accepts ascii only"
+            answer = {
+                "outcome": "invalid_scope_contract_version",
+                "request_id": None,
+                "action": None,
+                "scope": None,
+                "scope_contract_version": None,
+                "scope_contract_digest": None,
+            }
         key = json.dumps([query, raw], sort_keys=True)
         if key in seen:
             continue
         seen.add(key)
-        vectors.append({"name": case["name"], "raw": raw, "query": query, "expected": answer})
+        vector = {"name": case["name"], "raw": raw, "query": query, "expected": answer}
+        if narrowed is not None:
+            vector["narrowed_from_retired_python"] = narrowed
+        vectors.append(vector)
     return {"base_commit": BASE_COMMIT, "resolve_block_sha256": digest, "vectors": vectors, "python_gate": python_gate}
 
 

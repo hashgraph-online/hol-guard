@@ -7,6 +7,7 @@ so a divergence here means the resident or the transport changed behaviour.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import threading
 from pathlib import Path
@@ -233,6 +234,55 @@ def test_unbound_or_malformed_answers_raise(monkeypatch: pytest.MonkeyPatch, mut
     _resident(monkeypatch, mutate)
     with pytest.raises(route.NativeDaemonRouteError):
         route.native_route_facts("POST", "/v1/runtime")
+
+
+@pytest.mark.parametrize("answer", [[], "ok", 7, True, [{"schema": "guard-daemon-route-result.v1"}]])
+def test_non_object_answer_is_recorded_as_unbound_and_fails_closed(monkeypatch: pytest.MonkeyPatch, answer) -> None:
+    _resident(monkeypatch, lambda request: answer)
+    recorded: list[tuple[bool, str]] = []
+    monkeypatch.setattr(
+        shared, "record_resident", lambda _home, *, success, reason="": recorded.append((success, reason))
+    )
+    with pytest.raises(route.NativeDaemonRouteError) as caught:
+        route.native_route_facts("POST", "/v1/runtime")
+    assert caught.value.code == "native_daemon_route_unavailable"
+    assert recorded == [(False, "native_daemon_route_unbound")]
+
+
+def test_concurrent_asks_are_bounded_and_every_caller_is_answered(monkeypatch: pytest.MonkeyPatch) -> None:
+    lock = threading.Lock()
+    state = {"inflight": 0, "peak": 0}
+
+    def answer(request: dict[str, object]) -> dict[str, object]:
+        with lock:
+            state["inflight"] += 1
+            state["peak"] = max(state["peak"], state["inflight"])
+        threading.Event().wait(0.02)
+        with lock:
+            state["inflight"] -= 1
+        return _good(request, dict(_ROUTE_PAYLOAD))
+
+    _resident(monkeypatch, answer)
+    results: list[route.RouteFacts] = []
+    threads = [
+        threading.Thread(target=lambda: results.append(route.native_route_facts("POST", "/v1/runtime")))
+        for _ in range(12)
+    ]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+    assert len(results) == 12
+    assert 1 <= state["peak"] <= route._MAX_CONCURRENT_ASKS
+
+
+def test_waiting_for_an_ask_slot_past_the_deadline_fails_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    _resident(monkeypatch, lambda request: pytest.fail("resident must not be asked"))
+    monkeypatch.setattr(route, "_ASK_SLOTS", threading.BoundedSemaphore(0))
+    monkeypatch.setattr(route, "_OPERATION", dataclasses.replace(route._OPERATION, timeout_seconds=0.05))
+    with pytest.raises(route.NativeDaemonRouteError) as caught:
+        route.native_route_facts("POST", "/v1/runtime")
+    assert caught.value.code == "native_daemon_route_unavailable"
 
 
 def test_unavailable_resident_raises_without_a_request(monkeypatch: pytest.MonkeyPatch) -> None:

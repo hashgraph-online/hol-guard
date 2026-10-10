@@ -11,6 +11,7 @@ reply that is not a bound, strictly decoded ``ok`` raises
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -135,6 +136,14 @@ _OPERATION = ResidentOperation(
 )
 
 
+# Every daemon request asks the resident, so a burst would otherwise lease one
+# resident process per concurrent request. The answer takes about a
+# millisecond, so a few in-flight asks are enough; waiting for a slot stays
+# inside the operation deadline and fails closed instead of spawning a herd.
+_MAX_CONCURRENT_ASKS = 2
+_ASK_SLOTS = threading.BoundedSemaphore(_MAX_CONCURRENT_ASKS)
+
+
 def _decide(
     query: Mapping[str, object],
     guard_home: Path | None,
@@ -148,7 +157,12 @@ def _decide(
         if validate is not None:
             validate(payload)
 
-    return resident_decide(_OPERATION, _resident_request, query, guard_home, check)
+    if not _ASK_SLOTS.acquire(timeout=_OPERATION.timeout_seconds):
+        raise _OPERATION.fail(_OPERATION.unavailable)
+    try:
+        return resident_decide(_OPERATION, _resident_request, query, guard_home, check)
+    finally:
+        _ASK_SLOTS.release()
 
 
 def native_route_facts(method: str, path: str, *, guard_home: Path | None = None) -> RouteFacts:

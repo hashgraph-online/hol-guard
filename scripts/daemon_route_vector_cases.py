@@ -166,6 +166,14 @@ def route_paths(base_server: Path) -> list[str]:
     return sorted({*_literal_paths(base_server), *extra})
 
 
+# The retired handler used ``str.isdigit()`` on the version suffix, which also
+# accepts non-ASCII digits. The resident accepts ASCII digits only, on purpose:
+# a contract version is machine-readable input and a look-alike digit must not
+# match. ``record_daemon_route_vectors.py`` records these as deliberate
+# rejections instead of the retired Python answer.
+NARROWED_VERSION_SUFFIXES = ("guard.approval-scopes.v\u0667", "guard.approval-scopes.v\u00b2")
+
+
 def resolve_cases() -> list[dict]:
     paths = [
         "/v1/requests/r1/approve",
@@ -203,6 +211,7 @@ def resolve_cases() -> list[dict]:
             7,
             True,
             "guard.approval-scopes.v12345678901234567890",
+            *NARROWED_VERSION_SUFFIXES,
         ],
         "scope_contract_digest": [
             None,

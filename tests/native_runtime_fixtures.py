@@ -459,25 +459,28 @@ def native_route_policy_with_hooks_off(monkeypatch: pytest.MonkeyPatch) -> Path:
     handling in the same test still observes ``off``.
     """
 
-    from codex_plugin_scanner.guard import native_daemon_route
+    from codex_plugin_scanner.guard import native_daemon_route, native_runtime
 
     runtime = _resolve_native_hook_runtime()
     real_request = native_daemon_route._resident_request
-    lock = threading.Lock()
+    real_mode = native_runtime.native_mode
+    pinned = threading.local()
+
+    def pinned_mode():
+        # Only the thread currently inside a route request sees ``force``;
+        # concurrent hook workers keep reading the configured mode.
+        return "force" if getattr(pinned, "active", False) else real_mode()
 
     def pinned_request(**kwargs):
-        with lock:
-            saved = {key: os.environ.get(key) for key in ("HOL_GUARD_NATIVE", "HOL_GUARD_NATIVE_BINARY")}
-            os.environ["HOL_GUARD_NATIVE"] = "force"
-            os.environ["HOL_GUARD_NATIVE_BINARY"] = str(runtime)
-            try:
-                return real_request(**kwargs)
-            finally:
-                for key, value in saved.items():
-                    if value is None:
-                        os.environ.pop(key, None)
-                    else:
-                        os.environ[key] = value
+        pinned.active = True
+        try:
+            return real_request(**kwargs)
+        finally:
+            pinned.active = False
 
+    # The runtime path is only honoured for shadow/force, so naming it is
+    # inert for hook handling that observes ``off``.
+    monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", str(runtime))
+    monkeypatch.setattr(native_runtime, "native_mode", pinned_mode)
     monkeypatch.setattr(native_daemon_route, "_resident_request", pinned_request)
     return runtime

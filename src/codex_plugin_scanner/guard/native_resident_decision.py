@@ -122,6 +122,9 @@ def resident_decide(
     )
     if response is None:
         raise spec.fail(spec.unavailable)
+    if not isinstance(response, dict):
+        record_resident(home, success=False, reason=f"{spec.prefix}_unbound")
+        raise spec.fail(spec.unavailable)
     if (
         response.get("schema") != spec.result_schema
         or response.get("request_id") != request["request_id"]
