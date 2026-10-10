@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from .action_lattice import GuardAction
 from .config import GuardConfig, resolve_risk_action
@@ -163,7 +163,7 @@ def native_package_current_action(
     action = payload.get("current_action")
     if action not in _GUARD_ACTIONS:
         raise NativePackageApprovalHashError("Native package approval hash action invalid")
-    return action  # type: ignore[return-value]
+    return cast(GuardAction, action)
 
 
 def native_package_approval_hash(
@@ -216,4 +216,4 @@ def native_package_approval_hash(
     token_valid = isinstance(artifact_hash, str) and artifact_hash.startswith(_TOKEN_PREFIX)
     if action not in _GUARD_ACTIONS or not token_valid:
         raise NativePackageApprovalHashError("Native package approval hash result invalid")
-    return action, artifact_hash  # type: ignore[return-value]
+    return cast(GuardAction, action), cast(str, artifact_hash)

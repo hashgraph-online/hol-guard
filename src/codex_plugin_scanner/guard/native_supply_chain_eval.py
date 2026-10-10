@@ -317,9 +317,10 @@ def _saved_policy_decision(
 
     if workspace_dir is None:
         return None
+    from .native_package_approval_hash import NativePackageApprovalHashError
+
     try:
         from .local_supply_chain import package_request_policy_hash
-        from .native_package_approval_hash import NativePackageApprovalHashError
 
         artifact_hash = package_request_policy_hash(
             artifact=artifact,
