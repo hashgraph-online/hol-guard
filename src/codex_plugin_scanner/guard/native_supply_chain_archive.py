@@ -57,7 +57,7 @@ class ArchiveFulfilment:
         except ManagedNetworkError as error:
             return {"kind": "archive_failure", "code": str(error)[:128], "message": "Managed network policy refused"}
         spec = need.get("inspect")
-        aggregate = float(spec["aggregate_timeout_seconds"]) if isinstance(spec, Mapping) else None
+        aggregate = _required_timeout(spec.get("aggregate_timeout_seconds")) if isinstance(spec, Mapping) else None
         download_timeout = float(need["timeout_seconds"])
         if aggregate is not None:
             remaining = aggregate - self._elapsed
@@ -152,6 +152,14 @@ class ArchiveFulfilment:
         for download in self._retained:
             download.cleanup()
         self._retained = []
+
+
+def _required_timeout(value: object) -> float:
+    """Accept only a real number. Booleans and other objects are not timeouts."""
+
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise TypeError("archive timeout must be a number")
+    return float(value)
 
 
 def _take_match(pool: list[RestrictedArchiveDownload], descriptor: object) -> RestrictedArchiveDownload | None:

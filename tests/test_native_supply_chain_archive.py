@@ -32,6 +32,18 @@ def _permissive_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(native_supply_chain_archive, "validate_destination", lambda _url, _policy: None)
 
 
+def test_non_numeric_aggregate_timeout_does_not_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    forbid_download(monkeypatch, "download started for a non-numeric timeout")
+    fulfilment = ArchiveFulfilment(guard_home=tmp_path, scratch_dir=tmp_path, retain=False)
+    need = _need(aggregate=10.0)
+    inspect = need["inspect"]
+    assert isinstance(inspect, dict)
+    inspect["aggregate_timeout_seconds"] = "10"
+
+    with pytest.raises(TypeError, match="archive timeout must be a number"):
+        fulfilment.fulfil(need)
+
+
 def test_exhausted_aggregate_budget_fails_before_the_next_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
