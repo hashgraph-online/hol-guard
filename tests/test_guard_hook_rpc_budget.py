@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import threading
+import os
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import native_resident_client as resident_client
 from tests.guard_daemon_acceptance_fixtures import WorkloadSpec, run_workload
 
 # Native round trips each pi PostToolUse hook may spend: route facts, hook edge
@@ -23,20 +22,13 @@ def _pi_workload(requests: int) -> WorkloadSpec:
 
 
 def _round_trips(monkeypatch: pytest.MonkeyPatch, root: Path, requests: int) -> int:
-    count = [0]
-    lock = threading.Lock()
-    original = resident_client._PersistentNativeClientPool.request
-
-    def counting_request(self: object, *args: object, **kwargs: object) -> bytes | None:
-        with lock:
-            count[0] += 1
-        return original(self, *args, **kwargs)  # type: ignore[arg-type]
-
-    with monkeypatch.context() as patch:
-        patch.setattr(resident_client._PersistentNativeClientPool, "request", counting_request)
-        result = run_workload(_pi_workload(requests), root=root)
+    log_path = root / "resident-requests.log"
+    monkeypatch.setenv("HOL_GUARD_RESIDENT_REQUEST_LOG", os.fspath(log_path))
+    result = run_workload(_pi_workload(requests), root=root)
     assert result.requests == requests
-    return count[0]
+    if not log_path.is_file():
+        return 0
+    return len(log_path.read_bytes().splitlines())
 
 
 @pytest.mark.usefixtures("native_hook_force")

@@ -44,6 +44,42 @@ def test_missing_path_is_never_remembered(tmp_path: Path) -> None:
         cache.cached_realpath(os.fspath(tmp_path / "other"), strict=True)
 
 
+def test_renamed_directory_replaced_by_a_symlink_is_resolved_again(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    outside = tmp_path / "outside"
+    root.mkdir()
+    outside.mkdir()
+    directory = root / "workspace"
+    directory.mkdir()
+    remembered = cache.cached_realpath(os.fspath(directory))
+    moved = outside / "workspace"
+    directory.rename(moved)
+    directory.symlink_to(moved, target_is_directory=True)
+
+    resolved = cache.cached_realpath(os.fspath(directory))
+
+    assert resolved == os.path.realpath(directory)
+    assert resolved != remembered
+
+
+def test_ancestor_replaced_by_a_symlink_is_resolved_again(tmp_path: Path) -> None:
+    allowed = tmp_path / "allowed"
+    elsewhere = tmp_path / "elsewhere"
+    allowed.mkdir()
+    elsewhere.mkdir()
+    workspace = allowed / "workspace"
+    workspace.mkdir()
+    remembered = cache.cached_realpath(os.fspath(workspace))
+    moved = elsewhere / "allowed"
+    allowed.rename(moved)
+    allowed.symlink_to(moved, target_is_directory=True)
+
+    resolved = cache.cached_realpath(os.fspath(workspace))
+
+    assert resolved == os.path.realpath(workspace)
+    assert resolved != remembered
+
+
 def test_remembered_spelling_expires(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     directory = tmp_path / "dir"
     directory.mkdir()

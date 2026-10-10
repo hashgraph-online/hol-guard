@@ -33,6 +33,27 @@ from .path_resolution_cache import cached_realpath
 run_isolated_hook_process = _legacy_run_isolated_hook_process
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_RESIDENT_REQUEST_LOG = "HOL_GUARD_RESIDENT_REQUEST_LOG"
+
+
+def _record_resident_request() -> None:
+    """Append one line when a test asks every process to count resident calls.
+
+    Hook workers are spawned processes, so an in-process monkeypatch cannot see
+    their round trips. The variable is unset in production and the write then
+    does not run. A configured log that cannot be written fails the request.
+    """
+
+    path = os.environ.get(_RESIDENT_REQUEST_LOG)
+    if not path:
+        return
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(descriptor, b"1\n")
+    finally:
+        os.close(descriptor)
+
+
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_PERSISTENT_CLIENTS = 16
 _MAX_PERSISTENT_POOLS = 16
@@ -161,6 +182,7 @@ class _PersistentNativeClientPool:
         client = self._lease(deadline_monotonic=deadline_monotonic)
         if client is None:
             return None
+        _record_resident_request()
         response: bytes | None = None
         try:
             response = client.request(payload, deadline_monotonic=deadline_monotonic)
