@@ -330,11 +330,18 @@ def _copy_exclusive(source: Path, target: Path) -> None:
         raise NativeReleaseError(f"Native upload artifact could not be copied: {target.name}") from exc
 
 
+def _sdist_name(version: str) -> str:
+    return f"hol_guard-{_canonical_version(version)}.tar.gz"
+
+
 def select_upload_artifacts(local: Mapping[str, str], *, version: str, artifact_set: str) -> dict[str, str]:
     """Return the registry subset that this publication is allowed to upload."""
 
     if artifact_set == "full":
         return dict(local)
+    if artifact_set == "wheels":
+        # The sdist stays on the GitHub release; pip never selects it because the pure wheel matches everywhere.
+        return {filename: digest for filename, digest in local.items() if filename != _sdist_name(version)}
     if artifact_set != "pure":
         raise NativeReleaseError("Unsupported Guard registry artifact set")
     wheel = f"hol_guard-{_canonical_version(version).replace('-', '_')}-py3-none-any.whl"
@@ -342,6 +349,21 @@ def select_upload_artifacts(local: Mapping[str, str], *, version: str, artifact_
     if digest is None:
         raise NativeReleaseError("Guard pure wheel is missing from the local release set")
     return {wheel: digest}
+
+
+def _remote_for_artifact_set(
+    remote: Mapping[str, str],
+    complete: Mapping[str, str],
+    *,
+    version: str,
+    artifact_set: str,
+) -> dict[str, str]:
+    """Drop a registry sdist that predates wheels-only publication when its bytes are the local sdist."""
+
+    sdist = _sdist_name(version)
+    if artifact_set == "wheels" and sdist in remote and remote[sdist] == complete.get(sdist):
+        return {filename: digest for filename, digest in remote.items() if filename != sdist}
+    return dict(remote)
 
 
 def plan_upload(
@@ -353,17 +375,19 @@ def plan_upload(
     output_dir: Path,
     artifact_set: str = "full",
 ) -> tuple[str, ...]:
-    local = select_upload_artifacts(
-        local_guard_hashes(
-            dist_dir,
-            version=version,
-            source_sha=source_sha,
-        ),
+    complete = local_guard_hashes(
+        dist_dir,
+        version=version,
+        source_sha=source_sha,
+    )
+    local = select_upload_artifacts(complete, version=version, artifact_set=artifact_set)
+    inspection = _inspection(registry, version)
+    remote = _remote_for_artifact_set(
+        inspection.digests if inspection.exists else {},
+        complete,
         version=version,
         artifact_set=artifact_set,
     )
-    inspection = _inspection(registry, version)
-    remote = inspection.digests if inspection.exists else {}
     unexpected = sorted(set(remote) - set(local))
     if unexpected:
         raise NativeReleaseError(f"Registry release contains unexpected artifacts: {unexpected}")
@@ -391,19 +415,16 @@ def assert_published_exact(
     dist_dir: Path,
     artifact_set: str = "full",
 ) -> None:
-    local = select_upload_artifacts(
-        local_guard_hashes(
-            dist_dir,
-            version=version,
-            source_sha=source_sha,
-        ),
+    complete = local_guard_hashes(
+        dist_dir,
         version=version,
-        artifact_set=artifact_set,
+        source_sha=source_sha,
     )
+    local = select_upload_artifacts(complete, version=version, artifact_set=artifact_set)
     inspection = _inspection(registry, version)
     if not inspection.exists:
         raise NativeReleaseError("Registry release is absent")
-    remote = inspection.digests
+    remote = _remote_for_artifact_set(inspection.digests, complete, version=version, artifact_set=artifact_set)
     if remote != local:
         missing = sorted(set(local) - set(remote))
         extra = sorted(set(remote) - set(local))
@@ -445,7 +466,7 @@ def _parser() -> argparse.ArgumentParser:
         elif name in {"plan-upload", "verify-published"}:
             sub.add_argument(
                 "--artifact-set",
-                choices=("full", "pure"),
+                choices=("full", "wheels", "pure"),
                 default="full",
             )
     return parser

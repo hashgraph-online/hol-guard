@@ -232,6 +232,8 @@ def compute_local_distribution_hashes(
     dist_dir: Path,
     version_text: str,
     project_name: str = DEFAULT_PROJECT_NAME,
+    *,
+    require_sdist: bool = True,
 ) -> dict[str, str]:
     version = _canonical_public_version(version_text, label="Requested version")
     normalized_project_name = _validated_project_name(project_name)
@@ -265,8 +267,12 @@ def compute_local_distribution_hashes(
         found_wheel = found_wheel or path.name.endswith(".whl")
         found_sdist = found_sdist or not path.name.endswith(".whl")
 
-    if not hashes or not found_wheel or not found_sdist:
-        raise RegistryVerificationError("Local release requires both a project wheel and sdist")
+    if not hashes or not found_wheel or (require_sdist and not found_sdist):
+        raise RegistryVerificationError(
+            "Local release requires both a project wheel and sdist"
+            if require_sdist
+            else "Local release requires a project wheel"
+        )
     return hashes
 
 
@@ -311,8 +317,14 @@ def verify_registry_release(
     retry_initial_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_INITIAL_DELAY_SECONDS,
     retry_max_delay_seconds: float = release_registry_retry.REGISTRY_RETRY_MAX_DELAY_SECONDS,
     sleep: release_registry_retry.Sleeper | None = None,
+    wheels_only: bool = False,
 ) -> RegistryResult:
-    local_hashes = compute_local_distribution_hashes(dist_dir, version_text, project_name)
+    local_hashes = compute_local_distribution_hashes(
+        dist_dir,
+        version_text,
+        project_name,
+        require_sdist=not wheels_only,
+    )
 
     def verify_once() -> RegistryResult:
         inspection = inspect_release(registry, version_text, project_name=project_name, fetcher=fetcher)
@@ -324,7 +336,12 @@ def verify_registry_release(
                 files=tuple(sorted(local_hashes)),
             )
 
-        release_registry_retry._compare_digest_sets(local_hashes, inspection.digests, registry=registry)
+        remote_hashes = inspection.digests
+        if wheels_only:
+            # Wheels-only publication leaves the sdist on the GitHub release; releases published before
+            # that change may still carry one on the registry, which is immutable and not re-verified here.
+            remote_hashes = {name: digest for name, digest in remote_hashes.items() if name.endswith(".whl")}
+        release_registry_retry._compare_digest_sets(local_hashes, remote_hashes, registry=registry)
         downloaded = download_verified_release(inspection, download_dir, fetcher=fetcher) if download_dir else ()
         return RegistryResult(
             registry=registry,
@@ -426,6 +443,11 @@ def _parser() -> argparse.ArgumentParser:
     _ = generic_verify_parser.add_argument("--version", required=True)
     _ = generic_verify_parser.add_argument("--dist-dir", type=Path, required=True)
     _ = generic_verify_parser.add_argument("--download-dir", type=Path)
+    _ = generic_verify_parser.add_argument(
+        "--wheels-only",
+        action="store_true",
+        help="Verify only wheels; the sdist is published to the GitHub release, not the registry",
+    )
 
     absent_parser = subparsers.add_parser("assert-pypi-absent")
     _ = absent_parser.add_argument("--project", choices=SUPPORTED_PROJECT_NAMES, default=DEFAULT_PROJECT_NAME)
@@ -495,6 +517,7 @@ def main(
                 project_name=args.project,
                 download_dir=args.download_dir,
                 fetcher=fetcher,
+                wheels_only=args.wheels_only,
             )
             output = _result_output(result)
         elif command == "assert-pypi-absent":

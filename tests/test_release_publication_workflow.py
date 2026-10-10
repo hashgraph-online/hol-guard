@@ -132,7 +132,11 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
     assert "validate-local" in native_validate["run"] and "--artifact-set full" in native_validate["run"]
     main_quota = next(step for step in main_steps if step.get("name") == "Check PyPI quota admission")
     assert main_quota["id"] == "pypi_quota"
-    assert "--fail-if-over-limit --pending-dir dist-hol-guard" in main_quota["run"]
+    assert "--fail-if-over-limit --pending-dir pypi-hol-guard" in main_quota["run"]
+    stage_wheels = next(step for step in main_steps if step.get("name") == "Stage wheels-only PyPI upload")
+    assert "cp dist-hol-guard/*.whl pypi-hol-guard/" in stage_wheels["run"]
+    assert ".tar.gz" not in stage_wheels["run"]
+    assert main_steps.index(native_validate) < main_steps.index(stage_wheels) < main_steps.index(main_quota)
     assert "jq -e '.over_limit == true'" in main_quota["run"]
     assert 'echo "blocked=true"' in main_quota["run"]
     guard_publish = next(step for step in main_steps if step.get("name") == "Publish HOL Guard to PyPI")
@@ -144,7 +148,8 @@ def test_release_publication_reuses_one_hashed_build_artifact() -> None:
         "steps.pypi_quota.outputs.blocked != 'true' || steps.pypi.outputs.plugin_scanner_upload == 'true'"
     )
     assert jobs["publish-main-pypi"]["outputs"]["pypi_deferred"] == "${{ steps.pypi_quota.outputs.blocked }}"
-    assert "--artifact-set full" in main_verify["run"]
+    assert "--dist-dir dist-hol-guard --artifact-set wheels" in main_verify["run"]
+    assert "--dist-dir pypi-hol-guard --wheels-only" in main_verify["run"]
     assert (
         main_verify["run"].find("for attempt in {1..60}")
         < main_verify["run"].find("retry_verify_published.py")
@@ -319,10 +324,11 @@ def test_registry_state_is_revalidated_at_each_publication_boundary() -> None:
             "steps.pypi.outputs.plugin_scanner_upload == 'true'",
         }
         assert {step["with"]["packages-dir"] for step in publish_steps} == {
-            "dist-hol-guard/",
+            "pypi-hol-guard/",
             "dist-plugin-scanner/",
         }
-        assert "dist-hol-guard/*.publish.attestation" in cleanup_step["run"]
+        assert "--dist-dir pypi-hol-guard --wheels-only" in inspect_step["run"]
+        assert "pypi-hol-guard/*.publish.attestation" in cleanup_step["run"]
         assert "dist-plugin-scanner/*.publish.attestation" in cleanup_step["run"]
         assert all(steps.index(step) < steps.index(cleanup_step) for step in publish_steps)
         assert steps.index(cleanup_step) < steps.index(verify_step)
