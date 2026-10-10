@@ -24,6 +24,10 @@ opt-level = "s"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
 
+[profile.release.package.guard-command]
+# Keep the command parser and admission proofs within the native runtime budget.
+opt-level = "z"
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"

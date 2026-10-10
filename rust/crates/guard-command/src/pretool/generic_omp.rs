@@ -27,6 +27,7 @@ pub(super) struct OmpContext<'a> {
     pub(super) deadline: Option<Instant>,
     pub(super) path: super::super::PathContext<'a>,
     pub(super) execution_environment: Option<&'a guard_contracts::GuardExecutionEnvironmentV1>,
+    pub(super) yield_report_verified: bool,
 }
 
 /// The acknowledgement of a delegated task adds no executable operation.
@@ -64,7 +65,9 @@ pub(super) fn evaluate(
     let tool = signals.tool_name.as_deref()?;
     match tool {
         "yield" => {
-            yield_report::signal_payload(payload)?;
+            if !context.yield_report_verified {
+                return None;
+            }
             Some({
                 let readable = yield_report::references_are_readable(&signals.path_values, context);
                 generic_result(

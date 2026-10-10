@@ -230,6 +230,7 @@ fn evaluate_envelope(
         payload,
         &signals,
         &omp::OmpContext {
+            yield_report_verified: yield_payload.is_some(),
             harness,
             event,
             controls,
