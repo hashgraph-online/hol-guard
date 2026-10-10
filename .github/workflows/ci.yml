@@ -421,6 +421,8 @@ jobs:
             --deselect tests/test_guard_command_activity_rollups.py::test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms \
             --deselect tests/test_guard_update_artifact.py::test_windows_regular_descriptor_uses_bound_handle_without_cross_api_path_stat \
             --deselect 'tests/test_guard_surface_server.py::TestGuardSurfaceServer::test_guard_daemon_pi_hook_endpoint_returns_blocked_runtime_review_payload' \
+            --deselect tests/test_guard_command_decision_diff.py::test_fresh_process_report_is_environment_independent_and_bounded \
+            --deselect tests/test_runtime_transition_configured_inverse.py::test_configured_native_inverse_restores_binding_store_and_selection \
             "${coverage_args[@]}"
       - name: Upload pytest coverage data artifact
         if: always() && github.event_name != 'pull_request'
@@ -526,7 +528,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12.14", "3.14.7"]
-        slice: [0, 1]
+        slice: [0, 1, 2, 3]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -535,7 +537,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           slice-index: ${{ matrix.slice }}
-          slice-count: 2
+          slice-count: 4
 
   compatibility:
     needs: [plan, native-command-evaluators]

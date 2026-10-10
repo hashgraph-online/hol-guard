@@ -6,10 +6,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .command_decision_adapter import effect_decision_to_dict
-from .command_extensions import CommandSafetyExtension, CommandSafetyRule, risk_classes_for_command_action
+from .command_extensions import CommandSafetyExtension, CommandSafetyRule
 from .command_model import CanonicalCommand
-from .effect_contract import UncertaintyKind
-from .effect_decision import DecisionFactor, EffectDecision
+from .effect_decision import EffectDecision
 from .extension_control_contract import ControlResolution
 from .extension_control_runtime import ExtensionControlDecisionEvidence
 from .native_command_extension_evidence import NativeCommandExtensionObservation, NativeMatcherEvidence
@@ -54,7 +53,11 @@ class OwnedCommandRuleMatch:
 
 @dataclass(frozen=True, slots=True)
 class CompositeCommandEvaluation:
-    """All command matches plus the compatibility-preserving controlling action."""
+    """Resident-computed command evaluation, projected onto Python records.
+
+    Every field is decoded from the bound ``command_effect_decide`` result; no
+    field is derived or relaxed on the Python side.
+    """
 
     command: CanonicalCommand
     matches: tuple[OwnedCommandRuleMatch, ...]
@@ -64,21 +67,10 @@ class CompositeCommandEvaluation:
     minimum_action: CommandDecisionFloor
     extension_observations: tuple[NativeCommandExtensionObservation, ...]
     decision_plane: EffectDecision
-    baseline_factors: tuple[DecisionFactor, ...]
-    baseline_uncertainties: tuple[UncertaintyKind, ...]
+    baseline_decision: EffectDecision
+    risk_classes: tuple[str, ...]
     control_resolution: ControlResolution
     private_control_evidence: ExtensionControlDecisionEvidence | None
-
-    @property
-    def risk_classes(self) -> tuple[str, ...]:
-        risks = {risk for owned in self.matches for risk in owned.match.rule.risk_classes}
-        if self.controlling_action_class is not None:
-            risks.update(risk_classes_for_command_action(self.controlling_action_class))
-        if any(factor.reason_code == "critical.local-secret-read" for factor in self.baseline_factors):
-            risks.add("local_secret_read")
-        if any(factor.reason_code == "critical.local-script-execution" for factor in self.baseline_factors):
-            risks.add("execution")
-        return tuple(sorted(risks))
 
     @property
     def matched(self) -> bool:
@@ -98,25 +90,3 @@ class CompositeCommandEvaluation:
             "parse_confidence": self.command.confidence,
             "uncertainty_reason": self.command.uncertainty_reason,
         }
-
-
-_FLOOR_RANK: dict[CommandDecisionFloor, int] = {"allow": 0, "monitor": 1, "review": 2, "block": 3}
-_UNAVAILABLE_AUTHORITY_FAIL_CLOSED_RISKS = frozenset(
-    {
-        "destructive_shell",
-        "credential_exfiltration",
-        "data_flow_exfiltration",
-        "encoded_execution",
-        "encoded_exfiltration",
-        "guard_bypass",
-        "policy_bypass",
-    }
-)
-_SEVERITY_RANK = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-_MODE_FLOOR: dict[str, CommandDecisionFloor] = {
-    "disabled": "allow",
-    "monitor": "monitor",
-    "review": "review",
-    "enforce": "block",
-    "required": "review",
-}
