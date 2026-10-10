@@ -22,8 +22,8 @@ from .hook_process_worker import (
 )
 
 _HOOK_WORKER_READY_TIMEOUT_ENV = "HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS"
-_HOOK_PROCESS_READY_TIMEOUT_SECONDS = 14.0
-_HOOK_PROCESS_START_TIMEOUT_SECONDS = 30.0
+_HOOK_PROCESS_READY_TIMEOUT_SECONDS = 30.0
+_HOOK_PROCESS_START_TIMEOUT_SECONDS = 35.0
 # Hard cap for an operator-raised readiness budget.  Bounded so a stray
 # environment value cannot make the daemon wait indefinitely on a dead worker.
 _HOOK_PROCESS_READY_TIMEOUT_MAX_SECONDS = 120.0

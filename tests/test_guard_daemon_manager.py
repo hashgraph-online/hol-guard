@@ -1037,7 +1037,7 @@ def test_post_update_daemon_start_forwards_explicit_windows_breakaway_authorizat
     ensure.assert_called_once_with(
         guard_home,
         home_dir=home_dir,
-        start_timeout=daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
+        start_timeout=daemon_manager_module._post_update_guard_daemon_start_timeout(),
         preferred_port=4781,
         allow_windows_job_breakaway=True,
     )
