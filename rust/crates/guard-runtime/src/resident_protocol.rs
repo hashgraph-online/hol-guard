@@ -87,6 +87,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::PROMPT_ANALYZE_FEATURE.into(),
         guard_contracts::DATA_FLOW_ANALYZE_FEATURE.into(),
         guard_contracts::POLICY_DECISION_LOOKUP_FEATURE.into(),
+        guard_command::catalog_read_model::CATALOG_READ_CAPABILITY.into(),
         guard_contracts::GIT_EXECUTION_SAFETY_FEATURE.into(),
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
         guard_contracts::FALSE_POSITIVE_RULES_FEATURE.into(),
@@ -182,6 +183,7 @@ pub(crate) enum ResidentOperationV1 {
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
+    CatalogRead(guard_command::catalog_read_model::CatalogReadRequestV1),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     Health(Value),
     Shutdown(Value),

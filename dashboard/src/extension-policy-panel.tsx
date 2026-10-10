@@ -14,6 +14,7 @@ import { useModalDialog } from "./use-modal-dialog";
 import {
   type EffectiveExtensionControls,
   type ExtensionCatalogItem,
+  type ExtensionCatalogSummary,
   type ExtensionMutationPreview,
   type ExtensionPermission,
 } from "./extension-controls-api";
@@ -124,7 +125,7 @@ function DraftControl(props: {
 
 export function PermissionPolicyRow(props: {
   permission: ExtensionPermission;
-  extension: ExtensionCatalogItem;
+  extension: ExtensionCatalogSummary;
   effective: EffectiveExtensionControls;
   draftState: PermissionDraftState;
   disabled: boolean;

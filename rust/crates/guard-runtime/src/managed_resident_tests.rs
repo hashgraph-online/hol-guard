@@ -441,8 +441,8 @@ fn owner_liveness_expires_after_launcher_and_all_clients_disappear() {
     fs::remove_dir_all(root).unwrap();
 }
 
-#[path = "managed_resident_transport_tests.rs"]
-mod transport_tests;
-
 #[path = "managed_resident_owner_lock_tests.rs"]
 mod owner_lock_tests; // includes managed_owner_lock_rejects_second_process contention proof
+
+#[path = "managed_resident_retry_tests.rs"]
+mod retry_tests;

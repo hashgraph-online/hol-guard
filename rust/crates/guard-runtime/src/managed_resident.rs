@@ -205,6 +205,11 @@ pub(crate) fn serve_managed(
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
     let owner_lock = acquire_managed_owner_lock(state_base)?;
+    // Build the immutable catalog read snapshot off the request path so the
+    // first catalog_read does not pay for it; failures surface on that read.
+    thread::spawn(|| {
+        let _ = guard_command::catalog_read_model::packaged_catalog_read_snapshot();
+    });
     // Initialize before fallible policy startup so every client can see a
     // resident still starting. This guard drops before owner_lock on all exits.
     let _diagnostic_lifetime =

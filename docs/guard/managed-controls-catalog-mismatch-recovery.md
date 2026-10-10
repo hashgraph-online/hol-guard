@@ -12,7 +12,12 @@ The following commands expose only the installed version and device-local catalo
 hol-guard --version
 set -o pipefail
 hol-guard command controls status | jq -e '{revision, catalog_digest, health}'
-hol-guard command controls list | jq -e '{schema_version, control_schema_version, catalog_digest}'
+# Catalog-read v2 daemons return the index summary; older daemons return the v1 catalog.
+hol-guard command controls list | jq -e '
+  if .native_catalog_digest != null
+  then {schema_version, native_catalog_digest, snapshot_id, total_count}
+  else {schema_version, control_schema_version, catalog_digest}
+  end'
 ```
 
 `command controls status` does not advertise negotiated capabilities or schema compatibility. `connect status` also does not prove them. The Local catalog endpoint supplies a catalog digest and local control schema; capability negotiation requires the bounded `managedControlsCapabilities`, `extensionControlSchemaVersions`, and `extensionCatalogDigest` evidence carried by the runtime-session sync contract.

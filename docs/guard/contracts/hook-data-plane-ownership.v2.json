@@ -423,7 +423,8 @@
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/daemon/discovery.py",
     "src/codex_plugin_scanner/guard/daemon/manager.py",
-    "src/codex_plugin_scanner/guard/frozen_runtime_commands.py"
+    "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
+    "src/codex_plugin_scanner/guard/native_catalog_read.py"
    ],
    "current": "Python performs binary identity checks and minimal client launch. Rust owns authentication, framing, process and peer attestation, bounded retirement, liveness, reconnect, restart, and generation state. Both superseded Python resident implementations are physically deleted.",
    "target": "binary identity and minimal Rust client launch only"
