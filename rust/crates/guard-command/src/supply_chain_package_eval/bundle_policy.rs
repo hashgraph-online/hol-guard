@@ -142,43 +142,6 @@ pub(super) fn target_for_resolved_npm_policy_match(
 }
 
 #[allow(dead_code)]
-pub(super) fn policy_package_result(
-    target: &Map<String, Value>,
-    decision: &str,
-    rule: &Map<String, Value>,
-) -> Map<String, Value> {
-    let rule_id = rule_string(rule, "ruleId");
-    let mut reason = Map::new();
-    reason.insert(
-        "code".to_string(),
-        Value::String(format!("policy_{decision}")),
-    );
-    reason.insert(
-        "message".to_string(),
-        Value::String(format!(
-            "Policy rule {} applied to {}.",
-            rule_id.unwrap_or(""),
-            rule_string(target, "package_name")
-                .or_else(|| rule_string(target, "name"))
-                .unwrap_or("")
-        )),
-    );
-    reason.insert(
-        "severity".to_string(),
-        Value::String(
-            if decision == "block" {
-                "high"
-            } else {
-                "medium"
-            }
-            .into(),
-        ),
-    );
-    reason.insert("source".to_string(), Value::String("policy".into()));
-    package_target_result(target, decision, vec![reason], rule_id)
-}
-
-#[allow(dead_code)]
 pub(super) fn bind_resolved_npm_policy_result(
     result: Map<String, Value>,
     resolved_version: Option<&str>,
@@ -283,16 +246,6 @@ pub(super) fn dependency_confusion_selector_matches(
         Some(prefix) => name.starts_with(prefix),
         None => name == selector,
     }
-}
-
-#[allow(dead_code)]
-pub(super) fn emergency_deny_bundle_message(target: &Map<String, Value>) -> String {
-    format!(
-        "Emergency deny rule blocks {}.",
-        optional_string(target.get("package_name"))
-            .or_else(|| optional_string(target.get("name")))
-            .unwrap_or_else(|| "package".to_string())
-    )
 }
 
 #[cfg(test)]

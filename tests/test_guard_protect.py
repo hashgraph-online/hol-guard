@@ -1301,7 +1301,7 @@ class TestGuardProtect:
         approval link so a human can review the request and the retry can pass.
         """
         import codex_plugin_scanner.guard.cli.commands as commands_module
-        import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+        from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
         from tests.test_guard_package_shims import WORKSPACE_ID
 
         home_dir = tmp_path / "home"
@@ -1310,14 +1310,9 @@ class TestGuardProtect:
         store = GuardStore(home_dir)
         _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
 
-        def raise_trusted_session_error(*_args: object, **_kwargs: object) -> dict[str, object]:
-            raise RuntimeError("cloud token refresh failed")
-
-        monkeypatch.setattr(
-            evaluator_module,
-            "_resolve_guard_sync_auth_context",
-            raise_trusted_session_error,
-        )
+        # The resident resolves the Cloud session itself; this override surfaces a
+        # trusted-session (token refresh) failure there rather than in Python.
+        guard_runner_module._test_sync_auth_context_override = {"error": "trusted_session_failure"}
         monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda *args, **kwargs: None)
         monkeypatch.setattr(commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 

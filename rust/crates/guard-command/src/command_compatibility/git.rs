@@ -1,5 +1,8 @@
 use super::{CommandSegmentV1, CompatibilityObservations};
 
+#[path = "git_fetch.rs"]
+mod git_fetch;
+
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
@@ -251,9 +254,13 @@ pub(super) fn observe_with_context(
         }
     }
     if command == "fetch" {
-        // Proving a named origin requires repository/configuration bindings
-        // unavailable in CanonicalCommandV1. Never claim the Python exemption.
-        result.rule("command.git.unverified-fetch", index, true);
+        // Repository/configuration bindings are unavailable in
+        // CanonicalCommandV1, so Guard still never proves the fetch benign.
+        // A plain named-origin refresh is a definite review rule, though, so an
+        // explicit Allow of its permission can settle it. Every wrapped,
+        // option-prefixed, URL, or otherwise non-exact form stays uncertain.
+        let plain = git_fetch::plain_origin_refresh(segment, command_index);
+        result.rule("command.git.unverified-fetch", index, !plain);
     }
     if command == "diff"
         && arguments[command_index + 1..]
