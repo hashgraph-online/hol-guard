@@ -7,12 +7,14 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.cloud_request_native import cloud_scrub_text as _cloud_scrub_text
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
-from codex_plugin_scanner.guard.runtime.local_request_snapshots import _cloud_scrub_text
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
     normalize_transparent_shell_command,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
 
 
 @pytest.mark.parametrize(

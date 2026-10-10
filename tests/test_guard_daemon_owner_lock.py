@@ -26,7 +26,7 @@ def test_linux_process_inventory_uses_bounded_procfs_without_ps(
         b"daemon",
         b"--serve",
         b"--guard-home",
-        b"/guard-home",
+        str(tmp_path / "guard-home").encode(),
         b"--port",
         b"4781",
     )
@@ -40,7 +40,7 @@ def test_linux_process_inventory_uses_bounded_procfs_without_ps(
         lambda: read_proc_entries(proc_root),
     )
 
-    assert manager._guard_daemon_process_inventory_for_guard_home(Path("/guard-home")) == [(4242, 4781)]
+    assert manager._guard_daemon_process_inventory_for_guard_home(tmp_path / "guard-home") == [(4242, 4781)]
 
 
 def test_linux_proc_process_inventory_fails_closed_when_budget_is_exceeded(
@@ -136,8 +136,8 @@ def test_windows_venv_launcher_parent_matches_only_the_same_daemon_invocation(
     )
     monkeypatch.setattr(
         manager,
-        "_split_process_command",
-        lambda command: shlex.split(command, posix=False),
+        "windows_command_line_to_argv",
+        lambda command: [part.strip('"') for part in shlex.split(command, posix=False)],
     )
 
     assert manager._windows_venv_launcher_parent_pid() == 20

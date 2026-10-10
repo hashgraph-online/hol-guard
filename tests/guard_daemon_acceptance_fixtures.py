@@ -188,12 +188,6 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         dict[str, object],
         json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
     )
-    target = max(1, int(daemon._server.hook_process_runner.stats()["target"]))
-    if not daemon._server.hook_process_runner.wait_for_capacity(
-        minimum_workers=target,
-        timeout_seconds=15,
-    ):
-        raise RuntimeError("production hook workers did not become ready")
     # Worker-capacity readiness does not cover native policy prep: under
     # HOL_GUARD_NATIVE=force the resident edge still compiles its snapshot on
     # first use, and early requests would race it. Production callers retry
@@ -398,7 +392,6 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
             side_effect=lambda url: browser_calls.append(str(url)) or False,
         ):
             _run_client_reviews(spec["clients"], review, timeout_seconds=review_timeout_seconds)
-        worker_stats = daemon._server.hook_process_runner.stats()
         scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
         final_inbox = len(store.list_approval_requests(status=None, limit=None))
     finally:
@@ -414,9 +407,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         generic_failures=outcomes["generic_failure"],
         pid_stable=os.getpid() == initial_pid,
         workers_stable=(
-            worker_stats["workers"] <= worker_stats["configured"]
-            and worker_stats["failures"] == 0
-            and worker_stats["restarts"] == 0
+            scheduler_stats["active"] <= scheduler_stats["active_limit"]
             and threading.active_count() <= initial_workers + 1
         ),
         queue_bounded=(

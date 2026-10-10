@@ -66,7 +66,7 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     try:
         with ThreadPoolExecutor(max_workers=24) as executor:
             results = list(executor.map(review, range(24)))
-        worker_stats = daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
+        scheduler_stats = daemon._server.runtime_hook_scheduler.stats()  # pyright: ignore[reportPrivateUsage]
     finally:
         daemon.stop()
 
@@ -75,5 +75,5 @@ def test_omp_post_tool_read_burst_uses_resident_scanner(
     assert all(result.get("reason_code") in {"output_scan_allow", "native_policy_warning"} for result in results), (
         verdicts
     )
-    assert worker_stats["timeouts"] == 0
-    assert worker_stats["restarts"] == 0
+    assert scheduler_stats["expired"] == 0
+    assert scheduler_stats["retries"] == 0

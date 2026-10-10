@@ -360,27 +360,6 @@ def build_capability_report(
     return report
 
 
-def capability_report_for(
-    requested_host: str,
-    *,
-    build_id: str = "unknown",
-    commit: str = "unknown",
-    host_version_scope: str | None = None,
-    os_arch: str | None = None,
-    local_hosted: str | None = None,
-) -> HarnessCapabilityReport:
-    """Return one host report, including an explicit row for unknown hosts."""
-
-    return build_capability_report(
-        build_id=build_id,
-        commit=commit,
-        requested_host=requested_host,
-        host_version_scope=host_version_scope,
-        os_arch=os_arch,
-        local_hosted=local_hosted,
-    )
-
-
 def render_capability_report_json(report: HarnessCapabilityReport | Mapping[str, object]) -> str:
     """Render the validated report as deterministic machine JSON."""
 
@@ -466,7 +445,6 @@ __all__ = [
     "CAPABILITY_REPORT_SCHEMA",
     "CAPABILITY_REPORT_SCHEMA_VERSION",
     "build_capability_report",
-    "capability_report_for",
     "harness_capability_report",
     "render_capability_report_json",
     "render_capability_report_markdown",

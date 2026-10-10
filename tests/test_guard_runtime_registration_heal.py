@@ -175,11 +175,6 @@ def test_shutdown_winning_the_publish_race_never_registers(
     monkeypatch.setattr(daemon, "_publish_listen_state", lambda: published.append("published"))
     monkeypatch.setattr(daemon, "_reconcile_runtime_artifacts_best_effort", lambda: None)
     monkeypatch.setattr(daemon, "_maintain_command_activity_best_effort", lambda: None)
-    monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "require_initial_capacity",
-        lambda: None,
-    )
 
     def win_shutdown_race() -> None:
         # Shutdown completed between the outer generation checks and the

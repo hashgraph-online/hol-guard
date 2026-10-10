@@ -18,3 +18,9 @@ def test_ci_runs_trusted_updater_regressions_on_native_windows() -> None:
     commands = "\n".join(step.get("run", "") for step in expanded["jobs"]["windows-updater"]["steps"])
     assert "tests/test_guard_update_isolation.py" in commands
     assert "tests/test_guard_update_subprocess.py" in commands
+    regression = next(
+        step
+        for step in expanded["jobs"]["windows-updater"]["steps"]
+        if step.get("name") == "Run trusted updater and daemon regressions"
+    )
+    assert regression["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"

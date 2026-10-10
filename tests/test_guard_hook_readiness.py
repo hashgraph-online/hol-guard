@@ -72,18 +72,8 @@ def _daemon(*, prepared: dict[str, object] | None) -> SimpleNamespace:
             time.sleep(0.02)
             return prepared
 
-    class Runner:
-        def __init__(self) -> None:
-            self.calls: list[float] = []
-
-        def wait_for_capacity(self, *, minimum_workers: int, timeout_seconds: float) -> bool:
-            assert minimum_workers == 1
-            self.calls.append(timeout_seconds)
-            return prepared is not None
-
     return SimpleNamespace(
         hook_worker=Worker(),
-        hook_process_runner=Runner(),
         diagnostics=SimpleNamespace(record_exception=lambda _code: None),
     )
 
@@ -99,7 +89,6 @@ def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None
             200,
         )
     ]
-    assert server.hook_process_runner.calls == []
 
 
 def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path: Path) -> None:
@@ -126,8 +115,6 @@ def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path:
             200,
         )
     ]
-    assert daemon.hook_process_runner.calls
-    assert daemon.hook_process_runner.calls[0] < 25
 
 
 def test_workspace_readiness_stays_fail_closed_when_native_ack_is_unready(monkeypatch, tmp_path: Path) -> None:
@@ -143,7 +130,6 @@ def test_workspace_readiness_stays_fail_closed_when_native_ack_is_unready(monkey
     )
 
     assert handler.responses == [({"ready": False, "reason_code": "native_policy_not_ready"}, 503)]
-    assert daemon.hook_process_runner.calls == []
 
 
 def test_pi_source_prepares_workspace_before_timed_tool_review(

@@ -8,7 +8,6 @@ import importlib.metadata
 import io
 import json
 import os
-import re
 import socket
 import subprocess
 import threading
@@ -114,6 +113,7 @@ from .approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
 )
+from .cloud_request_native import cloud_sync_receipt_payloads
 from .decisions import AUTHORITATIVE_DECISION_INCONSISTENT
 from .detectors import DetectorContext, DetectorRegistry, DetectorRunResult, register_default_detectors
 from .extension_catalog_handshake import (
@@ -140,15 +140,6 @@ from .managed_controls_sync import (
 )
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
-)
-from .receipt_sync_privacy import (
-    cloud_sync_command_display_part as _cloud_sync_command_display_part,
-)
-from .receipt_sync_privacy import (
-    cloud_sync_sanitize_text as _cloud_sync_sanitize_text,
-)
-from .receipt_sync_privacy import (
-    cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
 )
 from .supply_chain_bundle import (
     SupplyChainBundleError,
@@ -4538,15 +4529,25 @@ def _cloud_sync_receipts_payload(
     device_name: str,
     redaction_level: str = "full",
 ) -> list[dict[str, object]]:
-    return [
-        _cloud_sync_receipt_payload(
-            receipt,
-            device_id=device_id,
-            device_name=device_name,
-            redaction_level=redaction_level,
-        )
-        for receipt in receipts
-    ]
+    return cloud_sync_receipt_payloads(
+        receipts,
+        device_id=device_id,
+        device_name=device_name,
+        redaction_level=redaction_level,
+        now=_now(),
+    )
+
+
+def _cloud_sync_receipt_payload(
+    receipt: dict[str, object],
+    *,
+    device_id: str,
+    device_name: str,
+    redaction_level: str = "full",
+) -> dict[str, object]:
+    return _cloud_sync_receipts_payload(
+        [receipt], device_id=device_id, device_name=device_name, redaction_level=redaction_level
+    )[0]
 
 
 def _dedupe_sync_payload_items(items: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -4918,119 +4919,6 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return local_receipt_redaction_level(store.guard_home)
 
 
-def _cloud_sync_transport_encode_text(value: str) -> str:
-    return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
-
-
-def _cloud_sync_receipt_action_command(envelope: dict[str, object], *, redaction_level: str) -> str | None:
-    tool_name = _optional_string(envelope.get("tool_name"))
-    sanitized_tool_name = _cloud_sync_command_display_part(tool_name) if tool_name is not None else ""
-    command = _optional_string(envelope.get("command"))
-    if command is not None and command not in {"guard_commands_module"}:
-        if redaction_level == "full":
-            return sanitized_tool_name or None
-        return _cloud_sync_command_display_part(command)
-    target_paths = envelope.get("target_paths")
-    if sanitized_tool_name and isinstance(target_paths, list):
-        raw_targets = [target for target in target_paths[:3] if isinstance(target, str) and target.strip()]
-        if raw_targets and redaction_level == "full":
-            target_placeholder = "[targets withheld]" if len(raw_targets) > 1 else "[target withheld]"
-            return " ".join([sanitized_tool_name, target_placeholder])
-        targets = [_cloud_sync_command_display_part(target) for target in raw_targets]
-        targets = [target for target in targets if target]
-        if targets:
-            return " ".join([sanitized_tool_name, *targets])
-        return sanitized_tool_name
-    return None
-
-
-def _cloud_sync_receipt_payload(
-    receipt: dict[str, object],
-    *,
-    device_id: str,
-    device_name: str,
-    redaction_level: str = "full",
-) -> dict[str, object]:
-    receipt_fingerprint = _cloud_sync_receipt_fingerprint(receipt)
-    artifact_id = _optional_string(receipt.get("artifact_id")) or f"guard:local-receipt:{receipt_fingerprint[:24]}"
-    artifact_name = _optional_string(receipt.get("artifact_name")) or artifact_id
-    policy_decision = _optional_string(receipt.get("policy_decision")) or "review"
-    capabilities_summary = _optional_string(receipt.get("capabilities_summary"))
-    explicit_capabilities = receipt.get("capabilities")
-    if isinstance(explicit_capabilities, list):
-        capabilities = [
-            _cloud_sync_sanitize_text(item, fallback="redacted-capability")
-            for item in explicit_capabilities
-            if isinstance(item, str)
-        ]
-    else:
-        capabilities = []
-    summary_input = (
-        _optional_string(receipt.get("provenance_summary"))
-        or capabilities_summary
-        or f"Guard recorded a {policy_decision} decision."
-    )
-    summary = _cloud_sync_sanitize_text(summary_input, fallback=f"Guard recorded a {policy_decision} decision.")
-    explicit_changed_since_last_approval = receipt.get("changedSinceLastApproval")
-    if not isinstance(explicit_changed_since_last_approval, bool):
-        explicit_changed_since_last_approval = receipt.get("changed_since_last_approval")
-    changed_since_last_approval = explicit_changed_since_last_approval is True
-    # Review-tier decisions always remain changed, even if an explicit false is present.
-    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
-        changed_since_last_approval = True
-    payload: dict[str, object] = {
-        "receiptId": _optional_string(receipt.get("receipt_id")) or f"guard-receipt-{receipt_fingerprint}",
-        "artifactId": artifact_id,
-        "artifactName": artifact_name,
-        "artifactType": _cloud_sync_artifact_type(artifact_id),
-        "artifactSlug": _cloud_sync_artifact_slug(artifact_name, artifact_id),
-        "artifactHash": _optional_string(receipt.get("artifact_hash"))
-        or hashlib.sha256(artifact_id.encode("utf-8")).hexdigest(),
-        "capabilities": capabilities,
-        "capturedAt": _optional_string(receipt.get("timestamp")) or _now(),
-        "changedSinceLastApproval": changed_since_last_approval,
-        "deviceId": device_id,
-        "deviceName": device_name,
-        "harness": _optional_string(receipt.get("harness")) or "unknown",
-        "policyDecision": policy_decision,
-        "recommendation": _cloud_sync_recommendation(policy_decision),
-        "summary": summary,
-    }
-    raw_command_text = _optional_string(receipt.get("raw_command_text"))
-    if raw_command_text is not None:
-        payload["raw_command_text"] = _cloud_sync_command_display_part(raw_command_text)
-    publisher = _optional_string(receipt.get("publisher"))
-    if publisher is not None:
-        payload["publisher"] = publisher
-    redacted_envelope = receipt.get("envelope_redacted_json")
-    if isinstance(redacted_envelope, dict) and redacted_envelope:
-        full_envelope = receipt.get("action_envelope_json")
-        if isinstance(full_envelope, dict):
-            enriched = _cloud_sync_scrub_envelope_commands(redacted_envelope, redaction_level=redaction_level)
-            command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
-            if command is not None:
-                enriched.pop("command", None)
-                enriched["commandEncoded"] = _cloud_sync_transport_encode_text(command)
-                enriched["commandTransport"] = "base64url-v1"
-            if redaction_level == "none":
-                target_paths = full_envelope.get("target_paths")
-                if isinstance(target_paths, list):
-                    enriched["target_paths"] = target_paths
-                network_hosts = full_envelope.get("network_hosts")
-                if isinstance(network_hosts, list):
-                    enriched["network_hosts"] = network_hosts
-                package_name = full_envelope.get("package_name")
-                if isinstance(package_name, str) and package_name:
-                    enriched["package_name"] = package_name
-            payload["envelopeRedacted"] = enriched
-        else:
-            payload["envelopeRedacted"] = _cloud_sync_scrub_envelope_commands(
-                redacted_envelope,
-                redaction_level=redaction_level,
-            )
-    return payload
-
-
 def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]) -> dict[str, object]:
     device_id, device_name = _guard_device_metadata(store)
     workspace = _optional_string(session.get("workspace")) or os.getcwd()
@@ -5198,11 +5086,6 @@ def _safe_private_ipv6() -> str | None:
     return None
 
 
-def _cloud_sync_receipt_fingerprint(receipt: dict[str, object]) -> str:
-    encoded_receipt = json.dumps(receipt, sort_keys=True, separators=(",", ":"), default=str)
-    return hashlib.sha256(encoded_receipt.encode("utf-8")).hexdigest()
-
-
 def _cloud_package_manager_coverage(
     store: GuardStore,
     *,
@@ -5264,29 +5147,6 @@ def _cloud_package_manager_coverage(
         "nextRefreshAt": next_refresh_at,
     }
     return coverage
-
-
-def _cloud_sync_artifact_type(artifact_id: str) -> str:
-    if artifact_id.startswith("skill:") or ":skill:" in artifact_id:
-        return "skill"
-    return "plugin"
-
-
-def _cloud_sync_artifact_slug(artifact_name: str, artifact_id: str) -> str:
-    base_value = artifact_name.strip() or artifact_id.strip() or "artifact"
-    slug = re.sub(r"[^a-z0-9]+", "-", base_value.lower()).strip("-")
-    if slug:
-        return slug
-    fallback = re.sub(r"[^a-z0-9]+", "-", artifact_id.lower()).strip("-")
-    return fallback or "artifact"
-
-
-def _cloud_sync_recommendation(policy_decision: str) -> str:
-    if policy_decision == "block":
-        return "block"
-    if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
-        return "review"
-    return "monitor"
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

@@ -101,6 +101,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+        # Decodes the bounded resident daemon-lifecycle verdict; decisions stay Rust.
+        "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
         # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Retry lineage is local diagnostic metadata. Its digests protect
@@ -169,6 +171,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Decodes the bounded resident MCP proxy decision envelope; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+        # Decodes the bounded resident daemon-lifecycle verdict; decisions stay Rust.
+        "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
         # Gathers facts for and decodes the resident sensitive-read decisions; verdicts stay Rust.
         "src/codex_plugin_scanner/guard/native_mcp_sensitive_read.py",
         # Decodes the bounded resident MCP runtime-evidence response envelope.

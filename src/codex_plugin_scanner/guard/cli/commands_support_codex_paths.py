@@ -42,12 +42,6 @@ def _truncate_codex_display_text(value: str, *, limit: int) -> str:
     return resolve(value, limit=limit)
 
 
-def _codex_absolute_search_target_is_source_like(target_path: Path) -> bool:
-    from ..runtime.source_paths import absolute_source_target_is_source_like
-
-    return absolute_source_target_is_source_like(target_path)
-
-
 def _path_contains_symlink(path: Path, *, base_dir: Path) -> bool:
     from ..runtime.source_paths import path_contains_symlink
 
@@ -242,7 +236,6 @@ __all__ = [
     "_PROMPT_CONTENT_SCAN_SKIP_BASENAMES",
     "_PROMPT_FILE_READ_VERB_PATTERN",
     "_PROMPT_PATH_TOKEN_PATTERN",
-    "_codex_absolute_search_target_is_source_like",
     "_codex_prompt_credential_file_artifact",
     "_codex_prompt_display_text",
     "_collect_codex_tool_response_text",
