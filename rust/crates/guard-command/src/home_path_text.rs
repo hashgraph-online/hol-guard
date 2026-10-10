@@ -88,8 +88,7 @@ fn normpath_nt(path: &str) -> String {
 }
 
 /// `ntpath.splitroot` on a backslash-only text: `(drive, root, tail)`.
-#[cfg(any(windows, test))]
-fn split_root_nt(text: &str) -> (&str, &str, &str) {
+pub(crate) fn split_root_nt(text: &str) -> (&str, &str, &str) {
     let bytes = text.as_bytes();
     if bytes.first() != Some(&b'\\') {
         if bytes.get(1) == Some(&b':') {

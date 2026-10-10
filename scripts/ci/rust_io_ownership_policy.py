@@ -78,6 +78,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_decision.py",
         # Same correlation-only digest for the hook artifact composition op.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
+        # Same correlation-only digest for the per-harness hook adapter op.
+        "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
@@ -122,6 +124,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident hook artifact composition response; the
         # answer is strictly bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
+        # Decodes the bounded resident hook adapter response; the answer is
+        # strictly bound and validated, never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
         # Decodes the bounded resident MCP tool-policy envelope; the decision
