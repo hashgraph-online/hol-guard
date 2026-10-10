@@ -47,7 +47,10 @@ fn request(action: RequestContextKindV1) -> RequestContextRequestV1 {
     RequestContextRequestV1 {
         schema: REQUEST_CONTEXT_REQUEST_SCHEMA.to_owned(),
         request_id: "request-context-test".to_owned(),
-        guard_home: "/tmp/guard-home".to_owned(),
+        guard_home: std::env::temp_dir()
+            .join("guard-home")
+            .to_string_lossy()
+            .into_owned(),
         source: RequestContextSourceV1::Hook,
         budget_ms: 5_000,
         owner_uid: owner(),
