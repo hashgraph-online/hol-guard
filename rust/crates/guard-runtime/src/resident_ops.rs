@@ -265,6 +265,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::HookDecide(request) => {
                 crate::hook_decision_op::evaluate_hook_decision_request(&request)
             }
+            ResidentOperationV1::DaemonRoute(request) => {
+                crate::daemon_route_op::evaluate_daemon_route_request(&request)
+            }
             ResidentOperationV1::HookAdapter(request) => {
                 crate::hook_adapter_op::evaluate_hook_adapter_request(&request)
             }

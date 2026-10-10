@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_hook_decision as decision
+from codex_plugin_scanner.guard import native_resident_decision as shared
 
 _VECTORS = json.loads(
     (
@@ -136,8 +137,8 @@ def test_finalize_and_post_claim_round_trip() -> None:
 
 
 def _resident_returning(monkeypatch: pytest.MonkeyPatch, reply: Any) -> None:
-    monkeypatch.setattr(decision, "_resolve_digest_home", lambda _home: Path("/tmp/hook-decision-home"))
-    monkeypatch.setattr(decision, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(shared, "_resolve_digest_home", lambda _home: Path("/tmp/hook-decision-home"))
+    monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: True)
     monkeypatch.setattr(decision, "_resident_request", lambda *, request, **_kwargs: reply(request))
 
 
@@ -145,7 +146,7 @@ def _good(request: dict[str, Any], **overrides: object) -> dict[str, Any]:
     reply: dict[str, Any] = {
         "schema": "guard-hook-decision-result.v1",
         "request_id": request["request_id"],
-        "request_sha256": "sha256:" + decision._canonical_request_sha256(request),
+        "request_sha256": "sha256:" + shared._canonical_request_sha256(request),
         "status": "ok",
         "code": "ok",
         "payload": {"kind": "post_claim_reuse", "current_action": "allow", "validation_reason": None},

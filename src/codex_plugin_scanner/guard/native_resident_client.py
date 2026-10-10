@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import atexit
 import contextlib
+import json
 import os
 import threading
 import time
@@ -84,6 +85,23 @@ def _record_failure_code(result: BoundedHookProcessResult) -> None:
     _LAST_FAILURE_CODE.set(_allowlisted_failure_code(result.stderr) or _classify_failure(result))
 
 
+def _is_resident_startup_error(response: bytes) -> bool:
+    """True for the resident's own failure frame, which carries no request schema.
+
+    A client that answered with it is bound to a resident that never came up
+    (for example the state directory did not exist yet). Parking it would hand
+    that stale failure to every later request for the same home.
+    """
+
+    if not response.startswith(b'{"error":"native_resident_'):
+        return False
+    try:
+        decoded = json.loads(response)
+    except ValueError:
+        return False
+    return isinstance(decoded, dict) and set(decoded) == {"error", "retryable"}
+
+
 class _PersistentNativeClientPool:
     """Bounded lazy pool of streams for one executable and Guard state root.
 
@@ -151,7 +169,7 @@ class _PersistentNativeClientPool:
             with self._condition:
                 if client not in self._clients:
                     close_client = True
-                elif self._closed or response is None:
+                elif self._closed or response is None or _is_resident_startup_error(response):
                     self._retiring.add(client)
                     close_client = True
                 else:

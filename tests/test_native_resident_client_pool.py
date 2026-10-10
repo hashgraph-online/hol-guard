@@ -60,6 +60,54 @@ def test_pool_recovers_retired_capacity_only_after_containment(tmp_path: Path, m
     assert len(pool._clients) == 1
 
 
+def test_pool_does_not_reuse_a_client_bound_to_a_failed_resident_startup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    failure = b'{"error":"native_resident_state_dir_create_failed","retryable":false}'
+    clients: list[object] = []
+
+    class Client:
+        def __init__(self, **_kwargs: object) -> None:
+            self.closed = False
+            clients.append(self)
+
+        def request(self, _payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+            # The first stream's lease failed at startup, so it frames that failure forever.
+            return failure if self is clients[0] else b'{"schema":"ok"}'
+
+        def close(self, *, deadline_monotonic: float) -> bool:
+            self.closed = True
+            return True
+
+    monkeypatch.setattr(client_module, "_PersistentNativeClient", Client)
+    pool = _pool(tmp_path)
+    deadline = time.monotonic() + 5
+    assert pool.request(b"first", deadline_monotonic=deadline) == failure
+    stale = clients[0]
+    assert stale.closed
+    assert stale not in pool._idle
+    assert stale not in pool._clients
+    assert pool.request(b"second", deadline_monotonic=deadline) == b'{"schema":"ok"}'
+    assert len(clients) == 2
+
+
+@pytest.mark.parametrize(
+    ("response", "expected"),
+    [
+        (b'{"error":"native_resident_state_dir_create_failed","retryable":false}', True),
+        (b'{"error":"native_resident_lease_busy","retryable":true}', True),
+        (b'{"error":"native_request_invalid_json","retryable":false}', False),
+        (b'{"error":"native_resident_x","retryable":false,"extra":1}', False),
+        (b'{"schema":"guard-daemon-route-result.v1","error":"native_resident_x"}', False),
+        (b'{"error":"native_resident_x"', False),
+        (b'{"error":"native_resident_x","retryable":false}garbage', False),
+        (b"", False),
+    ],
+)
+def test_startup_error_frame_detection_is_exact(response: bytes, expected: bool) -> None:
+    assert client_module._is_resident_startup_error(response) is expected
+
+
 def test_client_reader_keeps_response_binding_with_the_captured_generation_queue(
     tmp_path: Path,
 ) -> None:

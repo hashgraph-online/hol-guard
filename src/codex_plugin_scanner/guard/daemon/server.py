@@ -54,7 +54,6 @@ from ..approval_gate import (
     validate_settings_update as validate_approval_gate_settings,
 )
 from ..approval_scope_support import (
-    APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX,
     IneligibleApprovalScopeError,
     StaleApprovalScopeContractError,
     request_scope_contract_payload,
@@ -147,6 +146,14 @@ from ..models import (
     GuardRuntimeRegistration,
     PolicyDecision,
     format_local_http_origin,
+)
+from ..native_daemon_route import (
+    NativeDaemonRouteError,
+    native_origin_decision,
+    native_resolve_request,
+    native_route_facts,
+    native_session_authorize,
+    native_strict_loopback_origin,
 )
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_mode import native_mode_requires_rust as _native_mode_requires_rust
@@ -339,10 +346,6 @@ _LOGGER = logging.getLogger(__name__)
 _HEADLESS_CLOUD_SYNC_STATE_LOCK = threading.Lock()
 _HEADLESS_CLOUD_SYNC_IN_FLIGHT: set[str] = set()
 _AUDIT_REMEDIATION_ACTIONS = {"package_shim_path"}
-_REMOTE_REVIEW_POST_ROUTES = {
-    "/v1/command-queue/worker/refresh",
-    "/v1/requests/bulk-allow-once",
-}
 _SUPPLY_CHAIN_PACKAGE_ACTIONS = {
     "activate",
     "install",
@@ -360,33 +363,6 @@ _SUPPLY_CHAIN_CONNECT_WAIT_TIMEOUT_SECONDS = 180
 _LOCAL_DASHBOARD_SESSION_REFRESH_GRACE_SECONDS = 7 * 24 * 60 * 60
 _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
-_EXTENSION_CONTROL_PATHS = frozenset(
-    {
-        "/v1/extension-controls/preview",
-        "/v1/extension-controls/test",
-        "/v1/extension-controls/inspect",
-        "/v1/extension-controls/apply",
-        "/v1/extension-controls/refresh",
-        "/v1/extension-controls/recover-authority",
-        "/v1/extension-controls/acknowledge-degraded",
-    }
-)
-_LOCAL_CLI_PATHS = frozenset(
-    {
-        "/v1/local-clis/preview",
-        "/v1/local-clis/apply",
-        "/v1/local-clis/recognize",
-        "/v1/local-clis/discover",
-        "/v1/local-clis/forget",
-        "/v1/local-clis/provider-actions",
-        "/v1/local-clis/provider-workflows",
-        "/v1/local-clis/registry-search",
-        "/v1/local-clis/registry-setup",
-        "/v1/local-clis/refresh-job",
-        "/v1/local-clis/skills",
-        "/v1/local-clis/mcp-skills",
-    }
-)
 
 
 class _HookPathValidationError(ValueError):
@@ -1387,19 +1363,12 @@ _DEFAULT_SUPPLY_CHAIN_REFRESH_BACKOFF_SECONDS = 60.0
 _DEFAULT_SUPPLY_CHAIN_REFRESH_INTERVAL_SECONDS = 15 * 60.0
 _EPHEMERAL_GUARD_DAEMON_IDLE_TIMEOUT_SECONDS = 5
 _GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS = 0.5
-_HOSTED_GUARD_DASHBOARD_ORIGINS = frozenset({"https://hol.org", "https://www.hol.org"})
 _HEADLESS_APP_ACTIONS = {
     "connect": ("install", "install"),
     "repair": ("repair", "repair"),
     "disconnect": ("remove", "uninstall"),
     "status": ("status", "verify"),
     "test": ("scan", "verify"),
-}
-_CLOUD_APP_DASHBOARD_SESSION_ACTIONS = {
-    "connect": frozenset({"connect", "status", "test"}),
-    "repair": frozenset({"repair", "status", "test"}),
-    "status": frozenset({"status"}),
-    "test": frozenset({"status", "test"}),
 }
 _HEADLESS_OPERATIONS = ("install", "repair", "remove", "status", "scan", "policy_sync")
 
@@ -1455,10 +1424,6 @@ def _supply_chain_package_action_error_response(
             "operation": operation,
         },
     )
-
-
-def _cloud_app_dashboard_session_actions(action_path: str) -> frozenset[str]:
-    return _CLOUD_APP_DASHBOARD_SESSION_ACTIONS.get(action_path, frozenset({action_path}))
 
 
 def _headless_detection_status_to_app_status(value: object) -> str:
@@ -2690,7 +2655,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
-        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if parsed.path == "/healthz":
@@ -3181,8 +3146,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
     def do_DELETE(self) -> None:
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
-        path_parts = [part for part in parsed.path.split("/") if part]
-        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
         if not self._header_token_is_valid():
@@ -3238,13 +3202,18 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if parsed.path in {"/v1/connect/requests", "/v1/connect/complete", "/v1/connect/result"}:
             self._write_legacy_pairing_disabled()
             return
-        if not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if not self._origin_is_allowed_for_request(parsed.path):
             self._write_json({"error": "forbidden_origin"}, status=403)
             return
-        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS and not self._header_token_is_valid():
+        try:
+            route = native_route_facts("POST", parsed.path, guard_home=self._route_home())
+        except NativeDaemonRouteError:
+            self._write_json({"error": "native_route_policy_unavailable"}, status=503)
+            return
+        if route.route_class != "none" and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
             return
-        if parsed.path in _EXTENSION_CONTROL_PATHS | _LOCAL_CLI_PATHS:
+        if route.route_class != "none":
             try:
                 content_length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -3289,8 +3258,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             self._handle_dashboard_reconnect_verify(payload)
             return
         proof_authorized = challenge_auth(parsed.path, payload, self._consume_codex_daemon_challenge)
-        requires_token = self._requires_header_token(parsed.path, path_parts)
-        if not request_auth(requires_token, proof_authorized, payload, self._header_token_is_valid):
+        if not request_auth(route.requires_header_token, proof_authorized, payload, self._header_token_is_valid):
             if (
                 len(path_parts) == 4
                 and path_parts[:2] == ["v1", "requests"]
@@ -3321,7 +3289,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 status=401,
             )
             return
-        if parsed.path in _EXTENSION_CONTROL_PATHS:
+        if route.route_class == "extension_control":
             try:
                 if parsed.path.endswith("/test"):
                     response = self._daemon_server().extension_control_api.test_command(payload)
@@ -3345,7 +3313,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return
             self._write_json(response, extra_headers={"Cache-Control": "no-store"})
             return
-        if parsed.path in _LOCAL_CLI_PATHS:
+        if route.route_class == "local_cli":
             handle_local_cli_post(self, parsed.path, payload)
             return
         if parsed.path == "/v1/initialize":
@@ -3519,58 +3487,30 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision":
             self._handle_mcp_policy_decision(path_parts[3], payload)
             return
-        request_id, action, matched = self._resolve_request_action(path_parts, payload)
-        if not matched:
+        try:
+            resolution = native_resolve_request(parsed.path, payload, guard_home=self._route_home())
+        except NativeDaemonRouteError:
+            self._write_json({"resolved": False, "error": "native_route_policy_unavailable"}, status=503)
+            return
+        if resolution.outcome == "not_matched":
             self.send_response(404)
             self.end_headers()
             return
-        if action is None:
-            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
+        if resolution.outcome != "resolved":
+            self._write_json({"resolved": False, "error": resolution.outcome}, status=400)
             return
-        if request_id is None:
-            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
-            return
-        scope = payload.get("scope")
-        if not isinstance(scope, str) or not scope.strip():
-            self._write_json({"resolved": False, "error": "missing_required_fields"}, status=400)
-            return
-        scope_contract_version_value = payload.get("scope_contract_version")
-        if scope_contract_version_value is not None and (
-            not isinstance(scope_contract_version_value, str) or not scope_contract_version_value.strip()
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
-            return
-        scope_contract_version = (
-            scope_contract_version_value.strip() if isinstance(scope_contract_version_value, str) else None
-        )
-        if scope_contract_version is not None and (
-            not scope_contract_version.startswith(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX)
-            or not scope_contract_version.removeprefix(APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX).isdigit()
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_version"}, status=400)
-            return
-        scope_contract_digest_value = payload.get("scope_contract_digest")
-        if scope_contract_digest_value is not None and (
-            not isinstance(scope_contract_digest_value, str) or not scope_contract_digest_value.strip()
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
-            return
-        scope_contract_digest = (
-            scope_contract_digest_value.strip() if isinstance(scope_contract_digest_value, str) else None
-        )
-        if scope_contract_digest is not None and (
-            len(scope_contract_digest) != 64
-            or any(character not in "0123456789abcdef" for character in scope_contract_digest)
-        ):
-            self._write_json({"resolved": False, "error": "invalid_scope_contract_digest"}, status=400)
-            return
+        request_id = cast(str, resolution.request_id)
+        action = cast(str, resolution.action)
+        scope = cast(str, resolution.scope)
+        scope_contract_version = resolution.scope_contract_version
+        scope_contract_digest = resolution.scope_contract_digest
         try:
             existing_request = self.server.store.get_approval_request(request_id)  # type: ignore[attr-defined]
             if isinstance(existing_request, dict):
                 scope_selection = resolve_request_scope_selection(
                     existing_request,
                     action=action,
-                    requested_scope=scope.strip(),
+                    requested_scope=scope,
                     contract_version=scope_contract_version,
                     contract_digest=scope_contract_digest,
                 )
@@ -3596,7 +3536,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 store=self.server.store,  # type: ignore[attr-defined]
                 request_id=request_id,
                 action=action,
-                scope=scope.strip(),
+                scope=scope,
                 workspace=self._optional_string(payload.get("workspace")),
                 reason=self._optional_string(payload.get("reason")),
                 return_queue_result=True,
@@ -3632,7 +3572,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                     replay_selection = resolve_request_scope_selection(
                         resolved_request,
                         action=action,
-                        requested_scope=scope.strip(),
+                        requested_scope=scope,
                         contract_version=scope_contract_version,
                         contract_digest=scope_contract_digest,
                     )
@@ -3689,7 +3629,7 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         except ValueError as error:
             self._write_json({"resolved": False, "error": str(error)}, status=400)
             return
-        normalized_scope = scope.strip()
+        normalized_scope = scope
         item = updated.get("item")
         harness_str = str(item.get("harness", "")) if isinstance(item, dict) else ""
         self.server.store.add_event(  # type: ignore[attr-defined]
@@ -7185,27 +7125,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
             return f"http://[::1]:{daemon_server.daemon_port()}"
         return None
 
-    @classmethod
-    def _strict_loopback_origin(cls, value: object) -> str | None:
-        if not isinstance(value, str):
-            return None
-        normalized = cls._normalize_origin(value)
-        if normalized is None:
-            return None
-        parsed = urlparse(normalized)
-        if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "::1"}:
-            return None
-        try:
-            port = parsed.port
-        except ValueError:
-            return None
-        if port is None or not 1 <= port <= 65535:
-            return None
-        canonical_host = "[::1]" if parsed.hostname == "::1" else "127.0.0.1"
-        canonical = f"http://{canonical_host}:{port}"
-        raw_origin = value.strip()
-        return canonical if normalized == canonical and raw_origin in {canonical, f"{canonical}/"} else None
-
     def _handle_daemon_identity_challenge(self, payload: dict[str, object]) -> None:
         nonce = self._optional_string(payload.get("nonce"))
         hook_event = self._optional_string(payload.get("hook_event"))
@@ -7418,14 +7337,74 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 else:
                     return
 
+    def _route_home(self) -> Path | None:
+        return getattr(getattr(self.server, "store", None), "guard_home", None)
+
+    def _path_supports_dashboard_session(self, path: str) -> bool:
+        try:
+            return native_route_facts(self.command, path, guard_home=self._route_home()).session_path
+        except NativeDaemonRouteError:
+            return False
+
     def _header_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         token = self.headers.get("X-Guard-Token")
         path = urlparse(self.path).path
-        path_parts = [part for part in path.split("/") if part]
         return self._tokens_match(token) or (
-            self._path_supports_dashboard_session(path, path_parts)
-            and self._dashboard_session_token_is_valid(payload=payload)
+            self._path_supports_dashboard_session(path) and self._dashboard_session_token_is_valid(payload=payload)
         )
+
+    def _origin_is_allowed_for_request(self, path: str) -> bool:
+        origin = self.headers.get("Origin")
+        if origin is None:
+            return True
+        normalized_origin = self._normalize_origin(origin)
+        if normalized_origin is None:
+            return False
+        try:
+            return native_origin_decision(normalized_origin, path, guard_home=self._route_home()).allowed
+        except NativeDaemonRouteError:
+            return False
+
+    def _is_hosted_dashboard_origin(self) -> bool:
+        origin = self._normalize_origin(self.headers.get("Origin"))
+        if origin is None:
+            return False
+        try:
+            return native_origin_decision(origin, "/", guard_home=self._route_home()).hosted_origin
+        except NativeDaemonRouteError:
+            return True
+
+    def _strict_loopback_origin(self, value: object) -> str | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            return native_strict_loopback_origin(
+                value.strip(), self._normalize_origin(value), guard_home=self._route_home()
+            )
+        except NativeDaemonRouteError:
+            return None
+
+    def _dashboard_session_claims_authorize_request(
+        self,
+        claims: dict[str, object],
+        *,
+        payload: dict[str, object] | None,
+    ) -> bool:
+        try:
+            verdict = native_session_authorize(
+                method=self.command,
+                path=urlparse(self.path).path,
+                claims=claims,
+                payload=payload,
+                header_nonce=self.headers.get("X-Guard-Dashboard-Nonce"),
+                request_origin=self._normalize_origin(self.headers.get("Origin")),
+                guard_home=self._route_home(),
+            )
+        except NativeDaemonRouteError:
+            return False
+        if verdict.consume_nonce is not None and not self._consume_dashboard_session_nonce(verdict.consume_nonce):
+            return False
+        return verdict.allowed
 
     def _dashboard_session_token_is_valid(self, *, payload: dict[str, object] | None = None) -> bool:
         session_token = self.headers.get("X-Guard-Dashboard-Session")
@@ -7551,211 +7530,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return claims
         return None
 
-    def _dashboard_session_claims_authorize_request(
-        self,
-        claims: dict[str, object],
-        *,
-        payload: dict[str, object] | None,
-    ) -> bool:
-        surface = self._optional_string(claims.get("surface"))
-        path = urlparse(self.path).path
-        path_parts = [part for part in path.split("/") if part]
-        if surface == PROTECTION_REPAIR_DASHBOARD_SURFACE:
-            return self._protection_repair_session_request_is_allowed(path, payload=payload)
-        if surface in {"approval-center", "dashboard", "cloud-dashboard"}:
-            return self._path_supports_dashboard_session(path, path_parts)
-        action_path = self._optional_string(claims.get("action_path"))
-        if action_path is None:
-            return False
-        if self.command == "GET" and self._dashboard_session_scoped_read_path_is_allowed(claims, path):
-            return self._dashboard_session_scoped_nonce_matches_request(claims=claims, payload=payload)
-        if (
-            len(path_parts) == 3
-            and path_parts[:2] == ["v1", "apps"]
-            and path_parts[2] in _cloud_app_dashboard_session_actions(action_path)
-        ):
-            if payload is None:
-                return False
-            harness = self._optional_string(claims.get("harness"))
-            location_id = self._optional_string(claims.get("location_id"))
-            workspace_id = self._optional_string(claims.get("workspace_id")) or ""
-            payload_harness = self._optional_string(payload.get("harness"))
-            payload_location_id = self._optional_string(payload.get("location_id")) or self._optional_string(
-                payload.get("locationId")
-            )
-            payload_workspace_id = self._optional_string(payload.get("workspace_id")) or ""
-            return (
-                harness is not None
-                and payload_harness == harness
-                and (not location_id or payload_location_id == location_id)
-                and (not workspace_id or payload_workspace_id == workspace_id)
-            )
-        supply_chain_action = self._supply_chain_claim_action_for_request(path, path_parts)
-        if supply_chain_action is not None:
-            return self._supply_chain_dashboard_claims_authorize(
-                claims,
-                payload=payload,
-                supply_chain_action=supply_chain_action,
-            )
-        return False
-
-    def _dashboard_session_scoped_read_path_is_allowed(self, claims: dict[str, object], path: str) -> bool:
-        allowed_read_paths = claims.get("allowed_read_paths")
-        if not isinstance(allowed_read_paths, list):
-            return False
-        return path in {item for item in allowed_read_paths if isinstance(item, str)}
-
-    def _dashboard_session_scoped_nonce_matches_request(
-        self,
-        *,
-        claims: dict[str, object],
-        payload: dict[str, object] | None,
-    ) -> bool:
-        claim_nonce = self._optional_string(claims.get("nonce"))
-        if claim_nonce is None:
-            return True
-        request_nonce = self._optional_string(self.headers.get("X-Guard-Dashboard-Nonce"))
-        if request_nonce is None and payload is not None:
-            request_nonce = self._optional_string(payload.get("dashboard_session_nonce"))
-        return request_nonce == claim_nonce
-
-    def _local_surface_session_request_is_allowed(self, path: str, path_parts: list[str]) -> bool:
-        if path in {
-            "/v1/cloud-review",
-            "/v1/capabilities",
-            "/v1/sessions",
-            "/v1/runtime",
-            "/v1/harnesses",
-            "/v1/inventory",
-            "/v1/settings",
-            "/v1/settings/export",
-            "/v1/events",
-            "/v1/events/stream",
-            "/v1/command-activity",
-            "/v1/command-activity/analytics",
-            "/v1/command-activity/diagnostics",
-            "/v1/command-activity/events",
-            "/v1/command-activity/feedback",
-            "/v1/command-extensions",
-            "/v1/requests",
-            "/v1/receipts",
-            "/v1/receipts/analytics",
-            "/v1/insights/share",
-            "/v1/cloud/connect",
-            "/v1/receipts/latest",
-            "/v1/policy",
-            "/v1/policy/cloud-exceptions",
-            "/v1/evidence",
-            "/v1/evidence/export",
-            "/v1/clients/attach",
-            "/v1/clients/heartbeat",
-            "/v1/sessions/start",
-            "/v1/operations/start",
-            "/v1/operations/block",
-            "/v1/policy/sync",
-            "/v1/requests/clear",
-            *_REMOTE_REVIEW_POST_ROUTES,
-            "/v1/settings/import",
-            "/v1/settings/reset",
-            "/v1/read-state",
-            "/v1/policy/clear",
-            "/v1/approval-gate/cooldown/revoke",
-            "/v1/approval-gate/totp/enroll",
-            "/v1/approval-gate/totp/verify",
-            "/v1/approval-gate/totp/disable",
-            "/v1/daemon/repair",
-            "/v1/protection/repair",
-            "/v1/notifications/setup",
-            "/v1/update/status",
-            "/v1/update/channel",
-            "/v1/update/reconnect/prepare",
-        }:
-            return True
-        # Hosted dashboard access is blocked for these routes, but local
-        # loopback/dashboard sessions still use them until the route deletion
-        # slice lands.
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
-            return True
-        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
-            return True
-        if self.command == "GET":
-            if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] == "business-summary":
-                return True
-            if len(path_parts) == 4 and path_parts[:3] == ["v1", "mcp-policy", "requests"]:
-                return True
-            if len(path_parts) == 3 and path_parts[:2] in (
-                ["v1", "requests"],
-                ["v1", "receipts"],
-                ["v1", "operations"],
-            ):
-                return True
-            if len(path_parts) == 4 and path_parts[:2] == ["v1", "sessions"] and path_parts[3] == "resume":
-                return True
-        if self.command == "POST":
-            if (
-                len(path_parts) == 5
-                and path_parts[:3] == ["v1", "mcp-policy", "requests"]
-                and path_parts[4] == "decision"
-            ):
-                return True
-            if path in {"/v1/update", "/v1/update/channel", "/v1/update/reconnect/prepare"}:
-                return True
-            if (
-                len(path_parts) == 4
-                and path_parts[:2] == ["v1", "requests"]
-                and path_parts[3]
-                in {
-                    "approve",
-                    "block",
-                    "resume",
-                }
-            ):
-                return True
-            if (
-                len(path_parts) == 4
-                and path_parts[:2] == ["v1", "operations"]
-                and path_parts[3]
-                in {
-                    "items",
-                    "status",
-                }
-            ):
-                return True
-        return False
-
-    def _protection_repair_session_request_is_allowed(
-        self,
-        path: str,
-        *,
-        payload: dict[str, object] | None,
-    ) -> bool:
-        if self.command == "GET" and path in {
-            "/v1/runtime",
-            "/v1/settings",
-            "/v1/extension-controls/effective",
-            "/v1/update/status",
-        }:
-            return True
-        if self.command != "POST":
-            return False
-        return path in {
-            "/v1/initialize",
-            "/v1/extension-controls/recover-authority",
-        }
-
-    def _path_supports_dashboard_session(self, path: str, path_parts: list[str]) -> bool:
-        return self._is_hosted_dashboard_api_path(path, path_parts) or self._local_surface_session_request_is_allowed(
-            path,
-            path_parts,
-        )
-
-    def _claim_string(self, claims: dict[str, object], *keys: str) -> str | None:
-        for key in keys:
-            value = self._optional_string(claims.get(key))
-            if value is not None:
-                return value
-        return None
-
     def _enforce_package_firewall_rate_limit(
         self,
         operation: str,
@@ -7815,78 +7589,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
                 return False
             self.server.package_firewall_session_nonces[nonce] = now
             return True
-
-    def _supply_chain_dashboard_claims_authorize(
-        self,
-        claims: dict[str, object],
-        *,
-        payload: dict[str, object] | None,
-        supply_chain_action: str,
-    ) -> bool:
-        action_path = self._optional_string(claims.get("action_path"))
-        allowed_claim = claims.get("allowed_action_paths")
-        allowed_actions = (
-            {item for item in allowed_claim if isinstance(item, str)} if isinstance(allowed_claim, list) else set()
-        )
-        if supply_chain_action != action_path and supply_chain_action not in allowed_actions:
-            return False
-        claim_nonce = self._claim_string(claims, "nonce")
-        if claim_nonce is not None and not self._consume_dashboard_session_nonce(claim_nonce):
-            return False
-        if payload is None:
-            return supply_chain_action in {"package_shims_status", "supply_chain_bundle"}
-        workspace_id = self._claim_string(claims, "workspace_id", "workspaceId") or ""
-        payload_workspace_id = (
-            self._optional_string(payload.get("workspace_id"))
-            or self._optional_string(payload.get("workspaceId"))
-            or ""
-        )
-        if workspace_id and payload_workspace_id != workspace_id:
-            return False
-        location_id = self._claim_string(claims, "location_id", "locationId")
-        payload_location_id = (
-            self._optional_string(payload.get("location_id")) or self._optional_string(payload.get("locationId")) or ""
-        )
-        if location_id and payload_location_id != location_id:
-            return False
-        daemon_origin = self._claim_string(claims, "daemon_origin", "daemonOrigin")
-        if daemon_origin is not None:
-            request_origin = self._normalize_origin(self.headers.get("Origin"))
-            payload_origin = (
-                self._optional_string(payload.get("daemon_origin"))
-                or self._optional_string(payload.get("daemonOrigin"))
-                or request_origin
-            )
-            if payload_origin != daemon_origin:
-                return False
-        managers_claim = claims.get("managers")
-        if not isinstance(managers_claim, list):
-            return True
-        allowed_managers = {item for item in managers_claim if isinstance(item, str)}
-        managers_value = payload.get("managers")
-        if managers_value is None:
-            return True
-        if not isinstance(managers_value, list) or not all(isinstance(manager, str) for manager in managers_value):
-            return False
-        return set(managers_value).issubset(allowed_managers)
-
-    @staticmethod
-    def _supply_chain_claim_action_for_request(path: str, path_parts: list[str]) -> str | None:
-        if path == "/v1/supply-chain/package-shims":
-            return "package_shims_status"
-        if path == "/v1/supply-chain/entitlement":
-            return "supply_chain_entitlement"
-        if path == "/v1/supply-chain/bundle":
-            return "supply_chain_bundle"
-        if path == "/v1/supply-chain/repair":
-            return "package_shims_repair_all"
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "supply-chain", "package-shims"]:
-            action = "remove" if path_parts[3] == "uninstall" else path_parts[3]
-            if action in {"activate", "install", "repair", "test", "remove", "open-shell"}:
-                return f"package_shims_{action}"
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "supply-chain"] and path_parts[2] in {"audit", "sync"}:
-            return f"package_shims_{path_parts[2]}"
-        return None
 
     def _tokens_match(self, token: object) -> bool:
         if not isinstance(token, str):
@@ -7957,105 +7659,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         finally:
             self._decrement_active_stream_clients()
 
-    def _origin_is_allowed_for_request(self, path: str, path_parts: list[str]) -> bool:
-        origin = self.headers.get("Origin")
-        if origin is None:
-            return True
-        normalized_origin = self._normalize_origin(origin)
-        if normalized_origin is None:
-            return False
-        parsed = urlparse(normalized_origin)
-        local_origin = parsed.hostname in {"127.0.0.1", "localhost", "::1"}
-        if local_origin:
-            return True
-        return normalized_origin in _HOSTED_GUARD_DASHBOARD_ORIGINS and self._is_hosted_dashboard_api_path(
-            path, path_parts
-        )
-
-    @staticmethod
-    def _is_hosted_dashboard_api_path(path: str, path_parts: list[str]) -> bool:
-        if path in {
-            "/v1/capabilities",
-            "/v1/connect/complete",
-            "/v1/inventory",
-            "/v1/connect/state",
-            "/v1/daemon/repair",
-            "/v1/evidence",
-            "/v1/evidence/export",
-            "/v1/command-activity",
-            "/v1/command-activity/analytics",
-            "/v1/command-activity/diagnostics",
-            "/v1/command-activity/events",
-            "/v1/command-activity/feedback",
-            "/v1/command-extensions",
-            "/v1/extension-controls/catalog",
-            "/v1/extension-controls/effective",
-            "/v1/extension-controls/history",
-            "/v1/extension-controls/preview",
-            "/v1/extension-controls/test",
-            "/v1/extension-controls/apply",
-            "/v1/extension-controls/refresh",
-            "/v1/extension-controls/recover-authority",
-            "/v1/extension-controls/acknowledge-degraded",
-            "/v1/local-clis",
-            *_LOCAL_CLI_PATHS,
-            "/v1/harnesses",
-            "/v1/notifications/setup",
-            "/v1/policy",
-            "/v1/policy/cloud-exceptions",
-            "/v1/policy/cloud-exception-requests",
-            "/v1/policy/clear",
-            "/v1/receipts",
-            "/v1/receipts/analytics",
-            "/v1/insights/share",
-            "/v1/cloud/connect",
-            "/v1/supply-chain/package-shims/connect",
-            "/v1/supply-chain/package-shims/activate",
-            "/v1/receipts/latest",
-            "/v1/runtime",
-            "/v1/settings",
-            "/v1/protection/repair/approval-gate/setup",
-            "/v1/settings/export",
-            "/v1/settings/import",
-            "/v1/settings/reset",
-            "/v1/read-state",
-            "/v1/update",
-            "/v1/update/channel",
-            "/v1/update/reconnect/challenge",
-            "/v1/update/reconnect/prepare",
-            "/v1/update/reconnect/verify",
-            "/v1/update/status",
-        }:
-            return True
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "receipts"]:
-            return True
-        if len(path_parts) >= 4 and path_parts[:3] == ["v2", "extension-controls", "catalog"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            return True
-        if (
-            len(path_parts) == 5
-            and path_parts[:2] == ["v1", "apps"]
-            and path_parts[3] == "cloud"
-            and path_parts[4] == "start"
-        ):
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "harnesses"]
-            and path_parts[3]
-            in {
-                "install",
-                "verify",
-                "repair",
-                "uninstall",
-            }
-        ):
-            return True
-        return len(path_parts) == 4 and path_parts[:2] == ["v1", "artifacts"] and path_parts[3] == "diff"
-
     def _approval_with_extension_recommendation(self, approval: dict[str, object]) -> dict[str, object]:
         from .approval_extension_recommendation import with_approval_extension_recommendation
 
@@ -8068,10 +7671,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         return with_approval_extension_recommendation(
             {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
         )
-
-    def _is_hosted_dashboard_origin(self) -> bool:
-        origin = self._normalize_origin(self.headers.get("Origin"))
-        return origin in _HOSTED_GUARD_DASHBOARD_ORIGINS
 
     def _public_healthz_payload(self) -> dict[str, object]:
         return {
@@ -8285,9 +7884,8 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         allow_headers: str = "Authorization, Content-Type, X-Guard-Dashboard-Session, X-Guard-Token",
     ) -> dict[str, str] | None:
         parsed = urlparse(self.path)
-        path_parts = [part for part in parsed.path.split("/") if part]
         origin = self._normalize_origin(self.headers.get("Origin"))
-        if origin is None or not self._origin_is_allowed_for_request(parsed.path, path_parts):
+        if origin is None or not self._origin_is_allowed_for_request(parsed.path):
             return None
         return self._cors_headers(origin, allow_methods=allow_methods, allow_headers=allow_headers)
 
@@ -8543,101 +8141,6 @@ class _GuardDaemonHandler(BaseHTTPRequestHandler):
         if scope == "publisher":
             return publisher is not None
         return False
-
-    @staticmethod
-    def _resolve_request_action(
-        path_parts: list[str], payload: dict[str, object]
-    ) -> tuple[str | None, str | None, bool]:
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "requests"] and path_parts[3] in {"approve", "block"}:
-            return path_parts[2], "allow" if path_parts[3] == "approve" else "block", True
-        if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
-            action = payload.get("action")
-            if not isinstance(action, str) or not action.strip():
-                return path_parts[1], None, True
-            return path_parts[1], action.strip(), True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            action = payload.get("action")
-            if not isinstance(action, str) or not action.strip():
-                return path_parts[2], None, True
-            return path_parts[2], action.strip(), True
-        return None, None, False
-
-    @staticmethod
-    def _requires_header_token(path: str, path_parts: list[str]) -> bool:
-        if path in {
-            "/v1/cloud-review",
-            "/v1/clients/attach",
-            "/v1/clients/heartbeat",
-            "/v1/sessions/start",
-            "/v1/operations/start",
-            "/v1/connect/requests",
-            "/v1/connect/result",
-            "/v1/operations/block",
-            "/v1/policy/decisions",
-            "/v1/policy/resolve",
-            "/v1/policy/claim",
-            "/v1/policy/cloud-exceptions",
-            "/v1/policy/cloud-exception-requests",
-            "/v1/policy/clear",
-            "/v1/policy/sync",
-            "/v1/requests/clear",
-            *_REMOTE_REVIEW_POST_ROUTES,
-            "/v1/settings",
-            "/v1/settings/import",
-            "/v1/settings/reset",
-            "/v1/approval-gate/cooldown/revoke",
-            "/v1/approval-gate/totp/enroll",
-            "/v1/approval-gate/totp/verify",
-            "/v1/approval-gate/totp/disable",
-            "/v1/daemon/repair",
-            "/v1/protection/repair",
-            "/v1/protection/repair/approval-gate/setup",
-            "/v1/insights/share",
-            "/v1/cloud/connect",
-            "/v1/notifications/setup",
-            "/v1/update",
-            "/v1/update/channel",
-            "/v1/update/reconnect/prepare",
-            "/v1/command-activity/feedback",
-        }:
-            return True
-        if len(path_parts) >= 3 and path_parts[:2] == ["v1", "hooks"]:
-            return True
-        if len(path_parts) == 3 and path_parts[:2] == ["v1", "apps"] and path_parts[2] in _HEADLESS_APP_ACTIONS:
-            return True
-        if len(path_parts) >= 2 and path_parts[:2] == ["v1", "supply-chain"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:3] == ["v1", "audit", "remediations"]:
-            return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "operations"] and path_parts[3] in {"items", "status"}:
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "requests"]
-            and path_parts[3] in {"approve", "block", "resume", "live-decision"}
-        ):
-            return True
-        if (
-            len(path_parts) == 4
-            and path_parts[:2] == ["v1", "harnesses"]
-            and path_parts[3]
-            in {
-                "install",
-                "verify",
-                "repair",
-                "uninstall",
-            }
-        ):
-            return True
-        if len(path_parts) == 5 and path_parts[:2] == ["v1", "apps"] and path_parts[3:] == ["cloud", "start"]:
-            return True
-        if len(path_parts) == 3 and path_parts[0] == "approvals" and path_parts[2] == "decision":
-            return True
-        if len(path_parts) == 4 and path_parts[:2] == ["v1", "approvals"] and path_parts[3] == "decision":
-            return True
-        return (
-            len(path_parts) == 5 and path_parts[:3] == ["v1", "mcp-policy", "requests"] and path_parts[4] == "decision"
-        )
 
     def _write_json(
         self,

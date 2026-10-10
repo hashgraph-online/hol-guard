@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_hook_test_client import open_authenticated_claude_request
 
 
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_guard_daemon_hook_path_denial_survives_audit_timeout(tmp_path, monkeypatch) -> None:
     # The 400 surface only fires when the Python edge handles the request; under
     # native_required the invalid workspace is recorded but the raw payload is
