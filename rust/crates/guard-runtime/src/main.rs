@@ -143,6 +143,7 @@ mod package_approval_hash_op;
 mod package_authority_config;
 mod package_authority_op;
 mod package_evaluation_compose_op;
+mod package_policy_resolve_op;
 mod policy_bundle_crypto;
 mod policy_bundle_decisions;
 mod policy_bundle_delivery;

@@ -1,0 +1,5104 @@
+[
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "no_facts_unchanged",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "code": "current_package_policy",
+      "message": "HOL Guard's current package policy blocks `guard-proof`.",
+      "policy_action": "block",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard's current package policy blocks `guard-proof`.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard's current package policy blocks `guard-proof`.",
+     "next_step": "Review the current package request in HOL Guard, then retry.",
+     "summary": "HOL Guard's current package policy blocks `guard-proof`.",
+     "title": "Current package policy"
+    }
+   }
+  },
+  "name": "current_action_tightens_only",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "current_action": "block",
+   "daemon_authority": false,
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_content_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_content_changed",
+      "message": "Saved approval was rejected because the current package content or execution context changed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "diagnosed_content_changed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "diagnosed_reason": "approval_reuse_content_changed",
+   "diagnosed_stored_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjQzMTM3Y2FkZWMyZmMyYWE3YzYxMjkyM2Q2NDQyOWQ5OWI3YjJmNWVjODJhMDg0YTQ4NDZhMGNjNzJkN2IwNDEiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_content_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": false,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_content_changed",
+      "message": "Saved approval was rejected because the current package content or execution context changed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "diagnosed_legacy_hash",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "diagnosed_reason": "approval_reuse_content_changed",
+   "diagnosed_stored_hash": "legacy-hash",
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "require-reapproval",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "require-reapproval",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "require-reapproval",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_integrity_failure",
+       "saved_action": "require-reapproval",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_integrity_failure",
+      "message": "Saved approval was rejected because its integrity could not be verified.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Saved approval was rejected because its integrity could not be verified.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Saved approval was rejected because its integrity could not be verified.",
+     "next_step": "Review the current package request in HOL Guard, then retry.",
+     "summary": "Saved approval was rejected because its integrity could not be verified.",
+     "title": "Saved approval not reusable"
+    }
+   }
+  },
+  "name": "ignored_integrity_no_daemon",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": true,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "require-reapproval",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "require-reapproval",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "require-reapproval",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_integrity_failure",
+       "saved_action": "require-reapproval",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_integrity_failure",
+      "message": "Saved approval was rejected because its integrity could not be verified.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Saved approval was rejected because its integrity could not be verified.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Saved approval was rejected because its integrity could not be verified.",
+     "next_step": "Review the current package request in HOL Guard, then retry.",
+     "summary": "Saved approval was rejected because its integrity could not be verified.",
+     "title": "Saved approval not reusable"
+    }
+   }
+  },
+  "name": "ignored_integrity_daemon_no_decision",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": true,
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": true,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [
+    "daemon"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "daemon_allow_claim_ok",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": true,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": false,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [
+    "daemon"
+   ],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_claim_failed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_claim_failed",
+      "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "daemon_allow_claim_failed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": true,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "durable_allow_claim_ok",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": false,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_claim_failed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_claim_failed",
+      "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "durable_allow_claim_failed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "durable_allow_no_claim_requested",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": false,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "warn",
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "warn",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_current_action_not_review",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "not-applicable"
+      },
+      "code": "approval_reuse_current_action_not_review",
+      "message": "Saved package policy was not reused (approval_reuse_current_action_not_review).",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "durable_allow_warn_current",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "require-reapproval",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "require-reapproval",
+       "current_normalization_reason_code": null,
+       "original_current_action": "require-reapproval",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "durable_allow_require_reapproval",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "require-reapproval",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "sandbox-required",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "sandbox-required",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "sandbox-required",
+       "current_action": "sandbox-required",
+       "current_normalization_reason_code": null,
+       "original_current_action": "sandbox-required",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_sandbox_required",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_sandbox_required",
+      "message": "Saved approval was rejected because current package policy requires sandbox enforcement.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "durable_allow_sandbox_required",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "sandbox-required",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "block",
+   "packages": [
+    {
+     "decision": "block",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "block",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "block",
+       "current_normalization_reason_code": null,
+       "original_current_action": "block",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_current_block",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_current_block",
+      "message": "Saved approval was rejected because current package policy blocks this request.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "durable_allow_current_block",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "require-reapproval",
+       "current_normalization_reason_code": null,
+       "original_current_action": "require-reapproval",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_policy",
+      "message": "HOL Guard's current package policy requires fresh approval for `guard-proof`.",
+      "policy_action": "require-reapproval",
+      "severity": "medium",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "durable_allow_current_action_overlay",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "current_action": "require-reapproval",
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_content_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_content_changed",
+      "message": "Saved approval was rejected because the current package content or execution context changed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "allow_content_changed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjQzMTM3Y2FkZWMyZmMyYWE3YzYxMjkyM2Q2NDQyOWQ5OWI3YjJmNWVjODJhMDg0YTQ4NDZhMGNjNzJkN2IwNDEiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_identity_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_identity_changed",
+      "message": "Saved approval was rejected because the current package identity or scope changed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "allow_identity_changed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6IjBlMmExZDNjNzY2MTMxMjQ5NDFjNTcxOGQzOWY4MTQwMmE4YzU0NzZmZTZhMmQwNmQzY2ZhZjcyMWRiMjBkZGQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_policy_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_policy_changed",
+      "message": "Saved package policy was not reused (approval_reuse_policy_changed).",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "allow_policy_changed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJhYTcxYzY2Y2I0ZDFiMWUyYTg2MTdlNTlkOGRjNGU1Mzg1YjEwYTAyNWY3MWVlNjc3Y2JmZGE5ZTgwMWY1OGNhIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_capability_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_capability_changed",
+      "message": "Saved package policy was not reused (approval_reuse_capability_changed).",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "allow_capability_changed",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiJlYTRiNjExZjNkNjQyMjNiNWY2YmU4NDcyMjQ0OTg1MjRjZDZlZDMxNDE4ZjFlOGY2MzQ5NjBkN2Y4ZmYwMDYzIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_content_changed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": false,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_content_changed",
+      "message": "Saved approval was rejected because the current package content or execution context changed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "allow_legacy_hash",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "legacy-hash",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "consumed",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "consumed",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "fresh_expiring_with_request",
+  "request": {
+   "approval_request": {
+    "resolution_scope": "artifact"
+   },
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-1",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "consumed",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "consumed",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "fresh_expiring_request_wrong_scope",
+  "request": {
+   "approval_request": {
+    "resolution_scope": "workspace"
+   },
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-1",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "consumed",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "consumed",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "fresh_expiring_request_missing",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-1",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "consumed",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "consumed",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "fresh_expiring_local_identity",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "local-supply-chain:project:package-request:abc",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "decision_id": 7,
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "local-supply-chain",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": false,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_claim_failed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_claim_failed",
+      "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "fresh_expiring_claim_failed",
+  "request": {
+   "approval_request": {
+    "resolution_scope": "artifact"
+   },
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-1",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "consumed",
+   "claims": [
+    "legacy_local"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "consumed",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "legacy_local_claim_ok",
+  "request": {
+   "approval_request": {
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "artifact_type": "package_request",
+    "resolution_action": "allow",
+    "resolution_scope": "artifact",
+    "status": "resolved"
+   },
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "local-supply-chain:project:package-request:abc",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "approval_id": "appr-1",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "decision_id": "x",
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-2",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": null
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": false,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [
+    "legacy_local"
+   ],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_claim_failed",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_claim_failed",
+      "message": "Saved approval was rejected because it changed, expired, or was already consumed.",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "legacy_local_claim_failed",
+  "request": {
+   "approval_request": {
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "artifact_type": "package_request",
+    "resolution_action": "allow",
+    "resolution_scope": "artifact",
+    "status": "resolved"
+   },
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "local-supply-chain:project:package-request:abc",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "approval_id": "appr-1",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "decision_id": "x",
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-2",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": null
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "legacy_local_request_mismatch",
+  "request": {
+   "approval_request": {
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "other",
+    "artifact_type": "package_request",
+    "resolution_action": "allow",
+    "resolution_scope": "artifact",
+    "status": "resolved"
+   },
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "local-supply-chain:project:package-request:abc",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "approval_id": "appr-1",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "decision_id": "x",
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "request_id": "req-2",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": null
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": "retained",
+   "claims": [
+    "store"
+   ],
+   "final": {
+    "decision": "allow",
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "approval_claim_disposition": "retained",
+      "approval_reuse": {
+       "action": "allow",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "allow",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_accepted",
+       "saved_action": "allow",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": true,
+       "status": "accepted"
+      },
+      "code": "saved_package_approval",
+      "message": "HOL Guard reused your saved approval for this package request.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard verified the same repository, package manager, dependency files, settings, and registry environment before reusing your saved approval.",
+     "next_step": null,
+     "summary": "HOL Guard reused your saved approval for this package request.",
+     "title": "Allowed by saved approval"
+    }
+   }
+  },
+  "name": "approval_row_retained_disposition",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "local-supply-chain:project:package-request:abc",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "allow",
+    "approval_id": "appr-3",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "local-supply-chain:project:package-request:abc",
+    "decision_id": "x",
+    "expires_at": "2026-07-18T00:00:00Z",
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "ask",
+   "packages": [
+    {
+     "decision": "ask",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "review",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "review",
+       "current_normalization_reason_code": null,
+       "original_current_action": "review",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /work/space`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /work/space`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /work/space",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "saved_block",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "allow",
+       "current_normalization_reason_code": null,
+       "original_current_action": "allow",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /other/ws --publisher acme`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /other/ws --publisher acme`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 7 --harness codex --scope artifact --artifact-id command:npm-install --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ --policy-workspace /other/ws --publisher acme",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "saved_block_publisher_workspace",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": "acme",
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/other/ws"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "allow",
+       "current_normalization_reason_code": null,
+       "original_current_action": "allow",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope harness --artifact-id command:npm-install`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 7 --harness codex --scope harness --artifact-id command:npm-install`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 7 --harness codex --scope harness --artifact-id command:npm-install",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "saved_block_harness_scope",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": null,
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "harness",
+    "source": "approval-gate",
+    "workspace": null
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --harness codex --scope global --artifact-id command:npm-install`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --harness codex --scope global --artifact-id command:npm-install`, then retry the install.",
+     "next_step": "hol-guard policies clear --harness codex --scope global --artifact-id command:npm-install",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "saved_block_global_scope_no_id",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "decision_id": "n",
+    "scope": "global",
+    "source": "manual"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "review",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "review",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "review",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_action_not_allow",
+       "saved_action": "review",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_saved_action_not_allow",
+      "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "next_step": "Review the current package request in HOL Guard, then retry.",
+     "summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "title": "Saved approval not reusable"
+    }
+   }
+  },
+  "name": "saved_review_action",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "review",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "warn",
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "warn",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "warn",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_action_not_allow",
+       "saved_action": "warn",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_saved_action_not_allow",
+      "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "saved_warn_action",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "warn",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "require-reapproval",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "require-reapproval",
+       "current_action": "allow",
+       "current_normalization_reason_code": null,
+       "original_current_action": "allow",
+       "original_current_type": "str",
+       "original_saved_action": "require-reapproval",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_action_not_allow",
+       "saved_action": "require-reapproval",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_saved_action_not_allow",
+      "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "next_step": "Review the current package request in HOL Guard, then retry.",
+     "summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "title": "Saved approval not reusable"
+    }
+   }
+  },
+  "name": "saved_require_reapproval_action",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "require-reapproval",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "allow",
+   "packages": [
+    {
+     "decision": "allow",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "allow",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "ask",
+    "packages": [
+     {
+      "decision": "ask",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "sandbox-required",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "sandbox-required",
+       "current_action": "allow",
+       "current_normalization_reason_code": null,
+       "original_current_action": "allow",
+       "original_current_type": "str",
+       "original_saved_action": "sandbox-required",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_action_not_allow",
+       "saved_action": "sandbox-required",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "rejected"
+      },
+      "code": "approval_reuse_saved_action_not_allow",
+      "message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+      "severity": "high",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "next_step": "Review the current package request in HOL Guard, then retry.",
+     "summary": "Saved package policy was not reused (approval_reuse_saved_action_not_allow).",
+     "title": "Saved approval not reusable"
+    }
+   }
+  },
+  "name": "saved_sandbox_required_action",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "sandbox-required",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "command:npm-install",
+    "decision_id": 7,
+    "expires_at": null,
+    "harness": "codex",
+    "publisher": null,
+    "scope": "artifact",
+    "source": "approval-gate",
+    "workspace": "/work/space"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "allow",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "allow",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "warn",
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "family_row_stale_no_rules",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "bundle_rules": [],
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "rule-1",
+    "scope": "harness",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "warn",
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "family_row_stale_rule_without_family",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "bundle_rules": [
+    {
+     "action": "block",
+     "artifactType": "mcp_server",
+     "matcherFamilies": [
+      "mcp"
+     ],
+     "ruleId": "rule-1",
+     "scope": {}
+    }
+   ],
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "rule-1",
+    "scope": "harness",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "family_row_current_rule_keeps_block",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "bundle_rules": [
+    {
+     "action": "block",
+     "artifactType": "package_request",
+     "matcherFamilies": [
+      "package-request"
+     ],
+     "ruleId": "rule-1",
+     "scope": {}
+    }
+   ],
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "rule-1",
+    "scope": "harness",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "family_row_no_bundle_keeps_block",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "rule-1",
+    "scope": "harness",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "family_row_blank_owner",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "  ",
+    "scope": "harness",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "warn",
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "Current package evaluation.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "Current package evaluation.",
+     "next_step": null,
+     "summary": "Current package evaluation.",
+     "title": "Current package result"
+    }
+   }
+  },
+  "name": "family_row_global_scope_stale",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "bundle_rules": [],
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": null,
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "rule-1",
+    "scope": "global",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ },
+ {
+  "base": {
+   "decision": "warn",
+   "packages": [
+    {
+     "decision": "warn",
+     "name": "guard-proof"
+    }
+   ],
+   "policy_action": "warn",
+   "reasons": [
+    {
+     "code": "current_package_result",
+     "message": "Current package evaluation."
+    }
+   ],
+   "record_monitor_evidence": false,
+   "risk_summary": "Current package evaluation.",
+   "user_copy": {
+    "dashboard_url": null,
+    "harness_message": "Current package evaluation.",
+    "next_step": null,
+    "summary": "Current package evaluation.",
+    "title": "Current package result"
+   }
+  },
+  "claim_ok": true,
+  "expected": {
+   "claim_disposition": null,
+   "claims": [],
+   "final": {
+    "decision": "block",
+    "packages": [
+     {
+      "decision": "block",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "block",
+    "reasons": [
+     {
+      "approval_reuse": {
+       "action": "block",
+       "current_action": "warn",
+       "current_normalization_reason_code": null,
+       "original_current_action": "warn",
+       "original_current_type": "str",
+       "original_saved_action": "block",
+       "original_saved_type": "str",
+       "reason_code": "approval_reuse_saved_block",
+       "saved_action": "block",
+       "saved_artifact_hash_is_context_token": true,
+       "saved_normalization_reason_code": null,
+       "should_claim": false,
+       "status": "accepted"
+      },
+      "code": "saved_package_block",
+      "message": "HOL Guard kept this package blocked because a saved package policy already exists.",
+      "severity": "low",
+      "source": "guard-local"
+     },
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ],
+    "record_monitor_evidence": false,
+    "risk_summary": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ`, then retry the install.",
+    "user_copy": {
+     "dashboard_url": null,
+     "harness_message": "HOL Guard kept this package blocked because a saved package policy already exists. To reconsider, run `hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ`, then retry the install.",
+     "next_step": "hol-guard policies clear --decision-id 3 --harness codex --scope harness --artifact-id family:package-request --artifact-hash guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+     "summary": "HOL Guard kept this package blocked because a saved package policy already exists.",
+     "title": "Blocked by saved policy"
+    }
+   }
+  },
+  "name": "family_row_with_hash_not_family",
+  "request": {
+   "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+   "artifact_id": "command:npm-install",
+   "bundle_rules": [],
+   "claim_saved_approval": true,
+   "daemon_authority": false,
+   "decision": {
+    "action": "block",
+    "artifact_hash": "guard-approval-context:v1:eyJjYXBhYmlsaXRpZXMiOiIxZGQ1ZmQwMzlkYzhhMjQxNTA4MzA0ZTY5ZGI4ZDFhNGMyMmZiNjlhYjk0YWUyNDk5ZjQ1MWYxZjkzZjUyZThjIiwiY29udGVudCI6IjZlNGVjYjVlMWE2MDhlNTAzYWUzMDQ1OGJiMDFhZDAxODQ0Zjg4N2Y2Njg4ZjkwZWY1MjM4ODUzZDZjZDU0Y2EiLCJpZGVudGl0eSI6ImExZjFkMGIwOTNhMzRlYzY3ODY0YjBiMDE1YzUwNzE0OTY0ZmVlYjQ2NjI1NmM2NWE2MjYxMzdkMjUzMzEzOWQiLCJwb2xpY3kiOiJiOWE5ODUwYTcxOGVhYzdhMDFkMjFmY2RjYzEzOGNmMWQxYzhlN2NjOWJhNTY4NmNlYWU1ODNjYjBjYWJmYWNkIiwic2FuZGJveCI6IjUwYTA2OTA5MGQwMTk3ZTBiYTZkMjNkNTVkZjgwNzgzOTQ4Y2Y1ODY1ODhkMzEwNTc3ZjVlZWQzMTY2Y2M1ZjEiLCJ2ZXJzaW9uIjoxfQ",
+    "artifact_id": "family:package-request",
+    "decision_id": 3,
+    "harness": "codex",
+    "owner": "rule-1",
+    "scope": "harness",
+    "source": "policy-bundle"
+   },
+   "evaluation": {
+    "packages": [
+     {
+      "decision": "warn",
+      "name": "guard-proof"
+     }
+    ],
+    "policy_action": "warn",
+    "reasons": [
+     {
+      "code": "current_package_result",
+      "message": "Current package evaluation."
+     }
+    ]
+   },
+   "harness": "codex",
+   "ignored_integrity": false,
+   "workspace_dir": "/work/space"
+  }
+ }
+]

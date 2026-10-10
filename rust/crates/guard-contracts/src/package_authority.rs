@@ -20,6 +20,8 @@ pub const PACKAGE_AUTHORITY_FEATURE: &str = "package-authority-v1";
 /// Capability advertised when the package-evaluation composition op exists.
 pub const PACKAGE_EVALUATION_COMPOSE_FEATURE: &str = "package-evaluation-compose-v1";
 pub const PACKAGE_APPROVAL_HASH_FEATURE: &str = "package-approval-hash-v1";
+/// Capability advertised when the stored package policy resolution op exists.
+pub const PACKAGE_POLICY_RESOLVE_FEATURE: &str = "package-policy-resolve-v1";
 /// Capability advertised when `supply_chain_eval` is the sole package-verdict
 /// authority: the resident owns Cloud, bundle, lockfile and heuristic
 /// decisions, and callers have no Python evaluation to fall back to.
@@ -373,4 +375,51 @@ pub struct PackageApprovalHashRequestV1 {
     pub sandbox_analysis: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub extension_control_digest: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// PackagePolicyResolve — resident op owning the stored package policy
+// override: the saved allow, saved block and rejected-reuse verdicts. The
+// caller hydrates the store facts (lookup, diagnostic, approval request row,
+// bundle rules, claim disposition) and performs the claim; the runtime decides
+// every verdict and returns a patch over the caller's evaluation.
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackagePolicyResolveRequestV1 {
+    pub schema: String,
+    pub request_id: String,
+    pub guard_home: String,
+    /// Evaluation fields the rewrites read: `policy_action`, `reasons`, `packages`.
+    pub evaluation: Value,
+    /// Additional current action folded into the evaluation's policy action.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_action: Option<Value>,
+    pub harness: String,
+    pub artifact_id: String,
+    pub artifact_hash: String,
+    pub workspace_dir: String,
+    /// The saved policy row the store lookup (or the daemon) resolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision: Option<Value>,
+    /// The store ignored a saved row because local integrity failed.
+    pub ignored_integrity: bool,
+    /// A daemon policy authority owns the claim for `decision`.
+    pub daemon_authority: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosed_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosed_stored_hash: Option<String>,
+    /// Validated synced-bundle rules whose id matches the decision owner;
+    /// absent when no validated bundle is available.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bundle_rules: Option<Vec<Value>>,
+    /// The approval request row named by `decision.request_id`, if readable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_request: Option<Value>,
+    pub claim_saved_approval: bool,
+    /// Outcome of the caller-run claim; absent on the first call.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claim_succeeded: Option<bool>,
 }

@@ -89,9 +89,9 @@ def _feed_snapshot_hash(store: Any) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def _evaluation_view(evaluation: Any) -> dict[str, object]:
+def _evaluation_view(evaluation: Any, fields: tuple[str, ...] = _EVALUATION_FIELDS) -> dict[str, object]:
     view: dict[str, object] = {}
-    for field in _EVALUATION_FIELDS:
+    for field in fields:
         value = getattr(evaluation, field)
         view[field] = (
             [dict(item) if isinstance(item, Mapping) else item for item in value]
@@ -101,22 +101,31 @@ def _evaluation_view(evaluation: Any) -> dict[str, object]:
     return view
 
 
-def _transport(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
+def _transport(
+    request: dict[str, object],
+    guard_home: Path,
+    *,
+    operation: str = "package_approval_hash",
+    feature: str = _APPROVAL_HASH_FEATURE,
+    error: type[RuntimeError] = NativePackageApprovalHashError,
+) -> dict[str, Any]:
+    """Send one package-authority request and return the strictly checked payload."""
+
     request["schema"] = _REQUEST_SCHEMA
     request["request_id"] = _request_id()
     request["guard_home"] = str(guard_home)
     try:
         request_sha256 = "sha256:" + _canonical_request_sha256(request)
-    except (TypeError, ValueError) as error:
-        raise NativePackageApprovalHashError("Native package approval hash request invalid") from error
+    except (TypeError, ValueError) as cause:
+        raise error(f"Native {operation} request invalid") from cause
     if not ensure_resident_prerequisite(guard_home):
-        raise NativePackageApprovalHashError("Native package approval hash unavailable")
+        raise error(f"Native {operation} unavailable")
     response = _resident_request(
-        operation="package_approval_hash",
+        operation=operation,
         request=request,
         guard_home=guard_home,
         timeout_seconds=2.0,
-        required_features=(_APPROVAL_HASH_FEATURE,),
+        required_features=(feature,),
     )
     if (
         not isinstance(response, dict)
@@ -126,10 +135,10 @@ def _transport(request: dict[str, object], guard_home: Path) -> dict[str, Any]:
         or response.get("status") != "ok"
         or response.get("code") != "ok"
     ):
-        raise NativePackageApprovalHashError("Native package approval hash unavailable or invalid")
+        raise error(f"Native {operation} unavailable or invalid")
     payload = response.get("payload")
     if not isinstance(payload, dict):
-        raise NativePackageApprovalHashError("Native package approval hash payload invalid")
+        raise error(f"Native {operation} payload invalid")
     return payload
 
 

@@ -316,6 +316,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PackageApprovalHash(request) => {
                 crate::package_approval_hash_op::evaluate_package_approval_hash(&request)
             }
+            ResidentOperationV1::PackagePolicyResolve(request) => {
+                crate::package_policy_resolve_op::evaluate_package_policy_resolve(&request)
+            }
             #[cfg(unix)]
             ResidentOperationV1::ContainedNodeExecute(request) => {
                 crate::contained_op::evaluate_contained_node_execute(&request)
@@ -429,6 +432,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageApprovalHash(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackagePolicyResolve(request) => Some(&request.guard_home),
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedNodeExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedTypescriptExecute(request) => Some(&request.guard_home),
