@@ -67,8 +67,11 @@ pub(crate) fn evaluate_resident_bytes(
     {
         crate::oneshot::validate_request_policy_snapshot(&value)?;
     }
+    // The frame parsed as strict JSON but names no request shape this runtime
+    // supports. A client of another runtime version is told apart from a
+    // transient failure by this code alone.
     let request: ResidentRequestV1 = crate::strict_json::from_value(value)
-        .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
+        .map_err(|_| "native_request_schema_unsupported".to_owned())?;
     if let (Some(policy_store), ResidentRequestV1::Operation(operation)) = (policy_store, &request)
     {
         if let Some(guard_home) = operation_guard_home(operation) {
@@ -241,6 +244,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::McpProxyDecide(request) => {
+                crate::mcp_proxy_decision_op::evaluate_mcp_proxy_decision(&request)
+            }
             ResidentOperationV1::GitExecutionSafety(request) => {
                 crate::git_execution_safety_op::evaluate_git_execution_safety_request(&request)
             }
@@ -333,6 +339,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::FalsePositiveRules(request) => {
                 crate::false_positive_rules_op::evaluate_false_positive_rules(&request)
             }
+            ResidentOperationV1::RunnerAuthority(request) => {
+                crate::runner_authority_op::evaluate_runner_authority(&request)
+            }
             ResidentOperationV1::McpToolEvidence(request) => {
                 crate::mcp_tool_evidence_op::evaluate_mcp_tool_evidence(&request)
             }
@@ -401,6 +410,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
         ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::FalsePositiveRules(request) => Some(&request.guard_home),
+        ResidentOperationV1::RunnerAuthority(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),

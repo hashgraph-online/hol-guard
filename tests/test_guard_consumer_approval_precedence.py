@@ -2231,13 +2231,13 @@ def _with_runtime_detector_telemetry(
 
 
 def test_runtime_detector_context_excludes_only_elapsed_and_normalizes_semantics() -> None:
-    context = guard_runner_module._runtime_detector_context(
+    context = guard_runner_module._authority.detector_authority(
         _with_runtime_detector_telemetry(
             {"blocked": False, "artifacts": []},
             status="ok",
             elapsed_ms=917,
         )
-    )
+    ).context
 
     assert context is not None
     assert context["telemetry"] == [
@@ -2272,7 +2272,7 @@ def test_runtime_detector_telemetry_status_change_after_claim_prevents_launch(
         status="ok",
         elapsed_ms=1,
     )
-    initial_detector_context = guard_runner_module._runtime_detector_context(initial_detector_evaluation)
+    initial_detector_context = guard_runner_module._authority.detector_authority(initial_detector_evaluation).context
     assert initial_detector_context is not None
     initial = evaluate_detection(
         detection,
@@ -2336,7 +2336,7 @@ def test_runtime_detector_unchanged_status_ignores_elapsed_ms_and_launches_after
         status="ok",
         elapsed_ms=1,
     )
-    initial_detector_context = guard_runner_module._runtime_detector_context(initial_detector_evaluation)
+    initial_detector_context = guard_runner_module._authority.detector_authority(initial_detector_evaluation).context
     assert initial_detector_context is not None
     initial = evaluate_detection(
         detection,

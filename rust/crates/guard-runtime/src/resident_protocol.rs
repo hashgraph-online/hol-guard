@@ -11,15 +11,16 @@ use guard_contracts::{
     ContributedMcpDecisionRequestV1, DataFlowAnalyzeRequestV1, FalsePositiveRulesRequestV1,
     GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1, GuardHookEnvelopeV2,
     HookAdapterRequestV1, HookArtifactComposeRequestV1, HookDecisionRequestV1,
-    LocalCliGrantRequestV1, LocalMcpGrantRequestV1, McpRuntimeEvidenceRequestV1,
-    McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1,
-    McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1,
-    McpToolPolicyDecideRequestV1, NativeHookRequestV1, PackageAdvisoryIdsRequestV1,
-    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
-    PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
-    RequestContextRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
-    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES,
-    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    LocalCliGrantRequestV1, LocalMcpGrantRequestV1, McpProxyDecisionRequestV1,
+    McpRuntimeEvidenceRequestV1, McpStdioProbeRequestV1, McpStdioSessionCloseRequestV1,
+    McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1, McpStdioSessionSendRequestV1,
+    McpToolEvidenceRequestV1, McpToolPolicyDecideRequestV1, NativeHookRequestV1,
+    PackageAdvisoryIdsRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
+    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
+    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -97,6 +98,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::COMPOUND_GIT_INSPECTION_FEATURE.into(),
         guard_contracts::MCP_RUNTIME_EVIDENCE_FEATURE.into(),
         guard_contracts::FALSE_POSITIVE_RULES_FEATURE.into(),
+        guard_contracts::RUNNER_AUTHORITY_FEATURE.into(),
         guard_contracts::LOCAL_CLI_GRANT_FEATURE.into(),
         guard_contracts::APPROVAL_PROOF_FEATURE.into(),
         guard_contracts::HOOK_DECISION_FEATURE.into(),
@@ -104,6 +106,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::HOOK_ADAPTER_FEATURE.into(),
         guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_MCP_GRANT_FEATURE.into(),
+        guard_contracts::MCP_PROXY_DECISION_FEATURE.into(),
         guard_contracts::CONTRIBUTED_MCP_DECISION_FEATURE.into(),
         guard_contracts::REQUEST_CONTEXT_FEATURE.into(),
         guard_contracts::MCP_TOOL_POLICY_DECIDE_FEATURE.into(),
@@ -190,6 +193,7 @@ pub(crate) enum ResidentOperationV1 {
     CompoundGitInspection(CompoundGitInspectionRequestV1),
     McpRuntimeEvidence(McpRuntimeEvidenceRequestV1),
     FalsePositiveRules(FalsePositiveRulesRequestV1),
+    RunnerAuthority(RunnerAuthorityRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
     ApprovalProofDecide(ApprovalProofRequestV1),
     HookDecide(HookDecisionRequestV1),
@@ -197,6 +201,7 @@ pub(crate) enum ResidentOperationV1 {
     HookArtifactCompose(HookArtifactComposeRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
     LocalMcpGrantDecide(LocalMcpGrantRequestV1),
+    McpProxyDecide(McpProxyDecisionRequestV1),
     ContributedMcpDecide(ContributedMcpDecisionRequestV1),
     RequestContextBuild(RequestContextRequestV1),
     McpToolPolicyDecide(McpToolPolicyDecideRequestV1),
@@ -348,6 +353,13 @@ mod tests {
         ))
         .expect("known lifecycle error is JSON");
         assert_eq!(lifecycle["error"], "native_resident_start_in_progress");
+
+        let unsupported: Value = serde_json::from_slice(&safe_error_response(
+            "native_request_schema_unsupported",
+            false,
+        ))
+        .expect("schema-unsupported error is JSON");
+        assert_eq!(unsupported["error"], "native_request_schema_unsupported");
 
         let unknown_lifecycle: Value = serde_json::from_slice(&safe_error_response(
             "native_resident_future_unregistered_code",

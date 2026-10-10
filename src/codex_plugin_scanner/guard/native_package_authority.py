@@ -178,45 +178,6 @@ def package_intent_parse_native(
     return PackageIntent.from_dict(payload, runtime_private_metadata=runtime_private_metadata)
 
 
-def package_authority_decide_native(
-    command_text: str,
-    *,
-    store_path: Path,
-    guard_home: Path,
-    workspace_dir: Path | None = None,
-    artifact_kind: str = "package_request",
-    artifact_type: str = "package_request",
-    now: str | None = None,
-    external_archive_network_authorized: bool = False,
-    retain_external_archive_blob: bool = False,
-    timeout_seconds: float = 10.0,
-) -> dict[str, object] | None:
-    """``package_authority_decide`` op — parse + artifact + eval in one call."""
-    request: dict[str, object] = {
-        "schema": _REQUEST_SCHEMA,
-        "request_id": _request_id(),
-        "store_path": str(store_path),
-        "guard_home": str(guard_home),
-        "command_text": command_text,
-        "workspace_dir": str(workspace_dir) if workspace_dir is not None else None,
-        "artifact_kind": artifact_kind,
-        "artifact_type": artifact_type,
-        "now": now,
-        "external_archive_network_authorized": bool(external_archive_network_authorized),
-        "retain_external_archive_blob": bool(retain_external_archive_blob),
-    }
-    response = _resident_request(
-        operation="package_authority_decide",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=timeout_seconds,
-    )
-    if response is None:
-        return None
-    payload = response.get("payload")
-    return payload if isinstance(payload, dict) else None
-
-
 class NativePackageAdvisoryAuthorityError(RuntimeError):
     """No authoritative native cached-feed result was available."""
 
