@@ -218,6 +218,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ClaimApprovalReuseDecisions(request) => {
                 crate::claim_approval_reuse_op::evaluate_claim_approval_reuse_request(&request)
             }
+            ResidentOperationV1::GuardStore(request) => {
+                crate::guard_store_op::evaluate_guard_store_request(&request)
+            }
             ResidentOperationV1::ApprovalGate(request) => {
                 crate::approval_gate_op::evaluate_approval_gate_request(&request)
             }
@@ -392,6 +395,7 @@ pub(crate) fn evaluate_resident_bytes(
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
+        ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),
         ResidentOperationV1::ApprovalGate(request) => Some(&request.guard_home),
         ResidentOperationV1::SupplyChainEval(request) => Some(&request.guard_home),
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.guard_home),
@@ -425,6 +429,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
 fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.store_path),
+        ResidentOperationV1::GuardStore(request) => Some(&request.store_path),
         ResidentOperationV1::SupplyChainEval(request) => Some(&request.store_path),
         ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.store_path),
         ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
