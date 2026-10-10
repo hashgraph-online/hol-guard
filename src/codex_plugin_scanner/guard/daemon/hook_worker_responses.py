@@ -43,7 +43,6 @@ def prepare_native_hook_policy(
             default_harness=default_harness,
             reason=_native_policy_not_ready_reason(daemon_server),
             reason_code="native_policy_not_ready",
-            native_authoritative=True,
         )
     )
     return False

@@ -276,18 +276,21 @@ def _no_post_execution_proof_smoke() -> dict[str, object]:
             )
         expected = (harness, "pre", "prevented", "pre_hook", "block", "policy", 0)
         # Evidence is best effort for a fail-safe outage; the denial above is
-        # the authority. When a row was persisted it must describe a prevention.
-        if row is not None and tuple(row) != expected:
+        # the authority. A persisted row must describe a prevention. A missing
+        # row is reported as missing, not as the expected constants.
+        observed = tuple(row) if row is not None else None
+        if observed is not None and observed != expected:
             raise InstalledCanaryError(
-                f"Installed no-post-proof hook persisted unexpected activity evidence: {tuple(row)!r}"
+                f"Installed no-post-proof hook persisted unexpected activity evidence: {observed!r}"
             )
         return {
             "harness": harness,
             "post_execution_surface": False,
-            "execution_status": expected[2],
-            "proof_level": expected[3],
-            "policy_action": expected[4],
-            "decision_reason_code": expected[5],
+            "evidence_persisted": observed is not None,
+            "execution_status": str(observed[2]) if observed is not None else None,
+            "proof_level": str(observed[3]) if observed is not None else None,
+            "policy_action": str(observed[4]) if observed is not None else None,
+            "decision_reason_code": str(observed[5]) if observed is not None else None,
         }
 
 
