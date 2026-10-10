@@ -62,6 +62,8 @@ def effective_decision(response: Any) -> str:
 
 
 def _relative(value: str) -> str:
+    # Windows hosts report workspace paths with backslashes.
+    value = value.replace("\\", "/")
     for prefix in ("{{workspace}}/", "./"):
         value = value.removeprefix(prefix)
     return value

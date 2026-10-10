@@ -352,6 +352,16 @@ def test_shell_text_under_cmd_counts_as_the_reviewed_command():
     assert guard_decisions(rows)[0]["command"] == "git status"
 
 
+def test_windows_workspace_paths_resolve_to_the_same_relative_target():
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "{{workspace}}\\src\\a.ts"},
+    }
+    rows = [{"payload": payload, "response": {}, "receipt": {"event_name": "PreToolUse", "decision": "allow"}}]
+    assert guard_decisions(rows)[0]["path"] == "src/a.ts"
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
 def test_refreshed_login_is_owner_only_and_leaves_no_temporary_files(tmp_path):
     source, fixture = tmp_path / "real", tmp_path / "fixture"
