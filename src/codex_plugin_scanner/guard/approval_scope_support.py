@@ -187,9 +187,7 @@ def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContra
     return request_scope_contracts([request])[0]
 
 
-def scope_payload_for_request(
-    request: Mapping[str, object], contract: ApprovalScopeContract
-) -> dict[str, object]:
+def scope_payload_for_request(request: Mapping[str, object], contract: ApprovalScopeContract) -> dict[str, object]:
     """Attach non-resident approval hints to a contract already derived."""
 
     payload = contract.to_dict()
@@ -200,6 +198,29 @@ def scope_payload_for_request(
     if local_tool_approval is not None:
         payload["local_tool_approval"] = local_tool_approval
     return payload
+
+
+def apply_scope_surfaces(payload: dict[str, object]) -> None:
+    """Project a payload's derived contract onto the legacy UI fields.
+
+    The stored advertisement in ``decision_v2_json`` is untrusted, so the
+    contract the resident derived always replaces it.
+    """
+
+    from .native_approval_scope import ApprovalScopeUnavailableError
+
+    allowed = payload["allowed_scopes_by_action"]
+    recommended = payload["recommended_scope_by_action"]
+    if not isinstance(allowed, dict) or not isinstance(recommended, dict):
+        raise ApprovalScopeUnavailableError
+    payload["allowed_scopes"] = list(cast(list[str], allowed["allow"]))
+    payload["recommended_scope"] = recommended.get("allow")
+    decision_v2 = payload.get("decision_v2_json")
+    if isinstance(decision_v2, dict):
+        payload["decision_v2_json"] = {
+            **decision_v2,
+            "approval_scopes": list(cast(list[str], payload["allowed_scopes"])),
+        }
 
 
 def request_scope_contract_payloads(requests: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:

@@ -25,6 +25,7 @@ from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
+    apply_scope_surfaces,
     package_request_portable_workspace_scope,
     request_scope_observation,
     resolve_request_scope_selection,
@@ -968,6 +969,7 @@ def apply_approval_resolution(
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
     updated.update(scope_payload_for_request(request, contract))
+    apply_scope_surfaces(updated)
     updated["requested_scope"] = requested_scope
     updated["applied_scope"] = scope
     if selection.warning is not None:

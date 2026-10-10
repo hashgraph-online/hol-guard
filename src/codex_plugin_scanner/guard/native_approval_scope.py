@@ -101,9 +101,7 @@ def _narrow_envelope(value: object) -> object:
     narrowed = {key: value[key] for key in _ENVELOPE_KEYS if key in value}
     raw_payload = value.get("raw_payload_redacted")
     if isinstance(raw_payload, dict):
-        narrowed["raw_payload_redacted"] = {
-            key: raw_payload[key] for key in _RAW_PAYLOAD_KEYS if key in raw_payload
-        }
+        narrowed["raw_payload_redacted"] = {key: raw_payload[key] for key in _RAW_PAYLOAD_KEYS if key in raw_payload}
     return narrowed
 
 

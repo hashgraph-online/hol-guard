@@ -7,10 +7,9 @@ import hashlib
 import json
 import re
 import sqlite3
-from typing import cast
 
 from .approval_resolution import approval_resolution_block_reason
-from .approval_scope_support import request_scope_contract_payloads
+from .approval_scope_support import apply_scope_surfaces, request_scope_contract_payloads
 from .decision_boundaries import canonical_approval_surfaces
 from .models import GuardApprovalRequest
 from .runtime.action_identity import normalize_command_identity
@@ -560,17 +559,7 @@ def _rows_to_payloads(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
         payload.update(contract)
         if contract_error is not None:
             payload["decision_contract_error"] = contract_error
-        allowed = cast(dict[str, object], payload["allowed_scopes_by_action"])
-        payload["allowed_scopes"] = list(cast(list[str], allowed["allow"]))
-        recommendations = payload["recommended_scope_by_action"]
-        if isinstance(recommendations, dict):
-            payload["recommended_scope"] = recommendations.get("allow")
-        decision_v2 = payload.get("decision_v2_json")
-        if isinstance(decision_v2, dict):
-            payload["decision_v2_json"] = {
-                **decision_v2,
-                "approval_scopes": list(cast(list[str], payload["allowed_scopes"])),
-            }
+        apply_scope_surfaces(payload)
         payloads.append(payload)
     return payloads
 
