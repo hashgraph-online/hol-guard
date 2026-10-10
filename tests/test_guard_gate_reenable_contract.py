@@ -9,7 +9,7 @@ from codex_plugin_scanner.guard import approval_gate
 
 def test_reenable_retained_gate_requires_confirmed_password(tmp_path, native_hook_force):
     created = approval_gate._approval_gate_native(
-        "create_verifier", tmp_path, params={"password": "synthetic-old-password"}
+        "create_verifier", tmp_path, params={"password": "synthetic-old-password"}, provision_prerequisite=True
     )
     assert created is not None
     retained = {"enabled": False, "verifier": created, "totp_enabled": True}

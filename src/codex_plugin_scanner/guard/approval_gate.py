@@ -14,6 +14,7 @@ checks on it succeed without a resident.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -27,7 +28,7 @@ from .approval_gate_types import (
     grant_from_wire,
     input_from_mapping,
 )
-from .native_approval_gate import approval_gate_native as _approval_gate_native
+from .native_approval_gate import approval_gate_native as _approval_gate_native_impl
 
 if TYPE_CHECKING:
     from .models import PolicyDecision
@@ -63,6 +64,7 @@ __all__ = [
 ]
 
 # Test seams for the wire decoders.
+_approval_gate_native: Callable[..., dict[str, object] | None] = _approval_gate_native_impl
 _config_from_wire = config_from_wire
 _grant_from_wire = grant_from_wire
 
@@ -88,9 +90,35 @@ def _unavailable() -> ApprovalGateError:
     )
 
 
+# Only explicit configuration operations establish a home's resident verifier
+# key, plus any call on a home whose gate is already configured (state written
+# by an earlier release has no key yet and must stay answerable). A home that
+# never configured the gate is never given a key by a passive check.
+_CONFIGURATION_METHODS = frozenset(
+    {
+        "update_settings",
+        "validate_settings_update",
+        "revoke_cooldown",
+        "unlock_cooldown",
+        "begin_totp_enrollment",
+        "confirm_totp_enrollment",
+        "disable_totp",
+    }
+)
+
+
+def _provisions_prerequisite(method: str, guard_home: Path) -> bool:
+    return method in _CONFIGURATION_METHODS or (Path(guard_home) / APPROVAL_GATE_STATE_FILE).exists()
+
+
 def _native(method: str, guard_home: Path, **kwargs: object) -> dict[str, object]:
     """One resident round trip; no resident means no authority (fail closed)."""
-    payload = _approval_gate_native(method, guard_home, **kwargs)  # type: ignore[arg-type]
+    payload = _approval_gate_native(
+        method,
+        guard_home,
+        provision_prerequisite=_provisions_prerequisite(method, guard_home),
+        **kwargs,
+    )
     if payload is None:
         raise _unavailable()
     return payload
@@ -98,7 +126,12 @@ def _native(method: str, guard_home: Path, **kwargs: object) -> dict[str, object
 
 def _native_or_unconfigured(method: str, guard_home: Path, **kwargs: object) -> dict[str, object] | None:
     """Like ``_native``, but ``None`` for a home that never configured the gate."""
-    payload = _approval_gate_native(method, guard_home, **kwargs)  # type: ignore[arg-type]
+    payload = _approval_gate_native(
+        method,
+        guard_home,
+        provision_prerequisite=_provisions_prerequisite(method, guard_home),
+        **kwargs,
+    )
     if payload is not None:
         return payload
     if (Path(guard_home) / APPROVAL_GATE_STATE_FILE).exists():
@@ -333,15 +366,20 @@ def require_extension_control(
 ) -> ApprovalGateGrant:
     """Issue a strict proof for one exact extension-control mutation."""
 
-    return _issued(
-        _native(
-            "require_extension_control",
-            guard_home,
-            params={"action": action, "subject": subject, "session_nonce": session_nonce},
-            approval_gate_input=approval_gate_input,
-            now=now,
-        )
+    payload = _native_or_unconfigured(
+        "require_extension_control",
+        guard_home,
+        params={"action": action, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_input=approval_gate_input,
+        now=now,
     )
+    if payload is None:
+        raise ApprovalGateError(
+            "approval_gate_configuration_required",
+            "Configure the approval gate before changing extension controls.",
+            status=423,
+        )
+    return _issued(payload)
 
 
 def consume_extension_control_grant(
@@ -375,15 +413,20 @@ def require_local_cli_trust(
 ) -> ApprovalGateGrant:
     """Issue a strict proof for one exact local CLI allow-list mutation."""
 
-    return _issued(
-        _native(
-            "require_local_cli_trust",
-            guard_home,
-            params={"action": action, "subject": subject, "session_nonce": session_nonce},
-            approval_gate_input=approval_gate_input,
-            now=now,
-        )
+    payload = _native_or_unconfigured(
+        "require_local_cli_trust",
+        guard_home,
+        params={"action": action, "subject": subject, "session_nonce": session_nonce},
+        approval_gate_input=approval_gate_input,
+        now=now,
     )
+    if payload is None:
+        raise ApprovalGateError(
+            "approval_gate_configuration_required",
+            "Configure the approval gate before changing CLI allow-list settings.",
+            status=423,
+        )
+    return _issued(payload)
 
 
 def consume_local_cli_trust_grant(

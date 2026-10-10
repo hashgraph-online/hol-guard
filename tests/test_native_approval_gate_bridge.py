@@ -118,3 +118,19 @@ def test_envelope_bound_to_another_request_fails_closed(monkeypatch: pytest.Monk
     with pytest.raises(ApprovalGateError) as caught:
         bridge.approval_gate_native("require_approval_decision", tmp_path)
     assert caught.value.code == "native_approval_gate_unavailable"
+
+
+@pytest.mark.parametrize(("provision", "expected_calls"), [(False, 0), (True, 1)])
+def test_only_configuration_calls_establish_the_resident_verifier_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, provision: bool, expected_calls: int
+) -> None:
+    _provision(monkeypatch, _ok({"grant": None}))
+    provisioned: list[Path] = []
+
+    def establish(guard_home: Path) -> bool:
+        provisioned.append(guard_home)
+        return True
+
+    monkeypatch.setattr(bridge, "ensure_resident_prerequisite", establish)
+    bridge.approval_gate_native("require_approval_decision", tmp_path, provision_prerequisite=provision)
+    assert len(provisioned) == expected_calls

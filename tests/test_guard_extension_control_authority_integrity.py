@@ -26,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import (
+    _POLICY_INTEGRITY_SERVICE_NAME,
     MigratingFallbackSecretStore,
     SystemKeyringSecretStore,
 )
@@ -338,16 +339,25 @@ def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkey
         "sys",
         types.SimpleNamespace(platform="linux"),
     )
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "get_secret",
-        lambda _self, _secret_id: (_ for _ in ()).throw(RuntimeError("keyring unavailable")),
-    )
-    monkeypatch.setattr(
-        SystemKeyringSecretStore,
-        "set_secret",
-        lambda _self, _secret_id, _value: (_ for _ in ()).throw(RuntimeError("keyring unavailable")),
-    )
+    # The resident-owned gate and its native controls are keyed from the policy
+    # integrity secret, which keeps its own keyring service. Only the extension
+    # control authority's keyring is unavailable in this scenario.
+    real_get = SystemKeyringSecretStore.get_secret
+    real_set = SystemKeyringSecretStore.set_secret
+
+    def _get(self: SystemKeyringSecretStore, secret_id: str) -> str | None:
+        if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
+            return real_get(self, secret_id)
+        raise RuntimeError("keyring unavailable")
+
+    def _set(self: SystemKeyringSecretStore, secret_id: str, value: str) -> None:
+        if self.service_name == _POLICY_INTEGRITY_SERVICE_NAME:
+            real_set(self, secret_id, value)
+            return
+        raise RuntimeError("keyring unavailable")
+
+    monkeypatch.setattr(SystemKeyringSecretStore, "get_secret", _get)
+    monkeypatch.setattr(SystemKeyringSecretStore, "set_secret", _set)
     store = GuardStore(tmp_path, prime_policy_integrity=False)
     update_settings(
         tmp_path,

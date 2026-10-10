@@ -211,6 +211,7 @@ def approval_gate_native(
     duration_seconds: int | None = None,
     device_label: str | None = None,
     timeout_seconds: float = 5.0,
+    provision_prerequisite: bool = False,
 ) -> dict[str, object] | None:
     """Run one approval-gate method in the resident.
 
@@ -231,10 +232,14 @@ def approval_gate_native(
         or _APPROVAL_GATE_FEATURE not in status.capabilities.features
     ):
         return None
-    # Like every other native caller, establish the home's verifier key from its
-    # own policy store before the first request instead of treating a home the
-    # publisher has not reached yet as unprovisioned.
-    if not ensure_resident_prerequisite(Path(guard_home)):
+    # Only an explicit configuration operation may establish the home's verifier
+    # key. Passive checks (policy-write, grant and eligibility probes made from
+    # store write paths) must not mint it as a side effect: the policy store and
+    # its publisher own that key, and one derived early from a different store
+    # instance would later conflict with them (for example across a policy
+    # integrity key rotation). Without a key the resident answers "unprovisioned",
+    # which the caller reads as no native authority.
+    if provision_prerequisite and not ensure_resident_prerequisite(Path(guard_home)):
         return None
 
     request: dict[str, object] = {
