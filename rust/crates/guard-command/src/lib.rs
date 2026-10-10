@@ -42,11 +42,11 @@ mod executable_flag_contract;
 pub mod extension_control;
 pub mod extension_evidence;
 pub mod extension_trust;
-mod github_capability_contract;
+pub mod github_capability_contract;
 #[cfg(test)]
 mod github_capability_contract_tests;
 mod github_capability_interaction;
-mod github_command_capabilities;
+pub mod github_command_capabilities;
 #[cfg(test)]
 mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;

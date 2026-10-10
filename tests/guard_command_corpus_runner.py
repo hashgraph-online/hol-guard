@@ -119,7 +119,10 @@ def _worker_report(worker_index: int, worker_count: int) -> WorkerReport:
     )
     from tests.guard_command_corpus_native_contract import configure_native_contract_shard, validate_native_case
     from tests.guard_command_corpus_oracle import iter_adversarial_oracle, iter_benign_oracle
+    from tests.native_command_test_support import _native_binaries
+    from tests.native_github_offline import install_offline_github_classifier
 
+    install_offline_github_classifier(_native_binaries()[0])
     pin_neutral_attribution()
     configure_native_contract_shard(worker_index, worker_count)
     ranks = {

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.harness_judge import assess_harness_case, effective_decision, guard_decisions
+from ci.gauntlet.harness_judge import _relative, _tokens, assess_harness_case, effective_decision, guard_decisions
 from ci.gauntlet.harnesses import CredentialSeed, adapter, read_transcript
 from ci.gauntlet.proofs import required_checks
 
@@ -350,6 +350,18 @@ def test_shell_text_under_cmd_counts_as_the_reviewed_command():
     payload = {"hook_event_name": "PreToolUse", "tool_name": "exec_command", "tool_input": {"cmd": "git status"}}
     rows = [{"payload": payload, "response": {}, "receipt": {"event_name": "PreToolUse", "decision": "allow"}}]
     assert guard_decisions(rows)[0]["command"] == "git status"
+
+
+def test_windows_workspace_paths_resolve_to_the_same_relative_target():
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": "{{workspace}}\\src\\a.ts"},
+    }
+    rows = [{"payload": payload, "response": {}, "receipt": {"event_name": "PreToolUse", "decision": "allow"}}]
+    assert guard_decisions(rows)[0]["path"] == "src/a.ts"
+    assert _tokens('Get-Content "{{workspace}}\\.env" .\\src\\a.ts') == ("Get-Content", ".env", "src/a.ts")
+    assert _relative("src\\literal.ts") == "src\\literal.ts"
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
