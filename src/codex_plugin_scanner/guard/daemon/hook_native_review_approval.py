@@ -37,6 +37,7 @@ from .hook_worker_responses import (
     harness_json_from_native_pre_tool,
     harness_json_from_native_pre_tool_review,
 )
+from .native_review_allow_hint import native_review_extension_allow_hint
 
 if TYPE_CHECKING:
     from ..store import GuardStore
@@ -388,6 +389,14 @@ def queue_native_pre_tool_review(
         risk_summary=reason,
         action_envelope_json=action_envelope,
         raw_command_text=pre_tool_command(payload),
+        extension_allow_hint=native_review_extension_allow_hint(
+            store,
+            payload=payload,
+            native_result=native_result,
+            workspace=workspace,
+            home_dir=home_dir,
+            deadline=deadline,
+        ),
     )
     try:
         persisted_id = persist(request, datetime.now(tz=timezone.utc).isoformat())
