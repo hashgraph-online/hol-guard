@@ -142,6 +142,15 @@ from .managed_controls_sync import (
 from .managed_controls_sync import (
     managed_controls_runtime_sync_posture as _managed_controls_runtime_sync_posture,
 )
+from .receipt_sync_privacy import (
+    cloud_sync_command_display_part as _cloud_sync_command_display_part,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_sanitize_text as _cloud_sync_sanitize_text,
+)
+from .receipt_sync_privacy import (
+    cloud_sync_scrub_envelope_commands as _cloud_sync_scrub_envelope_commands,
+)
 from .signals import RiskSignalV2
 from .supply_chain_bundle import (
     SupplyChainBundleError,
@@ -233,6 +242,7 @@ def evaluate_detection(
     pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None = None,
     claimed_saved_approval_overrides: Mapping[str, str] | None = None,
     retained_saved_approval_overrides: Mapping[str, str] | None = None,
+    saved_approval_qualification_overrides: Mapping[str, Mapping[str, object]] | None = None,
     runtime_detector_context: Mapping[str, object] | None = None,
     runtime_detector_block_reason: str | None = None,
 ):
@@ -249,6 +259,7 @@ def evaluate_detection(
         pending_approval_claims=pending_approval_claims,
         claimed_saved_approval_overrides=claimed_saved_approval_overrides,
         retained_saved_approval_overrides=retained_saved_approval_overrides,
+        saved_approval_qualification_overrides=saved_approval_qualification_overrides,
         runtime_detector_context=runtime_detector_context,
         runtime_detector_block_reason=runtime_detector_block_reason,
     )
@@ -543,22 +554,25 @@ def _guard_run_launch_previews(
 ) -> tuple[_GuardRunLaunchPlan, ...]:
     """Content-bind every launch argv without performing adapter setup."""
 
-    adapter = get_adapter(harness)
-    raw_commands: Sequence[Sequence[str]] = adapter.preview_launch_commands(context, passthrough_args)
-    environment, launch_cwd = _guard_run_launch_environment(adapter, context)
-    plans: list[_GuardRunLaunchPlan] = []
-    seen_commands: set[tuple[str, ...]] = set()
-    for raw_command in raw_commands:
-        plan = _guard_run_plan_for_command(
-            raw_command,
-            environment=environment,
-            launch_cwd=launch_cwd,
-        )
-        if plan is None or plan.adapter_command in seen_commands:
-            continue
-        seen_commands.add(plan.adapter_command)
-        plans.append(plan)
-    return tuple(plans)
+    from ..native_context import bound_context_digest_home
+
+    with bound_context_digest_home(context.guard_home):
+        adapter = get_adapter(harness)
+        raw_commands: Sequence[Sequence[str]] = adapter.preview_launch_commands(context, passthrough_args)
+        environment, launch_cwd = _guard_run_launch_environment(adapter, context)
+        plans: list[_GuardRunLaunchPlan] = []
+        seen_commands: set[tuple[str, ...]] = set()
+        for raw_command in raw_commands:
+            plan = _guard_run_plan_for_command(
+                raw_command,
+                environment=environment,
+                launch_cwd=launch_cwd,
+            )
+            if plan is None or plan.adapter_command in seen_commands:
+                continue
+            seen_commands.add(plan.adapter_command)
+            plans.append(plan)
+        return tuple(plans)
 
 
 def _guard_run_executable_prefix(launch_plan: _GuardRunLaunchPlan) -> tuple[str, ...] | None:
@@ -850,6 +864,38 @@ def guard_run(
     blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
     current_config_provider: Callable[[], GuardConfig] | None = None,
 ) -> dict[str, Any]:
+    """Evaluate and launch with native authority bound to the actual store."""
+
+    from ..native_context import bound_context_digest_home
+
+    context = replace(context, guard_home=store.guard_home)
+    with bound_context_digest_home(store.guard_home):
+        return _guard_run_bound(
+            harness,
+            context,
+            store,
+            config,
+            dry_run,
+            passthrough_args,
+            default_action,
+            interactive_resolver,
+            blocked_resolver,
+            current_config_provider,
+        )
+
+
+def _guard_run_bound(
+    harness: str,
+    context: HarnessContext,
+    store: GuardStore,
+    config: GuardConfig,
+    dry_run: bool,
+    passthrough_args: list[str],
+    default_action: str | None = None,
+    interactive_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
+    blocked_resolver: Callable[[HarnessDetection, dict[str, Any]], dict[str, Any]] | None = None,
+    current_config_provider: Callable[[], GuardConfig] | None = None,
+) -> dict[str, Any]:
     """Evaluate local harness state and optionally launch the harness."""
 
     # `guard run` is usually the first native caller in a fresh install: the
@@ -859,11 +905,9 @@ def guard_run(
     # store-derived bootstrap; never create a separate authority or substitute
     # Python when the resident is absent. The digest home is bound too, so those
     # calls resolve against this store instead of `$HOME`.
-    from ..native_context import bind_context_digest_home
     from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 
     provision_native_verifier_key_for_store(store)
-    bind_context_digest_home(getattr(store, "guard_home", None))
     detection = _detection_with_prompt_artifacts(detect_harness(harness, context), context, passthrough_args)
     launch_plan: _GuardRunLaunchPlan | None = None
     pending_approval_claims: list[tuple[Mapping[str, object], str, str]] = []
@@ -1128,6 +1172,13 @@ def guard_run(
                 for decision, artifact_id, artifact_hash in pending_approval_claims
                 if _saved_decision_is_retained(decision)
             }
+            saved_approval_qualifications = {
+                artifact_id: {
+                    "fresh_local_approval": decision.get("fresh_local_approval") is True,
+                    "durable_exact_approval": decision.get("durable_exact_approval") is True,
+                }
+                for decision, artifact_id, _artifact_hash in pending_approval_claims
+            }
             if decisions_to_claim:
                 config_refresh_failed = False
                 fresh_config = config
@@ -1178,6 +1229,7 @@ def guard_run(
                     trusted_request_override_labels=trusted_request_override_labels,
                     claimed_saved_approval_overrides=consumed_claim_overrides,
                     retained_saved_approval_overrides=retained_claim_overrides,
+                    saved_approval_qualification_overrides=saved_approval_qualifications,
                     runtime_detector_context=fresh_detector_context,
                 )
                 fresh_evaluation = _evaluation_with_recorded_detector_result(
@@ -1292,6 +1344,7 @@ def guard_run(
                     trusted_request_override_labels=trusted_request_override_labels,
                     claimed_saved_approval_overrides=consumed_claim_overrides,
                     retained_saved_approval_overrides=retained_claim_overrides,
+                    saved_approval_qualification_overrides=saved_approval_qualifications,
                     runtime_detector_context=detector_context,
                 )
                 if evaluation["blocked"]:
@@ -5129,16 +5182,6 @@ def _urlopen_with_timeout_retry(
     )
 
 
-def _remote_harness(value: object, *, allow_wildcard: bool = True) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value
-    return "*" if allow_wildcard else None
-
-
-def _remote_workspace(item: dict[str, object]) -> str | None:
-    return _optional_string(item.get("workspace")) or _optional_string(item.get("workspacePath"))
-
-
 def _optional_string(value: object) -> str | None:
     if isinstance(value, str) and value.strip():
         return value
@@ -5915,10 +5958,6 @@ def _resolve_cloud_receipt_redaction_level(store: GuardStore) -> str:
     return local_receipt_redaction_level(store.guard_home)
 
 
-def _cloud_sync_command_display_part(value: str) -> str:
-    return " ".join(_cloud_sync_sanitize_text(value, fallback="").split())
-
-
 def _cloud_sync_transport_encode_text(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
 
@@ -6007,7 +6046,7 @@ def _cloud_sync_receipt_payload(
     if isinstance(redacted_envelope, dict) and redacted_envelope:
         full_envelope = receipt.get("action_envelope_json")
         if isinstance(full_envelope, dict):
-            enriched = dict(redacted_envelope)
+            enriched = _cloud_sync_scrub_envelope_commands(redacted_envelope, redaction_level=redaction_level)
             command = _cloud_sync_receipt_action_command(full_envelope, redaction_level=redaction_level)
             if command is not None:
                 enriched.pop("command", None)
@@ -6025,7 +6064,10 @@ def _cloud_sync_receipt_payload(
                     enriched["package_name"] = package_name
             payload["envelopeRedacted"] = enriched
         else:
-            payload["envelopeRedacted"] = redacted_envelope
+            payload["envelopeRedacted"] = _cloud_sync_scrub_envelope_commands(
+                redacted_envelope,
+                redaction_level=redaction_level,
+            )
     return payload
 
 
@@ -6285,34 +6327,6 @@ def _cloud_sync_recommendation(policy_decision: str) -> str:
     if policy_decision in {"review", "require-reapproval", "sandbox-required"}:
         return "review"
     return "monitor"
-
-
-def _cloud_sync_sanitize_text(value: str, *, fallback: str) -> str:
-    redacted = redact_sensitive_text(value).strip()
-    if not redacted:
-        return fallback
-    if _looks_like_source_excerpt(redacted):
-        return fallback
-    if len(redacted) > 320:
-        return f"{redacted[:317]}..."
-    return redacted
-
-
-def _looks_like_source_excerpt(value: str) -> bool:
-    lowered = value.lower()
-    suspicious_tokens = (
-        "function ",
-        "def ",
-        "class ",
-        "import ",
-        "from ",
-        " => ",
-        "console.log(",
-        "<script",
-        "#!/bin/",
-    )
-    has_structured_code_shape = "\n" in value and ("{" in value or "}" in value or ";" in value)
-    return has_structured_code_shape or any(token in lowered for token in suspicious_tokens)
 
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:

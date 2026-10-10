@@ -39,7 +39,7 @@ from codex_plugin_scanner.guard.store_supply_chain import (
 )
 
 
-def test_gpfr242_reuses_package_intent_parser_and_artifact_builder(tmp_path: Path) -> None:
+def test_gpfr242_reuses_package_intent_parser_and_artifact_builder(tmp_path: Path, package_intent_native: Path) -> None:
     (tmp_path / "package.json").write_text('{"dependencies":{"minimist":"^1.2.0"}}\n', encoding="utf-8")
     (tmp_path / "package-lock.json").write_text('{"lockfileVersion":3}\n', encoding="utf-8")
 

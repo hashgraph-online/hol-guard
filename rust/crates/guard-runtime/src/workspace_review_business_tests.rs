@@ -14,6 +14,9 @@ use std::path::{Path, PathBuf};
 #[path = "workspace_review_owned_input_tests.rs"]
 pub(super) mod owned_input_tests;
 
+#[path = "workspace_review_local_summary_tests.rs"]
+mod local_summary_tests;
+
 pub(super) fn input(primary: &[u8], attachments: &[Vec<u8>]) -> Value {
     let total = primary.len() + attachments.iter().map(Vec::len).sum::<usize>();
     json!({"schema":"guard.private-business-input.v1","version":1,
@@ -88,9 +91,20 @@ impl Fixture {
 
     pub(super) fn with_effect(label: &str, effect: &str) -> Self {
         let root = super::super::tests::test_root(label);
+        Self::from_root(root, &"a".repeat(64), effect)
+    }
+    pub(super) fn for_core_transport(label: &str, runtime_identity: &str) -> Self {
+        let home = super::super::tests::test_root(label);
+        let root = home.join("native-runtime");
+        crate::resident_state::ensure_private_directory(&root, true).unwrap();
+        Self::from_root(root, runtime_identity, "review")
+    }
+    fn from_root(root: PathBuf, runtime_identity: &str, effect: &str) -> Self {
         let key = super::super::tests::install_test_key(&root, 29);
-        let store = super::super::PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+        let store = super::super::PolicySnapshotStore::new(&root, runtime_identity).unwrap();
         let mut snapshot = super::super::tests::signed_snapshot(1, &key, &root);
+        snapshot.runtime_identity = runtime_identity.to_owned();
+        snapshot.scope_contract.scope_digest = super::super::scope_digest_for_test(&root);
         let document = json!({"apiVersion":"guard.hashgraphonline.com/v1alpha1","kind":"GuardPolicy",
             "metadata":{"id":"policy.mail.review","name":"Review source fixture","revision":1},
             "spec":{"defaults":{"mode":"enforce","defaultAction":"block"},"rules":[{
@@ -109,10 +123,11 @@ impl Fixture {
             &root.join("business-source-anchor.v1.json"),
             &serde_json::from_slice(&marker).unwrap(),
         );
+        let private_root = crate::resident_state::private_root_for_state_base(&root).unwrap();
         let mut lock = crate::resident_state::private_file(
-            &root.join("extension-control-authority.lock"),
+            &private_root.join("extension-control-authority.lock"),
             false,
-            &root,
+            &private_root,
         )
         .unwrap();
         lock.write_all(b"0").unwrap();

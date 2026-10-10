@@ -205,7 +205,9 @@ def _trust_classes() -> dict[str, str]:
         elif _frozen_runtime():
             raise FileNotFoundError("frozen Guard is missing packaged extension trust map") from None
         else:
-            raw = (Path(__file__).resolve().parents[4] / "contracts/extensions/trust-class-map.v1.json").read_bytes()
+            raise FileNotFoundError(
+                "Guard requires authored trust bindings or a packaged extension trust map"
+            ) from None
     payload = json.loads(raw.decode("utf-8"))
     classes = payload.get("classes") if isinstance(payload, dict) else None
     if not isinstance(classes, dict):

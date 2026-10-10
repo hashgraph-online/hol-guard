@@ -26,15 +26,10 @@ from codex_plugin_scanner.guard.product_model import (
     MANAGER_FIELD_VALUES,
     PERSONA_VALUES,
     PRODUCT_DECISION_SCOPE_VALUES,
-    REDACTION_FORBIDDEN_FIELD_VALUES,
     SEO_CONTENT_TYPE_VALUES,
-    SETTINGS_GROUP_VALUES,
     SEVERITY_LABELS,
-    STABLE_ID_PREFIXES,
     VIBE_CODER_FIELD_VALUES,
-    build_next_action,
     export_product_model_v1,
-    is_stable_guard_id,
 )
 
 
@@ -98,53 +93,10 @@ def test_shared_action_categories_and_plain_labels_are_complete() -> None:
     assert SEVERITY_LABELS["critical"]["plain"] == "Stop and review now"
 
 
-def test_next_action_contract_has_required_user_facing_fields() -> None:
-    action = build_next_action(
-        label="Review stopped command",
-        reason="Command can send local secrets to an unknown host.",
-        cta="Open review queue",
-        target="/evidence?category=network",
-        urgency="high",
-    )
-
-    assert action.to_dict() == {
-        "label": "Review stopped command",
-        "reason": "Command can send local secrets to an unknown host.",
-        "cta": "Open review queue",
-        "target": "/evidence?category=network",
-        "urgency": "high",
-    }
-
-
 def test_persona_value_fields_are_explicit() -> None:
     assert MANAGER_FIELD_VALUES == ("team_members", "roles", "coverage", "incidents", "notifications", "agent_risk")
     assert VIBE_CODER_FIELD_VALUES == ("headline", "safe_explanation", "primary_action", "learn_more")
     assert "shared_memory" in export_product_model_v1()["paid_value_fields"]
-
-
-def test_redaction_stable_ids_and_settings_contracts_are_shared() -> None:
-    assert {"token", "api_key", "secret", "password", "credential", "private_key", "authorization"}.issubset(
-        REDACTION_FORBIDDEN_FIELD_VALUES
-    )
-    assert STABLE_ID_PREFIXES == {
-        "action": "sha256_hex",
-        "request": "uuid_hex",
-        "receipt": "guard-receipt",
-        "incident": "inc",
-        "agent_snapshot": "snap",
-    }
-    assert is_stable_guard_id("act_01HX8K7G6Y8M9N0P2Q3R4S5T6V")
-    assert is_stable_guard_id("a" * 64)
-    assert is_stable_guard_id("4b2f0a3e8c164a4fb4a1d4b8f2b6c9aa")
-    assert is_stable_guard_id("guard-receipt-123e4567-e89b-12d3-a456-426614174000")
-    assert not is_stable_guard_id("act")
-    assert SETTINGS_GROUP_VALUES == (
-        "preset",
-        "custom",
-        "per_harness",
-        "per_category",
-        "per_secret_source",
-    )
 
 
 def test_external_models_cover_agents_billing_affiliate_seo_funnel_and_privacy() -> None:

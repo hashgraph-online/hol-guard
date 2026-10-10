@@ -8,14 +8,19 @@ use std::path::Path;
 pub struct PathContext<'a> {
     pub home_dir: Option<&'a str>,
     pub cwd: Option<&'a str>,
+    pub cdpath_unset: bool,
 }
 
+mod contained_wrapper;
+pub(crate) mod directory_targets;
+pub(crate) use directory_targets::safe_directory_target;
 mod git_config;
 mod git_helper_context;
 mod git_probe;
 mod git_routes;
 mod git_worktree;
 pub(crate) use git_routes::git_route_within_workspace;
+mod apply_patch_writes;
 mod pure_expression;
 mod read_paths;
 mod restricted_tests;
@@ -32,6 +37,7 @@ mod shell_script;
 mod stdin_filters;
 mod worktree_add;
 mod worktree_writes;
+mod wrangler_reads;
 
 pub mod generic;
 
@@ -174,6 +180,10 @@ fn safe_git_arguments(
     let Some(subcommand) = arguments.first().map(String::as_str) else {
         return false;
     };
+    if subcommand == "worktree" {
+        return matches!(&arguments[1..], [list] if list == "list")
+            || matches!(&arguments[1..], [list, flag] if list == "list" && flag == "--porcelain");
+    }
     if !matches!(
         subcommand,
         "status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote"
@@ -255,23 +265,6 @@ fn safe_gh_arguments(arguments: &[String]) -> bool {
         || crate::command_compatibility::github_arguments_are_read_only(arguments)
 }
 
-pub(crate) fn safe_directory_target(target: &str) -> bool {
-    let tilde_head = target
-        .strip_prefix('~')
-        .map(|rest| rest.split('/').next().unwrap_or(""));
-    let directory_history = tilde_head.is_some_and(|head| {
-        head.starts_with(['+', '-'])
-            || (!head.is_empty() && head.bytes().all(|byte| byte.is_ascii_digit()))
-    });
-    crate::is_plain_cd_target(target)
-        && !directory_history
-        && !target.contains(['*', '?', '[', ']', '\\'])
-        && !sensitive_command(target)
-        && !normalized_haystack(target)
-            .split('/')
-            .any(|component| matches!(component, ".ssh" | ".aws" | ".kube" | ".gnupg" | ".docker"))
-}
-
 fn exact_safe_command(model: &CanonicalCommandV1, allow_git_helper_context: bool) -> bool {
     exact_safe_command_with_context(
         model,
@@ -290,6 +283,9 @@ fn exact_safe_command_with_context(
         || model.segments.is_empty()
         || !model.wrapper_chain.is_empty()
     {
+        return false;
+    }
+    if !safe_scalar::bounded_total_sleep(model) {
         return false;
     }
     if segment_proof::exact_safe_cwd_compound(model, context) {
@@ -370,7 +366,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 ) -> Result<PreToolDecisionV1, String> {
     let model = parse_command(request)?;
     let normalized = model.normalized_text.as_str();
-    let context = crate::pretool::PathContext { home_dir, cwd };
+    let context = PathContext::for_session(home_dir, cwd, execution_environment);
     if shell_script::contains_credential_post(&model, context) {
         return Ok(pretool_decision(
             model,
@@ -501,3 +497,5 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_benign_probes;

@@ -5,6 +5,7 @@ on:
     types: [closed]
     paths:
       - "contributions/extensions/**"
+      - "contributions/command-sources/**"
       - "contributions/mcp-servers/**"
       - "contributions/extension-listings/**"
   workflow_dispatch:

@@ -31,6 +31,7 @@ from .approval_scope_support import (
     request_scope_contract_payload,
     resolve_request_scope_selection,
     resolve_request_workspace_scope,
+    tool_call_exact_context_token,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -72,6 +73,7 @@ from .risk import artifact_risk_signals, artifact_risk_summary
 from .runtime.approval_context import parse_approval_context_token
 from .runtime.command_capability import command_capability_status
 from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT, authoritative_decision_from_artifact
+from .runtime.extension_allow_hint import validated_extension_allow_hint
 from .runtime.github_workflow_runtime import (
     issue_github_workflow_capability_for_resolution,
 )
@@ -578,6 +580,7 @@ def queue_blocked_approvals(
             guard_version=guard_version,
             first_seen_guard_version=guard_version,
             last_seen_guard_version=guard_version,
+            extension_allow_hint=_item_extension_allow_hint(item, artifact),
         )
         request = replace(
             request,
@@ -795,6 +798,15 @@ def apply_approval_resolution(
         browser_mcp_exact_key = _browser_mcp_exact_match_key(request, scope)
         if browser_mcp_exact_key is not None:
             scoped_artifact_hash = browser_mcp_exact_key
+    native_once_artifact_hash: str | None = None
+    if persist_policy is True and scope == "artifact" and approval_context_token is None:
+        # Native review rows keep the per-call binding as their artifact hash
+        # for once flows; a saved decision keys on the stable exact-action token.
+        native_exact_token = tool_call_exact_context_token(request)
+        if native_exact_token is not None:
+            scoped_artifact_id = request_artifact_id
+            scoped_artifact_hash = native_exact_token
+            native_once_artifact_hash = request_artifact_hash
     decision = PolicyDecision(
         harness="*" if scope == "global" else _approval_policy_harness(request),
         scope=scope,
@@ -828,7 +840,11 @@ def apply_approval_resolution(
             local_once_fallback = _record_local_once_approval(
                 store,
                 request_id=request_id,
-                decision=decision,
+                decision=(
+                    decision
+                    if native_once_artifact_hash is None
+                    else replace(decision, artifact_hash=native_once_artifact_hash)
+                ),
                 harness=_approval_policy_harness(request),
                 created_at=resolved_at,
             )
@@ -957,6 +973,7 @@ def apply_approval_resolution(
                 harness=resolution_harness,
                 scope=scope,
                 artifact_id=scoped_artifact_id,
+                artifact_hash=request_artifact_hash,
                 workspace=resolved_workspace if scope == "workspace" else None,
                 publisher=(
                     str(request["publisher"])
@@ -997,6 +1014,7 @@ def apply_approval_resolution(
             harness=resolution_harness,
             scope=scope,
             artifact_id=scoped_artifact_id,
+            artifact_hash=request_artifact_hash,
             workspace=resolved_workspace if scope == "workspace" else None,
             publisher=(
                 str(request["publisher"])
@@ -1549,18 +1567,6 @@ def attach_primary_approval_link(
 _UNPROVEN_HOOK_REASONS = frozenset({"guard_cursor_cli_attestation_unavailable"})
 
 
-def _recorded_hook_verification(value: object) -> bool | None:
-    """Return proven hook state, or None when current proof is still unavailable."""
-
-    if isinstance(value, bool):
-        return value
-    if not isinstance(value, Mapping):
-        return None
-    if value.get("reason") in _UNPROVEN_HOOK_REASONS or value.get("integrity_status") == "attestation-unavailable":
-        return None
-    return value.get("protection_active") is True
-
-
 def _live_hook_verification(
     managed_installs: Sequence[Mapping[str, object]],
     store: GuardStore,
@@ -1905,6 +1911,13 @@ def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, 
         if isinstance(extension_id, str) and extension_id.startswith("command."):
             return {**item, "action_envelope_json": {**envelope, "command_category": extension_id}}
     return item
+
+
+def _item_extension_allow_hint(item: dict[str, object], artifact) -> dict[str, object] | None:
+    value = artifact.metadata.get("extension_allow_hint") if artifact is not None else None
+    if value is None:
+        value = item.get("extension_allow_hint")
+    return validated_extension_allow_hint(value)
 
 
 def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:

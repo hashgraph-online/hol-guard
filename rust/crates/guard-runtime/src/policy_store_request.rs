@@ -84,6 +84,31 @@ impl PolicySnapshotStore {
         Ok(Arc::clone(current))
     }
 
+    /// Rejects a request that names a Guard home other than the one this
+    /// resident serves. Operations open stores, secrets and integrity state
+    /// under the named home, so a caller-supplied path is never authority.
+    pub(crate) fn require_guard_home(&self, guard_home: &str) -> Result<(), String> {
+        if canonical_scope_text(guard_home) == self.expected_guard_home {
+            Ok(())
+        } else {
+            Err("native_guard_home_mismatch".to_owned())
+        }
+    }
+
+    /// Rejects a store path other than `guard.db` directly under the pinned
+    /// Guard home, so a matching `guard_home` cannot smuggle a foreign store.
+    pub(crate) fn require_store_path(&self, store_path: &str) -> Result<(), String> {
+        let path = Path::new(store_path);
+        let parent_matches = path.parent().is_some_and(|parent| {
+            canonical_scope_text(&parent.to_string_lossy()) == self.expected_guard_home
+        });
+        if parent_matches && path.file_name().is_some_and(|name| name == "guard.db") {
+            Ok(())
+        } else {
+            Err("native_guard_home_mismatch".to_owned())
+        }
+    }
+
     pub(crate) fn current_snapshot(&self) -> Result<PolicySnapshotV3, String> {
         let now = now_ms()?;
         if self.authority_changed.load(Ordering::SeqCst)

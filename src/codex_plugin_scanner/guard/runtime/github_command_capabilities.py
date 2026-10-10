@@ -289,10 +289,6 @@ def _has_option(args: Sequence[str], option: str) -> bool:
     return any(token == option or token.startswith(f"{option}=") for token in args)
 
 
-def _has_any_option(args: Sequence[str], *options: str) -> bool:
-    return any(_has_option(args, option) for option in options)
-
-
 def _pr_create_has_static_inline_content(args: Sequence[str]) -> bool:
     content_derived_options = (
         "--body-file",

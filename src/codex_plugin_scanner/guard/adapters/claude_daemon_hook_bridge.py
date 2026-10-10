@@ -511,6 +511,11 @@ def _recovery_command(state_path: str | Path, query: str) -> tuple[str, ...]:
     query_values = parse_qs(query)
     home_values = query_values.get("home")
     home_dir = Path(home_values[0]) if home_values and home_values[0] else Path.home()
+    from ..frozen_runtime_commands import frozen_daemon_recovery_command, is_frozen_guard_runtime
+
+    if is_frozen_guard_runtime():
+        # A frozen desktop core cannot run the Python ``-I -c`` bootstrap below.
+        return frozen_daemon_recovery_command(Path(state_path).parent, home_dir)
     package_root = Path(__file__).resolve().parents[3]
     return isolated_daemon_start_command(
         sys.executable,

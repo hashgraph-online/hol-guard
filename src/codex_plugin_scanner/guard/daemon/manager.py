@@ -38,7 +38,7 @@ from ..frozen_runtime_commands import (
 )
 from ..live_process_identity import process_start_token
 from ..mdm.file_lock import release_file_lock
-from ..private_file_io import private_regular_file_is_valid, read_private_regular_text
+from ..private_file_io import read_private_regular_text
 from ..windows_paths import (
     windows_command_line_to_argv,
     windows_process_creation_time,
@@ -75,7 +75,6 @@ GUARD_DAEMON_COMPATIBILITY_VERSION = 2
 GUARD_DAEMON_START_TIMEOUT_SECONDS = 15.0
 GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS = 30.0
 GUARD_DAEMON_POLL_INTERVAL_SECONDS = 0.1
-GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS = 30.0
 # Head-room the client adds on top of the worker-ready budget so the daemon can
 # finish binding its socket and writing its state file after the worker reports
 # ready, without the startup poll timing out first.
@@ -747,22 +746,6 @@ def _authenticated_live_current_daemon_url(
     return authenticated_live_current_daemon_url(guard_home, state)
 
 
-def _daemon_generation_is_recent(state: dict[str, object] | None) -> bool:
-    if not isinstance(state, dict):
-        return False
-    started_at = state.get("started_at")
-    if not isinstance(started_at, str):
-        return False
-    try:
-        started = datetime.fromisoformat(started_at)
-    except ValueError:
-        return False
-    if started.tzinfo is None:
-        return False
-    age_seconds = (datetime.now(timezone.utc) - started.astimezone(timezone.utc)).total_seconds()
-    return 0 <= age_seconds <= GUARD_DAEMON_HOOK_RECOVERY_COOLDOWN_SECONDS
-
-
 def retire_all_guard_daemons_for_home(
     guard_home: Path,
     *,
@@ -1290,6 +1273,24 @@ def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
     return token or None
 
 
+def ensure_guard_daemon_auth_token(guard_home: Path) -> str:
+    """Return the guard home's daemon auth token, creating it only when absent.
+
+    Every daemon for one guard home must share this token: hooks sign approval
+    links with the file's token, so a daemon minting its own would reject them.
+    """
+
+    token_path = _auth_token_path(guard_home)
+    _ensure_private_directory(token_path.parent)
+    with _guard_daemon_state_write_lock(guard_home):
+        token = load_guard_daemon_auth_token(guard_home)
+        if token is not None and token.strip():
+            return token
+        token = secrets.token_hex(16)
+        _write_private_atomic_text(token_path, token)
+        return token
+
+
 def _daemon_health_request(url: str, auth_token: str | None = None) -> urllib.request.Request:
     headers: dict[str, str] = {}
     if isinstance(auth_token, str) and auth_token.strip():
@@ -1322,6 +1323,11 @@ def _daemon_healthz_details_match_current_runtime(payload: dict[str, object]) ->
     """Match live daemon identity including protocol compatibility."""
 
     # Same-release peers still require a current compatibility version.
+    # A peer with a different fingerprint must name its install root: a daemon
+    # from before the upgrade omits it and would otherwise pass as a same-release peer.
+    fingerprint = payload.get("runtime_fingerprint")
+    if fingerprint != _current_guard_daemon_runtime_fingerprint() and not isinstance(payload.get("source_root"), str):
+        return False
     return _guard_daemon_state_matches_current_runtime(payload)
 
 
@@ -1343,7 +1349,9 @@ def _adopt_existing_guard_daemon(
     if isinstance(preferred_port, int) and preferred_port > 0:
         adopted = _initialize_existing_guard_daemon(guard_home, preferred_port)
         if adopted is not None:
-            write_guard_daemon_state(guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"])
+            write_guard_daemon_state(
+                guard_home, preferred_port, adopted["auth_token"], pid=adopted["pid"], write_auth_token=False
+            )
             return adopted["url"]
     candidate_ports = _adoptable_guard_daemon_ports(guard_home)
     if isinstance(preferred_port, int) and preferred_port > 0:
@@ -1352,7 +1360,7 @@ def _adopt_existing_guard_daemon(
         adopted = _initialize_existing_guard_daemon(guard_home, port)
         if adopted is None:
             continue
-        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=adopted["pid"])
+        write_guard_daemon_state(guard_home, port, adopted["auth_token"], pid=adopted["pid"], write_auth_token=False)
         return adopted["url"]
     return None
 
@@ -1538,7 +1546,10 @@ def write_guard_daemon_state(
             state_payload,
             discovery_key=discovery_key,
         )
-        if write_auth_token:
+        # ``write_auth_token=False`` never replaces another daemon's token, but
+        # a missing file is restored so hooks can keep signing approval links.
+        existing_token = load_guard_daemon_auth_token(guard_home)
+        if write_auth_token or existing_token is None or not existing_token.strip():
             _write_private_atomic_text(_auth_token_path(guard_home), auth_token)
         _write_private_atomic_text(
             state_path,
@@ -2232,10 +2243,6 @@ def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
 
 def _auth_token_path(guard_home: Path) -> Path:
     return guard_home / "daemon-auth-token"
-
-
-def _private_daemon_file_is_valid(path: Path) -> bool:
-    return private_regular_file_is_valid(path, require_private_parent=True)
 
 
 def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:
@@ -3066,6 +3073,9 @@ def _runtime_identity_paths(source_root: Path) -> list[Path]:
     package_root = source_root / "codex_plugin_scanner"
     static_root = package_root / "guard" / "daemon" / "static"
     paths = [*package_root.rglob("*.py")]
+    native_manifest = package_root / "_native" / "runtime-manifest.json"
+    if native_manifest.is_file():
+        paths.append(native_manifest)
     if static_root.is_dir():
         paths.extend(path for path in static_root.rglob("*") if path.is_file())
     return paths
@@ -3182,6 +3192,12 @@ def current_guard_daemon_runtime_fingerprint() -> str:
     """Return the installed runtime identity used for daemon compatibility."""
 
     return _current_guard_daemon_runtime_fingerprint()
+
+
+def current_guard_daemon_source_root() -> str:
+    """Return the install root whose runtime identity this process reports."""
+
+    return _current_guard_daemon_source_root()
 
 
 def _guard_daemon_start_in_progress(guard_home: Path) -> bool:

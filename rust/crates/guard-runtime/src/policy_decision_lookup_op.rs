@@ -586,6 +586,9 @@ fn local_once_approval_payload(row: &Value) -> Value {
         "request_id": row_value(row, "request_id"),
         "scope": "artifact",
         "source": "approval-gate-once",
+        "fresh_local_approval": crate::approval_reuse::exact_artifact_approval_qualification(
+            row, "approval-gate-once", true,
+        ).0,
         "signed_at": row_value(row, "signed_at"),
         "updated_at": row_value(row, "created_at"),
         "workspace": row_value(row, "workspace"),
@@ -931,6 +934,13 @@ fn policy_row_payload(
 ) -> Value {
     let source = row_value(row, "source").as_str().unwrap_or("").to_string();
     let mut map = serde_json::Map::new();
+    let (fresh, durable) = crate::approval_reuse::exact_artifact_approval_qualification(
+        row,
+        &source,
+        integrity_result.is_some_and(|result| result.status == "valid"),
+    );
+    map.insert("fresh_local_approval".into(), Value::Bool(fresh));
+    map.insert("durable_exact_approval".into(), Value::Bool(durable));
     let keys = [
         "action",
         "artifact_hash",

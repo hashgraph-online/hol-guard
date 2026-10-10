@@ -61,6 +61,7 @@ type RuntimeState =
 export type { BulkGateCredentials } from "./approval-gate-utils";
 
 type LayoutProps = {
+  onRetryDetail?: () => void;
   view: AppView;
   requests: RequestState;
   detail: DetailState;
@@ -158,6 +159,9 @@ function renderInboxContent(props: LayoutProps): ReactNode {
     <ReviewWorkspace
       requests={props.requests.items}
       activeRequestId={props.activeRequestId}
+      detailError={props.detail.kind === "error" ? props.detail.message : null}
+      detailLoading={props.detail.kind === "loading"}
+      onRetryDetail={props.onRetryDetail}
       detail={
         props.detail.kind === "ready"
           ? {

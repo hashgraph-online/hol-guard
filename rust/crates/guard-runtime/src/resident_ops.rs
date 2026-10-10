@@ -25,6 +25,8 @@ pub(crate) fn evaluate_resident_bytes(
         Some(
             "workspace_review_authority_enroll"
                 | "workspace_review_context"
+                | "workspace_review_local_summary"
+                | "workspace_review_local_queue"
                 | "workspace_review_decision"
         )
     ) {
@@ -67,6 +69,15 @@ pub(crate) fn evaluate_resident_bytes(
     }
     let request: ResidentRequestV1 = crate::strict_json::from_value(value)
         .map_err(|_| "native_resident_request_invalid_json".to_owned())?;
+    if let (Some(policy_store), ResidentRequestV1::Operation(operation)) = (policy_store, &request)
+    {
+        if let Some(guard_home) = operation_guard_home(operation) {
+            policy_store.require_guard_home(guard_home)?;
+        }
+        if let Some(store_path) = operation_store_path(operation) {
+            policy_store.require_store_path(store_path)?;
+        }
+    }
     match request {
         ResidentRequestV1::Edge(request) => {
             let policy_store =
@@ -140,6 +151,22 @@ pub(crate) fn evaluate_resident_bytes(
                     )?;
                 encode_response(&context)
             }
+            ResidentOperationV1::WorkspaceReviewLocalSummary(request) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let summary = crate::policy_store::workspace_review_local_summary::build(
+                    policy_store,
+                    &request.request_id,
+                )?;
+                encode_response(&summary)
+            }
+            ResidentOperationV1::WorkspaceReviewLocalQueue(_) => {
+                let policy_store =
+                    policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
+                let queue =
+                    crate::policy_store::workspace_review_local_summary::queue(policy_store)?;
+                encode_response(&queue)
+            }
             ResidentOperationV1::WorkspaceReviewDecision(request) => {
                 let policy_store =
                     policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
@@ -197,8 +224,14 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::PackageAuthorityDecide(request) => {
                 crate::package_authority_op::evaluate_package_authority_decide(&request)
             }
+            ResidentOperationV1::PackageEvaluationCompose(request) => {
+                crate::package_evaluation_compose_op::evaluate_package_evaluation_compose(&request)
+            }
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
+            }
+            ResidentOperationV1::LocalCliGrantDecide(request) => {
+                crate::local_cli_grant_op::evaluate_local_cli_grant_request(&request)
             }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)
@@ -248,6 +281,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::McpStdioSessionClose(request) => {
                 crate::mcp_stdio_session_op::session_close(&request)
             }
+            ResidentOperationV1::McpRuntimeEvidence(request) => {
+                crate::mcp_runtime_evidence_op::evaluate_mcp_runtime_evidence(&request)
+            }
             ResidentOperationV1::PromptAnalyze(request) => {
                 crate::prompt_analyze_op::evaluate_prompt_analyze(&request)
             }
@@ -279,5 +315,45 @@ pub(crate) fn evaluate_resident_bytes(
                 encode_response(&review_post_tool(&request))
             }
         }
+    }
+}
+
+/// The Guard home an operation acts on, for operations that open per-home state.
+fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
+    match operation {
+        ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
+        ResidentOperationV1::ApprovalGate(request) => Some(&request.guard_home),
+        ResidentOperationV1::SupplyChainEval(request) => Some(&request.guard_home),
+        ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
+        ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
+        ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainedNodeExecute(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainedTypescriptExecute(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainedPackageScriptExecute(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainedWorkspaceWriteExecute(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainedExecute(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainedTestHook(request) => Some(&request.guard_home),
+        ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),
+        ResidentOperationV1::PromptAnalyze(request) => Some(&request.guard_home),
+        ResidentOperationV1::McpRuntimeEvidence(request) => Some(&request.guard_home),
+        ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.guard_home),
+        _ => None,
+    }
+}
+
+/// The store an operation opens, for operations that carry an explicit path.
+fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
+    match operation {
+        ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.store_path),
+        ResidentOperationV1::SupplyChainEval(request) => Some(&request.store_path),
+        ResidentOperationV1::ApplyStoredPackagePolicy(request) => Some(&request.store_path),
+        ResidentOperationV1::PackageAuthorityDecide(request) => Some(&request.store_path),
+        ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.store_path),
+        ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),
+        ResidentOperationV1::LocalCliGrantDecide(request) => Some(&request.store_path),
+        _ => None,
     }
 }

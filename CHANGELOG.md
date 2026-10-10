@@ -9,13 +9,69 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 ## Unreleased
 
 ### Fixed
+* **daemon:** retire a same-install daemon left running across an in-place upgrade that changes only the native runtime. The daemon pins its runtime fingerprint at start and reports its install root in authenticated health details, so the upgraded CLI can neither adopt nor relabel the previous generation; the runtime manifest joins that fingerprint, and the managed OMP and Pi extensions request one bounded recovery when readiness reports `native_policy_not_ready`, then retry once without further recovery. Admission, native fail-closed behavior, and current-daemon adoption are unchanged.
+* **approval:** native authenticated SQLite and inline lookup qualify exact artifact-context grants for reapproval reuse. Generic hooks and harness-start consumers preserve qualification across atomic claims and revalidation; retained generic grants must match the fresh authenticated grant fields after claiming, excluding global authority and integrity ledger counters changed by unrelated approvals, while consumed one-shot grants retain their claim proof. Final native decision contracts accept qualified reapproval claims. Changed artifacts, incomplete directory identities, invalid integrity, revoked retained grants, and terminal restrictions remain enforced.
+* **launch:** compute launch argv and canonical authority digests in Rust instead of emitting unbound sentinels; hash verification material once, retaining fail-closed encoding checks; bind previews and execution to the selected store Guard home, including explicit prompt transport. Qualified installed-wheel OMP launches and managed-extension reads retain native content and context verification. Launch approvals issued with the former unbound digests require fresh approval after upgrading.
+* **tests:** isolate the cloud graph snapshot-without-workspace fixture from host Node and repository cwd using an owned launcher, retaining real native launch identity, original graph assertions, and unchanged deadlines.
+* **gauntlet:** match the pinned native edit grammar's horizontal header padding while retaining byte-identical edit input, exact reviewed targets, and rejection of ambiguous or changed paths; explicitly advertise parallel native-tool capability without forcing model calls.
+* **ci:** stream full command-corpus worker reports into owned result groups instead of retaining duplicate case-ID lists; preserve all three partitions, worker concurrency, original oracles, and time and memory limits.
+* **contracts:** complete canonical external trust bindings for CodeSage, VaultSync, Omairc, FetchSandbox MCP, and Setup Doctor MCP after retiring the derived repository trust cache; retain full-catalog ownership validation and opt-in review boundaries.
+* **ci:** create the managed-resident integration fixture's Guard home with private permissions before publishing signed snapshots, so real handoff and retained-client checks reach their intended lifecycle paths without weakening native directory ownership checks.
+* **ci:** bind manual Sonar analysis to the exact checkout and its unique open same-repository pull request instead of overwriting main; reject stale or mismatched server analysis and enforce the complete standard quality gate within the existing shared polling budget.
+* **ci:** let the opted-in Windows release producer preserve successful scheduled or manual main builds in the existing trusted host cache; keep PRs, other non-push jobs, cache identity, current-source artifact verification, and build deadlines unchanged.
+* **ci:** make the authenticated native recovery fixture's accepted socket blocking on Unix before its unchanged read deadline, preserving authentication rejection and recovery checks without scheduler-dependent `WouldBlock` races or diagnostic-text assertions.
+* **ci:** bind approval-reuse regressions to the canonical provisioned native context fixture after fixture modularization, retaining all native decision, error-envelope, and claim checks without a duplicate fixture or compatibility alias.
+* **policy:** accept schema-permitted fractional UTC timestamps on Python 3.10 while preserving all nine digits; retain calendar validation, including leap-day rejection, and compare restrictive expiry changes at full nanosecond precision without Python-version-dependent parsing.
+* **contracts:** add the missing authored external trust binding for the canonical Showtime command source; retain complete-catalog ownership checks during wheel builds.
+* **packages:** preserve exact Git revision and credential-bearing source identity in private native execution IPC while keeping public output redacted; retain package-source environment names so alternate-index reinstalls still require review.
+* **hooks:** preserve the selected Guard home during approval reconstruction and live revalidation instead of starting package parsing in an unrelated default-home resident.
+* **hooks:** constrain package-review RPCs by the original absolute hook deadline and any earlier explicit timeout, including resident-capacity waits and the native request budget.
+* **native:** hash executable contents with the existing hardware-aware SHA-256 backend while retaining fresh reads, file-descriptor identity checks, and replacement detection; no content cache is introduced.
+* **hooks:** carry the original hook deadline through native review, failure-record SQL operations, and late-result fail-safe rendering, preserving earlier inherited deadlines and restoring the caller's context.
+* **tests:** isolate native cwd fixtures across repeated CI runs and assert protected-call denials and Kubernetes hook exit codes rather than incidental review wording or source indentation.
+* **ci:** provision real checkout-built native runtime and compiler executables once for both Windows updater Python versions, using a supported Python 3.12 bootstrap and source-bound current-attempt artifacts instead of rebuilding in each consumer; retain explicit `.exe` selectors and fail-closed MCP identity checks.
+* **packages:** share `uvx` option arity rules for executable and dependency selection, including Python/index/constraint short aliases; preserve executable argument boundaries. Keep here-strings distinct from heredocs so `<<<` cannot hide subsequent package commands.
+* **ci:** fail projection preparation after a bounded five-minute subprocess timeout instead of leaving coverage shards waiting indefinitely.
+* **packages:** review the distribution selected by `uvx --from` and dependencies selected by `--with` or `-w`, without treating tool arguments as package options; forward the selected Guard home when normalizing action envelopes.
+* **packages:** preserve exact archive URLs and command tokens on the private resident-to-SDK transport so acquisition retains credentials, query parameters, and fragments; keep public projections sanitized and command tokens redacted.
+* **packages:** retain alternate-index environment variable names when redacting their URL values so same-version installs still require review; classify named editable VCS dependencies as remote sources, not local workspace projects.
+* **packages:** parse compound installs containing quoted or unquoted heredocs without crashing the resident; use a regex engine that supports heredoc quote backreferences.
+* **packages:** `uvx --with-requirements` and `--with-editable` now consume their dependency operands without replacing the executable package target, including `--option=value` forms.
+* **packages:** redact URL-bearing package-command tokens, including SSH sources and registry environment assignments, to prevent credential disclosure.
+* **packages:** honor the selected Guard home through hook normalization, request extraction, MCP requests, contained execution and package shims; remove duplicate resident parser retries.
+* **packages:** split native parsing and package regression fixtures into cohesive modules while retaining resident-only authority and the existing behavioral coverage.
+* **ci:** reconcile complete source-derived command and directory projections before native coverage shards; require explicit external bindings for published identities instead of retaining stale artifact-overlay descriptors.
+* **ci:** keep isolated wheel projection builds free of runtime validation dependencies; prepare and validate directory projections in the coverage environment.
 * **windows:** restore native hook verdicts and runtime receipts by returning complete launch identities on non-Unix platforms. Missing identity fields previously raised `KeyError` and replaced the real verdict with `native_hook_worker_exception`.
 * **windows:** share shell-command parsing and labeled argv digests with Unix, and align cwd home expansion and extended-path handling with Python. Unsupported identities remain unverified and non-reusable; malformed commands and non-string arguments fail closed.
 * **security:** update the pinned CI agent fixture to Sharp 0.35.5 and its patched libvips bundles, addressing GHSA-wq5f-xc86-pv6w without changing the pinned agent versions.
 * **ci:** move package-policy precedence regressions into a focused module, isolate the stale-bundle case from the runner's npm installation, and remove source-text analytics assertions while retaining behavioral coverage.
+* **ci:** reuse each coverage shard's matching native source compiler for wheel builds while retaining projection and packaged-resource validation; remove incidental workflow assertions and the obsolete 4 MiB fixture-size precondition while preserving native matcher-node and input-byte rejection checks.
+* **extensions:** preserve AgentBridge short-help exemptions with option-arity checks and retain the reviewed native rules' community opt-in activation and risk labels.
+* **ci:** require the full validation lane for command-protection sources, descriptors, authoring manifests, and MCP policy; retain the metadata lane for extension listings and portable fixtures, with deletions and type changes escalating.
+* **ci:** run fresh full-target Rust workspace and coverage gates with checksum-pinned nextest and optimized test builds while retaining debug assertions, overflow checks, bounded concurrency, and zero retries; import the successful current-attempt strict Clippy report into Sonar instead of recompiling it, rejecting stale or mismatched report identities.
+* **ci:** print rendered Clippy diagnostics on a failing strict workspace check without changing its exit status or publishing a failed report; replace obsolete Rust coverage command assertions with stale-report and test-failure checks.
+* **native:** identify the timed-out transport phase in existing opt-in diagnostic logs without changing launch-identity failure categories, runtime deadlines, or fail-closed decisions.
+* **native:** retain opt-in finite-label resident phases in an owner-private shared file capped at 64 KiB, independent of helper lifetimes; drain helper stderr into at most 64 validated rows in memory, reject unsafe files and fragmented private lines, join helper readers on retirement, and preserve production output, deadlines, and fail-closed decisions.
+* **ci:** enforce each daemon workload client's declared concurrency with concurrently primed bounded producers, retaining aggregate load, all requests, and existing latency/fairness gates.
+* **ci:** let default-branch CodeQL analyses finish instead of automatically canceling an overlay-base build and poisoning the shared overlay status cache; retain cancellation of obsolete PR analyses and the full scan/query scope.
+* **daemon:** reuse one connection scope for a hook's managed-install lookup and fallback listing, avoiding duplicate SQLite schema setup while preserving independent current transactions, private-mode repair, outbox commits, and fail-closed read errors.
+* **ci:** enable existing test diagnostic markers before session resident prewarming so timeout logs can contain Rust phases; preserve immutable pool environments and production behavior.
+* **ci:** retain the running workflow revision's wheel-size checker and unchanged budgets outside immutable release-source checkouts, enforcing the same gate for historical repairs and native artifacts.
+* **ci:** verify checksum-pinned nextest downloads on Python 3.10 with bounded streaming SHA-256 reads, and bound its version probe.
+* **ci:** make absent managed stores explicit before opening a connection scope, preserving existing hook decisions while allowing the optional-store type check to pass.
+* **ci:** collect pytest once for the shard plan and complete protected test inventory, retaining markers, corpus and source metrics before scheduling-only nodes are excluded; run the remaining static quality checks independently of native artifact production.
+* **ci:** remove obsolete fake-Cargo workflow command tests after the real pinned nextest cutover; retain required-aggregate failure checks and complete native test execution.
+* **ci:** preserve canonical lockfile format and release-version annotations, and keep unchanged workload/status/configured-proof timing contracts in required isolated lanes.
+* **ci:** detect musl Python hosts from their build triplet when GNU-symbol libc detection is empty; retain the pinned archive checksums and bounded nextest version probe.
+* **packages:** preserve approved signed archive URLs in separately validated native private metadata; keep queries and userinfo out of public intents, artifacts, receipts, and reasons, and reject missing or mutated private sources before execution.
 
 ### Features
+* **policy:** the resident is the sole approval-reuse decision authority. Python no longer recomputes reuse when the resident is unavailable; callers preserve the current evaluation without claiming a saved approval. Malformed decision fields and mismatched response envelopes are rejected.
+* **policy:** approval reuse rejects non-JSON action objects and verifies the canonical request digest. A resident failure after an atomic claim preserves the freshly recomputed action, never a stale allow; unavailable residents honor the existing circuit cooldown.
+* **policy:** sensitive stdio reads share one two-second approval-reuse budget across claims and policy refreshes; exhausted deadlines cannot dispatch another reuse request or grant a claim.
 * **policy:** the saved-package-approval claim now resolves inside the resident. The `apply_stored_package_policy` operation ships the evaluation, artifact and store path to `evaluate_apply_stored_package_policy`, which reuses the ported `resolve_stored_package_policy_override` and returns the evaluation unchanged when the store holds no usable saved approval. The previous `commands_hook_native_eval` bridge re-entered the Python override; it now routes through `apply_stored_package_policy_native` and, on transport failure, returns the evaluation unchanged — the resident's own no-saved-approval terminal — rather than re-running the Python override.
+* **runtime:** package-intent parsing now uses the resident as its sole authority, with no Python evaluator fallback. The Python adapter submits command text and the selected Guard home; unavailable or malformed native responses return `None`. Native parsing supports `uvx`, leading environment assignments, and launch-context evidence. URL-bearing tokens are redacted as `[REDACTED_URL]`, except validated JavaScript Git source spellings retain sanitized repository identity without credentials or query values; recognized source-environment assignments retain their names with redacted values. `--path` operands are redacted as `<local-path>`. Package-intent regression fixtures require an explicitly configured runtime and enrolled Guard home.
 
 * **sync:** the resident reads OAuth credentials through the scoped secret authority. The `oauth_local_credentials` payload holds metadata only (`credentials_ref` + `credentials_sha256`), so the secret behind that ref is now resolved and verified before a sync starts — against the same fingerprints the Python store writes (scrypt, plus the legacy `pbkdf2-sha256$` and bare sha256 forms), implemented in Rust so the resident can reproduce them byte-for-byte. A record whose secret no longer matches its fingerprint now reads as `degraded` instead of being trusted, and a normally-provisioned store — which never inlines secret material — can start native sync.
 * **mcp:** proxy the MCP server transport through a persistent native session when the resident advertises `mcp-stdio-session-v1`. The resident spawns the scrubbed child, owns newline JSON-RPC framing and cross-correlation, and tears down the process group; Python keeps the client stream and `tools/call` verdict authority. A reachable resident that fails to open a session is terminal — Python never substitutes its own subprocess.
@@ -26,6 +82,7 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 
 ### Bug Fixes
 
+* **policy:** approval-reuse runtime discovery and capability probes consume the same deadline as the resident request; discovery cannot restart the per-call budget, and an expired request is not dispatched after serialization.
 * **hooks:** normalize Hermes `pre_tool_call` and `post_tool_call` events through the shared hook event parser. An unavailable worker must block a protected pre-tool call instead of treating it as an observational lifecycle event and returning allow.
 * **hooks:** route structured `--json` responses and remaining Grok/ZCode verdict emit paths through the shared exit-code authority, removing the competing response-layer table. Envelope-driven pre-execution and approval verdicts, including `PermissionRequest`, exit `0`; post-execution violations and rc-driven harness denials remain nonzero.
 * **native:** the context-digest transport now establishes the resident's on-disk prerequisite (the owner-private `policy-verifier.key` under `<guard-home>/native-runtime/`) before shipping a request, the way every native launch/session caller already did. Launch and executable identities became resident-owned, so a guard home that had never been provisioned — a fresh deployment, or a test home carrying a seeded key — failed closed on `native_runtime_launch_identity_unavailable`, `native_mcp_launch_environment_unavailable`, and `native_package_context_digest_unavailable`. An existing key file is accepted as satisfied without opening a store; only a missing key is provisioned, once per home per process.
@@ -34,6 +91,272 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a context-digest request whose deadline ran out — the client's `native_client_timed_out` or the resident's own `native_client_deadline_exceeded` — is retried once with twice the cold-start allowance. The pooled resident serves one request at a time, so a sibling's long RPC could consume the steady-state budget and fail a request that was neither slow nor dead, and the resident's own bound (which the request carries) must not make the retry hopeless. Only a request that has already failed pays for the retry; every other failure still fails after a single attempt, and the reason names the transport, the attempt count and the budget that actually failed.
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
+
+## [3.38.0](https://github.com/hashgraph-online/hol-guard/compare/v3.37.0...v3.38.0) (2026-10-09)
+
+
+### Features
+
+* **native:** derive local CLI grant identity in the resident ([#3842](https://github.com/hashgraph-online/hol-guard/issues/3842)) ([8b5ff88](https://github.com/hashgraph-online/hol-guard/commit/8b5ff88861f4857d7738a8bacc2957646147a921))
+
+
+### Bug Fixes
+
+* **ci:** isolate Win32-descriptor test that poisons process-global os.lstat ([#3848](https://github.com/hashgraph-online/hol-guard/issues/3848)) ([5a092b6](https://github.com/hashgraph-online/hol-guard/commit/5a092b6a3ad80b5b7a4af23899dd61ecdfe0aff1))
+* **ci:** let xdist restart a crashed worker and bound corpus workers higher ([#3839](https://github.com/hashgraph-online/hol-guard/issues/3839)) ([f6e71e1](https://github.com/hashgraph-online/hol-guard/commit/f6e71e1275bc9f5ca341131a65ce0b72c9cb524c))
+* **ci:** queue main runs instead of cancelling in-flight ([#3852](https://github.com/hashgraph-online/hol-guard/issues/3852)) ([f4f993d](https://github.com/hashgraph-online/hol-guard/commit/f4f993dd367f64925aa9b17b08b0dfc1f525f754))
+* **codex:** stop Desktop installs from blocking plain Git reads and cd ([#3847](https://github.com/hashgraph-online/hol-guard/issues/3847)) ([d4e8b69](https://github.com/hashgraph-online/hol-guard/commit/d4e8b697957cc4ff6a6f0f0ded99c486f0524b87))
+* **custom-extensions:** let detected connections be forgotten and age out unused ones ([#3828](https://github.com/hashgraph-online/hol-guard/issues/3828)) ([0a18798](https://github.com/hashgraph-online/hol-guard/commit/0a187983c2a1860fa05f17836be732acb0dfbe17))
+* **daemon:** keep the daemon up while a request outlives the idle window ([#3845](https://github.com/hashgraph-online/hol-guard/issues/3845)) ([985e281](https://github.com/hashgraph-online/hol-guard/commit/985e28150ba5ae43c53b2076503606c70b8ab80b))
+* **doctor:** warn when Codex skips untrusted Guard hooks or OMP code mode routes tools through eval ([#3843](https://github.com/hashgraph-online/hol-guard/issues/3843)) ([b8c52ee](https://github.com/hashgraph-online/hol-guard/commit/b8c52ee19bc956cc6cc1070f83c8ed76fbd11f47))
+* **gauntlet:** accept Guard's observe-only answer to harness lifecycle hooks ([#3833](https://github.com/hashgraph-online/hol-guard/issues/3833)) ([99a6a82](https://github.com/hashgraph-online/hol-guard/commit/99a6a820bc79856959a4039e32dfe23454a644ce))
+* **gauntlet:** keep Codex harness cases on the fixture's Codex home ([#3831](https://github.com/hashgraph-online/hol-guard/issues/3831)) ([b81d2c2](https://github.com/hashgraph-online/hol-guard/commit/b81d2c21596a19a2d9f60eabb328c92e78399ff4))
+* **guard:** launch Codex hooks on Windows ([#3846](https://github.com/hashgraph-online/hol-guard/issues/3846)) ([60c6253](https://github.com/hashgraph-online/hol-guard/commit/60c6253533264731863fc3c6cecb6dc0f57c352a))
+* **runtime:** refuse resident operations for another Guard home ([#3832](https://github.com/hashgraph-online/hol-guard/issues/3832)) ([7d3390d](https://github.com/hashgraph-online/hol-guard/commit/7d3390dcdad57e4c89375c6d7ce77bf3bf05c7e1))
+* **sonar:** suppress S5856 false positive on fancy_regex lookbehind ([#3857](https://github.com/hashgraph-online/hol-guard/issues/3857)) ([9ed431e](https://github.com/hashgraph-online/hol-guard/commit/9ed431e3eb855fd9c74c7d35cc80b9571a07d130))
+
+## [3.37.0](https://github.com/hashgraph-online/hol-guard/compare/v3.36.1...v3.37.0) (2026-10-09)
+
+
+### Features
+
+* **business:** classify business operations and add Drive export ([#3798](https://github.com/hashgraph-online/hol-guard/issues/3798)) ([9cc3b01](https://github.com/hashgraph-online/hol-guard/commit/9cc3b0152a4b3b62501df5121a4070d72e619c44))
+* **extension:** add Formicx agent command safety extension ([#2914](https://github.com/hashgraph-online/hol-guard/issues/2914)) ([890037b](https://github.com/hashgraph-online/hol-guard/commit/890037b32b3aa4992c210d7ad567618c1deebd26))
+* **extensions:** add mcp-mail-server publisher listing ([#3805](https://github.com/hashgraph-online/hol-guard/issues/3805)) ([4736564](https://github.com/hashgraph-online/hol-guard/commit/4736564cf782ae5c70f2ac9275742a3c97655b1d))
+* **extensions:** add pyrig command protection ([#3674](https://github.com/hashgraph-online/hol-guard/issues/3674)) ([2431b20](https://github.com/hashgraph-online/hol-guard/commit/2431b20d8f3887395a114a7cf795b99dc1b378d8))
+* **extensions:** require review for mcp-mail-server deletion ([#3278](https://github.com/hashgraph-online/hol-guard/issues/3278)) ([526d5b7](https://github.com/hashgraph-online/hol-guard/commit/526d5b79e67c9fc0b78411da558dfb28e4054623))
+* **gauntlet:** run the catalog through Claude Code, Codex and Cursor ([#3818](https://github.com/hashgraph-online/hol-guard/issues/3818)) ([dba20ac](https://github.com/hashgraph-online/hol-guard/commit/dba20acc9aa9696a59acc812fbcf878ea14aaf1e))
+* **guard:** add agi-memory command safety extension ([#2921](https://github.com/hashgraph-online/hol-guard/issues/2921)) ([10b0c36](https://github.com/hashgraph-online/hol-guard/commit/10b0c36bcb614fb28a7d00c724f0c651c839c10d))
+* **guard:** add rungs command classification extension ([#2818](https://github.com/hashgraph-online/hol-guard/issues/2818)) ([1493513](https://github.com/hashgraph-online/hol-guard/commit/14935137911b54033590a49fa62f0dc17d452ff1))
+* **guard:** detect package-runner CLIs such as npx wrangler ([#3792](https://github.com/hashgraph-online/hol-guard/issues/3792)) ([d5b645c](https://github.com/hashgraph-online/hol-guard/commit/d5b645ca58cd93550eafe699ea089887bb2922e1))
+* **guard:** list detected CLIs and add a Cloudflare Wrangler profile ([#3795](https://github.com/hashgraph-online/hol-guard/issues/3795)) ([e1627da](https://github.com/hashgraph-online/hol-guard/commit/e1627daa9711e155296ba482daab5b1b09c55f05))
+* **guard:** review Dispat release starts with an opt-in extension ([#2813](https://github.com/hashgraph-online/hol-guard/issues/2813)) ([de01030](https://github.com/hashgraph-online/hol-guard/commit/de01030a831a13c6cc60fa4b7acd6f28feeb282b))
+
+
+### Bug Fixes
+
+* **codex:** read app inventory from native daemons and bound tool summaries ([9ed4ba2](https://github.com/hashgraph-online/hol-guard/commit/9ed4ba2fbb5cc65ce09e800d6d93cd9617892bbc))
+* **codex:** stop holding ordinary Codex Git reads and skill reads, and explain authority repair ([#3808](https://github.com/hashgraph-online/hol-guard/issues/3808)) ([e01a885](https://github.com/hashgraph-online/hol-guard/commit/e01a885efd7fa5c2775a2f3cd8c60895726df019))
+* **contracts:** raise managed-controls catalog payload cap to 8MB ([#3816](https://github.com/hashgraph-online/hol-guard/issues/3816)) ([2eba910](https://github.com/hashgraph-online/hol-guard/commit/2eba910efced8e1c4fcccfb0836c11aadfe31f73))
+* **daemon:** read camelCase toolInput from ZCode, Devin and Grok hooks ([#3820](https://github.com/hashgraph-online/hol-guard/issues/3820)) ([8e071fe](https://github.com/hashgraph-online/hol-guard/commit/8e071fea40431d98b7fe5857afa6e9f63011b2fd))
+* **daemon:** retire a superseded same-install daemon after a native-only upgrade ([#3815](https://github.com/hashgraph-online/hol-guard/issues/3815)) ([4b48d35](https://github.com/hashgraph-online/hol-guard/commit/4b48d35875d891773a366fb30b75ecf5ebe15946))
+* **dashboard:** keep extension inventory rendering when a launch kind is unknown ([#3811](https://github.com/hashgraph-online/hol-guard/issues/3811)) ([6c227f5](https://github.com/hashgraph-online/hol-guard/commit/6c227f5e1a9389b477501b21a6f32b0cf9190afb))
+* **guard:** let routine Codex apply_patch edits pass native review ([#3821](https://github.com/hashgraph-online/hol-guard/issues/3821)) ([9b23c49](https://github.com/hashgraph-online/hol-guard/commit/9b23c4980554ca7da24bde123b59076da9739872))
+* **guard:** load Cursor hooks by replacing unsupported beforeWriteFile ([#3825](https://github.com/hashgraph-online/hol-guard/issues/3825)) ([e80f605](https://github.com/hashgraph-online/hol-guard/commit/e80f6051806787ea89e3fd646a185d5da471a181))
+* **guard:** recognize npx wrangler as a CLI and parse yargs help rows ([#3809](https://github.com/hashgraph-online/hol-guard/issues/3809)) ([f58b83e](https://github.com/hashgraph-online/hol-guard/commit/f58b83e8250b275c64a42c8f8e334e1a07379ce1))
+* **guard:** repair extension-control catalog bound and error type ([#3817](https://github.com/hashgraph-online/hol-guard/issues/3817)) ([d8c0cda](https://github.com/hashgraph-online/hol-guard/commit/d8c0cda4a33237c16cf99faffe97a09b3e42254f))
+* **package-shims:** judge the dashboard intercept test by shell-profile PATH ([#3827](https://github.com/hashgraph-online/hol-guard/issues/3827)) ([01f73f8](https://github.com/hashgraph-online/hol-guard/commit/01f73f8f3f2011b27b2ad33e73b15546063c4784))
+* **runtime:** name the business context floor for shell-wrapped Workspace CLIs ([#3826](https://github.com/hashgraph-online/hol-guard/issues/3826)) ([329a7ea](https://github.com/hashgraph-online/hol-guard/commit/329a7ea63fb1e9ee8e38361b176d890c1558a560))
+* **runtime:** recover a stale resident-update marker and report the real native failure ([#3812](https://github.com/hashgraph-online/hol-guard/issues/3812)) ([d7bfce7](https://github.com/hashgraph-online/hol-guard/commit/d7bfce750159df25a0f1de72f5bbcb4c2fb12bea))
+* **runtime:** refuse multi-record business dispatch ([#3800](https://github.com/hashgraph-online/hol-guard/issues/3800)) ([77e849e](https://github.com/hashgraph-online/hol-guard/commit/77e849eef8cb5eb236f0578097ff0849e35d271c))
+* **runtime:** require business context for local, Windows and launcher Google CLIs ([#3799](https://github.com/hashgraph-online/hol-guard/issues/3799)) ([94661ea](https://github.com/hashgraph-online/hol-guard/commit/94661ead768daa952ffd018bbe3da583c4b64018))
+* **runtime:** retire the managed resident when its Guard home is deleted ([#3822](https://github.com/hashgraph-online/hol-guard/issues/3822)) ([d5cec22](https://github.com/hashgraph-online/hol-guard/commit/d5cec22eeddd6014a2df8ccc40eca1789aac994c))
+* **supply-chain:** restore paid first-time protection without approval loops ([#3814](https://github.com/hashgraph-online/hol-guard/issues/3814)) ([29d9e6b](https://github.com/hashgraph-online/hol-guard/commit/29d9e6b985e8ad582a03764e04796e7085e9e535))
+* **sync:** scrub CLI credential arguments from synced receipt commands ([#3824](https://github.com/hashgraph-online/hol-guard/issues/3824)) ([fe371f4](https://github.com/hashgraph-online/hol-guard/commit/fe371f48c3499c9d919a1a594b5b04ffa957d0bb))
+* **uninstall:** rewrite group-writable user files and run self-uninstall from the desktop core ([#3813](https://github.com/hashgraph-online/hol-guard/issues/3813)) ([253cb46](https://github.com/hashgraph-online/hol-guard/commit/253cb4603e6bfa6bc968ffb409771e60586ce46b))
+
+
+### Documentation
+
+* **guard:** list business app compatibility by command and mode ([#3803](https://github.com/hashgraph-online/hol-guard/issues/3803)) ([3f37b9f](https://github.com/hashgraph-online/hol-guard/commit/3f37b9fed54da6d19ff9ed2c96c69344f7c072f0))
+
+## [3.36.1](https://github.com/hashgraph-online/hol-guard/compare/v3.36.0...v3.36.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **ci:** reject missing authored trust before preparation ([4ca519d](https://github.com/hashgraph-online/hol-guard/commit/4ca519d37aeb890d0834a010143db3c07d913761))
+* honor verified exact approval for native OMP launch ([#3778](https://github.com/hashgraph-online/hol-guard/issues/3778)) ([8eb477e](https://github.com/hashgraph-online/hol-guard/commit/8eb477ede17aec341998c26a2ced6f248f514849))
+* **release:** compare cached and cold builds under the same compiler wrapper ([#3786](https://github.com/hashgraph-online/hol-guard/issues/3786)) ([1f6bb79](https://github.com/hashgraph-online/hol-guard/commit/1f6bb79f1d47c19156ce642e7626dc6304a78ac6))
+* **runtime:** keep hooks working when two Guard installs share a home ([#3791](https://github.com/hashgraph-online/hol-guard/issues/3791)) ([0eac18e](https://github.com/hashgraph-online/hol-guard/commit/0eac18eb043ebd814ca6daeeaf29880c75864b73))
+
+
+### Performance Improvements
+
+* **release:** cross-compile Intel macOS binaries on Apple silicon ([#3783](https://github.com/hashgraph-online/hol-guard/issues/3783)) ([08a84ee](https://github.com/hashgraph-online/hol-guard/commit/08a84ee34f5d004fec3babf3a39f1df224391745))
+
+## [3.36.0](https://github.com/hashgraph-online/hol-guard/compare/v3.35.0...v3.36.0) (2026-10-08)
+
+
+### Features
+
+* **mcp:** support direct-command launcher and add run MCP contribution ([#3325](https://github.com/hashgraph-online/hol-guard/issues/3325)) ([76fe4b0](https://github.com/hashgraph-online/hol-guard/commit/76fe4b080192ac8bb5deb4a9c3fba9d633725fcb))
+
+
+### Bug Fixes
+
+* **extensions:** bind the run MCP contribution to the external trust class ([#3784](https://github.com/hashgraph-online/hol-guard/issues/3784)) ([c3d8209](https://github.com/hashgraph-online/hol-guard/commit/c3d8209a745c75466f39bc79da3c86498a63d64c))
+* **gauntlet:** bind native edit grammar and preserve bounded corpus memory ([#3776](https://github.com/hashgraph-online/hol-guard/issues/3776)) ([8ae4da5](https://github.com/hashgraph-online/hol-guard/commit/8ae4da5456f968f7879bcaa1a154597a9145977a))
+* **guard:** allow relative cd into the workspace, piped git reads and pipe-through cat ([#3780](https://github.com/hashgraph-online/hol-guard/issues/3780)) ([25b661b](https://github.com/hashgraph-online/hol-guard/commit/25b661b80c743cb73378a78bab4689dbbbda68a6))
+* **guard:** offer and honor exact-action Always on daemon native reviews ([#3772](https://github.com/hashgraph-online/hol-guard/issues/3772)) ([429e8f8](https://github.com/hashgraph-online/hol-guard/commit/429e8f81690d84ba2b8d52657f80113e4bcb5c9d))
+* **update:** refresh managed hook clients and keep settings scoped to --guard-home ([#3764](https://github.com/hashgraph-online/hol-guard/issues/3764)) ([9b71e1a](https://github.com/hashgraph-online/hol-guard/commit/9b71e1a7207cc12320bad120a1f4412a46fefd8f))
+* **update:** retry native resident retirement before failing the update ([#3781](https://github.com/hashgraph-online/hol-guard/issues/3781)) ([e0d10a6](https://github.com/hashgraph-online/hol-guard/commit/e0d10a656a52c25a0209fec145c8964005c1b058))
+
+
+### Performance Improvements
+
+* **release:** content-addressed release compilation and one build graph ([#3782](https://github.com/hashgraph-online/hol-guard/issues/3782)) ([db079dd](https://github.com/hashgraph-online/hol-guard/commit/db079ddd7a823b0588fd898ea4643dd3dd76d860))
+
+## [3.35.0](https://github.com/hashgraph-online/hol-guard/compare/v3.34.1...v3.35.0) (2026-10-08)
+
+
+### Features
+
+* **gauntlet:** run catalog cases in parallel with --jobs ([#3765](https://github.com/hashgraph-online/hol-guard/issues/3765)) ([5f1ca7c](https://github.com/hashgraph-online/hol-guard/commit/5f1ca7cdeb81d3301ee2f630757be6acd7fef5b5))
+* **gauntlet:** run the native Luna route at medium effort by default ([#3767](https://github.com/hashgraph-online/hol-guard/issues/3767)) ([4e0234d](https://github.com/hashgraph-online/hol-guard/commit/4e0234d3876035d44aa7c41535c2bd0a8ddf7265))
+* **guard:** prove Wrangler version, help and whoami reads benign ([#3774](https://github.com/hashgraph-online/hol-guard/issues/3774)) ([632a120](https://github.com/hashgraph-online/hol-guard/commit/632a1202dacee3bc787fbcd3779aea9cf4d5aab2))
+
+
+### Bug Fixes
+
+* **ci:** reuse native source compiler for shard wheel builds ([#3701](https://github.com/hashgraph-online/hol-guard/issues/3701)) ([fb3af28](https://github.com/hashgraph-online/hol-guard/commit/fb3af285669014676038e6e1266626a0e9f5756a))
+* **gauntlet:** run the native Luna route on Windows ([#3759](https://github.com/hashgraph-online/hol-guard/issues/3759)) ([d52e029](https://github.com/hashgraph-online/hol-guard/commit/d52e0295a73a62fdce59e83d26b6c763ce2bd80b))
+* **guard:** contain test runs wrapped in a workspace cd or output filter ([#3775](https://github.com/hashgraph-online/hol-guard/issues/3775)) ([44d5a31](https://github.com/hashgraph-online/hol-guard/commit/44d5a319cdeb2edf461b2319a995313a5356feca))
+* **guard:** stop asking approval for bounded waits and read-only probes ([#3773](https://github.com/hashgraph-online/hol-guard/issues/3773)) ([d992303](https://github.com/hashgraph-online/hol-guard/commit/d992303ed65c36c928e0147449bc56cabbe14d6d))
+* **windows:** restore the native build and parallel Gauntlet workers ([#3771](https://github.com/hashgraph-online/hol-guard/issues/3771)) ([a8c8c3c](https://github.com/hashgraph-online/hol-guard/commit/a8c8c3cdafbe0e3fd13e6a7d039baeb55ca99195))
+
+
+### Performance Improvements
+
+* **release:** compile in parallel and start Desktop signing sooner ([87a5329](https://github.com/hashgraph-online/hol-guard/commit/87a532952ab75ea87d04ebd05489c9de5c71131f))
+
+## [3.34.1](https://github.com/hashgraph-online/hol-guard/compare/v3.34.0...v3.34.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* **guard:** bind approval scope sweeps to the decided action ([#3758](https://github.com/hashgraph-online/hol-guard/issues/3758)) ([f4de331](https://github.com/hashgraph-online/hol-guard/commit/f4de331ce6ed5df4f85e421d146364a4700a6406))
+
+## [3.34.0](https://github.com/hashgraph-online/hol-guard/compare/v3.33.0...v3.34.0) (2026-10-08)
+
+
+### Features
+
+* add external opt-in Kranz MCP coverage ([#3739](https://github.com/hashgraph-online/hol-guard/issues/3739)) ([efd99ad](https://github.com/hashgraph-online/hol-guard/commit/efd99ad5afcac604636bbad4a7f90e4f20e126c9))
+* **extensions:** add a proposed Google Workspace extension pack ([#3716](https://github.com/hashgraph-online/hol-guard/issues/3716)) ([b2ee37b](https://github.com/hashgraph-online/hol-guard/commit/b2ee37b9f80d8ca11dfb309d3f301259bbc756e5))
+* **extensions:** add community-maintained command.omairc coverage ([#3002](https://github.com/hashgraph-online/hol-guard/issues/3002)) ([195f204](https://github.com/hashgraph-online/hol-guard/commit/195f2042d267d1b071b7a8a4e8e5bac5ca11bae5))
+* **extensions:** add opt-in Gmail MCP coverage ([#3757](https://github.com/hashgraph-online/hol-guard/issues/3757)) ([81ed0d4](https://github.com/hashgraph-online/hol-guard/commit/81ed0d4418bd2a92de950e43d06f337aec2b8f1f))
+* **extensions:** add publisher listing for mcp.agenthub ([#3741](https://github.com/hashgraph-online/hol-guard/issues/3741)) ([bd063ed](https://github.com/hashgraph-online/hol-guard/commit/bd063edcea3e4d322d3148495642ef083b7ebba5))
+* **extensions:** cover versioned gws services and Drive v2 routes ([#3756](https://github.com/hashgraph-online/hol-guard/issues/3756)) ([c39507c](https://github.com/hashgraph-online/hol-guard/commit/c39507c9db61bcfde22b8b81013c3d4d3ab6c6aa))
+* **gauntlet:** run Luna high through an Oh My Pi ChatGPT login ([#3753](https://github.com/hashgraph-online/hol-guard/issues/3753)) ([67ad28d](https://github.com/hashgraph-online/hol-guard/commit/67ad28dd533e85897dcdf69a7001562b3a638a96))
+* **mcp:** add FableCut MCP server contribution ([#3746](https://github.com/hashgraph-online/hol-guard/issues/3746)) ([cbb94dd](https://github.com/hashgraph-online/hol-guard/commit/cbb94dd571963937ad6cbf1306df5112d2a75b13))
+
+
+### Bug Fixes
+
+* **extensions:** add missing trust bindings for five merged contributions ([#3755](https://github.com/hashgraph-online/hol-guard/issues/3755)) ([a182221](https://github.com/hashgraph-online/hol-guard/commit/a1822212398caa870b2eaedf4f0afa08548cfdf2))
+* **extensions:** retire the tracked aggregate trust map ([39341fa](https://github.com/hashgraph-online/hol-guard/commit/39341fa7ca5f3fd85782d7e79cff60791879170b))
+* **gauntlet:** accept Windows spellings of the Watch fixture cwd ([#3743](https://github.com/hashgraph-online/hol-guard/issues/3743)) ([0bfbc1f](https://github.com/hashgraph-online/hol-guard/commit/0bfbc1f1a3ff3ed8245065c0ea36cf0e2a8d2ce9))
+* **guard:** let the first prompt in a new workspace wait for policy to load ([#3752](https://github.com/hashgraph-online/hol-guard/issues/3752)) ([cf98a2f](https://github.com/hashgraph-online/hol-guard/commit/cf98a2fda9702dab94064071b4443174dc8d3270))
+
+
+### Documentation
+
+* **extensions:** add reviewed x-reader publisher listing metadata ([#3747](https://github.com/hashgraph-online/hol-guard/issues/3747)) ([e5df801](https://github.com/hashgraph-online/hol-guard/commit/e5df801303bd303840ffb6f034730ac73afda320))
+
+## [3.33.0](https://github.com/hashgraph-online/hol-guard/compare/v3.32.0...v3.33.0) (2026-10-08)
+
+
+### Features
+
+* add Syngraphe publisher listing ([#3451](https://github.com/hashgraph-online/hol-guard/issues/3451)) ([4a44336](https://github.com/hashgraph-online/hol-guard/commit/4a4433637b1ce1de9daa69f49be5069b8c312772))
+* **extensions:** add opt-in gws command risk rules ([b319f2f](https://github.com/hashgraph-online/hol-guard/commit/b319f2f71061fafcf9f8fdd442a870b2fc00bb07))
+* **extensions:** add shellroute command safety extension ([#2927](https://github.com/hashgraph-online/hol-guard/issues/2927)) ([8150b24](https://github.com/hashgraph-online/hol-guard/commit/8150b24e9889b286649a4a1e9e6f5766ccfd463f))
+* **guard:** RTM-032 — package_intent_parser resident-sole-authority ([#3659](https://github.com/hashgraph-online/hol-guard/issues/3659)) ([7e5d938](https://github.com/hashgraph-online/hol-guard/commit/7e5d938160ac12f2471aa72fa9634333937caad6))
+* **guard:** RTM-032 — resident approval_reuse_decide as sole reuse authority ([#3658](https://github.com/hashgraph-online/hol-guard/issues/3658)) ([27ebfae](https://github.com/hashgraph-online/hol-guard/commit/27ebfaee6562cc3273f2a6be7988da0c4da17f61))
+
+
+### Bug Fixes
+
+* **ci:** restore native test setup and Gauntlet task scheduling ([63a0006](https://github.com/hashgraph-online/hol-guard/commit/63a000612de06071f372db8d362b27dd60e642b3))
+* **extensions:** add the shellroute external trust binding ([#3745](https://github.com/hashgraph-online/hol-guard/issues/3745)) ([c55054d](https://github.com/hashgraph-online/hol-guard/commit/c55054dd3df66e5f2314d65e967efcfc32cdb302))
+* **gauntlet:** keep Windows fixtures byte-exact and redact forward-slash drive paths ([#3731](https://github.com/hashgraph-online/hol-guard/issues/3731)) ([cb20572](https://github.com/hashgraph-online/hol-guard/commit/cb20572ef692a6e57c3ab1c669226b10c37c1e09))
+* **guard:** accept exact Windows drive paths as cd and git -C targets ([#3728](https://github.com/hashgraph-online/hol-guard/issues/3728)) ([e258f28](https://github.com/hashgraph-online/hol-guard/commit/e258f28ae9bb49bae931e4f77065fa24d1f36cef))
+* **guard:** compile archive containment on ARM64 musl ([daa92f0](https://github.com/hashgraph-online/hol-guard/commit/daa92f0b2bd468048047fd8c8e5b6ab8d95e9e7b))
+* **guard:** drain leases of exited Windows clients so resident stop does not fail ([#3725](https://github.com/hashgraph-online/hol-guard/issues/3725)) ([553b8f7](https://github.com/hashgraph-online/hol-guard/commit/553b8f70cc9d0d5e539eb52da6267d1492de2c8d))
+* **guard:** let resident-stop reach live Windows residents and retire dead ones ([#3735](https://github.com/hashgraph-online/hol-guard/issues/3735)) ([a59ab66](https://github.com/hashgraph-online/hol-guard/commit/a59ab66c59e3001066f7682398bf5b6b8531e67e))
+* **guard:** publish independent managed authority posture ([#3738](https://github.com/hashgraph-online/hol-guard/issues/3738)) ([498b428](https://github.com/hashgraph-online/hol-guard/commit/498b4287287ff53c5108bc878444cea92e8583fe))
+* **guard:** trust Windows git by Program Files location instead of environment variables ([#3724](https://github.com/hashgraph-online/hol-guard/issues/3724)) ([fdeb257](https://github.com/hashgraph-online/hol-guard/commit/fdeb257ed1b3997ed3e10ed5a9717fc9ba557887))
+* **runtime:** hand the home over from an orphaned older resident ([#3732](https://github.com/hashgraph-online/hol-guard/issues/3732)) ([4f9b8e4](https://github.com/hashgraph-online/hol-guard/commit/4f9b8e4a4fa1934756cd5f7ac9321905cf6621cf))
+
+
+### Documentation
+
+* **runtime:** remove obsolete review and slice notes ([#3736](https://github.com/hashgraph-online/hol-guard/issues/3736)) ([7855c58](https://github.com/hashgraph-online/hol-guard/commit/7855c580359056eea9c94ec8c88e842bdbd49571))
+
+## [3.32.0](https://github.com/hashgraph-online/hol-guard/compare/v3.31.0...v3.32.0) (2026-10-07)
+
+
+### Features
+
+* **extensions:** add command.showtime command source ([#3302](https://github.com/hashgraph-online/hol-guard/issues/3302)) ([b4f8c7f](https://github.com/hashgraph-online/hol-guard/commit/b4f8c7ff0a10ef1273098ea1cd12d8b92a7197fb))
+* **gauntlet:** run the Guard Gauntlet on Windows hosts ([#3727](https://github.com/hashgraph-online/hol-guard/issues/3727)) ([454430f](https://github.com/hashgraph-online/hol-guard/commit/454430f81b4a7e0b09bf0952ff5188957a838d95))
+* **review:** show saved business requests in local review ([f2f76d6](https://github.com/hashgraph-online/hol-guard/commit/f2f76d675754019ec7f7a4b77aeb3483fca00c34))
+
+
+### Bug Fixes
+
+* **guard:** keep existing workspaces admitted while a new workspace policy publishes ([#3726](https://github.com/hashgraph-online/hol-guard/issues/3726)) ([5bd1d9a](https://github.com/hashgraph-online/hol-guard/commit/5bd1d9a7be16033c66ec9fc09e982bee3d2f84c8))
+* **guard:** review Windows source reads through a handle-bound path walk instead of blocking every read ([#3718](https://github.com/hashgraph-online/hol-guard/issues/3718)) ([d6302f6](https://github.com/hashgraph-online/hol-guard/commit/d6302f6681ba99ee5de19fd178584d2e47c9f473))
+
+## [3.31.0](https://github.com/hashgraph-online/hol-guard/compare/v3.30.0...v3.31.0) (2026-10-07)
+
+
+### Features
+
+* **extensions:** add publisher listing for command.routed ([#3722](https://github.com/hashgraph-online/hol-guard/issues/3722)) ([8d66089](https://github.com/hashgraph-online/hol-guard/commit/8d66089668cfe911c8c87591532894e4628fd145))
+
+
+### Bug Fixes
+
+* **guard:** keep the Windows policy-integrity key in the local vault ([#3717](https://github.com/hashgraph-online/hol-guard/issues/3717)) ([f7e1dcb](https://github.com/hashgraph-online/hol-guard/commit/f7e1dcb31d1bf686bb1c2a4d0586a04db3f1d75f))
+
+
+### Performance Improvements
+
+* **packaging:** shrink native wheels and enforce package size budgets ([6b450a2](https://github.com/hashgraph-online/hol-guard/commit/6b450a2a93a880fb77e293fc42c27bd37b421614))
+
+## [3.30.0](https://github.com/hashgraph-online/hol-guard/compare/v3.29.0...v3.30.0) (2026-10-07)
+
+
+### Features
+
+* **contributions:** add lattice-talk MCP server (external opt-in) ([#3049](https://github.com/hashgraph-online/hol-guard/issues/3049)) ([720adae](https://github.com/hashgraph-online/hol-guard/commit/720adaecaf979d4b5694cd24a080bb87cddd3b16))
+* **extensions:** add AgentHub MCP server contribution ([#3455](https://github.com/hashgraph-online/hol-guard/issues/3455)) ([d2748c0](https://github.com/hashgraph-online/hol-guard/commit/d2748c0d7c570359d08947754679408de336705e))
+* **extensions:** add ClipUGC MCP server contribution ([#3287](https://github.com/hashgraph-online/hol-guard/issues/3287)) ([314b1b5](https://github.com/hashgraph-online/hol-guard/commit/314b1b577ff1f8c8b31fffe16a7fbdac43cab57d))
+* **extensions:** add enola MCP server contribution ([#3210](https://github.com/hashgraph-online/hol-guard/issues/3210)) ([1f608ca](https://github.com/hashgraph-online/hol-guard/commit/1f608ca5214ca4781119b14d9de6b645a43f71fc))
+* **extensions:** add Home Assistant MCP (Vome) server contribution ([#3420](https://github.com/hashgraph-online/hol-guard/issues/3420)) ([1be8696](https://github.com/hashgraph-online/hol-guard/commit/1be869648c1494f57ecc7f8f0accb4b65e087dcf))
+* **extensions:** add opt-in Salesforce sf data command rules ([#3706](https://github.com/hashgraph-online/hol-guard/issues/3706)) ([8d3a88a](https://github.com/hashgraph-online/hol-guard/commit/8d3a88a8d55d91e02fc53eee146453e32c4483b6))
+* **extensions:** add publisher listing for mcp.authyouragent ([#3707](https://github.com/hashgraph-online/hol-guard/issues/3707)) ([3fed4a6](https://github.com/hashgraph-online/hol-guard/commit/3fed4a6de83766ead611477b86815bce536d4f3e))
+* **extensions:** add Theourgia command protection extension ([#3320](https://github.com/hashgraph-online/hol-guard/issues/3320)) ([980c427](https://github.com/hashgraph-online/hol-guard/commit/980c42751d34296681fb0768e192d9b6b359e247))
+* **extensions:** add Xahau MCP and Evernode MCP server contributions ([#3310](https://github.com/hashgraph-online/hol-guard/issues/3310)) ([099cfa7](https://github.com/hashgraph-online/hol-guard/commit/099cfa7b730af6cd02006189cf37fad667430654))
+* **extensions:** add XRPL Muse Skill command source ([#3482](https://github.com/hashgraph-online/hol-guard/issues/3482)) ([1d569c9](https://github.com/hashgraph-online/hol-guard/commit/1d569c93a52497635dce82dfeca1d650f39c885a))
+* **extensions:** review Kranz CLI mutations ([#3188](https://github.com/hashgraph-online/hol-guard/issues/3188)) ([1c8a492](https://github.com/hashgraph-online/hol-guard/commit/1c8a49214d965d3e666e9fcf28fe1fef94a94418))
+* **gauntlet:** pin a reasoning effort for live inference ([#3687](https://github.com/hashgraph-online/hol-guard/issues/3687)) ([1f05f1b](https://github.com/hashgraph-online/hol-guard/commit/1f05f1b5007d674da1fe774039ebe1a0562a6040))
+* **guard:** add kim command safety extension ([#2895](https://github.com/hashgraph-online/hol-guard/issues/2895)) ([e7b754c](https://github.com/hashgraph-online/hol-guard/commit/e7b754c5d4b2f7d927312eccb9a712ecfc09118e))
+* **guard:** add Routed command safety extension ([#3084](https://github.com/hashgraph-online/hol-guard/issues/3084)) ([8d06d15](https://github.com/hashgraph-online/hol-guard/commit/8d06d1554d73a73601eff3c920941af6f644df93))
+* **guard:** add tether memory MCP server contribution ([#2843](https://github.com/hashgraph-online/hol-guard/issues/2843)) ([af9ba3b](https://github.com/hashgraph-online/hol-guard/commit/af9ba3bf6f244d2f80326baeaf23c9b085f5a0dc))
+* **guard:** implement command.repopy safety extension ([#2988](https://github.com/hashgraph-online/hol-guard/issues/2988)) ([6ab3a9c](https://github.com/hashgraph-online/hol-guard/commit/6ab3a9c78cc499eee6877cdb63bad99068510743))
+* **identity:** retain and revoke registered Google accounts ([d67319e](https://github.com/hashgraph-online/hol-guard/commit/d67319e4c55beda724eabf4089410ba2a929bc0a))
+* **mcp:** add MusicContext MCP server contribution ([#3683](https://github.com/hashgraph-online/hol-guard/issues/3683)) ([a160cf2](https://github.com/hashgraph-online/hol-guard/commit/a160cf26315d7e4044e7c0063911c6a2f8fa412c))
+* **runtime:** retain cumulative business budgets in native policy ([f41963d](https://github.com/hashgraph-online/hol-guard/commit/f41963d73a3362078406da677286b429b9963901))
+
+
+### Bug Fixes
+
+* **artifacts:** publish snapshots using returned release IDs ([#3715](https://github.com/hashgraph-online/hol-guard/issues/3715)) ([635c949](https://github.com/hashgraph-online/hol-guard/commit/635c94973161b9cafd8341c442c845e13305cdc7))
+* **ci:** generate extension artifacts from current sources ([639eb51](https://github.com/hashgraph-online/hol-guard/commit/639eb511df5a0b521d2f99a7109638dc4c7a0044))
+* **extensions:** convert AgentBridge to a command source and stage missing trust bindings ([#3709](https://github.com/hashgraph-online/hol-guard/issues/3709)) ([51a80bc](https://github.com/hashgraph-online/hol-guard/commit/51a80bc34eba9f9a220b2b60df70a8fabe0fcd43))
+* **extensions:** generate the shared trust map from reviewed bindings ([fe92b6a](https://github.com/hashgraph-online/hol-guard/commit/fe92b6a4f72d70515802cf9294ec74ec31c52115))
+* **extensions:** omit ambiguous operation examples ([#3708](https://github.com/hashgraph-online/hol-guard/issues/3708)) ([74487b9](https://github.com/hashgraph-online/hol-guard/commit/74487b93b8dbeccdd378d3f70f6b510ba95720e0))
+* **extensions:** publish generated artifacts after merge ([#3695](https://github.com/hashgraph-online/hol-guard/issues/3695)) ([4cbc714](https://github.com/hashgraph-online/hol-guard/commit/4cbc714b6ad6153c55d53f6a71f0a36357455307))
+* **extensions:** publish snapshots when draft tags do not exist yet ([dccfce7](https://github.com/hashgraph-online/hol-guard/commit/dccfce76b71ae464fd1d1449dd4a74a972fc54c9))
+* **extensions:** send claim notices for source-only command contributions ([#3703](https://github.com/hashgraph-online/hol-guard/issues/3703)) ([43b5b69](https://github.com/hashgraph-online/hol-guard/commit/43b5b693b18c62172547ee00c2eaa0f66eefb4b6))
+* **gauntlet:** accept inert bash defaults in Watch fixtures ([#3711](https://github.com/hashgraph-online/hol-guard/issues/3711)) ([bd98880](https://github.com/hashgraph-online/hol-guard/commit/bd988807388a6ae33dd166dde1e2cbde3075573d))
+* **gauntlet:** require fixture output and metadata proofs for tool coverage cases ([3a9450d](https://github.com/hashgraph-online/hol-guard/commit/3a9450d44e99402de1c033f8bffdd84bc85818bc))
+* **grok:** remove orphaned Guard hooks during repair ([#3704](https://github.com/hashgraph-online/hol-guard/issues/3704)) ([688a1cb](https://github.com/hashgraph-online/hol-guard/commit/688a1cb1f66cc589dba6b579c902da653cd37ceb))
+* **omp:** recover readiness after daemon replacement ([#3688](https://github.com/hashgraph-online/hol-guard/issues/3688)) ([fece86d](https://github.com/hashgraph-online/hol-guard/commit/fece86d699bcca986871640b7f3dbc5b0a5275ca))
+* **release:** retry temporarily absent registry metadata ([bd161de](https://github.com/hashgraph-online/hol-guard/commit/bd161def907c6d08ee8d1483b4d81919619341b0))
 
 ## [3.29.0](https://github.com/hashgraph-online/hol-guard/compare/v3.28.0...v3.29.0) (2026-10-07)
 

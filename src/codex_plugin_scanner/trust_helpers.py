@@ -30,13 +30,6 @@ def round_trust_score(value: float) -> float:
     return float(Decimal(str(bounded)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
-def weighted_score(components: dict[str, float], weights: dict[str, float]) -> float:
-    total_weight = sum(weight for weight in weights.values() if weight > 0)
-    if total_weight <= 0:
-        return 0.0
-    return round_trust_score(sum(components[key] * weights[key] for key in weights) / total_weight)
-
-
 def normalize_report_total(scores: tuple[float, ...]) -> float:
     if not scores:
         return 0.0

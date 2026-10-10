@@ -430,3 +430,15 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
 
 #[path = "native_command_program_control_tests.rs"]
 mod controls;
+
+#[test]
+fn program_budget_matches_delivery_manifest() {
+    let manifest: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../contracts/catalog-delivery/limits.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        manifest["max_native_command_program_bytes"].as_u64(),
+        Some(MAX_PROGRAM_BYTES as u64)
+    );
+}

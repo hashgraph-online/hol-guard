@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.package_json_scripts import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def _write_package(
     directory: Path,

@@ -45,7 +45,7 @@ def test_transport_recovery_discards_partial_pagination_and_rechecks_every_shard
     barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
     assert [path.rsplit("=", 1)[1] for path in calls] == ["1", "2", "1", "2"]
     assert sleeps == [5]
-    assert "All 128 Python coverage shards succeeded" in logs[-1]
+    assert f"All {barrier.SHARD_COUNT} Python coverage shards succeeded" in logs[-1]
     assert "private-error" not in "\n".join(logs)
 
 
@@ -68,7 +68,7 @@ def test_underreported_inventory_restarts_pagination_before_accepting_coverage()
     barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
     assert [path.rsplit("=", 1)[1] for path in calls] == ["1", "1", "2"]
     assert sleeps == [5]
-    assert "All 128 Python coverage shards succeeded" in logs[-1]
+    assert f"All {barrier.SHARD_COUNT} Python coverage shards succeeded" in logs[-1]
 
 
 def test_persistently_underreported_inventory_never_accepts_partial_coverage() -> None:

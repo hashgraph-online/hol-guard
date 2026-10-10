@@ -283,3 +283,42 @@ fn codex_post_budget_preserves_sensitive_output_policy_facts() {
         }
     }
 }
+
+#[test]
+fn codex_routine_apply_patch_clears_the_persistence_floor() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target")
+        .join(format!("guard-runtime-apply-patch-{}", std::process::id()));
+    let workspace = root.join("home/project");
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::write(workspace.join("src/settings.ts"), "retryLimit: 3,\n").unwrap();
+    std::fs::write(workspace.join(".env"), "TOKEN=synthetic\n").unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let (home, workspace) = (root.join("home"), root.join("home/project"));
+    let mut installed = policy("allow");
+    installed
+        .risk_actions
+        .insert("persistence".into(), "require-reapproval".into());
+    let review = |target: &str| {
+        let payload = json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {"command": format!(
+                "*** Begin Patch\n*** Update File: {target}\n@@\n-  retryLimit: 3,\n+  retryLimit: 5,\n*** End Patch"
+            )}
+        });
+        let native = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+            "codex",
+            "PreToolUse",
+            &payload,
+            None,
+            None,
+            home.to_str(),
+            workspace.to_str(),
+        );
+        apply_pre_tool_policy(&snapshot(installed.clone()), &payload, native).unwrap()
+    };
+    let routine = review(&workspace.join("src/settings.ts").display().to_string());
+    assert_eq!(routine.decision, "allow", "{}", routine.reason_code);
+    assert_eq!(review(".env").decision, "deny");
+}

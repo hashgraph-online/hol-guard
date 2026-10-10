@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from .codex_hook_bridge_runtime import decode_bridge_config_argument
 from .codex_hook_compatibility import bridge_argv_sha256
 from .codex_hook_file_integrity import (
     active_hook_validation_deadline,
@@ -297,7 +298,7 @@ def verify_captured_launch_generation(
         raise ValueError("managed Codex hook captured argv is invalid")
     config_json = argv[-1]
     try:
-        config = json.loads(config_json)
+        config = json.loads(decode_bridge_config_argument(config_json))
     except (ValueError, RecursionError) as exc:
         raise ValueError("managed Codex hook captured config is invalid") from exc
     config = _mapping(config, label="bridge config")
@@ -427,8 +428,8 @@ def _verify_registered_bridge_argv(
     config_json: str,
 ) -> None:
     try:
-        config_payload = json.loads(config_json)
-    except json.JSONDecodeError as exc:
+        config_payload = json.loads(decode_bridge_config_argument(config_json))
+    except ValueError as exc:
         raise ValueError("managed Codex hook bridge config is malformed") from exc
     if not isinstance(config_payload, dict):
         raise ValueError("managed Codex hook bridge config is malformed")

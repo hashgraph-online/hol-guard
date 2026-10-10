@@ -45,6 +45,8 @@ from codex_plugin_scanner.guard.runtime.shell_execution_context import (
     validate_shell_execution_segment,
 )
 
+pytestmark = pytest.mark.usefixtures("package_intent_native")
+
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -63,8 +63,6 @@ CI_SAFE_GUARD_DEVICE_SCOPES = (
 CONNECT_COMMAND = "hol-guard connect"
 CONNECT_STATUS_COMMAND = "hol-guard connect status"
 CONNECT_REPAIR_COMMAND = "hol-guard connect repair"
-DISCONNECT_COMMAND = "hol-guard disconnect"
-HEADLESS_CONNECT_COMMAND = "hol-guard connect --headless"
 CONNECT_SYNC_AUTH_CONTEXT_KEY = "_guard_sync_auth_context"
 DEVICE_CODE_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:device_code"
 DEVICE_CODE_SLOW_DOWN_SECONDS = 5
@@ -172,11 +170,6 @@ class GuardOAuthBrowserSession:
 
 def _base64url_encode(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")
-
-
-def _base64url_decode(data: str) -> bytes:
-    padding = "=" * (-len(data) % 4)
-    return base64.urlsafe_b64decode(f"{data}{padding}")
 
 
 def _read_nested_string(payload: dict[str, object], *path: str) -> str | None:
@@ -622,11 +615,6 @@ def _load_error_payload(error: urllib.error.HTTPError) -> dict[str, object] | No
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
-
-
-def device_authorization_endpoint_from_connect_url(connect_url: str) -> str:
-    _, allowed_origin = resolve_connect_url(connect_url)
-    return resolve_guard_oauth_client_config(allowed_origin).device_authorization_endpoint
 
 
 def request_device_authorization(url: str, body: str) -> dict[str, object]:

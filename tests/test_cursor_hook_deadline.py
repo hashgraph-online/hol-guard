@@ -186,3 +186,13 @@ def test_invalid_hook_input_is_rejected_before_evaluation(tmp_path, monkeypatch,
         monkeypatch.setattr(sys, "stdin", stream)
         with pytest.raises(error):
             namespace["_read_hook_input"](time.monotonic() + 1)
+
+
+def test_hook_input_drops_the_utf8_bom_windows_powershell_prepends(tmp_path, monkeypatch):
+    namespace = _hook_namespace(tmp_path)
+    input_path = tmp_path / "input"
+    input_path.write_bytes(b'\xef\xbb\xbf{"command":"echo hi"}\r\n')
+    with input_path.open("r", encoding="utf-8") as stream:
+        monkeypatch.setattr(sys, "stdin", stream)
+        raw = namespace["_read_hook_input"](time.monotonic() + 1)
+    assert json.loads(raw) == {"command": "echo hi"}

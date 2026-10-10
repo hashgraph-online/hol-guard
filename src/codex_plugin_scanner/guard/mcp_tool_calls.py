@@ -14,6 +14,7 @@ from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
 from .local_cli_trust import apply_local_mcp_extension_decision
 from .mcp_fresh_approval import fresh_local_tool_approval_matches, fresh_lookup_preserves_claim
+from .mcp_tool_call_evidence import receipt_evidence_for_mcp_tool_call
 from .models import GuardAction, GuardArtifact, GuardReceipt, PolicyDecision
 from .native_context import (
     context_mcp_tool_approval_hash,
@@ -21,6 +22,7 @@ from .native_context import (
     context_mcp_tool_risk,
     context_opaque_digest,
 )
+from .native_mcp_runtime_evidence import argument_entries, native_command_text
 from .receipts import build_receipt
 from .runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -39,6 +41,7 @@ from .runtime.approval_reuse import (
     ApprovalReuseDecision,
     ApprovalReuseStatus,
     ApprovalReuseValidationFailure,
+    approval_reuse_authority_unavailable,
     evaluate_approval_reuse,
 )
 from .runtime.browser_mcp_intent import browser_intent_display_target, normalize_browser_mcp_intent
@@ -49,7 +52,7 @@ from .runtime.mcp_protection import (
     mcp_server_identity_metadata,
     mcp_tool_identity_metadata,
 )
-from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall, scanner_evidence_for_mcp_skill_firewall
+from .runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .store import GuardStore, browser_mcp_exact_match_context
 from .temporary_mcp_approvals import runtime_grant_selectors
 
@@ -183,57 +186,14 @@ def resolve_tool_call_policy_action(
     return normalized
 
 
-_MCP_COMMAND_ARGUMENT_KEYS: tuple[str, ...] = (
-    "command",
-    "cmd",
-    "shell_command",
-    "shellCommand",
-    "script",
-    "expression",
-    "code",
-    "query",
-)
-
-_MCP_PATH_ARGUMENT_KEYS: tuple[str, ...] = (
-    "path",
-    "file_path",
-    "filePath",
-    "filepath",
-    "directory",
-    "dir",
-    "cwd",
-    "working_dir",
-    "workingDir",
-    "url",
-    "uri",
-)
-
-
 def extract_mcp_command_text(
     artifact: GuardArtifact,
     arguments: object,
+    *,
+    guard_home: Path | None = None,
 ) -> str | None:
-    """Extract a human-readable command string from MCP tool call arguments.
-
-    For tools like ctx_shell/bash the primary argument is a ``command`` string.
-    For file/path tools we surface the path. For other tools we return None so
-    the UI falls back to the artifact name.
-    """
-    if not isinstance(arguments, Mapping):
-        return None
-
-    tool_name = artifact.name
-    for key in _MCP_COMMAND_ARGUMENT_KEYS:
-        value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-
-    for key in _MCP_PATH_ARGUMENT_KEYS:
-        value = arguments.get(key)
-        if isinstance(value, str) and value.strip():
-            return f"{tool_name} {value.strip()}"
-
-    return None
+    """Return the native-owned display text for an MCP tool call (command or path)."""
+    return native_command_text(artifact.name, argument_entries(arguments, mapping_type=Mapping), guard_home=guard_home)
 
 
 def build_tool_call_artifact(
@@ -587,6 +547,10 @@ def _revalidate_claimed_tool_call_approval(
             )
         ),
     )
+    if reuse is None:
+        # Resident unreachable after the claim was consumed: keep the claimed
+        # approval decision the user granted rather than dropping it.
+        reuse = approval_reuse_authority_unavailable(post_claim_current.action)
     return replace(
         _tool_call_decision_with_reuse(post_claim_current, reuse),
         approval_reuse_claim_disposition=claim_disposition,
@@ -631,6 +595,8 @@ def claim_deferred_tool_call_approval(
             saved_decision_present=True,
             validation_reason=APPROVAL_REUSE_CONTEXT_CHANGED_AFTER_CLAIM,
         )
+        if reuse is None:
+            reuse = approval_reuse_authority_unavailable(current.action)
         return replace(
             _tool_call_decision_with_reuse(current, reuse),
             approval_reuse_claim_disposition=decision.approval_reuse_claim_disposition,
@@ -649,6 +615,8 @@ def claim_deferred_tool_call_approval(
         saved_decision_present=True,
         validation_reason=APPROVAL_REUSE_CLAIM_FAILED,
     )
+    if reuse is None:
+        reuse = approval_reuse_authority_unavailable(current.action)
     return _tool_call_decision_with_reuse(current, reuse)
 
 
@@ -862,7 +830,10 @@ def allow_tool_call(
             now=now,
             approved=policy_action in {"allow", "warn"},
         )
-    raw_command_text = extract_mcp_command_text(artifact, arguments)
+    # Display-only evidence; failure degrades it, never the receipt or event.
+    raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
+        artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
+    )
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -875,13 +846,7 @@ def allow_tool_call(
         source_scope=artifact.source_scope,
         user_override="inline-approve" if decision_source == "inline-approved" else None,
         approval_source=_map_approval_source(decision_source),
-        scanner_evidence=(
-            scanner_evidence_for_mcp_skill_firewall(
-                artifact,
-                risk_categories=risk_categories,
-            ),
-            *additional_scanner_evidence,
-        ),
+        scanner_evidence=(firewall_evidence, *additional_scanner_evidence),
         raw_command_text=raw_command_text,
     )
     if emit_runtime_evidence:
@@ -926,7 +891,9 @@ def block_tool_call(
         now=now,
         approved=False,
     )
-    raw_command_text = extract_mcp_command_text(artifact, arguments)
+    raw_command_text, firewall_evidence = receipt_evidence_for_mcp_tool_call(
+        artifact, arguments=arguments, risk_categories=risk_categories, guard_home=store.guard_home
+    )
     receipt = build_receipt(
         harness=artifact.harness,
         artifact_id=artifact.artifact_id,
@@ -939,13 +906,7 @@ def block_tool_call(
         source_scope=artifact.source_scope,
         user_override="inline-deny" if decision_source == "inline-denied" else None,
         approval_source=_map_approval_source(decision_source),
-        scanner_evidence=(
-            scanner_evidence_for_mcp_skill_firewall(
-                artifact,
-                risk_categories=risk_categories,
-            ),
-            *additional_scanner_evidence,
-        ),
+        scanner_evidence=(firewall_evidence, *additional_scanner_evidence),
         raw_command_text=raw_command_text,
     )
     store.add_receipt(receipt)

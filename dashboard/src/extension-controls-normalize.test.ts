@@ -168,7 +168,28 @@ const directMcpCatalog = normalizeExtensionCatalog({
   extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: { kind: "direct-command", command: "decided-mcp" } }],
 });
 assert.deepEqual(directMcpCatalog.extensions[0]?.mcp_launch, { kind: "direct-command", command: "decided-mcp" });
-for (const launch of [{ kind: "unknown", command: "decided-mcp" }, { kind: "direct-command", command: null }]) {
+const futureLaunchCatalog = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: { kind: "unknown", command: "decided-mcp" } }],
+});
+assert.deepEqual(futureLaunchCatalog.extensions[0]?.mcp_launch, { kind: "unsupported" });
+assert.equal(futureLaunchCatalog.extensions[0]?.extension_id, "command.mcp-filesystem");
+assert.equal(futureLaunchCatalog.extensions.length, 1);
+const futureSurface = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], surface: "future-surface", mcp_launch: undefined }],
+});
+assert.equal(futureSurface.extensions[0]?.surface, "unsupported");
+assert.equal(futureSurface.extensions[0]?.mcp_launch, undefined);
+const futureIcon = normalizeExtensionCatalog({
+  ...mcpCatalog,
+  extensions: [{ ...mcpCatalog.extensions[0], icon: { kind: "future-icon" } }],
+});
+assert.deepEqual(futureIcon.extensions[0]?.icon, { kind: "none" });
+assert.throws(() => normalizeExtensionCatalog({
+  ...mcpCatalog, extensions: [{ ...mcpCatalog.extensions[0], trust_class: "future-class" }],
+}), /Invalid extension-control response/);
+for (const launch of [{ kind: 5, command: "x" }, { kind: "direct-command", command: null }]) {
   assert.throws(() => normalizeExtensionCatalog({
     ...mcpCatalog, extensions: [{ ...mcpCatalog.extensions[0], mcp_launch: launch }],
   }), /Invalid extension-control response/);

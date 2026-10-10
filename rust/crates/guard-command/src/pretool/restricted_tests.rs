@@ -54,6 +54,21 @@ pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
     }
 }
 
+fn executable_is_bunx(executable: &str) -> bool {
+    super::executable_basename(executable) == "bunx"
+}
+
+/// A lexical subdirectory; the sink resolves it and rejects escapes.
+fn workspace_relative(directory: &str) -> bool {
+    !directory.is_empty()
+        && !directory.starts_with(['-', '/', '~', '$'])
+        && !directory.contains(['\\', '$', '`'])
+        && directory
+            .trim_end_matches('/')
+            .split('/')
+            .all(|part| !part.is_empty() && part != "..")
+}
+
 pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
     if requires_pytest_containment(model) {
         return Some("native_pytest_readonly_containment_required");
@@ -188,6 +203,22 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
                 || matches!(arguments, [wrapper, flag, tool, run, ..] if wrapper == "x" && flag == "--no-install" && tool == "vitest" && run == "run")
         }
         "bunx" | "npx" => {
+            let arguments = match arguments {
+                [flag, directory, rest @ ..]
+                    if executable_is_bunx(executable)
+                        && flag == "--cwd"
+                        && workspace_relative(directory) =>
+                {
+                    rest
+                }
+                [flag, rest @ ..]
+                    if executable_is_bunx(executable)
+                        && flag.strip_prefix("--cwd=").is_some_and(workspace_relative) =>
+                {
+                    rest
+                }
+                rest => rest,
+            };
             matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
                 || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")
         }

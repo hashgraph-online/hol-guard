@@ -66,6 +66,7 @@ mod launch_identity_common;
 pub mod launch_identity_environment;
 pub mod mcp_arguments;
 pub mod mcp_launch_environment;
+pub mod mcp_runtime_evidence;
 pub mod mcp_tool_approval;
 pub mod mcp_tool_catalog;
 pub mod mcp_tool_policy;
@@ -85,6 +86,7 @@ pub mod package_manifest_diff;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;
+mod powershell_reads;
 use parser_executables::*;
 use parser_segments::*;
 pub mod pretool;
@@ -250,12 +252,24 @@ pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommand
                 Ok(value) => value,
                 Err(reason) => return Ok(uncertain(request, raw, reason)),
             };
-        let executable = tokens.get(executable_index).cloned();
-        let arguments = if executable.is_some() {
+        let mut tokens = tokens;
+        let mut executable = tokens.get(executable_index).cloned();
+        let mut arguments = if executable.is_some() {
             tokens[executable_index + 1..].to_vec()
         } else {
             Vec::new()
         };
+        if executable_index == 0 && powershell_reads::windows_powershell_reads() {
+            if let Some(operands) = executable.as_deref().and_then(|name| {
+                powershell_reads::plain_get_content_operands(name, &arguments, &text)
+            }) {
+                tokens = std::iter::once("cat".to_owned())
+                    .chain(operands.iter().cloned())
+                    .collect();
+                executable = Some("cat".to_owned());
+                arguments = operands;
+            }
+        }
         if executable.as_deref().is_some_and(is_shell_control_keyword) {
             return Ok(uncertain(request, raw, "compound_shell_not_yet_supported"));
         }
@@ -390,6 +404,7 @@ pub mod local_mcp_stdio;
 #[cfg(all(unix, test))]
 mod local_mcp_stdio_tests;
 pub mod mcp_decision;
+mod mcp_package_sources;
 #[cfg(unix)]
 pub mod mcp_stdio_session;
 pub mod pep440;

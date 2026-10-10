@@ -79,6 +79,8 @@ function publisher(value: unknown, label: string): { id: string; displayName: st
 function icon(value: unknown, label: string): { kind: "react-icon" | "svg-ref" | "none"; name?: string; background?: string } {
   if (value === undefined || value === null) return { kind: "none" };
   const item = record(value, label);
+  // Display-only: a newer daemon may send an icon kind this UI cannot draw.
+  if (typeof item.kind === "string" && !["react-icon", "svg-ref", "none"].includes(item.kind)) return { kind: "none" };
   const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"] as const);
   const name = item.name === undefined ? undefined : string(item.name, `${label}.name`);
   const background = item.background === undefined ? undefined : string(item.background, `${label}.background`);
@@ -211,6 +213,11 @@ function permission(value: unknown, extensionId: string, label: string): Extensi
 
 function mcpLaunch(value: unknown, label: string): McpLaunch {
   const item = record(value, label);
+  // Forward-compat: a newer daemon may emit launch kinds this UI does not know.
+  // Keep the entry and show it as unsupported; no launch representation is trusted.
+  if (typeof item.kind === "string" && !["package-launcher", "direct-command", "remote-http"].includes(item.kind)) {
+    return { kind: "unsupported" };
+  }
   const kind = enumValue(item.kind, `${label}.kind`, ["package-launcher", "direct-command", "remote-http"] as const);
   if (kind === "direct-command") {
     return { kind, command: string(item.command, `${label}.command`) };
@@ -242,6 +249,8 @@ function mcpCatalogFields(
   label: string,
 ): Pick<ExtensionCatalogItem, "surface" | "mcp_launch" | "mcp_tools"> {
   if (item.surface === undefined) return {};
+  // Unknown surfaces from a newer daemon are kept but not rendered as MCP or commands.
+  if (typeof item.surface === "string" && item.surface !== "mcp") return { surface: "unsupported" };
   const surface = enumValue(item.surface, `${label}.surface`, ["mcp"] as const);
   const launch = item.mcp_launch === undefined ? undefined : mcpLaunch(item.mcp_launch, `${label}.mcp_launch`);
   const tools = item.mcp_tools === undefined

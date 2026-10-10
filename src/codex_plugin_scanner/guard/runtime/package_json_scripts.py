@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..native_local_cli_identity import native_local_cli_identity
 from .command_model import parse_shell_command
 from .command_tokens import executable_name
 from .local_cli_commands import (
@@ -88,6 +89,8 @@ def recognize_package_json_scripts(
     if not scripts:
         return None
     identity = identity_for_package_json(manifest_path, runner=runner)
+    if identity is None:
+        return None
     commands = commands_from_package_scripts(scripts, runner=runner, focused_script=focused)
     project = identity.name
     count = max(0, len(commands) - 2)
@@ -183,30 +186,27 @@ def parse_package_script_invocation(
     return manifest, runner, focused
 
 
-def identity_for_package_json(manifest_path: Path, *, runner: str) -> UnlistedCliIdentity:
+def identity_for_package_json(manifest_path: Path, *, runner: str) -> UnlistedCliIdentity | None:
     payload, digest = _read_package_payload(manifest_path)
     package_name = _package_name(payload, manifest_path.parent)
-    path_fingerprint = hashlib.sha256(str(manifest_path.resolve()).encode("utf-8")).hexdigest()
-    compact = re.sub(r"[^a-z0-9]", "", package_name.lower())[:16] or "app"
-    identity_hash = hashlib.sha256(
-        json.dumps(
-            {
-                "kind": _PACKAGE_SCRIPT_SURFACE,
-                "content_sha256": digest,
-                "path_fingerprint": path_fingerprint,
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    ).hexdigest()
+    source = {
+        "source": "package_json",
+        "manifest_path": str(manifest_path.resolve()),
+        "content_sha256": digest,
+        "package_name": package_name,
+    }
+    identity = native_local_cli_identity(source)
+    if identity is None:
+        return None
     return UnlistedCliIdentity(
-        cli_id=f"local-cli.pkg-{compact}-{path_fingerprint[:8]}",
-        name=package_name[:120],
+        cli_id=identity["cli_id"],
+        name=identity["name"],
         kind="script",
-        identity_hash=identity_hash,
+        identity_hash=identity["identity_hash"],
         example_label=f"{runner} run",
         interpreter_name=runner,
         source_path=str(manifest_path),
+        identity_source=source,
     )
 
 

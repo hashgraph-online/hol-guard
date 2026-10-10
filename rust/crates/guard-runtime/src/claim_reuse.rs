@@ -166,6 +166,13 @@ pub(crate) fn policy_row_payload(
         "updated_at": row.get("updated_at").and_then(Value::as_str).unwrap_or(""),
         "workspace": row.get("workspace").cloned().unwrap_or(Value::Null),
     });
+    let (fresh, durable) = crate::approval_reuse::exact_artifact_approval_qualification(
+        row,
+        source,
+        integrity_result.is_some_and(|result| result.status == "valid"),
+    );
+    payload["fresh_local_approval"] = Value::Bool(fresh);
+    payload["durable_exact_approval"] = Value::Bool(durable);
     if integrity_result.is_some() && !is_remote_policy_source(Some(source)) {
         let res = integrity_result.unwrap();
         payload["integrity_status"] = Value::from(res.status);

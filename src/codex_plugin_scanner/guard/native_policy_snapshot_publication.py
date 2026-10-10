@@ -16,6 +16,8 @@ from .native_policy_snapshot_constants import (
 )
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 
@@ -146,10 +148,15 @@ class NativePolicySnapshotPublicationMixin:
             for _ in range(2):
                 with publisher._condition:
                     publish_epoch = publisher._epoch
+                    # Compile exactly this set. A workspace registered later
+                    # stays pending for the next publish; compiling its overlay
+                    # now would make the ACKed digest disagree with the
+                    # settled-only reconcile and withdraw readiness home-wide.
+                    compiled_workspaces = frozenset(publisher._workspace_paths)
                 local_cli_revision = publisher._current_local_cli_revision()
                 provider_reader = getattr(publisher.store, "read_mcp_provider_authority_hash", None)
                 provider_authority_hash = provider_reader() if callable(provider_reader) else None
-                context = publisher._publication_context()
+                context = publisher._publication_context(workspaces=compiled_workspaces)
                 if context is None:
                     return
                 with publisher._condition:
@@ -267,6 +274,7 @@ class NativePolicySnapshotPublicationMixin:
                     publisher._failure_count = 0
                     publisher._retry_not_before_monotonic = None
                     publisher._schedule_renewal_locked(snapshot)
+                    publisher._commit_workspace_readiness_locked(compiled_workspaces)
                     publisher._condition.notify_all()
         except NativePolicySnapshotError as error:
             publisher._record_error(str(error))
@@ -275,6 +283,8 @@ class NativePolicySnapshotPublicationMixin:
 
     def _publication_context(
         self,
+        *,
+        workspaces: frozenset[Path] | None = None,
     ) -> tuple[Any, Any, bytes, Mapping[str, object], Mapping[str, object], Callable[..., bytes | None]] | None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         status_provider = publisher._status_provider
@@ -318,7 +328,7 @@ class NativePolicySnapshotPublicationMixin:
             ):
                 publisher._record_error("native_policy_snapshot_integrity_key_unavailable")
                 return None
-            config = publisher._compiled_effective_policy()
+            config = publisher._compiled_effective_policy(workspaces=workspaces)
             command_extensions = publisher._compiled_command_extensions()
             client = publisher._client_request
             if client is None:
@@ -328,7 +338,3 @@ class NativePolicySnapshotPublicationMixin:
             return identity, capabilities, material[0], config, command_extensions, client
         finally:
             material = None
-
-    @staticmethod
-    def _decode_ack(output: bytes | None) -> dict[str, object] | None:
-        return _publisher_api()._decode_ack_v3(output)

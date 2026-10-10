@@ -2,10 +2,8 @@
 
 #[cfg(test)]
 use self::tests::{notify_lock_busy_for_test, notify_lock_retry_deadline_for_test};
-#[cfg(not(windows))]
-use std::fs::OpenOptions;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -37,6 +35,9 @@ const LEASE_ACQUIRE_RETRY_MAX_DELAY: Duration = Duration::from_millis(16);
 mod owner;
 use owner::deadline_for_timeout;
 pub(super) use owner::ClientLease;
+#[path = "managed_resident_lease_record.rs"]
+mod record;
+use record::{lease_file_is_recent, lease_is_live, read_lease, remove_stale_lease, LeaseReadError};
 #[path = "managed_resident_lease_retirement.rs"]
 mod retirement;
 
@@ -219,216 +220,6 @@ where
     ))
 }
 
-struct LeaseFile {
-    identity: LeaseIdentity,
-    modified: SystemTime,
-    bytes: Vec<u8>,
-}
-
-impl LeaseFile {
-    fn remove_if_same(&self, path: &Path) -> bool {
-        self.identity.remove_if_same(path)
-    }
-}
-
-enum LeaseFileOpenError {
-    Missing,
-    Unavailable,
-}
-
-fn open_lease_file(path: &Path, private_root: &Path) -> Result<LeaseFile, LeaseFileOpenError> {
-    #[cfg(not(windows))]
-    let _ = private_root;
-    #[cfg(windows)]
-    let file = match crate::resident_state::open_private_read(path, u64::MAX, "lease", private_root)
-    {
-        Ok(Some(file)) => file,
-        Ok(None) => return Err(LeaseFileOpenError::Missing),
-        Err(_) => return Err(LeaseFileOpenError::Unavailable),
-    };
-    #[cfg(not(windows))]
-    let file = {
-        let mut options = OpenOptions::new();
-        options.read(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
-        }
-        match options.open(path) {
-            Ok(file) => file,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                return Err(LeaseFileOpenError::Missing)
-            }
-            Err(_) => return Err(LeaseFileOpenError::Unavailable),
-        }
-    };
-    let identity = LeaseIdentity::from_file(&file).map_err(|_| LeaseFileOpenError::Unavailable)?;
-    #[cfg(unix)]
-    if !identity.matches_path(path) {
-        return Err(LeaseFileOpenError::Unavailable);
-    }
-    let modified = file
-        .metadata()
-        .map_err(|_| LeaseFileOpenError::Unavailable)?
-        .modified()
-        .map_err(|_| LeaseFileOpenError::Unavailable)?;
-    let mut file = file;
-    let mut bytes = Vec::new();
-    Read::by_ref(&mut file)
-        .take(LEASE_MAX_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| LeaseFileOpenError::Unavailable)?;
-    Ok(LeaseFile {
-        identity,
-        modified,
-        bytes,
-    })
-}
-
-struct LeaseRecord {
-    identity: LeaseIdentity,
-    process_id: u32,
-    start_marker: String,
-    digest: String,
-    modified: SystemTime,
-}
-
-struct LeaseContents {
-    process_id: u32,
-    start_marker: String,
-    digest: String,
-}
-
-fn parse_lease_contents(bytes: &[u8]) -> Option<LeaseContents> {
-    if bytes.len() as u64 > LEASE_MAX_BYTES {
-        return None;
-    }
-    let contents = String::from_utf8(bytes.to_owned()).ok()?;
-    let mut lines = contents.lines();
-    let process_id = lines.next()?.parse::<u32>().ok()?;
-    let start_marker = lines.next()?.to_owned();
-    let digest = lines.next()?.to_owned();
-    if process_id == 0
-        || start_marker.is_empty()
-        || start_marker.len() > 256
-        || digest.len() != 64
-        || !digest.bytes().all(|byte| byte.is_ascii_hexdigit())
-        || lines.next().is_some()
-    {
-        return None;
-    }
-    Some(LeaseContents {
-        process_id,
-        start_marker,
-        digest,
-    })
-}
-
-fn lease_file_is_recent(modified: SystemTime, observed_at: SystemTime) -> bool {
-    !observed_at
-        .duration_since(modified)
-        .is_ok_and(|age| age > LEASE_EXPIRY)
-}
-
-enum LeaseReadError {
-    Missing,
-    Unavailable,
-    Malformed(LeaseFile),
-}
-
-fn read_lease(path: &Path, private_root: &Path) -> Result<LeaseRecord, LeaseReadError> {
-    let file = open_lease_file(path, private_root).map_err(|error| match error {
-        LeaseFileOpenError::Missing => LeaseReadError::Missing,
-        LeaseFileOpenError::Unavailable => LeaseReadError::Unavailable,
-    })?;
-    let Some(LeaseContents {
-        process_id,
-        start_marker,
-        digest,
-    }) = parse_lease_contents(&file.bytes)
-    else {
-        return Err(LeaseReadError::Malformed(file));
-    };
-    Ok(LeaseRecord {
-        identity: file.identity,
-        process_id,
-        start_marker,
-        digest,
-        modified: file.modified,
-    })
-}
-
-fn lease_is_live(
-    path: &Path,
-    expected_digest: Option<&str>,
-    private_root: &Path,
-    observed_at: SystemTime,
-) -> bool {
-    let record = match read_lease(path, private_root) {
-        Ok(record) => record,
-        Err(LeaseReadError::Missing) => return false,
-        Err(LeaseReadError::Unavailable) => return true,
-        Err(LeaseReadError::Malformed(file)) => {
-            return lease_file_is_recent(file.modified, observed_at)
-        }
-    };
-    let Ok(age) = observed_at.duration_since(record.modified) else {
-        return false;
-    };
-    if age > LEASE_EXPIRY
-        || expected_digest.is_some_and(|expected| !record.digest.eq_ignore_ascii_case(expected))
-    {
-        return false;
-    }
-    process_start_marker(record.process_id).is_ok_and(|actual| actual == record.start_marker)
-}
-
-fn remove_stale_lease(path: &Path, private_root: &Path, observed_at: SystemTime) -> bool {
-    let record = match read_lease(path, private_root) {
-        Ok(record) => record,
-        Err(LeaseReadError::Missing | LeaseReadError::Unavailable) => return false,
-        Err(LeaseReadError::Malformed(file)) => {
-            let Ok(age) = observed_at.duration_since(file.modified) else {
-                return false;
-            };
-            if age <= LEASE_EXPIRY {
-                return false;
-            }
-            return file.remove_if_same(path);
-        }
-    };
-    let Ok(age) = observed_at.duration_since(record.modified) else {
-        return false;
-    };
-    if age <= LEASE_EXPIRY {
-        return false;
-    }
-    // A client whose heartbeat has stopped can still be the same process.
-    // Re-read the file before unlinking so a refresh or replacement is kept.
-    let confirmed = match read_lease(path, private_root) {
-        Ok(record) => record,
-        Err(
-            LeaseReadError::Missing | LeaseReadError::Unavailable | LeaseReadError::Malformed(_),
-        ) => {
-            return false;
-        }
-    };
-    if confirmed.process_id != record.process_id
-        || confirmed.start_marker != record.start_marker
-        || !confirmed.digest.eq_ignore_ascii_case(&record.digest)
-    {
-        return false;
-    }
-    let Ok(confirmed_age) = observed_at.duration_since(confirmed.modified) else {
-        return false;
-    };
-    if confirmed_age <= LEASE_EXPIRY {
-        return false;
-    }
-    confirmed.identity.remove_if_same(path)
-}
-
 fn any_live_with_digest(state_base: &Path, expected_digest: Option<&str>) -> bool {
     any_live_with_clock(state_base, expected_digest, SystemTime::now)
 }
@@ -438,11 +229,13 @@ fn any_live_with_clock(
     expected_digest: Option<&str>,
     clock: impl FnOnce() -> SystemTime,
 ) -> bool {
+    // A removed state base holds no leases. Retaining the resident here would
+    // keep it running forever once its Guard home is deleted.
     let Ok(private_root) = private_root_for_state_base(state_base) else {
-        return true;
+        return state_base_may_hold_leases(state_base);
     };
     let Ok(directory) = lease_directory(state_base) else {
-        return true;
+        return state_base_may_hold_leases(state_base);
     };
     let _lock = match acquire_directory_lock(&directory, &private_root) {
         Ok(Some(lock)) => lock,
@@ -455,7 +248,41 @@ fn any_live_with_clock(
     // Renewal uses this same directory lock. An otherwise fresh lease must
     // not expire merely because a bounded ACL/file scan delays its heartbeat.
     // Take one reference time after acquiring the lock for the whole sweep.
-    let observed_at = clock();
+    any_live_locked(&directory, &private_root, expected_digest, clock())
+}
+
+fn state_base_may_hold_leases(state_base: &Path) -> bool {
+    !matches!(
+        fs::symlink_metadata(state_base),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound
+    )
+}
+
+/// Run `action` only while no live lease of `digest` exists, holding the
+/// lease directory lock across both. Every runtime takes this lock before it
+/// publishes a lease, so no client of `digest` can start in between. Returns
+/// `None` when the directory stays busy, is unavailable, or a lease is live.
+pub(super) fn unless_live<T>(
+    state_base: &Path,
+    digest: &str,
+    action: impl FnOnce() -> T,
+) -> Option<T> {
+    let private_root = private_root_for_state_base(state_base).ok()?;
+    let directory = lease_directory(state_base).ok()?;
+    let _lock =
+        acquire_directory_lock_with_retry(&directory, &private_root, LEASE_HEARTBEAT).ok()?;
+    if any_live_locked(&directory, &private_root, Some(digest), SystemTime::now()) {
+        return None;
+    }
+    Some(action())
+}
+
+fn any_live_locked(
+    directory: &Path,
+    private_root: &Path,
+    expected_digest: Option<&str>,
+    observed_at: SystemTime,
+) -> bool {
     let Ok(entries) = fs::read_dir(directory) else {
         return true;
     };
@@ -471,7 +298,7 @@ fn any_live_with_clock(
             break;
         }
         let Ok(entry) = entry else {
-            let _ = batch_has_live_lease(&mut paths, expected_digest, &private_root, observed_at);
+            let _ = batch_has_live_lease(&mut paths, expected_digest, private_root, observed_at);
             return true;
         };
         let name = entry.file_name();
@@ -480,13 +307,13 @@ fn any_live_with_clock(
             continue;
         }
         if paths.len() >= LEASE_MAX_FILES
-            && batch_has_live_lease(&mut paths, expected_digest, &private_root, observed_at)
+            && batch_has_live_lease(&mut paths, expected_digest, private_root, observed_at)
         {
             return true;
         }
         paths.push(entry.path());
     }
-    let found_live = batch_has_live_lease(&mut paths, expected_digest, &private_root, observed_at);
+    let found_live = batch_has_live_lease(&mut paths, expected_digest, private_root, observed_at);
     found_live || stopped_before_end
 }
 
@@ -508,11 +335,11 @@ fn batch_has_live_lease(
     found_live
 }
 
-#[cfg(test)]
 pub(super) fn any_live(state_base: &Path, expected_digest: &str) -> bool {
     any_live_with_digest(state_base, Some(expected_digest))
 }
 
+#[cfg(test)]
 pub(super) fn any_live_for_home(state_base: &Path) -> bool {
     any_live_with_digest(state_base, None)
 }

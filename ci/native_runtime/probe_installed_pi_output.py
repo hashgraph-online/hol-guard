@@ -15,18 +15,33 @@ import importlib
 import json
 import os
 import shutil
-import signal
 import stat
 import subprocess
 import sys
 import tempfile
 import textwrap
-import threading
 import time
 from collections.abc import Mapping
 from importlib import metadata
 from pathlib import Path
 from typing import Any
+
+try:
+    from ci.native_runtime.probe_daemon_calls import (
+        ProbeCleanupError,
+        ProbeCleanupUnsafeError,
+        ProbeError,
+        _DaemonCallTimeoutError,
+        bounded_daemon_call,
+    )
+except ModuleNotFoundError:  # Run directly as a script from its own directory.
+    from probe_daemon_calls import (  # type: ignore[no-redef]
+        ProbeCleanupError,
+        ProbeCleanupUnsafeError,
+        ProbeError,
+        _DaemonCallTimeoutError,
+        bounded_daemon_call,
+    )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TEXT_LIMIT = 12_000
@@ -59,22 +74,6 @@ def _native_cleanup_retry_interval_seconds() -> float:
     from codex_plugin_scanner.guard.native_resident_client import NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
 
     return NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS
-
-
-class ProbeError(RuntimeError):
-    """Raised when the installed Pi/native boundary cannot be proven."""
-
-
-class ProbeCleanupError(ProbeError):
-    """Raised when startup cleanup must be retained for a bounded retry."""
-
-
-class ProbeCleanupUnsafeError(ProbeCleanupError):
-    """Raised when daemon containment is unproven and the scratch root may be mutable."""
-
-
-class _DaemonCallTimeoutError(ProbeCleanupUnsafeError):
-    """Internal signal interruption for a bounded daemon lifecycle call."""
 
 
 def _is_source_checkout_package(package_path: Path, repo_root: Path) -> bool:
@@ -901,73 +900,8 @@ def _prepare_installed_daemon_workspace(daemon: Any, workspace: Path) -> Any:
     return prepared
 
 
-def _restore_alarm_state(
-    *,
-    prior_handler: Any,
-    prior_timer: tuple[float, float],
-    elapsed: float,
-) -> None:
-    """Restore SIGALRM even when setup or the bounded call failed."""
-    restoration_error: BaseException | None = None
-    try:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-    except BaseException as exc:
-        restoration_error = exc
-
-    handler_restored = False
-    try:
-        signal.signal(signal.SIGALRM, prior_handler)
-        handler_restored = True
-    except BaseException as exc:
-        restoration_error = restoration_error or exc
-
-    if handler_restored:
-        prior_remaining, prior_interval = prior_timer
-        if prior_remaining > 0:
-            remaining = prior_remaining - elapsed
-            if remaining <= 0:
-                # The prior timer may have expired while this bounded call ran.
-                # Deliver it shortly instead of silently discarding it.
-                remaining = 0.001
-            try:
-                signal.setitimer(signal.ITIMER_REAL, remaining, prior_interval)
-            except BaseException as exc:
-                restoration_error = restoration_error or exc
-
-    if restoration_error is not None:
-        raise ProbeCleanupUnsafeError("Guard daemon alarm state restoration failed") from restoration_error
-
-
 def _bounded_daemon_call(daemon: Any, method_name: str) -> object | None:
-    if threading.current_thread() is not threading.main_thread():
-        raise ProbeError("bounded Guard daemon cleanup must run on the main thread")
-    method = getattr(daemon, method_name, None)
-    if not callable(method):
-        raise ProbeError(f"installed Guard daemon {method_name} signal is unavailable")
-
-    try:
-        prior_handler = signal.getsignal(signal.SIGALRM)
-        prior_timer = signal.getitimer(signal.ITIMER_REAL)
-    except BaseException as exc:
-        raise ProbeCleanupUnsafeError("Guard daemon alarm state could not be inspected") from exc
-    started = time.monotonic()
-
-    def timeout_handler(_signum: int, _frame: Any) -> None:
-        raise _DaemonCallTimeoutError(f"authenticated Guard daemon {method_name} timed out")
-
-    try:
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.setitimer(signal.ITIMER_REAL, _daemon_cleanup_timeout_seconds())
-        return method()
-    except _DaemonCallTimeoutError:
-        raise
-    except BaseException as exc:
-        if method_name == "stop":
-            raise ProbeError(f"authenticated Guard daemon cleanup failed: {type(exc).__name__}") from exc
-        raise ProbeError(f"authenticated Guard daemon {method_name} failed: {type(exc).__name__}") from exc
-    finally:
-        elapsed = time.monotonic() - started
-        _restore_alarm_state(prior_handler=prior_handler, prior_timer=prior_timer, elapsed=elapsed)
+    return bounded_daemon_call(daemon, method_name, _daemon_cleanup_timeout_seconds())
 
 
 def _bounded_daemon_finish(daemon: Any) -> bool:
