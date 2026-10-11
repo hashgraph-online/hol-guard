@@ -34,9 +34,9 @@ _READ_ONLY_FAMILIES = ("navigation-public-read", "source-search-read", "git-loca
 _READ_ONLY_EXTRA = {("shell-composition", "cd-pipeline"), ("shell-composition", "json-pipeline")}
 PENDING: dict[str, str] = {
     "git-local/branches": "native_command_review_required",
-    "git-local/diff-check": "native_command_review_required",
-    "git-local/recent-log": "native_command_review_required",
-    "git-local/show-stat": "native_command_review_required",
+    "git-local/diff-check": "native_policy_warning",
+    "git-local/recent-log": "native_policy_warning",
+    "git-local/show-stat": "native_policy_warning",
     "navigation-public-read/directory-list": "native_policy_warning",
     "navigation-public-read/repository-root": "native_policy_warning",
     "navigation-public-read/status": "native_policy_warning",
