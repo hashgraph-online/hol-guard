@@ -268,6 +268,9 @@ pub(super) fn exact_safe_segment_with_context(
     allow_git_helper_context: bool,
     context: super::PathContext<'_>,
 ) -> bool {
+    if let Some(merged) = without_stderr_merge(segment) {
+        return exact_safe_segment_with_context(model, &merged, allow_git_helper_context, context);
+    }
     let Some(executable) = segment.executable.as_deref() else {
         return false;
     };
@@ -365,4 +368,26 @@ pub(super) fn exact_safe_segment_with_context(
         }
         _ => false,
     }
+}
+
+/// A trailing `2>&1` only joins stderr to the segment's own stdout, so the
+/// proof applies to the command without it. The parser admits that redirect
+/// only at a token boundary; a quoted or escaped `2>&1` operand is still the
+/// last argument but leaves a quote or backslash in the text, so it stays.
+fn without_stderr_merge(segment: &crate::CommandSegmentV1) -> Option<crate::CommandSegmentV1> {
+    if segment.arguments.last().map(String::as_str) != Some("2>&1")
+        || segment.tokens.last().map(String::as_str) != Some("2>&1")
+    {
+        return None;
+    }
+    let text = segment.text.strip_suffix("2>&1")?;
+    let command = text.trim_end();
+    if command.len() == text.len() || command.ends_with('\\') {
+        return None;
+    }
+    let mut merged = segment.clone();
+    merged.arguments.pop();
+    merged.tokens.pop();
+    merged.text = command.to_owned();
+    Some(merged)
 }

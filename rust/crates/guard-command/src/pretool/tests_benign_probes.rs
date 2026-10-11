@@ -230,3 +230,25 @@ fn windows_get_content_reads_use_native_paths() {
         assert_ne!(action(&command), "allow", "{command}");
     }
 }
+
+#[test]
+fn a_trailing_stderr_merge_keeps_the_read_only_proof() {
+    for command in [
+        "ls 2>&1",
+        "ls -la 2>&1 | head -5",
+        "hol-guard status 2>&1 | head -50",
+        "hol-guard --version 2>&1",
+        "node --version 2>&1",
+    ] {
+        assert!(allowed(command), "{command}");
+    }
+    for command in [
+        "hol-guard doctor --repair 2>&1",
+        "hol-guard approvals approve 2>&1",
+        "rm -rf build 2>&1",
+        "cat '2>&1'",
+        "cat \"2>&1\"",
+    ] {
+        assert!(!allowed(command), "{command}");
+    }
+}
