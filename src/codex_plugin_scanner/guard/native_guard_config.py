@@ -212,8 +212,8 @@ def load_native_guard_config(
         return _spawn(request_text, path, deadline)
     try:
         config = _spawn(request_text, path, deadline)
-        flight.config = cast("dict[str, Any]", json.loads(json.dumps(config)))
         if _signatures(guard_home, workspace) == before:
+            flight.config = cast("dict[str, Any]", json.loads(json.dumps(config)))
             with _MEMO_LOCK:
                 _MEMO[key] = json.loads(json.dumps(config))
                 while len(_MEMO) > _MEMO_LIMIT:
