@@ -58,6 +58,15 @@ const PYTEST_FLAGS: &[&str] = &[
 const PYTEST_FLAGS_WITH_VALUES: &[&str] = &["-k", "-m", "--maxfail", "--tb", "--durations"];
 
 fn pytest_arguments(arguments: &[String]) -> bool {
+    // The proof sees arguments before the shell expands them and before pytest
+    // reads `@file` argument lists, so a glob, expansion or argument file could
+    // become an option the allowlist never checked.
+    if arguments.iter().any(|argument| {
+        argument.starts_with('@')
+            || argument.contains(['*', '?', '[', ']', '{', '}', '$', '`', '~', '\\', '\'', '"'])
+    }) {
+        return false;
+    }
     let mut arguments = arguments.iter();
     while let Some(argument) = arguments.next() {
         if !argument.starts_with('-') {
@@ -263,6 +272,13 @@ mod tests {
             "pytest-contained pytest --override-ini=addopts=",
             "pytest-contained pytest -k",
             "pytest-contained pytest --debug",
+            "pytest-contained pytest @args.txt",
+            "pytest-contained -- pytest *",
+            "pytest-contained pytest tests/test_*.py",
+            "pytest-contained pytest $TESTS",
+            "pytest-contained pytest -k $FILTER",
+            "pytest-contained pytest ~/tests",
+            "pytest-contained pytest tests/{a,b}.py",
             "pytest -q",
             "run pytest-contained pytest",
         ] {
