@@ -264,6 +264,14 @@ jobs:
           enable-cache: true
       - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --no-dev --extra dev --python 3.12
+      - name: Build the version-matched native runtime (daemon lifecycle decisions are resident-owned)
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
       - name: Run with a constrained descriptor budget
         run: |
           ulimit -n 128
@@ -329,6 +337,8 @@ jobs:
           "$RUNTIME" self-test --json
       - name: Validate daemon and resident edge behavior
         if: ${{ !cancelled() }}
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ env.RUNTIME }}
         run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
       - name: Validate real native client lifecycle
         if: ${{ !cancelled() }}
@@ -372,6 +382,14 @@ jobs:
           enable-cache: true
       - uses: ./.github/actions/stage-command-projections
       - run: uv sync --frozen --extra dev --python 3.12
+      - name: Build the version-matched native runtime (package intent parsing is resident-owned)
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
       - name: Provision the production Linux backend
         run: |
           sudo apt-get update
