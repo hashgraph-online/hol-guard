@@ -36,6 +36,21 @@ EXACT_ACTION_CONTEXT_TOKEN_KEY = "exact_context_token"
 EXACT_ACTION_IDENTITY_KIND_KEY = "exact_identity_kind"
 ONCE_ONLY_REASON_KEY = "once_only_reason"
 _NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
+# A review raised for one of these signals is a risk finding, not a first-seen
+# prompt: it never carries a persistent allow, whatever the command looks like.
+_RISK_REASON_MARKERS = (
+    "secret",
+    "sensitive",
+    "credential",
+    "exfil",
+    "injection",
+    "destructive",
+    "malware",
+    "obfuscat",
+    "encoded",
+    "poison",
+    "dangerous",
+)
 
 
 class TokenUnset:
@@ -106,6 +121,8 @@ def _exact_action_token(
 ) -> str:
     if not _native_review_is_overridable(native_result):
         raise OnceOnlyError(_non_overridable_reason(native_result))
+    if _review_carries_risk_signal(native_result):
+        raise OnceOnlyError(NON_OVERRIDABLE)
     command = pre_tool_command(payload)
     has_command = command is not None and bool(command.strip())
     try:
@@ -159,6 +176,11 @@ def _exact_action_token(
     if parse_approval_context_token(token) is None:
         raise OnceOnlyError(UNPROVEN_LAUNCH)
     return token
+
+
+def _review_carries_risk_signal(native_result: Mapping[str, object]) -> bool:
+    reason_code = str(native_result.get("reason_code") or "").lower()
+    return any(marker in reason_code for marker in _RISK_REASON_MARKERS)
 
 
 def _non_overridable_reason(native_result: Mapping[str, object]) -> str:

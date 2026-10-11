@@ -481,7 +481,8 @@ def _classify_shell_tool_action_request(
             reason=(
                 "pytest_restricted_profile_required: Pytest collection imports repository-controlled tests, "
                 "conftest.py files, and plugins. Run the exact pytest argv through "
-                "`hol-guard pytest-contained --workspace <workspace> -- ...`; Guard will not launch pytest when "
+                "`hol-guard pytest-contained -- python3 -m pytest <args>` (or `-- pytest <args>`; add "
+                "`--workspace <project root>` when not already in it); Guard will not launch pytest when "
                 "the required operating-system sandbox is unavailable."
             ),
             canonical_command=canonical_command,

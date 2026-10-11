@@ -19,9 +19,15 @@ const SHADOW_NAMES: &[&str] = &[
     "hol-guard.bat",
 ];
 
-pub(super) fn safe_hol_guard_segment(arguments: &[String], cwd: Option<&str>) -> bool {
-    safe_hol_guard_arguments(arguments)
-        && cwd.is_some_and(|cwd| !cwd_shadows_launcher(Path::new(cwd)))
+pub(super) fn safe_hol_guard_segment(
+    arguments: &[String],
+    cwd: Option<&str>,
+    pipeline_index: usize,
+) -> bool {
+    cwd.is_some_and(|cwd| !cwd_shadows_launcher(Path::new(cwd)))
+        && (safe_hol_guard_arguments(arguments)
+            || (pipeline_index == 0
+                && super::pytest_contained::safe_pytest_contained_arguments(arguments, cwd)))
 }
 
 fn cwd_shadows_launcher(cwd: &Path) -> bool {
@@ -107,11 +113,11 @@ mod tests {
         std::fs::create_dir_all(&workspace).unwrap();
         let cwd = workspace.to_str().unwrap().to_owned();
         let status = arguments("status");
-        assert!(safe_hol_guard_segment(&status, Some(&cwd)));
-        assert!(!safe_hol_guard_segment(&status, None));
-        assert!(!safe_hol_guard_segment(&status, Some("relative/dir")));
+        assert!(safe_hol_guard_segment(&status, Some(&cwd), 0));
+        assert!(!safe_hol_guard_segment(&status, None, 0));
+        assert!(!safe_hol_guard_segment(&status, Some("relative/dir"), 0));
         std::fs::write(workspace.join("hol-guard"), "#!/bin/sh\n").unwrap();
-        let shadowed = safe_hol_guard_segment(&status, Some(&cwd));
+        let shadowed = safe_hol_guard_segment(&status, Some(&cwd), 0);
         std::fs::remove_dir_all(&workspace).unwrap();
         assert!(!shadowed);
     }

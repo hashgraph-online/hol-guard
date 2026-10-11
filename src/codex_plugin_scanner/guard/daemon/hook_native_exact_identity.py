@@ -117,6 +117,9 @@ _HELPER_KEYS: dict[str, frozenset[str] | None] = {
 }
 _INCLUDE_PATH = re.compile(r"^\s*path\s*=\s*(.+?)\s*$", re.IGNORECASE)
 
+# Harness-internal bookkeeping tools: they read and write no file, run no code
+# and reach no network, so no argument can widen what a remembered allow covers.
+_STATE_ONLY_TOOLS = frozenset({"todo", "todo_write", "todowrite"})
 _FILE_READ_TOOLS = frozenset({"read", "read_file", "view"})
 _FILE_SEARCH_TOOLS = frozenset({"glob", "grep", "ls", "list_dir"})
 _PATH_KEYS = frozenset({"path", "file_path", "filePath", "directory", "dir"})
@@ -397,6 +400,8 @@ def tool_target_identity(
     """Return ``(launch identity, content)`` for a read-style file tool with no command."""
 
     name = tool_name.strip().lower()
+    if name in _STATE_ONLY_TOOLS:
+        return {"kind": "tool-target", "tool": name, "targets": []}, {}
     is_read = name in _FILE_READ_TOOLS
     if not is_read and name not in _FILE_SEARCH_TOOLS:
         raise OnceOnlyError(NO_COMMAND_IDENTITY)
