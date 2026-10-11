@@ -34,6 +34,7 @@ if not hasattr(store_inventory, "_inventory_payload_from_row"):
     sys.exit("refusing to record: the original Python inventory implementation is gone")
 
 from inventory_scenarios import SCENARIOS, SEQUENCE_KEY, jsonable
+from vector_support import schema_sql_for_tables
 
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -165,21 +166,6 @@ def dump(path: Path) -> dict[str, list[dict[str, object]]]:
     return out
 
 
-def schema_sql(path: Path) -> list[str]:
-    connection = sqlite3.connect(path)
-    try:
-        return [
-            row[0]
-            for row in connection.execute(
-                f"select sql from sqlite_master where sql is not null and tbl_name in ({','.join('?' * len(TABLES))}) "
-                "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid",
-                tuple(TABLES),
-            )
-        ]
-    finally:
-        connection.close()
-
-
 def run_scenario(scenario: dict) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="guard-inventory-vectors-") as root:
         store = GuardStore(Path(root) / "guard-home", prime_policy_integrity=False)
@@ -222,7 +208,9 @@ def run_scenario(scenario: dict) -> dict[str, object]:
 
 def main(output: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="guard-inventory-schema-") as root:
-        schema = schema_sql(Path(GuardStore(Path(root) / "guard-home", prime_policy_integrity=False).path))
+        schema = schema_sql_for_tables(
+            Path(GuardStore(Path(root) / "guard-home", prime_policy_integrity=False).path), TABLES
+        )
     document = {
         "schema": "guard-store-inventory-vectors.v1",
         "source": "guard",
