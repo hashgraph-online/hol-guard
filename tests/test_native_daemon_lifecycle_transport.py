@@ -10,6 +10,7 @@ from codex_plugin_scanner.guard import native_daemon_lifecycle as transport
 
 class _Identity:
     sha256 = "identity-a"
+    path = Path("/runtime/hol-guard-runtime")
 
 
 class _Status:
@@ -24,6 +25,7 @@ def _isolated_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(transport, "_resolve_existing_digest_home", lambda home: Path("/home"))
     monkeypatch.setattr(transport, "_record_success", lambda _home: None)
     monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(transport, "native_resident_client_ready", lambda _path, _home: True)
 
 
 def test_repeat_request_is_answered_once_and_facts_ride_the_first_round(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -260,3 +262,50 @@ def test_startup_and_retirement_bind_the_lifecycle_deadline(monkeypatch: pytest.
     assert manager.retire_all_guard_daemons_for_home(tmp_path, deadline=50.0) == []
     assert seen[-1] == ("inventory", 50.0)
     assert transport.daemon_lifecycle_deadline() is None
+
+
+def _answer(kwargs: dict[str, object], timeouts: list[float]) -> dict[str, object]:
+    timeout = kwargs["timeout_seconds"]
+    assert isinstance(timeout, float)
+    timeouts.append(timeout)
+    request = kwargs["request"]
+    assert isinstance(request, dict)
+    return {
+        "schema": transport._RESULT_SCHEMA,
+        "request_id": request["request_id"],
+        "request_sha256": "sha256:" + transport._canonical_request_sha256(request),
+        "status": "ok",
+        "code": "ok",
+        "payload": {"ephemeral": False},
+    }
+
+
+def test_a_cold_resident_spawn_gets_a_start_allowance(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+    monkeypatch.setattr(transport, "native_resident_client_ready", lambda _path, _home: False)
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"})
+
+    assert timeouts == [transport._TIMEOUT_SECONDS + transport._COLD_START_ALLOWANCE_SECONDS]
+
+
+def test_a_warm_resident_keeps_the_steady_state_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"})
+
+    assert timeouts == [transport._TIMEOUT_SECONDS]
+
+
+def test_the_caller_deadline_bounds_the_cold_start_allowance(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+    clock = {"now": 100.0}
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(transport, "native_resident_client_ready", lambda _path, _home: False)
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"}, deadline_monotonic=112.0)
+
+    assert timeouts == [12.0]

@@ -33,7 +33,7 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
-from .native_resident_client import native_resident_client_failure_code
+from .native_resident_client import native_resident_client_failure_code, native_resident_client_ready
 from .native_runtime import native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
@@ -44,6 +44,13 @@ _OPERATION = "daemon_lifecycle_decide"
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _MAX_NEED_ROUNDS = 8
 _TIMEOUT_SECONDS = 10.0
+# The pooled resident is spawned lazily by the first request of a process, and
+# every packaged CLI step is a new process. A cold Windows runner can spend
+# longer than the steady-state budget just starting the resident executable
+# (process creation plus first-run scanning of a 20 MB binary) before it
+# answers. Grant that one spawn an allowance so a slow start does not become a
+# lifecycle outage that fails daemon startup; the caller's deadline still wins.
+_COLD_START_ALLOWANCE_SECONDS = 20.0
 
 FactResolver = Callable[[str], object]
 
@@ -152,13 +159,23 @@ def _active_deadline(explicit: float | None) -> float | None:
     return min(bound, float(explicit))
 
 
-def _timeout_seconds(deadline: float | None) -> float:
+def _timeout_seconds(deadline: float | None, *, cold_start: bool = False) -> float:
+    budget = _TIMEOUT_SECONDS + (_COLD_START_ALLOWANCE_SECONDS if cold_start else 0.0)
     if deadline is None:
-        return _TIMEOUT_SECONDS
+        return budget
     remaining = deadline - time.monotonic()
     if remaining <= 0:
         raise TimeoutError("Guard daemon operation deadline exceeded.")
-    return min(_TIMEOUT_SECONDS, remaining)
+    return min(budget, remaining)
+
+
+def _resident_is_cold(home: Path) -> bool:
+    """True when this process holds no warm resident client, so a spawn is due."""
+
+    status = native_runtime_status()
+    if status.identity is None:
+        return False
+    return not native_resident_client_ready(status.identity.path, home)
 
 
 def _normalize_query_numbers(query: Mapping[str, object]) -> dict[str, object]:
@@ -278,7 +295,13 @@ def _decide(
                     raise _fail("native_daemon_lifecycle_prerequisite_unavailable")
                 return copy.deepcopy(cached)
     for _ in range(_MAX_NEED_ROUNDS):
-        payload = _round_trip(full_query, facts, home, platform, _timeout_seconds(deadline))
+        payload = _round_trip(
+            full_query,
+            facts,
+            home,
+            platform,
+            _timeout_seconds(deadline, cold_start=_resident_is_cold(home)),
+        )
         if payload.get("need") != "facts":
             _record_success(home)
             if query_key is not None:
