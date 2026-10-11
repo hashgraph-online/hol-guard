@@ -18,9 +18,9 @@ import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.native_data_flow import detect_data_flow_exfiltration
+from codex_plugin_scanner.guard.native_prompt import extract_prompt_requests
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SafeDecodeDetector, SecretPathDetector
-from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
