@@ -5,11 +5,16 @@ use serde_json::{json, Value};
 #[test]
 fn environment_secret_verdict_is_folded_into_bound_context_response() {
     let cwd = std::env::temp_dir().canonicalize().unwrap();
-    for (command, expected) in [("printenv TOKEN", true), ("printenv PATH", false)] {
+    for (command, opted_in, expected) in [
+        ("printenv TOKEN", true, json!(true)),
+        ("printenv PATH", true, json!(false)),
+        ("printenv TOKEN", false, Value::Null),
+    ] {
         let request = request(RequestContextKindV1::Build(RequestContextBuildV1 {
             cwd: Some(cwd.to_string_lossy().into_owned()),
             workspace: Some(cwd.to_string_lossy().into_owned()),
             script: Some(command.to_owned()),
+            classify_environment_secrets: opted_in,
             ..Default::default()
         }));
         let digest = request_digest(&request).unwrap();

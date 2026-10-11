@@ -272,12 +272,14 @@ def model_shell_execution_context(
     workspace_root: Path | None = None,
     home_dir: Path | None = None,
     source: RequestContextSource = "hook",
+    classify_environment_secrets: bool = False,
 ) -> ShellExecutionContext:
     """Ask the resident to model literal shell directory changes."""
 
     result = native_request_context_build(
         source=source,
         script=command_text,
+        classify_environment_secrets=classify_environment_secrets,
         cwd=cwd,
         workspace=workspace_root,
         home_dir=home_dir,

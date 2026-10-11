@@ -149,3 +149,21 @@ def test_tool_pipeline_builds_one_context_and_reuses_it(tmp_path: Path, monkeypa
     assert (result is not None) == matched
     assert len(calls) == 1
     assert len(classified) == (0 if matched else 1)
+    assert calls[0]["action"]["body"]["classify_environment_secrets"] is True
+
+
+def test_unrelated_context_build_does_not_request_secret_scan(tmp_path: Path, monkeypatch) -> None:
+    calls = _prime(monkeypatch, [None])
+    context = shell_execution_context.model_shell_execution_context("ls", cwd=tmp_path, home_dir=tmp_path)
+    assert context.native is not None
+    assert context.environment_secret_dump is None
+    assert calls[0]["action"]["body"]["classify_environment_secrets"] is False
+
+
+def test_benign_shell_pipeline_fails_closed_on_native_outage(tmp_path: Path, monkeypatch) -> None:
+    _prime(monkeypatch, [])
+    monkeypatch.setattr(native_request_context, "_resident_request", lambda **kwargs: None)
+    with pytest.raises(ValueError, match="native_environment_secret_dump_unavailable"):
+        tool_action_requests.extract_sensitive_tool_action_request(
+            "Shell", {"command": "ls"}, cwd=tmp_path, home_dir=tmp_path
+        )

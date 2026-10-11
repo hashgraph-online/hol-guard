@@ -1,4 +1,4 @@
-"""Transport the native environment-secret read classification; no Python oracle."""
+"""Transport native classification, failing closed on every shell-context outage."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ def environment_secret_dump_request(
     execution_context: ShellExecutionContext | None = None,
 ) -> ToolActionRequestMatch | None:
     context = execution_context or model_shell_execution_context(
-        command_text, cwd=cwd, workspace_root=cwd, home_dir=home_dir
+        command_text, cwd=cwd, workspace_root=cwd, home_dir=home_dir, classify_environment_secrets=True
     )
     if (
         context.native is None

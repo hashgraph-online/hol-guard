@@ -172,6 +172,7 @@ def extract_sensitive_tool_action_request(
             cwd=cwd,
             workspace_root=cwd,
             home_dir=home_dir,
+            classify_environment_secrets=True,
         )
         secret_request = _kubernetes_or_environment_secret_request(
             tool_name=requested_tool_name,

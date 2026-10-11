@@ -98,6 +98,9 @@ pub struct RequestContextBuildV1 {
     /// Shell script or command text to model.
     #[serde(default)]
     pub script: Option<String>,
+    /// Fold environment-secret classification into this shell context build.
+    #[serde(default)]
+    pub classify_environment_secrets: bool,
     #[serde(default)]
     pub target: Option<String>,
     #[serde(default)]

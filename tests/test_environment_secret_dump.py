@@ -46,6 +46,13 @@ def test_printenv_named_secret_is_process_environment_secret_read() -> None:
     assert match.action_class == _ACTION
 
 
+@pytest.mark.parametrize("name", ["AP\u0130KEY", "AP\u0131KEY", "CREDENT\u0130ALS", "pr\u0131vatekey"])
+def test_python_unicode_case_folding_is_preserved(name: str) -> None:
+    match = _match(f"printenv {name}")
+    assert match is not None
+    assert match.action_class == _ACTION
+
+
 def test_printenv_path_is_not_secret_read() -> None:
     assert _match("printenv PATH") is None
 

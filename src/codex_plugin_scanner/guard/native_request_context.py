@@ -152,6 +152,7 @@ def native_request_context_build(
     guard_home: Path | None = None,
     budget_ms: int = _DEFAULT_BUDGET_MS,
     script: str | None = None,
+    classify_environment_secrets: bool = False,
     cwd: Path | str | None = None,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
@@ -169,6 +170,7 @@ def native_request_context_build(
             "fallback_cwd": _absolute_text(_process_cwd()) if cwd is None else None,
             "home_dir": _absolute_text(home_dir),
             "script": script,
+            "classify_environment_secrets": classify_environment_secrets,
             "target": target,
             "executable": _executable_wire(executable),
         }

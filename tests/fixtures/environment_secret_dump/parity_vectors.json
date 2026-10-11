@@ -215,7 +215,47 @@
       "matched": true
     },
     {
+      "command": "printenv AP\u0130KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv AP\u0131KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv CREDENT\u0130ALS",
+      "matched": true
+    },
+    {
+      "command": "printenv pr\u0131vatekey",
+      "matched": true
+    },
+    {
       "command": "printenv 'TOKEN\u001c'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\"AP\u0130KEY\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\"TOKEN\u001c\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.env\u0131ron[\"TOKEN\"])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.environ[AP\u0131KEY])'",
+      "matched": true
+    },
+    {
+      "command": "python -c 'print(os.getenv(\u001c\"TOKEN\"))'",
+      "matched": true
+    },
+    {
+      "command": "node -e 'console.log(process.env[\u001c\"TOKEN\"])'",
       "matched": true
     },
     {

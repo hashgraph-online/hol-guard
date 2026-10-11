@@ -223,10 +223,8 @@ fn build(
     };
     budget.check()?;
     let launch_cwd = body.cwd.as_deref().or(body.fallback_cwd.as_deref());
-    let environment_secret_dump = body
-        .script
-        .as_deref()
-        .map(|command| {
+    let environment_secret_dump = if body.classify_environment_secrets {
+        body.script.as_deref().map(|command| {
             guard_command::environment_secret_dump::command_reads_environment_secrets_with_caller_cwd(
                 command,
                 body.cwd.as_deref().map(Path::new),
@@ -235,7 +233,11 @@ fn build(
             )
         })
         .transpose()
-        .map_err(|_| "native_request_context_environment_secret_invalid")?;
+        .map_err(|_| "native_request_context_environment_secret_invalid")?
+    } else {
+        None
+    };
+    budget.check()?;
     let launch = match &body.executable {
         None => Value::Null,
         Some(executable) => launch_identity(executable, launch_cwd, body.home_dir.as_deref()),

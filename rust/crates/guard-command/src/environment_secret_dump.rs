@@ -1,9 +1,10 @@
 //! Process-environment secret reads, including bounded local interpreter files.
 
-use crate::hook_adapter_pytext::compile_fancy;
+use crate::hook_adapter_pytext::{compile_fancy, py_strip};
 use crate::runtime_read_paths::{
     canonicalize_text, read_small_runtime_text_file, resolved_runtime_path, runtime_read_roots,
 };
+use crate::sfrs_gh_bindings::py_pattern;
 use crate::sfrs_shell_tokens::{
     iter_shell_command_segments, shell_segment_primary_command, split_shell_parts,
 };
@@ -31,7 +32,7 @@ static ENV_LOOKUPS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     r#"process\.env(?:\.\s*(?P<dot>[A-Za-z_][A-Za-z0-9_]*)|\[\s*['"](?P<bracket>[^'"]+)['"]\s*\])"#,
     r#"ENV\[\s*['"](?P<name>[^'"]+)['"]\s*\]"#,
     r#"(?i)System\.getenv\(\s*['"](?P<name>[^'"]+)['"]\s*\)"#,
-].into_iter().map(compile_fancy).collect()
+].into_iter().map(compile_python_pattern).collect()
 });
 static ENV_DUMPS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
     [
@@ -41,7 +42,7 @@ static ENV_DUMPS: LazyLock<Vec<Regex>> = LazyLock::new(|| {
         r#"\bprocess\.env\s*\[\s*(?!['"])"#,
     ]
     .into_iter()
-    .map(compile_fancy)
+    .map(compile_python_pattern)
     .collect()
 });
 static PYTHON_NAME: LazyLock<Regex> =
@@ -51,8 +52,28 @@ static ASSIGNMENT: LazyLock<Regex> = LazyLock::new(|| compile_fancy(r"^[A-Za-z_]
 fn matches(pattern: &Regex, text: &str) -> Result<bool, &'static str> {
     pattern.is_match(text).map_err(|_| INVALID)
 }
+fn compile_python_pattern(pattern: &str) -> Regex {
+    let mut pattern = py_pattern(pattern);
+    if pattern.starts_with("(?i)") {
+        pattern = pattern
+            .replace("environ", r"env[i\u{0130}\u{0131}]ron")
+            .replace("[A-Za-z_]", r"[A-Za-z_\u{0130}\u{0131}]")
+            .replace("[A-Za-z0-9_]", r"[A-Za-z0-9_\u{0130}\u{0131}]");
+    }
+    compile_fancy(&pattern)
+}
 fn sensitive_name(name: &str) -> Result<bool, &'static str> {
-    matches(&SENSITIVE_NAME, name.trim())
+    // Python IGNORECASE also folds dotted and dotless I to ASCII i. Rust's
+    // Unicode simple folding already covers Python's Kelvin sign and long s.
+    let name = py_strip(name);
+    if name.contains('\u{0130}') || name.contains('\u{0131}') {
+        matches(
+            &SENSITIVE_NAME,
+            &name.replace(['\u{0130}', '\u{0131}'], "i"),
+        )
+    } else {
+        matches(&SENSITIVE_NAME, name)
+    }
 }
 fn script_reads_secrets(script: &str) -> Result<bool, &'static str> {
     for pattern in ENV_DUMPS.iter() {
@@ -174,7 +195,7 @@ fn segment_reads_secrets(
             // Python resolves the operand before containment, including links
             // whose targets remain inside the allowed roots. The bounded reader
             // still verifies the resolved entry and opens it without following.
-            let stripped = operand.trim().trim_matches('\'').trim_matches('"');
+            let stripped = py_strip(operand).trim_matches('\'').trim_matches('"');
             let expanded = crate::home_path_text::expand_home(stripped, home_dir);
             let normalized = crate::home_path_text::normalize_path(&expanded, cwd.or(fallback_cwd));
             let canonical = canonicalize_text(Path::new(&normalized)).ok();

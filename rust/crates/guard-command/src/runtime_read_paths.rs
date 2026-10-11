@@ -349,7 +349,7 @@ fn open_runtime_file(path: &Path) -> Option<std::fs::File> {
     use std::os::unix::fs::OpenOptionsExt;
     std::fs::OpenOptions::new()
         .read(true)
-        .custom_flags(libc_o_nofollow())
+        .custom_flags(libc::O_NOFOLLOW)
         .open(path)
         .ok()
 }
@@ -357,21 +357,4 @@ fn open_runtime_file(path: &Path) -> Option<std::fs::File> {
 #[cfg(not(unix))]
 fn open_runtime_file(path: &Path) -> Option<std::fs::File> {
     std::fs::File::open(path).ok()
-}
-
-#[cfg(unix)]
-fn libc_o_nofollow() -> i32 {
-    // O_NOFOLLOW = 0o200000 on Linux, 0x0100 on macOS (O_NOFOLLOW=0x00000100).
-    #[cfg(target_os = "macos")]
-    {
-        0x0000_0100
-    }
-    #[cfg(target_os = "linux")]
-    {
-        0o200000
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        0
-    }
 }
