@@ -242,23 +242,6 @@ def request_scope_observation(
     return _native_scopes([request])[0]
 
 
-def tool_call_exact_context_token(request: Mapping[str, object]) -> str | None:
-    """Return the exact-action token bound to a tool-call approval row.
-
-    Generic hook rows carry the token as their artifact hash. Daemon native
-    rows keep the once-only native binding there and carry the persistent
-    token in their action envelope.
-    """
-
-    return _native_scopes([request])[0][1]
-
-
-def exact_action_allow_persistence_eligible(request: Mapping[str, object]) -> bool:
-    """Return whether an artifact allow can be saved as one exact action."""
-
-    return request_scope_contract(request).exact_action_persistence_eligible
-
-
 def resolve_request_scope_selection(
     request: Mapping[str, object],
     *,
@@ -307,12 +290,6 @@ def resolve_request_scope_selection(
         applied_scope="artifact",
         warning="legacy_scope_narrowed_to_artifact",
     )
-
-
-def supported_request_scopes(request: Mapping[str, object]) -> tuple[DecisionScope, ...]:
-    """Return legacy UI scopes, conservatively projected from V2 allow scopes."""
-
-    return request_scope_contract(request).allow_scopes
 
 
 def resolve_request_workspace_scope(

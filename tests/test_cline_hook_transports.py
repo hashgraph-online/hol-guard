@@ -278,7 +278,7 @@ def test_cline_state_cannot_execute_or_remove_managed_files_outside_canonical_sl
     assert attacker_hook.exists()
 
 
-def test_native_pretool_continues_inspection_when_guard_is_unavailable(tmp_path: Path) -> None:
+def test_native_pretool_cancels_inspection_when_guard_is_unavailable(tmp_path: Path) -> None:
     context = _context(tmp_path)
     _activate(context, "hooks")
     source = _hook_source(context, event_name="PreToolUse", guard_cli=[str(tmp_path / "missing")])
@@ -288,7 +288,7 @@ def test_native_pretool_continues_inspection_when_guard_is_unavailable(tmp_path:
         {"hookName": "PreToolUse", "tool_call": {"name": "read_files", "input": {"paths": ["README.md"]}}},
     )
     assert result.returncode == 0
-    assert json.loads(result.stdout)["cancel"] is False
+    assert json.loads(result.stdout)["cancel"] is True
 
 
 def test_native_pretool_pauses_mutation_when_guard_is_unavailable(tmp_path: Path) -> None:

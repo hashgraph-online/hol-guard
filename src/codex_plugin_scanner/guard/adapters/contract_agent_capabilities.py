@@ -25,7 +25,7 @@ AGENT_EVENT_CAPABILITIES: dict[str, tuple[HarnessEventCapability, ...]] = {
             "Guard returns decision:block for protected prompts and unavailable prompt review.",
             "Grok must honor UserPromptSubmit decision:block before delivering a user-typed prompt.",
             ("Auto-wake and subagent prompts are passive; Grok fails open if the hook process crashes or times out.",),
-            "src/codex_plugin_scanner/guard/daemon/hook_worker_responses.py:harness_json_from_native_prompt",
+            "src/codex_plugin_scanner/guard/daemon/hook_fail_closed.py:fail_closed_response",
         ),
         _capability(
             "grok",

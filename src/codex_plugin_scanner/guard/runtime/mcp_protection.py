@@ -184,48 +184,11 @@ def _is_guard_package_shim_dir(part: str) -> bool:
     return posix.endswith("/package-shims/bin") or "/.hol-guard/package-shims/" in posix
 
 
-def _split_package_token(value: str) -> tuple[str | None, str | None]:
-    pip_style_name, pip_style_version = _split_pip_style_specifier(value)
-    if pip_style_name is not None:
-        return pip_style_name, pip_style_version
-    if value.startswith("@"):
-        scope, slash, remainder = value.partition("/")
-        if not slash or not remainder:
-            return value, None
-        name, at_sign, version = remainder.rpartition("@")
-        if not at_sign or not name:
-            return value, None
-        return f"{scope}/{name}", version or None
-    if "://" in value:
-        return _sanitize_package_url(value), None
-    name, at_sign, version = value.rpartition("@")
-    if not at_sign or not name:
-        return value, None
-    return name, version or None
-
-
 def _command_name(value: str) -> str:
     command_name = PurePath(value.replace("\\", "/")).name.lower()
     if command_name.endswith((".cmd", ".exe", ".bat", ".ps1")):
         command_name = PurePath(command_name).stem
     return command_name
-
-
-def _split_pip_style_specifier(value: str) -> tuple[str | None, str | None]:
-    if "://" in value:
-        return None, None
-    for separator in ("===", "==", "~=", "!=", "<=", ">=", "<", ">", "="):
-        name, matched, version = value.partition(separator)
-        if not matched:
-            continue
-        normalized_name = name.strip()
-        normalized_version = version.strip()
-        if not normalized_name or not normalized_version:
-            continue
-        if separator in {"=", "==", "==="}:
-            return normalized_name, normalized_version
-        return normalized_name, f"{separator}{normalized_version}"
-    return None, None
 
 
 def _url_authority_contains_userinfo(value: str) -> bool:

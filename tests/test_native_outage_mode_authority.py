@@ -102,11 +102,11 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
             store=store,
         )
         # codex denies via the hookSpecificOutput.permissionDecision envelope;
-        # rc stays 0 whether the outage resolves allow (observe+acked snapshot)
-        # or deny, because a nonzero rc would read as a hook error and permit.
+        # rc stays 0 because a nonzero rc would read as a hook error and permit.
         assert status == 0
         assert len(responses) == 1
         response = responses[0]
     hook_output = response["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == ("allow" if state == "observe" else "deny")
+    # The resident being unavailable never authorizes, whatever the snapshot says.
+    assert hook_output["permissionDecision"] == "deny"

@@ -283,7 +283,7 @@ def test_cli_native_success_projects_managed_structured_withhold_and_keeps_optio
     ("recording_only", "decision", "reason_code"),
     [
         (False, "block", "native_prompt_unavailable"),
-        (True, "allow", "native_prompt_deadline_exceeded"),
+        (True, "block", "native_prompt_unavailable"),
     ],
 )
 def test_cli_native_unavailable_preserves_native_recording_posture(

@@ -56,6 +56,8 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         "display(await read('notes:1'))",
         "display(await tool.read({path:'notes:1'}))",
         "const result = await tool.read({i:'Reading skill document', path:'README.md'}); display(result);",
+        "const [a,b]=await Promise.all([read('README.md'),read('notes:1')]); console.log(a.length,b.length)",
+        "const r = await read('README.md'); display(r.text.length, r)",
     ] {
         let result = evaluate(code);
         assert_eq!(
@@ -84,6 +86,13 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         "let read = await tool.read({path:'README.md'}); display(await read('README.md'))",
         "display(await read('README.md', 'other'))",
         "display(await read('README.md')); await fetch('https://example.com')",
+        "const [a]=await Promise.all([read('README.md'),read('~/.ssh/id_rsa')]); console.log(a.length)",
+        "const [a]=await Promise.all([read('README.md'),read('linked.md')]); console.log(a.length)",
+        "const r = await read('README.md'); console.log(r.constructor)",
+        "const r = await read('README.md'); console.log(r.length.constructor)",
+        "console.log(a.length)",
+        "console.log(read('README.md'), fetch('https://example.com'))",
+        "console.log(read('README.md'),)",
     ] {
         assert_ne!(evaluate(code).minimum_action, "allow", "{code}");
     }

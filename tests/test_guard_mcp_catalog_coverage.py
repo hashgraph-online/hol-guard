@@ -9,7 +9,6 @@ import pytest
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     MAX_MCP_PROBE_TOOLS,
     run_mcp_catalog,
-    run_mcp_tools_list,
 )
 
 pytestmark = pytest.mark.usefixtures("native_mcp_probe")
@@ -87,7 +86,7 @@ def test_tool_limit_does_not_report_a_partial_catalog_as_complete(tmp_path: Path
             "more": {"tools": _tools(1, prefix="remaining")},
         },
     )
-    assert run_mcp_tools_list(argv) is None
+    assert not run_mcp_catalog(argv).complete
 
 
 def test_page_limit_does_not_report_a_partial_catalog_as_complete(tmp_path: Path) -> None:
@@ -98,7 +97,7 @@ def test_page_limit_does_not_report_a_partial_catalog_as_complete(tmp_path: Path
         }
         for index in range(9)
     }
-    assert run_mcp_tools_list(_server(tmp_path, pages)) is None
+    assert not run_mcp_catalog(_server(tmp_path, pages)).complete
 
 
 def test_pagination_cursor_is_preserved_as_an_opaque_value(tmp_path: Path) -> None:
@@ -108,12 +107,14 @@ def test_pagination_cursor_is_preserved_as_an_opaque_value(tmp_path: Path) -> No
         tmp_path,
         {"<root>": {"tools": first, "nextCursor": " next "}, " next ": {"tools": second}},
     )
-    assert run_mcp_tools_list(argv) == [*first, *second]
+    catalog = run_mcp_catalog(argv)
+    assert catalog.complete
+    assert list(catalog.tools) == [*first, *second]
 
 
 def test_invalid_cursor_cannot_mark_a_catalog_complete(tmp_path: Path) -> None:
     argv = _server(tmp_path, {"<root>": {"tools": _tools(1), "nextCursor": 7}})
-    assert run_mcp_tools_list(argv) is None
+    assert not run_mcp_catalog(argv).complete
 
 
 def test_partial_catalog_retains_bounded_tools_and_coverage(tmp_path: Path) -> None:
@@ -339,10 +340,6 @@ def test_change_notification_during_pagination_invalidates_partial_snapshot(tmp_
     )
     assert not catalog.complete and catalog.reason == "catalog_changed"
     assert catalog.tools == tuple(_tools(1))
-
-
-
-
 
 
 def test_modern_version_error_does_not_initialize_legacy(tmp_path: Path) -> None:

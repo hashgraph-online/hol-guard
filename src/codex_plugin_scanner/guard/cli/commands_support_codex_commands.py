@@ -63,16 +63,6 @@ def _codex_post_tool_command_is_read_only_source_inspection(
     ).allowed
 
 
-def _codex_command_is_read_only_git_metadata(
-    command_text: str,
-    *,
-    cwd: Path | None = None,
-) -> bool:
-    return codex_tool_output_native("git_metadata", command=command_text, cwd=cwd).allowed
-
-
-
-
 def _codex_post_tool_command_texts(payload: dict[str, object]) -> tuple[str, ...]:
     tool_input = payload.get("tool_input")
     if isinstance(tool_input, dict):

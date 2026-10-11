@@ -28,13 +28,14 @@ import pytest
 from ci.gauntlet.approval_rows import always_gap, approval_rows
 from ci.gauntlet.input_evidence import redact_value
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import _SILENT_WARNING_CODES
 from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.benign_fp_gate_fixture import BenignFixture, build_fixture
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
+# Mirrors SILENT_WARNING_CODES in the native hook renderer (hook_responses.rs).
+_SILENT_WARNING_CODES = frozenset({"native_policy_observed", "native_policy_warning"})
 _CASES_PATH = Path(__file__).parent / "fixtures" / "benign_false_positive_gate.json"
 _DOCUMENT = json.loads(_CASES_PATH.read_text(encoding="utf-8"))
 _PENDING_FIX: dict[str, str] = _DOCUMENT["pending_fix"]

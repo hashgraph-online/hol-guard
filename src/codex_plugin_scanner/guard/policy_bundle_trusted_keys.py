@@ -264,30 +264,6 @@ def signing_key_is_current(
     return result.get("value") is True
 
 
-def migrate_legacy_policy_bundle_anchors(
-    *,
-    stored_keyring: object,
-    sync_keys: tuple[PolicyBundleVerificationKey, ...],
-    expected_workspace_id: str | None,
-) -> tuple[PolicyBundleVerificationKey, ...]:
-    """Scope an exact legacy anchor using authenticated sync metadata."""
-
-    try:
-        result = policy_bundle_verdict(
-            "migrate_legacy",
-            {
-                "stored_keyring": stored_keyring,
-                "sync_keys_raw": _wire(sync_keys),
-                "expected_workspace_id": expected_workspace_id,
-            },
-        )
-        return _keys_from_wire(result.get("keys"))
-    except PolicyBundleNativeUnavailableError:
-        raise
-    except ValueError:
-        return ()
-
-
 def policy_bundle_keyring_payload(
     keys: tuple[PolicyBundleVerificationKey, ...],
     *,
@@ -322,54 +298,6 @@ def _context_request(
         "provenance_present": managed_keyring_provenance is not None,
         "expected_workspace_id": expected_workspace_id,
     }
-
-
-def _policy_bundle_verification_context_with_source(
-    *,
-    stored_keyring: object,
-    sync_payload: dict[str, object] | None = None,
-    supply_chain_keyring: object = None,
-    managed_keyring_provenance: object = None,
-    expected_workspace_id: str | None = None,
-) -> tuple[
-    tuple[PolicyBundleVerificationKey, ...],
-    tuple[PolicyBundleVerificationKey, ...],
-    bool,
-]:
-    del supply_chain_keyring
-    request = _context_request(
-        stored_keyring=stored_keyring,
-        sync_payload=sync_payload,
-        managed_keyring_provenance=managed_keyring_provenance,
-        expected_workspace_id=expected_workspace_id,
-    )
-    try:
-        result = policy_bundle_verdict("verification_context", request)
-        return (
-            _keys_from_wire(result.get("trusted_keys")),
-            _keys_from_wire(result.get("anchored_keys")),
-            result.get("managed_configured") is True,
-        )
-    except PolicyBundleNativeUnavailableError:
-        raise
-    except ValueError:
-        return (), (), request["managed_configured"] is True
-
-
-def policy_bundle_verification_context(
-    *,
-    stored_keyring: object,
-    sync_payload: dict[str, object] | None = None,
-    supply_chain_keyring: object = None,
-    managed_keyring_provenance: object = None,
-) -> tuple[tuple[PolicyBundleVerificationKey, ...], tuple[PolicyBundleVerificationKey, ...]]:
-    trusted_keys, anchored_keys, _managed_configured = _policy_bundle_verification_context_with_source(
-        stored_keyring=stored_keyring,
-        sync_payload=sync_payload,
-        supply_chain_keyring=supply_chain_keyring,
-        managed_keyring_provenance=managed_keyring_provenance,
-    )
-    return trusted_keys, anchored_keys
 
 
 def _synced_rejection_code(policy_bundle: dict[str, object], error: PolicyBundleNativeError) -> str:

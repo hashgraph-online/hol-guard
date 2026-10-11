@@ -192,14 +192,6 @@ def compute_capability_delta(before: CapabilitySet | None, after: CapabilitySet)
     return tuple(deltas)
 
 
-def severity_from_deltas(deltas: tuple[CapabilityDelta, ...]) -> int:
-    """Resolve the dominant severity from computed deltas."""
-
-    if not deltas:
-        return 1
-    return max(delta.severity for delta in deltas)
-
-
 def _first_seen_deltas(after: CapabilitySet) -> list[CapabilityDelta]:
     deltas: list[CapabilityDelta] = []
     if after.network_hosts:

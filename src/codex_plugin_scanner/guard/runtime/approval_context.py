@@ -244,18 +244,6 @@ def approval_context_tokens_validation_reason(
     return cast(ApprovalContextValidationFailure | None, result.get("validation_reason"))
 
 
-def saved_allow_context_validation_reason(
-    decision: Mapping[str, object],
-    *,
-    artifact_hash: str,
-) -> str | None:
-    """Validate only stored allows and fail closed on stale context tokens."""
-
-    if decision.get("action") != "allow":
-        return None
-    return approval_context_tokens_validation_reason(decision.get("artifact_hash"), artifact_hash)
-
-
 def build_runtime_executable_identity(
     command: object,
     *,

@@ -7,7 +7,7 @@ mod omp_targets;
 mod private_temporary;
 use allowances::{
     agent_home_state, agent_skill_document, codex_notes_document, execution_output_log,
-    guard_safety_doc, project_skill_document,
+    git_ref_document, guard_safety_doc, project_skill_document,
 };
 pub(super) use omp_targets::{
     bounded_omp_directory_read_target, bounded_omp_file_read_target,
@@ -221,7 +221,8 @@ pub(super) fn resolved_path_allowed_for_operation(
                 && (agent_skill_document(canonical, home_dir)
                     || agent_home_state(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
-                    || codex_notes_document(canonical, home_dir)))
+                    || codex_notes_document(canonical, home_dir)
+                    || git_ref_document(canonical, home_dir, cwd)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;

@@ -15,6 +15,7 @@ from pathlib import Path
 
 from ..runtime.approval_context import build_approval_context_token, parse_approval_context_token
 from ..store_policy_decision import policy_decision_hash_exists
+from .hook_fail_closed import render_accepted_allow, render_pre_tool
 from .hook_native_exact_identity import (
     GUARD_CONTROL,
     GUARD_CONTROL_ACTION_TYPES,
@@ -28,7 +29,6 @@ from .hook_native_exact_identity import (
 from .hook_native_launch_identity import launch_cwd, launch_identity
 from .hook_native_review_binding import native_review_policy_binding
 from .hook_request_parsing import pre_tool_command
-from .hook_worker_responses import harness_json_from_native_pre_tool
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -234,6 +234,7 @@ def native_saved_decision_response(
             native_result,
             reason_code="saved_exact_action_unreadable",
             reason="HOL Guard could not read your saved decision for this exact action.",
+            guard_home=store_guard_home(store),
         )
     if not isinstance(result, Mapping) or result.get("ignored_local_integrity"):
         return None
@@ -253,6 +254,7 @@ def native_saved_decision_response(
             native_result,
             reason_code="saved_exact_action_block",
             reason="You chose to always block this exact action in HOL Guard.",
+            guard_home=store_guard_home(store),
         )
     if action != "allow" or decision.get("source") != "approval-gate" or decision.get("expires_at"):
         return None
@@ -260,9 +262,7 @@ def native_saved_decision_response(
         return None
     allowed = dict(native_result)
     allowed.update(decision="allow", minimum_action="allow", policy_action="allow")
-    response = harness_json_from_native_pre_tool(harness, allowed)
-    response["approval_reuse_status"] = "accepted"
-    return response
+    return render_accepted_allow(harness, allowed, guard_home=store_guard_home(store))
 
 
 def native_saved_review_response(
@@ -307,8 +307,20 @@ def native_saved_review_response(
     )
 
 
+def store_guard_home(store: object) -> Path | None:
+    """The store's Guard home, so the resident renders against the right state directory."""
+
+    home = getattr(store, "guard_home", None)
+    return home if isinstance(home, Path) else None
+
+
 def _saved_block_response(
-    harness: str, native_result: Mapping[str, object], *, reason_code: str, reason: str
+    harness: str,
+    native_result: Mapping[str, object],
+    *,
+    reason_code: str,
+    reason: str,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
     blocked = dict(native_result)
     blocked.update(
@@ -318,7 +330,7 @@ def _saved_block_response(
         reason_code=reason_code,
         reason=reason,
     )
-    response = harness_json_from_native_pre_tool(harness, blocked)
+    response = render_pre_tool(harness, blocked, guard_home=guard_home)
     response["approval_reuse_status"] = "blocked"
     return response
 

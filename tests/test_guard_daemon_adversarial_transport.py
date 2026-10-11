@@ -662,7 +662,7 @@ def test_liveness_uses_reserved_capacity_when_general_requests_are_saturated(
         (
             "/v1/hooks/claude-code",
             {"hook_event_name": "PermissionRequest", "tool_name": "Read", "tool_input": {}},
-            ("continue", True),
+            ("permissionRequestBehavior", "deny"),
         ),
     ],
 )
@@ -710,6 +710,8 @@ def test_hook_overload_returns_native_fail_safe_response(
     assert result["reason_code"] == "daemon_hook_queue_capacity"
     if assertion[0] == "decision":
         assert result["decision"] == assertion[1]
+    elif assertion[0] == "permissionRequestBehavior":
+        assert result["hookSpecificOutput"]["decision"]["behavior"] == assertion[1]
     elif assertion[0] == "permissionDecision":
         assert result["hookSpecificOutput"]["permissionDecision"] == assertion[1]
     else:

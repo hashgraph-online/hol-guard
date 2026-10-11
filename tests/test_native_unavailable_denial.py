@@ -64,7 +64,7 @@ def test_native_worker_unavailable_preserves_explicit_protection_mode(
     specific = response.get("hookSpecificOutput", {})
     assert isinstance(specific, dict)
     decision = response.get("decision", specific.get("permissionDecision"))
-    assert decision == ("allow" if watch else "deny")
+    assert decision == "deny"
 
 
 def test_missing_mode_authority_does_not_infer_watch_from_config(

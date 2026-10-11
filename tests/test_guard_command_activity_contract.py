@@ -25,7 +25,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     CorrelationHandle,
     CorrelationKind,
     ReceiptLinkStatus,
-    validate_activity_transition,
 )
 from codex_plugin_scanner.guard.runtime.effect_contract import EffectKind, UncertaintyKind
 from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeverity, ExtensionRuleIdentity
@@ -205,38 +204,6 @@ def test_unpaired_post_cannot_invent_pre_hook_facts() -> None:
         replace(unpaired, policy_action="allow")
     with pytest.raises(ValueError, match="cannot claim"):
         replace(unpaired, request_correlation=_correlation())
-
-
-def test_lifecycle_transitions_are_idempotent_and_fail_closed() -> None:
-    request = _correlation()
-    attempted = _activity(request_correlation=request)
-    allowed = replace(
-        attempted,
-        execution_status=CommandExecutionStatus.ALLOWED_UNCONFIRMED,
-    )
-    confirmed = replace(
-        allowed,
-        hook_phase=CommandHookPhase.POST_SUCCESS,
-        execution_status=CommandExecutionStatus.CONFIRMED_SUCCESS,
-        proof_level=CommandProofLevel.POST_HOOK,
-    )
-    prevented = replace(attempted, execution_status=CommandExecutionStatus.PREVENTED)
-
-    validate_activity_transition(attempted, allowed)
-    validate_activity_transition(allowed, confirmed)
-    validate_activity_transition(confirmed, confirmed)
-    validate_activity_transition(attempted, prevented)
-    with pytest.raises(ValueError, match="invalid or conflicting"):
-        validate_activity_transition(prevented, confirmed)
-    conflicting = replace(
-        confirmed,
-        hook_phase=CommandHookPhase.POST_FAILURE,
-        execution_status=CommandExecutionStatus.CONFIRMED_FAILURE,
-    )
-    with pytest.raises(ValueError, match="invalid or conflicting"):
-        validate_activity_transition(confirmed, conflicting)
-    with pytest.raises(ValueError, match="cannot change"):
-        validate_activity_transition(allowed, replace(allowed, prompted=True))
 
 
 def test_review_or_stronger_activity_requires_exact_receipt_link() -> None:

@@ -24,13 +24,11 @@ from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     PolicyBundleVerificationKey,
     load_policy_bundle_verification_keys,
     policy_bundle_keyring_payload,
-    policy_bundle_verification_context,
     policy_bundle_verification_key_from_public_key,
     safe_load_policy_bundle_verification_keys,
     validate_synced_policy_bundle,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.guard_review_signing_helpers import review_verification_keys
 from tests.policy_bundle_signing_helpers import (
     TEST_POLICY_BUNDLE_WORKSPACE_ID,
     policy_bundle_test_keyring,
@@ -471,43 +469,6 @@ def test_validate_synced_policy_bundle_ignores_malformed_sync_keyring() -> None:
 
     assert reason is None
     assert validated_bundle is not None
-
-
-def test_live_managed_anchor_overrides_user_store_key_collision(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    managed_keyring = policy_bundle_test_keyring(workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID)
-    managed_state = _managed_policy_state(managed_keyring)
-    review_public_key = review_verification_keys()[0]
-    attacker_key = policy_bundle_verification_key_from_public_key(
-        key_id=_TEST_SIGNING_KEY.key_id,
-        public_key_pem=str(review_public_key["publicKeyPem"]),
-        purpose=POLICY_BUNDLE_KEY_PURPOSE,
-        workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-    attacker_store_keyring = policy_bundle_keyring_payload(
-        (attacker_key,),
-        workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.mdm.policy.load_managed_policy",
-        lambda: managed_state,
-    )
-
-    trusted_keys, anchored_keys = policy_bundle_verification_context(
-        stored_keyring=attacker_store_keyring,
-    )
-    validated_bundle, reason, persisted_keys = validate_synced_policy_bundle(
-        _sample_policy_bundle(),
-        stored_keyring=attacker_store_keyring,
-        expected_workspace_id=TEST_POLICY_BUNDLE_WORKSPACE_ID,
-    )
-
-    assert trusted_keys == (_TEST_SIGNING_KEY,)
-    assert anchored_keys == (_TEST_SIGNING_KEY,)
-    assert reason is None
-    assert validated_bundle is not None
-    assert persisted_keys == ()
 
 
 @pytest.mark.parametrize(

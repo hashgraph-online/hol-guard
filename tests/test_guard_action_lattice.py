@@ -18,7 +18,6 @@ from codex_plugin_scanner.guard.action_lattice import (
 )
 from codex_plugin_scanner.guard.config import (
     GuardConfig,
-    _coerce_action_map,
     _coerce_risk_action_map,
     load_guard_config,
 )
@@ -159,7 +158,6 @@ def test_present_invalid_local_config_actions_do_not_fall_back_to_warn(tmp_path)
 
 @pytest.mark.parametrize("invalid_value", (None, 7, False, {}, {"action": None}, {"default_action": 7}))
 def test_present_invalid_action_map_values_do_not_disappear(invalid_value: object) -> None:
-    assert _coerce_action_map({"codex": invalid_value}) == {"codex": "require-reapproval"}
     assert _coerce_risk_action_map({"network_egress": invalid_value}) == {"network_egress": "require-reapproval"}
 
 

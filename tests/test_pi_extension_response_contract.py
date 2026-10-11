@@ -5,10 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    harness_json_from_native_pre_tool,
-    observe_lifecycle_fail_safe_response,
-)
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
 from tests.pi_extension_response_callback_support import (
     _run_generated_callback_payload,
     _run_generated_source_ref_fixture,
@@ -21,11 +18,11 @@ from tests.pi_extension_response_source_support import _generated_source
 
 
 def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
-    allow = harness_json_from_native_pre_tool(
+    allow = render_pre_tool(
         "omp",
         {"decision": "allow", "minimum_action": "allow", "reason_code": "fixture_allow"},
     )
-    deny = harness_json_from_native_pre_tool(
+    deny = render_pre_tool(
         "omp",
         {
             "decision": "deny",
@@ -34,19 +31,9 @@ def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
             "reason_code": "fixture_block",
         },
     )
-    lifecycle = observe_lifecycle_fail_safe_response(
-        "omp",
-        event_name="UserPromptSubmit",
-        reason_code="fixture_lifecycle",
-    )
 
     assert allow["decision"] == "allow"
     assert deny["decision"] == "deny"
-    assert lifecycle == {
-        "decision": "allow",
-        "policy_action": "allow",
-        "reason_code": "fixture_lifecycle",
-    }
 
 
 def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(tmp_path: Path) -> None:

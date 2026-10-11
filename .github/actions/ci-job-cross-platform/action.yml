@@ -37,41 +37,10 @@ runs:
   - name: Run cross-platform Guard regressions
     run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
-  - uses: ./.github/actions/setup-rust
-    if: runner.os == 'macOS'
-  - name: Install content-addressed compiler cache
-    if: runner.os == 'macOS'
-    uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
-    with:
-      version: v0.18.0
-  - name: Route the runtime build through the compiler cache
-    # The rust-cache key includes the runner image's toolchains, so it misses
-    # on every PR between an image rollout and the next completed main push,
-    # and the macOS build then recompiles every crate (about 4 min). sccache
-    # keys on content and main pushes write objects as they compile, so a
-    # cancelled main run still warms it. PRs only read.
-    if: runner.os == 'macOS'
-    shell: bash
-    env:
-      SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
-    run: |
-      {
-        echo "RUSTC_WRAPPER=sccache"
-        echo "SCCACHE_GHA_ENABLED=on"
-        echo "SCCACHE_GHA_VERSION=cross-platform-runtime"
-        echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
-        echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
-      } >> "$GITHUB_ENV"
-  - name: Build the native runtime for skill-directory identity on macOS
-    if: runner.os == 'macOS'
-    shell: bash
-    run: |
-      cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
-      echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
-      echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
   - name: Run cross-platform skill-directory identity regressions
-    # macOS serves identity from the native runtime built above; Windows has no
-    # native op and uses the portable Python implementation.
+    # macOS runs these against the native runtime in the macos-skill-identity
+    # job; Windows has no native op and uses the portable Python implementation.
+    if: runner.os == 'Windows'
     run: uv run --no-sync pytest tests/test_guard_skill_directory_identity.py
       tests/test_guard_skill_directory_identity_discovery.py tests/test_guard_skill_directory_identity_downstream.py tests/test_guard_skill_directory_identity_links.py
       tests/test_guard_skill_directory_identity_vectors.py

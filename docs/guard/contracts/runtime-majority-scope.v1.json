@@ -768,6 +768,12 @@
           "src/codex_plugin_scanner/marketplace_support.py"
         ],
         "reason": "Reviewed: claude_code adapter and its inventory/skill-directory and aibom detection helpers. The Claude hook client no longer imports them; they load lazily from the frozen hook and the adapter registry for install, inventory and approval flows, not per tool call."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/policy_bundle_v2.py"
+        ],
+        "reason": "Reviewed: policy bundle v2 evidence and clock helpers. policy_bundle_trusted_keys loads the module through a literal importlib.import_module call when it builds the native verification request for a signed policy bundle, so it is runtime policy-bundle verification and stays counted."
       }
     ],
     "tests": {

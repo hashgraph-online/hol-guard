@@ -26,6 +26,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if guard_config_load::is_command(command) && flag == "--stdin" => {
+            let response = guard_config_load::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
             let response = policy_effective::run_command(io::stdin().lock())?;
             write_bytes_response(&response)

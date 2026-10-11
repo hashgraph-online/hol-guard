@@ -379,8 +379,8 @@ def test_watch_unavailable_pretool_records_command_activity(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
+    assert result["decision"] == "deny"
     writer.submit_command_activity.assert_called_once()
     recorded = writer.submit_command_activity.call_args.kwargs
     assert recorded["event"] == "PreToolUse"
-    assert recorded["succeeded"] is True
+    assert recorded["succeeded"] is False

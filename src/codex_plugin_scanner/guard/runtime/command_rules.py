@@ -427,15 +427,6 @@ class CommandRuleMatch:
         }
 
 
-@dataclass(frozen=True, slots=True)
-class MatcherIndexHints:
-    """Conservative registry hints that never replace matcher evaluation."""
-
-    executables: frozenset[str] = frozenset()
-    keywords: frozenset[str] = frozenset()
-    complete: bool = True
-
-
 def _segment_matches_executable(segment: CommandSegment, executables: frozenset[str]) -> bool:
     if segment.executable is None:
         return False

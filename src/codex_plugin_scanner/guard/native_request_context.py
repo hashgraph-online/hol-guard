@@ -50,6 +50,7 @@ class NativeRequestContext:
     shell: Mapping[str, Any] | None
     launch: Mapping[str, Any] | None
     target: str | None
+    environment_secret_dump: bool | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,6 +152,7 @@ def native_request_context_build(
     guard_home: Path | None = None,
     budget_ms: int = _DEFAULT_BUDGET_MS,
     script: str | None = None,
+    classify_environment_secrets: bool = False,
     cwd: Path | str | None = None,
     workspace: Path | str | None = None,
     home_dir: Path | str | None = None,
@@ -171,6 +173,8 @@ def native_request_context_build(
             "target": target,
             "executable": _executable_wire(executable),
         }
+        if classify_environment_secrets:
+            body["classify_environment_secrets"] = classify_environment_secrets
     except OSError:
         return NativeRequestContextFailure("native_request_context_request_invalid")
     payload = _call({"kind": "build", "body": body}, source=source, guard_home=guard_home, budget_ms=budget_ms)
@@ -253,7 +257,10 @@ _SHELL_KEYS = frozenset({"context", "context_hash", "segment_hashes", "metadata"
 
 
 def _decode_build(payload: Mapping[str, Any]) -> NativeRequestContext | None:
-    if set(payload) != _BUILD_KEYS or payload["schema"] != _CONTEXT_SCHEMA:
+    if (
+        set(payload) not in (_BUILD_KEYS, _BUILD_KEYS | {"environment_secret_dump"})
+        or payload["schema"] != _CONTEXT_SCHEMA
+    ):
         return None
     digest, admission, shell, launch, target = (
         payload["context_sha256"],
@@ -272,7 +279,10 @@ def _decode_build(payload: Mapping[str, Any]) -> NativeRequestContext | None:
         return None
     if target is not None and not isinstance(target, str):
         return None
-    return NativeRequestContext(digest, admission, shell, launch, target)
+    environment_secret_dump = payload.get("environment_secret_dump")
+    if environment_secret_dump is not None and type(environment_secret_dump) is not bool:
+        return None
+    return NativeRequestContext(digest, admission, shell, launch, target, environment_secret_dump)
 
 
 def _shell_hashes_valid(shell: Mapping[str, Any]) -> bool:

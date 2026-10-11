@@ -29,9 +29,7 @@ def _canonical_managed_harness_cached(harness: str) -> str:
 
         return get_adapter(harness).harness
     except (ValueError, ImportError):
-        from .hook_worker_responses import _canonical_hook_harness
-
-        return _canonical_hook_harness(harness)
+        return harness.strip().lower().replace("_", "-")
 
 
 def _canonical_managed_harness(harness: str) -> str:

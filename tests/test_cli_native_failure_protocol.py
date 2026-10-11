@@ -64,9 +64,8 @@ def test_native_failure_preserves_codex_wire_response(
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert result == 0
     else:
-        assert response["continue"] is True
+        assert response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
         assert "permissionDecision" not in response["hookSpecificOutput"]
-        assert "decision" not in response["hookSpecificOutput"]
         assert result == 0
 
 
@@ -95,7 +94,6 @@ def test_pipeline_unavailable_preserves_codex_wire_response(
         assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
         assert result == 0
     else:
-        assert response["continue"] is True
+        assert response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
         assert "permissionDecision" not in response["hookSpecificOutput"]
-        assert "decision" not in response["hookSpecificOutput"]
         assert result == 0

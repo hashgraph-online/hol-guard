@@ -277,3 +277,46 @@ pub(in crate::pretool) fn codex_notes_document(
             })
     })
 }
+
+/// Git ref files in a repository below the verified workspace or user home:
+/// `.git/HEAD`, `.git/refs/{heads,tags,remotes}/**` and a linked worktree's
+/// `.git/worktrees/<name>/HEAD`. They hold a ref name or object id only.
+/// `.git/config`, hooks, logs and every other entry stay guarded, and every
+/// component outside the single `.git` marker must be visible. Only regular
+/// files qualify, so a ref directory cannot carry the exception to a search
+/// that walks its children.
+pub(in crate::pretool) fn git_ref_document(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let inside = [home_dir, cwd]
+        .into_iter()
+        .flatten()
+        .filter_map(|root| std::fs::canonicalize(root).ok())
+        .any(|root| canonical.starts_with(root));
+    let Some(parts) = canonical
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(part) => Some(part.to_str()),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    let Some(marker) = parts.iter().position(|part| part.starts_with('.')) else {
+        return false;
+    };
+    let visible = |parts: &[&str]| parts.iter().all(|part| !part.starts_with('.'));
+    inside
+        && canonical.is_file()
+        && parts[marker] == ".git"
+        && visible(&parts[marker + 1..])
+        && match &parts[marker + 1..] {
+            ["HEAD"] => true,
+            ["worktrees", _, "HEAD"] => true,
+            ["refs", "heads" | "tags" | "remotes", rest @ ..] => !rest.is_empty(),
+            _ => false,
+        }
+}

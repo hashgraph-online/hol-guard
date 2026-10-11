@@ -134,19 +134,6 @@ _OUTPUT_REQUEST_ID_PATTERN = re.compile(r"[a-z0-9._:-]{1,256}")
 _HEX_PATTERN_CACHE: dict[int, re.Pattern[str]] = {}
 
 
-class _DuplicateKeyError(ValueError):
-    pass
-
-
-def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise _DuplicateKeyError
-        result[key] = value
-    return result
-
-
 def _reject_json_constant(value: str) -> None:
     raise ValueError(value)
 

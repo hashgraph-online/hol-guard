@@ -61,7 +61,7 @@ def _review_request(
 
 @pytest.mark.parametrize("endpoint", ("pi", "omp", "claude-code"))
 @pytest.mark.usefixtures("native_hook_force")
-def test_observe_mode_does_not_block_failed_local_review(
+def test_observe_mode_denies_failed_local_review_with_a_fixed_response(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     endpoint: str,
@@ -90,12 +90,12 @@ def test_observe_mode_does_not_block_failed_local_review(
         daemon.stop()
 
     if endpoint in {"pi", "omp"}:
-        assert payload["decision"] == "allow"
+        assert payload["decision"] == "deny"
         return
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["hookEventName"] == "PreToolUse"
-    assert hook_output["permissionDecision"] == "allow"
+    assert hook_output["permissionDecision"] == "deny"
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))

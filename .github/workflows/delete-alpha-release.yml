@@ -23,7 +23,8 @@ jobs:
     name: Delete alpha prerelease, tag and container image
     if: github.repository == 'hashgraph-online/hol-guard'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Leaves room for a rate-limit retry to wait out one quota reset.
+    timeout-minutes: 75
     permissions:
       contents: write
       packages: write
@@ -43,9 +44,26 @@ jobs:
           fi
           echo "### Alpha ${VERSION} retraction" >>"$GITHUB_STEP_SUMMARY"
 
+      - name: Check out release API token tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .release-api-token
+          sparse-checkout: .github/actions/release-api-token
+          sparse-checkout-cone-mode: false
+      - name: Select release API token
+        id: release-token
+        uses: ./.release-api-token/.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
       - name: Confirm the tag is a prerelease cut from main
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -100,7 +118,7 @@ jobs:
 
       - name: Delete the GitHub prerelease and tag
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token.outputs.token }}
           VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail

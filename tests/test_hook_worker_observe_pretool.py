@@ -118,7 +118,7 @@ def test_hook_worker_watch_native_block_records_without_stopping(
     assert result["policy_action"] == "warn"
 
 
-def test_hook_worker_watch_native_unavailable_continues_without_cli_escape(
+def test_hook_worker_watch_native_unavailable_denies_without_cli_escape(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -148,13 +148,13 @@ def test_hook_worker_watch_native_unavailable_continues_without_cli_escape(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_pre_tool_unavailable"
-    assert result["policy_action"] == "warn"
+    assert result["policy_action"] == "block"
     hook_output = result["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "allow"
+    assert hook_output["permissionDecision"] == "deny"
 
 
-def test_hook_worker_watch_native_unavailable_allows_network(
+def test_hook_worker_watch_native_unavailable_denies_network(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -174,8 +174,8 @@ def test_hook_worker_watch_native_unavailable_allows_network(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
-    assert result["policy_action"] == "warn"
+    assert result["decision"] == "deny"
+    assert result["policy_action"] == "block"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 

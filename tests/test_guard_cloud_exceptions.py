@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.cloud_exceptions import (
-    build_cloud_exceptions_from_sync_payload,
     cloud_exception_from_mapping,
     list_active_cloud_exceptions,
 )
@@ -103,13 +102,6 @@ def test_expired_cloud_exceptions_are_not_active() -> None:
     assert expired is not None
     active = list_active_cloud_exceptions([expired], now="2026-01-01T00:00:00+00:00")
     assert active == []
-
-
-def test_sync_payload_builder_parses_distinct_ids() -> None:
-    items = build_cloud_exceptions_from_sync_payload(
-        [_sample_sync_exception(), _sample_sync_exception(exception_id="artifact:codex:other")]
-    )
-    assert len(items) == 2
 
 
 def test_signed_bundle_exception_is_hidden_after_bundle_expiry(tmp_path: Path) -> None:

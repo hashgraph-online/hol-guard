@@ -8,12 +8,10 @@ import re
 import shlex
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Literal, cast
 
 from ..models import GuardArtifact
 from .typescript_launch_evidence import TypeScriptLaunchEvidence, TypeScriptLaunchStatus
-from .workspace_path_guard import existing_paths_within_workspace
 
 IntentKind = Literal["install", "execute", "sync"]
 EvidenceStatus = Literal["available", "missing", "not_regular", "unreadable", "unstable"]
@@ -551,10 +549,6 @@ def redact_package_request_token(value: str) -> str:
     """Return a persistence-safe package argv token without URL credentials."""
 
     return _sanitize_url(value)
-
-
-def existing_relative_paths(workspace: Path | None, candidates: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    return existing_paths_within_workspace(workspace, candidates)
 
 
 def _sanitize_url(value: str) -> str:

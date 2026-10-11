@@ -4,42 +4,19 @@
 //! directory and the temporary directories, and no ancestor can be written by
 //! another user. The agent can write the excluded trees, so a binary or library
 //! there could be planted by an earlier tool call.
+//!
+//! Loader search paths also accept a directory below home (see
+//! [`trusted_library_search_path`]); the Git binary lookup does not.
 use std::fs;
 use std::path::Path;
 
 pub(super) fn trusted_location(path: &Path, home: &Path, cwd: &Path) -> bool {
-    let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
-    if path.starts_with(home)
-        || path.starts_with(cwd)
-        || path.starts_with(std::env::temp_dir())
-        || canonical_temp
-            .as_deref()
-            .is_some_and(|directory| path.starts_with(directory))
-        || path.starts_with("/tmp")
-        || path.starts_with("/private/tmp")
-    {
+    if path.starts_with(home) || path.starts_with(cwd) || temporary_location(path) {
         return false;
     }
     #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let Ok(home_metadata) = fs::metadata(home) else {
-            return false;
-        };
-        let owner = home_metadata.uid();
-        for ancestor in std::iter::once(path).chain(path.ancestors().skip(1)) {
-            let Ok(metadata) = fs::metadata(ancestor) else {
-                return false;
-            };
-            if metadata.mode() & 0o002 != 0
-                || (metadata.mode() & 0o020 != 0
-                    && metadata.uid() != owner
-                    && metadata.gid() != home_metadata.gid())
-                || !matches!(metadata.uid(), uid if uid == 0 || uid == owner)
-            {
-                return false;
-            }
-        }
+    if !owned_by_user_or_root(path, home) {
+        return false;
     }
     #[cfg(windows)]
     {
@@ -56,16 +33,56 @@ pub(super) fn trusted_location(path: &Path, home: &Path, cwd: &Path) -> bool {
     true
 }
 
+fn temporary_location(path: &Path) -> bool {
+    let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
+    path.starts_with(std::env::temp_dir())
+        || canonical_temp
+            .as_deref()
+            .is_some_and(|directory| path.starts_with(directory))
+        || path.starts_with("/tmp")
+        || path.starts_with("/private/tmp")
+}
+
+/// Every ancestor exists, is owned by root or the home owner, and is neither
+/// world-writable nor group-writable by a group other than the home owner's.
+#[cfg(unix)]
+fn owned_by_user_or_root(path: &Path, home: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(home_metadata) = fs::metadata(home) else {
+        return false;
+    };
+    let owner = home_metadata.uid();
+    std::iter::once(path)
+        .chain(path.ancestors().skip(1))
+        .all(|ancestor| {
+            fs::metadata(ancestor).is_ok_and(|metadata| {
+                metadata.mode() & 0o002 == 0
+                    && (metadata.mode() & 0o020 == 0
+                        || metadata.uid() == owner
+                        || metadata.gid() == home_metadata.gid())
+                    && (metadata.uid() == 0 || metadata.uid() == owner)
+            })
+        })
+}
+
 /// A stamped loader search path keeps a Git read proven only when every entry
-/// is a non-empty absolute path whose directory is a trusted location. An
-/// empty entry or `.` means the working directory, and a relative entry
-/// follows it, so either could load a library from the repository.
+/// is a non-empty absolute path naming a trusted directory. An empty entry or
+/// `.` means the working directory, and a relative entry follows it, so either
+/// could load a library from the repository.
 ///
 /// The dynamic loader searches the literal entry again when Git starts. A
 /// symlink, a `.` or `..` component, or a `/proc` path can canonicalize to a
-/// trusted directory for this process and still point somewhere the agent can
-/// write for the Git process. The entry therefore has to already be canonical,
-/// and no ancestor may be writable by the hook user.
+/// trusted directory for this process and still point somewhere else for the
+/// Git process. The entry therefore has to already be canonical.
+///
+/// A trusted directory is either a system location no ancestor of which the
+/// hook user can write, or a directory strictly below home (such as
+/// `~/.local/lib` or a toolchain prefix) outside the working directory, with no
+/// ancestor another user can write. The home
+/// case is not weaker than what already runs: the same exported search path
+/// reaches every other process the agent starts without review, so refusing
+/// it only for Git reads adds an approval without blocking a planted library.
+/// Writes that plant the library are the step to review.
 pub(super) fn trusted_library_search_path(value: &str, home: &Path, cwd: &Path) -> bool {
     !value.is_empty()
         && value
@@ -82,8 +99,59 @@ fn trusted_loader_entry(entry: &Path, home: &Path, cwd: &Path) -> bool {
     };
     directory == entry
         && directory.is_dir()
-        && trusted_location(&directory, home, cwd)
-        && !agent_writable_loader_tree(&directory, home)
+        && (home_loader_directory(&directory, home, cwd)
+            || (trusted_location(&directory, home, cwd)
+                && !agent_writable_loader_tree(&directory, home)))
+}
+
+/// A canonical directory strictly below home, outside the working directory,
+/// that only the home owner (or root) can write from the directory up to home.
+/// Group write at or below home is another user's write even when the home
+/// owner owns the directory or shares its group. A temporary directory counts
+/// only when home itself is one, as for sandboxed and CI homes. Above home, a
+/// sticky world-writable ancestor such as `/tmp` is accepted because other
+/// users cannot rename entries they do not own.
+#[cfg(unix)]
+fn home_loader_directory(directory: &Path, home: &Path, cwd: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    let Ok(home) = fs::canonicalize(home) else {
+        return false;
+    };
+    let Ok(home_metadata) = fs::metadata(&home) else {
+        return false;
+    };
+    let canonical_cwd = fs::canonicalize(cwd).ok();
+    if directory == home
+        || !directory.starts_with(&home)
+        || directory.starts_with(cwd)
+        || canonical_cwd
+            .as_deref()
+            .is_some_and(|cwd| directory.starts_with(cwd))
+        || (temporary_location(directory) && !temporary_location(&home))
+    {
+        return false;
+    }
+    let owner = home_metadata.uid();
+    directory.ancestors().all(|ancestor| {
+        fs::metadata(ancestor).is_ok_and(|metadata| {
+            let mode = metadata.mode();
+            let at_or_below_home = ancestor.starts_with(&home);
+            let sticky_above_home = !at_or_below_home && mode & 0o1000 != 0;
+            // Below home, the group-write bit is enough. Owning the directory
+            // does not stop another member of its group from planting a library.
+            let foreign_writable = mode & 0o002 != 0
+                || (mode & 0o020 != 0
+                    && (at_or_below_home
+                        || (metadata.uid() != owner && metadata.gid() != home_metadata.gid())));
+            (sticky_above_home || !foreign_writable)
+                && (metadata.uid() == 0 || metadata.uid() == owner)
+        })
+    })
+}
+
+#[cfg(not(unix))]
+fn home_loader_directory(_directory: &Path, _home: &Path, _cwd: &Path) -> bool {
+    false
 }
 
 fn process_relative_loader_prefix(entry: &Path) -> bool {
@@ -188,6 +256,45 @@ mod tests {
             &home,
             &cwd
         ));
+        let _ = fs::remove_dir_all(&root);
+    }
+    #[cfg(unix)]
+    #[test]
+    fn home_directory_outside_the_working_tree_is_proven() {
+        use std::os::unix::fs::PermissionsExt;
+        // Other tests remove the shared proof root, so this one owns a sibling.
+        let root = proof_root().with_file_name(format!("loader-home-proof-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let home = root.join("home");
+        let cwd = home.join("app");
+        let toolchain = home.join(".local/lib");
+        let repository = cwd.join("lib");
+        let shared = home.join("shared");
+        fs::create_dir_all(&toolchain).unwrap();
+        fs::create_dir_all(&repository).unwrap();
+        fs::create_dir_all(shared.join("lib")).unwrap();
+        fs::set_permissions(&shared, fs::Permissions::from_mode(0o777)).unwrap();
+        let entry = |path: &Path| {
+            let path = fs::canonicalize(path).unwrap();
+            trusted_library_search_path(path.to_str().unwrap(), &home, &cwd)
+        };
+        // A checkout under a group-writable tree is not a clean fixture.
+        if owned_by_user_or_root(&fs::canonicalize(&home).unwrap(), &home) {
+            assert!(entry(&toolchain));
+        }
+        assert!(!entry(&repository));
+        assert!(!entry(&cwd));
+        assert!(!entry(&home));
+        assert!(!entry(&shared.join("lib")));
+        let group_leaf = home.join(".conda/lib");
+        fs::create_dir_all(&group_leaf).unwrap();
+        fs::set_permissions(&group_leaf, fs::Permissions::from_mode(0o775)).unwrap();
+        assert!(!entry(&group_leaf));
+        let group_prefix = home.join("toolchains");
+        let planted = group_prefix.join("lib");
+        fs::create_dir_all(&planted).unwrap();
+        fs::set_permissions(&group_prefix, fs::Permissions::from_mode(0o775)).unwrap();
+        assert!(!entry(&planted));
         let _ = fs::remove_dir_all(&root);
     }
 }

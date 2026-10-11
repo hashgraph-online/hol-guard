@@ -120,8 +120,8 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     #[cfg(unix)]
     {
         // A stamped search path keeps the proof only when every entry is an
-        // existing absolute directory outside the home, working and temporary
-        // trees, with no ancestor another user can write.
+        // existing canonical directory that no other user can write: a system
+        // directory, or one below home and outside the working tree.
         let stamped = |names: &[(&str, &str)]| {
             let mut loader = context.clone();
             for (name, value) in names {
@@ -146,9 +146,39 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         let home_lib = home.join(".local/lib");
         std::fs::create_dir_all(&repository_lib).unwrap();
         std::fs::create_dir_all(&home_lib).unwrap();
+        // The loader searches the literal entry, so the stamped value is the
+        // canonical spelling (`/private/var` rather than `/var` on macOS).
+        let home_lib = std::fs::canonicalize(&home_lib).unwrap();
+        let canonical_home = std::fs::canonicalize(&home).unwrap();
+        // The same exported path reaches every other process the agent starts,
+        // so a home toolchain directory keeps the Git read quiet.
+        assert_eq!(
+            stamped(&[("LD_LIBRARY_PATH", home_lib.to_str().unwrap())]),
+            "allow"
+        );
+        assert_eq!(
+            stamped(&[(
+                "LD_LIBRARY_PATH",
+                &format!("/usr/lib:{}", home_lib.display())
+            )]),
+            "allow"
+        );
+        let linked_lib = canonical_home.join("linked-lib");
+        std::os::unix::fs::symlink(&home_lib, &linked_lib).unwrap();
+        let shared_lib = canonical_home.join("shared-lib");
+        std::fs::create_dir_all(&shared_lib).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&shared_lib, std::fs::Permissions::from_mode(0o777)).unwrap();
+        let below_shared = shared_lib.join("lib");
+        std::fs::create_dir_all(&below_shared).unwrap();
         let repository_lib = repository_lib.to_str().unwrap();
-        let home_lib = home_lib.to_str().unwrap();
         let temporary = root.to_str().unwrap();
+        let home_dir = canonical_home.to_str().unwrap();
+        let linked_lib = linked_lib.to_str().unwrap();
+        let shared_lib = shared_lib.to_str().unwrap();
+        let below_shared = below_shared.to_str().unwrap();
+        let missing_home_lib = canonical_home.join("missing-lib");
+        let missing_home_lib = missing_home_lib.to_str().unwrap();
         for value in [
             ".",
             "",
@@ -161,8 +191,12 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             "/usr/lib/synthetic-missing-directory",
             "/tmp",
             repository_lib,
-            home_lib,
             temporary,
+            home_dir,
+            linked_lib,
+            shared_lib,
+            below_shared,
+            missing_home_lib,
         ] {
             assert_ne!(stamped(&[("LD_LIBRARY_PATH", value)]), "allow", "{value:?}");
         }

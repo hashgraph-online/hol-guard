@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from urllib.parse import parse_qs, urlparse
 
 from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import _native_policy_not_ready_reason
+from codex_plugin_scanner.guard.daemon.hook_policy_admission import _native_policy_not_ready_reason
 
 
 def test_cursor_hook_response_surfaces_native_policy_reason() -> None:

@@ -107,7 +107,9 @@ def review_native_edge(
                 guard_home=guard_home,
                 # Control-binding failures only refresh enforce bindings and
                 # stay blocking; a superseded Watch snapshot keeps recording.
-                recording_only=error.code == SNAPSHOT_NOT_CURRENT_ERROR and error.recording_only,
+                recording_only=False,
+                watch_continue=error.code == SNAPSHOT_NOT_CURRENT_ERROR and error.recording_only,
+                deadline=deadline,
             )
             response["native_failure_code"] = error.code
             return response

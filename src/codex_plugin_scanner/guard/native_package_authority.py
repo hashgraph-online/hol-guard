@@ -1,7 +1,5 @@
 """Resident transport and DTO adapters for native package operations.
 
-Cached advisory matching is terminal: missing or invalid native authority
-raises ``NativePackageAdvisoryAuthorityError`` instead of evaluating in Python.
 Package evaluation is terminal in ``native_supply_chain_eval``. The older
 intent/authority adapters still expose optional transport results; their
 production caller cutover remains tracked under RTM-028.
@@ -9,12 +7,10 @@ production caller cutover remains tracked under RTM-028.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import time
 from collections.abc import Mapping
-from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -177,55 +173,6 @@ def package_intent_parse_native(
     if not isinstance(runtime_private_metadata, Mapping):
         raise ValueError("native package intent missing private metadata")
     return PackageIntent.from_dict(payload, runtime_private_metadata=runtime_private_metadata)
-
-
-class NativePackageAdvisoryAuthorityError(RuntimeError):
-    """No authoritative native cached-feed result was available."""
-
-
-def package_advisory_ids_native(
-    *,
-    artifact: Mapping[str, object],
-    store_path: Path,
-    guard_home: Path,
-) -> tuple[str, ...]:
-    request: dict[str, object] = {
-        "schema": _REQUEST_SCHEMA,
-        "request_id": _request_id(),
-        "store_path": str(store_path),
-        "guard_home": str(guard_home),
-        "artifact": dict(artifact),
-    }
-    request_digest = (
-        "sha256:"
-        + hashlib.sha256(
-            json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
-        ).hexdigest()
-    )
-    response = _resident_request(
-        operation="package_advisory_ids",
-        request=request,
-        guard_home=guard_home,
-        timeout_seconds=2.0,
-    )
-    if (
-        not isinstance(response, dict)
-        or response.get("schema") != _RESULT_SCHEMA
-        or response.get("request_id") != request["request_id"]
-        or response.get("request_sha256") != request_digest
-        or response.get("status") != "ok"
-        or response.get("code") != "ok"
-    ):
-        raise NativePackageAdvisoryAuthorityError("Native package advisory authority unavailable or invalid")
-    payload = response.get("payload")
-    ids = payload.get("matched_advisory_ids") if isinstance(payload, dict) else None
-    if (
-        not isinstance(ids, list)
-        or any(not isinstance(item, str) or not item for item in ids)
-        or any(left >= right for left, right in pairwise(ids))
-    ):
-        raise NativePackageAdvisoryAuthorityError("Native package advisory result invalid")
-    return tuple(ids)
 
 
 def evaluation_from_native_payload(payload: Mapping[str, object]) -> Any:

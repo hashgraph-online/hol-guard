@@ -159,24 +159,3 @@ class PromptRequest:
         payload = asdict(self)
         payload["remediation"] = [item.to_dict() for item in self.remediation]
         return payload
-
-
-@dataclass(frozen=True, slots=True)
-class GuardVerdict:
-    """Final explainable decision prior to scoped policy override."""
-
-    action: GuardVerdictAction
-    severity: int
-    confidence: float
-    reasons: tuple[str, ...]
-    recommended_next_actions: tuple[str, ...]
-    suppressible: bool
-    review_priority: ReviewPriority
-    evidence_sources: tuple[EvidenceSource, ...]
-    provenance_state: ProvenanceSourceKind
-    capability_delta: tuple[CapabilityDelta, ...] = ()
-
-    def to_dict(self) -> dict[str, object]:
-        payload = asdict(self)
-        payload["capability_delta"] = [item.to_dict() for item in self.capability_delta]
-        return payload

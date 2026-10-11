@@ -9,11 +9,11 @@ from urllib.parse import parse_qs
 
 import pytest
 
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
 from codex_plugin_scanner.guard.daemon.hook_policy_repair import (
     apply_command_policy_repair,
     command_policy_repair_page_url,
 )
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool
 from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
 
 _ORIGINAL_REASON = "HOL Guard requires the native command extension policy before this action can execute."
@@ -73,7 +73,7 @@ def test_auth_failure_denies_and_links_the_repair_page(tmp_path: Path) -> None:
     assert "press Repair protection" in str(result["reason"])
     assert _REPAIR_URL in str(result["reason"])
 
-    rendered = harness_json_from_native_pre_tool("codex", result)
+    rendered = render_pre_tool("codex", result)
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "deny"

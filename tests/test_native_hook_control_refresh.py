@@ -344,6 +344,10 @@ def test_superseded_watch_snapshot_without_fresh_ack_keeps_recording(
         side_effect=review.NativePolicyBindingRefreshError(review.SNAPSHOT_NOT_CURRENT_ERROR, 3, recording_only=True)
     )
     monkeypatch.setattr(worker, "_review_native_edge_with_snapshot", native)
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker_native.render_recording_only_pre_tool",
+        lambda *_args, **_kwargs: {"policy_action": "allow"},
+    )
     response = _pre_tool_call(worker, tmp_path, {"generation": 3, "mode": "observe"})
     assert response["policy_action"] != "block"
     assert response["native_failure_code"] == review.SNAPSHOT_NOT_CURRENT_ERROR

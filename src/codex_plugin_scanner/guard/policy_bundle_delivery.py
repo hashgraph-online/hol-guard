@@ -38,32 +38,6 @@ def _chunks(policy_bundle: Mapping[str, object], keys: tuple[str, ...] | None = 
     return policy_bundle_chunks(document)
 
 
-def validate_policy_bundle_delivery(
-    value: object,
-    *,
-    policy_bundle: Mapping[str, object],
-    workspace_id: str | None,
-    device_id: str,
-    runtime_summary: object,
-) -> tuple[dict[str, object] | None, str | None]:
-    """Validate an exact delivery object and bind it to signed/local authority."""
-
-    try:
-        policy_bundle_verdict(
-            "delivery_validate",
-            {
-                "delivery": value,
-                "bundle_chunks": _chunks(policy_bundle),
-                "workspace_id": workspace_id,
-                "device_id": device_id,
-                "runtime_summary": runtime_summary,
-            },
-        )
-    except PolicyBundleNativeError as error:
-        return None, native_rejection_code(error)
-    return (dict(value) if isinstance(value, dict) else {}), None
-
-
 def validated_managed_policy_delivery(
     *,
     policy_bundle: dict[str, object],

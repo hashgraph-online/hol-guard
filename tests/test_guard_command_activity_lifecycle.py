@@ -17,7 +17,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_contract import (
     CorrelationHandle,
     CorrelationKind,
     ReceiptLinkStatus,
-    validate_activity_transition,
 )
 from codex_plugin_scanner.guard.runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
@@ -215,7 +214,6 @@ def test_correlated_post_activity_accepts_the_parent_row_returned_by_storage() -
 
     assert post.execution_status is CommandExecutionStatus.CONFIRMED_SUCCESS
     assert post.activity_id == pre.activity.activity_id
-    validate_activity_transition(pre.activity, post)
 
 
 def test_unpaired_post_claims_no_decision_match_receipt_or_request_proof() -> None:

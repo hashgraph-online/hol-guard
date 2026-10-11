@@ -236,6 +236,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::HookRender(request) => {
+                crate::hook_render_op::evaluate_hook_render_request(&request)
+            }
             ResidentOperationV1::ApprovalScope(request) => {
                 crate::approval_scope_op::evaluate_approval_scope_request(&request)
             }

@@ -61,3 +61,19 @@ def expand_ci_job_actions(workflow: dict, root: Path = ROOT) -> dict:
         if "steps" in job:
             job["steps"] = expanded
     return result
+
+
+def load_ci_workflow(root: Path = ROOT) -> dict:
+    """Load .github/workflows/ci.yml with in-tree CI job actions expanded."""
+    return expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
+
+
+def composite_action_steps(name: str, root: Path = ROOT) -> list[dict]:
+    """Load the steps of .github/actions/<name>/action.yml."""
+    action = yaml.safe_load((root / ".github/actions" / name / "action.yml").read_text(encoding="utf-8"))
+    return action["runs"]["steps"]
+
+
+def step_index(steps: list[dict], name_fragment: str) -> int:
+    """Index of the first step whose name contains name_fragment."""
+    return next(i for i, step in enumerate(steps) if name_fragment in step.get("name", ""))

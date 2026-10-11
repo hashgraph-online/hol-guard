@@ -1,0 +1,44 @@
+name: CI macOS native runtime
+description: Build and publish the macOS hol-guard-runtime for the skill-directory identity lane.
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: "3.12"
+    - name: Stage trust bindings the native build embeds
+      shell: bash
+      run: python scripts/refresh_extension_artifacts.py --trust-only
+    - uses: ./.github/actions/setup-rust
+    - name: Install content-addressed compiler cache
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+      with:
+        version: v0.18.0
+    - name: Route the runtime build through the compiler cache
+      # The rust-cache key includes the runner image's toolchains, so it misses
+      # on every PR between an image rollout and the next completed main push,
+      # and the macOS build then recompiles every crate (about 4 min). sccache
+      # keys on content and main pushes write objects as they compile, so a
+      # cancelled main run still warms it. PRs only read.
+      shell: bash
+      env:
+        SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+      run: |
+        {
+          echo "RUSTC_WRAPPER=sccache"
+          echo "SCCACHE_GHA_ENABLED=on"
+          echo "SCCACHE_GHA_VERSION=cross-platform-runtime"
+          echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
+          echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+        } >> "$GITHUB_ENV"
+    - name: Build the macOS native runtime
+      shell: bash
+      run: cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
+    - name: Upload the macOS native runtime
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: macos-native-runtime
+        path: rust/target/release/hol-guard-runtime
+        if-no-files-found: error
+        retention-days: 1
+        overwrite: true

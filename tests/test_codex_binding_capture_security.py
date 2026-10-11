@@ -388,6 +388,7 @@ def test_shared_native_worker_defers_capture_after_receipt_acceptance(tmp_path: 
             "reason_code": "native_allow",
         },
         "receipt": receipt,
+        "harness_response": {"policy_action": "allow"},
     }
     host = SimpleNamespace(
         store=SimpleNamespace(),

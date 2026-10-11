@@ -26,34 +26,4 @@ def test_supervisor_never_reports_grade_without_current_health() -> None:
     initial = supervisor.health(now_epoch_ms=1_000)
     assert initial.phase is RecoveryPhase.UNAVAILABLE
     assert initial.effective_grade is EnforcementGrade.UNAVAILABLE
-
-    healthy = supervisor.record_probe(_advertisement(), now_epoch_ms=1_000)
-    assert healthy.phase is RecoveryPhase.HEALTHY
-    assert healthy.effective_grade is EnforcementGrade.OBSERVE
-    assert not healthy.permits_enforcement
-
-    expired = supervisor.health(now_epoch_ms=2_000)
-    assert expired.phase is RecoveryPhase.DEGRADED
-    assert expired.effective_grade is EnforcementGrade.UNAVAILABLE
-
-
-def test_supervisor_reuses_bounded_recovery_state_machine() -> None:
-    supervisor = NetworkSupervisor()
-    error_digest = "a" * 64
-
-    first = supervisor.record_probe(None, now_epoch_ms=1_000, error_digest=error_digest)
-    assert first.retry_attempt == 1
-    assert first.next_retry_seconds == 2.0
-    for offset in range(1, 5):
-        failed = supervisor.record_probe(
-            None,
-            now_epoch_ms=1_000 + offset,
-            error_digest=error_digest,
-        )
-    assert failed.phase is RecoveryPhase.UNAVAILABLE
-    assert failed.retry_attempt == 5
-    assert failed.next_retry_seconds == 30.0
-
-    recovered = supervisor.record_probe(_advertisement(), now_epoch_ms=1_100)
-    assert recovered.phase is RecoveryPhase.HEALTHY
-    assert recovered.retry_attempt == 0
+    assert not initial.permits_enforcement

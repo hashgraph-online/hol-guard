@@ -13,12 +13,8 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.cli import commands_hook, commands_hook_native_authority
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool, render_pre_tool_review
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    harness_json_from_native_pre_tool,
-    harness_json_from_native_pre_tool_review,
-    harness_json_from_native_prompt,
-)
 from codex_plugin_scanner.guard.native_hook_edge import _decode_edge
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_pretool_edge_fixtures import _edge, _sync_receipt
@@ -41,63 +37,11 @@ def test_generic_allow_result_renders_grok_decision_json() -> None:
         }
     )
     _sync_receipt(edge)
-    rendered = harness_json_from_native_pre_tool("grok", result)
+    rendered = render_pre_tool("grok", result)
     assert rendered["decision"] == "allow"
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
-
-
-def test_native_prompt_block_renders_supported_host_contracts() -> None:
-    result = {
-        "decision": "deny",
-        "minimum_action": "block",
-        "policy_action": "block",
-        "reason_code": "native_guard_bypass_prompt",
-        "reason": "HOL Guard blocked this prompt because it asks to disable Guard protection.",
-        "prompt_risk_classes": ["local_env_read", "exfil_intent", "guard_bypass_intent"],
-    }
-    claude = harness_json_from_native_prompt("claude-code", result)
-    assert claude["decision"] == "block"
-    assert claude["policy_action"] == "block"
-    hook_specific = claude["hookSpecificOutput"]
-    assert isinstance(hook_specific, dict)
-    assert hook_specific["hookEventName"] == "UserPromptSubmit"
-    assert claude["reason_code"] == "native_guard_bypass_prompt"
-    signals = claude["risk_signals"]
-    assert isinstance(signals, list)
-    assert all(isinstance(signal, str) for signal in signals)
-    assert len(signals) == 3
-    assert any("local .env file" in signal for signal in signals)
-    assert any("exfiltration" in signal for signal in signals)
-    assert any("bypass" in signal for signal in signals)
-    codex = harness_json_from_native_prompt("codex", result)
-    assert codex["decision"] == "block"
-    assert codex["continue"] is False
-    assert codex["stopReason"] == codex["reason"]
-    copilot = harness_json_from_native_prompt("copilot", result)
-    assert copilot["behavior"] == "deny"
-    assert copilot["reason_code"] == "native_guard_bypass_prompt"
-    grok = harness_json_from_native_prompt("grok", result)
-    assert grok["decision"] == "block"
-    assert grok["reason"] == "HOL Guard blocked this prompt because it asks to disable Guard protection."
-    assert grok["policy_action"] == "block"
-    assert grok["reason_code"] == "native_guard_bypass_prompt"
-
-
-def test_native_prompt_allow_does_not_create_a_block() -> None:
-    rendered = harness_json_from_native_prompt(
-        "claude-code",
-        {"decision": "allow", "minimum_action": "allow", "reason_code": "native_prompt_clean"},
-    )
-    assert "decision" not in rendered
-    hook_specific = rendered["hookSpecificOutput"]
-    assert isinstance(hook_specific, dict)
-    assert hook_specific["hookEventName"] == "UserPromptSubmit"
-    assert harness_json_from_native_prompt(
-        "codex",
-        {"decision": "allow", "minimum_action": "warn", "reason_code": "native_policy_warning"},
-    ) == {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit"}}
 
 
 @pytest.mark.parametrize("mode", ("enforce", "observe"))
@@ -124,7 +68,13 @@ def test_hook_worker_routes_native_prompt_without_post_tool_projection(
     _sync_receipt(edge)
     # The resident renders the harness response; the fake edge mirrors its two shapes.
     edge["harness_response"] = (
-        harness_json_from_native_prompt("claude-code", result)
+        {
+            "decision": "block",
+            "reason": result["reason"],
+            "policy_action": "block",
+            "reason_code": result["reason_code"],
+            "hookSpecificOutput": {"hookEventName": "UserPromptSubmit"},
+        }
         if mode == "enforce"
         else {"continue": True, "policy_action": "allow", "reason_code": "watch_recording_only"}
     )
@@ -163,7 +113,7 @@ def test_generic_review_result_renders_grok_deny_decision() -> None:
     edge = _edge("grok", "PreToolUse")
     result = edge["result"]
     assert isinstance(result, dict)
-    rendered = harness_json_from_native_pre_tool("grok", result)
+    rendered = render_pre_tool("grok", result)
     assert rendered["decision"] == "deny"
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
@@ -174,7 +124,7 @@ def test_generic_review_result_renders_grok_review_decision_with_approval() -> N
     edge = _edge("grok", "PreToolUse")
     result = edge["result"]
     assert isinstance(result, dict)
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "grok",
         result,
         approval={"request_id": "req-1", "approval_url": "http://127.0.0.1/pending/req-1"},
@@ -204,7 +154,7 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     )
     _sync_receipt(edge)
     assert _decode_edge(edge) == edge
-    rendered = harness_json_from_native_pre_tool("codex", result)
+    rendered = render_pre_tool("codex", result)
     assert rendered["continue"] is True
     assert rendered["policy_action"] == "warn"
     hook_specific = rendered["hookSpecificOutput"]
@@ -222,7 +172,7 @@ def test_policy_floor_warning_on_proven_allow_is_silent(harness: str) -> None:
         "reason_code": "native_policy_warning",
         "reason": "HOL Guard raised a non-blocking warning under the installed native policy.",
     }
-    rendered = harness_json_from_native_pre_tool(harness, result)
+    rendered = render_pre_tool(harness, result)
     assert rendered["policy_action"] == "warn"
     assert "notice" not in rendered
     assert "reason" not in rendered
@@ -246,9 +196,9 @@ def test_intrinsic_and_observed_floor_warnings_still_reach_the_harness(reason_co
         "reason_code": reason_code,
         "reason": reason,
     }
-    omp = harness_json_from_native_pre_tool("omp", result)
+    omp = render_pre_tool("omp", result)
     assert omp["notice"] == "warning"
-    codex = harness_json_from_native_pre_tool("codex", result)
+    codex = render_pre_tool("codex", result)
     hook_specific = codex["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecisionReason"] == reason

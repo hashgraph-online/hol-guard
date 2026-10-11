@@ -20,8 +20,6 @@ from .schemas import (
 
 _MAX_FIELD_LENGTH = 1024
 _MAX_TITLE_LENGTH = 256
-_MAX_SUMMARY_LENGTH = 4096
-
 _CONTROL_CHARS = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 

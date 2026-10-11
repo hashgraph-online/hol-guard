@@ -147,7 +147,7 @@ def test_stable_jobs_accept_the_release_please_tag_ref() -> None:
 
 def test_alpha_dispatch_is_maintainer_only_and_targets_main() -> None:
     dispatch = load_workflow(RELEASE_PLEASE_WORKFLOW)["jobs"]["dispatch-alpha-publish"]
-    step = dispatch["steps"][0]
+    step = next(s for s in dispatch["steps"] if s.get("name") == "Dispatch an alpha of the current main commit")
     run = step["run"]
 
     assert dispatch["if"] == "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'"
@@ -198,7 +198,7 @@ def test_main_alpha_publication_trusts_the_release_please_bot_and_main_ancestry(
         assert 'if [[ "$TRAIN" == "main" ]]; then' in step["run"]
         assert "bash scripts/ci/require_alpha_source_on_main.sh" in step["run"]
         assert "no longer the release train head" in step["run"]
-        assert step["env"]["GH_TOKEN"] == "${{ github.token }}"
+        assert step["env"]["GH_TOKEN"] == "${{ steps.release-token.outputs.token }}"
     script = (ROOT / "scripts" / "ci" / "require_alpha_source_on_main.sh").read_text(encoding="utf-8")
     assert "compare/${SOURCE_SHA}...main" in script
     assert "ahead | identical) ;;" in script
@@ -206,13 +206,14 @@ def test_main_alpha_publication_trusts_the_release_please_bot_and_main_ancestry(
 
 def test_main_alpha_wakes_the_desktop_core_alpha_feed() -> None:
     wake = load_workflow(PUBLISH_WORKFLOW)["jobs"]["wake-alpha-core-feed"]
-    run = wake["steps"][0]["run"]
+    step = next(s for s in wake["steps"] if s.get("name") == "Dispatch the exact published alpha Core version")
+    run = step["run"]
 
     assert wake["needs"] == ["build", "release-alpha"]
     assert "needs.release-alpha.result == 'success'" in wake["if"]
     assert "needs.build.outputs.release_train == 'main'" in wake["if"]
     assert wake["permissions"] == {"actions": "write", "contents": "read"}
-    assert wake["steps"][0]["env"]["PUBLICATION_SOURCE_SHA"] == "${{ needs.build.outputs.source_sha }}"
+    assert step["env"]["PUBLICATION_SOURCE_SHA"] == "${{ needs.build.outputs.source_sha }}"
     assert "gh workflow run desktop-core-alpha-feed.yml" in run
     assert "-f release_channel=alpha" in run
     assert "--ref main" in run
@@ -221,7 +222,7 @@ def test_main_alpha_wakes_the_desktop_core_alpha_feed() -> None:
 def test_alpha_deletion_is_maintainer_only_and_limited_to_prereleases() -> None:
     workflow = load_workflow(ROOT / ".github" / "workflows" / "delete-alpha-release.yml")
     job = workflow["jobs"]["delete"]
-    steps = {step["name"]: step["run"] for step in job["steps"]}
+    steps = {step["name"]: step["run"] for step in job["steps"] if "run" in step}
 
     assert set(workflow[True]) == {"workflow_dispatch"}
     assert workflow["permissions"] == {}

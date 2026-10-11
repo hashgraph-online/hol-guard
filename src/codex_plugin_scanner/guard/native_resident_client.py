@@ -44,8 +44,11 @@ _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _RESIDENT_REQUEST_LOG = "HOL_GUARD_RESIDENT_REQUEST_LOG"
 
 
-def _record_resident_request() -> None:
+def _record_resident_request(payload: bytes = b"") -> None:
     """Append one line when a test asks every process to count resident calls.
+
+    The line is the operation name when the payload is a resident envelope, so
+    a test can assert which ops a workload used; otherwise it is ``1``.
 
     Hook workers are spawned processes, so an in-process monkeypatch cannot see
     their round trips. The variable is unset in production and the write then
@@ -55,9 +58,16 @@ def _record_resident_request() -> None:
     path = os.environ.get(_RESIDENT_REQUEST_LOG)
     if not path:
         return
+    label = b"1"
+    try:
+        operation = json.loads(payload).get("operation")
+        if isinstance(operation, str) and operation.isidentifier():
+            label = operation.encode("ascii", "replace")
+    except (ValueError, AttributeError, UnicodeDecodeError):
+        pass
     descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
     try:
-        os.write(descriptor, b"1\n")
+        os.write(descriptor, label + b"\n")
     finally:
         os.close(descriptor)
 
@@ -209,7 +219,7 @@ class _PersistentNativeClientPool:
             return None
         response: bytes | None = None
         try:
-            _record_resident_request()
+            _record_resident_request(payload)
             response = client.request(payload, deadline_monotonic=deadline_monotonic)
             if response is not None:
                 if is_restart_blocked_frame(response):

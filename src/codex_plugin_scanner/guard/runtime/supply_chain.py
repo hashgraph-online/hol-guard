@@ -43,10 +43,6 @@ _SETUP_PY_EXEC = re.compile(
     r"\bpython(?:3)?\s+setup\.py\s+(?:install|develop|bdist|sdist|build)\b",
     re.IGNORECASE,
 )
-_PYPROJECT_BUILD_BACKEND_DRIFT = re.compile(
-    r"\[build-system\].*?build-backend\s*=\s*\"[^\"]+\"",
-    re.DOTALL,
-)
 _DOCKERFILE_CURL_SHELL = re.compile(
     r"RUN\s+.*?curl\s+.*?\|\s*(?:bash|sh|python|node)",
     re.IGNORECASE,

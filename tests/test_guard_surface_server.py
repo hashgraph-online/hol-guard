@@ -2118,9 +2118,9 @@ class TestGuardSurfaceServer:
                 "codex",
                 "PermissionRequest",
                 {
-                    "continue": True,
                     "hookSpecificOutput": {
                         "hookEventName": "PermissionRequest",
+                        "decision": {"behavior": "deny"},
                     },
                 },
             ),

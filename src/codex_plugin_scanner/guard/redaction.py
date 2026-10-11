@@ -159,7 +159,6 @@ _REVIEW_SENSITIVE_KEYS = frozenset(
         "tool_response",
     }
 )
-_REVIEW_SENSITIVE_ALIASES = frozenset(key.replace("_", "") for key in _REVIEW_SENSITIVE_KEYS)
 
 
 def redact_text(value: str) -> RedactedText:

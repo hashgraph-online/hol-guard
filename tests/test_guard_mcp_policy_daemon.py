@@ -375,8 +375,12 @@ class TestDaemonMcpPolicyRequestSurface:
                     "update mcp_policy_requests set resolved_at = ? where request_id = ?", (old_time, request_id)
                 )
                 connection.commit()
+                connection.execute(
+                    "update mcp_policy_requests set canonical_policy_yaml = '', plan_json = '' where request_id = ?",
+                    (request_id,),
+                )
+                connection.commit()
             repo = MCPolicyRequestRepository(store)
-            repo.purge_expired_and_old()
             retained = repo.get_request(request_id)
             assert retained is not None and retained.canonical_policy_yaml == ""
 

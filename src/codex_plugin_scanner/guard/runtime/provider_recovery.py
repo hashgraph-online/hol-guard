@@ -38,14 +38,6 @@ class RecoveryPhase(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
-# Mapping between RecoveryPhase and ProviderHealthState variants
-_RECOVERY_TO_HEALTH: dict[RecoveryPhase, ProviderHealthState] = {
-    RecoveryPhase.HEALTHY: ProviderHealthState.HEALTHY,
-    RecoveryPhase.DEGRADED: ProviderHealthState.DEGRADED,
-    RecoveryPhase.RECOVERING: ProviderHealthState.DEGRADED,
-    RecoveryPhase.UNAVAILABLE: ProviderHealthState.UNAVAILABLE,
-}
-
 _HEALTH_TO_RECOVERY: dict[ProviderHealthState, RecoveryPhase] = {
     ProviderHealthState.HEALTHY: RecoveryPhase.HEALTHY,
     ProviderHealthState.DEGRADED: RecoveryPhase.DEGRADED,

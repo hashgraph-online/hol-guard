@@ -9,7 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import prepare_native_hook_policy
+from codex_plugin_scanner.guard.daemon.hook_policy_admission import prepare_native_hook_policy
 from codex_plugin_scanner.guard.store import GuardStore
 
 _PRE_TOOL_PAYLOAD: dict[str, object] = {
@@ -53,9 +53,7 @@ def _daemon(
         return installs
 
     return SimpleNamespace(
-        store=SimpleNamespace(
-            get_managed_install=getter, list_managed_installs=lister, connection_scope=nullcontext
-        ),
+        store=SimpleNamespace(get_managed_install=getter, list_managed_installs=lister, connection_scope=nullcontext),
         hook_worker=SimpleNamespace(
             prepare_workspace_policy=lambda *_args, **_kwargs: prepared,
             metrics=SimpleNamespace(record_route=lambda *_args, **_kwargs: None),

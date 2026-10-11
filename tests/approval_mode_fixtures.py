@@ -24,15 +24,22 @@ def approval_questionnaire_mode(monkeypatch: pytest.MonkeyPatch, tmp_path) -> No
         original_init(self, *args, **kwargs)
 
     original_read = config._read_toml
+    original_load = config.load_native_guard_config
 
-    @wraps(original_read)
-    def read_with_questionnaire(*args, **kwargs):
+    @wraps(original_load)
+    def load_with_questionnaire(guard_home, workspace, **kwargs):
         # Model the operator preference in synthetic Guard configuration only.
-        # Explicit modes in a test always win, including safe-alternative.
-        return {"blocked_request_mode": "ask", **original_read(*args, **kwargs)}
+        # Explicit modes in any config file always win, including safe-alternative.
+        loaded = original_load(guard_home, workspace, **kwargs)
+        paths = [guard_home / "config.toml"]
+        if workspace is not None:
+            paths.extend(workspace / name for name in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
+        if not any("blocked_request_mode" in original_read(path) for path in paths):
+            loaded["blocked_request_mode"] = "ask"
+        return loaded
 
     monkeypatch.setattr(config.GuardConfig, "__init__", init_with_questionnaire)
-    monkeypatch.setattr(config, "_read_toml", read_with_questionnaire)
+    monkeypatch.setattr(config, "load_native_guard_config", load_with_questionnaire)
 
     original_store_init = GuardStore.__init__
 

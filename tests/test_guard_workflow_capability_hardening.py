@@ -27,13 +27,10 @@ from codex_plugin_scanner.guard.workflow_capabilities import (
     SignedWorkflowCapabilityReceipt,
     WorkflowCapabilityError,
     sign_workflow_capability,
-    verify_workflow_capability,
-    verify_workflow_capability_receipt,
 )
 from tests.test_guard_workflow_capabilities import (
     _KEY,
     _KEY_ID,
-    _binding,
     _claim,
     _claim_capability,
     _issue,
@@ -50,157 +47,6 @@ def _fixed_policy_integrity_key(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda self, *, create: (_KEY, _KEY_ID),
     )
     monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", _now)
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("capability_id", "wc-tampered"),
-        ("approval_provenance_id", "provenance-tampered"),
-        ("task_id", "task-tampered"),
-        ("nonce", "b" * 64),
-        ("issuer_id", "issuer.tampered"),
-        ("subject_id", "subject.tampered"),
-        ("issued_at", "2026-07-19T11:59:00.000000Z"),
-        ("not_before", "2026-07-19T12:01:00.000000Z"),
-        ("expires_at", "2026-07-19T13:01:00.000000Z"),
-        ("max_uses", 2),
-    ],
-)
-def test_every_claim_authority_field_is_signature_bound(field: str, value: object) -> None:
-    claim = _claim()
-    signed = sign_workflow_capability(claim, key=_KEY, key_id=_KEY_ID)
-    tampered = replace(signed, claim=replace(claim, **{field: value}))
-    with pytest.raises(WorkflowCapabilityError, match="signature_invalid"):
-        verify_workflow_capability(
-            tampered,
-            key=_KEY,
-            key_id=_KEY_ID,
-            now=_now(),
-            expected_binding=claim.binding,
-        )
-
-
-@pytest.mark.parametrize(
-    ("field", "value", "error"),
-    [
-        ("envelope_schema", "wrong.envelope.v1", "unsupported_capability_envelope"),
-        ("algorithm", "hmac-sha512", "unsupported_capability_algorithm"),
-        ("key_id", "guard-policy-integrity-key:other", "capability_key_mismatch"),
-        ("signature", "0" * 64, "capability_signature_invalid"),
-    ],
-)
-def test_claim_envelope_tamper_fails_closed(field: str, value: str, error: str) -> None:
-    claim = _claim()
-    signed = sign_workflow_capability(claim, key=_KEY, key_id=_KEY_ID)
-    object.__setattr__(signed, field, value)
-    with pytest.raises(WorkflowCapabilityError, match=error):
-        verify_workflow_capability(
-            signed,
-            key=_KEY,
-            key_id=_KEY_ID,
-            now=_now(),
-            expected_binding=claim.binding,
-        )
-
-
-def test_claim_schema_tamper_fails_closed() -> None:
-    claim = _claim()
-    signed = sign_workflow_capability(claim, key=_KEY, key_id=_KEY_ID)
-    object.__setattr__(signed.claim, "schema_version", "wrong.claim.v1")
-    with pytest.raises(WorkflowCapabilityError, match="unsupported_capability_schema"):
-        verify_workflow_capability(
-            signed,
-            key=_KEY,
-            key_id=_KEY_ID,
-            now=_now(),
-            expected_binding=claim.binding,
-        )
-
-
-@pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("receipt_id", "wcr-tampered"),
-        ("capability_id", "wc-tampered"),
-        ("task_id", "task-tampered"),
-        ("invocation_id", "invocation-tampered"),
-        ("approval_provenance_id", "provenance-tampered"),
-        ("claim_sha256", "0" * 64),
-        ("binding", _binding(policy_version="policy.v99")),
-        ("use_number", 2),
-        ("event_id", 999),
-        ("claimed_at", "2026-07-19T12:02:00.000000Z"),
-    ],
-)
-def test_every_receipt_field_is_signature_bound(tmp_path, field: str, value: object) -> None:
-    store = _store(tmp_path)
-    claim = _claim(capability_id=f"wc-receipt-tamper-{field}")
-    _issue(store, claim)
-    signed = _claim_capability(
-        store,
-        claim,
-        invocation_id=f"invocation-{field}",
-    )
-    tampered = replace(signed, receipt=replace(signed.receipt, **{field: value}))
-    with pytest.raises(WorkflowCapabilityError, match="receipt_signature_invalid"):
-        verify_workflow_capability_receipt(tampered, key=_KEY, key_id=_KEY_ID)
-
-
-@pytest.mark.parametrize(
-    ("field", "value", "error"),
-    [
-        ("envelope_schema", "wrong.receipt.v1", "unsupported_receipt_envelope"),
-        ("algorithm", "hmac-sha512", "unsupported_receipt_algorithm"),
-        ("key_id", "guard-policy-integrity-key:other", "receipt_key_mismatch"),
-        ("signature", "0" * 64, "receipt_signature_invalid"),
-    ],
-)
-def test_receipt_envelope_tamper_fails_closed(tmp_path, field: str, value: str, error: str) -> None:
-    store = _store(tmp_path)
-    claim = _claim(capability_id=f"wc-receipt-envelope-{field}")
-    _issue(store, claim)
-    signed = _claim_capability(
-        store,
-        claim,
-        invocation_id=f"invocation-{field}",
-    )
-    object.__setattr__(signed, field, value)
-    with pytest.raises(WorkflowCapabilityError, match=error):
-        verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
-
-
-def test_receipt_schema_tamper_fails_closed(tmp_path) -> None:
-    store = _store(tmp_path)
-    claim = _claim(capability_id="wc-receipt-schema")
-    _issue(store, claim)
-    signed = _claim_capability(
-        store,
-        claim,
-        invocation_id="invocation-receipt-schema",
-    )
-    object.__setattr__(signed.receipt, "schema_version", "wrong.receipt.v1")
-    with pytest.raises(WorkflowCapabilityError, match="unsupported_receipt_schema"):
-        verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
-
-
-def test_malformed_receipt_verifier_input_fails_closed() -> None:
-    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
-        verify_workflow_capability_receipt(
-            cast(SignedWorkflowCapabilityReceipt, object()),
-            key=_KEY,
-            key_id=_KEY_ID,
-        )
-
-
-def test_malformed_nested_receipt_verifier_input_fails_closed(tmp_path) -> None:
-    store = _store(tmp_path)
-    claim = _claim(capability_id="wc-malformed-nested-receipt")
-    _issue(store, claim)
-    signed = _claim_capability(store, claim, invocation_id="invocation-malformed-nested-receipt")
-    object.__setattr__(signed, "receipt", object())
-    with pytest.raises(WorkflowCapabilityError, match="invalid_signed_receipt"):
-        verify_workflow_capability_receipt(signed, key=_KEY, key_id=_KEY_ID)
 
 
 def test_claim_and_revoke_race_is_serializable(tmp_path) -> None:

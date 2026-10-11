@@ -16,7 +16,6 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
 )
 from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
     load_policy_bundle_verification_keys,
-    migrate_legacy_policy_bundle_anchors,
 )
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.local_request_snapshots import (
@@ -190,11 +189,6 @@ def test_sync_migrates_legacy_anchor_and_restores_cloud_redaction_choice(
         {"keys": [legacy_key], "workspace_id": "workspace-1"},
         "2026-07-01T00:00:00Z",
     )
-    assert migrate_legacy_policy_bundle_anchors(
-        stored_keyring={"keys": [legacy_key], "workspace_id": "workspace-1"},
-        sync_keys=(policy_key,),
-        expected_workspace_id="workspace-1",
-    ) == (policy_key,)
     monkeypatch.setattr(
         trusted_keys_module,
         "managed_policy_bundle_verification_keys",

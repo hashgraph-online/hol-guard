@@ -146,19 +146,3 @@ def run_mcp_catalog(
         if native_catalog is not None:
             return native_catalog
     raise NativeMcpAuthorityError("Native MCP discovery authority is unavailable or malformed")
-
-
-def run_mcp_tools_list(
-    argv: Sequence[str],
-    *,
-    timeout: float = MCP_PROBE_TIMEOUT_SECONDS,
-    extra_env: Mapping[str, str] | None = None,
-) -> list[dict[str, object]] | None:
-    """Return tools for complete discovery, or None for an incomplete catalog.
-
-    Unavailable or malformed native authority raises NativeMcpAuthorityError;
-    there is no Python discovery fallback.
-    """
-
-    catalog = run_mcp_catalog(argv, timeout=timeout, extra_env=extra_env)
-    return list(catalog.tools) if catalog.complete else None

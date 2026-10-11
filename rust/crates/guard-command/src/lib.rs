@@ -135,6 +135,7 @@ mod powershell_parser;
 mod powershell_reads;
 use parser_executables::*;
 use parser_segments::*;
+pub mod environment_secret_dump;
 pub mod pretool;
 mod runtime_read_paths;
 pub mod secret_path_probe;

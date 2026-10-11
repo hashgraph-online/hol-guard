@@ -190,25 +190,6 @@ def build_cloud_exceptions_from_policy_bundle(
     return items
 
 
-def build_cloud_exceptions_from_sync_payload(
-    exceptions: list[dict[str, object]],
-    *,
-    bundle_hash: str | None = None,
-    ack_status: str | None = None,
-) -> list[CloudException]:
-    items: list[CloudException] = []
-    resolved_ack_status = ack_status if _is_cloud_exception_ack_status(ack_status) else None
-    for raw_item in exceptions:
-        parsed = cloud_exception_from_mapping(
-            raw_item,
-            bundle_hash=bundle_hash,
-            ack_status=resolved_ack_status,
-        )
-        if parsed is not None:
-            items.append(parsed)
-    return items
-
-
 def dedupe_cloud_exceptions(items: list[CloudException]) -> list[CloudException]:
     deduped: dict[str, CloudException] = {}
     for item in items:

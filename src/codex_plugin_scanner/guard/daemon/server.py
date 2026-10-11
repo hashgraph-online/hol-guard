@@ -134,9 +134,10 @@ from .discovery import (
     load_daemon_discovery_key,
 )
 from .extension_control_api import ExtensionControlApiService
+from .hook_managed_install_state import _hook_harness_is_unmanaged
+from .hook_policy_admission import prepare_native_hook_policy
 from .hook_request_auth import CHALLENGE_HOOK_PATHS, challenge_auth, request_auth
 from .hook_worker import WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS
-from .hook_worker_responses import _hook_harness_is_unmanaged, prepare_native_hook_policy
 from .lifecycle_journal import record_daemon_lifecycle_event
 from .local_cli_api import LocalCliApiService
 from .manager import (

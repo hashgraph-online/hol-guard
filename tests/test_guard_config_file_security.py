@@ -85,7 +85,7 @@ def test_config_reader_rejects_external_file_symlinks(tmp_path: Path, filename: 
         config_module._read_toml(workspace / filename)
     if filename != "config.toml":
         with pytest.raises(config_file_io.ConfigFileTrustError):
-            config_module._load_workspace_guard_config(workspace)
+            config_module.load_guard_config(tmp_path / "guard-home", workspace)
 
 
 def test_config_reader_preserves_selected_directory_aliases(tmp_path: Path) -> None:

@@ -19,10 +19,6 @@ from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     hook_event_is_permission_request,
 )
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    post_tool_fail_safe_response,
-    post_tool_native_block_response,
-)
 
 
 def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request() -> None:
@@ -36,20 +32,6 @@ def test_permission_denied_lifecycle_is_not_canonicalized_to_permission_request(
         reason="native unavailable",
     )
     assert denied["continue"] is True
-
-
-def test_post_tool_fail_safe_continues_the_turn() -> None:
-    payload = post_tool_fail_safe_response("claude-code", reason="worker exploded")
-    assert payload["continue"] is True
-    assert payload.get("decision") != "block"
-
-
-def test_successful_post_tool_block_withholds_without_stopping() -> None:
-    payload = post_tool_native_block_response(reason="credential-looking output")
-    assert payload["decision"] == "block"
-    assert payload["model_output_action"] == "block"
-    assert payload["continue"] is True
-    assert payload["hookSpecificOutput"]["additionalContext"] == "credential-looking output"
 
 
 def test_old_cursor_hooks_deny_empty_stdin_without_baked_event() -> None:
@@ -79,7 +61,7 @@ def test_native_unavailable_pretool_denies_without_watch(tmp_path: Path) -> None
         reason_code="native_pre_tool_unavailable",
         reason="native unavailable",
     )
-    assert permission["continue"] is True
+    assert permission["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     daemon_miss = availability_harness_response(
         {"hook_event_name": "PreToolUse", "tool_input": {"command": "curl https://example.test"}},
         harness="grok",

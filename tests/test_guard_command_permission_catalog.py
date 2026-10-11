@@ -112,7 +112,6 @@ def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -
     assert catalog.get(" COMMAND.GITHUB.PERMISSION.MERGE-ADMIN ") is admin
     assert catalog.for_rule_id(" COMMAND.GITHUB.ADMIN-MERGE ") is admin
     assert catalog.for_action_class(" github administrator pull-request merge command ") is admin
-    assert catalog.for_typed_capability(" ADMIN_MERGE_REMOTE ") is admin
     assert admin.baseline_floor == "require-reapproval"
     assert ordinary.permission_id == "command.github.permission.merge-remote"
     assert ordinary.rule_ids == ("command.github.merge",)

@@ -250,20 +250,8 @@ class GuardBrowserOpener(Protocol):
 _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
 _SERVICE_RUNTIME_CHOICES = ("hermes", "openclaw", "custom")
-_SERVICE_RUNTIME_SURFACE = "agent-sdk"
 _NAMED_SECURITY_LEVELS = {"relaxed", "balanced", "strict", "gentle", "paranoid"}
-_HOOK_DAEMON_FAILURE_STATUSES = frozenset({"unreachable", "error", "failed", "404"})
-_HOOK_DAEMON_FAIL_MODES = frozenset({"strict", "permissive"})
 _HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
-_HOOK_DAEMON_STRICT_REASON = (
-    "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action."
-)
-_HOOK_DAEMON_PERMISSIVE_REASON = (
-    "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded state."
-)
-_HOOK_DAEMON_PRESERVED_DENY_REASON = (
-    "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
-)
 _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS = 8
 _GUARD_HELP_GROUPS = (
     "HOL Guard AI Antivirus command center:\n"

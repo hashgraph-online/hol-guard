@@ -275,7 +275,10 @@ def harness_watch_auto_revert_due(
         stamp = (config.harness_watch_entered_at or {}).get(harness)
         if posture != "watch" or stamp is None:
             continue
-        entered = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        try:
+            entered = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+        except ValueError:
+            continue
         if entered.tzinfo is None:
             entered = entered.replace(tzinfo=timezone.utc)
         if current - entered >= timedelta(hours=config.watch_auto_revert_hours):

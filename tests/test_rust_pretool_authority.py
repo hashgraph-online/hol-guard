@@ -289,4 +289,7 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
-    assert result["reason_code"] == "native_hook_event_unavailable" and result["continue"] is True
+    assert (
+        result["reason_code"] == "native_hook_event_unavailable"
+        and result["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+    )

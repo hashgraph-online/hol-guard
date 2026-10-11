@@ -70,8 +70,6 @@ def test_prompt_timeout_never_releases_an_unreviewed_protected_prompt(
         assert response["behavior"] == "deny"
     else:
         assert response["decision"] == "block"
-        if harness == "codex":
-            assert response["continue"] is False
     assert ".env" not in str(response)
 
 

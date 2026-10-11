@@ -5,7 +5,6 @@ from __future__ import annotations
 from codex_plugin_scanner.guard.capabilities import (
     compute_capability_delta,
     normalize_artifact_capabilities,
-    severity_from_deltas,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
 
@@ -73,7 +72,6 @@ def test_compute_capability_delta_detects_semantic_expansion_and_scores_severity
     assert "publisher_changed" in delta_types
     assert "subprocess_added" in delta_types
     assert "secret_scope_expanded" in delta_types
-    assert severity_from_deltas(deltas) >= 8
 
 
 def test_normalize_artifact_capabilities_ignores_common_local_file_suffixes_as_hosts():

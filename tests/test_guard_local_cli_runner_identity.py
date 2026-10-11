@@ -149,8 +149,8 @@ def test_native_review_applies_custom_extension_grants(
     rendered: list[Mapping[str, object]] = []
     monkeypatch.setattr(
         hook_native_local_cli,
-        "harness_json_from_native_pre_tool",
-        lambda harness, result: rendered.append(result) or {"harness": harness},
+        "render_accepted_allow",
+        lambda harness, result, **_kwargs: rendered.append(result) or {"harness": harness},
     )
     monkeypatch.setattr(
         hook_native_local_cli,
@@ -208,6 +208,7 @@ def test_native_allow_still_honors_custom_extension_block(
             "decision": "deny",
             "reason_code": "local_cli_extension_blocked",
             "reason": "Your custom extension rules block this wrangler command.",
+            "guard_home": store.guard_home,
         }
 
 

@@ -19,6 +19,7 @@ from ..models import GuardApprovalRequest, format_local_http_origin
 from ..native_decision_receipt import validate_native_decision_receipt
 from ..native_hook_adapter import NativeHookAdapterError
 from ..runtime.actions import normalize_harness_payload
+from .hook_fail_closed import render_accepted_allow, render_pre_tool, render_pre_tool_review
 from .hook_native_local_cli import native_local_cli_grant_response
 from .hook_native_review_binding import (
     native_review_claimed_allow,
@@ -35,10 +36,6 @@ from .hook_native_saved_approval import (
     native_saved_review_response,
 )
 from .hook_request_parsing import pre_tool_command, pre_tool_input
-from .hook_worker_responses import (
-    harness_json_from_native_pre_tool,
-    harness_json_from_native_pre_tool_review,
-)
 from .native_review_allow_hint import native_review_extension_allow_hint
 
 if TYPE_CHECKING:
@@ -126,7 +123,7 @@ def pause_native_pre_tool_for_approval(
             reason_code="native_review_policy_binding_invalid",
             reason="HOL Guard could not bind this review to its native policy.",
         )
-        return harness_json_from_native_pre_tool(harness, failed)
+        return render_pre_tool(harness, failed, guard_home=guard_home)
     launch_target = _native_review_launch_target(payload)
     tool_name = _native_review_tool_name(payload)
     identity = _native_review_binding(
@@ -189,9 +186,7 @@ def pause_native_pre_tool_for_approval(
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
         allowed["policy_action"] = "allow"
-        response = harness_json_from_native_pre_tool(harness, allowed)
-        response["approval_reuse_status"] = "accepted"
-        return response
+        return render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
     if claim_saved_approval and native_review_matching_allow(
         store,
         harness=harness,
@@ -205,9 +200,7 @@ def pause_native_pre_tool_for_approval(
         allowed["decision"] = "allow"
         allowed["minimum_action"] = "allow"
         allowed["policy_action"] = "allow"
-        response = harness_json_from_native_pre_tool(harness, allowed)
-        response["approval_reuse_status"] = "accepted"
-        return response
+        return render_accepted_allow(harness, allowed, guard_home=guard_home, deadline=deadline)
     from ..blocked_request_mode import asks_for_approval, safe_alternative_reason
     from ..config import load_guard_config
 
@@ -243,7 +236,7 @@ def pause_native_pre_tool_for_approval(
             policy_action="block",
             reason=safe_alternative_reason(str(native_result.get("reason") or "HOL Guard blocked this action.")),
         )
-        response = harness_json_from_native_pre_tool(harness, blocked)
+        response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
         response["prompted"] = False
         response["blocked_request_mode"] = "safe-alternative"
         return response
@@ -269,12 +262,13 @@ def pause_native_pre_tool_for_approval(
         failed["policy_action"] = "block"
         failed["reason_code"] = "native_review_queue_failed"
         failed["reason"] = "HOL Guard could not record this review for approval."
-        return harness_json_from_native_pre_tool(harness, failed)
-    response = harness_json_from_native_pre_tool_review(
+        return render_pre_tool(harness, failed, guard_home=guard_home, deadline=deadline)
+    response = render_pre_tool_review(
         harness,
         native_result,
         approval=queued,
         guard_home=guard_home,
+        deadline=deadline,
     )
     response["prompted"] = True
     response["approval_center_url"] = approval_center_url

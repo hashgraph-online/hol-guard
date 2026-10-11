@@ -20,16 +20,16 @@ use guard_command::supply_chain_package_eval::{ConfigLoaderApi, EvalError, EvalR
 use guard_secure_fs::read_stable;
 use serde_json::{Map, Value};
 
-const HOME_CONFIG_FILENAME: &str = "config.toml";
+pub(crate) const HOME_CONFIG_FILENAME: &str = "config.toml";
 const WORKSPACE_CONFIG_FILENAMES: [&str; 2] = [".ai-plugin-scanner-guard.toml", ".hol-guard.toml"];
 const MAX_CONFIG_BYTES: usize = 1024 * 1024;
-const DEFAULT_SECURITY_LEVEL: &str = "balanced";
-const VALID_SECURITY_LEVELS: [&str; 6] = [
+pub(crate) const DEFAULT_SECURITY_LEVEL: &str = "balanced";
+pub(crate) const VALID_SECURITY_LEVELS: [&str; 6] = [
     "relaxed", "gentle", "balanced", "strict", "paranoid", "custom",
 ];
 /// `WORKSPACE_BLOCKED_POLICY_KEYS` (config.py): a workspace file can never set
 /// these, so it cannot weaken the user's own policy.
-const WORKSPACE_BLOCKED_POLICY_KEYS: [&str; 22] = [
+const WORKSPACE_BLOCKED_POLICY_KEYS: [&str; 24] = [
     "blocked_request_mode",
     "mode",
     "presentation_mode",
@@ -41,6 +41,8 @@ const WORKSPACE_BLOCKED_POLICY_KEYS: [&str; 22] = [
     "density",
     "protection_posture",
     "watch_auto_revert_hours",
+    "harness_postures",
+    "harness_watch_entered_at",
     "default_action",
     "unknown_publisher_action",
     "changed_hash_action",
@@ -74,7 +76,7 @@ impl ConfigLoaderApi for ResidentConfigLoader {
     }
 }
 
-fn config_error(reason: &str) -> EvalError {
+pub(crate) fn config_error(reason: &str) -> EvalError {
     EvalError::Internal(format!("guard config unavailable: {reason}"))
 }
 
@@ -115,7 +117,10 @@ fn reject_machine_policy(paths: &[PathBuf]) -> EvalResult<()> {
 
 /// Read one allowed config file. `Ok(None)` means the file does not exist,
 /// which Python treats as an empty config.
-fn read_config_table(directory: &Path, filename: &str) -> EvalResult<Option<Map<String, Value>>> {
+pub(crate) fn read_config_table(
+    directory: &Path,
+    filename: &str,
+) -> EvalResult<Option<Map<String, Value>>> {
     let path = directory.join(filename);
     match fs::symlink_metadata(&path) {
         Ok(_) => {}
@@ -134,7 +139,7 @@ fn read_config_table(directory: &Path, filename: &str) -> EvalResult<Option<Map<
 
 /// `_merge_config_payload` (config.py): nested objects merge key by key, and an
 /// overriding `action`/`default_action` replaces both inherited keys.
-fn merge_config_payload(
+pub(crate) fn merge_config_payload(
     base: &Map<String, Value>,
     over: &Map<String, Value>,
 ) -> Map<String, Value> {
@@ -157,7 +162,26 @@ fn merge_config_payload(
     merged
 }
 
-fn load_workspace_config(
+/// A workspace path that was authorized as canonical must keep that exact
+/// path: no existing component, the workspace itself included, may be a
+/// symlink. A missing component is an absent workspace, not an alias.
+fn reject_symlinked_ancestors(workspace: &Path) -> EvalResult<()> {
+    let mut walked = PathBuf::new();
+    for component in workspace.components() {
+        walked.push(component);
+        match fs::symlink_metadata(&walked) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(config_error("config_file_unavailable_or_changed"));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err(config_error("config_file_unavailable_or_changed")),
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn load_workspace_config(
     workspace: Option<&Path>,
     require_canonical: bool,
 ) -> EvalResult<Map<String, Value>> {
@@ -168,6 +192,9 @@ fn load_workspace_config(
         && (!workspace.is_absolute() || workspace.components().any(|c| c == Component::ParentDir))
     {
         return Err(config_error("config_directory_not_canonical"));
+    }
+    if require_canonical {
+        reject_symlinked_ancestors(workspace)?;
     }
     let mut merged = Map::new();
     for filename in WORKSPACE_CONFIG_FILENAMES {
@@ -180,7 +207,7 @@ fn load_workspace_config(
     Ok(merged)
 }
 
-fn coerce_security_level(value: Option<&Value>) -> String {
+pub(crate) fn coerce_security_level(value: Option<&Value>) -> String {
     match value.and_then(Value::as_str) {
         Some(level) if VALID_SECURITY_LEVELS.contains(&level) => level.to_owned(),
         _ => DEFAULT_SECURITY_LEVEL.to_owned(),
@@ -188,13 +215,13 @@ fn coerce_security_level(value: Option<&Value>) -> String {
 }
 
 /// `normalize_protection_posture` (protection_posture.py).
-fn explicit_posture(value: Option<&Value>) -> Option<String> {
+pub(crate) fn explicit_posture(value: Option<&Value>) -> Option<String> {
     let normalized = value?.as_str()?.trim().replace('-', "_").to_lowercase();
     matches!(normalized.as_str(), "protected" | "extra_careful" | "watch").then_some(normalized)
 }
 
 /// `derive_protection_posture` (protection_posture.py).
-fn derive_posture(mode: Option<&Value>, security_level: &str) -> &'static str {
+pub(crate) fn derive_posture(mode: Option<&Value>, security_level: &str) -> &'static str {
     if mode.and_then(Value::as_str) == Some("observe") {
         "watch"
     } else if matches!(security_level, "strict" | "paranoid") {
@@ -214,7 +241,9 @@ fn action_map_value(value: &Value) -> &Value {
     }
 }
 
-fn coerce_risk_action_map(payload: Option<&Value>) -> std::collections::BTreeMap<String, String> {
+pub(crate) fn coerce_risk_action_map(
+    payload: Option<&Value>,
+) -> std::collections::BTreeMap<String, String> {
     let mut actions = std::collections::BTreeMap::new();
     let Some(Value::Object(map)) = payload else {
         return actions;
@@ -229,7 +258,7 @@ fn coerce_risk_action_map(payload: Option<&Value>) -> std::collections::BTreeMap
     actions
 }
 
-fn coerce_harness_risk_actions(
+pub(crate) fn coerce_harness_risk_actions(
     payload: Option<&Value>,
 ) -> std::collections::BTreeMap<String, std::collections::BTreeMap<String, String>> {
     let mut actions = std::collections::BTreeMap::new();

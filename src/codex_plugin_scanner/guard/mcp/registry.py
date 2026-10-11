@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 from urllib.parse import urlparse
 
 _LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -40,14 +40,6 @@ def parse_loopback_origin(approval_url_base: object) -> str | None:
     if not netloc:
         return None
     return f"{parsed.scheme}://{netloc}"
-
-
-AnnotationHint = Literal[
-    "readOnlyHint",
-    "destructiveHint",
-    "idempotentHint",
-    "openWorldHint",
-]
 
 
 @dataclass(frozen=True, slots=True)

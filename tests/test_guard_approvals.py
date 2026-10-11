@@ -10,12 +10,10 @@ import urllib.parse
 import urllib.request
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard import bridge as guard_bridge_module
 from codex_plugin_scanner.guard.approval_scope_support import (
     StaleApprovalScopeContractError,
     package_request_portable_workspace_scope,
@@ -26,7 +24,6 @@ from codex_plugin_scanner.guard.approvals import (
     build_runtime_snapshot,
     queue_blocked_approvals,
 )
-from codex_plugin_scanner.guard.bridge import BridgeConfig, GuardBridge
 from codex_plugin_scanner.guard.cli import approval_commands as approval_commands_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import artifact_hash, evaluate_detection
@@ -3667,39 +3664,6 @@ class TestGuardApprovals:
         assert len(remaining) == 1
         assert remaining[0]["source"] == "manual"
         assert len(store.list_approval_requests(status="resolved", harness="claude-code", limit=None)) == 1
-
-    def test_guard_bridge_resolves_requests_against_guard_daemon_api(self, tmp_path, monkeypatch):
-        store = GuardStore(tmp_path / "guard-home")
-        bridge = GuardBridge(
-            config=BridgeConfig(guard_url="http://127.0.0.1:4455", dry_run=False),
-            store=store,
-        )
-        token_path = store.guard_home / "daemon-auth-token"
-        token_path.parent.mkdir(parents=True, exist_ok=True)
-        token_path.write_text("bridge-token", encoding="utf-8")
-        token_path.chmod(0o600)
-        post_calls: list[tuple[str, dict[str, object], dict[str, str] | None]] = []
-
-        def fake_post(url: str, json: dict[str, object], timeout: int, headers: dict[str, str] | None = None):
-            post_calls.append((url, json, headers))
-            assert timeout == 30
-            return SimpleNamespace(status_code=200, json=lambda: {"resolved": True})
-
-        monkeypatch.setattr(guard_bridge_module._DAEMON_SESSION, "post", fake_post)
-
-        resolved = bridge._execute_resolution("approve", "req-bridge")
-
-        assert resolved is True
-        assert post_calls == [
-            (
-                "http://127.0.0.1:4455/v1/requests/req-bridge/approve",
-                {
-                    "scope": "artifact",
-                    "reason": "resolved from Guard Bridge",
-                },
-                {"X-Guard-Token": "bridge-token"},
-            )
-        ]
 
     def test_guard_approvals_cli_derives_workspace_scope_without_workspace_override(
         self,

@@ -61,10 +61,14 @@ class ClientSpec(TypedDict):
     concurrency: int
 
 
-class WorkloadSpec(TypedDict):
+class _WorkloadRequired(TypedDict):
     id: str
     clients: list[ClientSpec]
     secret_stride: int
+
+
+class WorkloadSpec(_WorkloadRequired, total=False):
+    event: str
 
 
 class SoakSpec(TypedDict):
@@ -246,19 +250,21 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
 
     def review(harness: str, client: str, index: int) -> None:
         started = time.monotonic()
-        secret_request = index % spec["secret_stride"] == 0
+        secret_request = spec["secret_stride"] > 0 and index % spec["secret_stride"] == 0
         output = (
             "token=sk-proj-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE" if secret_request else "routine documentation"
         )
+        hook_event = spec.get("event", "PostToolUse")
         payload = {
-            "hook_event_name": "PostToolUse",
+            "hook_event_name": hook_event,
             "tool_name": "Read",
             "tool_input": {"path": "src/secret.txt" if secret_request else "docs/readme.md"},
-            "tool_response": [{"type": "text", "text": output}],
-            "stdout": output,
             "session_id": client,
             "guard_remaining_ms": int(remaining_ms),
         }
+        if hook_event == "PostToolUse":
+            payload["tool_response"] = [{"type": "text", "text": output}]
+            payload["stdout"] = output
         query = (
             f"guard-home={urllib.parse.quote(str(guard_home))}&"
             f"home={urllib.parse.quote(str(root))}&"
@@ -289,7 +295,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
                                     "protocol_version": 1,
                                     "nonce": nonce,
                                     "state_id": daemon_state["state_id"],
-                                    "hook_event": "PostToolUse",
+                                    "hook_event": hook_event,
                                 }
                             ).encode(),
                             headers={"Content-Type": "application/json", "Connection": "keep-alive"},

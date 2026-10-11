@@ -2,16 +2,12 @@ from __future__ import annotations
 
 import copy
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon import managed_policy_delivery as daemon_policy_delivery
-from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
-    validated_managed_controls_policy_bundle_v2_payload,
-)
 from codex_plugin_scanner.guard.managed_controls_policy_fields import (
     EXTENSION_CONTROL_LAYER_CAPABILITY,
     HOL_EXTENSION_CONTROLS_FIELD,
@@ -21,13 +17,7 @@ from codex_plugin_scanner.guard.managed_controls_policy_fields import (
     ManagedControlsPolicyError,
     parse_managed_controls_policy_fields,
 )
-from codex_plugin_scanner.guard.policy_bundle_trusted_keys import (
-    POLICY_BUNDLE_KEY_PURPOSE,
-    policy_bundle_verification_key_from_public_key,
-)
 from codex_plugin_scanner.guard.policy_bundle_v2 import (
-    computed_policy_bundle_v2_hash,
-    payload_hash_for_policy_bundle_v2,
     validate_policy_bundle_v2_transition,
 )
 from codex_plugin_scanner.guard.runtime.command_extensions import (
@@ -432,28 +422,6 @@ def test_oversized_target_and_advanced_regex_are_not_evaluated_by_extension_pars
     parsed = _parse(document)
     assert matcher_accesses == []
     assert parsed.rule_targets[0].permission_ids == ("command.git.permission.force-push",)
-
-
-def test_shared_signature_vector_validates_before_projection() -> None:
-    bundle = copy.deepcopy(_VECTOR["bundle"])
-    public_key = policy_bundle_verification_key_from_public_key(
-        key_id=bundle["verifier"]["keyId"],
-        public_key_pem=bundle["verifier"]["publicKeyPem"],
-        purpose=POLICY_BUNDLE_KEY_PURPOSE,
-        workspace_id=bundle["workspaceId"],
-    )
-    validated, parsed, reason = validated_managed_controls_policy_bundle_v2_payload(
-        bundle,
-        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-        negotiated_capabilities=_CAPABILITIES,
-        trusted_verification_keys=(public_key,),
-        anchored_verification_keys=(public_key,),
-        now=datetime(2026, 8, 22, tzinfo=timezone.utc),
-    )
-    assert reason is None and validated is not None and parsed is not None
-    assert parsed.has_extension_semantics
-    assert computed_policy_bundle_v2_hash(bundle) == _VECTOR["expectedBundleHash"]
-    assert payload_hash_for_policy_bundle_v2(bundle) == _VECTOR["expectedPayloadHash"]
 
 
 def test_rotation_rollback_and_downgrade_fixtures_are_monotonic() -> None:
