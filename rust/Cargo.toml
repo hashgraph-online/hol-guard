@@ -63,7 +63,7 @@ base32ct = { version = "0.2.0", features = ["alloc"] }
 sysinfo = "=0.37.2"
 thiserror = "2.0.16"
 windows-permissions = "0.2.4"
-toml = "0.8.23"
+toml = { version = "0.8.23", features = ["preserve_order"] }
 roxmltree = "0.21.1"
 winapi = "0.3.9"
 

@@ -609,20 +609,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/mcp/adapters.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_apply.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_recovery_state.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_tools.py",
-          "src/codex_plugin_scanner/guard/mcp/registry.py",
-          "src/codex_plugin_scanner/guard/mcp/sanitizers.py",
-          "src/codex_plugin_scanner/guard/mcp/schemas.py",
-          "src/codex_plugin_scanner/guard/mcp/server.py",
-          "src/codex_plugin_scanner/guard/mcp/tools.py"
-        ],
-        "reason": "Reviewed: guard MCP server (mcp/*): the `guard mcp` stdio server answers tool calls (policy, registry, adapters) from agents, so it is an MCP-surface request route; classified in scope under the in-doubt rule. Entry: cli/commands_dispatch_local -> mcp/server."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/business_policy_document_import.py",
           "src/codex_plugin_scanner/guard/capabilities.py",
           "src/codex_plugin_scanner/guard/codex_binding_capture_join.py",
@@ -644,6 +630,27 @@
           "src/codex_plugin_scanner/guard/policy_bundle_decisions.py"
         ],
         "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_*/local_mcp_grant_decision trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), codex_binding_capture_join, cloud_exceptions (store_cloud_events) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
+          "src/codex_plugin_scanner/guard/mdm/device_key_windows_api.py"
+        ],
+        "reason": "Reviewed: windows_current_user_sid and its token-API loader: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/mcp/adapters.py",
+          "src/codex_plugin_scanner/guard/mcp/policy_apply.py",
+          "src/codex_plugin_scanner/guard/mcp/policy_recovery_state.py",
+          "src/codex_plugin_scanner/guard/mcp/policy_tools.py",
+          "src/codex_plugin_scanner/guard/mcp/registry.py",
+          "src/codex_plugin_scanner/guard/mcp/sanitizers.py",
+          "src/codex_plugin_scanner/guard/mcp/schemas.py",
+          "src/codex_plugin_scanner/guard/mcp/server.py",
+          "src/codex_plugin_scanner/guard/mcp/tools.py"
+        ],
+        "reason": "Reviewed: the guard mcp serve stdio server (GuardMCPServer, tool registry, adapters, sanitizers, schemas) and its policy-authoring tools. The scope definition lists the MCP surface and tool calls as runtime, and these tools are invoked by coding agents with Guard-authored results, so they stay in scope even though the serve command is launched interactively rather than from a hook."
       }
     ],
     "tests": {
@@ -1003,6 +1010,142 @@
         "entry_points": [],
         "reason": "Payload builders for the guard settings explain/doctor/show commands and the runtime detector registry and perf listing commands.",
         "evidence": "The only callers are commands_dispatch_records.py and commands_dispatch_admin.py, which are excluded CLI dispatch modules, plus each other. They read settings and detector metadata for operator output and never feed a hook, run, protect or MCP decision. The runtime policy readers (effective policy config, stored policy decision, approval context token) stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "mdm-device-key-native-signing",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
+        "symbols": [
+          "_MAX_HELPER_OUTPUT_BYTES",
+          "_MAX_HELPER_STDERR_BYTES",
+          "_MAX_HEALTH_LEASE_CLAIMS_BYTES",
+          "_HELPER_TIMEOUT_SECONDS",
+          "_SYSTEM_SID",
+          "_P256_ORDER",
+          "_HEALTH_LEASE_KEYS",
+          "_HEALTH_KEY_REGISTRATION_KEYS",
+          "NativeKeyEvidence",
+          "NativeHealthLeaseSignature",
+          "_validated_canonical_health_lease_claims",
+          "_validated_canonical_protection_lease",
+          "_validated_canonical_health_key_registration",
+          "_validated_der_signature",
+          "windows_directory",
+          "_helper_invocation",
+          "run_helper",
+          "_sign_payload_with_device_key",
+          "sign_health_lease",
+          "sign_protection_lease",
+          "sign_health_key_registration",
+          "require_machine_context"
+        ],
+        "entry_points": [],
+        "reason": "Native device-key helper invocation and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership.",
+        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which is retained together with the token API module it loads."
+      },
+      {
+        "id": "adapter-inventory-snapshot",
+        "category": "offline_reporting",
+        "path": "src/codex_plugin_scanner/guard/adapters/base.py",
+        "symbols": [
+          "HarnessAdapter.inventory_snapshot"
+        ],
+        "entry_points": [],
+        "reason": "HarnessAdapter.inventory_snapshot assembles the AIBOM inventory snapshot (including optional Cisco scans) for export and cloud inventory upload.",
+        "evidence": "No production code calls inventory_snapshot: the only references are the method definition and tests/test_guard_aibom_detection.py, which test the method directly. The AIBOM collection, upload and CLI modules (aibom_collection, aibom_commands, aibom_cli, aibom_content_upload) are already excluded by aibom-inventory and build snapshots through their own path. Its lazy imports of inventory_contract and inventory_cisco were the only in-scope edge to the inventory_contract assembly modules (items, metadata, redaction, scans, mcp, models, constants) and, through them, skill_document_evidence and trust_metadata_boundary. aibom_detection now imports fingerprint_mapping and fingerprint_text straight from inventory_contract_fingerprints, which stay in scope because adapter detect() hashes MCP server content synchronously during launch."
+      },
+      {
+        "id": "mcp-contribution-authoring-validation",
+        "category": "authoring_tooling",
+        "path": "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
+        "symbols": [
+          "contributions_dir",
+          "catalog_id_for_mcp_id",
+          "_reserved_direct_mcp_command",
+          "direct_mcp_command_name",
+          "_normalized_tool_name",
+          "remote_mcp_endpoint_identity",
+          "normalized_remote_server_name",
+          "load_mcp_contribution_payloads",
+          "validate_mcp_contribution_file",
+          "validate_mcp_contribution",
+          "mcp_tool_state",
+          "_load_from_directory",
+          "_frozen_runtime",
+          "_load_packaged_payloads",
+          "_finalize_payloads",
+          "_validator",
+          "_schema_bytes"
+        ],
+        "entry_points": [],
+        "reason": "The MCP server contribution loader, schema validator and catalog-id helpers serve extension authoring, the extension builder and the contributed-MCP catalog. The only runtime consumer is the remote URL normalizer used when resolving a Copilot runtime server identity, which stays in scope with its helpers.",
+        "evidence": "Only one in-scope module imports mcp_server_contribution: cli/commands_support_runtime_resolution.py, and it imports only normalized_remote_mcp_url. The excluded functions are reached from extension_builder/render_native.py, runtime/mcp_server_catalog.py and tests, none of which are in the runtime import closure. normalized_remote_mcp_url and its helpers (_valid_dns_hostname, _normalized_remote_component, _remove_remote_dot_segments, _normalized_remote_path, _normalized_remote_query) do not call any excluded function."
+      }
+    ],
+    "dynamic_imports": [
+      {
+        "path": "src/codex_plugin_scanner/guard/adapters/__init__.py",
+        "count": 1,
+        "resolution": "unfollowed",
+        "mode": "lazy",
+        "targets": [
+          ".codex",
+          ".claude_code",
+          ".copilot",
+          ".cursor",
+          ".cline",
+          ".devin",
+          ".antigravity",
+          ".gemini",
+          ".grok",
+          ".hermes",
+          ".kimi",
+          ".pi",
+          ".openclaw",
+          ".opencode",
+          ".zcode",
+          ".paseo"
+        ],
+        "evidence": "Adapter registry: _adapters() imports each module named in the literal _ADAPTER_SPECS table with import_module(module_name, __package__) and instantiates the named class. Targets list every module in that table (.pi holds two classes). Decision: unfollowed. get_adapter(harness).approval_flow() is called from hook handling (commands_hook_native_review and commands_hook_native_copilot), so the registry is not request-path-free; but 51 modules and 14,588 LOC (about 1.5 points of share) would join the scope, and the adapters carry install, config and detection code that the external-reference check rejects until each adapter has reviewed install-side function exclusions like adapter-codex-setup and adapter-grok-setup. Until then the registry-only adapter modules stay out of the count and any static import from in-scope code still pulls a module in. Flip to follow once those exclusions exist."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/cli/_commands_shared.py",
+        "count": 1,
+        "resolution": "follow",
+        "mode": "eager",
+        "targets": [
+          "..daemon"
+        ],
+        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with the literal package ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), so the one non-literal site resolves to the guard.daemon package."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/codex_config.py",
+        "count": 1,
+        "resolution": "external",
+        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/config.py",
+        "count": 1,
+        "resolution": "external",
+        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
+        "count": 1,
+        "resolution": "external",
+        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/__init__.py",
+        "count": 1,
+        "resolution": "follow",
+        "mode": "lazy",
+        "targets": [
+          ".wrapper_run",
+          ".runner"
+        ],
+        "evidence": "Package __getattr__ resolves the six names in the literal __all__ to .wrapper_run (guard_run) or .runner (the sync and receipt helpers) with import_module(module_name, __name__). Both targets are real submodules; wrapper_run is the guard run launch path so it is followed, and runner stays in scope as the lazy attribute owner except for the modules excluded by their own entries."
       }
     ]
   },
@@ -1010,6 +1153,49 @@
     "workspace": "rust",
     "binary_crate": "hol-guard-runtime",
     "dependency_policy": "normal and target-specific path dependencies of the runtime binary crate; dev/build dependencies and separate binary targets are not linked",
-    "exclude_paths": []
+    "exclude_paths": [
+      {
+        "path": "rust/crates/guard-command/src/native_command_source*.rs",
+        "category": "offline_build_tool",
+        "reason": "Build-time native command source compiler, never invoked by hook evaluation.",
+        "evidence": "The module header states it is an additive build-time source compiler never invoked by hook evaluation. Its only callers are guard-command/build.rs (compile_build_request, through the guard-command-build crate) and the guard-command-source authoring binary; no guard-runtime source and no resident op references source::, compile_matcher, compile_build_request or the source schemas. The runtime reads the already-compiled program through native_command_program::packaged_command_program."
+      },
+      {
+        "path": "rust/crates/guard-google-identity/**",
+        "category": "unpublished_worker",
+        "reason": "Credential-owning Google worker crate with no published route, called only from the unpublished business worker path.",
+        "evidence": "The crate header says it is not an execution grant, credential-isolation proof or hook producer. guard-runtime references it only from workspace_review_business_dispatch.rs and workspace_review_business_producer.rs, which are themselves excluded below; prepare_google_review has no caller (its re-export in workspace_review_business.rs carries allow(unused_imports) with the note that the authenticated worker route is not yet published). Re-include these files when a route that calls prepare_google_review is published."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_producer.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_dispatch.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_journal.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_budget.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_budget_anchor.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      }
+    ]
   }
 }

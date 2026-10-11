@@ -405,7 +405,7 @@ def test_shipped_scope_keeps_synchronous_hook_path_modules_in_scope(shipped_repo
         "runtime/mcp_server_contribution.py",
         "cli/render.py",
         "aibom_detection.py",
-        "inventory_contract.py",
+        "inventory_contract_fingerprints.py",
         "evaluation_json.py",
         "store_receipt_rollups.py",
         "store_review_event_outbox_writes.py",

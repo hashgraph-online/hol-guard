@@ -154,7 +154,11 @@ pub(crate) fn benign_command_segments(
         .segments
         .iter()
         .enumerate()
-        .filter_map(|(index, segment)| {
+        .filter_map(|(index, original)| {
+            // Coverage checks must see the same arguments the proof does. A
+            // trailing `2>&1` is not an ls target.
+            let stripped = without_stderr_merge(original);
+            let segment = stripped.as_ref().unwrap_or(original);
             let benign = segment_benign[index];
             let basename = executable_basename(segment.executable.as_deref().unwrap_or(""));
             let stdin_filter = segment.pipeline_index > 0
@@ -268,6 +272,8 @@ pub(super) fn exact_safe_segment_with_context(
     allow_git_helper_context: bool,
     context: super::PathContext<'_>,
 ) -> bool {
+    let stripped = without_stderr_merge(segment);
+    let segment = stripped.as_ref().unwrap_or(segment);
     let Some(executable) = segment.executable.as_deref() else {
         return false;
     };
@@ -365,4 +371,34 @@ pub(super) fn exact_safe_segment_with_context(
         }
         _ => false,
     }
+}
+
+/// Trailing `2>&1` redirects only join stderr to the segment's own stdout, so
+/// the proof applies to the command without them. Every eligible redirect is
+/// removed in one copy. The parser admits that redirect only at a token
+/// boundary; a quoted or escaped `2>&1` operand is still the last argument but
+/// leaves a quote or backslash in the text, so it stays.
+fn stderr_merge_tail(segment: &crate::CommandSegmentV1) -> bool {
+    segment.arguments.last().map(String::as_str) == Some("2>&1")
+        && segment.tokens.last().map(String::as_str) == Some("2>&1")
+}
+
+fn without_stderr_merge(segment: &crate::CommandSegmentV1) -> Option<crate::CommandSegmentV1> {
+    if !stderr_merge_tail(segment) {
+        return None;
+    }
+    let mut merged = segment.clone();
+    while stderr_merge_tail(&merged) {
+        let Some(text) = merged.text.strip_suffix("2>&1") else {
+            break;
+        };
+        let command = text.trim_end();
+        if command.len() == text.len() || command.ends_with('\\') {
+            break;
+        }
+        merged.arguments.pop();
+        merged.tokens.pop();
+        merged.text = command.to_owned();
+    }
+    Some(merged)
 }

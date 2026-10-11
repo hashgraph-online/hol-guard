@@ -23,8 +23,8 @@ use guard_contracts::{
     PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
     PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
     RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
-    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -99,6 +99,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::PACKAGE_APPROVAL_HASH_FEATURE.into(),
         guard_contracts::PACKAGE_POLICY_RESOLVE_FEATURE.into(),
         guard_contracts::PACKAGE_POSTURE_FEATURE.into(),
+        guard_contracts::WORKSPACE_INVENTORY_FEATURE.into(),
         guard_contracts::SUPPLY_CHAIN_EVAL_FEATURE.into(),
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
@@ -214,6 +215,7 @@ pub(crate) enum ResidentOperationV1 {
     PackageApprovalHash(PackageApprovalHashRequestV1),
     PackagePolicyResolve(PackagePolicyResolveRequestV1),
     PackagePosture(PackagePostureRequestV1),
+    WorkspaceInventory(WorkspaceInventoryRequestV1),
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     GitExecutionSafety(GitExecutionSafetyRequestV1),
     CompoundGitInspection(CompoundGitInspectionRequestV1),

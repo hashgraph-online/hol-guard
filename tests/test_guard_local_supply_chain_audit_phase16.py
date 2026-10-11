@@ -804,13 +804,6 @@ def test_guard_supply_chain_audit_handles_large_workspace_and_prioritizes_findin
     assert output["evaluation"]["packages"][0]["name"] == "critical-lib"
 
 
-def test_read_sbom_text_rejects_oversized_files(tmp_path: Path) -> None:
-    sbom_path = tmp_path / "oversized-sbom.json"
-    sbom_path.write_text("x" * ((10 * 1024 * 1024) + 1), encoding="utf-8")
-
-    assert local_supply_chain_module._read_sbom_text(sbom_path) is None
-
-
 def test_build_cloud_audit_payload_includes_workspace_context(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

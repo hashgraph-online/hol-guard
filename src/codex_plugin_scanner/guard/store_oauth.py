@@ -449,6 +449,14 @@ class StoreOAuthConnectMixin:
 
     def repair_oauth_local_credential_storage_from_primary(self) -> bool:
         """Rebuild OAuth credential storage from primary or recoverable fallback state."""
+        if (
+            not isinstance(self.get_sync_payload(self._oauth_local_credentials_state_key), dict)
+            and not self._oauth_secret_is_recoverable_without_payload()
+        ):
+            # Nothing is configured and nothing is recoverable, so there is nothing to repair. Taking the
+            # exclusive credential lock for this read-only answer let every health probe on a fresh home
+            # queue behind each other on a cold runner until the daemon start timed out.
+            return False
         with self.hold_oauth_credential_lock():
             payload = self.get_sync_payload(self._oauth_local_credentials_state_key)
             if not isinstance(payload, dict):
@@ -537,6 +545,9 @@ class StoreOAuthConnectMixin:
             secret_json,
         )
         return recovered_payload
+
+    def _oauth_secret_is_recoverable_without_payload(self) -> bool:
+        return self._load_oauth_secret_json_without_payload(self._oauth_local_credentials_ref) is not None
 
     def _load_oauth_secret_json_without_payload(self, secret_ref: str) -> str | None:
         primary_secret_json = None
