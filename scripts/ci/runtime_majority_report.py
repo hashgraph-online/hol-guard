@@ -34,12 +34,16 @@ from scripts.ci.runtime_majority_functions import (  # noqa: E402
 )
 from scripts.ci.runtime_majority_python import (  # noqa: E402
     ImportGraph,
+    apply_dynamic_imports,
     build_graph,
     closure,
     count_python_loc,
     path_matches,
+    undeclared_dynamic_sites,
+    validate_dynamic_imports,
 )
-from scripts.ci.runtime_majority_rust import measure_rust  # noqa: E402
+from scripts.ci.runtime_majority_rust import analyze_source, measure_rust  # noqa: E402
+from scripts.ci.runtime_majority_wiring import build_files, compute_wired  # noqa: E402
 
 SCHEMA: Final = "hol-guard.runtime-majority-report.v1"
 SCOPE_SCHEMA: Final = "hol-guard.runtime-majority-scope.v1"
@@ -68,9 +72,14 @@ def load_scope(path: Path) -> dict[str, Any]:
         scope["python"].get("function_exclusions", []),
         frozenset(str(entry.get("id")) for entry in scope["python"]["exclusions"]),
     )
+    try:
+        validate_dynamic_imports(scope["python"].get("dynamic_imports", []))
+    except ValueError as error:
+        raise ScopeError(str(error)) from error
     for item in scope["rust"].get("exclude_paths", []):
-        if not str(item.get("reason", "")).strip():
-            raise ScopeError(f"rust exclusion {item.get('path')!r} needs a reason")
+        missing = [key for key in ("path", "category", "reason", "evidence") if not str(item.get(key, "")).strip()]
+        if missing:
+            raise ScopeError(f"rust exclusion {item.get('path')!r} needs {', '.join(missing)}")
     return scope
 
 
@@ -224,6 +233,8 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
     }
     plans = plan_modules(repo, function_entries, root_paths=root_paths)
     graph = build_graph(repo, python_scope["package_root"], plans)
+    dynamic_entries = list(python_scope.get("dynamic_imports", []))
+    apply_dynamic_imports(graph, dynamic_entries)
     missing = [root for root in roots if root not in graph.modules]
     if missing:
         raise ScopeError(f"runtime roots not found: {missing}")
@@ -231,6 +242,9 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
     unpruned, _, _ = closure(graph, roots, exclusions=[])
     in_scope, direct_hits, kind = closure(graph, roots, exclusions=entries)
     check_external_references(repo, graph.modules, in_scope, plans)
+    undeclared = undeclared_dynamic_sites(graph, in_scope, dynamic_entries)
+    if undeclared:
+        raise ScopeError("undeclared dynamic imports (add python.dynamic_imports entries): " + "; ".join(undeclared))
     reviewed = python_scope["reviewed_runtime"]
     root_set = set(roots)
 
@@ -251,7 +265,22 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
         if kind[name] == "lazy" and not is_reviewed:
             pending.append({k: record[k] for k in ("path", "module", "loc", "imported_by")})
 
-    rust_counts, rust_exclusions, rust_totals, rust_meta = measure_rust(repo, scope["rust"])
+    rust_linked, rust_exclusions, rust_totals, rust_meta = measure_rust(repo, scope["rust"])
+    wired = compute_wired(
+        build_files(repo, rust_linked, analyze_source), rust_meta["crate_deps"], rust_meta["binary_crate"]
+    )
+    rust_counts = [item for item in rust_linked if item.path in wired]
+    rust_unwired = [item for item in rust_linked if item.path not in wired]
+    rust_exclusions += [
+        {
+            "language": "rust",
+            "path": item.path,
+            "category": "unwired",
+            "reason": "compiled into the runtime but not reachable from main.rs through any wired file",
+            "loc": item.loc,
+        }
+        for item in rust_unwired
+    ]
     rust_loc = sum(item.loc for item in rust_counts)
     python_loc = sum(item["loc"] for item in files)
     share = rust_loc / (rust_loc + python_loc) if rust_loc + python_loc else 0.0
@@ -302,8 +331,14 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
                 for crate in sorted({item.crate for item in rust_counts})
             },
             "files": [
-                {"path": item.path, "crate": item.crate, "loc": item.loc}
+                {"path": item.path, "crate": item.crate, "loc": item.loc, "wired_via": wired[item.path]}
                 for item in sorted(rust_counts, key=lambda item: item.path)
+            ],
+            "linked_loc": sum(item.loc for item in rust_linked),
+            "unwired_loc": sum(item.loc for item in rust_unwired),
+            "unwired_files": [
+                {"path": item.path, "crate": item.crate, "loc": item.loc}
+                for item in sorted(rust_unwired, key=lambda item: item.path)
             ],
         },
         "python": {
@@ -317,6 +352,10 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
             "pending_unclassified_modules": pending,
             "pending_unclassified_loc": sum(item["loc"] for item in pending),
             "dynamic_import_sites_unresolved": sum(graph.dynamic_unresolved.get(name, 0) for name in in_scope),
+            "dynamic_imports": [
+                {**entry, "in_scope": any(graph.modules[n].path == entry["path"] for n in in_scope)}
+                for entry in dynamic_entries
+            ],
         },
         "exclusion_summary": _summarize_exclusions(exclusions, [*entries, *function_entries]),
         "exclusions": exclusions,
@@ -339,6 +378,7 @@ def render_summary(report: dict[str, Any]) -> str:
         f"runtime majority share: {metric['share']:.2%} (target {metric['target_share']:.0%}, "
         f"{'MET' if metric['meets_target'] else 'NOT MET'})",
         f"  rust_runtime_loc   {metric['rust_runtime_loc']}",
+        f"  rust unwired loc   {report['rust']['unwired_loc']} (linked but not reachable from main; not counted)",
         f"  python_runtime_loc {metric['python_runtime_loc']} "
         f"(pending/unclassified {report['python']['pending_unclassified_loc']})",
         f"  python LOC allowed at target: {metric['python_loc_needed_for_target']}",

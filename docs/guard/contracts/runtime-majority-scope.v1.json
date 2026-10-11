@@ -995,12 +995,110 @@
         "reason": "Payload builders for the guard settings explain/doctor/show commands and the runtime detector registry and perf listing commands.",
         "evidence": "The only callers are commands_dispatch_records.py and commands_dispatch_admin.py, which are excluded CLI dispatch modules, plus each other. They read settings and detector metadata for operator output and never feed a hook, run, protect or MCP decision. The runtime policy readers (effective policy config, stored policy decision, approval context token) stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       }
+    ],
+    "dynamic_imports": [
+      {
+        "path": "src/codex_plugin_scanner/guard/adapters/__init__.py",
+        "count": 1,
+        "resolution": "unfollowed",
+        "mode": "lazy",
+        "targets": [
+          ".codex",
+          ".claude_code",
+          ".copilot",
+          ".cursor",
+          ".cline",
+          ".devin",
+          ".antigravity",
+          ".gemini",
+          ".grok",
+          ".hermes",
+          ".kimi",
+          ".pi",
+          ".openclaw",
+          ".opencode",
+          ".zcode",
+          ".paseo"
+        ],
+        "evidence": "Adapter registry: _adapters() imports each module named in the literal _ADAPTER_SPECS table with import_module(module_name, __package__) and instantiates the named class. Targets list every module in that table (.pi holds two classes). Decision: unfollowed. get_adapter(harness).approval_flow() is called from hook handling (commands_hook_native_review and commands_hook_native_copilot), so the registry is not request-path-free; but 51 modules and 14,588 LOC (about 1.5 points of share) would join the scope, and the adapters carry install, config and detection code that the external-reference check rejects until each adapter has reviewed install-side function exclusions like adapter-codex-setup and adapter-grok-setup. Until then the registry-only adapter modules stay out of the count and any static import from in-scope code still pulls a module in. Flip to follow once those exclusions exist."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/cli/_commands_shared.py",
+        "count": 1,
+        "resolution": "follow",
+        "mode": "eager",
+        "targets": [
+          "..daemon"
+        ],
+        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with the literal package ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), so the one non-literal site resolves to the guard.daemon package."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/codex_config.py",
+        "count": 1,
+        "resolution": "external",
+        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/config.py",
+        "count": 1,
+        "resolution": "external",
+        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
+        "count": 1,
+        "resolution": "external",
+        "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      }
     ]
   },
   "rust": {
     "workspace": "rust",
     "binary_crate": "hol-guard-runtime",
     "dependency_policy": "normal and target-specific path dependencies of the runtime binary crate; dev/build dependencies and separate binary targets are not linked",
-    "exclude_paths": []
+    "exclude_paths": [
+      {
+        "path": "rust/crates/guard-command/src/native_command_source*.rs",
+        "category": "offline_build_tool",
+        "reason": "Build-time native command source compiler, never invoked by hook evaluation.",
+        "evidence": "The module header states it is an additive build-time source compiler never invoked by hook evaluation. Its only callers are guard-command/build.rs (compile_build_request, through the guard-command-build crate) and the guard-command-source authoring binary; no guard-runtime source and no resident op references source::, compile_matcher, compile_build_request or the source schemas. The runtime reads the already-compiled program through native_command_program::packaged_command_program."
+      },
+      {
+        "path": "rust/crates/guard-google-identity/**",
+        "category": "unpublished_worker",
+        "reason": "Credential-owning Google worker crate with no published route, called only from the unpublished business worker path.",
+        "evidence": "The crate header says it is not an execution grant, credential-isolation proof or hook producer. guard-runtime references it only from workspace_review_business_dispatch.rs and workspace_review_business_producer.rs, which are themselves excluded below; prepare_google_review has no caller (its re-export in workspace_review_business.rs carries allow(unused_imports) with the note that the authenticated worker route is not yet published). Re-include these files when a route that calls prepare_google_review is published."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_producer.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_dispatch.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_journal.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_budget.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      },
+      {
+        "path": "rust/crates/guard-runtime/src/workspace_review_business_budget_anchor.rs",
+        "category": "unpublished_worker",
+        "reason": "Business-review worker producer subtree that no resident route calls yet.",
+        "evidence": "Declared under workspace_review_business_producer.rs, whose only exported entry (prepare_google_review, OwnedGoogleBusinessReview) has no caller outside its own re-export, which is marked allow(unused_imports) because the authenticated worker route is not yet published; the budget, dispatch and journal modules carry allow(dead_code) for the same reason and are referenced only from the producer. workspace_review_business.rs itself (load, used by workspace_review_request) stays in scope."
+      }
+    ]
   }
 }
