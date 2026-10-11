@@ -9,7 +9,10 @@ top-level imports that only those symbols use.  Every entry carries
 * retained code in the same module may reference an excluded symbol only from
   a listed ``entry_points`` symbol (the reviewed dispatcher into that code);
 * no other in-scope module may import an excluded symbol;
-* roots are never eligible, so process and hook entry modules stay whole.
+* roots are not eligible unless the entry sets ``root_function: true``, which
+  marks a reviewed non-request handler (for example a CLI subcommand body or a
+  dashboard-only route) inside a mixed dispatcher root; the ``evidence`` must
+  then show that no hook, launch or proxy route reaches the symbol.
 """
 
 from __future__ import annotations
@@ -156,7 +159,12 @@ def plan_module(
     method_names: frozenset[str] = frozenset(),
 ) -> ModulePlan:
     if path in root_paths:
-        raise ScopeError(f"function exclusion {entries[0]['id']!r}: {path} is a runtime root and stays whole")
+        plain = [entry["id"] for entry in entries if entry.get("root_function") is not True]
+        if plain:
+            raise ScopeError(
+                f"function exclusion {plain[0]!r}: {path} is a runtime root and stays whole "
+                "unless the entry sets root_function: true with evidence"
+            )
     tree = ast.parse(source)
     plan = ModulePlan(path=path)
     wanted: dict[str, str] = {}
@@ -350,6 +358,8 @@ def validate_entries(entries: list[dict[str, Any]], taken_ids: frozenset[str] = 
         for key in ("reason", "category", "evidence"):
             if not str(entry.get(key, "")).strip():
                 raise ScopeError(f"function exclusion {ident!r} needs {key}")
+        if "root_function" in entry and not isinstance(entry["root_function"], bool):
+            raise ScopeError(f"function exclusion {ident!r}: root_function must be a boolean")
         points = entry.get("entry_points", [])
         if not (isinstance(points, list) and all(isinstance(item, str) and item for item in points)):
             raise ScopeError(f"function exclusion {ident!r}: entry_points must be a list of names")

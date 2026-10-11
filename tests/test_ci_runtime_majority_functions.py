@@ -175,6 +175,23 @@ def test_runtime_roots_cannot_be_partially_excluded(tmp_path: Path) -> None:
         build_report(repo, scope)
 
 
+def test_root_function_flag_allows_a_reviewed_handler_in_a_root(tmp_path: Path) -> None:
+    root = (
+        "from pkg.render import emit\n\n\ndef emit_all():\n    return emit({}, True)\n"
+        "\n\ndef _cli_only():\n    return 1\n"
+    )
+    entry = _entry(path="src/pkg/root.py", symbols=["_cli_only"], entry_points=[], root_function=True)
+    repo, scope = _repo(tmp_path / "a", entries=[entry])
+    _write(repo / "src/pkg/root.py", root)
+    report = build_report(repo, scope)
+    [record] = [item for item in report["exclusions"] if item["kind"] == "function"]
+    assert record["loc"] == 2
+    repo, scope = _repo(tmp_path / "b", entries=[{**entry, "root_function": "yes"}])
+    _write(repo / "src/pkg/root.py", root)
+    with pytest.raises(ScopeError, match="must be a boolean"):
+        build_report(repo, scope)
+
+
 def test_missing_symbol_and_unknown_entry_point_are_rejected(tmp_path: Path) -> None:
     render = RENDER.replace('\n\n_TABLE["x"] = _human\n', "\n")
     repo, scope = _repo(tmp_path / "a", entries=[_entry(symbols=["_nope"])], render=render)

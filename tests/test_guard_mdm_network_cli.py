@@ -9,7 +9,7 @@ from jsonschema import Draft202012Validator
 from codex_plugin_scanner import cli
 from codex_plugin_scanner.guard.cli import commands_dispatch_mdm
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
-from codex_plugin_scanner.guard.mdm.network import NetworkDiagnostic, ProxyDiagnostic
+from codex_plugin_scanner.guard.mdm.network_diagnostics import NetworkDiagnostic, ProxyDiagnostic
 
 
 def _status_validator() -> Draft202012Validator:

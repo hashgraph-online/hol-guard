@@ -602,20 +602,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/mcp/adapters.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_apply.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_recovery_state.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_tools.py",
-          "src/codex_plugin_scanner/guard/mcp/registry.py",
-          "src/codex_plugin_scanner/guard/mcp/sanitizers.py",
-          "src/codex_plugin_scanner/guard/mcp/schemas.py",
-          "src/codex_plugin_scanner/guard/mcp/server.py",
-          "src/codex_plugin_scanner/guard/mcp/tools.py"
-        ],
-        "reason": "Reviewed: guard MCP server (mcp/*): the `guard mcp` stdio server answers tool calls (policy, registry, adapters) from agents, so it is an MCP-surface request route; classified in scope under the in-doubt rule. Entry: cli/commands_dispatch_local -> mcp/server."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/business_policy_document_import.py",
           "src/codex_plugin_scanner/guard/capabilities.py",
           "src/codex_plugin_scanner/guard/codex_binding_capture_join.py",
@@ -635,6 +621,13 @@
           "src/codex_plugin_scanner/guard/trust_metadata_boundary.py"
         ],
         "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_*/local_mcp_grant_decision trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), codex_binding_capture_join."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
+          "src/codex_plugin_scanner/guard/mdm/device_key_windows_api.py"
+        ],
+        "reason": "Reviewed: windows_current_user_sid and its token-API loader: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
       }
     ],
     "tests": {
@@ -994,6 +987,93 @@
         "entry_points": [],
         "reason": "Payload builders for the guard settings explain/doctor/show commands and the runtime detector registry and perf listing commands.",
         "evidence": "The only callers are commands_dispatch_records.py and commands_dispatch_admin.py, which are excluded CLI dispatch modules, plus each other. They read settings and detector metadata for operator output and never feed a hook, run, protect or MCP decision. The runtime policy readers (effective policy config, stored policy decision, approval context token) stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "mcp-policy-request-repository",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/mcp/policy_store.py",
+        "symbols": [
+          "PolicyRequestStatus",
+          "_VALID_REQUEST_STATUSES",
+          "_PolicyRequestStoreConnection",
+          "_PolicyImportResult",
+          "_PENDING_TTL_SECONDS",
+          "_TERMINAL_PAYLOAD_TTL_SECONDS",
+          "_TERMINAL_METADATA_TTL_SECONDS",
+          "_now",
+          "_parse_iso",
+          "PendingPolicyRequest",
+          "_coerce_status",
+          "_coerce_mode",
+          "_row_to_request",
+          "StageRequestInput",
+          "StageRequestResult",
+          "ApplyRequestResult",
+          "MCPolicyRequestRepository"
+        ],
+        "entry_points": [],
+        "reason": "Persistence and compare-and-set repository for pending MCP policy creation requests that a user approves in the dashboard; ensure_mcp_policy_request_schema and its DDL constants stay because the store connection schema creates the table at every store open.",
+        "evidence": "MCPolicyRequestRepository and its request types are constructed only by mcp/tools.py, mcp/policy_tools.py, mcp/policy_apply.py (the guard mcp serve tool surface), the dashboard route handlers daemon/server.py _handle_mcp_policy_request_get and daemon/mcp_policy_decisions.py (excluded by daemon-mcp-policy-routes), and daemon/business_policy_recovery*.py (not in the runtime closure). No hook, launch or proxy route reaches them: the hook pipeline never reads mcp_policy_requests, and the only in-scope import of this module is store_connection_schema.py importing ensure_mcp_policy_request_schema, which is retained. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "daemon-mcp-policy-routes",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/daemon/server.py",
+        "symbols": [
+          "_GuardDaemonHandler._handle_mcp_policy_request_get",
+          "_GuardDaemonHandler._handle_mcp_policy_decision"
+        ],
+        "entry_points": [
+          "_GuardDaemonHandler.do_GET",
+          "_GuardDaemonHandler.do_POST"
+        ],
+        "reason": "Dashboard-only routes GET /v1/mcp-policy/requests/<id> and the approve/decline decision POST for pending MCP policy creation requests.",
+        "evidence": "Reached only from the do_GET and do_POST route tables on /v1/mcp-policy/requests/<id> paths, which the dashboard issues to render and decide a pending request created through guard mcp serve. Neither handler is called by hook, launch, proxy or approval-resolution code; both lazily import the excluded MCP policy repository and decision helper. This entry removes the only lazy edges from daemon/server.py into mcp/ and daemon/mcp_policy_decisions.py. Scope-file-only: daemon/server.py is not edited by this change.",
+        "root_function": true
+      },
+      {
+        "id": "cli-mcp-serve",
+        "category": "cli_only",
+        "path": "src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py",
+        "symbols": [
+          "_run_guard_mcp_command"
+        ],
+        "entry_points": [],
+        "reason": "The guard mcp serve subcommand: a stdio MCP server that exposes Guard policy-request tools to a coding agent.",
+        "evidence": "Dispatched only by name from the _EARLY_HANDLERS table in cli/commands_router.py for the interactive guard mcp serve command. It resolves its own guard home and store, never runs inside a hook, launch, proxy or daemon request, and nothing in the runtime closure calls it. It is the only importer (lazy) of mcp/server.py, which is the root of the mcp tool, adapter, registry, sanitizer and schema modules.",
+        "root_function": true
+      },
+      {
+        "id": "mdm-device-key-native-signing",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
+        "symbols": [
+          "_MAX_HELPER_OUTPUT_BYTES",
+          "_MAX_HELPER_STDERR_BYTES",
+          "_MAX_HEALTH_LEASE_CLAIMS_BYTES",
+          "_HELPER_TIMEOUT_SECONDS",
+          "_SYSTEM_SID",
+          "_P256_ORDER",
+          "_HEALTH_LEASE_KEYS",
+          "_HEALTH_KEY_REGISTRATION_KEYS",
+          "NativeKeyEvidence",
+          "NativeHealthLeaseSignature",
+          "_validated_canonical_health_lease_claims",
+          "_validated_canonical_protection_lease",
+          "_validated_canonical_health_key_registration",
+          "_validated_der_signature",
+          "windows_directory",
+          "_helper_invocation",
+          "run_helper",
+          "_sign_payload_with_device_key",
+          "sign_health_lease",
+          "sign_protection_lease",
+          "sign_health_key_registration",
+          "require_machine_context"
+        ],
+        "entry_points": [],
+        "reason": "Native device-key helper invocation and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership.",
+        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which is retained together with the token API module it loads."
       }
     ]
   },
