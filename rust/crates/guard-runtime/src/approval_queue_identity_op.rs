@@ -205,7 +205,7 @@ fn build_action_identity(launch_target: Option<&str>, envelope: Option<&Value>) 
 }
 
 /// Python `str(value)` for the scalar JSON values a browser intent holds.
-fn py_str(value: &Value) -> Option<String> {
+pub(crate) fn py_str(value: &Value) -> Option<String> {
     match value {
         Value::String(text) => Some(text.clone()),
         Value::Null => Some("None".to_owned()),
@@ -223,7 +223,7 @@ fn py_str(value: &Value) -> Option<String> {
     }
 }
 
-fn is_truthy(value: &Value) -> bool {
+pub(crate) fn is_truthy(value: &Value) -> bool {
     match value {
         Value::Null => false,
         Value::Bool(flag) => *flag,

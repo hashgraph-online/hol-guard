@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod approval;
+mod approval_bulk_eligibility_op;
 mod approval_gate_consumers;
 mod approval_gate_enrollment;
 mod approval_gate_grants;

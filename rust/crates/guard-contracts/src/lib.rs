@@ -15,6 +15,8 @@ mod git_execution_safety;
 pub use git_execution_safety::*;
 mod compound_git_inspection;
 pub use compound_git_inspection::*;
+mod approval_bulk_eligibility;
+pub use approval_bulk_eligibility::*;
 mod approval_queue_identity;
 pub use approval_queue_identity::*;
 mod approval_resolution_plan;
