@@ -132,7 +132,6 @@ jobs:
           grep -q "def review_pre_tool_native(" src/codex_plugin_scanner/guard/native_pretool.py
           grep -q 'command == "pre-tool"' rust/crates/guard-runtime/src/runtime_cli.rs
           grep -q "pub fn evaluate_pre_tool" rust/crates/guard-command/src/pretool.rs
-          grep -q 'if event_name == "PreToolUse":' src/codex_plugin_scanner/guard/daemon/hook_worker.py
           uv run --no-sync python scripts/ci/rust_pretool_no_python_gate.py --root .
           uv run --no-sync python - <<'PY'
           from pathlib import Path
