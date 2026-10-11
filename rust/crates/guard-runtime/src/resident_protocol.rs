@@ -31,9 +31,8 @@ use guard_contracts::{
 use serde::Deserialize;
 use serde_json::Value;
 
-// Evaluation (`capabilities`/`evaluate_resident_bytes`) lives in
-// `resident_ops.rs`; re-exported so `crate::resident_protocol::` call sites
-// and the approval-contract token surface stay stable.
+// Evaluation lives in `resident_ops.rs`; re-exported so `crate::resident_protocol::`
+// call sites and the approval-contract token surface stay stable.
 pub(crate) use crate::resident_ops::evaluate_resident_bytes;
 
 pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
