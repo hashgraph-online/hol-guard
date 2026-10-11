@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import stat
 import tempfile
@@ -30,6 +31,8 @@ from .codex_config import dump_toml, tomllib
 _MAX_CONFIG_BYTES = 8 * 1024 * 1024
 _COMMAND_KEYS = ("command", "bash", "powershell", "script", "cmd")
 _GUARD_EXECUTABLES = frozenset({"hol-guard", "hol-guard.exe", "hol guard", "plugin-guard", "plugin-guard.exe"})
+# Characters shlex leaves unquoted; any other argument is shown quoted.
+_UNDELIMITED_ARG = re.compile(r"[\w@%+=:,./-]+", re.ASCII)
 _GUARD_MARKERS = (
     "hol_guard_managed",
     "hol guard managed",
@@ -117,7 +120,10 @@ def _handler_is_guard(handler: Mapping[str, object]) -> bool:
         return False
     # Match the argv directly; it is never rebuilt into a shell command line.
     argv = [command, *args]
-    text = " ".join(argv).lower().replace('\\"', '"')
+    # Arguments with spaces or shell metacharacters stay delimited (as shlex
+    # quoting would show them), so a marker cannot form across two arguments.
+    text = " ".join(arg if _UNDELIMITED_ARG.fullmatch(arg) else f"'{arg}'" for arg in argv)
+    text = text.lower().replace('\\"', '"')
     if any(marker in text for marker in _GUARD_MARKERS):
         return True
     return _tokens_are_guard_hook(argv)
