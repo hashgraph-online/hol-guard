@@ -217,7 +217,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "result",
         "receipt",
     }
-    allowed = required | {"request_id"}
+    allowed = required | {"request_id", "harness_response"}
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
     event_name = payload.get("event_name")
@@ -233,6 +233,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         or not payload["harness"]
         or len(payload["harness"]) > 64
         or not isinstance(payload.get("result"), dict)
+        or not isinstance(payload.get("harness_response"), dict)
     ):
         return None
     if event_name in {"PreToolUse", "UserPromptSubmit"} and not _decode_pre_tool_result(
@@ -262,6 +263,7 @@ def _encode_hook_envelope(
     snapshot: Mapping[str, object],
     execution_context_supported: bool = False,
     request_id: str | None = None,
+    recording_only: bool = False,
 ) -> bytes | None:
     from .hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
 
@@ -291,6 +293,8 @@ def _encode_hook_envelope(
             "source_ref_external_allowed": source_ref_external_allowed,
         },
     }
+    if recording_only:
+        envelope["recording_only"] = True
     if execution_context_supported:
         # Direct CLI calls capture locally; daemon workers explicitly pass
         # None when caller context is unavailable instead of using daemon env.
@@ -359,7 +363,6 @@ def review_raw_hook_native(
     ):
         return record_native_hook_result("native_fail_safe", None)
     deadline_monotonic, deadline_budget_ms = _capture_deadline(deadline)
-    del observe_mode
     if policy_snapshot is None:
         return record_native_hook_result("native_fail_safe", None)
     snapshot = dict(policy_snapshot)
@@ -378,6 +381,7 @@ def review_raw_hook_native(
         snapshot=snapshot,
         execution_context_supported="git-execution-context-v1" in status.capabilities.features,
         request_id=request_id,
+        recording_only=observe_mode,
     )
     if encoded is None:
         return record_native_hook_result("native_fail_safe", None)

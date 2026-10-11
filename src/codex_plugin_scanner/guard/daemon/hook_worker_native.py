@@ -41,12 +41,7 @@ from .hook_worker_native_review import (
     NativePolicyBindingRefreshError,
     review_native_edge,
 )
-from .hook_worker_responses import (
-    harness_json_from_native_post_tool,
-    harness_json_from_native_pre_tool,
-    harness_json_from_native_prompt,
-    observe_lifecycle_fail_safe_response,
-)
+from .hook_worker_responses import harness_json_from_native_pre_tool
 
 _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 
@@ -110,16 +105,6 @@ def _claude_native_prompt_brand(
         if isinstance(hook_output, dict):
             hook_output["additionalContext"] = additional_context
     return response
-
-
-def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
-    rewritten = dict(native)
-    if str(rewritten.get("minimum_action") or "") == "allow" and rewritten.get("decision") == "allow":
-        return rewritten
-    rewritten["decision"] = "allow"
-    rewritten["minimum_action"] = "warn"
-    rewritten["policy_action"] = "warn"
-    return rewritten
 
 
 class _HookWorkerMetrics(Protocol):
@@ -539,17 +524,8 @@ class HookWorkerNativeMixin:
                     ),
                     False,
                 )
-            if recording_only:
-                return (
-                    observe_lifecycle_fail_safe_response(
-                        native_harness,
-                        event_name=native_event,
-                        reason_code="watch_recording_only",
-                    ),
-                    True,
-                )
-            response = harness_json_from_native_prompt(native_harness, native_result)
-            if native_harness.strip().lower().replace("_", "-") == "claude-code":
+            response = dict(edge["harness_response"])
+            if not recording_only and native_harness.strip().lower().replace("_", "-") == "claude-code":
                 with suppress(Exception):
                     response = _claude_native_prompt_brand(response, native_result)
             return (response, True)
@@ -559,14 +535,10 @@ class HookWorkerNativeMixin:
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
-                    native_result = _watch_native_pre_tool_result(native_result)
-                    response = recording_only_pre_tool_response(
-                        native_harness,
-                        reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
-                        reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
-                    )
                     return (
-                        _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt),
+                        _record_native_pre_activity(
+                            self, native_harness, payload, dict(edge["harness_response"]), accepted_receipt
+                        ),
                         True,
                     )
             action = str(native_result.get("minimum_action") or "")
@@ -621,12 +593,12 @@ class HookWorkerNativeMixin:
                 native_result,
                 guard_home=guard_home,
             )
-            if repaired_result:
-                native_result = repaired_result
             from ..adapters.zcode_contained_tests import route_zcode_containment
 
             rendered = route_zcode_containment(
-                harness_json_from_native_pre_tool(native_harness, native_result),
+                harness_json_from_native_pre_tool(native_harness, repaired_result)
+                if repaired_result
+                else dict(edge["harness_response"]),
                 harness=native_harness,
                 payload=payload,
                 guard_home=guard_home,
@@ -643,7 +615,7 @@ class HookWorkerNativeMixin:
                 ),
                 True,
             )
-        native_result = self._apply_structured_mediation(
+        mediated = self._apply_structured_mediation(
             native_result,
             payload=payload,
             native_harness=native_harness,
@@ -659,7 +631,11 @@ class HookWorkerNativeMixin:
             payload=payload,
             succeeded=hook_post_succeeded(native_event, payload),
         )
-        return (harness_json_from_native_post_tool(native_harness, native_result), True)
+        response = dict(edge["harness_response"])
+        mediation = mediated.get("structured_content_mediation")
+        if mediation is not None and mediation != native_result.get("structured_content_mediation"):
+            response["structured_content_mediation"] = mediation
+        return (response, True)
 
     def review_native_edge_decision(
         self: _HookWorkerNativeHost,

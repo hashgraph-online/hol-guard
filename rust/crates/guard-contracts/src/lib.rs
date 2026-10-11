@@ -186,6 +186,10 @@ pub struct GuardHookEnvelopeV2 {
     pub policy_generation: u64,
     pub policy_snapshot: Value,
     pub source: GuardHookSourceMetadataV2,
+    /// Acknowledged Watch posture. It only selects a continuing response
+    /// envelope; it never changes the verdict, receipt, or request identity.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub recording_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -207,6 +211,10 @@ pub struct GuardHookEdgeResultV2 {
     pub event_name: String,
     pub payload_kind: GuardHookPayloadKindV2,
     pub result: Value,
+    /// The harness-specific JSON a hook must print for `result`, rendered by
+    /// the resident so no other layer interprets the verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub harness_response: Option<Value>,
     /// Rust-owned decision evidence.  The Python edge may only transport it
     /// to a non-authoritative asynchronous consumer.
     pub receipt: NativeHookDecisionReceiptV1,

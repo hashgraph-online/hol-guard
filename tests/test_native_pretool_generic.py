@@ -122,6 +122,12 @@ def test_hook_worker_routes_native_prompt_without_post_tool_projection(
     )
     receipt["event_name"] = "UserPromptSubmit"
     _sync_receipt(edge)
+    # The resident renders the harness response; the fake edge mirrors its two shapes.
+    edge["harness_response"] = (
+        harness_json_from_native_prompt("claude-code", result)
+        if mode == "enforce"
+        else {"continue": True, "policy_action": "allow", "reason_code": "watch_recording_only"}
+    )
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
     worker = HookWorker(
         store=GuardStore(tmp_path / "guard-home"),
