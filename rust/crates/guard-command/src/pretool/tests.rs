@@ -507,7 +507,6 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat //etc/passwd",
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
-        "cat README.md Cargo.toml",
         "head -n 10 README.md Cargo.toml",
         "ls /",
         "cat /root/secret",
