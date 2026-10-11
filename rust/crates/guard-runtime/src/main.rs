@@ -26,6 +26,12 @@ mod archive_verdict_seam;
 mod bundle_parse_reuse_tests;
 mod business_document_compile;
 mod business_source_codec;
+mod cisco_containment;
+mod cisco_evidence;
+mod cisco_plan;
+mod cisco_preflight_op;
+#[cfg(test)]
+mod cisco_preflight_vectors_tests;
 mod claim_approval_reuse_op;
 mod claim_reuse;
 mod claim_reuse_binding;

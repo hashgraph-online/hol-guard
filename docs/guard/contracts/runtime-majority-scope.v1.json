@@ -466,6 +466,17 @@
           "src/codex_plugin_scanner/guard/daemon/repair_self_check.py",
           "src/codex_plugin_scanner/guard/daemon/runtime_repair.py"
         ]
+      },
+      {
+        "id": "third-party-analyzer-wrapper",
+        "category": "third_party_analyzer_wrapper",
+        "reason": "Thin wrappers that invoke the third-party Cisco skill and MCP analyzers in a bounded scanner subprocess and normalize their raw output into Finding records. They decide nothing: which roots may be scanned, every containment verdict, the finding-to-signal mapping and the policy action are owned by the resident cisco_preflight operation (guard-runtime cisco_plan, cisco_containment and cisco_evidence), which never spawns analyzers. Reached from guard/native_cisco_preflight.py (the analyzer step between the resident plan and evidence queries) and from the plugin-scanner product. The exclusion is whole-path rather than function-level because the in-scope transport imports the analyzer runners, which a function exclusion forbids.",
+        "path": [
+          "src/codex_plugin_scanner/integrations/__init__.py",
+          "src/codex_plugin_scanner/integrations/cisco_mcp_scanner.py",
+          "src/codex_plugin_scanner/integrations/cisco_skill_scanner.py",
+          "src/codex_plugin_scanner/integrations/scanner_subprocess.py"
+        ]
       }
     ],
     "reviewed_runtime": [

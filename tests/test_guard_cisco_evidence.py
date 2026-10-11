@@ -10,60 +10,10 @@ from typing import Any, cast
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.cisco_evidence import (
-    cisco_finding_to_risk_signal,
-    scanner_cache_key,
-)
-from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
+from codex_plugin_scanner.guard.runtime.scanner_cache import scanner_cache_key
 from codex_plugin_scanner.integrations import cisco_mcp_scanner, cisco_skill_scanner
 from codex_plugin_scanner.integrations.cisco_skill_scanner import CiscoIntegrationStatus
 from codex_plugin_scanner.integrations.scanner_subprocess import ScannerProcessResult
-from codex_plugin_scanner.models import Finding, Severity
-
-
-def test_cisco_finding_becomes_v3_signal_with_first_class_scanner_fields() -> None:
-    finding = Finding(
-        rule_id="CISCO-MCP-TOOL-POISONING",
-        severity=Severity.HIGH,
-        category="security",
-        title="Tool poisoning detected",
-        description="MCP config exposes a risky tool description.",
-        remediation="Review the MCP server before enabling it.",
-        file_path=".mcp.json",
-        line_number=12,
-        source="cisco-mcp-scanner",
-    )
-
-    signal = cisco_finding_to_risk_signal(
-        finding,
-        scanner_status=CiscoIntegrationStatus.ENABLED,
-        scanner_name="Cisco MCP scanner",
-        source_version="4.6.2",
-    )
-
-    assert signal == GuardRiskSignalV3(
-        signal_id="cisco-mcp-scanner:CISCO-MCP-TOOL-POISONING:.mcp.json:12",
-        source="cisco_mcp",
-        source_version="4.6.2",
-        category="mcp",
-        severity="high",
-        confidence="strong",
-        title="Tool poisoning detected",
-        plain_language_summary="MCP config exposes a risky tool description.",
-        technical_detail="Cisco MCP scanner rule CISCO-MCP-TOOL-POISONING reported security evidence.",
-        evidence_ref=".mcp.json:12",
-        scanner_name="Cisco MCP scanner",
-        scanner_status="enabled",
-        scanner_rule_id="CISCO-MCP-TOOL-POISONING",
-        redaction_level="summary",
-        source_path=".mcp.json",
-        source_line=12,
-        data_source=None,
-        data_sink=None,
-        recommended_action="Review the MCP server before enabling it.",
-    )
-    assert signal.to_dict()["scanner_status"] == "enabled"
-    assert GuardRiskSignalV3.from_dict(signal.to_dict()) == signal
 
 
 def test_scanner_cache_key_changes_with_content_hash_or_version() -> None:

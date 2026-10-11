@@ -134,6 +134,12 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import GUARD_ACTION_VALUES, SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..native_cisco_preflight import (
+    build_cisco_deep_scan_payload,
+    cisco_risk_signal_v3_to_v2,
+    policy_action_for_cisco_signals,
+    scan_action_for_cisco_evidence,
+)
 from ..native_prompt import extract_prompt_requests
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
@@ -145,12 +151,6 @@ from ..protect import build_protect_payload
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
-from ..runtime.cisco_preflight import (
-    build_cisco_deep_scan_payload,
-    cisco_risk_signal_v3_to_v2,
-    policy_action_for_cisco_signals,
-    scan_action_for_cisco_evidence,
-)
 from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
