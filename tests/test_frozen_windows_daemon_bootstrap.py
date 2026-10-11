@@ -70,16 +70,54 @@ def _diagnostics(env: dict[str, str]) -> str:
             if entry.is_file():
                 lines.append(f"{entry.name}={_safe_read(entry)[-300:]!r}")
     for entry in guard_home.rglob("managed-resident-phases.v1.log"):
-        phases = [line for line in _safe_read(entry).splitlines() if line.startswith("native_resident_phase ")]
+        text = _safe_read(entry)
+        if text.startswith("<"):
+            # The resident may hold the file without read sharing; say so instead of dropping the evidence.
+            lines.append(f"{entry.name}={text}")
+            continue
+        phases = [line for line in text.splitlines() if line.startswith("native_resident_phase ")]
         lines.extend(phases[-96:])
     return " | ".join(lines)
+
+
+def _process_and_listener_snapshot(guard_home: Path) -> str:
+    """Name the live Guard processes, loopback listeners and resident state files for a failed step.
+
+    A resident that is listed in state but never answers authentication leaves no phase evidence of its
+    own, so record whether it is alive, what it listens on and whether its phase file exists.
+    """
+
+    lines = ["--- process and listener snapshot ---"]
+    for command in (
+        ["tasklist", "/FI", "IMAGENAME eq hol-guard*", "/FO", "CSV", "/NH"],
+        ["tasklist", "/FI", "IMAGENAME eq guard-runtime*", "/FO", "CSV", "/NH"],
+        ["netstat", "-ano", "-p", "TCP"],
+    ):
+        try:
+            result = subprocess.run(command, capture_output=True, check=False, text=True, timeout=10)
+        except (OSError, subprocess.SubprocessError) as error:
+            lines.append(f"{command[0]}: {error!r}")
+            continue
+        output = result.stdout
+        if command[0] == "netstat":
+            output = "\n".join(line for line in output.splitlines() if "127.0.0.1" in line and "LISTENING" in line)
+        lines.append(output.strip())
+    runtime_dir = guard_home / "native-runtime"
+    if runtime_dir.is_dir():
+        for entry in sorted(runtime_dir.rglob("*")):
+            try:
+                size = entry.stat().st_size if entry.is_file() else "dir"
+            except OSError as error:
+                size = repr(error)
+            lines.append(f"{entry.relative_to(runtime_dir)} size={size}")
+    return "\n".join(lines)
 
 
 def _full_diagnostics(env: dict[str, str]) -> str:
     """Complete daemon journal records and complete log files for a failed packaged step."""
 
     guard_home = Path(env["HOL_GUARD_HOME"])
-    sections = [_diagnostics(env)]
+    sections = [_diagnostics(env), _process_and_listener_snapshot(guard_home)]
     journal = guard_home / "daemon-lifecycle"
     if journal.is_dir():
         for entry in sorted(journal.iterdir()):

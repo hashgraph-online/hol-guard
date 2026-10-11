@@ -183,3 +183,33 @@ def test_mcp_probe_accepts_native_result_without_outer_status(transport, tmp_pat
         )
         == reply
     )
+
+
+@pytest.mark.parametrize(
+    "frame,expected",
+    [
+        ({"error": "native_client_auth_timeout_failed", "retryable": False}, "native_client_auth_timeout_failed"),
+        ({"error": "not-a-finite-code", "retryable": False}, None),
+        ({"error": 7}, None),
+    ],
+)
+def test_framed_resident_refusal_keeps_its_finite_code(transport, tmp_path, frame, expected):
+    from codex_plugin_scanner.guard.native_resident_client import (
+        native_resident_client_failure_code,
+        record_native_resident_client_failure_code,
+    )
+
+    record_native_resident_client_failure_code(None)
+    transport.client.return_value = json.dumps(frame).encode()
+    response = bridge._resident_request(
+        operation="daemon_lifecycle_decide",
+        request={},
+        guard_home=tmp_path,
+        timeout_seconds=4.5,
+        required_feature="contained-execution-v1",
+        response_schema="guard-daemon-lifecycle-decision-result.v1",
+        record_success=False,
+    )
+    assert response is None
+    assert native_resident_client_failure_code() == expected
+    transport.failed.assert_called_once_with("a" * 64, tmp_path, reason="native_daemon_lifecycle_decide_schema")
