@@ -93,6 +93,11 @@ def record() -> None:
             "./bin/bash -c 'echo value'",
             "echo " + "é" * 4100,
             "echo " + "x" * 20_000,
+            "bash --norc -c 'echo value'",
+            "bash --init-file /dev/null -c 'echo value'",
+            "bash -O extglob -c 'echo value'",
+            "bash -oc extglob 'echo value' -- tail",
+            "bash --rcfile=/dev/null +o nounset -c 'echo value'",
         ]
     )
     vectors = []

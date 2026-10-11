@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from dataclasses import asdict
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -105,3 +109,42 @@ def test_scan_state_reuses_compatible_jumps_but_rejects_wrong_pre_state(monkeypa
     assert len(seen) == 1
     assert state.advance("ab'c", 1) == 2
     assert len(seen) == 2
+
+
+def test_fresh_process_provisions_resident_before_public_helper(native_hook_force, tmp_path):
+    environment = os.environ.copy()
+    environment["SHELL_HELPER_TEST_HOME"] = str(tmp_path / "fresh-guard")
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            """
+import os
+from pathlib import Path
+from codex_plugin_scanner.guard.native_context import bind_context_digest_home
+from codex_plugin_scanner.guard.runtime.shell_command_wrappers import normalize_transparent_shell_command
+bind_context_digest_home(Path(os.environ["SHELL_HELPER_TEST_HOME"]))
+result = normalize_transparent_shell_command("bash --init-file /dev/null -c 'echo value'")
+assert result.normalized_command == "echo value"
+assert result.wrapper_chain == ("bash",)
+""",
+        ],
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+
+
+def test_prerequisite_time_consumes_the_same_transport_deadline(monkeypatch, tmp_path):
+    from codex_plugin_scanner.guard import native_context
+
+    ticks = iter((0.0, 11.0))
+    monkeypatch.setattr(native_shell_helpers, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
+    monkeypatch.setattr(native_context, "_resolve_digest_home", lambda _: tmp_path)
+    monkeypatch.setattr(native_context, "ensure_resident_prerequisite", lambda _: True)
+    monkeypatch.setattr(native_context, "_native_runtime_status_memo", lambda: None)
+    with pytest.raises(native_shell_helpers.NativeShellHelpersError, match="deadline"):
+        native_shell_helpers.call("segments", "echo value")

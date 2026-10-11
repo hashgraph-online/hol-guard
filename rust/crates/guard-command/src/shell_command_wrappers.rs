@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::command_launcher_floors::shlex_quote;
 use crate::env_wrapper::parse_env_wrapper;
+use crate::shell_secret_read_support::shell_interpreter_command_payload;
 
 pub const SHELL_COMMAND_NORMALIZE_MAX_BYTES: usize = 8192;
 
@@ -256,25 +257,11 @@ fn unwrap_lean_ctx(parts: &[String]) -> Option<(String, Vec<String>)> {
 
 /// `_unwrap_shell_string_wrapper` (:206-220).
 fn unwrap_shell_string_wrapper(parts: &[String]) -> Option<(String, Vec<String>)> {
-    let mut index = 1usize;
-    while index < parts.len() {
-        let token = &parts[index];
-        if token == "--" {
-            break;
-        }
-        if token.starts_with('-') && !token.starts_with("--") && token[1..].contains('c') {
-            if index + 1 >= parts.len() {
-                return None;
-            }
-            return Some((parts[index + 1].clone(), parts[index + 2..].to_vec()));
-        }
-        if token.starts_with('-') {
-            index += 1;
-            continue;
-        }
-        return None;
-    }
-    None
+    let payload = shell_interpreter_command_payload(parts, 0)?;
+    Some((
+        payload.script_text,
+        parts[payload.tokens_consumed + 1..].to_vec(),
+    ))
 }
 
 /// `_strip_env_wrapper` (:223-229).

@@ -11,7 +11,7 @@ class NativeShellHelpersError(RuntimeError, ValueError):
 
 
 def runtime_key() -> tuple[object, ...]:
-    from .native_runtime import native_runtime_status
+    from .native_context import _native_runtime_status_memo as native_runtime_status
 
     status = native_runtime_status()
     if not status.available or not status.compatible or status.identity is None:
@@ -22,11 +22,13 @@ def runtime_key() -> tuple[object, ...]:
 
 def call(action: str, command: str, **fields: Any) -> Any:
     from . import native_execution
-    from .native_context import _canonical_request_sha256, _resolve_digest_home
-    from .native_runtime import native_runtime_status
+    from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
+    from .native_context import _native_runtime_status_memo as native_runtime_status
 
     deadline = time.monotonic() + 10.0
     home = _resolve_digest_home(None)
+    if not ensure_resident_prerequisite(home):
+        raise NativeShellHelpersError("native_shell_helpers_unavailable")
     status = native_runtime_status()
     remaining = deadline - time.monotonic()
     if remaining <= 0:
