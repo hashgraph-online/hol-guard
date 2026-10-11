@@ -121,3 +121,32 @@ def test_missing_or_stopped_daemon_state_is_not_an_authentication_failure(
     assert failure_reason.daemon_failure_reason(causes, daemon_overloaded=False) == (
         failure_reason.DAEMON_UNAVAILABLE_REASON
     )
+
+
+def test_a_home_whose_daemon_never_started_is_not_an_authentication_failure(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    state = guard_home / "daemon-state.json"
+
+    with pytest.raises(ValueError) as raised:
+        bridge_flow._daemon_response(state_path=state, query="", data="{}", timeout_seconds=1.0)
+
+    assert bridge_flow._daemon_failure_reason(raised.value) == "daemon_state_missing"
+
+
+def test_state_without_its_discovery_key_still_fails_authentication(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    state = guard_home / "daemon-state.json"
+    state.write_text('{"pid": 1}', encoding="utf-8")
+    state.chmod(0o600)
+
+    with pytest.raises(ValueError) as raised:
+        bridge_flow._daemon_response(state_path=state, query="", data="{}", timeout_seconds=1.0)
+
+    reason_code = bridge_flow._daemon_failure_reason(raised.value)
+    assert reason_code not in failure_reason.UNANSWERED_DAEMON_CODES
+    causes = [{"stage": "daemon_request", "reason_code": reason_code}]
+    assert failure_reason.daemon_failure_reason(causes, daemon_overloaded=False) == (
+        failure_reason.AUTHENTICATION_FAILED_REASON
+    )

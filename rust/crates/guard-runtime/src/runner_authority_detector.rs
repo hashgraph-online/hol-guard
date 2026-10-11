@@ -2,6 +2,7 @@
 //! overrides and saved-claim partitioning for `RunnerAuthority`.
 
 use guard_command::decisions::parse_signals;
+use guard_command::skill_content_risk::detect_skill_content_risk;
 use guard_contracts::{
     compose_action_from_signals, is_guard_action, most_restrictive_guard_action, GuardAction,
 };
@@ -9,7 +10,7 @@ use serde_json::{json, Map, Value};
 
 use super::context_digest::parse_context_token;
 use super::context_digest_json::write_canonical_json_with_limit;
-use super::runner_authority_op::{KindResult, ERR_INVALID};
+use super::runner_authority_op::{KindResult, ERR_INVALID, ERR_TOO_LARGE};
 
 pub(crate) const RUNTIME_DETECTOR_WARN_REASON: &str = "runtime_detector_warn";
 pub(crate) const RUNTIME_DETECTOR_REVIEW_REASON: &str = "runtime_detector_review";
@@ -187,6 +188,30 @@ pub(crate) fn detector_composition(args: &Value) -> KindResult {
         },
         "blocks": composition.action == GuardAction::Block,
     }))
+}
+
+/// Largest SKILL.md the resident scans. The detector uses backtracking
+/// patterns, so its work is bounded here rather than by the request limit,
+/// which keeps one oversized skill from holding a shared worker.
+pub(crate) const SKILL_CONTENT_MAX_BYTES: usize = 512 * 1024;
+
+/// `detect_skill_content_risk(content)` for a SKILL.md file. The detector
+/// runs on the whole file, with no skill-structure gate. Content over
+/// [`SKILL_CONTENT_MAX_BYTES`] is refused, and the caller reports the skill
+/// as unscanned.
+pub(crate) fn skill_content_risk(args: &Value) -> KindResult {
+    let content = args_object(args)?
+        .get("content")
+        .and_then(Value::as_str)
+        .ok_or(ERR_INVALID)?;
+    if content.len() > SKILL_CONTENT_MAX_BYTES {
+        return Err(ERR_TOO_LARGE);
+    }
+    let signals: Vec<Value> = detect_skill_content_risk(content)
+        .iter()
+        .map(|signal| signal.to_value())
+        .collect();
+    Ok(json!({ "signals": signals }))
 }
 
 /// `_config_with_current_authority`: stronger of the current action and the

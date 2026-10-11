@@ -871,6 +871,7 @@ dependencies = [
  "guard-policy-snapshot",
  "guard-rule-contract",
  "guard-runtime-windows-process",
+ "guard-scanner",
  "guard-seatbelt",
  "guard-secure-fs",
  "hex",

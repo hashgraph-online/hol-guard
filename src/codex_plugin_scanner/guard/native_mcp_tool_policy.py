@@ -76,7 +76,6 @@ _OPTIONAL_TEXT = (str, type(None))
 _NEED_FIELDS: dict[str, dict[str, tuple[type, ...]]] = {
     "provider_choices": {},
     "provider_authority_hash": {},
-    "extension_decision": {"action": _TEXT},
     "grant_lookup": {"harness": _TEXT, "selector": _TEXT},
     "policy_lookup": {
         "harness": _TEXT,
@@ -141,12 +140,14 @@ class NativeToolPolicyResult:
 
 
 def _subject(
+    store: GuardStore,
     config: GuardConfig,
     artifact: GuardArtifact,
     artifact_hash: str,
     arguments: object,
 ) -> dict[str, object]:
     from .mcp_tool_calls import _tool_call_configuration
+    from .native_mcp_extension_input import build_extension_input
 
     return {
         "config": json_safe_copy(_tool_call_configuration(config)),
@@ -160,6 +161,7 @@ def _subject(
         "publisher": artifact.publisher,
         "artifact_hash": artifact_hash,
         "arguments": _arguments_dto(arguments),
+        "extension": build_extension_input(store, artifact),
     }
 
 
@@ -247,9 +249,8 @@ def _validated_decision(payload: object) -> dict[str, Any]:
 class _Effects:
     """Runs one named effect against the real store, in the correct scope."""
 
-    def __init__(self, store: GuardStore, artifact: GuardArtifact) -> None:
+    def __init__(self, store: GuardStore) -> None:
         self.store = store
-        self.artifact = artifact
         self.stack = ExitStack()
         self.stack.enter_context(store.connection_scope())
 
@@ -273,14 +274,6 @@ class _Effects:
 
     def _need_provider_authority_hash(self, _need: Mapping[str, Any]) -> object:
         return {"hash": self.store.read_mcp_provider_authority_hash()}
-
-    def _need_extension_decision(self, need: Mapping[str, Any]) -> object:
-        from .local_cli_trust import apply_local_mcp_extension_decision
-
-        decided = apply_local_mcp_extension_decision(self.store, self.artifact, need["action"])
-        if decided is None:
-            return None
-        return {"action": decided[0], "source": decided[1], "summary": decided[2]}
 
     def _need_grant_lookup(self, need: Mapping[str, Any]) -> object:
         lookup = self.store.resolve_policy_decision_lookup(need["harness"], need["selector"], consume_one_shot=False)
@@ -345,10 +338,10 @@ def native_evaluate_tool_call(
     if not ensure_resident_prerequisite(guard_home):
         raise NativeMcpToolPolicyError("home_unprovisioned")
     initial_authority: FreshAuthority = (config, artifact, artifact_hash, arguments)
-    subject = _subject(config, artifact, artifact_hash, arguments)
+    subject = _subject(store, config, artifact, artifact_hash, arguments)
     observations: list[dict[str, object]] = []
     authority: FreshAuthority | None = None
-    effects = _Effects(store, artifact)
+    effects = _Effects(store)
     try:
         for _ in range(_MAX_ROUNDS):
             reply = _round_trip(
@@ -383,8 +376,8 @@ def native_evaluate_tool_call(
                 authority = initial_authority
                 if provided is not None:
                     authority = provided
-                    result = {"status": "provided", "subject": _subject(*provided)}
-                effects = _Effects(store, authority[1])
+                    result = {"status": "provided", "subject": _subject(store, *provided)}
+                effects = _Effects(store)
             else:
                 result = effects.run(cast("Mapping[str, Any]", need))
             observations.append({"need": need, "result": result})

@@ -284,56 +284,6 @@ def _emit_failure(
     return returncode
 
 
-def _daemon_hook_endpoint(guard_home: Path, harness: str) -> str | None:
-    from .bounded_cli_hook_daemon import _daemon_hook_endpoint as implementation
-
-    return implementation(guard_home, harness)
-
-
-def _read_daemon_auth_token(guard_home: Path) -> str | None:
-    from .bounded_cli_hook_daemon import _read_daemon_auth_token as implementation
-
-    return implementation(guard_home)
-
-
-def _build_loopback_opener():  # type: ignore[no-untyped-def]
-    from .bounded_cli_hook_daemon import _build_loopback_opener as implementation
-
-    return implementation()
-
-
-def _try_daemon_hook(
-    *,
-    guard_home: Path,
-    harness: str,
-    input_text: str,
-    timeout_seconds: float,
-) -> tuple[str, str, int] | None:
-    """Retain legacy private patch points for established direct callers."""
-    from . import bounded_cli_hook_daemon as daemon
-
-    return daemon.try_daemon_hook(
-        guard_home=guard_home,
-        harness=harness,
-        input_text=input_text,
-        timeout_seconds=timeout_seconds,
-        _endpoint_loader=_daemon_hook_endpoint,
-        _token_loader=_read_daemon_auth_token,
-        _opener_builder=_build_loopback_opener,
-    )
-
-
-def _daemon_response_to_native(
-    daemon_response: dict[str, object],
-    *,
-    harness: str,
-    event_name: str,
-) -> tuple[str, str, int]:
-    from .bounded_cli_hook_daemon import _daemon_response_to_native as implementation
-
-    return implementation(daemon_response, harness=harness, event_name=event_name)
-
-
 def run_bounded_cli_hook(
     config: Mapping[str, object],
     *,

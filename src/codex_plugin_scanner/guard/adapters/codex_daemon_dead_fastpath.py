@@ -28,6 +28,17 @@ from pathlib import Path
 FAILED_START_WINDOW_SECONDS = 120.0
 FAILED_START_MARKER = "daemon-start-failed.json"
 DEAD_DAEMON_REASON_CODE = "daemon_dead_repair_needed"
+# Markers a launch writes while a daemon is on its way up; each is reset to
+# ``{}`` once the launch settles. The window matches the bounded slow-start
+# window, so a marker a crashed launcher left behind stops counting.
+DAEMON_START_MARKERS = (
+    "daemon-recovery-reservation.json",
+    "daemon-start-progress.json",
+    "daemon-launch-pending.json",
+)
+DAEMON_START_MARKER_WINDOW_SECONDS = 180.0
+_DAEMON_START_MARKER_MAX_BYTES = 4096
+_DAEMON_STATE_MAX_BYTES = 65536
 NATIVE_RUNTIME_DEAD_REASON_CODE = "native_resident_restart_circuit_open"
 # The one copy of this denial: the bridge, the daemon hook worker and the pool all use it.
 NATIVE_RUNTIME_DEAD_REASON = (
@@ -85,6 +96,46 @@ def daemon_provably_dead(state_path: str | Path) -> bool:
     return False
 
 
+def _live_state_written_at(state_path: Path) -> float | None:
+    """When the daemon last wrote nonempty state; ``None`` for absent or ``{}``."""
+
+    try:
+        modified = state_path.stat().st_mtime
+        with state_path.open("rb") as handle:
+            payload = json.loads(handle.read(_DAEMON_STATE_MAX_BYTES + 1))
+    except (OSError, ValueError):
+        return None
+    return modified if isinstance(payload, dict) and payload else None
+
+
+def daemon_start_in_progress(state_path: str | Path, *, now: float | None = None) -> bool:
+    """True when a recent launch marker says a daemon start has not settled.
+
+    This only extends how long a hook keeps asking the daemon. It is never
+    evidence for a decision: an allow still needs an authenticated daemon reply.
+    """
+
+    current = time.time() if now is None else now
+    # A daemon that wrote live state after the marker came up from that
+    # launch; a marker its worker never reset must not keep later hooks waiting.
+    settled_at = _live_state_written_at(Path(state_path))
+    for name in DAEMON_START_MARKERS:
+        path = Path(state_path).parent / name
+        try:
+            modified = path.stat().st_mtime
+            if not 0 <= current - modified < DAEMON_START_MARKER_WINDOW_SECONDS:
+                continue
+            if settled_at is not None and modified <= settled_at:
+                continue
+            with path.open("rb") as handle:
+                payload = json.loads(handle.read(_DAEMON_START_MARKER_MAX_BYTES + 1))
+        except (OSError, ValueError):
+            continue
+        if isinstance(payload, dict) and payload:
+            return True
+    return False
+
+
 def recent_start_failure(state_path: str | Path, *, now: float | None = None) -> bool:
     try:
         modified = _marker_path(state_path).stat().st_mtime
@@ -137,6 +188,7 @@ __all__ = [
     "NATIVE_RUNTIME_DEAD_REASON_CODE",
     "clear_start_failure",
     "daemon_provably_dead",
+    "daemon_start_in_progress",
     "native_runtime_refused",
     "recent_start_failure",
     "record_start_failure",

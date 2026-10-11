@@ -16,6 +16,7 @@ guard-google-identity = { path = "../guard-google-identity" }
 guard-hook-core = { path = "../guard-hook-core" }
 guard-policy-snapshot = { path = "../guard-policy-snapshot" }
 guard-rule-contract = { path = "../guard-rule-contract" }
+guard-scanner = { path = "../guard-scanner" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 caseless.workspace = true
 regex.workspace = true

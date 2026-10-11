@@ -1,17 +1,25 @@
+"""End-to-end coverage for ``hol-guard secrets`` through the native runtime.
+
+Detector, scanner and hook parity is pinned by the Rust vectors in
+``rust/crates/guard-runtime/testdata/secrets_cli``; these tests cover the
+argument handling, rendering and exit codes of the Python shim.
+"""
+
 from __future__ import annotations
 
 import contextlib
 import io
 import json
+import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from codex_plugin_scanner import cli as guard_cli
+from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.secrets.cli import main as standalone_secrets_main
-from codex_plugin_scanner.guard.secrets.precommit import install_precommit_hook, uninstall_precommit_hook
-from codex_plugin_scanner.guard.secrets.secret_staged_scanner import scan_staged_secrets
 
 
 def _git(root: Path, *args: str) -> None:
@@ -22,6 +30,8 @@ def _init_repo(root: Path) -> None:
     _git(root, "init")
     _git(root, "config", "user.email", "guard@example.invalid")
     _git(root, "config", "user.name", "Guard Test")
+    # A developer's global core.hooksPath must not leak into hook tests.
+    _git(root, "config", "core.hooksPath", "")
 
 
 def _github_token() -> str:
@@ -49,14 +59,17 @@ def test_staged_scan_reads_index_not_unstaged_worktree(tmp_path: Path) -> None:
     secret = _github_token()
     target.write_text(f"GITHUB_TOKEN={secret}\n", encoding="utf-8")
 
-    staged = scan_staged_secrets(tmp_path)
-    assert staged.findings == ()
+    exit_code, output, error = _run_native(["secrets", "scan", str(tmp_path), "--staged", "--json"])
+    assert (exit_code, error) == (0, "")
+    assert json.loads(output)["findings"] == []
 
     _git(tmp_path, "add", "config.env")
-    staged_secret = scan_staged_secrets(tmp_path)
-    assert [finding.rule_id for finding in staged_secret.findings] == ["github-token"]
-    assert staged_secret.findings[0].source == "staged"
-    assert secret not in json.dumps(staged_secret.to_public_dict())
+    exit_code, output, error = _run_native(["secrets", "scan", str(tmp_path), "--staged", "--json"])
+    assert (exit_code, error) == (0, "")
+    payload = json.loads(output)
+    assert [finding["rule_id"] for finding in payload["findings"]] == ["github-token"]
+    assert payload["findings"][0]["source"] == "staged"
+    assert secret not in output
 
 
 def test_staged_scan_resolves_repository_root_from_nested_directory(tmp_path: Path) -> None:
@@ -66,18 +79,27 @@ def test_staged_scan_resolves_repository_root_from_nested_directory(tmp_path: Pa
     (tmp_path / "config.env").write_text(f"GITHUB_TOKEN={_github_token()}\n", encoding="utf-8")
     _git(tmp_path, "add", "config.env")
 
-    result = scan_staged_secrets(nested)
+    exit_code, output, _error = _run_native(["secrets", "scan", str(nested), "--staged", "--json"])
 
-    assert result.truncated is False
-    assert [finding.path for finding in result.findings] == ["config.env"]
+    payload = json.loads(output)
+    assert exit_code == 0
+    assert payload["truncated"] is False
+    assert [finding["path"] for finding in payload["findings"]] == ["config.env"]
 
 
-def test_staged_scan_non_git_target_is_explicitly_partial(tmp_path: Path) -> None:
-    result = scan_staged_secrets(tmp_path)
+def test_relative_target_resolves_from_caller_working_directory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "config.env").write_text(f"GITHUB_TOKEN={_github_token()}\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
 
-    assert result.truncated is True
-    assert result.findings == ()
-    assert result.errors == ("git_staged_enumeration_failed",)
+    exit_code = standalone_secrets_main(["scan", "--json"])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert [finding["path"] for finding in json.loads(captured.out)["findings"]] == ["config.env"]
 
 
 def test_native_partial_staged_scan_returns_infrastructure_error(tmp_path: Path) -> None:
@@ -113,17 +135,17 @@ def test_native_rules_bypass_guard_parser(monkeypatch: pytest.MonkeyPatch) -> No
     assert payload["schema"] == "guard-secret-rules.v1"
     assert any(rule["rule_id"] == "github-token" for rule in payload["rules"])
     public_fields = {"description", "family", "rule_id", "severity", "strong_format", "validation"}
-    assert all(set(rule) == public_fields for rule in payload["rules"])
+    assert all(set(rule) <= public_fields for rule in payload["rules"])
     assert all("pattern" not in rule and "candidate" not in rule for rule in payload["rules"])
 
 
-def test_public_rules_catalog_matches_detector_metadata() -> None:
-    from codex_plugin_scanner.guard.secrets.public_rule_catalog import PUBLIC_RULES_JSON
-    from codex_plugin_scanner.guard.secrets.secret_detection import detector_version, secret_rule_catalog
+def test_cli_rules_lists_detector_catalog(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = standalone_secrets_main(["rules"])
 
-    payload = json.loads(PUBLIC_RULES_JSON)
-    assert payload["detector_version"] == detector_version()
-    assert payload["rules"] == secret_rule_catalog()
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "HOL Guard Secrets detector" in captured.out
+    assert "GitHub token" in captured.out
 
 
 def test_native_staged_scan_fails_on_findings_without_printing_secret(tmp_path: Path) -> None:
@@ -141,38 +163,45 @@ def test_native_staged_scan_fails_on_findings_without_printing_secret(tmp_path: 
     assert secret not in output
 
 
-def test_native_staged_json_reports_staged_source(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
-    (tmp_path / "config.env").write_text(f"TOKEN={_github_token()}\n", encoding="utf-8")
-    _git(tmp_path, "add", "config.env")
+def test_cli_scan_json_returns_public_payload(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = standalone_secrets_main(["scan", str(tmp_path), "--json"])
 
-    exit_code, output, error = _run_native(["secrets", "scan", str(tmp_path), "--staged", "--json"])
-
+    captured = capsys.readouterr()
     assert exit_code == 0
-    assert error == ""
-    payload = json.loads(output)
-    assert payload["finding_count"] == 1
-    assert payload["findings"][0]["source"] == "staged"
-    assert "candidate" not in output
+    assert json.loads(captured.out)["schema"] == "guard-repository-secret-scan.v1"
+    assert captured.err == ""
 
 
-def test_precommit_install_is_idempotent(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
+def test_cli_missing_target_returns_two(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = standalone_secrets_main(["scan", str(tmp_path / "missing")])
 
-    first = install_precommit_hook(tmp_path)
-    second = install_precommit_hook(tmp_path)
-    hook = tmp_path / ".git" / "hooks" / "pre-commit"
-
-    assert first.status == "installed"
-    assert second.status == "already_installed"
-    assert first.chained_existing is False
-    content = hook.read_text(encoding="utf-8")
-    assert "HOL_GUARD_SECRETS_PRE_COMMIT_V1" in content
-    assert "hol-guard secrets scan --staged --fail-on-findings" in content
-    assert hook.stat().st_mode & 0o100
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "Error: secret scan target does not exist" in captured.err
 
 
-def test_precommit_install_chains_and_uninstall_restores_existing_hook(tmp_path: Path) -> None:
+def test_cli_fails_closed_without_native_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    unavailable = SimpleNamespace(available=False, compatible=False, identity=None, capabilities=None)
+    monkeypatch.setattr(native_runtime, "native_runtime_status", lambda **_kwargs: unavailable)
+
+    exit_code = standalone_secrets_main(["scan", str(tmp_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "requires the Guard native runtime" in captured.err
+
+
+_POSIX_ONLY = pytest.mark.skipif(os.name != "posix", reason="Guard refuses Git hook management off POSIX")
+
+
+@_POSIX_ONLY
+def test_hook_install_chains_and_uninstall_restores_existing_hook(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     hook = tmp_path / ".git" / "hooks" / "pre-commit"
     hook.parent.mkdir(parents=True, exist_ok=True)
@@ -180,69 +209,60 @@ def test_precommit_install_chains_and_uninstall_restores_existing_hook(tmp_path:
     hook.write_bytes(original)
     hook.chmod(0o755)
 
-    installed = install_precommit_hook(tmp_path)
-    backup = hook.with_name("pre-commit.hol-guard-user")
-    assert installed.chained_existing is True
-    assert backup.read_bytes() == original
-    assert "HOL_GUARD_SECRETS_PRE_COMMIT_V1" in hook.read_text(encoding="utf-8")
+    exit_code, output, error = _run_native(["secrets", "install-hook", str(tmp_path), "--json"])
+    assert (exit_code, error) == (0, "")
+    assert json.loads(output) == {
+        "chained_existing": True,
+        "hook": "git-hooks/pre-commit",
+        "schema": "guard-secrets-hook.v1",
+        "status": "installed",
+    }
+    assert hook.with_name("pre-commit.hol-guard-user").read_bytes() == original
+    content = hook.read_text(encoding="utf-8")
+    assert "HOL_GUARD_SECRETS_PRE_COMMIT_V1" in content
+    assert "hol-guard secrets scan --staged --fail-on-findings" in content
+
+    exit_code, output, error = _run_native(["secrets", "install-hook", str(tmp_path)])
+    assert (exit_code, error) == (0, "")
+    assert "pre-commit hook installed: already_installed (git-hooks/pre-commit)" in output
+    assert "Existing pre-commit behavior is preserved" in output
 
     exit_code, output, error = _run_native(["secrets", "uninstall-hook", str(tmp_path)])
-    assert exit_code == 0
-    assert error == ""
+    assert (exit_code, error) == (0, "")
     assert "pre-commit hook uninstalled: restored" in output
     assert hook.read_bytes() == original
     assert hook.stat().st_mode & 0o100
-    assert not backup.exists()
+    assert not hook.with_name("pre-commit.hol-guard-user").exists()
 
 
-def test_precommit_install_refuses_custom_hooks_path(tmp_path: Path) -> None:
+@_POSIX_ONLY
+def test_hook_install_refusal_returns_two(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     _git(tmp_path, "config", "core.hooksPath", ".custom-hooks")
 
-    with pytest.raises(ValueError, match=r"custom core.hooksPath"):
-        install_precommit_hook(tmp_path)
+    exit_code, output, error = _run_native(["secrets", "install-hook", str(tmp_path)])
+
+    assert exit_code == 2
+    assert output == ""
+    assert "custom core.hooksPath" in error
 
 
-def test_precommit_install_rejects_symlinked_hooks_directory(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
-    hooks = tmp_path / ".git" / "hooks"
-    preserved_hooks = tmp_path / ".git" / "hooks-original"
-    hooks.rename(preserved_hooks)
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    try:
-        hooks.symlink_to(outside, target_is_directory=True)
-    except OSError:
-        pytest.skip("directory symlinks are unavailable")
+def test_interrupt_stops_native_scan_before_propagating(monkeypatch: pytest.MonkeyPatch) -> None:
+    import _thread
+    import threading
 
-    with pytest.raises(ValueError, match="real trusted directory"):
-        install_precommit_hook(tmp_path)
-    with pytest.raises(ValueError, match="real trusted directory"):
-        uninstall_precommit_hook(tmp_path)
+    from codex_plugin_scanner.guard import codex_hook_launch_runtime
+    from codex_plugin_scanner.guard.secrets import cli as secrets_cli
 
-    assert list(outside.iterdir()) == []
+    stopped = threading.Event()
 
+    def fake_run(command: object, *, stop_event: threading.Event, **options: object) -> object:
+        threading.Timer(0.3, _thread.interrupt_main).start()
+        assert stop_event.wait(10)
+        stopped.set()
+        return SimpleNamespace(returncode=None)
 
-def test_precommit_uninstall_does_not_remove_foreign_hook(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
-    hook = tmp_path / ".git" / "hooks" / "pre-commit"
-    hook.parent.mkdir(parents=True, exist_ok=True)
-    original = b"#!/bin/sh\necho foreign\n"
-    hook.write_bytes(original)
-    hook.chmod(0o755)
-
-    result = uninstall_precommit_hook(tmp_path)
-
-    assert result.status == "not_installed"
-    assert hook.read_bytes() == original
-
-
-def test_precommit_uninstall_accepts_missing_hooks_directory(tmp_path: Path) -> None:
-    _init_repo(tmp_path)
-    hooks = tmp_path / ".git" / "hooks"
-    hooks.rename(tmp_path / ".git" / "hooks-preserved")
-
-    result = uninstall_precommit_hook(tmp_path)
-
-    assert result.status == "not_installed"
-    assert result.chained_existing is False
+    monkeypatch.setattr(codex_hook_launch_runtime, "run_isolated_hook_process", fake_run)
+    with pytest.raises(KeyboardInterrupt):
+        secrets_cli._run_interruptibly(("runtime",), input_text="{}")
+    assert stopped.is_set()

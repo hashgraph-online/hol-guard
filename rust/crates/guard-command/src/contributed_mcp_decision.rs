@@ -1,4 +1,4 @@
-//! Port of `apply_contributed_mcp_decision` (`runtime/mcp_server_grants.py`).
+//! Port of the former Python `apply_contributed_mcp_decision` (deleted with `runtime/mcp_server_grants.py`).
 //!
 //! A catalog MCP contribution can tighten a live `tools/call` (block or
 //! review) or, only for a reviewed package launcher, relax it to allow. The

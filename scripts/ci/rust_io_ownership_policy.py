@@ -50,6 +50,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_runtime.py",
         # Per-request status reuse. stat() only rechecks the validated binary.
         "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
+        # Process-wide verified status reuse; stat() fingerprints gate every hit.
+        "src/codex_plugin_scanner/guard/native_runtime_process_cache.py",
         # Extracted binary identity validation; no command or policy semantics.
         "src/codex_plugin_scanner/guard/native_binary_identity.py",
         "src/codex_plugin_scanner/guard/native_context.py",
@@ -103,6 +105,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        "src/codex_plugin_scanner/guard/native_protect_request.py",
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
@@ -178,6 +181,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Decodes the bounded resident install-time protect envelope.
+        "src/codex_plugin_scanner/guard/native_protect_request.py",
         # Decodes the bounded resident MCP tool-policy envelope; the decision
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",

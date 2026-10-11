@@ -9,7 +9,7 @@ import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
-from codex_plugin_scanner.guard.local_cli_trust import matching_local_mcp_grant, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_extension_driver import matching_local_mcp_grant
 
 
 def _clean_npx() -> str | None:

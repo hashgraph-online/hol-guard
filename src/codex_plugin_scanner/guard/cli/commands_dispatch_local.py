@@ -348,21 +348,39 @@ def _run_guard_protect_command(
         _emit("protect", payload, getattr(args, "json", False))
         return 0
     protect_workspace = workspace or Path.cwd()
+    from ..native_protect_request import NativeProtectRequestError
+
+    def _emit_protect_resident_failure(error: NativeProtectRequestError) -> int:
+        code = str(error).strip() or "native_protect_request_unavailable"
+        _emit(
+            "protect",
+            {
+                "policy_action": "block",
+                "exit_code": 1,
+                "error": {"code": code, "status": "native_protect_request_failed"},
+                "verdict": {"action": "block", "blocking": True, "reason": code},
+            },
+            bool(getattr(args, "json", False)),
+        )
+        return 1
 
     def current_protect_config() -> GuardConfig:
         local_config = load_guard_config(guard_home, workspace=protect_workspace)
         return overlay_synced_guard_policy(local_config, _synced_policy_payload(store))
 
-    payload, exit_code = build_protect_payload(
-        command=protect_command,
-        store=store,
-        workspace_dir=protect_workspace,
-        dry_run=bool(getattr(args, "dry_run", False)),
-        now=_now(),
-        config=config,
-        current_config_provider=current_protect_config,
-        unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
-    )
+    try:
+        payload, exit_code = build_protect_payload(
+            command=protect_command,
+            store=store,
+            workspace_dir=protect_workspace,
+            dry_run=bool(getattr(args, "dry_run", False)),
+            now=_now(),
+            config=config,
+            current_config_provider=current_protect_config,
+            unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+        )
+    except NativeProtectRequestError as error:
+        return _emit_protect_resident_failure(error)
     _queue_local_protect_approvals(
         payload,
         store=store,
@@ -404,16 +422,19 @@ def _run_guard_protect_command(
                 str(item.get("resolution_action")) == "block" for item in resolved_items
             ):
                 initial_payload = payload
-                fresh_payload, fresh_exit_code = build_protect_payload(
-                    command=protect_command,
-                    store=store,
-                    workspace_dir=protect_workspace,
-                    dry_run=bool(getattr(args, "dry_run", False)),
-                    now=_now(),
-                    config=current_protect_config(),
-                    current_config_provider=current_protect_config,
-                    unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
-                )
+                try:
+                    fresh_payload, fresh_exit_code = build_protect_payload(
+                        command=protect_command,
+                        store=store,
+                        workspace_dir=protect_workspace,
+                        dry_run=bool(getattr(args, "dry_run", False)),
+                        now=_now(),
+                        config=current_protect_config(),
+                        current_config_provider=current_protect_config,
+                        unsafe_raw_output=bool(getattr(args, "unsafe_raw_output", False)),
+                    )
+                except NativeProtectRequestError as error:
+                    return _emit_protect_resident_failure(error)
                 if fresh_exit_code == 0:
                     payload, exit_code = fresh_payload, fresh_exit_code
                 elif _package_shim_approval_matches_fresh_request(initial_payload, fresh_payload):

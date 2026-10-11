@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.local_cli_trust import apply_local_mcp_extension_decision, utc_now
+from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     build_tool_call_hash,
@@ -34,7 +34,12 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
+from .local_cli_native_fixture import (  # noqa: F401
+    ensure_keyed_home,
+    native_local_cli_grant_resident,
+    native_test_guard_home,
+)
+from .mcp_extension_driver import apply_local_mcp_extension_decision
 
 _CATALOG_ID = "command.mcp-mail-server"
 _DELETE_TOOLS = ("delete_message", "delete_messages")
@@ -411,14 +416,8 @@ def test_offline_unreviewed_launch_retains_host_policy(
     arguments: dict[str, object],
 ) -> None:
     """Exercise native identity and final tool evaluation without invoking mail."""
-    # No grants are enrolled here; an unkeyed home must not trip the shared resident.
-    from codex_plugin_scanner.guard import local_mcp_grant_decision
-    from codex_plugin_scanner.guard.native_local_mcp_grant import NativeLocalMcpGrant
-
-    monkeypatch.setattr(
-        local_mcp_grant_decision, "native_local_mcp_grant", lambda **_: NativeLocalMcpGrant("none", None, None)
-    )
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=tmp_path / "workspace", mode="prompt")
+    ensure_keyed_home(config.guard_home)
     store = GuardStore(config.guard_home)
     artifact = _artifact(tool, command=command, args=args, env=env)
     artifact_hash = build_tool_call_hash(artifact, arguments, workspace=config.workspace, config=config)

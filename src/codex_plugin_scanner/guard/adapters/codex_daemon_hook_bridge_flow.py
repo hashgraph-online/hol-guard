@@ -18,12 +18,14 @@ from .codex_daemon_dead_fastpath import (
     NATIVE_RUNTIME_DEAD_REASON_CODE,
     clear_start_failure,
     daemon_provably_dead,
+    daemon_start_in_progress,
     native_runtime_refused,
     record_start_failure,
     should_fail_fast,
 )
 from .codex_daemon_hook_auth import _DaemonResponseError
 from .codex_daemon_hook_transport import _daemon_response_once, _DaemonGenerationChangedError
+from .codex_daemon_start_wait import await_started_daemon
 
 _DAEMON_START_TIMEOUT_SECONDS = 8
 _DAEMON_RPC_TIMEOUT_SECONDS = 4.0
@@ -223,8 +225,9 @@ def bridge_review_response(
         daemon_overloaded = _authenticated_daemon_overload(error)
         if native_refused(error):
             return None, False, False
-        if not daemon_overloaded and should_fail_fast(state_path):
+        if not daemon_overloaded and should_fail_fast(state_path) and not daemon_start_in_progress(state_path):
             # A launch already failed to start the daemon: deny now, name the fix.
+            # A newer start marker is a recovery, so the wait still gets its turn.
             _record_failure(failure_causes, "daemon_dead_fast", DEAD_DAEMON_REASON_CODE)
             return None, False, False
         if _transient_overload(error) is not None:
@@ -243,7 +246,8 @@ def bridge_review_response(
             failure_causes=failure_causes,
             deadline_monotonic=deadline,
         )
-        if _daemon_start_succeeded(
+        start_attempted = not daemon_overloaded and response is None
+        started = _daemon_start_succeeded(
             daemon_overloaded=daemon_overloaded,
             response=response,
             trusted_launch=trusted_launch,
@@ -251,9 +255,31 @@ def bridge_review_response(
             start_command=start_command,
             deadline=deadline,
             failure_kind=_daemon_failure_kind(error),
-        ):
+        )
+        if start_attempted and not launch_integrity_failed:
+            wait_stop_at = deadline - _FALLBACK_TIMEOUT_SECONDS
+
+            def wait_daemon_request() -> dict[str, object] | None:
+                # Cap this poll at the time left before the fallback's slice.
+                remaining = wait_stop_at - time.monotonic()
+                if remaining <= 0:
+                    raise TimeoutError("daemon_start_wait_expired")
+                return _daemon_response(
+                    state_path=state_path,
+                    query=query,
+                    data=data,
+                    timeout_seconds=min(remaining, rpc_cap),
+                )
+
             try:
-                response = daemon_request()
+                response = await_started_daemon(
+                    state_path=state_path,
+                    stop_at=wait_stop_at,
+                    first_request=daemon_request,
+                    request=wait_daemon_request,
+                    started=started,
+                    failure_reason=_daemon_failure_reason,
+                )
             except (OSError, ValueError, http.client.HTTPException, urllib.error.URLError) as retry_error:
                 _record_failure(failure_causes, "daemon_retry", _daemon_failure_reason(retry_error))
                 if native_refused(retry_error):
@@ -282,7 +308,12 @@ def bridge_review_response(
             data=data,
             deadline=deadline,
         )
-        if response is None and not launch_integrity_failed and daemon_provably_dead(state_path):
+        if (
+            response is None
+            and not launch_integrity_failed
+            and daemon_provably_dead(state_path)
+            and not daemon_start_in_progress(state_path)
+        ):
             record_start_failure(state_path)
             # The first denial names the same fix as every later fast-path denial.
             if failure_causes is not None:

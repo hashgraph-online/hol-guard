@@ -5,8 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from .hook_fail_closed import fail_closed_response
-
 # Native review covers tool events and supported prompt callbacks. Other
 # lifecycle events remain inventory-only: failing them closed freezes a turn
 # without adding enforcement. Unreviewable prompts pause protected hosts;
@@ -145,6 +143,8 @@ def availability_harness_response(
     """
 
     del payload, workspace, home_dir, guard_home, recording_only
+    from .hook_fail_closed import fail_closed_response
+
     return fail_closed_response(
         harness, event_name, reason=reason, reason_code=reason_code, prompt_reason=prompt_reason
     )

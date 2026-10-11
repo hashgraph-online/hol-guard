@@ -221,8 +221,9 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
     assert store.read_local_cli_command_states(tool.identity.cli_id)[tool.command_id] == "allow"
     assert native_observed_mcp_tool_actions(store) == {"codex:" + tool.qualified_name: "allow"}
     assert store.read_local_cli_revision() == 1
-    from codex_plugin_scanner.guard.local_cli_trust import matching_local_mcp_grant
     from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+
+    from .mcp_extension_driver import matching_local_mcp_grant
 
     def artifact(name: str):
         return build_tool_call_artifact(

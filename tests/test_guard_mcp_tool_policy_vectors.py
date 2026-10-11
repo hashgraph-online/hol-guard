@@ -18,7 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import local_cli_trust, native_mcp_tool_policy
+from codex_plugin_scanner.guard import native_mcp_tool_policy
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     ToolCallDecision,
@@ -165,6 +165,26 @@ def _expected_view(decision: ToolCallDecision) -> dict[str, object]:
     }
 
 
+def _replay_extension_needs(monkeypatch, store: _ReplayStore) -> None:
+    """Send no in-process extension input so Rust still asks the recorded extension_decision need."""
+    real_subject = native_mcp_tool_policy._subject
+
+    def subject(*args, **kwargs):
+        built = real_subject(*args, **kwargs)
+        built.pop("extension")
+        return built
+
+    monkeypatch.setattr(native_mcp_tool_policy, "_subject", subject)
+    real_run = native_mcp_tool_policy._Effects.run
+
+    def run(self, need):
+        if need.get("kind") == "extension_decision":
+            return store._serve(need)
+        return real_run(self, need)
+
+    monkeypatch.setattr(native_mcp_tool_policy._Effects, "run", run)
+
+
 @pytest.mark.parametrize("vector", _VECTORS, ids=[item["name"] for item in _VECTORS])
 def test_resident_reproduces_recorded_python_decision(vector, monkeypatch, native_context_digest: Path) -> None:
     home = native_context_digest
@@ -187,11 +207,7 @@ def test_resident_reproduces_recorded_python_decision(vector, monkeypatch, nativ
         provided.append(authority)
         return authority
 
-    def extension(_store, _artifact, action):
-        result = store._serve({"kind": "extension_decision", "action": action})
-        return None if result is None else (result["action"], result["source"], result["summary"])
-
-    monkeypatch.setattr(local_cli_trust, "apply_local_mcp_extension_decision", extension)
+    _replay_extension_needs(monkeypatch, store)
     sent: list[list[dict[str, object]]] = []
     real_round_trip = native_mcp_tool_policy._round_trip
 
@@ -240,13 +256,7 @@ def test_uncertain_claim_is_terminal_and_never_retried(monkeypatch, native_conte
         return original(decision)
 
     store.claim_approval_reuse_decision = counted  # type: ignore[method-assign]
-    monkeypatch.setattr(
-        local_cli_trust,
-        "apply_local_mcp_extension_decision",
-        lambda _s, _a, action: (lambda r: None if r is None else (r["action"], r["source"], r["summary"]))(
-            store._serve({"kind": "extension_decision", "action": action})
-        ),
-    )
+    _replay_extension_needs(monkeypatch, store)
     decision = evaluate_tool_call(
         store=store,  # type: ignore[arg-type]
         config=config,
@@ -273,7 +283,7 @@ def test_storage_read_failure_fails_closed(monkeypatch, native_context_digest: P
         raise RuntimeError("storage read failed")
 
     store.resolve_policy_decision_lookup_with_memory_pattern = boom  # type: ignore[method-assign]
-    monkeypatch.setattr(local_cli_trust, "apply_local_mcp_extension_decision", lambda *_a: None)
+    _replay_extension_needs(monkeypatch, store)
     with pytest.raises(RuntimeError, match="storage read failed"):
         evaluate_tool_call(
             store=store,  # type: ignore[arg-type]
@@ -307,8 +317,6 @@ class _ScopeStore:
 @pytest.mark.parametrize(
     "need",
     [
-        {"kind": "extension_decision"},
-        {"kind": "extension_decision", "action": 3},
         {"kind": "grant_lookup", "harness": "codex"},
         {"kind": "policy_lookup", "harness": "codex", "artifact_id": "a", "artifact_hash": "h"},
         {"kind": "reuse_diagnostic", "harness": "codex", "artifact_id": 1, "artifact_hash": "h"},
@@ -317,7 +325,7 @@ class _ScopeStore:
     ],
 )
 def test_malformed_need_fails_closed_with_typed_error(need) -> None:
-    effects = native_mcp_tool_policy._Effects(_ScopeStore(), artifact=None)  # type: ignore[arg-type]
+    effects = native_mcp_tool_policy._Effects(_ScopeStore())  # type: ignore[arg-type]
     try:
         with pytest.raises(native_mcp_tool_policy.NativeMcpToolPolicyError) as raised:
             effects.run(need)
@@ -327,7 +335,7 @@ def test_malformed_need_fails_closed_with_typed_error(need) -> None:
 
 
 def test_unknown_need_kind_is_rejected() -> None:
-    effects = native_mcp_tool_policy._Effects(_ScopeStore(), artifact=None)  # type: ignore[arg-type]
+    effects = native_mcp_tool_policy._Effects(_ScopeStore())  # type: ignore[arg-type]
     try:
         with pytest.raises(native_mcp_tool_policy.NativeMcpToolPolicyError) as raised:
             effects.run({"kind": "bogus"})
@@ -338,7 +346,7 @@ def test_unknown_need_kind_is_rejected() -> None:
 
 def test_fatal_claim_failure_reaches_storage_recovery() -> None:
     failure = sqlite3.DatabaseError("database disk image is malformed")
-    effects = native_mcp_tool_policy._Effects(_ScopeStore(failure), artifact=None)  # type: ignore[arg-type]
+    effects = native_mcp_tool_policy._Effects(_ScopeStore(failure))  # type: ignore[arg-type]
     assert effects.run({"kind": "claim", "decision": {"action": "allow"}}) == {"outcome": "uncertain"}
     with pytest.raises(sqlite3.DatabaseError) as raised:
         effects.close()

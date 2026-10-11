@@ -10,6 +10,8 @@ import pytest
 
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
+from codex_plugin_scanner.guard import supply_chain_workspace_audit as workspace_audit_module
 from codex_plugin_scanner.guard.runtime.runner import GuardSyncAuthorizationExpiredError
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.support.network import stub_authenticated_urlopen
@@ -127,7 +129,7 @@ def test_cloud_workspace_audit_renews_dpop_proof_for_each_page(monkeypatch: pyte
     monkeypatch.setattr(runner, "_guard_sync_headers", _fake_guard_sync_headers)
     stub_authenticated_urlopen(monkeypatch, _fake_urlopen)
 
-    response, fallback = local_supply_chain_module._run_cloud_workspace_audit(
+    response, fallback = cloud_audit_module._run_cloud_workspace_audit(
         auth_context={
             "access_token": "token",
             "sync_url": "https://guard.example/api/guard/receipts/sync",
@@ -258,7 +260,7 @@ def test_guard_supply_chain_scan_uses_cloud_batch_for_premium_workspaces(
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -455,7 +457,7 @@ def test_guard_supply_chain_audit_alias_accepts_sbom_input(
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -493,7 +495,7 @@ def test_guard_supply_chain_scan_falls_back_locally_when_cloud_audit_fails(
     _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
 
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (
             None,
@@ -580,7 +582,7 @@ def test_guard_supply_chain_audit_payload_excludes_source_snippets(
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -614,7 +616,7 @@ def test_guard_supply_chain_audit_ci_fail_on_high_returns_distinct_exit_code(
     _seed_premium_pairing(store, now="2026-05-25T10:00:00+00:00")
 
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (
             {
@@ -703,7 +705,7 @@ def test_guard_supply_chain_audit_before_after_limits_inventory_to_changed_depen
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -778,7 +780,7 @@ def test_guard_supply_chain_audit_handles_large_workspace_and_prioritizes_findin
             None,
         )
 
-    monkeypatch.setattr(local_supply_chain_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
+    monkeypatch.setattr(cloud_audit_module, "_run_cloud_workspace_audit", _fake_cloud_audit)
 
     rc = main(
         [
@@ -905,7 +907,7 @@ def test_run_cloud_workspace_audit_falls_back_after_page_limit(monkeypatch: pyte
         ),
     )
 
-    response, fallback_reason = local_supply_chain_module._run_cloud_workspace_audit(
+    response, fallback_reason = cloud_audit_module._run_cloud_workspace_audit(
         request_payload={
             "commandShape": {
                 "argCount": 3,
@@ -1033,7 +1035,7 @@ def test_audit_receipt_metadata_enriches_cloud_advisory_aliases_from_bundle(
         "manifest_paths": ["package.json"],
         "lockfile_paths": ["package-lock.json"],
     }
-    metadata = local_supply_chain_module.audit_receipt_metadata(payload, store=store)
+    metadata = workspace_audit_module.audit_receipt_metadata(payload, store=store)
     findings = metadata["scanner_evidence"]["package_findings"]
     assert findings
     aliases = findings[0].get("advisoryAliases")

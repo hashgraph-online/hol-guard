@@ -156,3 +156,48 @@ fn constant_eval_proof_carries_no_execution_risk() {
         vec!["execution"]
     );
 }
+
+#[test]
+fn constant_eval_mcp_tool_needs_no_publisher_identity() {
+    let payload = json!({
+        "tool_name": "mcp__node_repl__js",
+        "tool_input": {"code": "1+1", "timeout_ms": 1000, "title": "calc"}
+    });
+    let mut proven = generic_result("allow");
+    proven.action.harness = "zcode".into();
+    proven.action.action_type = PreToolActionTypeV1::McpTool;
+    proven.action.operation = PreToolOperationV1::Call;
+    proven.reason_code = "native_pure_constant_eval".into();
+    let allowed =
+        apply_pre_tool_policy(&snapshot(policy("allow")), &payload, proven.clone()).unwrap();
+    assert_eq!(allowed.decision, "allow");
+    assert_eq!(allowed.reason_code, "native_pure_constant_eval");
+
+    let mut unproven = proven;
+    unproven.reason_code = "native_test".into();
+    let reviewed = apply_pre_tool_policy(&snapshot(policy("allow")), &payload, unproven).unwrap();
+    assert_eq!(reviewed.decision, "deny");
+    assert_eq!(reviewed.reason_code, "native_policy_review_required");
+}
+
+#[test]
+fn constant_eval_with_an_object_publisher_keeps_the_unknown_publisher_floor() {
+    for key in ["publisher", "artifact"] {
+        let payload = json!({
+            "tool_name": "mcp__node_repl__js",
+            "tool_input": {"code": "1+1", "timeout_ms": 1000, "title": "calc"},
+            key: {"name": "unverified"}
+        });
+        let mut proven = generic_result("allow");
+        proven.action.harness = "zcode".into();
+        proven.action.action_type = PreToolActionTypeV1::McpTool;
+        proven.action.operation = PreToolOperationV1::Call;
+        proven.reason_code = "native_pure_constant_eval".into();
+        let reviewed = apply_pre_tool_policy(&snapshot(policy("allow")), &payload, proven).unwrap();
+        assert_eq!(reviewed.decision, "deny", "{key}");
+        assert_eq!(
+            reviewed.reason_code, "native_policy_review_required",
+            "{key}"
+        );
+    }
+}

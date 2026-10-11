@@ -58,7 +58,10 @@ pub(crate) fn git_route_within_workspace(target: &str, context: super::PathConte
 /// repository, so neither the home directory itself nor a symlinked or
 /// forged repository qualifies. The Git configuration probe still runs
 /// against the `-C` target and rejects executable helpers.
-fn repository_below_home(target: &std::path::Path, context: super::PathContext<'_>) -> bool {
+pub(in crate::pretool) fn repository_below_home(
+    target: &std::path::Path,
+    context: super::PathContext<'_>,
+) -> bool {
     let Some(home) = context
         .home_dir
         .and_then(|home| std::fs::canonicalize(home).ok())

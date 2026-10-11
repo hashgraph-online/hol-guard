@@ -8,17 +8,19 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
+from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.local_supply_chain import (
-    audit_receipt_metadata,
-    build_workspace_audit_payload,
     evaluate_package_request_artifact,
     managed_install_audit_workspace_dirs,
-    resolve_supply_chain_audit_workspace_dir,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.supply_chain_workspace_audit import (
+    audit_receipt_metadata,
+    build_workspace_audit_payload,
+    resolve_supply_chain_audit_workspace_dir,
+)
 from tests.daemon_control_patching import patch_daemon_global
 from tests.native_workspace import bind_workspace
 from tests.test_guard_headless_daemon_api import (
@@ -440,7 +442,7 @@ def test_daemon_workspace_audit_uses_managed_install_workspace_when_cwd_is_not_a
     store.set_managed_install("codex", True, str(workspace_dir), {}, WORKSPACE_AUDIT_NOW)
     _seed_premium_entitlement(store)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )
@@ -602,7 +604,7 @@ def test_daemon_workspace_audit_persists_receipt_and_queues_cloud_sync(
     store = GuardStore(tmp_path / "guard-home")
     _seed_premium_entitlement(store)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )
@@ -704,7 +706,7 @@ def test_daemon_workspace_audit_accepts_an_explicit_project_folder(
     store = GuardStore(tmp_path / "guard-home")
     _seed_premium_entitlement(store)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )

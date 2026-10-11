@@ -18,6 +18,7 @@ import pytest
 from codex_plugin_scanner.guard import local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard import package_firewall_entitlement as package_firewall_entitlement_module
 from codex_plugin_scanner.guard import store as guard_store_module
+from codex_plugin_scanner.guard import supply_chain_cloud_audit as cloud_audit_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.approval_gate import update_settings as update_approval_gate_settings
 from codex_plugin_scanner.guard.cli.connect_flow import GuardOAuthTokenExchangeResult
@@ -1693,7 +1694,7 @@ def test_supply_chain_audit_scans_workspace_manifests(
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     monkeypatch.setattr(
-        local_supply_chain_module,
+        cloud_audit_module,
         "_run_cloud_workspace_audit",
         lambda **_kwargs: (None, {"code": "cloud_timeout", "message": "Cloud unavailable."}),
     )

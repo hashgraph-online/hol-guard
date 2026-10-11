@@ -11,6 +11,8 @@ mod approval_reuse;
 pub use approval_reuse::*;
 mod github_cli_classify;
 pub use github_cli_classify::*;
+mod protect_request;
+pub use protect_request::*;
 mod git_execution_safety;
 pub use git_execution_safety::*;
 mod compound_git_inspection;
