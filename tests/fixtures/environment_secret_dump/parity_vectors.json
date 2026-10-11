@@ -203,6 +203,22 @@
       "matched": true
     },
     {
+      "command": "printenv PR\u0130VATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv PR\u0131VATE_KEY",
+      "matched": true
+    },
+    {
+      "command": "printenv API_\u212aEY",
+      "matched": true
+    },
+    {
+      "command": "printenv 'TOKEN\u001c'",
+      "matched": true
+    },
+    {
       "command": "echo ${TOKEN}",
       "matched": true
     },
