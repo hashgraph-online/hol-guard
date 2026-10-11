@@ -17,9 +17,10 @@ __all__ = [
 def __getattr__(name: str) -> object:
     if name not in __all__:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-    runner = import_module(".runner", __name__)
-    if not hasattr(runner, name):
-        raise AttributeError(f"module {__name__!r} exports {name!r}, but runner does not define it")
-    value = getattr(runner, name)
+    module_name = ".wrapper_run" if name == "guard_run" else ".runner"
+    owner = import_module(module_name, __name__)
+    if not hasattr(owner, name):
+        raise AttributeError(f"module {__name__!r} exports {name!r}, but {module_name[1:]} does not define it")
+    value = getattr(owner, name)
     globals()[name] = value
     return value
