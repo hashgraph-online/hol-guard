@@ -290,8 +290,11 @@ pub static GROK_DECISION_HARNESSES: LazyLock<HashSet<&'static str>> =
     LazyLock::new(|| ["grok", "openclaw"].into_iter().collect());
 
 /// `_SILENT_WARNING_CODES` (:130) — shared with `hook_pretool_rendering`.
-pub static SILENT_WARNING_CODES: LazyLock<HashSet<&'static str>> =
-    LazyLock::new(|| ["native_policy_observed"].into_iter().collect());
+pub static SILENT_WARNING_CODES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    ["native_policy_observed", "native_policy_warning"]
+        .into_iter()
+        .collect()
+});
 
 /// `harness_json_from_native_pre_tool` (:133-138) — deferred rendering delegate.
 pub fn harness_json_from_native_pre_tool(

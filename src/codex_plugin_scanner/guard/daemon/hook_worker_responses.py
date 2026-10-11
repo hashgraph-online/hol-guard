@@ -84,7 +84,11 @@ def _canonical_hook_harness(harness: str) -> str:
 
 _GROK_DECISION_HARNESSES = frozenset({"grok", "openclaw"})
 
-_SILENT_WARNING_CODES = frozenset({"native_policy_observed"})
+# A native_policy_warning means Rust proved the action benign and only the
+# installed policy floor (warn by default) raised it. The receipt keeps the
+# warning; showing the same sentence on every proven read trains users to
+# ignore Guard, so it is not rendered to the harness.
+_SILENT_WARNING_CODES = frozenset({"native_policy_observed", "native_policy_warning"})
 
 
 def harness_json_from_native_pre_tool(harness: str, response: Mapping[str, object]) -> dict[str, object]:

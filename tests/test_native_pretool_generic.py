@@ -204,6 +204,41 @@ def test_generic_warning_result_is_allow_with_warning_and_renders_mechanically()
     hook_specific = rendered["hookSpecificOutput"]
     assert isinstance(hook_specific, dict)
     assert hook_specific["permissionDecision"] == "allow"
+    assert "permissionDecisionReason" not in hook_specific
+
+
+@pytest.mark.parametrize("harness", ["claude-code", "codex", "zcode", "omp", "pi", "grok"])
+def test_policy_floor_warning_on_proven_allow_is_silent(harness: str) -> None:
+    result = {
+        "decision": "allow",
+        "policy_action": "warn",
+        "minimum_action": "warn",
+        "reason_code": "native_policy_warning",
+        "reason": "HOL Guard raised a non-blocking warning under the installed native policy.",
+    }
+    rendered = harness_json_from_native_pre_tool(harness, result)
+    assert rendered["policy_action"] == "warn"
+    assert "notice" not in rendered
+    assert "reason" not in rendered
+    hook_specific = rendered.get("hookSpecificOutput", {})
+    assert isinstance(hook_specific, dict)
+    assert "permissionDecisionReason" not in hook_specific
+
+
+def test_intrinsic_warning_still_reaches_the_harness() -> None:
+    result = {
+        "decision": "allow",
+        "policy_action": "warn",
+        "minimum_action": "warn",
+        "reason_code": "native_risk_warning",
+        "reason": "HOL Guard noticed risk signals.",
+    }
+    omp = harness_json_from_native_pre_tool("omp", result)
+    assert omp["notice"] == "warning"
+    codex = harness_json_from_native_pre_tool("codex", result)
+    hook_specific = codex["hookSpecificOutput"]
+    assert isinstance(hook_specific, dict)
+    assert hook_specific["permissionDecisionReason"] == "HOL Guard noticed risk signals."
 
 
 def test_native_review_queues_approval_without_escaping_to_cli(
