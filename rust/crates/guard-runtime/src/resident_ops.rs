@@ -225,6 +225,9 @@ pub(crate) fn evaluate_resident_bytes(
                     &request,
                 )
             }
+            ResidentOperationV1::ApprovalScope(request) => {
+                crate::approval_scope_op::evaluate_approval_scope_request(&request)
+            }
             ResidentOperationV1::ApprovalResolutionPlan(request) => {
                 crate::approval_resolution_plan_op::evaluate_approval_resolution_plan_request(
                     &request,

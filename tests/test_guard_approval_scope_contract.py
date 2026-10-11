@@ -1094,10 +1094,10 @@ def test_raced_completed_replay_maps_scope_contract_errors(
     original_get = store.get_approval_request
     call_count = 0
 
-    def raced_get(request_id: str) -> dict[str, object] | None:
+    def raced_get(request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         nonlocal call_count
         call_count += 1
-        current = original_get(request_id)
+        current = original_get(request_id, derive_scope=derive_scope)
         if current is None:
             return None
         if call_count == 1:

@@ -98,7 +98,7 @@ def input_matches(tool: str, executed: dict, reviewed: dict) -> bool:
     return actual == enriched
 
 
-def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any]) -> bool:
+def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str, Any], result: Any = None) -> bool:
     """Bind resolved read paths without accepting a different target or read options."""
     if reviewed == completed:
         return True
@@ -111,6 +111,26 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     original, resolved = reviewed[key], completed[key]
     if not isinstance(original, str) or not isinstance(resolved, str):
         return False
+    selector = re.fullmatch(r"(.+):([1-9][0-9]*)(?:-([1-9][0-9]*))?", original)
+    if selector:
+        base, first, last = selector.groups()
+        if last is not None and int(last) < int(first):
+            return False
+        details = result.get("details") if isinstance(result, dict) else None
+        if not isinstance(details, dict):
+            return False
+        meta, display = details.get("meta"), details.get("displayContent")
+        source = meta.get("source") if isinstance(meta, dict) else None
+        if (
+            not isinstance(source, dict)
+            or source != {"type": "path", "value": resolved}
+            or not isinstance(display, dict)
+            or display.get("startLine") != int(first)
+        ):
+            return False
+        # The actual SDK result proves it resolved a selector rather than read
+        # a literal colon-named file. Guard alone cannot supply that proof.
+        original = base
     # Windows agents resolve with backslash separators. Accept them only when
     # the whole resolved path is in that form and the reviewed path has no
     # backslash, so a POSIX name containing one never matches a different file.
