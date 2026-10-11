@@ -14,6 +14,7 @@ def _page(items: list[dict[str, object]], next_offset: int | None) -> dict[str, 
         "lockfile_paths": [],
         "sbom_paths": [],
         "inventory": items,
+        "inventory_digest": "sha256:" + "ab" * 32,
         "next_offset": next_offset,
         "diff": None,
         "lockfile_warnings": [],
@@ -54,3 +55,5 @@ def test_relative_workspaces_are_sent_absolute_and_pages_are_joined(monkeypatch,
     assert str(sent[0]["before_workspace_dir"]).endswith("/rel-before")
     assert [item["name"] for item in inventory.inventory] == ["left-pad", "react"]
     assert sent[1]["inventory_offset"] == 1
+    assert sent[1]["inventory_digest"] == "sha256:" + "ab" * 32
+    assert "inventory_digest" not in sent[0]

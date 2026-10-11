@@ -19,7 +19,16 @@ from .native_package_approval_hash import _transport
 
 _INVENTORY_FEATURE = "workspace-inventory-v1"
 _PAYLOAD_KEYS = frozenset(
-    {"manifest_paths", "lockfile_paths", "sbom_paths", "inventory", "next_offset", "diff", "lockfile_warnings"}
+    {
+        "manifest_paths",
+        "lockfile_paths",
+        "sbom_paths",
+        "inventory",
+        "inventory_digest",
+        "next_offset",
+        "diff",
+        "lockfile_warnings",
+    }
 )
 _MAX_PAGES = 1024
 _ITEM_KEYS = ("ecosystem", "namespace", "name", "direct", "range", "version")
@@ -107,9 +116,13 @@ def native_workspace_inventory(
     first: dict[str, Any] | None = None
     items: list[object] = []
     offset = 0
+    digest: str | None = None
     for _ in range(_MAX_PAGES):
+        page_request = {**request, "inventory_offset": offset}
+        if digest is not None:
+            page_request["inventory_digest"] = digest
         payload = _transport(
-            {**request, "inventory_offset": offset},
+            page_request,
             guard_home,
             operation="workspace_inventory",
             feature=_INVENTORY_FEATURE,
@@ -119,10 +132,14 @@ def native_workspace_inventory(
             raise _invalid()
         page = payload["inventory"]
         next_offset = payload["next_offset"]
-        if not isinstance(page, list):
+        page_digest = payload["inventory_digest"]
+        if not isinstance(page, list) or not isinstance(page_digest, str) or not page_digest.startswith("sha256:"):
             raise _invalid()
-        if first is None:
+        if digest is None:
             first = payload
+            digest = page_digest
+        elif page_digest != digest:
+            raise _invalid()
         items.extend(page)
         if next_offset is None:
             break

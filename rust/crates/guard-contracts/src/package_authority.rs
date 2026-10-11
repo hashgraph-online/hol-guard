@@ -498,4 +498,8 @@ pub struct WorkspaceInventoryRequestV1 {
     /// large inventory is read as consecutive pages until `next_offset` is null.
     #[serde(default)]
     pub inventory_offset: usize,
+    /// Digest of the full inventory snapshot from page 1. Later pages must
+    /// echo it. A workspace that changed between pages is rejected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inventory_digest: Option<String>,
 }
