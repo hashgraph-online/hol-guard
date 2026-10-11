@@ -46,8 +46,8 @@ def test_installed_package_shim_stops_vitest_when_runner_evidence_is_missing(tmp
         lambda *args, **kwargs: _vitest_intent(workspace),
     )
     monkeypatch.setattr(
-        contained_node_execution,
-        "build_local_node_runner_evidence",
+        contained_node_execution._native_execution,
+        "contained_node_execute_native",
         lambda *args, **kwargs: None,
     )
 
@@ -74,8 +74,8 @@ def test_non_shim_vitest_returns_to_review_when_runner_evidence_is_missing(tmp_p
         lambda *args, **kwargs: _vitest_intent(workspace),
     )
     monkeypatch.setattr(
-        contained_node_execution,
-        "build_local_node_runner_evidence",
+        contained_node_execution._native_execution,
+        "contained_node_execute_native",
         lambda *args, **kwargs: None,
     )
 

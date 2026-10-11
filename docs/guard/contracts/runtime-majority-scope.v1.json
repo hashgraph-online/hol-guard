@@ -590,8 +590,6 @@
           "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
           "src/codex_plugin_scanner/guard/runtime/js_semver.py",
           "src/codex_plugin_scanner/guard/runtime/local_cli_compound.py",
-          "src/codex_plugin_scanner/guard/runtime/local_node_runner_evidence.py",
-          "src/codex_plugin_scanner/guard/runtime/local_node_runner_options.py",
           "src/codex_plugin_scanner/guard/runtime/lockfile_evaluation_support.py",
           "src/codex_plugin_scanner/guard/runtime/manifest_dependency_targets.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
@@ -602,10 +600,9 @@
           "src/codex_plugin_scanner/guard/runtime/oci_mount_security.py",
           "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
           "src/codex_plugin_scanner/guard/runtime/skill_paths.py",
-          "src/codex_plugin_scanner/guard/runtime/source_paths.py",
-          "src/codex_plugin_scanner/guard/runtime/typescript_snapshot_inputs.py"
+          "src/codex_plugin_scanner/guard/runtime/source_paths.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, local_node_runner_*, typescript_snapshot_inputs, contained_test_hook/wrapper, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, local_cli_compound, mcp_connection_identity, mcp_server_grants. Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, contained_test_hook/wrapper, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, local_cli_compound, mcp_connection_identity, mcp_server_grants. Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [

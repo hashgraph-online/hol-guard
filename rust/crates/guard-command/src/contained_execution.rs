@@ -3637,6 +3637,10 @@ fn _semantic_safe_relative(
     {
         return Err("workspace_path_protected".to_owned());
     }
+    if crate::shell_secret_read_support::classify_secret_path(raw, Some(workspace), None).is_some()
+    {
+        return Err("workspace_path_secret".to_owned());
+    }
     let candidate = workspace.join(rel);
     let parent = candidate
         .parent()
@@ -3656,6 +3660,9 @@ fn _semantic_safe_relative(
             }
             if must_exist && (!metadata.is_file() || metadata.nlink() != 1) {
                 return Err("workspace_input_not_regular".to_owned());
+            }
+            if must_exist && canonical != candidate {
+                return Err("workspace_path_alias".to_owned());
             }
             if !must_exist && !metadata.is_file() {
                 return Err("workspace_output_not_regular".to_owned());
@@ -4013,3 +4020,7 @@ pub fn try_execute_contained_workspace_write_semantic(
         output_digest: staged_output.map(|(_, digest)| digest),
     })
 }
+
+#[cfg(test)]
+#[path = "contained_safe_relative_tests.rs"]
+mod safe_relative_tests;
