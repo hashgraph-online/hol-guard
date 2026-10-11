@@ -1249,6 +1249,93 @@
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
       },
       {
+        "id": "supply-chain-bundle-sync-verification",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/runtime/supply_chain_bundle_runtime.py",
+        "symbols": [
+          "OfflineSupplyChainDecision",
+          "canonical_supply_chain_bundle_payload",
+          "payload_hash_for_supply_chain_bundle",
+          "load_supply_chain_bundle_response",
+          "check_supply_chain_bundle_freshness",
+          "check_supply_chain_bundle_rollback",
+          "_computed_key_fingerprint",
+          "_validate_key_fingerprints",
+          "_signing_key_is_trusted",
+          "verify_supply_chain_bundle_response",
+          "_package_identity_matches",
+          "_package_matches",
+          "_emergency_deny_identity_matches",
+          "_matching_emergency_deny_entries",
+          "_is_high_confidence_block",
+          "_blocking_bundle_reason",
+          "evaluate_cached_supply_chain_bundle"
+        ],
+        "entry_points": [],
+        "evidence": "Every excluded public symbol is called only from runtime/runner.py (cloud-sync-transport) and runtime/supply_chain_bundle.py, which only runner.py and runner_native_sync.py import; neither is in the runtime closure. load_supply_chain_verification_keys stays counted because policy_bundle_trusted_keys.py imports it. The report validates this reference closure on every run.",
+        "reason": "Cloud supply-chain bundle loading, signature and freshness checks, rollback checks and cached bundle evaluation. They run when Guard syncs the supply-chain bundle from Guard Cloud, not on a hook or proxy call."
+      },
+      {
+        "id": "approval-continuation-replay",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/continuation_runtime.py",
+        "symbols": [
+          "_CLAIM_LEASE_SECONDS",
+          "_run_store_continuation_plan",
+          "continue_request_after_application",
+          "_persist_attempt",
+          "_notify_manual_retry"
+        ],
+        "entry_points": [],
+        "evidence": "continue_request_after_application is called only from runtime/command_executors.py (cloud-command-queue), harness_resume.py (imported only by command_executors.py and daemon/local_approval_continuation.py) and daemon/local_approval_continuation.py (imported only by daemon/server_control_routes_post.py, daemon-control-plane-routes). None of these is in the runtime closure. continuation_offer_payload and record_live_hook_completion stay counted. The report validates this reference closure on every run.",
+        "reason": "Replay of an approved request after the approval is applied: claim lease, store continuation plan, persisted attempt and manual-retry notice. It runs from the cloud command queue and the local approval continuation route, after the hook call has already returned."
+      },
+      {
+        "id": "observed-mcp-tool-discovery-api",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/runtime/observed_mcp_tools.py",
+        "symbols": [
+          "MAX_OBSERVED_MCP_RECEIPTS",
+          "MAX_OBSERVED_MCP_SERVERS",
+          "MAX_OBSERVED_MCP_TOOLS",
+          "_receipt_tools",
+          "tools_from_receipts",
+          "_latest_seen_by_connector",
+          "discover_observed_mcp_tools"
+        ],
+        "entry_points": [],
+        "evidence": "discover_observed_mcp_tools is called only from daemon/local_cli_api.py (dashboard-control-api); tools_from_receipts and the receipt helpers are reached only through it. ObservedMcpTool, observed_mcp_tool and the native MCP tool action builders stay counted. The report validates this reference closure on every run.",
+        "reason": "Discovery of MCP tools observed in recent receipts for the dashboard's local CLI and MCP listing. It reads receipts on request from the dashboard API and returns a list; it makes no decision."
+      },
+      {
+        "id": "operator-cli-recognition-api",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
+        "symbols": [
+          "_SCRIPT_LAUNCHERS",
+          "recognize_operator_cli",
+          "local_cli_recognition_candidates",
+          "_recognition_candidates",
+          "_first_executable_name"
+        ],
+        "entry_points": [],
+        "evidence": "recognize_operator_cli and local_cli_recognition_candidates are called only from daemon/local_cli_api.py (dashboard-control-api); the excluded private helpers are reached only through them. identify_unlisted_cli, unlisted_cli_invocation_is_safe, is_local_cli_id and UnlistedCliIdentity stay counted. The report validates this reference closure on every run.",
+        "reason": "Recognition of operator-supplied CLI commands for the dashboard's local CLI registration flow."
+      },
+      {
+        "id": "package-firewall-entitlement-connect",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/package_firewall_entitlement.py",
+        "symbols": [
+          "build_oauth_package_firewall_entitlement",
+          "reconcile_connect_state_with_oauth_entitlement",
+          "package_firewall_operation_allowed"
+        ],
+        "entry_points": [],
+        "evidence": "build_oauth_package_firewall_entitlement and reconcile_connect_state_with_oauth_entitlement are called only from cli/connect_flow.py (install-uninstall-doctor), runtime/runner.py (cloud-sync-transport) and daemon/server_control_connect_flow.py; package_firewall_operation_allowed only from daemon/server_control_supply_chain.py (daemon-control-plane-routes). resolve_package_firewall_entitlement and the action-state helpers stay counted. The report validates this reference closure on every run.",
+        "reason": "Building and reconciling the OAuth package-firewall entitlement during connect and cloud sync, and the control API's operation gate."
+      },
+      {
         "id": "adapter-openclaw-setup",
         "category": "install_config",
         "path": "src/codex_plugin_scanner/guard/adapters/openclaw.py",
