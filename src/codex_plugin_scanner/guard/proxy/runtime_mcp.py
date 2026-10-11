@@ -79,7 +79,8 @@ from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
 from ..runtime.composio_contract import composio_requires_action_review
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
-from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
+from ..runtime.package_intent_common import build_package_request_artifact
+from ..runtime.package_intent_parser import extract_package_intent_request
 from ..runtime.signals import RiskSeverityLabel, RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
 from ..store import GuardStore

@@ -31,11 +31,11 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         .unwrap()
         .success());
     let original_path = std::env::var("PATH").unwrap();
-    let evaluate = |context: &GuardExecutionEnvironmentV1| {
+    let evaluate_command = |command: &str, context: &GuardExecutionEnvironmentV1| {
         evaluate_pre_tool_envelope_with_execution_context(
             "omp",
             "PreToolUse",
-            &json!({"tool_name":"bash", "tool_input":{"command":"git status --short"}}),
+            &json!({"tool_name":"bash", "tool_input":{"command":command}}),
             None,
             None,
             guard_command::pretool::PathContext {
@@ -46,6 +46,8 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             Some(context),
         )
     };
+    let evaluate =
+        |context: &GuardExecutionEnvironmentV1| evaluate_command("git status --short", context);
     let context = GuardExecutionEnvironmentV1 {
         path: original_path.clone(),
         environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
@@ -80,6 +82,38 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             evaluate(&overridden).minimum_action,
             "require-reapproval",
             "{name}"
+        );
+    }
+    // The execution context carries names and an opaque digest, not values.
+    // The config probe clears the environment, but an allowed `git` still
+    // runs in the caller environment, so a search path of `.` or an empty
+    // entry can load a library the probe never saw. Name-only search paths
+    // stay unproven.
+    for name in [
+        "LD_LIBRARY_PATH",
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_FRAMEWORK_PATH",
+        "DYLD_FALLBACK_FRAMEWORK_PATH",
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+    ] {
+        let mut loader = context.clone();
+        loader.environment_names.push(name.into());
+        assert_ne!(evaluate(&loader).decision, "allow", "{name}");
+    }
+    // A model-chosen search path on the command line is not the exported
+    // toolchain environment and still is not a proven Git read.
+    for command in [
+        "LD_LIBRARY_PATH=. git status --short",
+        "DYLD_LIBRARY_PATH=. git status --short",
+        "env LD_LIBRARY_PATH=. git status --short",
+    ] {
+        assert_ne!(
+            evaluate_command(command, &context).decision,
+            "allow",
+            "{command}"
         );
     }
     let caller_home = root.join("actual-caller-home");

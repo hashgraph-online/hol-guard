@@ -128,6 +128,11 @@ mod guard_store_cmd_rollups;
 mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
 mod guard_store_db;
+mod guard_store_inventory;
+#[cfg(test)]
+mod guard_store_inventory_page_tests;
+#[cfg(test)]
+mod guard_store_inventory_vectors_tests;
 mod guard_store_json;
 mod guard_store_lineage;
 mod guard_store_op;
@@ -282,6 +287,8 @@ mod supply_chain_egress;
 mod supply_chain_eval_seams;
 mod totp;
 mod workflow_capability_store;
+mod workspace_inventory_files;
+mod workspace_inventory_op;
 
 pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
 pub(crate) use resident_transport::{

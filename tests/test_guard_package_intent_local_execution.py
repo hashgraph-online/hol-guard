@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    PackageIntent,
+from codex_plugin_scanner.guard.runtime.package_intent_common import PackageIntent
+from codex_plugin_scanner.guard.runtime.package_intent_parser import (
     extract_package_intent_request,
     parse_package_intent,
 )
