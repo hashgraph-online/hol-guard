@@ -226,7 +226,8 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
     assert properties["sonar.tests"] == "tests,rust"
     assert properties["sonar.test.inclusions"] == (
         "**/test_*.py,rust/**/tests/**/*.rs,rust/**/*_tests.rs,"
-        "rust/crates/guard-command/testdata/generate_*_fixtures.py"
+        "rust/crates/guard-command/testdata/generate_*_fixtures.py,"
+        "rust/crates/guard-runtime/testdata/**/*.py"
     )
     assert properties["sonar.rust.cargo.manifestPaths"] == "rust/Cargo.toml"
     assert "src/codex_plugin_scanner/guard/daemon/static/**" in properties["sonar.exclusions"]

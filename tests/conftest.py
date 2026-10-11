@@ -13,6 +13,10 @@ import pytest
 
 from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
+from tests.home_isolation import isolate_user_home
+
+# Before any Guard module computes a default home or a test spawns a helper.
+isolate_user_home()
 
 pytest_plugins = [
     "tests.bundle_first_cloud",

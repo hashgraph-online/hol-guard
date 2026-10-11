@@ -37,6 +37,11 @@ EXACT_FIXTURES = (
     "sudo rm -rf /tmp/example",
     "sudo -n rm -rf /tmp/example",
     "sudo --non-interactive -- rm -rf /tmp/example",
+    # A literal shell-script invocation is an exact single command in both
+    # models (bounded script execution review is owned by the pre-tool
+    # authority, not by the structural parser), so parity must hold.
+    "bash ./script.sh",
+    "sh script.sh",
 )
 UNCERTAIN_FIXTURES = (
     "echo $(uname)",

@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Final
 
-SCHEMA: Final = "hol-guard-rust-pretool-no-python.v3"
+SCHEMA: Final = "hol-guard-rust-pretool-no-python.v4"
 
 
 def read(path: Path) -> str:
@@ -47,6 +47,25 @@ def function_calls(node: ast.AST) -> set[str]:
         elif isinstance(child.func, ast.Attribute):
             calls.add(child.func.attr)
     return calls
+
+
+def python_references(path: Path) -> set[str]:
+    """Names a module defines, imports, references or calls; comments and strings are ignored."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    names = function_calls(tree)
+    for child in ast.walk(tree):
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            names.add(child.name)
+        elif isinstance(child, (ast.Import, ast.ImportFrom)):
+            for alias in child.names:
+                names.add(alias.name.rsplit(".", 1)[-1])
+                if alias.asname:
+                    names.add(alias.asname)
+        elif isinstance(child, ast.Attribute):
+            names.add(child.attr)
+        elif isinstance(child, ast.Name):
+            names.add(child.id)
+    return names
 
 
 _TYPED_FAIL_SAFE = frozenset(
@@ -234,6 +253,16 @@ def _contract_failures(root: Path) -> list[str]:
             ("evaluate_pre_tool_envelope", "guard-pre-tool-result.v1"),
         ),
         (
+            # PostToolUse is decided by the same native edge: the Rust review,
+            # then the authenticated policy join, before any harness rendering.
+            root / "rust/crates/guard-hook-core/src/lib.rs",
+            ("pub fn review_post_tool",),
+        ),
+        (
+            root / "rust/crates/guard-runtime/src/edge.rs",
+            ("let native = review_post_tool(&request);", "apply_post_tool_policy"),
+        ),
+        (
             root / "rust/crates/guard-runtime/src/oneshot.rs",
             ("fn evaluate_pre_tool_bytes", "pre_tool_response", "evaluate_pre_tool_request"),
         ),
@@ -312,6 +341,17 @@ def _worker_failures(root: Path) -> list[str]:
     )
     if "_review_raw_hook_native" not in function_calls(native_edge_snapshot):
         failures.append("HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge")
+    # The resident renders the harness response for the edge decision; the
+    # worker returns that rendering instead of building PostToolUse output.
+    edge_calls = function_calls(native_edge_snapshot)
+    if "_edge_harness_response" not in edge_calls:
+        failures.append(
+            "HookWorkerNativeMixin._review_native_edge_with_snapshot does not return the native edge harness response"
+        )
+    if "harness_json_from_native_post_tool" in edge_calls:
+        failures.append("HookWorkerNativeMixin._review_native_edge_with_snapshot renders PostToolUse in Python")
+    if "review_post_tool" in python_references(native_hook) | python_references(hook_worker):
+        failures.append("worker decides PostToolUse in Python instead of the native edge")
     raw_edge_review = function_node(hook_worker, "_review_raw_hook_native", class_name="HookWorker")
     if "review_raw_hook_native" not in function_calls(raw_edge_review):
         failures.append("HookWorker._review_raw_hook_native does not invoke review_raw_hook_native")

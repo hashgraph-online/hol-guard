@@ -61,6 +61,7 @@ def test_registry_preserves_release_30_and_release_31() -> None:
         "refs/heads/release/2.2",
         "refs/heads/release/3.0",
         "refs/heads/release/3.1",
+        "refs/heads/main",
     )
     assert RELEASE_TRAINS["refs/heads/release/2.1"].version_prefix == "2.1.0"
     assert RELEASE_TRAINS["refs/heads/release/2.2"].version_prefix == "2.2.0"
@@ -149,7 +150,7 @@ def test_rejects_malformed_requested_version() -> None:
 @pytest.mark.parametrize(
     "git_ref",
     [
-        "refs/heads/main",
+        "refs/heads/develop",
         "refs/heads/release/2.3",
         "refs/tags/alpha/v2.1.0a1",
         "refs/pull/123/merge",
@@ -388,3 +389,109 @@ def test_cli_requires_sha_pair_for_stable_candidate(
     captured = capsys.readouterr()
     assert "Stable releases require --actual-ref, --github-sha, and --expected-sha" in captured.err
     assert "Traceback" not in captured.err
+
+
+def test_main_alpha_train_follows_the_minor_after_the_stable_base() -> None:
+    release = validate_release_train(
+        "3.43.0a2",
+        "refs/heads/main",
+        ReleaseChannel.ALPHA,
+        existing_versions=["3.42.0", "3.43.0a1", "3.1.0a13"],
+        actual_ref="refs/heads/main",
+        github_sha=GITHUB_SHA,
+        expected_sha=GITHUB_SHA,
+        base_version="3.42.0",
+    )
+
+    assert release.version == "3.43.0a2"
+    assert release.source_ref == "refs/heads/main"
+
+
+@pytest.mark.parametrize(
+    ("version", "message"),
+    [
+        ("3.42.1a1", "exact release train"),
+        ("3.44.0a1", "exact release train"),
+        ("3.43.0", "exact release train"),
+        ("3.43.0rc1", "exact release train"),
+        ("3.43.0a1", "must be newer"),
+    ],
+)
+def test_main_alpha_train_rejects_versions_outside_the_next_minor(version: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        _ = validate_release_train(
+            version,
+            "refs/heads/main",
+            ReleaseChannel.ALPHA,
+            existing_versions=["3.43.0a2"],
+            base_version="3.42.0",
+        )
+
+
+@pytest.mark.parametrize("closing", ["3.43.0", "3.43.0rc1", "3.43.0.post1"])
+def test_main_alpha_train_is_closed_once_the_next_minor_ships(closing: str) -> None:
+    with pytest.raises(ValueError, match=f"Existing release {closing} closes the 3.43.0 alpha train"):
+        _ = validate_release_train(
+            "3.43.0a2",
+            "refs/heads/main",
+            ReleaseChannel.ALPHA,
+            existing_versions=["3.43.0a1", closing],
+            base_version="3.42.0",
+        )
+
+
+def test_main_alpha_train_requires_a_canonical_stable_base() -> None:
+    with pytest.raises(ValueError, match="require --base-version"):
+        _ = validate_release_train("3.43.0a1", "refs/heads/main", ReleaseChannel.ALPHA)
+    with pytest.raises(ValueError, match="canonical stable"):
+        _ = validate_release_train("3.43.0a1", "refs/heads/main", ReleaseChannel.ALPHA, base_version="3.42.0a1")
+
+
+def test_main_stable_releases_stay_on_the_release_please_path() -> None:
+    with pytest.raises(ValueError, match="Release Please"):
+        _ = validate_release_train(
+            "3.43.0",
+            "refs/heads/main",
+            ReleaseChannel.STABLE,
+            actual_ref="refs/tags/v3.43.0",
+            github_sha=GITHUB_SHA,
+            expected_sha=GITHUB_SHA,
+            base_version="3.42.0",
+        )
+
+
+def test_main_alpha_train_requires_the_main_source_ref() -> None:
+    with pytest.raises(ValueError, match="source ref refs/heads/main"):
+        _ = validate_release_train(
+            "3.43.0a1",
+            "refs/heads/main",
+            ReleaseChannel.ALPHA,
+            actual_ref="refs/heads/feature",
+            base_version="3.42.0",
+        )
+
+
+def test_cli_validates_main_alpha_with_base_version(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_alpha_release.py",
+            "--version",
+            "3.43.0a1",
+            "--git-ref",
+            "refs/heads/main",
+            "--actual-ref",
+            "refs/heads/main",
+            "--base-version",
+            "3.42.0",
+            "--existing-version",
+            "3.42.0",
+        ],
+    )
+
+    assert main() == 0
+    assert capsys.readouterr().out == "3.43.0a1\n"

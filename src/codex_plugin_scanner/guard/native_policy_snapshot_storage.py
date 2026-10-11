@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hmac
 import os
 import secrets
 import stat
@@ -117,17 +116,15 @@ def _read_v3_snapshot_file(
         if verifier_key is None:
             raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
         return _authority_snapshot_v3(value, payload, verifier_key), payload
-    api._validate_snapshot_v3(value)
+    if verifier_key is None:
+        # The hook-side read authenticates by MAC only; unauthenticated content
+        # is never accepted and Python does not re-validate resident content.
+        raise NativePolicySnapshotError("native_policy_snapshot_cache_invalid")
     canonical = api.snapshot_bytes_v3(value)
     if canonical != payload:
         raise NativePolicySnapshotError("native_policy_snapshot_cache_noncanonical")
-    if verifier_key is not None:
-        integrity = value.get("integrity")
-        if not isinstance(integrity, Mapping) or not hmac.compare_digest(
-            cast(str, integrity.get("mac")),
-            api._snapshot_integrity_mac_v3(value, verifier_key),
-        ):
-            raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
+    if not api.snapshot_mac_matches_v3(value, verifier_key):
+        raise NativePolicySnapshotError("native_policy_snapshot_cache_integrity_invalid")
     return cast(dict[str, object], value), payload
 
 

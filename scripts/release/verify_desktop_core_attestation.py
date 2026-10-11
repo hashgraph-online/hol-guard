@@ -88,6 +88,20 @@ def _require_token(value: object, *, label: str) -> str:
     return value
 
 
+_ALPHA_SOURCE_TAG = re.compile(r"^alpha/v3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a[1-9][0-9]*\Z")
+
+
+def _require_source_tag(source_tag: object, *, version: str, channel: str) -> str:
+    """Stable tags stay plain tokens; an alpha tag is exactly alpha/v<version> and may contain one slash."""
+    if channel == "alpha":
+        if not isinstance(source_tag, str) or _ALPHA_SOURCE_TAG.fullmatch(source_tag) is None:
+            raise DesktopAttestationError("source tag is not an alpha release tag")
+        if source_tag != f"alpha/v{version}":
+            raise DesktopAttestationError("alpha source tag does not match the release version")
+        return source_tag
+    return _require_token(source_tag, label="source tag")
+
+
 def _require_signing_identity(value: object, *, label: str) -> str:
     if not isinstance(value, str) or _SIGNING_IDENTITY.fullmatch(value) is None:
         raise DesktopAttestationError(f"{label} is not a bounded signing identity")
@@ -104,20 +118,23 @@ def verify(
     source_tag: str,
     target: str,
     expected_team_id: str,
+    channel: str = "stable",
 ) -> dict[str, object]:
     """Verify the post-sign bytes and return a privacy-safe evidence record."""
 
     _regular_file(binary, label="Desktop Core binary", maximum=_MAX_BINARY_BYTES)
     manifest_payload = _json(manifest, label="Desktop Core manifest")
     marker_payload = _json(marker, label="Desktop Core attestation marker")
+    if channel not in {"stable", "alpha"}:
+        raise DesktopAttestationError("release channel must be stable or alpha")
     _require_token(version, label="release version")
-    _require_token(source_tag, label="source tag")
+    _require_source_tag(source_tag, version=version, channel=channel)
     _require_token(target, label="release target")
     if not _SHA40.fullmatch(source_commit):
         raise DesktopAttestationError("source commit must be a full lowercase Git SHA")
     expected_manifest: Mapping[str, object] = {
         "schema": _MANIFEST_SCHEMA,
-        "channel": "stable",
+        "channel": channel,
         "version": version,
         "sourceCommit": source_commit,
         "sourceTag": source_tag,
@@ -352,14 +369,17 @@ def verify_archive(
     source_tag: str,
     target: str,
     expected_team_id: str,
+    channel: str = "stable",
 ) -> dict[str, object]:
     """Verify a signed onedir zip, its v2 manifest, and the attestation marker."""
 
     _regular_file(archive, label="Desktop Core onedir archive", maximum=_MAX_BINARY_BYTES)
     manifest_payload = _json(manifest, label="Desktop Core onedir manifest")
     marker_payload = _json(marker, label="Desktop Core onedir attestation marker")
+    if channel not in {"stable", "alpha"}:
+        raise DesktopAttestationError("release channel must be stable or alpha")
     _require_token(version, label="release version")
-    _require_token(source_tag, label="source tag")
+    _require_source_tag(source_tag, version=version, channel=channel)
     _require_token(target, label="release target")
     if not _SHA40.fullmatch(source_commit):
         raise DesktopAttestationError("source commit must be a full lowercase Git SHA")
@@ -367,7 +387,7 @@ def verify_archive(
         raise DesktopAttestationError("Onedir Desktop Core attestation is macOS-only")
     expected_manifest: Mapping[str, object] = {
         "schema": _ONEDIR_MANIFEST_SCHEMA,
-        "channel": "stable",
+        "channel": channel,
         "version": version,
         "sourceCommit": source_commit,
         "sourceTag": source_tag,
@@ -446,6 +466,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-tag", required=True)
     parser.add_argument("--target", required=True)
     parser.add_argument("--team-id", required=True)
+    parser.add_argument("--channel", choices=("stable", "alpha"), default="stable")
     parser.add_argument("--output", type=Path)
     return parser
 
@@ -465,6 +486,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 source_tag=args.source_tag,
                 target=args.target,
                 expected_team_id=args.team_id,
+                channel=args.channel,
             )
         else:
             assert args.binary is not None
@@ -477,6 +499,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 source_tag=args.source_tag,
                 target=args.target,
                 expected_team_id=args.team_id,
+                channel=args.channel,
             )
     except DesktopAttestationError as error:
         print(f"Desktop Core attestation failed: {error}", file=sys.stderr)

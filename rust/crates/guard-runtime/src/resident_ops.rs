@@ -85,7 +85,7 @@ pub(crate) fn evaluate_resident_bytes(
         ResidentRequestV1::Edge(request) => {
             let policy_store =
                 policy_store.ok_or_else(|| "native_policy_snapshot_unavailable".to_owned())?;
-            crate::edge::evaluate_envelope_with_store(request, policy_store)
+            crate::edge::evaluate_envelope_with_store(*request, policy_store)
         }
         ResidentRequestV1::Operation(request) => match *request {
             ResidentOperationV1::CommandModel(request) => {

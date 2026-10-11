@@ -1329,6 +1329,84 @@
         "entry_points": [],
         "reason": "Paseo adapter install and uninstall.",
         "evidence": "install, prepare_install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "store2-connect-cli-helpers",
+        "category": "cli_only",
+        "path": "src/codex_plugin_scanner/guard/cli/commands_support_connect.py",
+        "symbols": [
+          "_validate_policy_scope",
+          "_resolve_policy_expiry",
+          "_guard_doctor_connect_health_payload",
+          "_guard_doctor_oauth_storage_health_payload_from_health",
+          "_guard_doctor_latest_connect_state_payload",
+          "_guard_cloud_urls_for_connect",
+          "_finalize_guard_connect_payload",
+          "_filter_policy_items",
+          "_run_guard_device_connect_flow",
+          "_run_guard_browser_connect_flow",
+          "_build_guard_device_connect_payload",
+          "_announce_guard_device_connect_copy",
+          "_guard_ci_safe_connect_options",
+          "_manual_guard_login_payload",
+          "_guard_service_runtime_profile"
+        ],
+        "entry_points": [],
+        "reason": "Helpers of the `guard connect`, `guard login`, `guard doctor` and policy-listing CLI subcommands that live beside the retained policy-bundle refresh in the same module.",
+        "evidence": "Every symbol is referenced only by the CLI dispatch modules commands_dispatch_cloud, commands_dispatch_admin, commands_dispatch_records and commands_support_service, which the cli-presentation-and-parsing and cloud-review-async exclusions already remove from scope, by the init wizard excluded below, and by each other. The facade wrappers in commands.py that forward to the connect payload builders by name are called only from commands_dispatch_cloud and the excluded init wizard. The retained `_refresh_cloud_policy_bundle` and `_synced_policy_payload`, which the hook pipeline reaches, are not excluded. The report validates that no retained symbol or in-scope module references an excluded name."
+      },
+      {
+        "id": "store2-init-wizard-helpers",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/cli/commands_support_workspace.py",
+        "symbols": [
+          "_aibom_cli_options_from_args",
+          "_add_guard_cisco_mode_arg",
+          "_guard_http_url",
+          "_build_init_plan",
+          "_print_init_plan_preview",
+          "_prompt_init_step",
+          "_approve_init_step",
+          "_skip_init_step_payload",
+          "_print_init_step_complete",
+          "_run_init_command"
+        ],
+        "entry_points": [],
+        "reason": "Interactive `guard init` wizard: plan building, prompts and step output.",
+        "evidence": "The only entry is `_run_init_command`, reached from the excluded `_run_guard_init_command` dispatcher; the other symbols are called only from it or from CLI parser setup in the already-excluded dispatch modules. The only in-scope mention is an `if TYPE_CHECKING` import in commands_dispatch_local, which is not a runtime edge. Workspace resolution helpers used by the hook and run paths stay in scope."
+      },
+      {
+        "id": "store2-dispatch-install-update-init",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/cli/commands_dispatch_local.py",
+        "root_function": true,
+        "symbols": [
+          "_migrate_legacy_macos_secrets",
+          "_run_guard_update_command",
+          "_run_guard_init_command",
+          "_run_guard_install_command"
+        ],
+        "entry_points": [],
+        "reason": "Dispatch bodies of the `guard install`, `guard update` and `guard init` subcommands and the one-time legacy macOS secret migration they run.",
+        "evidence": "commands_router maps the \"install\", \"update\" and \"init\" subcommand names to these three handlers by string; no hook, run, protect or MCP proxy route dispatches to them. `_migrate_legacy_macos_secrets` is called only from the update and install handlers. The report validates that no retained symbol references them. Marked root_function because the module is a dispatcher root."
+      },
+      {
+        "id": "store2-oauth-connect-lifecycle",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/store_oauth.py",
+        "symbols": [
+          "StoreOAuthConnectMixin._clear_oauth_local_credentials_locked",
+          "StoreOAuthConnectMixin.clear_cloud_sync_state_for_reconnect",
+          "StoreOAuthConnectMixin.clear_oauth_local_credentials",
+          "StoreOAuthConnectMixin.legacy_macos_oauth_secret_migration_required",
+          "StoreOAuthConnectMixin.list_oauth_sources",
+          "StoreOAuthConnectMixin.migrate_legacy_macos_oauth_secret",
+          "StoreOAuthConnectMixin.record_guard_connect_pairing_completed",
+          "StoreOAuthConnectMixin.record_latest_guard_connect_sync_success"
+        ],
+        "entry_points": [],
+        "reason": "Cloud connect and pairing lifecycle methods of the OAuth credential store: clearing credentials and sync state on disconnect or reconnect, listing sources, legacy macOS secret migration and recording connect results.",
+        "evidence": "Remaining callers are the guard connect and uninstall CLI flows, the daemon connect-flow and cloud-sync control handlers, and the cloud sync runner, all of which the install-uninstall-doctor, daemon-control-plane-routes and cloud-sync-transport exclusions already remove from scope, plus the excluded install and update dispatchers that reach the legacy migration by name. The credential read path (health, profile, local credentials, source loading, recovery and the credential lock) is not excluded because approvals and package entitlement callers use it. The report validates that no retained method or in-scope module references the excluded names."
       }
     ],
     "dynamic_imports": [

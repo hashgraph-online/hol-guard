@@ -69,6 +69,13 @@ from .start_classification import (
     collect_spawned_daemon_signals,
     daemon_still_starting_evidence_present,
 )
+from .start_heartbeat import (
+    SLOW_START_MAX_SECONDS,
+    START_HEARTBEAT_CODE,
+    START_HEARTBEAT_ENV,
+    clear_start_heartbeat,
+    start_heartbeat_path,
+)
 from .start_lock import guard_daemon_start_lock as _guard_daemon_start_lock
 from .startup_phase import timed_phase
 
@@ -110,6 +117,9 @@ _WINDOWS_CREATE_BREAKAWAY_FROM_JOB = 0x01000000
 _GUARD_DAEMON_POSIX_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
 _GUARD_DAEMON_BOOTSTRAP = (
     "import json,runpy,sys; "
+    # Signal liveness before the slow Guard imports so a cold start is not
+    # mistaken for a stuck child.
+    f"exec({START_HEARTBEAT_CODE!r}); "
     "trusted_prefix=sys.argv.pop(1); "
     "trusted_exec_prefix=sys.argv.pop(1); "
     "trusted_paths=json.loads(sys.argv.pop(1)); "
@@ -687,6 +697,8 @@ def _ensure_guard_daemon_body(
                 )
             if time.monotonic() >= start_deadline:
                 break
+            clear_start_heartbeat(guard_home)
+            launcher_env = {**launcher_env, START_HEARTBEAT_ENV: str(start_heartbeat_path(guard_home))}
             spawned_at_ns = time.time_ns()
             if os.name == "nt":
                 process = subprocess.Popen(
@@ -746,6 +758,7 @@ def _ensure_guard_daemon_body(
                         pending_launch_present=False,
                         lock_held_by_spawned_tree=False,
                         journal_start_requested_after=False,
+                        start_heartbeat_present=False,
                     )
                 )
                 spawn_state = classify_spawned_daemon(
@@ -753,6 +766,7 @@ def _ensure_guard_daemon_body(
                     pending_launch_present=signals.pending_launch_present,
                     lock_held_by_spawned_tree=signals.lock_held_by_spawned_tree,
                     journal_start_requested_after=signals.journal_start_requested_after,
+                    start_heartbeat_present=signals.start_heartbeat_present,
                 )
                 if spawn_state == "progressing" and _record_guard_daemon_start_progress(
                     guard_home,
@@ -2178,9 +2192,26 @@ def _clear_guard_daemon_start_progress(guard_home: Path) -> None:
 def _guard_daemon_start_progress_is_live(guard_home: Path, record: GuardDaemonStartProgress) -> bool:
     """Whether the record still names a live, identity-proven daemon for this home."""
 
+    now_ns = time.time_ns()
+    if _start_progress_record_is_live(guard_home, record, now_ns=now_ns):
+        return True
+    # A slow machine can still be importing after the recorded window. Keep the
+    # same identity checks but judge age by the bounded slow-start window, and
+    # only while the spawned tree still shows start evidence.
+    spawned_at_ns = record.get("spawned_at_ns")
+    if (
+        type(spawned_at_ns) is not int
+        or not 0 < now_ns - spawned_at_ns < int(SLOW_START_MAX_SECONDS * 1_000_000_000)
+        or not _start_progress_record_is_live(guard_home, record, now_ns=record["recorded_at_ns"])
+    ):
+        return False
+    return daemon_still_starting_evidence_present(guard_home, root_pid=record["pid"], spawned_at_ns=spawned_at_ns)
+
+
+def _start_progress_record_is_live(guard_home: Path, record: GuardDaemonStartProgress, *, now_ns: int) -> bool:
     query = {
         "record": _native_fields(record, ("pid", "process_start_token", "recorded_at_ns")),
-        "now_ns": time.time_ns(),
+        "now_ns": now_ns,
         "worker_ready_floor": _START_TIMEOUT_FLOOR_SECONDS,
     }
     return bool(_lifecycle("start_progress_live", query, home=guard_home, facts_home=guard_home)["live"])

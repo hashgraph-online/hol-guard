@@ -63,8 +63,9 @@ permissions:
 
 concurrency:
   # Serialize publish-capable branch events while keeping pull-request
-  # validation isolated by its merge ref.
-  group: hol-guard-publish-${{ github.ref }}
+  # validation isolated by its merge ref. Alpha dispatches get their own group
+  # so a push to the same branch can never replace a pending alpha, or the reverse.
+  group: hol-guard-publish-${{ github.ref }}${{ github.event_name == 'workflow_dispatch' && inputs.release_channel == 'alpha' && '-alpha' || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -92,6 +93,13 @@ jobs:
           case "${RELEASE_CHANNEL}:${RELEASE_TRAIN}:${GITHUB_REF}" in
             alpha:3.0:refs/heads/release/3.0)
               if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
+              ;;
+            alpha:main:refs/heads/main)
+              # Release Please dispatches main alphas only after checking the requesting maintainer.
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
                 echo "Release dispatch actor is not an authorized maintainer" >&2
                 exit 1
               fi
@@ -146,6 +154,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       channel: ${{ steps.version.outputs.channel }}
       release_train: ${{ steps.version.outputs.release_train }}
+      base_version: ${{ steps.version.outputs.base_version }}
       source_sha: ${{ steps.version.outputs.source_sha }}
       release_repair: ${{ steps.version.outputs.release_repair }}
     steps:
@@ -255,6 +264,51 @@ jobs:
                 --expected-sha "$EXPECTED_SHA"
               )
               for existing_version in "${EXISTING_VERSIONS[@]}"; do
+                VALIDATOR_ARGS+=(--existing-version "$existing_version")
+              done
+              VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
+            elif [[ "$CHANNEL" == "alpha" && "$TRAIN" == "main" ]]; then
+              if [[ "$GITHUB_ACTOR_ID" != "6068672" && "$GITHUB_ACTOR_ID" != "301892678" && "$GITHUB_ACTOR_ID" != "41898282" ]]; then
+                echo "Release dispatch actor is not an authorized maintainer" >&2
+                exit 1
+              fi
+              if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+                echo "Main alpha releases must run from refs/heads/main" >&2
+                exit 1
+              fi
+              # Optional test builds for the next minor; they never move the stable line.
+              PYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+                list-versions --registry pypi)
+              TESTPYPI_VERSIONS=$(uv run --no-sync python scripts/verify_release_registry.py \
+                list-versions --registry testpypi)
+              TAG_VERSIONS=$(git tag --list 'alpha/v*' | sed 's#^alpha/v##' | jq -R -s \
+                'split("\n") | map(select(length > 0))')
+              EXISTING_VERSIONS=$(jq -n \
+                --argjson pypi "$PYPI_VERSIONS" \
+                --argjson testpypi "$TESTPYPI_VERSIONS" \
+                --argjson tags "$TAG_VERSIONS" \
+                '$pypi + $testpypi + $tags | unique')
+              if [[ "$RELEASE_VERSION" == "next" ]]; then
+                RELEASE_VERSION=$(uv run --no-sync python scripts/compute_alpha_release_version.py \
+                  --release-train main --base-version "$BASE_VERSION" <<< "$EXISTING_VERSIONS")
+              fi
+              mapfile -t EXISTING_VERSIONS_ARRAY < <(
+                jq -r --arg candidate "$RELEASE_VERSION" '.[] | select(. != $candidate)' <<< "$EXISTING_VERSIONS"
+              )
+              if jq -e --arg candidate "$RELEASE_VERSION" 'index($candidate) != null' <<< "$EXISTING_VERSIONS" >/dev/null; then
+                echo "Alpha version ${RELEASE_VERSION} was already published or reserved" >&2
+                exit 1
+              fi
+              VALIDATOR_ARGS=(
+                --channel "$CHANNEL"
+                --version "$RELEASE_VERSION"
+                --git-ref refs/heads/main
+                --actual-ref "$GITHUB_REF"
+                --github-sha "$SOURCE_SHA"
+                --expected-sha "$EXPECTED_SHA"
+                --base-version "$BASE_VERSION"
+              )
+              for existing_version in "${EXISTING_VERSIONS_ARRAY[@]}"; do
                 VALIDATOR_ARGS+=(--existing-version "$existing_version")
               done
               VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
@@ -412,6 +466,7 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "release_train=$TRAIN" >> "$GITHUB_OUTPUT"
+          echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "Computed $CHANNEL version: $VERSION"
       - name: Verify release toolchain and write SBOM
@@ -579,7 +634,10 @@ jobs:
           needs.build.outputs.channel == 'alpha' &&
           (
             (github.event_name == 'push' && github.ref == 'refs/heads/release/3.0') ||
-            (github.event_name == 'workflow_dispatch' && github.event.inputs.release_train == '3.0')
+            (
+              github.event_name == 'workflow_dispatch' &&
+              (github.event.inputs.release_train == '3.0' || github.event.inputs.release_train == 'main')
+            )
           )
         ) ||
         (
@@ -1283,15 +1341,20 @@ jobs:
         run: rm -f dist/plugin_scanner-* dist/plugin-scanner-*
       - name: Revalidate alpha source before TestPyPI
         env:
+          GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           TRAIN: ${{ needs.build.outputs.release_train }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          train_ref="refs/heads/release/${TRAIN}"
-          remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
-          if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
-            echo "Alpha publication source is no longer the release train head" >&2
-            exit 1
+          if [[ "$TRAIN" == "main" ]]; then
+            bash scripts/ci/require_alpha_source_on_main.sh
+          else
+            train_ref="refs/heads/release/${TRAIN}"
+            remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
+            if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
+              echo "Alpha publication source is no longer the release train head" >&2
+              exit 1
+            fi
           fi
           remote_alpha_tag_sha=$(git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
           if [[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
@@ -1413,16 +1476,25 @@ jobs:
       - name: Revalidate alpha publication authorization
         env:
           ACTUAL_REF: ${{ github.ref }}
+          BASE_VERSION: ${{ needs.build.outputs.base_version }}
           EXPECTED_SHA: ${{ github.event.inputs.expected_sha || needs.build.outputs.source_sha }}
+          GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
           TRAIN: ${{ needs.build.outputs.release_train }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          train_ref="refs/heads/release/${TRAIN}"
-          remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
-          if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
-            echo "Alpha publication source is no longer the release train head" >&2
-            exit 1
+          base_args=()
+          if [[ "$TRAIN" == "main" ]]; then
+            train_ref="refs/heads/main"
+            base_args=(--base-version "$BASE_VERSION")
+            bash scripts/ci/require_alpha_source_on_main.sh
+          else
+            train_ref="refs/heads/release/${TRAIN}"
+            remote_train_sha=$(git ls-remote --exit-code origin "$train_ref" | awk '{print $1}')
+            if [[ "$remote_train_sha" != "$SOURCE_SHA" ]]; then
+              echo "Alpha publication source is no longer the release train head" >&2
+              exit 1
+            fi
           fi
           remote_alpha_tag_sha=$(git ls-remote --exit-code origin "refs/tags/alpha/v${VERSION}" | awk '{print $1}')
           if [[ "$remote_alpha_tag_sha" != "$SOURCE_SHA" ]]; then
@@ -1442,6 +1514,7 @@ jobs:
             --actual-ref "$ACTUAL_REF"
             --github-sha "$SOURCE_SHA"
             --expected-sha "$EXPECTED_SHA"
+            "${base_args[@]}"
           )
           for existing_version in "${existing_versions[@]}" "${alpha_tags[@]}"; do
             [[ -z "$existing_version" ]] || validator_args+=(--existing-version "$existing_version")
@@ -2364,6 +2437,35 @@ jobs:
             --prerelease \
             --verify-tag \
             "${ASSET_FILES[@]}"
+
+  wake-alpha-core-feed:
+    name: Dispatch Desktop Core alpha sidecar
+    needs: [build, release-alpha]
+    if: >-
+      always() && github.repository == 'hashgraph-online/hol-guard' &&
+      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+      needs.release-alpha.result == 'success' &&
+      needs.build.outputs.channel == 'alpha' && needs.build.outputs.release_train == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      # Desktop installs with the Alpha channel selected read signed sidecars, not PyPI.
+      - name: Dispatch the exact published alpha Core version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PUBLICATION_RUN_ID: ${{ github.run_id }}
+          PUBLICATION_SOURCE_SHA: ${{ needs.build.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$VERSION" =~ ^3\.(0|[1-9][0-9]*)\.0a[1-9][0-9]*$ ]]; then
+            echo "Published Core version is not a canonical main alpha" >&2
+            exit 1
+          fi
+          gh workflow run desktop-core-alpha-feed.yml --repo "$GITHUB_REPOSITORY" --ref main -f "core_version=$VERSION" -f release_channel=alpha -f "publication_run_id=$PUBLICATION_RUN_ID" -f "publication_source_sha=$PUBLICATION_SOURCE_SHA"
 
   publish-container:
     name: Publish container image

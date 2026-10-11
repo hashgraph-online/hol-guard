@@ -16,6 +16,8 @@ from urllib3.exceptions import HTTPError as Urllib3HTTPError
 from urllib3.exceptions import SSLError as Urllib3SSLError
 from urllib3.response import BaseHTTPResponse
 
+_ERROR_BODY_LIMIT_BYTES = 64 * 1024
+
 
 class ManagedResponse(Protocol):
     headers: Mapping[str, str]
@@ -189,7 +191,7 @@ class ManagedUrlOpener:
             status = response.status
             reason = str(response.reason or "managed_http_error")
             response_headers = _message_headers(response.headers)
-            response_body = response.read()
+            response_body = response.read(_ERROR_BODY_LIMIT_BYTES)
             response.close()
             raise urllib.error.HTTPError(
                 url,

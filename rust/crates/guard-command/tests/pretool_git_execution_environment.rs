@@ -58,6 +58,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     assert_eq!(evaluate(&context).decision, "allow");
     // The absent HOME field falls back to the verified home spelling. This
@@ -85,11 +86,10 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             "{name}"
         );
     }
-    // The execution context carries names and an opaque digest, not values.
     // The config probe clears the environment, but an allowed `git` still
     // runs in the caller environment, so a search path of `.` or an empty
-    // entry can load a library the probe never saw. Name-only search paths
-    // stay unproven.
+    // entry can load a library the probe never saw. A search path declared by
+    // name only, without a stamped value, stays unproven.
     for name in [
         "LD_LIBRARY_PATH",
         "DYLD_LIBRARY_PATH",
@@ -115,6 +115,85 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             evaluate_command(command, &context).decision,
             "allow",
             "{command}"
+        );
+    }
+    #[cfg(unix)]
+    {
+        // A stamped search path keeps the proof only when every entry is an
+        // existing absolute directory outside the home, working and temporary
+        // trees, with no ancestor another user can write.
+        let stamped = |names: &[(&str, &str)]| {
+            let mut loader = context.clone();
+            for (name, value) in names {
+                loader.environment_names.push((*name).into());
+                loader
+                    .library_search_paths
+                    .insert((*name).into(), (*value).into());
+            }
+            evaluate(&loader).decision
+        };
+        for name in [
+            "LD_LIBRARY_PATH",
+            "DYLD_LIBRARY_PATH",
+            "DYLD_FALLBACK_LIBRARY_PATH",
+            "DYLD_FRAMEWORK_PATH",
+            "DYLD_FALLBACK_FRAMEWORK_PATH",
+        ] {
+            assert_eq!(stamped(&[(name, "/usr/lib")]), "allow", "{name}");
+            assert_eq!(stamped(&[(name, "/usr/lib:/usr")]), "allow", "{name}");
+        }
+        let repository_lib = repository.join("lib");
+        let home_lib = home.join(".local/lib");
+        std::fs::create_dir_all(&repository_lib).unwrap();
+        std::fs::create_dir_all(&home_lib).unwrap();
+        let repository_lib = repository_lib.to_str().unwrap();
+        let home_lib = home_lib.to_str().unwrap();
+        let temporary = root.to_str().unwrap();
+        for value in [
+            ".",
+            "",
+            "lib",
+            "./lib",
+            "/usr/lib:",
+            ":/usr/lib",
+            "/usr/lib::/usr",
+            "/usr/lib:.",
+            "/usr/lib/synthetic-missing-directory",
+            "/tmp",
+            repository_lib,
+            home_lib,
+            temporary,
+        ] {
+            assert_ne!(stamped(&[("LD_LIBRARY_PATH", value)]), "allow", "{value:?}");
+        }
+        // Injection variables are never stamped by value, so a value for one
+        // makes the whole context invalid.
+        for name in ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"] {
+            assert_ne!(stamped(&[(name, "/usr/lib")]), "allow", "{name}");
+        }
+        // Every declared search path needs its own trusted value.
+        let mut partial = context.clone();
+        partial.environment_names.push("DYLD_LIBRARY_PATH".into());
+        partial.environment_names.push("LD_LIBRARY_PATH".into());
+        partial
+            .library_search_paths
+            .insert("LD_LIBRARY_PATH".into(), "/usr/lib".into());
+        assert_ne!(evaluate(&partial).decision, "allow");
+        // A value whose name the hook did not declare is inconsistent.
+        let mut undeclared = context.clone();
+        undeclared
+            .library_search_paths
+            .insert("LD_LIBRARY_PATH".into(), "/usr/lib".into());
+        assert_ne!(evaluate(&undeclared).decision, "allow");
+        // Inline assignments are not the exported environment.
+        let mut exported = context.clone();
+        exported.environment_names.push("LD_LIBRARY_PATH".into());
+        exported
+            .library_search_paths
+            .insert("LD_LIBRARY_PATH".into(), "/usr/lib".into());
+        assert_ne!(
+            evaluate_command("LD_LIBRARY_PATH=. git status --short", &exported).decision,
+            "allow"
         );
     }
     let caller_home = root.join("actual-caller-home");
@@ -166,6 +245,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -176,6 +256,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -186,6 +267,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -196,6 +278,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -206,6 +289,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -216,6 +300,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: Some(xdg.to_string_lossy().into_owned()),
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: original_path.clone(),
@@ -226,6 +311,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
         GuardExecutionEnvironmentV1 {
             path: "x".repeat(32769),
@@ -236,6 +322,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             pager_disabled: false,
             xdg_config_home: None,
             git_config_no_system: false,
+            library_search_paths: Default::default(),
         },
     ] {
         assert_eq!(evaluate(&context).decision, "deny");
@@ -260,6 +347,7 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     assert_eq!(evaluate(&context).decision, "deny");
 }
@@ -300,6 +388,7 @@ fn stamped_git_reads_allow_only_when_no_diff_helper_is_configured() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     let evaluate = |command: &str, context: Option<&GuardExecutionEnvironmentV1>| {
         evaluate_pre_tool_envelope_with_execution_context(

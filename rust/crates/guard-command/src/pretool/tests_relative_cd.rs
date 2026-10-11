@@ -12,6 +12,7 @@ fn environment(names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     }
 }
 

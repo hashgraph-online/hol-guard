@@ -263,12 +263,20 @@ def _exercise_mode_invariants(
                 raise RuntimeError(f"native_default_auto_probe_failed: invalid mode response: {response}")
             # Legacy values are accepted but resolve to auto: the native
             # resident must decide exactly as it does with the variable unset.
-            # Allow and warn outcomes use the compact PostToolUse shape, which
-            # carries no ``continue`` or ``decision`` keys, so compare the
-            # shared keys (absent on both sides is equal) and reject blocks.
+            # Current Claude PostToolUse contract: a non-blocking native
+            # outcome carries ``policy_action`` (allow/warn) plus the
+            # PostToolUse hook-specific envelope. It carries no ``continue``
+            # (that key only appears on terminal block responses) and no
+            # ``decision``; any block/stop key would mean the tool output was
+            # refused rather than passed through.
+            specific = response.get("hookSpecificOutput")
             _require(
-                response.get("decision") not in {"block", "deny"}
-                and response.get("policy_action") in {"allow", "warn"}
+                response.get("policy_action") in {"allow", "warn"}
+                and isinstance(specific, dict)
+                and specific.get("hookEventName") == "PostToolUse"
+                and "decision" not in response
+                and "continue" not in response
+                and "stopReason" not in response
                 and all(
                     response.get(key) == baseline.get(key)
                     for key in ("decision", "policy_action", "reason_code", "hookSpecificOutput")
@@ -277,6 +285,7 @@ def _exercise_mode_invariants(
             )
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
+                "policy_action": response.get("policy_action"),
                 "reason_code": response.get("reason_code"),
                 "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }

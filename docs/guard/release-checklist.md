@@ -64,6 +64,53 @@ Normal pushes to `main` still build and verify packages without publishing.
 
 The workflow rejects alpha versions outside the 3.x line, rejects non-alpha prerelease types, rejects alpha publishes from any other branch, binds every tag and artifact to the exact branch commit, and prevents alpha artifacts from entering the stable repository-version synchronization flow.
 
+### Desktop Core alpha sidecars
+
+The `Desktop Core macOS feed` workflow can publish signed, notarized macOS Core sidecars to an existing `alpha/v<VERSION>` prerelease. Alpha runs happen only by explicit dispatch; scheduled and push runs stay stable-only and never look for alpha releases.
+
+Dispatch from `main` with an exact version, the alpha publish run, and the alpha source commit:
+
+```sh
+gh workflow run desktop-core-alpha-feed.yml --ref main \
+  -f core_version=<VERSION> -f release_channel=alpha \
+  -f publication_run_id=<RUN_ID> -f publication_source_sha=<ALPHA_SOURCE_SHA>
+```
+
+- `core_version` must match `3.<minor>.<patch>a<N>` exactly. `release_channel` defaults to `stable`, which keeps the existing behavior.
+- The `alpha/v<VERSION>` release must be a published prerelease, not a draft, and its tag must point at `publication_source_sha`. The workflow never creates or edits releases.
+- The publish run must be a `main` dispatch of `publish.yml` whose `Publish alpha to PyPI` job succeeded. The alpha source commit must be an ancestor of that run's commit, not necessarily the head of `main`.
+- Manifests declare `"channel": "alpha"`. Existing complete sidecar assets are reused, so rerunning a dispatch is safe.
+- If the prerelease or tag is deleted before upload, the run fails and nothing is recreated.
+- Alpha dispatches queue separately from the stable feed. A `main` run in which only the alpha publish jobs succeeded does not trigger MCP registry or MCPB publishing.
+
+### Cut an optional test alpha from main
+
+Use this to try a large batch on real machines before the stable Release Please PR merges. A main alpha never changes the stable version line, the Release Please PR, or the default installer path.
+
+1. Run the `Release Please` workflow from `main` with `workflow_dispatch`. Leave `alpha_version` as `next`, or name an exact unused `X.Y.0aN`. Only maintainers may start it.
+2. The workflow dispatches `Publish to PyPI` with `release_channel=alpha`, `release_train=main`, and `expected_sha` set to the current `main` commit. `next` resolves to the next minor after the current stable version, for example `3.43.0a1` while `3.42.0` is current, then `3.43.0a2` for the next request.
+3. The publish reserves `alpha/v<VERSION>`, uploads the verified artifact to PyPI, creates the `alpha/v<VERSION>` GitHub prerelease, and dispatches the Desktop Core feed with `release_channel=alpha` so the signed sidecars land on that prerelease.
+4. Main may keep moving during the publish; the source commit only has to remain part of `main`'s history.
+
+Once `X.Y.0` ships as stable, later `next` requests move to `X.(Y+1).0a1`.
+
+To test the alpha:
+
+- CLI: `hol-guard update --alpha`, or install the exact version with `uv tool install 'hol-guard==<VERSION>'`.
+- Desktop: select the Alpha update channel. Desktop offers only alpha Core builds that still have a live `alpha/v<VERSION>` prerelease with signed sidecars.
+
+### Delete a test alpha
+
+Run the `Delete alpha release` workflow with the alpha `version`. It deletes the `alpha/v<VERSION>` prerelease, its tag, the Desktop Core sidecars attached to it, and the matching container image. Guard and Desktop alpha updates stop offering that version immediately.
+
+The same cleanup by hand:
+
+```bash
+gh release delete alpha/v<VERSION> --repo hashgraph-online/hol-guard --cleanup-tag --yes
+```
+
+PyPI never allows a published version to be deleted or reused. The PyPI files stay, but installers skip prereleases unless asked for one. To hide the version from exact pins too, yank it on the PyPI release management page. The next `next` request skips deleted numbers and uses a fresh `aN`.
+
 ### Continue alpha maintenance
 
 1. Land compatible fixes on `main` and publish them through the stable Release Please path.

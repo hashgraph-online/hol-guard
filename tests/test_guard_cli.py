@@ -4783,6 +4783,10 @@ args = ["-lc", "echo hi"]
         assert output["status"] == "current"
         assert "managed_install" not in output
         assert any("Could not repair Codex protection during update" in note for note in output["notes"])
+        assert any(
+            "Could not repair Codex protection during update" in failure
+            for failure in output["protection_repair_failures"]
+        )
 
     @pytest.mark.usefixtures("native_prompt_runtime")
     def test_guard_update_reports_codex_repair_write_failures(self, tmp_path, monkeypatch, capsys):

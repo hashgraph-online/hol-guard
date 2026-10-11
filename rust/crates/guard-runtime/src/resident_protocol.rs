@@ -289,7 +289,7 @@ pub(crate) struct WorkspaceReviewAuthorityEnrollRequestV1 {
 #[serde(untagged)]
 pub(crate) enum ResidentRequestV1 {
     Operation(Box<ResidentOperationV1>),
-    Edge(GuardHookEnvelopeV2),
+    Edge(Box<GuardHookEnvelopeV2>),
     Hook(NativeHookRequestV1),
 }
 

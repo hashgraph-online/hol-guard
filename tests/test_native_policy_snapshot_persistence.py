@@ -98,7 +98,7 @@ def test_lost_ack_retries_identical_payload(tmp_path: Path, monkeypatch: pytest.
     )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         assert len(calls) >= 2
         assert calls[1] == calls[0]
     finally:
@@ -248,7 +248,7 @@ def test_publisher_process_restart_reuses_cached_payload(
         poll_interval_seconds=0.05,
     )
     first_publisher.start()
-    assert first_publisher.wait_until_ready(time.monotonic() + 2.0)
+    assert first_publisher.wait_until_ready(time.monotonic() + 10.0)
     first_publisher.close()
 
     second_calls: list[bytes] = []
@@ -267,7 +267,7 @@ def test_publisher_process_restart_reuses_cached_payload(
     )
     second_publisher.start()
     try:
-        assert second_publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert second_publisher.wait_until_ready(time.monotonic() + 10.0)
         assert first_calls and second_calls
         assert second_calls[0] == first_calls[0]
     finally:

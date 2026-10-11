@@ -657,6 +657,7 @@ class HookWorkerNativeMixin:
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None = None,
+        edge_budget_seconds: float | None = None,
     ) -> dict[str, object]:
         """Return the raw native edge decision for the CLI presentation path.
 
@@ -671,6 +672,10 @@ class HookWorkerNativeMixin:
         policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
         recording_only = recording_only_for_binding(policy_snapshot, harness)
         fenced: bool | None = None
+        if deadline is None and edge_budget_seconds is not None:
+            # The budget starts after policy readiness, which keeps its own
+            # wait; it bounds only the native evaluation and fails closed.
+            deadline = time.monotonic() + edge_budget_seconds
 
         def unavailable(reason_code: str) -> dict[str, object]:
             # The CLI path owns presentation, but evidence persistence stays

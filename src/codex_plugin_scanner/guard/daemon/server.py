@@ -7,7 +7,6 @@ import errno
 import hashlib
 import hmac
 import json
-import math
 import os
 import secrets
 import select
@@ -149,7 +148,7 @@ from .manager import (
 )
 from .request_executor import BoundedRequestExecutor as _BoundedRequestExecutor
 from .runtime_heartbeat import RuntimeHeartbeatWriter
-from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline
+from .runtime_hook_deadline import PROMPT_ADMISSION_SECONDS, RuntimeHookDeadline, remaining_hint_from_payload
 from .runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from .runtime_hook_scheduler import RuntimeHookAdmissionReason, RuntimeHookLane, RuntimeHookScheduler
 from .server_common import (
@@ -256,21 +255,8 @@ _DAEMON_CRITICAL_PATHS = frozenset(
 
 
 def _runtime_hook_remaining_hint(payload: dict[str, object]) -> float:
-    raw_seconds = payload.pop("guard_remaining_seconds", None)
-    raw_milliseconds = payload.pop("guard_remaining_ms", None)
-    if (
-        isinstance(raw_seconds, (int, float))
-        and not isinstance(raw_seconds, bool)
-        and math.isfinite(float(raw_seconds))
-    ):
-        return float(raw_seconds)
-    if (
-        isinstance(raw_milliseconds, (int, float))
-        and not isinstance(raw_milliseconds, bool)
-        and math.isfinite(float(raw_milliseconds))
-    ):
-        return float(raw_milliseconds) / 1000.0
-    return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS
+    hint = remaining_hint_from_payload(payload, pop=True)
+    return _RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS if hint is None else hint
 
 
 def _codex_live_replay_authority(

@@ -3,7 +3,8 @@ name: Cache cleanup
 # The repository cache is capped at 10 GB with LRU eviction. Every main push
 # saves a new CodeQL overlay database, and lockfile changes leave the previous
 # Rust target caches behind. Prune entries a newer one in the same family has
-# replaced so they stop evicting the caches the next run restores.
+# replaced, and compiler cache objects no build has read for two hours, so they
+# stop evicting the caches the next run restores.
 on:
   workflow_run:
     workflows: [CodeQL Analysis]
@@ -36,7 +37,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh cache list --ref refs/heads/main --limit 1000 --json id,key,ref,createdAt > "$RUNNER_TEMP/caches.json"
+          gh cache list --ref refs/heads/main --limit 5000 --json id,key,ref,createdAt,lastAccessedAt,version > "$RUNNER_TEMP/caches.json"
           python3 scripts/ci/prune_superseded_caches.py "$RUNNER_TEMP/caches.json" > "$RUNNER_TEMP/prune.txt"
           deleted=0
           failed=0
@@ -49,4 +50,4 @@ jobs:
               echo "::warning::could not delete cache $id"
             fi
           done < "$RUNNER_TEMP/prune.txt"
-          echo "Deleted $deleted superseded cache entries; $failed failed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deleted $deleted superseded or idle cache entries; $failed failed" >> "$GITHUB_STEP_SUMMARY"

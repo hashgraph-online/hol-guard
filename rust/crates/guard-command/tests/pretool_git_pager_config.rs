@@ -99,6 +99,7 @@ fn pager_checks_follow_the_actual_subcommand_and_global_override() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     for (command, expected) in [
         ("git status --short", "deny"),
@@ -229,6 +230,7 @@ fn empty_git_pager_overrides_a_custom_pager_variable() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     let mut without_git_pager = caller.clone();
     without_git_pager
@@ -283,6 +285,7 @@ fn piped_git_output_never_starts_a_configured_pager() {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     for (command, expected) in [
         ("git log --oneline -2 | cat", "allow"),

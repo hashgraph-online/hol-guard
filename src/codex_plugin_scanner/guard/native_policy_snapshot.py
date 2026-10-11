@@ -51,15 +51,12 @@ derive_native_policy_verifier_key = _codec.derive_native_policy_verifier_key
 native_policy_verifier_key_id = _codec.native_policy_verifier_key_id
 build_policy_snapshot_v3 = _contract.build_policy_snapshot_v3
 snapshot_bytes_v3 = _contract.snapshot_bytes_v3
-snapshot_config_digest_v3 = _contract.snapshot_config_digest_v3
-snapshot_signing_bytes_v3 = _contract.snapshot_signing_bytes_v3
+snapshot_mac_matches_v3 = _contract.snapshot_mac_matches_v3
 native_policy_snapshot_v3 = _generation.native_policy_snapshot_v3
 effective_native_policy_v3 = _contract.effective_native_policy_v3
 provision_native_policy_verifier_key = _windows_key.provision_native_policy_verifier_key
 
 _snapshot_integrity_mac_v3 = _contract._snapshot_integrity_mac_v3
-_snapshot_policy_digest_v3 = _contract._snapshot_policy_digest_v3
-_validate_snapshot_v3 = _contract._validate_snapshot_v3
 _strict_json_loads_v3 = _codec._strict_json_loads_v3
 _clear_v3_snapshot_pending = _storage._clear_v3_snapshot_pending
 _read_v3_generation_state = _storage._read_v3_generation_state
@@ -110,8 +107,6 @@ _action_value = _policy._action_value
 _string_map = _policy._string_map
 _harness_risk_map = _policy._harness_risk_map
 _harness_action_map = _policy._harness_action_map
-_require_snapshot_mapping_fields_v3 = _contract._require_snapshot_mapping_fields_v3
-_valid_u16_v3 = _contract._valid_u16_v3
 _valid_u64_v3 = _contract._valid_u64_v3
 _valid_digest_v3 = _contract._valid_digest_v3
 _policy_snapshot_push_bytes_v3 = _contract._policy_snapshot_push_bytes_v3
@@ -436,6 +431,5 @@ __all__ = [
     "notify_native_policy_mutation",
     "provision_native_policy_verifier_key",
     "snapshot_bytes_v3",
-    "snapshot_config_digest_v3",
-    "snapshot_signing_bytes_v3",
+    "snapshot_mac_matches_v3",
 ]

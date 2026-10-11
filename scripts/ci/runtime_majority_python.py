@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from scripts.ci.runtime_majority_functions import ModulePlan, counted_lines
+from scripts.ci.runtime_majority_functions import ModulePlan, counted_lines, is_type_checking_test
 
 
 @dataclass
@@ -69,12 +69,6 @@ def discover_modules(
     return modules
 
 
-def _is_type_checking(test: ast.expr) -> bool:
-    if isinstance(test, ast.Name):
-        return test.id == "TYPE_CHECKING"
-    return isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING"
-
-
 def _literal_package(node: ast.expr, module: PythonModule) -> str | None:
     """Package anchor of a relative ``import_module`` call, when statically known."""
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -116,7 +110,7 @@ class _ImportCollector(ast.NodeVisitor):
         super().visit(node)
 
     def visit_If(self, node: ast.If) -> None:
-        if _is_type_checking(node.test):
+        if is_type_checking_test(node.test):
             for child in node.orelse:
                 self.visit(child)
             return

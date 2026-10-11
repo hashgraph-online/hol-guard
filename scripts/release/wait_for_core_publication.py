@@ -80,18 +80,44 @@ def attested_publication_identity(
     return run_id, run["head_sha"]
 
 
-def publication_ready(repo: str, run_id: str, source_sha: str) -> bool:
+_VERSION_PATTERNS = {
+    "stable": re.compile(r"[0-9]+\.[0-9]+\.[0-9]+"),
+    "alpha": re.compile(r"3\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a[1-9][0-9]*"),
+}
+_PUBLICATION_JOBS = {"stable": "Publish main release to PyPI", "alpha": "Publish alpha to PyPI"}
+
+
+def _alpha_source_is_in_run(repo: str, source_sha: str, head_sha: str) -> bool:
+    """An alpha run dispatches from main, which may have moved past the alpha source commit."""
+    if head_sha == source_sha:
+        return True
+    comparison = json.loads(
+        subprocess.check_output(
+            ["gh", "api", f"repos/{repo}/compare/{source_sha}...{head_sha}?per_page=1"], text=True, timeout=20
+        )
+    )
+    return (
+        comparison["status"] in {"ahead", "identical"}
+        and comparison["base_commit"]["sha"] == source_sha
+        and comparison["merge_base_commit"]["sha"] == source_sha
+    )
+
+
+def publication_ready(repo: str, run_id: str, source_sha: str, channel: str = "stable") -> bool:
+    if channel not in _PUBLICATION_JOBS:
+        raise ValueError("invalid release channel")
     if not re.fullmatch(r"[1-9][0-9]*", run_id) or not re.fullmatch(r"[0-9a-f]{40}", source_sha):
         raise ValueError("invalid publication run identity")
     result = json.loads(
         subprocess.check_output(["gh", "api", f"repos/{repo}/actions/runs/{run_id}"], text=True, timeout=20)
     )
-    if (
-        result["path"].split("@")[0] != ".github/workflows/publish.yml"
-        or result["event"] != "workflow_dispatch"
-        or result["head_sha"] != source_sha
-    ):
+    if result["path"].split("@")[0] != ".github/workflows/publish.yml" or result["event"] != "workflow_dispatch":
         raise ValueError("publication run is not the authorized release dispatch")
+    if channel == "stable":
+        if result["head_sha"] != source_sha:
+            raise ValueError("publication run is not the authorized release dispatch")
+    elif result["head_branch"] != "main" or not _alpha_source_is_in_run(repo, source_sha, result["head_sha"]):
+        raise ValueError("alpha publication run is not an authorized main dispatch of the alpha source")
     conclusions = subprocess.check_output(
         [
             "gh",
@@ -101,24 +127,24 @@ def publication_ready(repo: str, run_id: str, source_sha: str) -> bool:
             # failed job reports them as skipped in the latest attempt.
             f"repos/{repo}/actions/runs/{run_id}/attempts/1/jobs?per_page=100",
             "--jq",
-            '.jobs[] | select(.name == "Publish main release to PyPI") | .conclusion',
+            f'.jobs[] | select(.name == "{_PUBLICATION_JOBS[channel]}") | .conclusion',
         ],
         text=True,
         timeout=20,
     ).splitlines()
     if conclusions == ["success"]:
         return True
-    if not conclusions and result["conclusion"] == "success":
+    if channel == "stable" and not conclusions and result["conclusion"] == "success":
         # Older publish workflows used different job names; require the entire run.
         return True
     if any(value not in {"null", ""} for value in conclusions) or result["conclusion"] in {"failure", "cancelled"}:
-        raise ValueError("stable registry publication failed; withholding updater assets")
+        raise ValueError(f"{channel} registry publication failed; withholding updater assets")
     return False
 
 
-def registry_ready(version: str, wheel: Path, filename: str | None = None) -> bool:
-    if not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version):
-        raise ValueError("invalid stable version")
+def registry_ready(version: str, wheel: Path, filename: str | None = None, channel: str = "stable") -> bool:
+    if channel not in _VERSION_PATTERNS or not _VERSION_PATTERNS[channel].fullmatch(version):
+        raise ValueError(f"invalid {channel} version")
     try:
         with urllib.request.urlopen(f"https://pypi.org/pypi/hol-guard/{version}/json", timeout=20) as response:
             metadata = json.loads(response.read(2_000_000))
@@ -142,16 +168,22 @@ def registry_ready(version: str, wheel: Path, filename: str | None = None) -> bo
     return True
 
 
-def wait(version: str, wheel: Path, timeout: float = 600, *, filename: str | None = None) -> None:
+def wait(
+    version: str, wheel: Path, timeout: float = 600, *, filename: str | None = None, channel: str = "stable"
+) -> None:
     run_id = os.environ.get("PUBLICATION_RUN_ID", "")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             if run_id:
-                ready = publication_ready(os.environ["GITHUB_REPOSITORY"], run_id, os.environ["PUBLICATION_SOURCE_SHA"])
+                ready = publication_ready(
+                    os.environ["GITHUB_REPOSITORY"], run_id, os.environ["PUBLICATION_SOURCE_SHA"], channel
+                )
+            elif channel == "alpha":
+                raise ValueError("alpha publication requires the publishing run identity")
             else:
                 ready = True
-            if ready and registry_ready(version, wheel, filename):
+            if ready and registry_ready(version, wheel, filename, channel):
                 print("Registry publication verified; signed updater assets may be published.")
                 return
         except urllib.error.HTTPError as error:
@@ -171,8 +203,11 @@ if __name__ == "__main__":
     parser.add_argument("--filename", help="Original distribution filename before copying the attested wheel")
     parser.add_argument("--bundle", type=Path, help="Verified package provenance for scheduled publication checks")
     parser.add_argument("--check-only", action="store_true")
+    parser.add_argument("--channel", choices=tuple(_PUBLICATION_JOBS), default="stable")
     args = parser.parse_args()
     if not os.environ.get("PUBLICATION_RUN_ID"):
+        if args.channel == "alpha":
+            raise ValueError("alpha publication requires the publishing run identity")
         if args.bundle is None:
             raise ValueError("a publishing run or package provenance is required")
         run_id, source_sha = attested_publication_identity(
@@ -184,8 +219,12 @@ if __name__ == "__main__":
         print("publication_run_id=" + os.environ["PUBLICATION_RUN_ID"])
         print("publication_source_sha=" + os.environ["PUBLICATION_SOURCE_SHA"])
         ready = publication_ready(
-            os.environ["GITHUB_REPOSITORY"], os.environ["PUBLICATION_RUN_ID"], os.environ["PUBLICATION_SOURCE_SHA"]
+            os.environ["GITHUB_REPOSITORY"],
+            os.environ["PUBLICATION_RUN_ID"],
+            os.environ["PUBLICATION_SOURCE_SHA"],
+            args.channel,
         )
-        print("registry_ready=" + str(ready and registry_ready(args.version, args.wheel, args.filename)).lower())
+        ready = ready and registry_ready(args.version, args.wheel, args.filename, args.channel)
+        print("registry_ready=" + str(ready).lower())
     else:
-        wait(args.version, args.wheel, filename=args.filename)
+        wait(args.version, args.wheel, filename=args.filename, channel=args.channel)

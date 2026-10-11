@@ -31,6 +31,7 @@ mod git_worktree;
 mod guard_diagnostics;
 mod listing_reads;
 mod pytest_contained;
+mod trusted_location;
 pub(crate) use git_routes::git_route_within_workspace;
 mod apply_patch_writes;
 mod pure_expression;

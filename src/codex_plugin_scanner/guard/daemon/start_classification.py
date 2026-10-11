@@ -16,6 +16,7 @@ from typing import Literal
 from ..mdm.file_lock import release_file_lock
 from .file_locking import try_lock_daemon_file
 from .lifecycle_journal import load_daemon_lifecycle_events
+from .start_heartbeat import heartbeat_is_within_window, load_start_heartbeat
 
 _PPID_WALK_LIMIT = 16
 
@@ -31,6 +32,7 @@ class SpawnedDaemonSignals:
     pending_launch_present: bool
     lock_held_by_spawned_tree: bool
     journal_start_requested_after: bool
+    start_heartbeat_present: bool = False
 
 
 def classify_spawned_daemon(
@@ -39,12 +41,15 @@ def classify_spawned_daemon(
     pending_launch_present: bool,
     lock_held_by_spawned_tree: bool,
     journal_start_requested_after: bool,
+    start_heartbeat_present: bool = False,
 ) -> Literal["progressing", "dead", "blocked"]:
     """Classify a spawned daemon whose state URL never appeared before the deadline."""
 
     if process.poll() is not None:
         return "dead"
-    if pending_launch_present and (lock_held_by_spawned_tree or journal_start_requested_after):
+    if pending_launch_present and (
+        lock_held_by_spawned_tree or journal_start_requested_after or start_heartbeat_present
+    ):
         return "progressing"
     return "blocked"
 
@@ -68,19 +73,42 @@ def collect_spawned_daemon_signals(
             root_pid=process.pid,
             since_ns=spawned_at_ns,
         ),
+        start_heartbeat_present=daemon_start_heartbeat_present(
+            guard_home,
+            root_pid=process.pid,
+            spawned_at_ns=spawned_at_ns,
+        ),
     )
 
 
 def daemon_still_starting_evidence_present(guard_home: Path, *, root_pid: int, spawned_at_ns: int) -> bool:
     """Re-check progress evidence for a recorded still-starting daemon pid."""
 
-    return spawned_daemon_owner_lock_held(
-        guard_home, root_pid=root_pid
-    ) or daemon_journal_records_start_requested_after(
-        guard_home,
-        root_pid=root_pid,
-        since_ns=spawned_at_ns,
+    return (
+        spawned_daemon_owner_lock_held(guard_home, root_pid=root_pid)
+        or daemon_journal_records_start_requested_after(
+            guard_home,
+            root_pid=root_pid,
+            since_ns=spawned_at_ns,
+        )
+        or daemon_start_heartbeat_present(guard_home, root_pid=root_pid, spawned_at_ns=spawned_at_ns)
     )
+
+
+def daemon_start_heartbeat_present(guard_home: Path, *, root_pid: int, spawned_at_ns: int) -> bool:
+    """Whether the spawned tree wrote an early heartbeat inside the slow-start window.
+
+    This only keeps a live child from being killed while it is still importing;
+    the window is bounded so a child that never advances is retired.
+    """
+
+    heartbeat = load_start_heartbeat(guard_home)
+    if heartbeat is None:
+        return False
+    pid, recorded_at_ns = heartbeat
+    if not heartbeat_is_within_window(recorded_at_ns, spawned_at_ns=spawned_at_ns):
+        return False
+    return _pid_in_process_tree(pid, root_pid)
 
 
 def _spawned_guard_daemon_pending_launch_present(
@@ -178,6 +206,7 @@ __all__ = [
     "collect_spawned_daemon_signals",
     "daemon_journal_records_start_requested_after",
     "daemon_owner_lock_is_held",
+    "daemon_start_heartbeat_present",
     "daemon_still_starting_evidence_present",
     "spawned_daemon_owner_lock_held",
 ]

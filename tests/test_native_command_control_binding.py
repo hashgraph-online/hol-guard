@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
     native_policy_snapshot_v3,
     snapshot_bytes_v3,
 )
+from codex_plugin_scanner.guard.native_policy_snapshot_business_bridge import validate_business_snapshot_content
 from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _digest_v3,
@@ -209,13 +210,15 @@ def test_legacy_bytes_remain_identical_and_binding_changes_policy_digest_and_mac
     assert snapshot_bytes_v3(native) == before
     altered = copy.deepcopy(native)
     altered["command_extensions"] = _binding(revision=4)
+    # Content validation is resident-owned: the native inspect op rejects a
+    # binding that no longer matches the signed digests.
     with pytest.raises(NativePolicySnapshotError, match="digest_mismatch"):
-        snapshot_bytes_v3(altered)
+        validate_business_snapshot_content(altered)
     for binding_value in [None, {}, []]:
         altered = copy.deepcopy(legacy)
         altered["command_extensions"] = binding_value
         with pytest.raises(NativePolicySnapshotError):
-            snapshot_bytes_v3(altered)
+            validate_business_snapshot_content(altered)
 
 
 def test_generation_cache_tracks_control_digest_independently_of_config(tmp_path: Path) -> None:
