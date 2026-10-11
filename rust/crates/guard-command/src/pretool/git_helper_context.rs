@@ -1,19 +1,26 @@
-use super::{exact_safe_command, executable_basename, git_config, PathContext};
+use super::{exact_safe_command_with_context, executable_basename, git_config, PathContext};
 use crate::CanonicalCommandV1;
 
-pub(super) fn git_helper_context_required(model: &CanonicalCommandV1) -> bool {
-    exact_safe_command(model, true)
+pub(super) fn git_helper_context_required(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> bool {
+    exact_safe_command_with_context(model, true, context)
         && model.segments.iter().any(|segment| {
             segment.executable.as_deref().is_some_and(|executable| {
                 executable_basename(executable) == "git"
-                    && segment.arguments.first().is_some_and(|subcommand| {
-                        let option_end = segment
-                            .arguments
+                    // Leading `-C`/`-P` options precede the subcommand.
+                    && crate::command_compatibility::git_inspection_arguments(
+                        &segment.arguments,
+                        context,
+                    )
+                    .is_some_and(|arguments| {
+                        let option_end = arguments
                             .iter()
                             .position(|argument| argument == "--")
-                            .unwrap_or(segment.arguments.len());
-                        let active_options = &segment.arguments[1..option_end];
-                        matches!(subcommand.as_str(), "diff" | "log" | "show")
+                            .unwrap_or(arguments.len());
+                        let active_options = &arguments[1..option_end];
+                        matches!(arguments[0].as_str(), "diff" | "log" | "show")
                             && !(active_options
                                 .iter()
                                 .any(|argument| argument == "--no-ext-diff")
@@ -35,6 +42,13 @@ pub(super) fn git_helpers_proven_inert(
 ) -> bool {
     let Some(environment) = execution_environment else {
         return false;
+    };
+    // After a verified `cd`, the Git process reads configuration from the new
+    // directory, so the probe must run there rather than in the reported cwd.
+    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let context = PathContext {
+        cwd: destination.as_deref().or(context.cwd),
+        ..context
     };
     model.segments.iter().enumerate().all(|(index, segment)| {
         segment.executable.as_deref().is_none_or(|executable| {

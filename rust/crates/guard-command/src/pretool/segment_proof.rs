@@ -42,6 +42,7 @@ pub(super) fn verified_cwd_compound_context(
 
 pub(super) fn exact_safe_cwd_compound(
     model: &CanonicalCommandV1,
+    allow_git_helper_context: bool,
     context: super::PathContext<'_>,
 ) -> bool {
     let Some(cwd) = verified_cwd_compound_context(model, context) else {
@@ -106,7 +107,7 @@ pub(super) fn exact_safe_cwd_compound(
         ) && exact_safe_segment_with_context(
             model,
             segment,
-            false,
+            allow_git_helper_context,
             crate::pretool::PathContext {
                 home_dir: context.home_dir,
                 cdpath_unset: context.cdpath_unset,

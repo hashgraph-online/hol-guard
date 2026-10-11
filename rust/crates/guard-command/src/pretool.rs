@@ -294,7 +294,7 @@ fn exact_safe_command_with_context(
     if !safe_scalar::bounded_total_sleep(model) {
         return false;
     }
-    if segment_proof::exact_safe_cwd_compound(model, context) {
+    if segment_proof::exact_safe_cwd_compound(model, allow_git_helper_context, context) {
         return true;
     }
     model.segments.iter().all(|segment| {
@@ -484,7 +484,7 @@ pub(super) fn evaluate_pre_tool_with_execution_context(
             "HOL Guard requires review because this command overrides executable resolution.",
         ));
     }
-    if git_helper_context::git_helper_context_required(&model) {
+    if git_helper_context::git_helper_context_required(&model, context) {
         if git_helper_context::git_helpers_proven_inert(
             &model,
             context,
