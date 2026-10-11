@@ -33,9 +33,21 @@ _RACY_WINDOW_NS = 2_000_000_000
 _MEMO_LIMIT = 64
 _MEMO: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _MEMO_LOCK = threading.Lock()
-# Concurrent first loads of one configuration (a burst of hook requests after
-# a restart) must share a single native process instead of each spawning one.
-_FLIGHT_STRIPES = tuple(threading.Lock() for _ in range(16))
+
+
+class _Flight:
+    """One in-progress native load that concurrent identical loads wait on."""
+
+    __slots__ = ("config", "done")
+
+    def __init__(self) -> None:
+        self.done = threading.Event()
+        self.config: dict[str, Any] | None = None
+
+
+# Concurrent first loads of one exact configuration (a burst of hook requests
+# after a restart) share a single native process; unrelated keys never wait.
+_FLIGHTS: dict[str, _Flight] = {}
 
 FileSignature = tuple[int, ...] | None
 
@@ -181,17 +193,36 @@ def load_native_guard_config(
     cached = _memo_get(key)
     if cached is not None:
         return cached
-    with _FLIGHT_STRIPES[hash(key) % len(_FLIGHT_STRIPES)]:
+    with _MEMO_LOCK:
+        flight = _FLIGHTS.get(key)
+        leader = flight is None
+        if flight is None:
+            flight = _Flight()
+            _FLIGHTS[key] = flight
+    if not leader:
+        # Bounded by this caller's own deadline; on a miss or a failed leader
+        # the waiter spawns for itself exactly as it would have alone.
+        flight.done.wait(max(0.0, deadline - time.monotonic()))
+        shared = flight.config
+        if shared is not None:
+            return cast("dict[str, Any]", json.loads(json.dumps(shared)))
         cached = _memo_get(key)
         if cached is not None:
             return cached
+        return _spawn(request_text, path, deadline)
+    try:
         config = _spawn(request_text, path, deadline)
+        flight.config = cast("dict[str, Any]", json.loads(json.dumps(config)))
         if _signatures(guard_home, workspace) == before:
             with _MEMO_LOCK:
                 _MEMO[key] = json.loads(json.dumps(config))
                 while len(_MEMO) > _MEMO_LIMIT:
                     _MEMO.popitem(last=False)
         return config
+    finally:
+        with _MEMO_LOCK:
+            _FLIGHTS.pop(key, None)
+        flight.done.set()
 
 
 def _memo_get(key: str) -> dict[str, Any] | None:
