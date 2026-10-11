@@ -33,6 +33,9 @@ _RACY_WINDOW_NS = 2_000_000_000
 _MEMO_LIMIT = 64
 _MEMO: OrderedDict[str, dict[str, Any]] = OrderedDict()
 _MEMO_LOCK = threading.Lock()
+# Concurrent first loads of one configuration (a burst of hook requests after
+# a restart) must share a single native process instead of each spawning one.
+_FLIGHT_STRIPES = tuple(threading.Lock() for _ in range(16))
 
 FileSignature = tuple[int, ...] | None
 
@@ -175,18 +178,29 @@ def load_native_guard_config(
     if before is None:
         return _spawn(request_text, path, deadline)
     key = f"{runtime_sha}\0{path}\0{request_text}\0{before!r}"
+    cached = _memo_get(key)
+    if cached is not None:
+        return cached
+    with _FLIGHT_STRIPES[hash(key) % len(_FLIGHT_STRIPES)]:
+        cached = _memo_get(key)
+        if cached is not None:
+            return cached
+        config = _spawn(request_text, path, deadline)
+        if _signatures(guard_home, workspace) == before:
+            with _MEMO_LOCK:
+                _MEMO[key] = json.loads(json.dumps(config))
+                while len(_MEMO) > _MEMO_LIMIT:
+                    _MEMO.popitem(last=False)
+        return config
+
+
+def _memo_get(key: str) -> dict[str, Any] | None:
     with _MEMO_LOCK:
         cached = _MEMO.get(key)
-        if cached is not None:
-            _MEMO.move_to_end(key)
-            return json.loads(json.dumps(cached))
-    config = _spawn(request_text, path, deadline)
-    if _signatures(guard_home, workspace) == before:
-        with _MEMO_LOCK:
-            _MEMO[key] = json.loads(json.dumps(config))
-            while len(_MEMO) > _MEMO_LIMIT:
-                _MEMO.popitem(last=False)
-    return config
+        if cached is None:
+            return None
+        _MEMO.move_to_end(key)
+        return cast("dict[str, Any]", json.loads(json.dumps(cached)))
 
 
 def clear_native_guard_config_memo() -> None:

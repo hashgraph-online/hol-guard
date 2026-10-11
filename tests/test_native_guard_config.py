@@ -119,6 +119,33 @@ def test_unchanged_old_config_is_served_from_memo(tmp_path: Path, monkeypatch: p
     assert len(calls) == 2
 
 
+def test_concurrent_first_loads_share_one_native_process(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    (tmp_path / "config.toml").write_text('mode = "enforce"\n', encoding="utf-8")
+    _age_clock(monkeypatch)
+    calls: list[str] = []
+    real_spawn = native_guard_config._spawn
+
+    def slow_spawn(request_text: str, *args: object) -> dict[str, object]:
+        calls.append(request_text)
+        time.sleep(0.2)
+        return real_spawn(request_text, *args)
+
+    monkeypatch.setattr(native_guard_config, "_spawn", slow_spawn)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(
+            pool.map(
+                lambda _: load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None),
+                range(8),
+            )
+        )
+
+    assert len(calls) == 1
+    assert all(result["mode"] == "enforce" for result in results)
+
+
 def test_freshly_written_config_is_never_memoized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "config.toml").write_text('mode = "enforce"\n', encoding="utf-8")
     calls: list[str] = []
