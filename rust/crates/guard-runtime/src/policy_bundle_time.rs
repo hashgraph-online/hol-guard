@@ -390,24 +390,32 @@ impl Parsed {
 
     /// `astimezone(utc).isoformat()` with `+00:00` rewritten to `Z`.
     pub(crate) fn utc_isoformat_z(&self) -> Option<String> {
-        let utc = self.utc_micros()?;
-        let days = utc.div_euclid(MICROS_PER_DAY);
-        let rest = utc.rem_euclid(MICROS_PER_DAY);
-        let (year, month, day) = ord_to_ymd(days + 719_163);
-        let seconds = rest / MICROS_PER_SECOND;
-        let micros = rest % MICROS_PER_SECOND;
-        let mut text = format!(
-            "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
-            seconds / 3600,
-            seconds % 3600 / 60,
-            seconds % 60
-        );
-        if micros != 0 {
-            text.push_str(&format!(".{micros:06}"));
-        }
-        text.push('Z');
-        Some(text)
+        micros_to_utc_isoformat(self.utc_micros()?, "Z")
     }
+}
+
+/// `datetime.isoformat()` of a UTC instant, closed with `suffix`
+/// (`+00:00` for Python's spelling, `Z` for the contract's).
+pub(crate) fn micros_to_utc_isoformat(utc: i64, suffix: &str) -> Option<String> {
+    if !(MIN_MICROS..=MAX_MICROS).contains(&utc) {
+        return None;
+    }
+    let days = utc.div_euclid(MICROS_PER_DAY);
+    let rest = utc.rem_euclid(MICROS_PER_DAY);
+    let (year, month, day) = ord_to_ymd(days + 719_163);
+    let seconds = rest / MICROS_PER_SECOND;
+    let micros = rest % MICROS_PER_SECOND;
+    let mut text = format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}",
+        seconds / 3600,
+        seconds % 3600 / 60,
+        seconds % 60
+    );
+    if micros != 0 {
+        text.push_str(&format!(".{micros:06}"));
+    }
+    text.push_str(suffix);
+    Some(text)
 }
 
 pub(crate) fn micros_to_seconds(micros: i64) -> Option<f64> {

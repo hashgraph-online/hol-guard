@@ -988,6 +988,22 @@
         "entry_points": [],
         "reason": "Hermes config.yaml hook registration, allowlist sync and doctor labels.",
         "evidence": "The only callers are the excluded Hermes adapter module (adapters/hermes.py, harness setup and doctor). hermes_native_decision and hermes_bridge_response, which the hook bridges import, stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "runtime-policy-admin-payloads",
+        "category": "cli_only",
+        "path": "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
+        "symbols": [
+          "_guard_settings_payload",
+          "_guard_settings_explain_payload",
+          "_guard_settings_doctor_payload",
+          "_guard_cli_settings_payload",
+          "_runtime_detector_registry_payload",
+          "_runtime_detector_perf_payload"
+        ],
+        "entry_points": [],
+        "reason": "Payload builders for the guard settings explain/doctor/show commands and the runtime detector registry and perf listing commands.",
+        "evidence": "The only callers are commands_dispatch_records.py and commands_dispatch_admin.py, which are excluded CLI dispatch modules, plus each other. They read settings and detector metadata for operator output and never feed a hook, run, protect or MCP decision. The runtime policy readers (effective policy config, stored policy decision, approval context token) stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
       }
     ]
   },

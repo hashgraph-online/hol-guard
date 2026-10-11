@@ -1583,21 +1583,12 @@ def test_same_install_native_upgrade_rejects_live_previous_generation(tmp_path, 
 
 
 def test_desktop_ensure_uses_post_update_timeout(monkeypatch):
-    monkeypatch.delenv("HOL_GUARD_HOOK_WORKER_READY_TIMEOUT_SECONDS", raising=False)
-    margin = daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_MARGIN_SECONDS
-    worker_floor = daemon_manager_module.hook_worker_ready_timeout(0.0)
-    # The start deadline is the larger of the base constant and the worker
-    # ready floor plus margin, so the client always outlasts a healthy worker.
+    # The resident decides the budget: the larger of the base timeout and the
+    # start floor plus its margin (14 s + 5 s), so a slow cold start is not cut off.
     monkeypatch.setenv("HOL_GUARD_DESKTOP", "1")
-    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(
-        daemon_manager_module.GUARD_DAEMON_POST_UPDATE_START_TIMEOUT_SECONDS,
-        worker_floor + margin,
-    )
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == 30.0
     monkeypatch.delenv("HOL_GUARD_DESKTOP")
-    assert daemon_manager_module._default_guard_daemon_start_timeout() == max(
-        daemon_manager_module.GUARD_DAEMON_START_TIMEOUT_SECONDS,
-        worker_floor + margin,
-    )
+    assert daemon_manager_module._default_guard_daemon_start_timeout() == 19.0
 
 
 def test_ensure_guard_daemon_refuses_desktop_preflight(tmp_path, monkeypatch):

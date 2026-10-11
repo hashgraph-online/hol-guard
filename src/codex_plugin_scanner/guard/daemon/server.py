@@ -2816,6 +2816,7 @@ class _GuardDaemonHandler(
         if verdict is None:
             return
         options = verdict.fields
+        from ..native_approval_scope import ApprovalScopeUnavailableError
         from .business_review_queue import NativeBusinessReviewQueueReadError, local_request_page
 
         try:
@@ -2828,6 +2829,13 @@ class _GuardDaemonHandler(
         except NativeBusinessReviewQueueReadError:
             self._write_json(
                 {"error": "native_local_business_queue_read_failed"},
+                status=503,
+                extra_headers={"Cache-Control": "no-store"},
+            )
+            return
+        except ApprovalScopeUnavailableError:
+            self._write_json(
+                {"error": "native_approval_scope_unavailable"},
                 status=503,
                 extra_headers={"Cache-Control": "no-store"},
             )
@@ -3589,7 +3597,6 @@ class _GuardDaemonHandler(
                     home_dir=home_dir,
                     guard_home=guard_home,
                     workspace=workspace,
-                    payload_hydrated=True,
                     deadline=hook_deadline.expires_at,
                 )
         finally:
@@ -3731,7 +3738,6 @@ class _GuardDaemonHandler(
         home_dir: str | None,
         guard_home: str | None,
         workspace: str | None,
-        payload_hydrated: bool = False,
         deadline: float | None = None,
     ) -> None:
         from contextlib import nullcontext
@@ -5644,6 +5650,8 @@ class GuardDaemonServer:
         while not self._shutdown_started.is_set():
             with self._server.active_stream_clients_lock:
                 active_stream_clients = self._server.active_stream_clients
+            from ..native_approval_scope import ApprovalScopeUnavailableError
+
             try:
                 pending_review_requests = self._server.store.list_approval_requests(
                     status="pending",
@@ -5662,7 +5670,7 @@ class GuardDaemonServer:
                     # the depth is unknown rather than transient-locked. Queued events
                     # stay durable in guard.db; do not let this pin the daemon alive.
                     outbox_depth = None
-            except sqlite3.OperationalError:
+            except (sqlite3.OperationalError, ApprovalScopeUnavailableError):
                 time.sleep(_GUARD_DAEMON_IDLE_POLL_INTERVAL_SECONDS)
                 continue
             if (
