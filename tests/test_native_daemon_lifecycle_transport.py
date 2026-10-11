@@ -25,7 +25,7 @@ class _Status:
 def _isolated_cache(monkeypatch: pytest.MonkeyPatch) -> None:
     transport._NEED_KEYS.clear()
     transport._VERDICTS.clear()
-    monkeypatch.setattr(transport, "native_runtime_status", lambda: _Status())
+    monkeypatch.setattr(transport, "native_runtime_status", lambda **_kw: _Status())
     monkeypatch.setattr(transport, "_resolve_existing_digest_home", lambda home: Path("/home"))
     monkeypatch.setattr(transport, "_record_success", lambda _home: None)
     monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
@@ -316,7 +316,9 @@ def test_the_caller_deadline_bounds_the_cold_start_allowance(monkeypatch: pytest
 
 
 class _ProbeMiss:
-    identity = _Identity()
+    """What a real missed capabilities probe yields: no identity, not available."""
+
+    identity = None
     available = False
     compatible = False
     capabilities = None
@@ -328,8 +330,9 @@ def test_a_transient_capability_probe_miss_is_waited_out_before_the_resident_is_
 ) -> None:
     statuses = [_ProbeMiss(), _ProbeMiss(), _Status()]
     monkeypatch.setattr(
-        transport, "native_runtime_status", lambda: statuses.pop(0) if len(statuses) > 1 else statuses[0]
+        transport, "native_runtime_status", lambda **_kw: statuses.pop(0) if len(statuses) > 1 else statuses[0]
     )
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: True)
     monkeypatch.setattr(transport.time, "sleep", lambda _seconds: None)
     seen: list[str] = []
     monkeypatch.setattr(
@@ -344,16 +347,45 @@ def test_a_transient_capability_probe_miss_is_waited_out_before_the_resident_is_
     assert seen == []  # waiting never decides anything; the resident is asked afterwards
 
 
+def test_a_host_with_no_runtime_is_not_waited_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(transport, "native_runtime_status", lambda **_kw: calls.append("status") or _ProbeMiss())
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: False)
+    monkeypatch.setattr(transport.time, "sleep", lambda _seconds: calls.append("sleep"))
+
+    transport._await_native_runtime(20.0)
+
+    assert calls == ["status"]
+
+
 def test_a_persistent_probe_miss_stops_waiting_and_names_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     clock = [0.0]
     monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(transport.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
-    monkeypatch.setattr(transport, "native_runtime_status", lambda: _ProbeMiss())
+    monkeypatch.setattr(transport, "native_runtime_status", lambda **_kw: _ProbeMiss())
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: True)
     monkeypatch.setattr(transport, "_resident_request", lambda **_kwargs: None)
     monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: None)
 
     with pytest.raises(transport.NativeDaemonLifecycleError) as raised:
-        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 20.0)
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 30.0)
 
     assert clock[0] <= transport._RUNTIME_PROBE_WAIT_SECONDS + 1.0
     assert "runtime_unavailable:native_unavailable" in str(raised.value)
+
+
+def test_the_resident_gets_only_the_budget_the_probe_wait_left(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    statuses = [_ProbeMiss()] * 5 + [_Status()]
+    monkeypatch.setattr(
+        transport, "native_runtime_status", lambda **_kw: statuses.pop(0) if len(statuses) > 1 else statuses[0]
+    )
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: True)
+    timeouts: list[float] = []
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 12.0)
+
+    assert timeouts == [pytest.approx(12.0 - 5 * transport._RUNTIME_PROBE_RETRY_SECONDS)]

@@ -21,7 +21,7 @@ def _provision(monkeypatch: pytest.MonkeyPatch, answer, *, failure_code: str | N
         identity=SimpleNamespace(path=Path("/native"), sha256="sha"),
         capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v2")),
     )
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: status)
 
     def respond(**kwargs: object) -> bytes | None:
         # A callable answer is built from the request, as the resident binds it.
@@ -166,7 +166,7 @@ def test_runtime_without_the_current_approval_gate_capability_is_not_asked(
         identity=SimpleNamespace(path=Path("/native"), sha256="sha"),
         capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v1")),
     )
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda: stale)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: stale)
     assert bridge.approval_gate_native("require_approval_decision", tmp_path) is None
 
 

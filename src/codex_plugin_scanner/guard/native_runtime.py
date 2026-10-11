@@ -308,10 +308,10 @@ def _capabilities_for_identity(
     if retry_after is not None and now < retry_after:
         return None
     timeout_seconds = _CAPABILITIES_PROBE_TIMEOUT_SECONDS
-    if deadline_monotonic is None and retry_after is None:
+    if retry_after is None:
         # The first execution of a freshly installed runtime pays one-time costs (for example a Windows
-        # antivirus scan) that exceed the warm budget; a caller without a deadline has no tighter bound
-        # to protect, so give that first probe room instead of failing every native check behind it.
+        # antivirus scan) that exceed the warm budget. Give that first probe room instead of failing every
+        # native check behind it; the caller's deadline, when it has one, still caps it just below.
         timeout_seconds = _CAPABILITIES_FIRST_PROBE_TIMEOUT_SECONDS
     if deadline_monotonic is not None:
         remaining = deadline_monotonic - now
@@ -371,6 +371,16 @@ def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeR
     status = _compute_runtime_status(candidates, deadline_monotonic=deadline_monotonic)
     remember_scoped_status(key, status)
     return status
+
+
+def native_runtime_probe_missed() -> bool:
+    """True when a runtime binary is installed but its capability probe has not succeeded yet.
+
+    A miss leaves a status with no identity, so this is what tells a transient cold-host probe failure
+    (worth waiting out) from a host with no runtime at all (not worth waiting for).
+    """
+
+    return any(_validate_binary(candidate) is not None for candidate in _runtime_candidates())
 
 
 def _compute_runtime_status(

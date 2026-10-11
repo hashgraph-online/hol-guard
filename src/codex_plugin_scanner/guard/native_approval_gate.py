@@ -226,7 +226,11 @@ def approval_gate_native(
     native runtime is provisioned for this process.
     """
     global _request_counter
-    status = native_runtime_status()
+    # The first probe of a cold runtime may spend the cold-start allowance, but never more than this
+    # request's own total budget.
+    status = native_runtime_status(
+        deadline_monotonic=time.monotonic() + timeout_seconds + _COLD_START_ALLOWANCE_SECONDS
+    )
     if (
         not status.available
         or not status.compatible

@@ -34,7 +34,7 @@ from uuid import uuid4
 from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
 from .native_resident_client import native_resident_client_failure_code, native_resident_client_ready
-from .native_runtime import native_runtime_status
+from .native_runtime import native_runtime_probe_missed, native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
 
 DAEMON_LIFECYCLE_FEATURE = "daemon-lifecycle-decision-v1"
@@ -171,26 +171,32 @@ def _timeout_seconds(deadline: float | None, *, cold_start: bool = False) -> flo
     return min(budget, remaining)
 
 
-def _await_native_runtime(timeout_seconds: float) -> None:
+def _await_native_runtime(timeout_seconds: float) -> float:
     """Wait out a transient capability-probe miss before asking the resident.
 
     A freshly installed runtime can fail its first ``capabilities`` probe on a cold host; that miss is
     never cached and clears on the next attempt. Without a wait the one lifecycle request reads the miss
     as "no resident" and the daemon operation fails. The verdict stays the resident's: this only waits
-    for the runtime to become usable and never decides anything.
+    for the runtime to become usable and never decides anything. Only an installed runtime whose probe
+    missed is waited on; no runtime at all, or a real incompatibility, returns at once. Returns the
+    seconds spent so the caller can charge them against the request budget.
     """
 
-    deadline = time.monotonic() + min(timeout_seconds, _RUNTIME_PROBE_WAIT_SECONDS)
+    started = time.monotonic()
+    deadline = started + min(timeout_seconds, _RUNTIME_PROBE_WAIT_SECONDS)
+    waited = False
     while True:
-        status = native_runtime_status()
-        if status.available and status.compatible and status.capabilities is not None:
-            return
-        if status.identity is None or status.capabilities is not None:
-            # No runtime binary at all, or a real incompatibility: neither is transient.
-            return
+        status = native_runtime_status(deadline_monotonic=deadline)
+        if status.available and status.capabilities is not None:
+            break
+        if status.identity is not None or not native_runtime_probe_missed():
+            break  # A manifest error or no runtime at all is not transient; report it as is.
         if time.monotonic() + _RUNTIME_PROBE_RETRY_SECONDS >= deadline:
-            return
+            break
+        waited = True
         time.sleep(_RUNTIME_PROBE_RETRY_SECONDS)
+    # A runtime that was usable at once costs the request nothing; only a real wait is charged to it.
+    return time.monotonic() - started if waited else 0.0
 
 
 def _runtime_unavailable_detail() -> str:
@@ -245,7 +251,9 @@ def _round_trip(
         raise _fail("native_daemon_lifecycle_request_invalid") from error
     if not ensure_resident_prerequisite(home):
         raise _fail("native_daemon_lifecycle_prerequisite_unavailable")
-    _await_native_runtime(timeout_seconds)
+    timeout_seconds -= _await_native_runtime(timeout_seconds)
+    if timeout_seconds <= 0:
+        raise _fail("native_daemon_lifecycle_deadline")
     response = _resident_request(
         operation=_OPERATION,
         request=request,
@@ -311,7 +319,7 @@ def _decide(
     # from the resident's ``10.0``.
     numbers = _normalize_query_numbers(query)
     full_query = {"check": check, **{key: value for key, value in numbers.items() if value is not None}}
-    status = native_runtime_status()
+    status = native_runtime_status(deadline_monotonic=deadline)
     identity = status.identity.sha256 if status.identity is not None else ""
     query_key = None
     if check not in _UNCACHED_CHECKS and identity:
