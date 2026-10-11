@@ -58,7 +58,7 @@ _FIXED_TOOLS = {
 # prompts and has no owner yet. A merged PR is never a marker: once its fix
 # lands the case either passes or needs a new owner.
 _ALLOWED_PR = {"unassigned"}
-_PENDING_CEILING = 32
+_PENDING_CEILING = 28
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
