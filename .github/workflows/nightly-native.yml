@@ -391,6 +391,8 @@ jobs:
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+          # ci/ has no conftest to pin the mode, and auto mode does not take an explicit binary path.
+          echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - name: Provision the production Linux backend
         run: |
           sudo apt-get update
