@@ -228,6 +228,7 @@ mod tests {
                 source_ref_external_allowed: false,
                 execution_environment: None,
             },
+            recording_only: false,
         }
     }
 

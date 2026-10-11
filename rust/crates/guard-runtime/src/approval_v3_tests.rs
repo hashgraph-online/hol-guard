@@ -171,6 +171,7 @@ fn store_and_envelope_with_runtime(
             source_ref_external_allowed: false,
             execution_environment: None,
         },
+        recording_only: false,
     };
     (root, store, envelope)
 }

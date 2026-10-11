@@ -53,7 +53,7 @@ def response_from_payload(payload: object) -> HookReviewResponse | None:
             "result",
             "receipt",
         }
-        if not required <= set(decoded) or set(decoded) - (required | {"request_id"}):
+        if not required <= set(decoded) or set(decoded) - (required | {"request_id", "harness_response"}):
             return None
         harness = decoded.get("harness")
         if (

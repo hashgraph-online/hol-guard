@@ -85,6 +85,7 @@ def _edge_result() -> dict[str, object]:
         "harness": "claude-code",
         "event_name": "PreToolUse",
         "payload_kind": "inline",
+        "harness_response": {"continue": True},
         "result": {
             "schema": "guard-pre-tool-result.v1",
             "version": 1,
