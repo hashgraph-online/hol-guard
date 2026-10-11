@@ -175,7 +175,7 @@ fn is_python_space(ch: char) -> bool {
     )
 }
 
-fn python_strip(text: &str) -> &str {
+pub fn python_strip(text: &str) -> &str {
     text.trim_matches(is_python_space)
 }
 

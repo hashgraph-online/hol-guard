@@ -6,11 +6,8 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.npm_source_spec import parse_npm_source_spec
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
-from codex_plugin_scanner.guard.runtime.package_intent_common import js_target
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact, js_target
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 REPOSITORY = "git:github.com/hashgraph-online/hol-guard"

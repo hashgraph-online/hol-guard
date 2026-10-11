@@ -17,12 +17,12 @@ from codex_plugin_scanner.guard.local_supply_chain import (
     evaluate_package_request_artifact,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.runtime.package_intent import (
+from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     PackageIntentTarget,
     build_package_request_artifact,
-    parse_package_intent,
 )
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_archive_fakes import forbid_download, install_download, install_inspection

@@ -28,10 +28,8 @@ from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, Policy
 from codex_plugin_scanner.guard.package_execution_context import build_package_execution_context
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy, OpenCodeMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    extract_package_intent_request,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_mcp_catalog import tool_definition_authority_hash
 

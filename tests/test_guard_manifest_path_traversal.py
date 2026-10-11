@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
-from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.runtime.workspace_path_guard import (
     existing_paths_within_workspace,

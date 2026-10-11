@@ -4,9 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from tests.package_intent_fixtures import (
     _native_package_intent,  # noqa: F401 -- registers the module autouse fixture
     _write_text,
