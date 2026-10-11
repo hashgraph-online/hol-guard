@@ -82,6 +82,18 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             "{name}"
         );
     }
+    // Toolchain installers export library search paths for every process;
+    // they do not change how Git reads configuration.
+    let mut search_paths = context.clone();
+    search_paths
+        .environment_names
+        .extend(["LD_LIBRARY_PATH".into(), "DYLD_LIBRARY_PATH".into()]);
+    assert_eq!(evaluate(&search_paths).decision, "allow");
+    for name in ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"] {
+        let mut preloaded = context.clone();
+        preloaded.environment_names.push(name.into());
+        assert_ne!(evaluate(&preloaded).decision, "allow", "{name}");
+    }
     let caller_home = root.join("actual-caller-home");
     std::fs::create_dir_all(&caller_home).unwrap();
     std::fs::write(
