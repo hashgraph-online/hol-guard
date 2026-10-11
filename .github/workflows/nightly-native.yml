@@ -570,6 +570,16 @@ jobs:
           set +e
           sudo /tmp/hol-guard-test/runsc --debug --debug-log=/tmp/runsc-debug.log --root /tmp/hol-guard-test/state --network none --platform systrap run --bundle /tmp/hol-guard-test/bundles/guard-breakout guard-diagnostic
           sudo tail -n 80 /tmp/runsc-debug.log
+          # Repeat the corpus launch exactly: bare PATH-only environment, then the 1 MiB RLIMIT_FSIZE the
+          # runtime applies before exec. Print runsc's own error for whichever variant fails.
+          base=(/tmp/hol-guard-test/runsc --root /tmp/hol-guard-test/state --network none --platform systrap)
+          bundle=/tmp/hol-guard-test/bundles/guard-breakout
+          sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin "${base[@]}" run --bundle "$bundle" guard-diag-env
+          echo "bare-env exit=$?"
+          sudo "${base[@]}" delete --force guard-diag-env
+          sudo prlimit --fsize=1048576:1048576 env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin "${base[@]}" run --bundle "$bundle" guard-diag-fsize
+          echo "fsize-limited exit=$?"
+          sudo "${base[@]}" delete --force guard-diag-fsize
           exit 1
       - name: Verify no residual runsc state
         if: always()
