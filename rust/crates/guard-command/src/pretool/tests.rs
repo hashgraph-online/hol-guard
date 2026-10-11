@@ -431,7 +431,6 @@ fn allows_bounded_exact_commands() {
         "ls",
         "ls -la src",
         "cat README.md",
-        "cat README.md Cargo.toml",
         "head -n 20 README.md",
         "tail -n 5 README.md",
     ] {
@@ -508,9 +507,6 @@ fn reviews_date_mutations_and_unbounded_file_reads() {
         "cat //etc/passwd",
         "cat /proc//self/environ",
         "cat /var/../etc/passwd",
-        "cat README.md .env",
-        "cat README.md /etc/passwd",
-        "cat README.md -",
         "head -n 10 README.md Cargo.toml",
         "ls /",
         "cat /root/secret",

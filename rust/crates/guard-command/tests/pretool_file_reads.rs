@@ -375,6 +375,7 @@ fn codex_multi_file_cat_proves_every_operand() {
         "cat README.md ~/.hol-support/SAFETY.md",
         "cat -n README.md pyproject.toml",
         "cat -- README.md pyproject.toml",
+        "cat README.md pyproject.toml",
     ] {
         assert_eq!(decide(command).minimum_action, "allow", "{command}");
     }
