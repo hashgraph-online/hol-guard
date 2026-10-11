@@ -405,6 +405,12 @@ pub(super) fn parse_python(code: &str) -> Option<Vec<Call>> {
         if line.starts_with(char::is_whitespace) || calls.len() >= MAX_CALLS {
             return None;
         }
+        // The shared lexer decodes JS escapes and backtick strings. Python
+        // keeps the backslash, and a backtick string never reaches read().
+        // Reject both so the proven path is the literal text.
+        if line.contains(['\\', '`']) {
+            return None;
+        }
         let tokens = tokenize(line)?;
         let inner = match tokens.as_slice() {
             [Token::Ident(word), Token::Punct('('), inner @ .., Token::Punct(')')]
@@ -443,6 +449,9 @@ fn python_read_lines_are_parsed_as_reads() {
         "print(read(\n'a'))",
         "x = read('a')",
         "",
+        "print(read('a\\b'))",
+        "print(read('a`b'))",
+        "read(`a`)",
     ] {
         assert!(parse_python(code).is_none(), "{code:?}");
     }
