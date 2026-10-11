@@ -1,8 +1,8 @@
 #[path = "read_path_allowances.rs"]
 mod allowances;
 use allowances::{
-    agent_skill_document, codex_notes_document, execution_output_log, guard_safety_doc,
-    project_skill_document,
+    agent_home_state, agent_skill_document, codex_notes_document, execution_output_log,
+    guard_safety_doc, project_skill_document,
 };
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
@@ -58,7 +58,7 @@ pub(super) fn bounded_omp_file_read_target(
         BoundedSelectorPath::Unsupported => return false,
         BoundedSelectorPath::NotSelector => {}
     }
-    bounded_read_target(value, home_dir, cwd, false)
+    bounded_structured_file_read_target(value, home_dir, cwd)
 }
 
 pub(super) fn bounded_omp_selector_requires_review(
@@ -303,14 +303,38 @@ pub(super) fn bounded_read_target(
     cwd: Option<&str>,
     allow_directory: bool,
 ) -> bool {
+    bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, false)
+}
+
+/// A structured read tool opens its path literally, so `[slug]` in a Next.js
+/// route is a directory name, not a glob. Brackets are accepted only when the
+/// exact spelling resolves to an existing regular file; every other glob
+/// metacharacter, and any unresolved bracketed path, stays rejected.
+pub(super) fn bounded_structured_file_read_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    bounded_read_target_with_brackets(value, home_dir, cwd, false, true)
+}
+
+fn bounded_read_target_with_brackets(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    allow_directory: bool,
+    literal_brackets: bool,
+) -> bool {
     let path = value.trim();
     let path = path.strip_prefix(r"\\?\").unwrap_or(path);
     if path.is_empty() || path.len() > 4096 {
         return false;
     }
+    let has_brackets = path.contains(['[', ']']);
     if path.contains([
-        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '[', ']', '{', '}',
-    ]) {
+        '$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '*', '?', '{', '}',
+    ]) || (has_brackets && !literal_brackets)
+    {
         return false;
     }
     if path.split(['/', '\\']).any(|part| part == "..") {
@@ -334,6 +358,9 @@ pub(super) fn bounded_read_target(
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
         return (canonical.is_file() || (allow_directory && canonical.is_dir()))
             && resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true);
+    }
+    if has_brackets {
+        return false;
     }
     // An unresolvable absolute or `~` target cannot prove a bounded file;
     // a workspace-relative spelling keeps the pre-existing lexical floor.
@@ -414,6 +441,7 @@ fn resolved_path_allowed_for_operation(
             || guard_safety_doc(canonical, home_dir)
             || (read_only
                 && (agent_skill_document(canonical, home_dir)
+                    || agent_home_state(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)))
             || (read_only && execution_output_log(canonical, home_dir)))

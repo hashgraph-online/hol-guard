@@ -260,7 +260,7 @@ pub(super) fn evaluate_signals(
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_file_read_target(
+        && super::super::safe_reads::bounded_structured_file_read_target(
             &signals.path_values[0],
             home_dir,
             cwd,

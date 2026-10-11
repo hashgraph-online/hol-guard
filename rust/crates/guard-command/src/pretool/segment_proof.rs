@@ -280,7 +280,9 @@ pub(super) fn exact_safe_segment_with_context(
     let basename = executable_basename(executable);
     let inert_search = matches!(basename, "rg" | "grep")
         && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
-    if (!inert_search && sensitive_command(&segment.text))
+    if (!inert_search
+        && !super::source_file_read_segment(segment)
+        && sensitive_command(&segment.text))
         || (!matches!(basename, "rg" | "grep")
             && segment
                 .arguments
