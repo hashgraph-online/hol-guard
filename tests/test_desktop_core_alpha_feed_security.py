@@ -54,6 +54,7 @@ def test_feed_preserves_trusted_push_without_publication_completion_overlap() ->
     trusted_push = """push:
     branches: [main]
     paths:
+      - .github/actions/release-api-token/**
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
