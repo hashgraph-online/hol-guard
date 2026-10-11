@@ -91,7 +91,9 @@ def test_scan_state_reuses_one_native_trace_and_invalidates_runtime(monkeypatch)
 
 def test_initial_and_mutated_top_level_answers_come_from_native(monkeypatch):
     seen = []
-    answers = iter((True, False))
+    identity = ["native-one"]
+    monkeypatch.setattr(shell_structure, "runtime_key", lambda: tuple(identity))
+    answers = iter((True, False, False))
 
     def top_level(action, command, **fields):
         seen.append((action, fields["state"]))
@@ -103,7 +105,9 @@ def test_initial_and_mutated_top_level_answers_come_from_native(monkeypatch):
     assert state.is_top_level is True
     state.quote = "'"
     assert state.is_top_level is False
-    assert seen == [("top_level", [None, 0, False]), ("top_level", ["'", 0, False])]
+    identity[:] = ["native-two"]
+    assert state.is_top_level is False
+    assert seen == [("top_level", [None, 0, False]), ("top_level", ["'", 0, False]), ("top_level", ["'", 0, False])]
 
 
 def test_scan_state_reuses_compatible_jumps_but_rejects_wrong_pre_state(monkeypatch):

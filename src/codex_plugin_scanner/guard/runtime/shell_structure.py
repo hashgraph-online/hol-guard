@@ -63,14 +63,17 @@ class ShellScanState:
         self.subshell_depth = 0
         self.in_backtick = False
         self._top_level: bool | None = None
+        self._top_level_runtime: tuple[object, ...] | None = None
         self._key: tuple[object, ...] | None = None
         self._rows: dict[int, tuple[tuple[object, ...], list[Any]]] = {}
         self._expected: tuple[object, ...] = (None, 0, False)
 
     @property
     def is_top_level(self) -> bool:
-        if self._top_level is None or (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
+        identity = runtime_key()
+        if self._top_level_runtime != identity or (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
             self._top_level = call("top_level", "", state=[self.quote, self.subshell_depth, self.in_backtick])
+            self._top_level_runtime = identity
             self._expected = (self.quote, self.subshell_depth, self.in_backtick)
         return cast(bool, self._top_level)
 
@@ -89,4 +92,5 @@ class ShellScanState:
         row = self._rows[index][1]
         self.quote, self.subshell_depth, self.in_backtick, self._top_level = row[2:]
         self._expected = (self.quote, self.subshell_depth, self.in_backtick)
+        self._top_level_runtime = key[1:]
         return row[1]
