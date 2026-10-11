@@ -76,6 +76,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-policy-snapshot-inspect-v1".into(),
         "native-business-policy-retained-floor-v1".into(),
         "native-business-policy-document-compile-v1".into(),
+        "native-guard-config-load-v1".into(),
         "native-business-source-codec-v1".into(),
         "native-business-source-anchor-codec-v1".into(),
         "native-business-source-current-fence-v2".into(),

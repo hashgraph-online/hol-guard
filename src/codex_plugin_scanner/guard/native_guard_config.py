@@ -1,0 +1,159 @@
+"""Thin client for the native effective Guard configuration loader.
+
+Rust reads the Guard home and workspace files, composes the managed policy this
+client resolved, and coerces every value. This module only spawns the loader,
+fails closed when it is unavailable, and keeps a stat-validated memo so an
+unchanged configuration is not reloaded.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import threading
+import time
+from collections import OrderedDict
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any, cast
+
+from .config_file_io import ConfigFileTrustError
+
+GUARD_CONFIG_LOAD_COMMAND = "guard-config-load"
+GUARD_CONFIG_LOAD_FEATURE = "native-guard-config-load-v1"
+GUARD_CONFIG_LOAD_SCHEMA = "guard-config-load.v1"
+GUARD_CONFIG_LOAD_TIMEOUT_SECONDS = 10.0
+WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
+# A file modified this recently may still change within one timestamp tick, so
+# its result is neither stored nor reused.
+_RACY_WINDOW_NS = 2_000_000_000
+_MEMO_LIMIT = 64
+_MEMO: OrderedDict[str, dict[str, Any]] = OrderedDict()
+_MEMO_LOCK = threading.Lock()
+
+FileSignature = tuple[int, ...] | None
+
+
+def _file_signature(path: Path) -> FileSignature:
+    try:
+        metadata = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return (-1,)
+    return (
+        metadata.st_mode,
+        metadata.st_ino,
+        metadata.st_dev,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_ctime_ns,
+    )
+
+
+def _signatures(guard_home: Path, workspace: Path | None) -> tuple[FileSignature, ...] | None:
+    """Return the config file signatures, or None when a file is too fresh to trust."""
+
+    paths = [guard_home / "config.toml"]
+    if workspace is not None:
+        paths.extend(workspace / name for name in WORKSPACE_CONFIG_FILENAMES)
+    now_ns = time.time_ns()
+    signatures: list[FileSignature] = []
+    for path in paths:
+        signature = _file_signature(path)
+        if signature is not None and (
+            len(signature) == 1 or now_ns - max(signature[4], signature[5]) < _RACY_WINDOW_NS
+        ):
+            return None
+        signatures.append(signature)
+    return tuple(signatures)
+
+
+def _request_text(
+    guard_home: Path,
+    workspace: Path | None,
+    *,
+    require_canonical_workspace: bool,
+    managed: Mapping[str, object] | None,
+) -> str:
+    request: dict[str, object] = {
+        "schema": GUARD_CONFIG_LOAD_SCHEMA,
+        "guard_home": str(guard_home),
+        "workspace": str(workspace) if workspace is not None else None,
+        "require_canonical_workspace": require_canonical_workspace,
+        "managed": dict(managed) if managed is not None else None,
+    }
+    return json.dumps(request, sort_keys=True, separators=(",", ":"))
+
+
+def _spawn(request_text: str) -> dict[str, Any]:
+    from .native_runtime import _run_native_process, native_runtime_status
+
+    status = native_runtime_status()
+    if (
+        not status.available
+        or not status.compatible
+        or status.identity is None
+        or status.capabilities is None
+        or GUARD_CONFIG_LOAD_FEATURE not in status.capabilities.features
+    ):
+        raise ConfigFileTrustError("native_guard_config_unavailable")
+    output = _run_native_process(
+        status.identity.path,
+        (GUARD_CONFIG_LOAD_COMMAND, "--stdin"),
+        input_text=request_text,
+        timeout_seconds=GUARD_CONFIG_LOAD_TIMEOUT_SECONDS,
+    )
+    if output is None:
+        raise ConfigFileTrustError("native_guard_config_unavailable")
+    try:
+        response = json.loads(output)
+    except ValueError as error:
+        raise ConfigFileTrustError("native_guard_config_invalid") from error
+    if not isinstance(response, dict):
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    if response.get("ok") is not True:
+        reason = response.get("error")
+        raise ConfigFileTrustError(reason if isinstance(reason, str) and reason else "native_guard_config_invalid")
+    config = response.get("config")
+    if not isinstance(config, dict):
+        raise ConfigFileTrustError("native_guard_config_invalid")
+    return cast("dict[str, Any]", config)
+
+
+def load_native_guard_config(
+    guard_home: Path,
+    workspace: Path | None,
+    *,
+    require_canonical_workspace: bool,
+    managed: Mapping[str, object] | None,
+) -> dict[str, Any]:
+    """Load the coerced configuration fields from the native runtime."""
+
+    request_text = _request_text(
+        guard_home,
+        workspace,
+        require_canonical_workspace=require_canonical_workspace,
+        managed=managed,
+    )
+    before = _signatures(guard_home, workspace)
+    if before is None:
+        return _spawn(request_text)
+    key = request_text + repr(before)
+    with _MEMO_LOCK:
+        cached = _MEMO.get(key)
+        if cached is not None:
+            _MEMO.move_to_end(key)
+            return json.loads(json.dumps(cached))
+    config = _spawn(request_text)
+    if _signatures(guard_home, workspace) == before:
+        with _MEMO_LOCK:
+            _MEMO[key] = json.loads(json.dumps(config))
+            while len(_MEMO) > _MEMO_LIMIT:
+                _MEMO.popitem(last=False)
+    return config
+
+
+def clear_native_guard_config_memo() -> None:
+    with _MEMO_LOCK:
+        _MEMO.clear()
