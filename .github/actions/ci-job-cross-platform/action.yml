@@ -39,6 +39,29 @@ runs:
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
   - uses: ./.github/actions/setup-rust
     if: runner.os == 'macOS' || runner.os == 'Windows'
+  - name: Install content-addressed compiler cache
+    if: runner.os == 'macOS' || runner.os == 'Windows'
+    uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+    with:
+      version: v0.18.0
+  - name: Route the runtime build through the compiler cache
+    # The rust-cache key includes the runner image's toolchains, so it misses
+    # on every PR between an image rollout and the next completed main push,
+    # and these builds then recompile every crate (about 4 min on macOS, 7 on
+    # Windows). sccache keys on content and main pushes write objects as they
+    # compile, so a cancelled main run still warms it. PRs only read.
+    if: runner.os == 'macOS' || runner.os == 'Windows'
+    shell: bash
+    env:
+      SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+    run: |
+      {
+        echo "RUSTC_WRAPPER=sccache"
+        echo "SCCACHE_GHA_ENABLED=on"
+        echo "SCCACHE_GHA_VERSION=cross-platform-runtime"
+        echo "SCCACHE_GHA_RW_MODE=${SCCACHE_MODE}"
+        echo "SCCACHE_IGNORE_SERVER_IO_ERROR=1"
+      } >> "$GITHUB_ENV"
   - name: Build the native runtime for skill-directory identity on macOS
     if: runner.os == 'macOS'
     shell: bash
