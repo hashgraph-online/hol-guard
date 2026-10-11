@@ -5,7 +5,7 @@
 //! Python path produced.
 
 use super::*;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::fs;
 use std::path::PathBuf;
 
@@ -176,17 +176,18 @@ fn oversized_sbom_is_skipped() {
 
 #[test]
 fn relative_workspace_dirs_are_rejected() {
-    let mut request = request(Path::new("/tmp/unused-workspace"), None, &[], "inventory");
-    request.workspace_dir = "relative/workspace".into();
+    let mut relative_workspace =
+        request(Path::new("/tmp/unused-workspace"), None, &[], "inventory");
+    relative_workspace.workspace_dir = "relative/workspace".into();
     assert_eq!(
-        run(&request).unwrap_err(),
+        run(&relative_workspace).unwrap_err(),
         "native_workspace_inventory_invalid"
     );
     let scratch = Scratch::new("relative-before");
-    let mut request = request(&scratch.0, None, &[], "inventory");
-    request.before_workspace_dir = Some("relative/before".into());
+    let mut relative_before = request(&scratch.0, None, &[], "inventory");
+    relative_before.before_workspace_dir = Some("relative/before".into());
     assert_eq!(
-        run(&request).unwrap_err(),
+        run(&relative_before).unwrap_err(),
         "native_workspace_inventory_invalid"
     );
 }
@@ -209,12 +210,7 @@ fn large_inventory_is_returned_in_pages() {
     fs::write(workspace.join("sbom.cdx.json"), components).unwrap();
     let mut names: Vec<String> = Vec::new();
     let mut pages = 0;
-    let mut request = request(
-        &workspace,
-        None,
-        &["sbom.cdx.json".to_owned()],
-        "inventory",
-    );
+    let mut request = request(&workspace, None, &["sbom.cdx.json".to_owned()], "inventory");
     loop {
         let bytes = evaluate_workspace_inventory(&request).unwrap();
         assert!(bytes.len() < guard_contracts::MAX_NATIVE_RESPONSE_BYTES);
@@ -244,9 +240,8 @@ fn inventory_row_larger_than_the_resident_reply_is_rejected() {
     let workspace = scratch.0.join("ws");
     fs::create_dir_all(&workspace).unwrap();
     let name = "n".repeat(crate::MAX_NATIVE_RESPONSE_BYTES);
-    let sbom = format!(
-        r#"{{"bomFormat":"CycloneDX","components":[{{"name":"{name}","version":"1"}}]}}"#
-    );
+    let sbom =
+        format!(r#"{{"bomFormat":"CycloneDX","components":[{{"name":"{name}","version":"1"}}]}}"#);
     fs::write(workspace.join("sbom.cdx.json"), sbom).unwrap();
     assert_eq!(
         run(&request(
