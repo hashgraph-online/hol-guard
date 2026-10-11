@@ -103,3 +103,25 @@ fn missing_home_directory_loads_defaults() {
     assert_eq!(config["mode"], json!("prompt"));
     let _ = fs::remove_dir_all(root);
 }
+
+#[cfg(unix)]
+#[test]
+fn canonical_workspace_rejects_symlinked_ancestors() {
+    let root = fs::canonicalize(scratch("symlink")).unwrap();
+    fs::create_dir_all(root.join("real/project")).unwrap();
+    std::os::unix::fs::symlink(root.join("real"), root.join("alias")).unwrap();
+    let request = |workspace: PathBuf| LoadRequest {
+        schema: SCHEMA.to_owned(),
+        guard_home: root.join("home"),
+        workspace: Some(workspace),
+        require_canonical_workspace: true,
+        managed: None,
+    };
+    assert!(load(&request(root.join("real/project"))).is_ok());
+    assert!(load(&request(root.join("real/absent"))).is_ok());
+    assert!(load(&request(root.join("alias/project"))).is_err());
+    let mut lenient = request(root.join("alias/project"));
+    lenient.require_canonical_workspace = false;
+    assert!(load(&lenient).is_ok());
+    let _ = fs::remove_dir_all(root);
+}

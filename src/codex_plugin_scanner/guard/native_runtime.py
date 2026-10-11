@@ -255,6 +255,7 @@ def _run_native_process(
     *,
     input_text: str,
     timeout_seconds: float,
+    output_limit: int = _MAX_RESPONSE_BYTES,
 ) -> str | None:
     result = run_isolated_hook_process(
         (str(path), *args),
@@ -262,7 +263,7 @@ def _run_native_process(
         cwd=path.parent,
         environment=_isolated_environment(),
         timeout_seconds=timeout_seconds,
-        output_limit=_MAX_RESPONSE_BYTES,
+        output_limit=output_limit,
     )
     if result.returncode != 0 or result.timed_out or result.output_limit_exceeded or result.containment_failed:
         return None

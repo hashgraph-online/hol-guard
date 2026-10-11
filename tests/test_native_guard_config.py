@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -85,7 +86,9 @@ def _age_clock(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pretend a minute has passed so freshly written files leave the racy window."""
 
     real = time.time_ns
-    monkeypatch.setattr(native_guard_config, "time", SimpleNamespace(time_ns=lambda: real() + 60_000_000_000))
+    monkeypatch.setattr(
+        native_guard_config, "time", SimpleNamespace(time_ns=lambda: real() + 60_000_000_000, monotonic=time.monotonic)
+    )
 
 
 def test_unchanged_old_config_is_served_from_memo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -95,9 +98,9 @@ def test_unchanged_old_config_is_served_from_memo(tmp_path: Path, monkeypatch: p
     calls: list[str] = []
     real_spawn = native_guard_config._spawn
 
-    def counting_spawn(request_text: str) -> dict[str, object]:
+    def counting_spawn(request_text: str, *args: object) -> dict[str, object]:
         calls.append(request_text)
-        return real_spawn(request_text)
+        return real_spawn(request_text, *args)
 
     monkeypatch.setattr(native_guard_config, "_spawn", counting_spawn)
 
@@ -120,9 +123,58 @@ def test_freshly_written_config_is_never_memoized(tmp_path: Path, monkeypatch: p
     (tmp_path / "config.toml").write_text('mode = "enforce"\n', encoding="utf-8")
     calls: list[str] = []
     real_spawn = native_guard_config._spawn
-    monkeypatch.setattr(native_guard_config, "_spawn", lambda text: (calls.append(text), real_spawn(text))[1])
+    monkeypatch.setattr(
+        native_guard_config, "_spawn", lambda text, *rest: (calls.append(text), real_spawn(text, *rest))[1]
+    )
 
     load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
     load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
 
     assert len(calls) == 2
+
+
+def test_memo_hit_still_requires_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "config.toml").write_text('mode = "enforce"\n', encoding="utf-8")
+    _age_clock(monkeypatch)
+    assert (
+        load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)["mode"] == "enforce"
+    )
+
+    def unavailable(deadline_monotonic: float) -> tuple[Path, str]:
+        raise ConfigFileTrustError("native_guard_config_unavailable")
+
+    monkeypatch.setattr(native_guard_config, "_runtime_identity", unavailable)
+    with pytest.raises(ConfigFileTrustError, match="native_guard_config_unavailable"):
+        load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory permissions")
+def test_directory_permission_change_invalidates_memo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "config.toml").write_text('mode = "enforce"\n', encoding="utf-8")
+    _age_clock(monkeypatch)
+    calls: list[str] = []
+    real_spawn = native_guard_config._spawn
+    monkeypatch.setattr(
+        native_guard_config, "_spawn", lambda text, *rest: (calls.append(text), real_spawn(text, *rest))[1]
+    )
+    load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+    tmp_path.chmod(0o711)
+    try:
+        load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+    finally:
+        tmp_path.chmod(0o755)
+    assert len(calls) == 2
+
+
+def test_every_harness_id_and_alias_keeps_its_posture_override(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS, contract_for
+
+    names = {contract.harness for contract in HARNESS_CONTRACTS}
+    for contract in HARNESS_CONTRACTS:
+        names.update(contract.install_aliases)
+    assert all(contract_for(name) is not None for name in names)
+    toml = "[harness_postures]\n" + "".join(f'"{name}" = "watch"\n' for name in sorted(names))
+    (tmp_path / "config.toml").write_text(toml, encoding="utf-8")
+    loaded = load_native_guard_config(tmp_path, None, require_canonical_workspace=False, managed=None)
+    canonical = {contract.harness for contract in HARNESS_CONTRACTS}
+    assert set(loaded["harness_postures"]) == canonical

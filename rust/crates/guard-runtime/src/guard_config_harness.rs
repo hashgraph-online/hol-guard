@@ -48,15 +48,9 @@ fn canonical_harness_id(value: &str) -> Option<&'static str> {
         .map(|(harness, _)| *harness)
 }
 
-/// `normalize_protection_posture`.
+/// `normalize_protection_posture`, shared with the package authority loader.
 pub(crate) fn normalize_posture(value: &Value) -> Option<&'static str> {
-    match value
-        .as_str()?
-        .trim()
-        .replace('-', "_")
-        .to_lowercase()
-        .as_str()
-    {
+    match crate::package_authority_config::explicit_posture(Some(value))?.as_str() {
         "protected" => Some("protected"),
         "extra_careful" => Some("extra_careful"),
         "watch" => Some("watch"),

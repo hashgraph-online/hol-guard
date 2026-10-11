@@ -23,6 +23,9 @@ GUARD_CONFIG_LOAD_COMMAND = "guard-config-load"
 GUARD_CONFIG_LOAD_FEATURE = "native-guard-config-load-v1"
 GUARD_CONFIG_LOAD_SCHEMA = "guard-config-load.v1"
 GUARD_CONFIG_LOAD_TIMEOUT_SECONDS = 10.0
+# Home, two workspace files and a managed policy are each bounded at 1 MiB, so
+# the composed response may exceed the default one-shot output allowance.
+GUARD_CONFIG_LOAD_OUTPUT_LIMIT_BYTES = 8 * 1024 * 1024
 WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
 # A file modified this recently may still change within one timestamp tick, so
 # its result is neither stored nor reused.
@@ -51,6 +54,18 @@ def _file_signature(path: Path) -> FileSignature:
     )
 
 
+def _directory_signature(path: Path) -> FileSignature:
+    """Identity and permissions of a config directory (not its changing mtime)."""
+
+    try:
+        metadata = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError):
+        return (-1,)
+    return (metadata.st_mode, metadata.st_ino, metadata.st_dev, metadata.st_uid)
+
+
 def _signatures(guard_home: Path, workspace: Path | None) -> tuple[FileSignature, ...] | None:
     """Return the config file signatures, or None when a file is too fresh to trust."""
 
@@ -66,6 +81,9 @@ def _signatures(guard_home: Path, workspace: Path | None) -> tuple[FileSignature
         ):
             return None
         signatures.append(signature)
+    signatures.append(_directory_signature(guard_home))
+    if workspace is not None:
+        signatures.append(_directory_signature(workspace))
     return tuple(signatures)
 
 
@@ -86,10 +104,12 @@ def _request_text(
     return json.dumps(request, sort_keys=True, separators=(",", ":"))
 
 
-def _spawn(request_text: str) -> dict[str, Any]:
-    from .native_runtime import _run_native_process, native_runtime_status
+def _runtime_identity(deadline_monotonic: float) -> tuple[Path, str]:
+    """Return the capable runtime's path and digest, or fail closed."""
 
-    status = native_runtime_status()
+    from .native_runtime import native_runtime_status
+
+    status = native_runtime_status(deadline_monotonic=deadline_monotonic)
     if (
         not status.available
         or not status.compatible
@@ -98,11 +118,21 @@ def _spawn(request_text: str) -> dict[str, Any]:
         or GUARD_CONFIG_LOAD_FEATURE not in status.capabilities.features
     ):
         raise ConfigFileTrustError("native_guard_config_unavailable")
+    return status.identity.path, status.identity.sha256
+
+
+def _spawn(request_text: str, path: Path, deadline_monotonic: float) -> dict[str, Any]:
+    from .native_runtime import _run_native_process
+
+    remaining = deadline_monotonic - time.monotonic()
+    if remaining <= 0:
+        raise ConfigFileTrustError("native_guard_config_unavailable")
     output = _run_native_process(
-        status.identity.path,
+        path,
         (GUARD_CONFIG_LOAD_COMMAND, "--stdin"),
         input_text=request_text,
-        timeout_seconds=GUARD_CONFIG_LOAD_TIMEOUT_SECONDS,
+        timeout_seconds=remaining,
+        output_limit=GUARD_CONFIG_LOAD_OUTPUT_LIMIT_BYTES,
     )
     if output is None:
         raise ConfigFileTrustError("native_guard_config_unavailable")
@@ -136,16 +166,21 @@ def load_native_guard_config(
         require_canonical_workspace=require_canonical_workspace,
         managed=managed,
     )
+    # One deadline covers the capability probe and the load process.
+    deadline = time.monotonic() + GUARD_CONFIG_LOAD_TIMEOUT_SECONDS
+    # A memo hit still requires the native runtime to be present, compatible
+    # and capable, and is bound to its exact identity.
+    path, runtime_sha = _runtime_identity(deadline)
     before = _signatures(guard_home, workspace)
     if before is None:
-        return _spawn(request_text)
-    key = request_text + repr(before)
+        return _spawn(request_text, path, deadline)
+    key = f"{runtime_sha}\0{path}\0{request_text}\0{before!r}"
     with _MEMO_LOCK:
         cached = _MEMO.get(key)
         if cached is not None:
             _MEMO.move_to_end(key)
             return json.loads(json.dumps(cached))
-    config = _spawn(request_text)
+    config = _spawn(request_text, path, deadline)
     if _signatures(guard_home, workspace) == before:
         with _MEMO_LOCK:
             _MEMO[key] = json.loads(json.dumps(config))

@@ -162,6 +162,25 @@ pub(crate) fn merge_config_payload(
     merged
 }
 
+/// A workspace path that was authorized as canonical must keep that exact
+/// path: no existing component, the workspace itself included, may be a
+/// symlink. A missing component is an absent workspace, not an alias.
+fn reject_symlinked_ancestors(workspace: &Path) -> EvalResult<()> {
+    let mut walked = PathBuf::new();
+    for component in workspace.components() {
+        walked.push(component);
+        match fs::symlink_metadata(&walked) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(config_error("config_file_unavailable_or_changed"));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+            Err(_) => return Err(config_error("config_file_unavailable_or_changed")),
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn load_workspace_config(
     workspace: Option<&Path>,
     require_canonical: bool,
@@ -173,6 +192,9 @@ pub(crate) fn load_workspace_config(
         && (!workspace.is_absolute() || workspace.components().any(|c| c == Component::ParentDir))
     {
         return Err(config_error("config_directory_not_canonical"));
+    }
+    if require_canonical {
+        reject_symlinked_ancestors(workspace)?;
     }
     let mut merged = Map::new();
     for filename in WORKSPACE_CONFIG_FILENAMES {
