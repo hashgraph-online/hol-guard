@@ -8,25 +8,16 @@ fail-closed handoff for an allowed native Vitest launch.
 from __future__ import annotations
 
 import shlex
-from dataclasses import dataclass
 from pathlib import Path
 
 from . import native_execution as _native_execution
+from .contained_runner_result import ContainedRunnerResult
 from .runtime.contained_execution_common import (
     canonical_existing_directory as _canonical_directory,
 )
-from .runtime.effect_decision import EffectDecision, PositiveProof
 from .runtime.package_intent_parser import parse_package_intent
 
-
-@dataclass(frozen=True, slots=True)
-class ContainedNodeResult:
-    exit_code: int
-    stdout: str
-    stderr: str
-    proof: PositiveProof
-    decision: EffectDecision
-    operation_id: str
+ContainedNodeResult = ContainedRunnerResult
 
 
 def _package_shim_handoff_active(shim_directory: Path) -> bool:

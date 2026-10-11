@@ -262,14 +262,6 @@
         ]
       },
       {
-        "id": "runtime-protection-health-report",
-        "category": "offline_reporting",
-        "reason": "Protection-health summary shown on the dashboard runtime page and in `guard approvals` status. runtime/protection_health_runtime.py turns stored daemon, install and hook-verification state into display signals for a snapshot field. Its only in-scope caller is approvals._build_runtime_snapshot, which is built solely by the dashboard runtime read route and the approvals CLI status command; no hook, daemon enforcement or policy path imports it, and the headline state it feeds is informational.",
-        "path": [
-          "src/codex_plugin_scanner/guard/runtime/protection_health_runtime.py"
-        ]
-      },
-      {
         "id": "extension-authoring",
         "category": "offline_authoring",
         "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane). Modules the hook evaluation calls synchronously (package_json_scripts, custom_extension_suggestion, mcp_server_contribution, extension_contribution) stay in scope; only continuity sync, catalog sync/handshake and builder/control surfaces are excluded.",
@@ -352,7 +344,8 @@
           "src/codex_plugin_scanner/guard/hook_removal_presence.py",
           "src/codex_plugin_scanner/guard/daemon_stop.py",
           "src/codex_plugin_scanner/guard/cli/commands_remove_hooks.py",
-          "src/codex_plugin_scanner/guard/cli/commands_repair.py"
+          "src/codex_plugin_scanner/guard/cli/commands_repair.py",
+          "src/codex_plugin_scanner/guard/cli/bootstrap.py"
         ]
       },
       {
@@ -374,7 +367,8 @@
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_risk_report.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py",
           "src/codex_plugin_scanner/guard/cli/render_*.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_service.py"
+          "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
+          "src/codex_plugin_scanner/guard/cli/approval_commands.py"
         ]
       },
       {
@@ -479,15 +473,6 @@
         ]
       },
       {
-        "id": "cloud-memory-decision-outbox",
-        "category": "async_control_plane",
-        "reason": "Producer of the guard.memory-decision.v1 cloud outbox event that feeds Guard Cloud's Suggested Memory candidates. memory_decision_outbox.py and memory_decision_event.py are reached only through approvals._enqueue_memory_decision_for_resolution, the last step of apply_approval_resolution (daemon approval POST, CLI approval command, bulk allow-once), after the human decision is already recorded; every failure is swallowed. They are in the static closure only because approvals.py imports them eagerly, and hook modules import approvals; no hook admission, decision or run path calls them. They write a cloud_events row and a memory-decision-sourced local receipt for the async sync worker; nothing in enforcement reads either as an input to a verdict.",
-        "path": [
-          "src/codex_plugin_scanner/guard/memory_decision_outbox.py",
-          "src/codex_plugin_scanner/guard/memory_decision_event.py"
-        ]
-      },
-      {
         "id": "repair-lifecycle",
         "category": "control_plane",
         "reason": "Explicit and periodic Guard repair: `guard repair` (cli/commands_repair), POST /v1/repair and the removal endpoint (daemon/repair_api via _handle_repair_api) and the 600 s repair self-check thread (daemon/repair_self_check started by _start_repair_self_check). None runs inside hook admission, decision or enforcement. resident_state_prune.py and daemon/runtime_repair.py are reached only from repair_engine (repair_native_runtime, repair_daemon) and the daemon package's lazy export used by the repair CLI handler.",
@@ -517,6 +502,14 @@
         "path": [
           "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py"
         ]
+      },
+      {
+        "category": "control_plane",
+        "id": "protection-capability-payloads",
+        "path": [
+          "src/codex_plugin_scanner/guard/protection_capabilities.py"
+        ],
+        "reason": "Static protection-capability payloads for the dashboard and settings views. Its only callers are daemon/server_common.py's _settings_response_payload (called only from server_dashboard_runtime_read.py, server_control_repair.py and server_control_sync.py), server_dashboard_runtime_read.py and the excluded approvals runtime snapshot; no hook or tool request reads it."
       }
     ],
     "reviewed_runtime": [
@@ -772,6 +765,26 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py"
+        ],
+        "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so all three are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/synced_policy.py"
+        ],
+        "reason": "Reviewed: synced policy payload. commands_support_runtime_resolution.py builds the synced policy payload from it while resolving a runtime decision, so it is runtime policy resolution and stays counted. approvals.py used to pull it in eagerly; it is now reached only through that lazy runtime path."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/managed_install_proof.py"
+        ],
+        "reason": "Reviewed: managed install proof binding and verification. PaseoHarnessAdapter.detect (adapters/paseo.py) calls paseo_install.provider_status, which runs verify_managed_install_proof to report each provider's protection status. Adapter detection stays in scope for every harness (the adapter setup exclusions leave detect counted), so the verifier stays counted with it. Binding (bind_managed_install_proof) is reached only from the excluded install paths."
+      },
+      {
+        "path": [
           "src/codex_plugin_scanner/guard/codex_hook_command_line.py",
           "src/codex_plugin_scanner/guard/codex_hook_compatibility.py",
           "src/codex_plugin_scanner/guard/codex_hook_file_integrity.py",
@@ -809,6 +822,105 @@
       "path": []
     },
     "function_exclusions": [
+      {
+        "id": "mdm-machine-integrity-acl-verification",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/mdm/acl.py",
+        "symbols": [
+          "_WINDOWS_ACTIVE_SETUP",
+          "_WINDOWS_POLICY",
+          "OwnershipAclVerification",
+          "_aggregate",
+          "_macos_surfaces",
+          "_windows_registry_chain",
+          "_windows_surface_payload",
+          "_run_windows_acl_probe",
+          "verify_protected_ownership_and_acl"
+        ],
+        "entry_points": [],
+        "reason": "Whole-machine ownership and ACL verification for the managed-device integrity snapshot. It runs when the health lease reports, when removal is authorized and for the guard mdm command, on their own cadence rather than during hook handling.",
+        "evidence": "verify_protected_ownership_and_acl and OwnershipAclVerification are called only from mdm/integrity.py (whose machine_integrity_snapshot is imported only by mdm/user_health.py, mdm/health_lease.py and cli/commands_dispatch_mdm.py) and mdm/removal.py (mdm-health). The per-path helpers that in-scope mdm/managed_file_trust.py imports (_PathSurface, _run_windows_acl_payload, _verify_macos_surface, _windows_filesystem_chain, _windows_result) stay in scope. The report validates this reference closure on every run."
+      },
+      {
+        "id": "local-trust-backend-checks",
+        "category": "cli_only",
+        "path": "src/codex_plugin_scanner/guard/local_trust_contract.py",
+        "symbols": [
+          "TrustBackend",
+          "_ProcessHandle",
+          "_TrustResult",
+          "_TRUST_BACKEND_SPAWN_TIMEOUT_SECONDS",
+          "TrustBackendUnavailableError",
+          "TrustBackendProcessFailedError",
+          "TrustBackendCorruptResultError",
+          "_load_trust_backend_operation",
+          "_trust_backend_check_worker",
+          "_terminate_trust_backend_process_tree",
+          "_trust_backend_process_failed_error",
+          "_load_trust_backend_result",
+          "select_trust_backend",
+          "run_trust_backend_check",
+          "degraded_reason_for_backend_error"
+        ],
+        "entry_points": [],
+        "reason": "Trust-backend selection and the spawned backend check worker behind the guard trust command.",
+        "evidence": "TrustBackend, select_trust_backend, run_trust_backend_check, degraded_reason_for_backend_error and the backend errors are used only by local_trust_controller.py, which only cli/commands_dispatch_trust.py imports. TrustStatus and the POLICY_INTEGRITY_* constants that the store modules import stay in scope. The report validates this reference closure on every run."
+      },
+      {
+        "id": "codex-hook-manifest-repair",
+        "category": "install_config",
+        "path": "src/codex_plugin_scanner/guard/codex_hook_manifest.py",
+        "symbols": [
+          "CODEX_AUTHORITY_REPAIR_ACTION",
+          "PreparedCodexHookRepair",
+          "prepare_authenticated_hook_manifest_repair"
+        ],
+        "entry_points": [],
+        "reason": "Preparing an authenticated Codex hook manifest repair. It runs only from the Codex authority repair flow.",
+        "evidence": "PreparedCodexHookRepair and prepare_authenticated_hook_manifest_repair are used only by codex_hook_repair_request.py, codex_hook_repair.py and cli/codex_authority_repair.py (install-uninstall-doctor). The manifest build, publication, baseline and live verification functions that adapters/codex.py imports stay in scope. The report validates this reference closure on every run."
+      },
+      {
+        "id": "native-daemon-handler-control-routes",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/native_daemon_handler.py",
+        "symbols": [
+          "_MAX_LIST_ITEMS",
+          "_BODY_KEYS",
+          "_field",
+          "native_body_handler",
+          "native_requests_list",
+          "native_harness_action",
+          "_fact",
+          "native_headless_action_error",
+          "native_headless_cursor_surface_error",
+          "native_headless_action_state",
+          "native_detection_app_statuses",
+          "native_supply_chain_error"
+        ],
+        "entry_points": [],
+        "reason": "Request-body, request-list, harness-action, headless-action, detection-status and supply-chain helpers for daemon control-plane and dashboard routes.",
+        "evidence": "Each excluded public helper is called only from daemon/server_control_policy.py, server_control_misc.py, server_control_headless.py, server_control_supply_chain.py (daemon-control-plane-routes) or daemon/server_dashboard_support.py (daemon-dashboard-read-routes). HandlerDecision, NativeDaemonHandlerError and native_events_cursor, which daemon/server.py imports, stay in scope. The report validates this reference closure on every run."
+      },
+      {
+        "id": "store-evidence-dashboard-export",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/store_evidence.py",
+        "symbols": [
+          "EXPORT_PRIVACY_WARNING",
+          "_EXPORT_COLUMNS",
+          "_CSV_FORMULA_TRIGGER_PATTERN",
+          "count_evidence",
+          "_redact_export_value",
+          "evidence_record_to_dict",
+          "export_evidence_payload",
+          "export_evidence_json",
+          "export_evidence_csv",
+          "_sanitize_csv_formula_cell"
+        ],
+        "entry_points": [],
+        "reason": "Evidence counting, serialization and JSON/CSV export (with formula-injection sanitizing) for the dashboard records view.",
+        "evidence": "count_evidence, evidence_record_to_dict, export_evidence_json and export_evidence_csv are called only from daemon/server_dashboard_records_read.py (daemon-dashboard-read-routes). Evidence schema setup, storage, listing and clearing, which the store and runtime modules import, stay in scope. The report validates this reference closure on every run."
+      },
       {
         "id": "render-human-output",
         "category": "cli_only",
@@ -1601,6 +1713,65 @@
         "entry_points": [],
         "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "approvals-resolution-and-dashboard-snapshot",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/approvals.py",
+        "symbols": [
+          "GUARD_DASHBOARD_URL",
+          "GUARD_INBOX_URL",
+          "GUARD_FLEET_URL",
+          "GUARD_CONNECT_URL",
+          "_APPROVAL_RESOLUTION_LOCKS",
+          "_P",
+          "_R",
+          "ApprovalRequestNotFoundError",
+          "_serialize_approval_resolution",
+          "ApprovalRequestAlreadyResolvedError",
+          "apply_approval_resolution",
+          "_temporary_mcp_grant_result",
+          "_local_tool_grant_result",
+          "_record_resolution_event",
+          "_enqueue_memory_decision_for_resolution",
+          "_refresh_queue_result",
+          "_live_hook_verification",
+          "_canonical_managed_installs_for_health",
+          "build_runtime_snapshot",
+          "_build_runtime_snapshot",
+          "_resolve_matching_requests",
+          "_record_local_once_approval",
+          "_build_runtime_cloud_context",
+          "_sync_payload_dict",
+          "_cloud_policy_last_ack_at",
+          "_build_runtime_device_context",
+          "_build_latest_connect_state",
+          "_connect_state_proof",
+          "_build_runtime_proof_status",
+          "_runtime_proof_status_payload",
+          "_runtime_proof_status_name",
+          "_runtime_proof_status_label",
+          "_runtime_proof_status_detail",
+          "_build_cloud_sync_health",
+          "_latest_sync_timestamp",
+          "_parse_timestamp",
+          "_timestamp_is_stale",
+          "_cloud_sync_health_label",
+          "_cloud_sync_health_detail",
+          "_runtime_cloud_state_label",
+          "_runtime_cloud_state_detail",
+          "_resolve_guard_urls",
+          "_resolve_runtime_headline_state",
+          "_runtime_headline_label",
+          "_runtime_headline_detail",
+          "is_bulk_allow_once_eligible",
+          "bulk_allow_read_only_once",
+          "_optional_string",
+          "_non_negative_int"
+        ],
+        "entry_points": [],
+        "reason": "Resolving queued approval requests (approve, deny, bulk allow-once) and building the dashboard runtime snapshot. These run when a person acts in the approval center, the dashboard or the guard approvals command; no hook or MCP proxy call reaches them.",
+        "evidence": "Every caller of apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible is outside runtime scope: the daemon control-plane routes (server_control_routes_post.py, server_control_policy.py), the dashboard read routes (server_dashboard_runtime_read.py) and the guard approvals command (cli/approval_commands.py). The remaining symbols are reached only from apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible. The retained in-scope part of approvals.py (request queueing, build_approval_request_url, primary_approval_request, silent_review_center_url) does not reference them, and the report validates this reference closure on every run."
       }
     ],
     "dynamic_imports": [
@@ -1635,9 +1806,12 @@
         "resolution": "follow",
         "mode": "eager",
         "targets": [
-          "..daemon"
+          "..daemon",
+          "..proxy",
+          ".approval_commands",
+          ".bootstrap"
         ],
-        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with the literal package ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), so the one non-literal site resolves to the guard.daemon package."
+        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with literal module names: ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), ..proxy (the harness MCP proxy classes), .approval_commands (the guard approvals command handlers) and .bootstrap (the guard bootstrap payload builder), so the one non-literal site resolves to those four modules."
       },
       {
         "path": "src/codex_plugin_scanner/guard/codex_config.py",

@@ -1979,6 +1979,38 @@
       "expect": "allow"
     },
     {
+      "id": "home-rg-relative-sibling-repo",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n export ../service-api"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "home-rg-abs-sibling-repo",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n export ${ORG}/service-api/src"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
       "id": "neg-home-fd-hidden",
       "fix_area": "negative",
       "harnesses": [

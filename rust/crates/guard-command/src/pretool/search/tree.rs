@@ -218,7 +218,7 @@ fn home_relative(value: &str, home: Option<&str>) -> Option<PathBuf> {
     }
 }
 
-fn expanded_operand(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
+pub(super) fn expanded_operand(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
     let expanded = if value == "~" || value.starts_with("~/") {
         home_relative(value, context.home_dir)?
     } else if Path::new(value).is_absolute() {
@@ -231,7 +231,7 @@ fn expanded_operand(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
 }
 
 /// Characters that make a word mean more than one literal path.
-const HAZARDS: [char; 11] = ['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\'];
+pub(super) const HAZARDS: [char; 11] = ['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0', '\\'];
 
 /// A relative, quoted operand naming an existing real directory.
 fn checked_directory(value: &str, context: ReadContext<'_>) -> Option<PathBuf> {
@@ -262,7 +262,7 @@ fn hidden_allowed(name: &str) -> bool {
     BENIGN_HIDDEN_NAMES.contains(&name.to_ascii_lowercase().as_str())
 }
 
-fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> bool {
+pub(super) fn descendant_allowed(path: &Path, root: &Path, is_file: bool) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };

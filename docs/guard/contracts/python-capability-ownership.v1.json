@@ -44,6 +44,7 @@
     "src/codex_plugin_scanner/guard/native_resident_client.py",
     "src/codex_plugin_scanner/guard/native_runtime.py",
     "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
+    "src/codex_plugin_scanner/guard/native_runtime_process_cache.py",
     "src/codex_plugin_scanner/guard/native_runtime_status_share.py",
     "src/codex_plugin_scanner/guard/native_runtime_values.py",
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",

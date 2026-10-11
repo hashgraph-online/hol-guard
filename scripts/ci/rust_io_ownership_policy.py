@@ -50,6 +50,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_runtime.py",
         # Per-request status reuse. stat() only rechecks the validated binary.
         "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
+        # Process-wide verified status reuse; stat() fingerprints gate every hit.
+        "src/codex_plugin_scanner/guard/native_runtime_process_cache.py",
         # Extracted binary identity validation; no command or policy semantics.
         "src/codex_plugin_scanner/guard/native_binary_identity.py",
         "src/codex_plugin_scanner/guard/native_context.py",
