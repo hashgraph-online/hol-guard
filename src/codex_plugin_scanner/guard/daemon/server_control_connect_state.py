@@ -242,19 +242,18 @@ def _resolve_package_firewall_connect_flow(
     if state in {"starting", "running"}:
         flow["title"] = "Finish Guard Cloud sign-in in your browser"
         browser_opened = flow.get("browser_opened") is True
-        flow["detail"] = (
-            "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this page will "
-            "unlock package-firewall controls automatically."
-            if browser_opened
-            else (
-                "HOL Guard is opening the secure sign-in flow in your browser."
-                if state == "starting"
-                else (
-                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                    "not open automatically."
-                )
+        if browser_opened:
+            flow["detail"] = (
+                "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this page will "
+                "unlock package-firewall controls automatically."
             )
-        )
+        elif state == "starting":
+            flow["detail"] = "HOL Guard is opening the secure sign-in flow in your browser."
+        else:
+            flow["detail"] = (
+                "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
+                "not open automatically."
+            )
         flow["poll_after_ms"] = _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS
         return flow
     if state == "failed":
@@ -355,19 +354,18 @@ def _resolve_guard_cloud_connect_flow(*, server: _GuardDaemonHttpServer, store: 
     if state in {"starting", "running"}:
         flow["title"] = "Finish Guard Cloud sign-in in your browser"
         browser_opened = flow.get("browser_opened") is True
-        flow["detail"] = (
-            "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this modal will "
-            "unlock public sharing automatically."
-            if browser_opened
-            else (
-                "HOL Guard is opening the secure sign-in flow in your browser."
-                if state == "starting"
-                else (
-                    "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
-                    "not open automatically."
-                )
+        if browser_opened:
+            flow["detail"] = (
+                "HOL Guard opened the secure sign-in flow in your browser. Finish sign-in there and this modal will "
+                "unlock public sharing automatically."
             )
-        )
+        elif state == "starting":
+            flow["detail"] = "HOL Guard is opening the secure sign-in flow in your browser."
+        else:
+            flow["detail"] = (
+                "HOL Guard is waiting for browser approval. Open the sign-in page below if your browser did "
+                "not open automatically."
+            )
         flow["poll_after_ms"] = _SUPPLY_CHAIN_CONNECT_POLL_AFTER_MS
         return flow
     if state == "failed":
