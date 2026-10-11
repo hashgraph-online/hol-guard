@@ -130,6 +130,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
         "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",
         "src/codex_plugin_scanner/guard/native_supply_chain_posture.py",
+        "src/codex_plugin_scanner/guard/native_workspace_inventory.py",
         # Decodes the bounded resident command-effect result envelope and binds
         # it to the request; the decision itself is computed in Rust.
         "src/codex_plugin_scanner/guard/native_command_effect.py",
@@ -337,7 +338,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
         "src/codex_plugin_scanner/guard/runtime/local_cli_runner.py",
         "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/lockfile_parse_result.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_protection.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
         "src/codex_plugin_scanner/guard/runtime/mcp_skill_firewall.py",
@@ -346,7 +346,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/package_intent_common.py",
         "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
         "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
-        "src/codex_plugin_scanner/guard/runtime/package_manifest_diff.py",
         "src/codex_plugin_scanner/guard/runtime/prompt_injection.py",
         "src/codex_plugin_scanner/guard/runtime/read_only_git_audit.py",
         "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",

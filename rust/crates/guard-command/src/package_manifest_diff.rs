@@ -30,6 +30,9 @@
 //!   `versions[0]` selection — preserved via `JsoncPairs` pair order.
 
 use std::collections::BTreeMap;
+
+use crate::dep_map::DepMap;
+use crate::ordered_json::{Ordered, OrderedObject};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
@@ -330,7 +333,7 @@ pub fn parse_manifest_dependency_changes(
         };
     }
     let deadline = Deadline::from_ms(deadline_ms);
-    let parse = || -> ParseResult<(BTreeMap<String, String>, BTreeMap<String, String>)> {
+    let parse = || -> ParseResult<(DepMap, DepMap)> {
         let before_deps = dependency_map_for_path(path, before_text, &deadline)?;
         let after_deps = dependency_map_for_path(path, after_text, &deadline)?;
         Ok((before_deps, after_deps))
@@ -357,7 +360,7 @@ pub fn parse_manifest_dependency_changes(
     names.dedup();
     let changes = names
         .into_iter()
-        .filter(|name| before_deps.get(*name) != after_deps.get(*name))
+        .filter(|name| before_deps.get(name) != after_deps.get(name))
         .map(|name| ManifestDependencyChange {
             manifest_path: path.to_string(),
             package_name: name.clone(),
@@ -379,8 +382,18 @@ pub fn parse_manifest_dependencies(
     byte_limit: usize,
     deadline_ms: u64,
 ) -> BTreeMap<String, String> {
+    parse_manifest_dependencies_ordered(path, text, byte_limit, deadline_ms).into_sorted()
+}
+
+/// `parse_manifest_dependencies` keeping Python's dict insertion order.
+pub fn parse_manifest_dependencies_ordered(
+    path: &str,
+    text: &str,
+    byte_limit: usize,
+    deadline_ms: u64,
+) -> DepMap {
     if text.len() > byte_limit {
-        return BTreeMap::new();
+        return DepMap::new();
     }
     let deadline = Deadline::from_ms(deadline_ms);
     dependency_map_for_path(path, text, &deadline).unwrap_or_default()
@@ -396,21 +409,19 @@ pub fn try_dependency_map_for_path(
     deadline_ms: u64,
 ) -> Result<BTreeMap<String, String>, &'static str> {
     let deadline = Deadline::from_ms(deadline_ms);
-    dependency_map_for_path(path, text, &deadline).map_err(|failure| match failure {
-        ParseFailure::Deadline => "deadline_exceeded",
-        ParseFailure::Error => "parse_error",
-    })
+    dependency_map_for_path(path, text, &deadline)
+        .map(DepMap::into_sorted)
+        .map_err(|failure| match failure {
+            ParseFailure::Deadline => "deadline_exceeded",
+            ParseFailure::Error => "parse_error",
+        })
 }
 
 // ---------------------------------------------------------------------------
 // Dispatch (:81-134) — same endswith checks, same order.
 // ---------------------------------------------------------------------------
 
-fn dependency_map_for_path(
-    path: &str,
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn dependency_map_for_path(path: &str, text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     let lower_path = path.to_lowercase();
     let lower_name = last_path_segment(&lower_path);
     if lower_path.ends_with("package.json") {
@@ -488,7 +499,7 @@ fn dependency_map_for_path(
     if lower_path.ends_with("gemfile.lock") {
         return gemfile_lock_dependency_map(text, deadline);
     }
-    Ok(BTreeMap::new())
+    Ok(DepMap::new())
 }
 
 // ---------------------------------------------------------------------------
@@ -496,18 +507,14 @@ fn dependency_map_for_path(
 // ---------------------------------------------------------------------------
 
 /// `_json_dependency_map` (:137-147).
-fn json_dependency_map(
-    text: &str,
-    sections: &[&str],
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn json_dependency_map(text: &str, sections: &[&str], deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
-    let payload: Value = json_loads(text)?;
+    let payload: Ordered = json_loads_ordered(text)?;
     let payload = payload.as_object().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     for section in sections {
-        if let Some(values) = payload.get(*section).and_then(Value::as_object) {
-            for (package_name, version) in values {
+        if let Some(values) = payload.get(section).and_then(Ordered::as_object) {
+            for (package_name, version) in values.iter() {
                 if let Some(version) = version.as_str() {
                     dependencies.insert(package_name.clone(), version.to_string());
                 }
@@ -519,15 +526,12 @@ fn json_dependency_map(
 
 /// `_package_lock_dependency_map` (:150-167) — v2 `packages/` first, then the
 /// v1 `dependencies` tree only when the v2 walk produced nothing.
-fn package_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let payload: Value = json_loads(text)?;
+fn package_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let payload: Ordered = json_loads_ordered(text)?;
     let payload = payload.as_object().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
-    if let Some(packages) = payload.get("packages").and_then(Value::as_object) {
-        for (package_path, value) in packages {
+    let mut dependencies = DepMap::new();
+    if let Some(packages) = payload.get("packages").and_then(Ordered::as_object) {
+        for (package_path, value) in packages.iter() {
             deadline.ensure()?;
             if !package_path.starts_with("node_modules/") {
                 continue;
@@ -535,7 +539,7 @@ fn package_lock_dependency_map(
             let version = value
                 .as_object()
                 .and_then(|entry| entry.get("version"))
-                .and_then(Value::as_str);
+                .and_then(Ordered::as_str);
             if let Some(version) = version {
                 dependencies.insert(
                     package_path["node_modules/".len()..].to_string(),
@@ -547,7 +551,7 @@ fn package_lock_dependency_map(
     if !dependencies.is_empty() {
         return Ok(dependencies);
     }
-    if let Some(legacy) = payload.get("dependencies").and_then(Value::as_object) {
+    if let Some(legacy) = payload.get("dependencies").and_then(Ordered::as_object) {
         walk_package_lock_v1_dependencies(legacy, &mut dependencies, deadline)?;
     }
     Ok(dependencies)
@@ -555,19 +559,19 @@ fn package_lock_dependency_map(
 
 /// `_walk_package_lock_v1_dependencies` (:170-184) — recursive v1 tree walk.
 fn walk_package_lock_v1_dependencies(
-    payload: &serde_json::Map<String, Value>,
-    dependencies: &mut BTreeMap<String, String>,
+    payload: &OrderedObject,
+    dependencies: &mut DepMap,
     deadline: &Deadline,
 ) -> ParseResult<()> {
-    for (package_name, value) in payload {
+    for (package_name, value) in payload.iter() {
         deadline.ensure()?;
         let Some(value) = value.as_object() else {
             continue;
         };
-        if let Some(version) = value.get("version").and_then(Value::as_str) {
+        if let Some(version) = value.get("version").and_then(Ordered::as_str) {
             dependencies.insert(package_name.clone(), version.to_string());
         }
-        if let Some(nested) = value.get("dependencies").and_then(Value::as_object) {
+        if let Some(nested) = value.get("dependencies").and_then(Ordered::as_object) {
             walk_package_lock_v1_dependencies(nested, dependencies, deadline)?;
         }
     }
@@ -581,15 +585,18 @@ fn json_loads(text: &str) -> ParseResult<Value> {
     serde_json::from_str(source).map_err(|_| ParseFailure::Error)
 }
 
+/// `json_loads` that keeps object keys in document order.
+fn json_loads_ordered(text: &str) -> ParseResult<Ordered> {
+    let source = if text.is_empty() { "{}" } else { text };
+    serde_json::from_str(source).map_err(|_| ParseFailure::Error)
+}
+
 // ---------------------------------------------------------------------------
 // pnpm-lock.yaml hand-rolled line scanner (:187-236). NOT a YAML parser.
 // ---------------------------------------------------------------------------
 
-fn pnpm_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn pnpm_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     let mut package_versions: BTreeMap<String, String> = BTreeMap::new();
     let mut section: Option<String> = None;
     let mut dependency_block = false;
@@ -667,11 +674,8 @@ fn pnpm_entry_name_version(entry: &str) -> (Option<String>, Option<String>) {
 // `version: x`.
 // ---------------------------------------------------------------------------
 
-fn yarn_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn yarn_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     let mut current_names: Vec<String> = Vec::new();
     for raw_line in py_splitlines(text) {
         deadline.ensure()?;
@@ -752,25 +756,13 @@ fn yarn_selector_name(selector: &str) -> Option<String> {
 // `versions[0]`; `serde_json::Map` sorts keys without `preserve_order`.
 // ---------------------------------------------------------------------------
 
-fn bun_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let versions_by_name = bun_lock_package_versions(text, deadline)?;
-    let mut dependencies = BTreeMap::new();
-    for (package_name, versions) in versions_by_name {
-        if let Some(version) = versions.first() {
-            dependencies.insert(package_name, version.clone());
-        }
-    }
-    Ok(dependencies)
+fn bun_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    bun_lock_first_versions(text, deadline)
 }
 
-/// `_bun_lock_package_versions` (:290-310).
-fn bun_lock_package_versions(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, Vec<String>>> {
+/// `_bun_lock_package_versions` (:290-310) reduced to what `_bun_lock_dependency_map`
+/// keeps: the first version of each package, in first-seen document order.
+fn bun_lock_first_versions(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     // loads_jsonc(text or "{}", deadline_check=...) (:292) — thread the
     // deadline into normalize_jsonc_checked so the check fires mid-pass.
@@ -791,7 +783,7 @@ fn bun_lock_package_versions(
     };
     // `payload.get("packages", {})` — dict.get returns the value of the LAST
     // occurrence of a duplicated key.
-    let mut versions_by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut first_versions = DepMap::new();
     // `payload.get("packages", {})` — a missing key yields the empty-dict
     // default and iterates nothing; a non-dict value is a shape error (:298).
     if let Some(packages) = jsonc_pairs_get(&payload_pairs, "packages") {
@@ -809,13 +801,12 @@ fn bun_lock_package_versions(
             let Some((package_name, version)) = bun_resolution_identity(resolution) else {
                 continue;
             };
-            let versions = versions_by_name.entry(package_name).or_default();
-            if !versions.contains(&version) {
-                versions.push(version);
+            if !first_versions.contains_key(&package_name) {
+                first_versions.insert(package_name, version);
             }
         }
     }
-    Ok(versions_by_name)
+    Ok(first_versions)
 }
 
 /// `dict.get(key)` semantics over `JsoncPairs::Object` pairs — the value of
@@ -880,11 +871,6 @@ fn bun_resolution_identity(resolution: &str) -> Option<(String, String)> {
 // package_intent_common.py:447-493.
 // ---------------------------------------------------------------------------
 
-/// `_exact_dependency_version` (:334-342) for JSON scalar values.
-fn exact_dependency_version(value: &Value) -> Option<String> {
-    exact_dependency_version_str(value.as_str()?)
-}
-
 /// `_exact_dependency_version` core (:338-342).
 fn exact_dependency_version_str(value: &str) -> Option<String> {
     let mut normalized = py_strip(value).trim_matches('"').trim_matches('\'');
@@ -906,11 +892,8 @@ fn exact_dependency_version_str(value: &str) -> Option<String> {
 }
 
 /// `_requirements_dependency_map` (:345-358).
-fn requirements_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn requirements_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     for line in requirements_logical_lines(text, deadline)? {
         let mut stripped = py_strip(&line).to_string();
         if stripped.is_empty() || stripped.starts_with('#') {
@@ -971,14 +954,11 @@ fn toml_loads(text: &str) -> ParseResult<toml::Value> {
 }
 
 /// `_pyproject_dependency_map` (:379-403).
-fn pyproject_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn pyproject_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     let payload = toml_loads(text)?;
     let payload = payload.as_table().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     if let Some(project) = payload.get("project").and_then(toml::Value::as_table) {
         collect_python_dependency_list(&mut dependencies, project.get("dependencies"), deadline)?;
         if let Some(optional_dependencies) = project
@@ -1021,7 +1001,7 @@ fn pyproject_dependency_map(
 
 /// `_collect_python_dependency_list` (:405-416).
 fn collect_python_dependency_list(
-    dependencies: &mut BTreeMap<String, String>,
+    dependencies: &mut DepMap,
     values: Option<&toml::Value>,
     deadline: &Deadline,
 ) -> ParseResult<()> {
@@ -1040,7 +1020,7 @@ fn collect_python_dependency_list(
 
 /// `_collect_poetry_dependency_table` (:419-435) — `python` key skipped.
 fn collect_poetry_dependency_table(
-    dependencies: &mut BTreeMap<String, String>,
+    dependencies: &mut DepMap,
     values: Option<&toml::Value>,
     deadline: &Deadline,
 ) -> ParseResult<()> {
@@ -1070,14 +1050,11 @@ fn collect_poetry_dependency_table(
 
 /// `_toml_lock_dependency_map` (:438-453) — shared by poetry.lock, uv.lock,
 //  cargo.lock (:456-458 aliases).
-fn toml_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn toml_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     let payload = toml_loads(text)?;
     let payload = payload.as_table().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     let Some(toml::Value::Array(packages)) = payload.get("package") else {
         return Ok(dependencies);
     };
@@ -1097,26 +1074,24 @@ fn toml_lock_dependency_map(
 
 /// `_pipfile_lock_dependency_map` (:461-476) — JSON `default`/`develop`
 /// sections with `_exact_dependency_version` normalization.
-fn pipfile_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn pipfile_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
-    let payload: Value = json_loads(text)?;
+    let payload: Ordered = json_loads_ordered(text)?;
     let payload = payload.as_object().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     for section in ["default", "develop"] {
-        let Some(values) = payload.get(section).and_then(Value::as_object) else {
+        let Some(values) = payload.get(section).and_then(Ordered::as_object) else {
             continue;
         };
-        for (package_name, package_value) in values {
+        for (package_name, package_value) in values.iter() {
             deadline.ensure()?;
             let Some(package_value) = package_value.as_object() else {
                 continue;
             };
             if let Some(exact_version) = package_value
                 .get("version")
-                .and_then(exact_dependency_version)
+                .and_then(Ordered::as_str)
+                .and_then(exact_dependency_version_str)
             {
                 dependencies.insert(package_name.clone(), exact_version);
             }
@@ -1130,11 +1105,11 @@ fn toml_table_dependency_map(
     text: &str,
     sections: &[&str],
     deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+) -> ParseResult<DepMap> {
     deadline.ensure()?;
     let payload = toml_loads(text)?;
     let payload = payload.as_table().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     for section in sections {
         let Some(values) = payload.get(*section).and_then(toml::Value::as_table) else {
             continue;
@@ -1158,14 +1133,11 @@ fn toml_table_dependency_map(
 }
 
 /// `_cargo_toml_dependency_map` (:496-513).
-fn cargo_toml_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn cargo_toml_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     let payload = toml_loads(text)?;
     let payload = payload.as_table().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     for section in ["dependencies", "dev-dependencies", "build-dependencies"] {
         collect_toml_dependency_table(&mut dependencies, payload.get(section), deadline)?;
     }
@@ -1192,7 +1164,7 @@ fn cargo_toml_dependency_map(
 
 /// `_collect_toml_dependency_table` (:516-529).
 fn collect_toml_dependency_table(
-    dependencies: &mut BTreeMap<String, String>,
+    dependencies: &mut DepMap,
     values: Option<&toml::Value>,
     deadline: &Deadline,
 ) -> ParseResult<()> {
@@ -1220,8 +1192,8 @@ fn collect_toml_dependency_table(
 // go.mod (:532-551) — `require` block + single-line requires via regex.
 // ---------------------------------------------------------------------------
 
-fn go_mod_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn go_mod_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     let mut in_require_block = false;
     for raw_line in py_splitlines(text) {
         deadline.ensure()?;
@@ -1255,11 +1227,11 @@ fn go_mod_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<BTreeMa
 // search + namespace-insensitive local-name matching = `{*}` wildcard.
 // ---------------------------------------------------------------------------
 
-fn pom_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<BTreeMap<String, String>> {
+fn pom_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     let source = if text.is_empty() { "<project />" } else { text };
     let document = roxmltree::Document::parse(source).map_err(|_| ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     // `.//{*}dependency` — descendants of the root element only (ElementTree
     // `findall` does not include the context element itself).
     for dependency in document.root_element().descendants() {
@@ -1288,8 +1260,8 @@ fn pom_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<BTreeMap<S
 // composer.lock (:590-606), Gemfile (:609-616), Gemfile.lock (:619-636).
 // ---------------------------------------------------------------------------
 
-fn gradle_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn gradle_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     for line in py_splitlines(text) {
         deadline.ensure()?;
         for matched in GRADLE_DEP_RE.captures_iter(line) {
@@ -1302,11 +1274,8 @@ fn gradle_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<BTreeMa
     Ok(dependencies)
 }
 
-fn gradle_lockfile_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn gradle_lockfile_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     for raw_line in py_splitlines(text) {
         deadline.ensure()?;
         let line = py_strip(raw_line);
@@ -1327,14 +1296,11 @@ fn gradle_lockfile_dependency_map(
 
 /// `_composer_lock_dependency_map` (:590-606) — `packages` + `packages-dev`
 /// list entries with string `name`/`version`.
-fn composer_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
+fn composer_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     let payload: Value = json_loads(text)?;
     let payload = payload.as_object().ok_or(ParseFailure::Error)?;
-    let mut dependencies = BTreeMap::new();
+    let mut dependencies = DepMap::new();
     for section in ["packages", "packages-dev"] {
         let Some(packages) = payload.get(section).and_then(Value::as_array) else {
             continue;
@@ -1355,11 +1321,8 @@ fn composer_lock_dependency_map(
 }
 
 /// `_gemfile_dependency_map` (:609-616) — `_GEMFILE_RE.search` per line.
-fn gemfile_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn gemfile_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     for line in py_splitlines(text) {
         deadline.ensure()?;
         if let Some(matched) = GEMFILE_RE.captures(line) {
@@ -1375,11 +1338,8 @@ fn gemfile_dependency_map(
 }
 
 /// `_gemfile_lock_dependency_map` (:619-636) — `GEM` `specs:` block only.
-fn gemfile_lock_dependency_map(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, String>> {
-    let mut dependencies = BTreeMap::new();
+fn gemfile_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
+    let mut dependencies = DepMap::new();
     let mut in_specs_block = false;
     for raw_line in py_splitlines(text) {
         deadline.ensure()?;
@@ -1419,6 +1379,30 @@ mod tests {
     /// → {'left-pad': '1.3.0', 'react': '^18.2.0', 'jest': '^29.0.0',
     ///    'lodash': '4.17.21'}
     #[test]
+    fn bun_lock_keeps_document_order() {
+        let text = r#"{
+            "packages": {
+                "zeta": ["zeta@2.0.0"],
+                "alpha": ["alpha@1.0.0"]
+            }
+        }"#;
+        let deadline = Deadline::from_ms(GENEROUS);
+        let map = dependency_map_for_path("bun.lock", text, &deadline).unwrap();
+        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["zeta", "alpha"]);
+    }
+
+    #[test]
+    fn package_json_keeps_dict_insertion_order() {
+        let text =
+            r#"{"dependencies": {"zeta": "1", "alpha": "2"}, "devDependencies": {"mid": "3"}}"#;
+        let deadline = Deadline::from_ms(GENEROUS);
+        let map = dependency_map_for_path("package.json", text, &deadline).unwrap();
+        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["zeta", "alpha", "mid"]);
+    }
+
+    #[test]
     fn package_json_sections_map() {
         let text = r#"{
             "dependencies": {"react": "^18.2.0", "left-pad": "1.3.0"},
@@ -1437,7 +1421,7 @@ mod tests {
         .into_iter()
         .map(|(name, version)| (name.to_string(), version.to_string()))
         .collect();
-        assert_eq!(map, expected);
+        assert_eq!(map.into_sorted(), expected);
     }
 
     /// Oracle package-lock v2 (`packages` wins over v1 `dependencies`):
@@ -1459,7 +1443,7 @@ mod tests {
             .into_iter()
             .map(|(name, version)| (name.to_string(), version.to_string()))
             .collect();
-        assert_eq!(map, expected);
+        assert_eq!(map.clone().into_sorted(), expected);
         // v1 subtree must be ignored once v2 produced entries.
         assert!(!map.contains_key("legacy"));
     }
@@ -1483,7 +1467,7 @@ mod tests {
             .into_iter()
             .map(|(name, version)| (name.to_string(), version.to_string()))
             .collect();
-        assert_eq!(map, expected);
+        assert_eq!(map.into_sorted(), expected);
     }
 
     /// Oracle requirements.txt (via `python_target`):
@@ -1509,7 +1493,7 @@ mod tests {
         .into_iter()
         .map(|(name, version)| (name.to_string(), version.to_string()))
         .collect();
-        assert_eq!(map, expected);
+        assert_eq!(map.into_sorted(), expected);
     }
 
     #[test]
@@ -1700,43 +1684,4 @@ mod tests {
             Some(&"33.0.0".to_string())
         );
     }
-
-    /// Temporary Python-oracle check (RTM-026): compare `_dependency_map_for_path`
-    /// output against the Rust port for package.json, package-lock.json
-    /// (v1 + v2) and requirements.txt. Marked #[ignore]d-env — skip when the
-    /// Python worktree is not importable.
-    #[test]
-    fn python_oracle_parity() {
-        use std::process::Command;
-        let fixtures: &[(&str, &str)] = &[
-            ("package.json", r#"{"dependencies":{"a":"1.0"},"devDependencies":{"b":"~2"},"peerDependencies":{"c":"3"},"other":{"d":"x"}}"#),
-            ("package-lock.json", r#"{"packages":{"node_modules/x":{"version":"1.2.3"},"node_modules/@s/y":{"version":"0.1"}},"dependencies":{"x":{"version":"9.9.9"}}}"#),
-            ("package-lock.json", r#"{"dependencies":{"left":{"version":"1.0","dependencies":{"nested":{"version":"2.0"}}},"right":{"version":"3.0"}}}"#),
-            ("requirements.txt", "flask==2.0 # comment\nrequests>=2\n-e ./local\n-r other.txt\nurllib3 @ https://example.com/u.whl --hash=sha256:ab\n"),
-        ];
-        let python_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../src");
-        for (path, text) in fixtures {
-            let output = Command::new("python3")
-                .env("PYTHONPATH", python_path.as_os_str())
-                .args(["-c", ORACLE_SCRIPT, path, text])
-                .output()
-                .expect("python3 must exist for oracle test");
-            assert!(
-                output.status.success(),
-                "oracle failed: {}",
-                String::from_utf8_lossy(&output.stderr)
-            );
-            let oracle: BTreeMap<String, String> = serde_json::from_slice(&output.stdout).unwrap();
-            let deadline = Deadline::from_ms(GENEROUS);
-            let rust = dependency_map_for_path(path, text, &deadline).unwrap();
-            assert_eq!(rust, oracle, "mismatch for {path}");
-        }
-    }
-
-    const ORACLE_SCRIPT: &str = r#"
-import json, sys
-from codex_plugin_scanner.guard.runtime.package_manifest_diff import _dependency_map_for_path
-path, text = sys.argv[1], sys.argv[2]
-print(json.dumps(_dependency_map_for_path(path, text, deadline=float("inf")), sort_keys=True))
-"#;
 }

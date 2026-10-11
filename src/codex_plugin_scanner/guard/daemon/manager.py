@@ -1834,7 +1834,9 @@ def _load_state(guard_home: Path) -> dict[str, object] | None:
 def _looks_like_guard_daemon_state(payload: dict[str, object], *, guard_home: Path) -> bool:
     shape = _native_fields(payload, ("compatibility_version", "source_root", "runtime_fingerprint", "guard_home"))
     query = {"payload": shape, "guard_home": str(guard_home)}
-    return bool(_lifecycle("state_shape", query, home=guard_home)["result"])
+    # Pure verdict. Binding it to the stale home would start a resident there,
+    # and that failure would skip retirement of every other ephemeral daemon.
+    return bool(_lifecycle("state_shape", query)["result"])
 
 
 def _state_path(guard_home: Path) -> Path:
@@ -2360,35 +2362,12 @@ def _reap_stale_ephemeral_guard_daemons(
     candidate_paths = list(_ephemeral_guard_daemon_state_paths(temp_root))
     exclude_resolved = exclude_guard_home.resolve() if exclude_guard_home is not None else None
     for state_path in candidate_paths[:_EPHEMERAL_GUARD_DAEMON_MAX_STATES]:
-        guard_home = state_path.parent
         try:
-            resolved_guard_home = guard_home.resolve()
-        except OSError:
+            _reap_one_stale_ephemeral_state_file(state_path, exclude_resolved=exclude_resolved)
+        except Exception:
+            # A missing verdict leaves that home untouched and must not skip
+            # the process inventory, which still requires its own inactive verdict.
             continue
-        if exclude_resolved is not None and resolved_guard_home == exclude_resolved:
-            continue
-        if not _guard_home_is_ephemeral(resolved_guard_home):
-            continue
-        state_age_seconds = _state_path_age_seconds(state_path)
-        if state_age_seconds < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
-            continue
-        payload = _load_state(guard_home)
-        if not _ephemeral_guard_home_is_inactive(
-            guard_home,
-            fallback_age_seconds=state_age_seconds,
-            state_payload=payload,
-        ):
-            continue
-        if not isinstance(payload, dict) or not _looks_like_guard_daemon_state(payload, guard_home=guard_home):
-            continue
-        pid = payload.get("pid")
-        if not isinstance(pid, int) or pid <= 0:
-            continue
-        # Live daemons are handled by the single bounded process inventory below.
-        # Probing every stale state independently creates an unbounded process
-        # query fan-out when a temp root contains many prior test runs.
-        if not _guard_daemon_pid_is_running(pid):
-            clear_guard_daemon_state(guard_home)
     for pid, guard_home, elapsed_seconds in _running_ephemeral_guard_daemon_processes():
         if elapsed_seconds < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
             continue
@@ -2402,6 +2381,38 @@ def _reap_stale_ephemeral_guard_daemons(
             continue
         if _retire_guard_daemon_pid(pid, expected_guard_home=guard_home):
             clear_guard_daemon_state(guard_home)
+
+
+def _reap_one_stale_ephemeral_state_file(state_path: Path, *, exclude_resolved: Path | None) -> None:
+    guard_home = state_path.parent
+    try:
+        resolved_guard_home = guard_home.resolve()
+    except OSError:
+        return
+    if exclude_resolved is not None and resolved_guard_home == exclude_resolved:
+        return
+    if not _guard_home_is_ephemeral(resolved_guard_home):
+        return
+    state_age_seconds = _state_path_age_seconds(state_path)
+    if state_age_seconds < _EPHEMERAL_GUARD_DAEMON_STALE_SECONDS:
+        return
+    payload = _load_state(guard_home)
+    if not _ephemeral_guard_home_is_inactive(
+        guard_home,
+        fallback_age_seconds=state_age_seconds,
+        state_payload=payload,
+    ):
+        return
+    if not isinstance(payload, dict) or not _looks_like_guard_daemon_state(payload, guard_home=guard_home):
+        return
+    pid = payload.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return
+    # Live daemons are handled by the single bounded process inventory below.
+    # Probing every stale state independently creates an unbounded process
+    # query fan-out when a temp root contains many prior test runs.
+    if not _guard_daemon_pid_is_running(pid):
+        clear_guard_daemon_state(guard_home)
 
 
 def _ephemeral_guard_daemon_state_paths(temp_root: Path) -> list[Path]:

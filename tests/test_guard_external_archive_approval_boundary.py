@@ -11,10 +11,8 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact, PolicyDecision
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.stable_digest import stable_digest_hex
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_archive_fakes import forbid_download, install_download, install_inspection

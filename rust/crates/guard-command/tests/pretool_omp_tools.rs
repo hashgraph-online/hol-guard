@@ -501,6 +501,29 @@ fn eval_requires_js_language_exact_tool_and_clean_envelope() {
 }
 
 #[test]
+fn python_eval_allows_only_prelude_reads_of_proven_files() {
+    let f = fixture();
+    let py = |code: &str| {
+        omp(
+            &f,
+            "eval",
+            json!({"code": code, "language": "py", "reset": false, "timeout": 20, "title": "probe"}),
+        )
+    };
+    assert!(allowed(&py("print(read('calc.py'))")));
+    assert!(allowed(&py("display(read('calc.py'))\nread('calc.py')")));
+    for code in [
+        "print(read('.env'))",
+        "print(read('secret-dir/.env'))",
+        "import os\nprint(read('calc.py'))",
+        "print(open('calc.py').read())",
+        "print(read('calc.py', 1, 5))",
+    ] {
+        assert!(!allowed(&py(code)), "{code}");
+    }
+}
+
+#[test]
 fn skill_root_link_into_hidden_state_is_reviewed() {
     let f = fixture();
     let skills = f.home.join(".agent/skills");

@@ -38,7 +38,7 @@ def _configure_guard_local_parsers(
     guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
     pytest_contained_parser = guard_subparsers.add_parser("pytest-contained", help=argparse.SUPPRESS)
-    pytest_contained_parser.add_argument("--workspace", required=True)
+    pytest_contained_parser.add_argument("--workspace", default=None)
     pytest_contained_parser.add_argument("--cwd")
     pytest_contained_parser.add_argument("--timeout-seconds", type=int, default=30 * 60)
     pytest_contained_parser.add_argument("--read-only-workspace", action="store_true")

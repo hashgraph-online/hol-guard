@@ -36,7 +36,7 @@ if not hasattr(store_sessions, "preserve_retry_lineage"):
     sys.exit("refusing to record: the original Python sessions implementation is gone")
 
 from guard_sessions_scenarios import NOW, SCENARIOS, wire_json
-from vector_support import dump
+from vector_support import dump, schema_sql_for_tables
 
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -194,21 +194,6 @@ def native_payload(path: Path, method: str, args: tuple, kwargs: dict, result: o
     raise AssertionError(method)
 
 
-def schema_sql(path: Path) -> list[str]:
-    connection = sqlite3.connect(path)
-    try:
-        return [
-            row[0]
-            for row in connection.execute(
-                f"select sql from sqlite_master where sql is not null and tbl_name in ({','.join('?' * len(TABLES))}) "
-                "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid",
-                tuple(TABLES),
-            )
-        ]
-    finally:
-        connection.close()
-
-
 def run_scenario(scenario: dict) -> dict[str, object]:
     counter = iter(range(1, 1000))
     store_sessions.uuid4 = lambda: SimpleNamespace(hex=f"{next(counter):032x}")
@@ -253,7 +238,9 @@ def run_scenario(scenario: dict) -> dict[str, object]:
 
 def main(output: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="guard-sessions-schema-") as root:
-        schema = schema_sql(Path(GuardStore(Path(root) / "guard-home", prime_policy_integrity=False).path))
+        schema = schema_sql_for_tables(
+            Path(GuardStore(Path(root) / "guard-home", prime_policy_integrity=False).path), TABLES
+        )
     document = {
         "schema": "guard-store-guard-sessions-vectors.v1",
         "source": "guard",

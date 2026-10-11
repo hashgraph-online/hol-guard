@@ -873,20 +873,6 @@ def test_audit_receipt_metadata_includes_full_package_inventory() -> None:
     assert findings[0]["name"] == "risky-lib"
 
 
-def test_workspace_files_discovers_nested_manifests(tmp_path: Path) -> None:
-    workspace_dir = tmp_path / "workspace"
-    nested = workspace_dir / "dashboard"
-    nested.mkdir(parents=True)
-    _write_text(nested / "package.json", '{"name":"dashboard","dependencies":{}}')
-    _write_text(workspace_dir / "pyproject.toml", "[project]\nname = 'root'\n")
-
-    manifest_paths, lockfile_paths = local_supply_chain_module._workspace_files(workspace_dir)
-
-    assert "pyproject.toml" in manifest_paths
-    assert "dashboard/package.json" in manifest_paths
-    assert lockfile_paths == ()
-
-
 def test_workspace_audit_without_inventory_marks_incomplete_and_sync_required(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
