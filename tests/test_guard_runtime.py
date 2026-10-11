@@ -13928,7 +13928,7 @@ def test_guard_run_headless_waits_for_local_approval_and_resumes(tmp_path, capsy
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
     monkeypatch.setattr(
-        guard_runner_module,
+        wrapper_run_finish,
         "subprocess",
         SimpleNamespace(run=lambda *args, **kwargs: subprocess.CompletedProcess(args=[], returncode=0)),
     )
