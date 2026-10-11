@@ -502,6 +502,14 @@
         "path": [
           "src/codex_plugin_scanner/guard/daemon/manager_ephemeral_reap.py"
         ]
+      },
+      {
+        "category": "control_plane",
+        "id": "protection-capability-payloads",
+        "path": [
+          "src/codex_plugin_scanner/guard/protection_capabilities.py"
+        ],
+        "reason": "Static protection-capability payloads for the dashboard and settings views. Its only callers are daemon/server_common.py's _settings_response_payload (called only from server_dashboard_runtime_read.py, server_control_repair.py and server_control_sync.py), server_dashboard_runtime_read.py and the excluded approvals runtime snapshot; no hook or tool request reads it."
       }
     ],
     "reviewed_runtime": [
@@ -771,15 +779,9 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/protection_capabilities.py"
-        ],
-        "reason": "Reviewed: protection capability payloads. daemon/server_common.py imports it inside _settings_response_payload, which the in-scope daemon server uses for its settings responses, so it stays counted. approvals.py used to pull it in eagerly."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/managed_install_proof.py"
         ],
-        "reason": "Reviewed: managed install proof binding and verification. adapters/paseo_install.py imports it at module level and that module's retained functions stay in scope, so it stays counted. approvals.py used to pull it in eagerly; it is now reached only through that lazy chain."
+        "reason": "Reviewed: managed install proof binding and verification. PaseoHarnessAdapter.detect (adapters/paseo.py) calls paseo_install.provider_status, which runs verify_managed_install_proof to report each provider's protection status. Adapter detection stays in scope for every harness (the adapter setup exclusions leave detect counted), so the verifier stays counted with it. Binding (bind_managed_install_proof) is reached only from the excluded install paths."
       }
     ],
     "tests": {
