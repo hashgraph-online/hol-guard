@@ -262,14 +262,6 @@
         ]
       },
       {
-        "id": "runtime-protection-health-report",
-        "category": "offline_reporting",
-        "reason": "Protection-health summary shown on the dashboard runtime page and in `guard approvals` status. runtime/protection_health_runtime.py turns stored daemon, install and hook-verification state into display signals for a snapshot field. Its only in-scope caller is approvals._build_runtime_snapshot, which is built solely by the dashboard runtime read route and the approvals CLI status command; no hook, daemon enforcement or policy path imports it, and the headline state it feeds is informational.",
-        "path": [
-          "src/codex_plugin_scanner/guard/runtime/protection_health_runtime.py"
-        ]
-      },
-      {
         "id": "extension-authoring",
         "category": "offline_authoring",
         "reason": "Extension/contribution authoring, discovery, probing and custom-extension profile management (offline builder or dashboard control plane). Modules the hook evaluation calls synchronously (package_json_scripts, custom_extension_suggestion, mcp_server_contribution, extension_contribution) stay in scope; only continuity sync, catalog sync/handshake and builder/control surfaces are excluded.",
@@ -352,7 +344,8 @@
           "src/codex_plugin_scanner/guard/hook_removal_presence.py",
           "src/codex_plugin_scanner/guard/daemon_stop.py",
           "src/codex_plugin_scanner/guard/cli/commands_remove_hooks.py",
-          "src/codex_plugin_scanner/guard/cli/commands_repair.py"
+          "src/codex_plugin_scanner/guard/cli/commands_repair.py",
+          "src/codex_plugin_scanner/guard/cli/bootstrap.py"
         ]
       },
       {
@@ -374,7 +367,8 @@
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_risk_report.py",
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py",
           "src/codex_plugin_scanner/guard/cli/render_*.py",
-          "src/codex_plugin_scanner/guard/cli/commands_support_service.py"
+          "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
+          "src/codex_plugin_scanner/guard/cli/approval_commands.py"
         ]
       },
       {
@@ -476,15 +470,6 @@
         "reason": "Cloud connect, OAuth refresh/DPoP, receipt, runtime-session, supply-chain-bundle and policy-bundle sync transport (runtime/runner.py). Every public entry point (sync_receipts, sync_runtime_session, sync_supply_chain_bundle, sync_local_guard_cloud_proof, prepare_guard_cloud_connect_authorization, repair_guard_cloud_connect_storage, the cloud-review and command-queue workers and the daemon's cloud policy-bundle and managed-controls delivery handlers that import its urlopen/auth/bundle helpers) runs from `guard connect`/`guard sync`, the cloud-review sync worker or the command-queue loop, never inside hook admission, decision or enforcement. The Rust runtime has no HTTP client, so the network, token refresh and retry loop stay in Python by design; the policy computation inside it (payload shaping, scrubbing, cursor/ack arithmetic, verdict digests, bundle verification) already runs in the resident through runner_native_sync/runner_native_authority. The only request-adjacent caller is the Hermes launch credential lookup (guard_run_launch._resolve_hermes_guard_access_token), which reads the cached token and, when it is absent or near expiry, runs the same OAuth refresh HTTP request as `guard sync` before the harness starts. That refresh is network transport the Rust runtime cannot perform; the lookup is best-effort, runs once at the execution boundary after the authority verdict, and never decides admission. The run-side lookup wrapper stays in scope.",
         "path": [
           "src/codex_plugin_scanner/guard/runtime/runner.py"
-        ]
-      },
-      {
-        "id": "cloud-memory-decision-outbox",
-        "category": "async_control_plane",
-        "reason": "Producer of the guard.memory-decision.v1 cloud outbox event that feeds Guard Cloud's Suggested Memory candidates. memory_decision_outbox.py and memory_decision_event.py are reached only through approvals._enqueue_memory_decision_for_resolution, the last step of apply_approval_resolution (daemon approval POST, CLI approval command, bulk allow-once), after the human decision is already recorded; every failure is swallowed. They are in the static closure only because approvals.py imports them eagerly, and hook modules import approvals; no hook admission, decision or run path calls them. They write a cloud_events row and a memory-decision-sourced local receipt for the async sync worker; nothing in enforcement reads either as an input to a verdict.",
-        "path": [
-          "src/codex_plugin_scanner/guard/memory_decision_outbox.py",
-          "src/codex_plugin_scanner/guard/memory_decision_event.py"
         ]
       },
       {
@@ -769,6 +754,32 @@
           "src/codex_plugin_scanner/guard/policy_bundle_v2.py"
         ],
         "reason": "Reviewed: policy bundle v2 evidence and clock helpers. policy_bundle_trusted_keys loads the module through a literal importlib.import_module call when it builds the native verification request for a signed policy bundle, so it is runtime policy-bundle verification and stays counted."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py"
+        ],
+        "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so all three are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/synced_policy.py"
+        ],
+        "reason": "Reviewed: synced policy payload. commands_support_runtime_resolution.py builds the synced policy payload from it while resolving a runtime decision, so it is runtime policy resolution and stays counted. approvals.py used to pull it in eagerly; it is now reached only through that lazy runtime path."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/protection_capabilities.py"
+        ],
+        "reason": "Reviewed: protection capability payloads. daemon/server_common.py imports it inside _settings_response_payload, which the in-scope daemon server uses for its settings responses, so it stays counted. approvals.py used to pull it in eagerly."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/managed_install_proof.py"
+        ],
+        "reason": "Reviewed: managed install proof binding and verification. adapters/paseo_install.py imports it at module level and that module's retained functions stay in scope, so it stays counted. approvals.py used to pull it in eagerly; it is now reached only through that lazy chain."
       }
     ],
     "tests": {
@@ -1502,6 +1513,65 @@
         "entry_points": [],
         "reason": "Cline MCP settings rewrite to the Guard proxy on install and restore on uninstall.",
         "evidence": "install and uninstall have no caller in any in-scope module; they are invoked by the excluded install, uninstall and repair dispatchers. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "approvals-resolution-and-dashboard-snapshot",
+        "category": "control_plane",
+        "path": "src/codex_plugin_scanner/guard/approvals.py",
+        "symbols": [
+          "GUARD_DASHBOARD_URL",
+          "GUARD_INBOX_URL",
+          "GUARD_FLEET_URL",
+          "GUARD_CONNECT_URL",
+          "_APPROVAL_RESOLUTION_LOCKS",
+          "_P",
+          "_R",
+          "ApprovalRequestNotFoundError",
+          "_serialize_approval_resolution",
+          "ApprovalRequestAlreadyResolvedError",
+          "apply_approval_resolution",
+          "_temporary_mcp_grant_result",
+          "_local_tool_grant_result",
+          "_record_resolution_event",
+          "_enqueue_memory_decision_for_resolution",
+          "_refresh_queue_result",
+          "_live_hook_verification",
+          "_canonical_managed_installs_for_health",
+          "build_runtime_snapshot",
+          "_build_runtime_snapshot",
+          "_resolve_matching_requests",
+          "_record_local_once_approval",
+          "_build_runtime_cloud_context",
+          "_sync_payload_dict",
+          "_cloud_policy_last_ack_at",
+          "_build_runtime_device_context",
+          "_build_latest_connect_state",
+          "_connect_state_proof",
+          "_build_runtime_proof_status",
+          "_runtime_proof_status_payload",
+          "_runtime_proof_status_name",
+          "_runtime_proof_status_label",
+          "_runtime_proof_status_detail",
+          "_build_cloud_sync_health",
+          "_latest_sync_timestamp",
+          "_parse_timestamp",
+          "_timestamp_is_stale",
+          "_cloud_sync_health_label",
+          "_cloud_sync_health_detail",
+          "_runtime_cloud_state_label",
+          "_runtime_cloud_state_detail",
+          "_resolve_guard_urls",
+          "_resolve_runtime_headline_state",
+          "_runtime_headline_label",
+          "_runtime_headline_detail",
+          "is_bulk_allow_once_eligible",
+          "bulk_allow_read_only_once",
+          "_optional_string",
+          "_non_negative_int"
+        ],
+        "entry_points": [],
+        "reason": "Resolving queued approval requests (approve, deny, bulk allow-once) and building the dashboard runtime snapshot. These run when a person acts in the approval center, the dashboard or the guard approvals command; no hook or MCP proxy call reaches them.",
+        "evidence": "Every caller of apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible is outside runtime scope: the daemon control-plane routes (server_control_routes_post.py, server_control_policy.py), the dashboard read routes (server_dashboard_runtime_read.py) and the guard approvals command (cli/approval_commands.py). The remaining symbols are reached only from apply_approval_resolution, build_runtime_snapshot, bulk_allow_read_only_once and is_bulk_allow_once_eligible. The retained in-scope part of approvals.py (request queueing, build_approval_request_url, primary_approval_request, silent_review_center_url) does not reference them, and the report validates this reference closure on every run."
       }
     ],
     "dynamic_imports": [
@@ -1536,9 +1606,12 @@
         "resolution": "follow",
         "mode": "eager",
         "targets": [
-          "..daemon"
+          "..daemon",
+          "..proxy",
+          ".approval_commands",
+          ".bootstrap"
         ],
-        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with the literal package ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), so the one non-literal site resolves to the guard.daemon package."
+        "evidence": "_load_lazy_export(module_name, attribute) is only ever called at module level with literal module names: ..daemon (GuardDaemonServer, ensure_guard_daemon and the other daemon exports), ..proxy (the harness MCP proxy classes), .approval_commands (the guard approvals command handlers) and .bootstrap (the guard bootstrap payload builder), so the one non-literal site resolves to those four modules."
       },
       {
         "path": "src/codex_plugin_scanner/guard/codex_config.py",
