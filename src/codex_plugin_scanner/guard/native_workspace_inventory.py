@@ -148,6 +148,8 @@ def native_workspace_inventory(
         offset = next_offset
     else:
         raise _invalid()
+    if first is None:
+        raise _invalid()
     warnings = first["lockfile_warnings"]
     if not isinstance(warnings, list):
         raise _invalid()
