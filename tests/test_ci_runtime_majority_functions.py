@@ -190,6 +190,12 @@ def test_root_function_flag_allows_a_reviewed_handler_in_a_root(tmp_path: Path) 
     _write(repo / "src/pkg/root.py", root)
     with pytest.raises(ScopeError, match="must be a boolean"):
         build_report(repo, scope)
+    with_class = root + "\n\nclass _Holder:\n    value = 1\n"
+    entry = _entry(path="src/pkg/root.py", symbols=["_Holder"], entry_points=[], root_function=True)
+    repo, scope = _repo(tmp_path / "c", entries=[entry])
+    _write(repo / "src/pkg/root.py", with_class)
+    with pytest.raises(ScopeError, match="may only name functions"):
+        build_report(repo, scope)
 
 
 def test_missing_symbol_and_unknown_entry_point_are_rejected(tmp_path: Path) -> None:

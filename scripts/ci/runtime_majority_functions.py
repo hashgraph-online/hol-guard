@@ -182,6 +182,8 @@ def plan_module(
         if hit:
             if len(hit) != len(names):
                 raise ScopeError(f"{path}: statement binds both excluded and retained names {names}")
+            if path in root_paths and not _is_function(node):
+                raise ScopeError(f"{path}: root_function exclusions may only name functions, not {names}")
             start, end = _node_range(node)
             for name in hit:
                 plan.symbol_lines[name] = (start, end)
