@@ -134,6 +134,7 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import GUARD_ACTION_VALUES, SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..native_prompt import extract_prompt_requests
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
     package_firewall_available_actions,
@@ -164,6 +165,7 @@ from ..runtime.false_positive_rules import (
     target_is_known_skill_doc_path,
 )
 from ..runtime.github_capability_interaction import github_capability_requires_confirmation
+from ..runtime.guard_run_evaluation import prompt_requests_to_artifacts
 from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent_common import build_package_request_artifact
 from ..runtime.package_intent_parser import extract_package_intent_request
@@ -172,9 +174,6 @@ from ..runtime.runner import (
     GuardSyncEndpointUntrustedError,
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
-    extract_prompt_requests,
-    guard_run,
-    prompt_requests_to_artifacts,
     sync_local_guard_cloud_proof,
     sync_receipts,
     sync_runtime_session,
@@ -203,6 +202,7 @@ from ..runtime.secret_sensitivity import (
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
+from ..runtime.wrapper_run import guard_run
 from ..shims import (
     activate_package_shims,
     package_shim_status,

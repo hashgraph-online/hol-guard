@@ -249,7 +249,7 @@ def native_prompt_runtime(
     from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
     from codex_plugin_scanner.guard.native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import guard_run_evaluation as runner
 
     runtime: Path | None = None
     analyze = native_prompt.analyze
