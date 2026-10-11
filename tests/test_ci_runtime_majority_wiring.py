@@ -188,3 +188,27 @@ def test_shipped_rust_exclusions_carry_evidence_and_unwired_is_reported() -> Non
     counted = {item["path"] for item in result["rust"]["files"]}
     assert not counted & {item["path"] for item in result["rust"]["unwired_files"]}
     assert f"{CRATES}/guard-command/src/hook_responses.rs" not in counted
+
+
+def test_declaration_without_a_remaining_site_is_an_error(tmp_path: Path) -> None:
+    repo, scope_path = _repo(tmp_path, _scope())
+    scope_path.write_text(json.dumps(_with_dynamic([_dynamic("external")])), encoding="utf-8")
+    with pytest.raises(ScopeError, match=r"root\.py: 0 non-literal import site\(s\), declared 1"):
+        build_report(repo, scope_path)
+
+
+def test_declared_path_must_name_a_module(tmp_path: Path) -> None:
+    repo, scope_path = _repo(tmp_path, _scope(), root=REGISTRY_ROOT)
+    entries = [_dynamic("external"), _dynamic("external", path="src/pkg/ghost.py")]
+    scope_path.write_text(json.dumps(_with_dynamic(entries)), encoding="utf-8")
+    with pytest.raises(ScopeError, match=r"ghost\.py: declared dynamic import entry names no module"):
+        build_report(repo, scope_path)
+
+
+@pytest.mark.parametrize("resolution", ["follow", "unfollowed"])
+def test_declared_target_must_resolve_to_a_module(tmp_path: Path, resolution: str) -> None:
+    repo, scope_path = _repo(tmp_path, _scope(), root=REGISTRY_ROOT)
+    _write(repo / "src" / "pkg" / "plugin.py", "p = 1\n")
+    scope_path.write_text(json.dumps(_with_dynamic([_dynamic(resolution, targets=[".plugn"])])), encoding="utf-8")
+    with pytest.raises(ScopeError, match=r"target '\.plugn' resolves to no module"):
+        build_report(repo, scope_path)

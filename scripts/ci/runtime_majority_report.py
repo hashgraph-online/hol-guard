@@ -234,7 +234,10 @@ def build_report(repo: Path, scope_path: Path, *, top: int = 40) -> dict[str, An
     plans = plan_modules(repo, function_entries, root_paths=root_paths)
     graph = build_graph(repo, python_scope["package_root"], plans)
     dynamic_entries = list(python_scope.get("dynamic_imports", []))
-    apply_dynamic_imports(graph, dynamic_entries)
+    try:
+        apply_dynamic_imports(graph, dynamic_entries)
+    except ValueError as error:
+        raise ScopeError(str(error)) from error
     missing = [root for root in roots if root not in graph.modules]
     if missing:
         raise ScopeError(f"runtime roots not found: {missing}")

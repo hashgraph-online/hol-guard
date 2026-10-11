@@ -116,13 +116,13 @@ def build_files(
         parsed[item.path] = (source, code, flags)
     for path, (source, code, flags) in parsed.items():
         modules, includes = module_children((repo / path).resolve(), source, code, flags)
+        parent_text = visible_code(code, flags)
         for alias, target in modules:
             if target in by_resolved and not by_resolved[target].parent:
                 child = by_resolved[target]
                 child.parent, child.alias = path, alias
-                text = _MOD_DECL.sub(lambda m: m.group(0), visible_code(parsed[path][1], parsed[path][2]))
                 child.public_mod = (
-                    re.search(r"\bpub(?:\s*\([^)]*\))?\s+mod\s+" + re.escape(alias) + r"\s*;", text) is not None
+                    re.search(r"\bpub(?:\s*\([^)]*\))?\s+mod\s+" + re.escape(alias) + r"\s*;", parent_text) is not None
                 )
         for target in includes:
             if target in by_resolved:

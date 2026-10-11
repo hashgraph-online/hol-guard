@@ -242,29 +242,39 @@ def apply_dynamic_imports(graph: ImportGraph, entries: list[dict[str, Any]]) -> 
 
     ``external`` (stdlib or third-party) and ``unfollowed`` (reviewed decision
     not to count the targets) add nothing; an unfollowed target is in scope
-    only if a static import reaches it.
+    only if a static import reaches it. Every declared target must resolve to a
+    module (raises ``ValueError``), so a misspelled target cannot shrink the scope.
     """
     by_path = {module.path: module for module in graph.modules.values()}
     for entry in entries:
         module = by_path.get(entry["path"])
-        if module is None or entry["resolution"] != "follow":
+        if module is None or entry["resolution"] not in {"follow", "unfollowed"}:
             continue
         package = module.name if module.is_package else module.name.rpartition(".")[0]
         edges = graph.eager if entry.get("mode") == "eager" else graph.lazy
         for target in entry["targets"]:
             name = _absolute_name(target, package)
-            if name:
-                edges.setdefault(module.name, set()).update(_expand(graph.modules, name) - {module.name})
+            resolved = _expand(graph.modules, name) if name else set()
+            if not resolved:
+                raise ValueError(f"dynamic import entry {entry['path']!r}: target {target!r} resolves to no module")
+            if entry["resolution"] == "follow":
+                edges.setdefault(module.name, set()).update(resolved - {module.name})
 
 
 def undeclared_dynamic_sites(graph: ImportGraph, in_scope: dict[str, str], entries: list[dict[str, Any]]) -> list[str]:
-    """In-scope modules whose unresolved dynamic import count differs from the declared count."""
+    """Declarations that disagree with the graph.
+
+    An in-scope module's unresolved dynamic import count must equal its declared
+    count, including zero, so a declaration cannot outlive its last import site.
+    A declared path must name a module.
+    """
     declared = {entry["path"]: entry["count"] for entry in entries}
-    problems = []
+    known = {module.path for module in graph.modules.values()}
+    problems = [f"{path}: declared dynamic import entry names no module" for path in sorted(set(declared) - known)]
     for name in sorted(in_scope):
         found = graph.dynamic_unresolved.get(name, 0)
         path = graph.modules[name].path
-        if found and declared.get(path) != found:
+        if found != declared.get(path, 0):
             problems.append(f"{path}: {found} non-literal import site(s), declared {declared.get(path, 0)}")
     return problems
 
