@@ -994,6 +994,37 @@
         "entry_points": [],
         "reason": "Payload builders for the guard settings explain/doctor/show commands and the runtime detector registry and perf listing commands.",
         "evidence": "The only callers are commands_dispatch_records.py and commands_dispatch_admin.py, which are excluded CLI dispatch modules, plus each other. They read settings and detector metadata for operator output and never feed a hook, run, protect or MCP decision. The runtime policy readers (effective policy config, stored policy decision, approval context token) stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "cloud-workspace-audit-sync",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/local_supply_chain.py",
+        "symbols": [
+          "_should_use_cloud_workspace_audit",
+          "_run_cloud_workspace_audit",
+          "_codebase_label_from_remote",
+          "_read_git_origin_codebase",
+          "_safe_machine_name",
+          "_redacted_workspace_folder_path",
+          "_build_workspace_context_payload",
+          "_build_cloud_audit_payload",
+          "_execute_cloud_workspace_audit_request",
+          "_normalized_supply_chain_batch_job_url",
+          "_enqueue_cloud_workspace_audit_job",
+          "_poll_cloud_workspace_audit_job",
+          "_workspace_audit_lockfile_context",
+          "_workspace_audit_fingerprint",
+          "_normalize_cloud_audit_response",
+          "_normalized_supply_chain_batch_url",
+          "sync_managed_workspace_audits",
+          "_managed_workspace_audit_candidates"
+        ],
+        "entry_points": [
+          "build_workspace_audit_payload",
+          "sync_supply_chain_cloud_state"
+        ],
+        "reason": "Premium cloud workspace audit submission and the managed-workspace cloud audit sync: build the cloud request payload, enqueue and poll the supply-chain batch job over the network, and normalize the cloud response.",
+        "evidence": "The only retained callers are build_workspace_audit_payload (the operator guard audit and package shim audit commands) and sync_supply_chain_cloud_state (the cloud connect and sync commands and the daemon cloud sync worker). Neither is reached from hook admission, guard-run, package protect or the MCP proxy; the local audit verdict is computed by the native resident before any cloud call and the cloud job only publishes workspace inventory for the dashboard. No other module imports the excluded names. The report validates that no retained symbol or in-scope module references them outside the two listed entry points."
       }
     ]
   },
