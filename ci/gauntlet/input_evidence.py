@@ -111,9 +111,12 @@ def post_input_matches(tool: str, reviewed: dict[str, Any], completed: dict[str,
     original, resolved = reviewed[key], completed[key]
     if not isinstance(original, str) or not isinstance(resolved, str):
         return False
-    selector = re.fullmatch(r"(.+):([1-9][0-9]*)(?:-([1-9][0-9]*))?", original)
+    # A bare `:raw` returns the whole file without line formatting, so its
+    # result must still prove the same resolved source from the first line.
+    selector = re.fullmatch(r"(.+):(?:([1-9][0-9]*)(?:-([1-9][0-9]*))?|raw)", original)
     if selector:
         base, first, last = selector.groups()
+        first = first or "1"
         if last is not None and int(last) < int(first):
             return False
         details = result.get("details") if isinstance(result, dict) else None
