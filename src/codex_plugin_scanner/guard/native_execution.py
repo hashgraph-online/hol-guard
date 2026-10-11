@@ -163,6 +163,7 @@ def _resident_request(
             "approval_reuse_diagnostic",
             "approval_resolution_plan",
             "approval_queue_identity",
+            "approval_bulk_eligibility",
             "daemon_route",
             "daemon_handler",
         }:

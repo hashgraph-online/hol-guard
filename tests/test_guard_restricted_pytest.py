@@ -184,6 +184,26 @@ def test_pytest_contained_cli_dispatches_exact_argv(
     }
 
 
+def test_pytest_contained_cli_workspace_defaults_to_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    observed: dict[str, object] = {}
+
+    def fake_run_restricted_pytest(command, **kwargs):
+        observed["command"] = command
+        observed.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(restricted_pytest_module, "run_restricted_pytest", fake_run_restricted_pytest)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["guard", "pytest-contained", "python3", "-m", "pytest", "-q"]) == 0
+    assert observed["command"] == ["python3", "-m", "pytest", "-q"]
+    assert observed["workspace"] == Path.cwd()
+    assert observed["read_only_workspace"] is False
+
+
 def test_prepare_restricted_pytest_binds_profile_workspace_and_capabilities(tmp_path: Path) -> None:
     executable = Path(sys.executable)
     workspace = Path.cwd().resolve()

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
 
 from codex_plugin_scanner.guard.runtime.command_shadow_evaluation import CommandShadowObservation
@@ -72,6 +73,24 @@ def schema_sql(path: Path) -> list[str]:
             for row in connection.execute(
                 "select sql from sqlite_master where sql is not null and tbl_name like 'command_activity%' "
                 "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid"
+            )
+        ]
+    finally:
+        connection.close()
+
+
+def schema_sql_for_tables(path: Path, tables: Iterable[str]) -> list[str]:
+    """Schema DDL for exactly the named tables and their indexes, in creation order."""
+
+    names = tuple(tables)
+    connection = sqlite3.connect(path)
+    try:
+        return [
+            row[0]
+            for row in connection.execute(
+                f"select sql from sqlite_master where sql is not null and tbl_name in ({','.join('?' * len(names))}) "
+                "order by case type when 'table' then 0 when 'index' then 1 else 2 end, rowid",
+                names,
             )
         ]
     finally:

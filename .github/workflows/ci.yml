@@ -294,7 +294,9 @@ jobs:
           HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
           HOL_GUARD_NATIVE_REGRESSION: "1"
         run: |
-          uv run --no-sync pytest -q --tb=short \
+          # Four workers on the 4-vCPU runner keep this required gate well under
+          # the job's five-minute budget after a cold native build.
+          uv run --no-sync pytest -q --tb=short -n 4 --dist load --max-worker-restart 0 \
             tests/test_guard_benign_false_positive_gate.py \
             tests/test_guard_command_corpus_benign_allow.py
       - name: Upload native command evaluators

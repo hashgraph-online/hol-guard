@@ -230,3 +230,47 @@ fn windows_get_content_reads_use_native_paths() {
         assert_ne!(action(&command), "allow", "{command}");
     }
 }
+
+#[test]
+fn a_stderr_merge_does_not_invent_an_ls_target() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .canonicalize()
+        .unwrap();
+    let root = root.to_str().unwrap();
+    let context = PathContext {
+        home_dir: Some(root),
+        cwd: Some(root),
+        cdpath_unset: false,
+    };
+    let cover = |command: &str| {
+        benign_command_segments(&parse_command(&request(command)).unwrap(), context)
+    };
+    assert!(cover("ls -la").is_empty());
+    assert!(cover("ls -la 2>&1").is_empty());
+    assert!(cover("ls -la 2>&1 2>&1").is_empty());
+    assert_eq!(cover("ls src"), vec![0]);
+    assert_eq!(cover("ls src 2>&1"), vec![0]);
+    assert_eq!(cover("ls src 2>&1 2>&1"), vec![0]);
+}
+
+#[test]
+fn a_trailing_stderr_merge_keeps_the_read_only_proof() {
+    for command in [
+        "ls 2>&1",
+        "ls -la 2>&1 | head -5",
+        "hol-guard status 2>&1 | head -50",
+        "hol-guard --version 2>&1",
+        "node --version 2>&1",
+    ] {
+        assert!(allowed(command), "{command}");
+    }
+    for command in [
+        "hol-guard doctor --repair 2>&1",
+        "hol-guard approvals approve 2>&1",
+        "rm -rf build 2>&1",
+        "cat '2>&1'",
+        "cat \"2>&1\"",
+    ] {
+        assert!(!allowed(command), "{command}");
+    }
+}

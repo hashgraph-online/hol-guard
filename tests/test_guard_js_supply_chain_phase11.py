@@ -14,10 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generate_private_key
 
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    parse_package_intent,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
 

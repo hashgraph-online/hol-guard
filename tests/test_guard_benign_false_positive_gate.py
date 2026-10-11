@@ -53,7 +53,11 @@ _FIXED_TOOLS = {
     "todo_write": "todo_write",
     "ls": "ls",
 }
-_ALLOWED_PR = {"#3958", "#3959", "#3960", "#3961", "#3973", "unassigned"}
+# A pending marker names the open work that owns the case. "advisory-warn" is an
+# intrinsic allow the installed policy floor raises to a non-blocking warning;
+# "unassigned" still prompts and has no owner yet. A merged PR is never a marker:
+# once its fix lands the case either passes or needs a new owner.
+_ALLOWED_PR = {"advisory-warn", "unassigned"}
 # Pending entries are recorded against the Linux CI host. Git helper context and
 # temp-directory proofs differ on other hosts, so only CI fails a stale entry.
 # Pending markers record the Linux CI result. macOS sends some Oh My Pi and Z Code reads
@@ -129,7 +133,15 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     fixture = build_fixture(tmp_path_factory.mktemp("benign-fp-gate"))
     patch = pytest.MonkeyPatch()
     patch.setenv("HOME", str(fixture.home))
-    patch.setenv("GIT_CONFIG_GLOBAL", str(fixture.home / ".gitconfig"))
+    # Git finds the fixture ~/.gitconfig through HOME, as on a real host. The
+    # native Git proofs fail closed on any GIT_*, LD_* or DYLD_* override in
+    # the agent environment. A test-only GIT_CONFIG_GLOBAL, and later the
+    # LD_LIBRARY_PATH that setup-python exports on CI runners, each hid every
+    # Git read case behind a review that real agents never see.
+    for name in list(os.environ):
+        if name.upper().startswith(("GIT_", "LD_", "DYLD_")):
+            patch.delenv(name)
+    patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
     binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
     if not binary:
@@ -275,6 +287,12 @@ def test_pending_entries_are_consistent_and_name_their_fix() -> None:
     assert set(_PENDING_PR.values()) <= _ALLOWED_PR, sorted(set(_PENDING_PR.values()) - _ALLOWED_PR)
     assert set(_PENDING_ALWAYS) <= set(_PENDING_FIX)
     assert set(_PENDING_ALWAYS.values()) <= _ALLOWED_PR, sorted(set(_PENDING_ALWAYS.values()) - _ALLOWED_PR)
+    mislabeled = sorted(
+        case_id
+        for case_id, marker in _PENDING_PR.items()
+        if (marker == "advisory-warn") != (_PENDING_FIX[case_id] == "native_policy_warning")
+    )
+    assert not mislabeled, mislabeled
 
 
 def test_every_confirmed_false_positive_class_has_a_gate_case() -> None:

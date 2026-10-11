@@ -1,8 +1,9 @@
 use guard_command::CommandModelRequestV1;
 use guard_contracts::{
-    ApplyStoredPackagePolicyRequestV1, ApprovalChallengeRequestV3, ApprovalChallengeRequestV4,
-    ApprovalConsumeRequestV3, ApprovalConsumeRequestV4, ApprovalGateRequestV1,
-    ApprovalProofRequestV1, ApprovalQueueIdentityRequestV1, ApprovalResolutionPlanRequestV1,
+    ApplyStoredPackagePolicyRequestV1, ApprovalBulkEligibilityRequestV1,
+    ApprovalChallengeRequestV3, ApprovalChallengeRequestV4, ApprovalConsumeRequestV3,
+    ApprovalConsumeRequestV4, ApprovalGateRequestV1, ApprovalProofRequestV1,
+    ApprovalQueueIdentityRequestV1, ApprovalResolutionPlanRequestV1,
     ApprovalReuseDiagnosticRequestV1, ApprovalReuseRequestV1, ApprovalScopeRequestV1,
     ApprovalValidateRequestV3, ApprovalValidateRequestV4, ClaimApprovalReuseDecisionsRequestV1,
     CodexToolOutputRequestV1, CommandEffectBatchRequestV1, CommandEffectRequestV1,
@@ -23,8 +24,8 @@ use guard_contracts::{
     PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
     PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
     RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
-    SupplyChainEvalRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
-    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -89,6 +90,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::GITHUB_CLI_CLASSIFY_FEATURE.into(),
         guard_contracts::CLAIM_APPROVAL_REUSE_FEATURE.into(),
         guard_contracts::APPROVAL_REUSE_DIAGNOSTIC_FEATURE.into(),
+        guard_contracts::APPROVAL_BULK_ELIGIBILITY_FEATURE.into(),
         guard_contracts::APPROVAL_QUEUE_IDENTITY_FEATURE.into(),
         guard_contracts::APPROVAL_RESOLUTION_PLAN_FEATURE.into(),
         guard_contracts::APPROVAL_SCOPE_FEATURE.into(),
@@ -99,6 +101,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::PACKAGE_APPROVAL_HASH_FEATURE.into(),
         guard_contracts::PACKAGE_POLICY_RESOLVE_FEATURE.into(),
         guard_contracts::PACKAGE_POSTURE_FEATURE.into(),
+        guard_contracts::WORKSPACE_INVENTORY_FEATURE.into(),
         guard_contracts::SUPPLY_CHAIN_EVAL_FEATURE.into(),
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
         guard_contracts::MCP_STDIO_PROBE_FEATURE.into(),
@@ -181,6 +184,7 @@ pub(crate) enum ResidentOperationV1 {
     GithubCliClassify(GithubCliClassifyRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),
+    ApprovalBulkEligibility(ApprovalBulkEligibilityRequestV1),
     ApprovalQueueIdentity(ApprovalQueueIdentityRequestV1),
     ApprovalResolutionPlan(ApprovalResolutionPlanRequestV1),
     ApprovalScope(ApprovalScopeRequestV1),
@@ -214,6 +218,7 @@ pub(crate) enum ResidentOperationV1 {
     PackageApprovalHash(PackageApprovalHashRequestV1),
     PackagePolicyResolve(PackagePolicyResolveRequestV1),
     PackagePosture(PackagePostureRequestV1),
+    WorkspaceInventory(WorkspaceInventoryRequestV1),
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     GitExecutionSafety(GitExecutionSafetyRequestV1),
     CompoundGitInspection(CompoundGitInspectionRequestV1),
