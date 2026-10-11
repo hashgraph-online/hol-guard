@@ -1,0 +1,405 @@
+{
+ "extension": {
+  "action_classes": [
+   "Codex Migrate destination-changing operation"
+  ],
+  "aliases": [],
+  "conflicts": [],
+  "delegated_protection": null,
+  "dependencies": [],
+  "description": "Reviews Codex Migrate commands that enable destination-changing migration or recovery operations.",
+  "ecosystem_ids": [
+   "codex-migrate"
+  ],
+  "executables": [
+   "codex-migrate"
+  ],
+  "extension_id": "command.codex-migrate",
+  "homepage": "https://migrate.segeren.com/",
+  "icon": {
+   "background": "#4F46C8",
+   "kind": "react-icon",
+   "name": "HiMiniCommandLine"
+  },
+  "license": "MIT",
+  "name": "Codex Migrate",
+  "permissions": [
+   {
+    "action_classes": [
+     "Codex Migrate destination-changing operation"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies codex-migrate invocations that pass --apply, which enables transfer, installation, scheduling, or rollback writes on the destination or local Codex state.",
+    "example_command": "codex-migrate vault install --vault ~/v --apply",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "3.13.1",
+    "label": "Codex Migrate write apply",
+    "permission_id": "command.codex-migrate.permission.apply",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Run without --apply first; the plan output lists every destination change before anything is written."
+    ],
+    "typed_capabilities": []
+   },
+   {
+    "action_classes": [
+     "Codex Migrate destination-changing operation"
+    ],
+    "baseline_floor": "review",
+    "configurable": true,
+    "conflicts": [],
+    "default_enabled": true,
+    "dependencies": [],
+    "deprecated": false,
+    "description": "Identifies codex-migrate sessions that open an SSH connection to a migration destination (serve, export, inspect, recovery) even before --apply enables writes.",
+    "example_command": "codex-migrate export --target user@new-mac.local --target-home /Users/user",
+    "family": null,
+    "fixed_reason": null,
+    "implementation_version": "1.0.0",
+    "implied_permissions": [],
+    "introduced_version": "3.13.1",
+    "label": "Codex Migrate remote destination session",
+    "permission_id": "command.codex-migrate.permission.remote-session",
+    "replacement_permission_id": null,
+    "risk_tier": "high",
+    "safer_guidance": [
+     "Verify --target and --target-home point at the intended destination before starting a session."
+    ],
+    "typed_capabilities": []
+   }
+  ],
+  "project_markers": [],
+  "publisher": {
+   "display_name": "Joshua Segeren",
+   "id": "community.jsegeren",
+   "url": "https://github.com/jsegeren/codex-migrate"
+  },
+  "reference_urls": [
+   "https://github.com/jsegeren/codex-migrate",
+   "https://migrate.segeren.com/how-it-works"
+  ],
+  "required": false,
+  "risk_classes": [
+   "destructive_shell",
+   "execution",
+   "network_egress"
+  ],
+  "rules": [
+   {
+    "action_classes": [
+     "Codex Migrate destination-changing operation"
+    ],
+    "default_mode": "review",
+    "description": "Any codex-migrate invocation carrying --apply can write to the destination machine or local Codex installation (transfer, vault install/restore/recover, backup, scheduling).",
+    "family": null,
+    "matcher": {
+     "config": {
+      "allow_leading_options": true,
+      "executables": [
+       "codex-migrate",
+       "codex-migrate.cmd",
+       "codex-migrate.exe"
+      ],
+      "fail_secure_unknown_options": true,
+      "forbidden_flags": [],
+      "interspersed_flags": [
+       "--json",
+       "--no-compress",
+       "--no-open",
+       "--verbose",
+       "-v"
+      ],
+      "interspersed_options_with_values": [
+       "--chunk-size",
+       "--collection",
+       "--config",
+       "--crypto-helper",
+       "--destination",
+       "--host-key-alias",
+       "--identity-file",
+       "--interval-hours",
+       "--known-hosts-file",
+       "--limit",
+       "--output",
+       "--port",
+       "--snapshot",
+       "--source-home",
+       "--staging-name",
+       "--state-dir",
+       "--target",
+       "--target-home",
+       "--transcript",
+       "--vault",
+       "--workspace"
+      ],
+      "inverse_flag_pairs": [],
+      "leading_options_with_values": [],
+      "options_with_values": [],
+      "required_flags": [
+       "--apply"
+      ],
+      "required_flags_in_all_arguments": false,
+      "required_option_values": [],
+      "subcommands": []
+     },
+     "op": "executable.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.codex-migrate.permission.apply",
+    "risk_classes": [
+     "destructive_shell",
+     "execution"
+    ],
+    "rule_id": "command.codex-migrate.apply",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {
+        "allow_leading_options": true,
+        "executables": [
+         "codex-migrate",
+         "codex-migrate.cmd",
+         "codex-migrate.exe"
+        ],
+        "fail_secure_unknown_options": true,
+        "forbidden_flags": [],
+        "interspersed_flags": [
+         "--json",
+         "--no-compress",
+         "--no-open",
+         "--verbose",
+         "-v"
+        ],
+        "interspersed_options_with_values": [
+         "--chunk-size",
+         "--collection",
+         "--config",
+         "--crypto-helper",
+         "--destination",
+         "--host-key-alias",
+         "--identity-file",
+         "--interval-hours",
+         "--known-hosts-file",
+         "--limit",
+         "--output",
+         "--port",
+         "--snapshot",
+         "--source-home",
+         "--staging-name",
+         "--state-dir",
+         "--target",
+         "--target-home",
+         "--transcript",
+         "--vault",
+         "--workspace"
+        ],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--apply",
+         "--help"
+        ],
+        "required_flags_in_all_arguments": true,
+        "required_option_values": [],
+        "subcommands": []
+       },
+       "op": "executable.v1"
+      },
+      "title": "Command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Run the command without --apply and inspect the read-only plan first."
+    ],
+    "severity": "high",
+    "title": "Codex Migrate write apply"
+   },
+   {
+    "action_classes": [
+     "Codex Migrate destination-changing operation"
+    ],
+    "default_mode": "review",
+    "description": "codex-migrate serve, export, inspect, and recovery open an SSH session against --target; even read-only runs contact the destination machine.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "allow_leading_options": true,
+      "executables": [
+       "codex-migrate",
+       "codex-migrate.cmd",
+       "codex-migrate.exe"
+      ],
+      "fail_secure_unknown_options": true,
+      "forbidden_flags": [],
+      "interspersed_flags": [
+       "--apply",
+       "--json",
+       "--no-compress",
+       "--no-open",
+       "--verbose",
+       "-v"
+      ],
+      "interspersed_options_with_values": [
+       "--component",
+       "--host-key-alias",
+       "--identity-file",
+       "--known-hosts-file",
+       "--port",
+       "--source-home",
+       "--staging-name",
+       "--state-dir",
+       "--target",
+       "--target-home",
+       "--workspace"
+      ],
+      "inverse_flag_pairs": [],
+      "leading_options_with_values": [],
+      "options_with_values": [],
+      "required_flags": [],
+      "required_flags_in_all_arguments": false,
+      "required_option_values": [],
+      "subcommands": [
+       "serve",
+       "export",
+       "inspect",
+       "recovery"
+      ]
+     },
+     "op": "executable.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.codex-migrate.permission.remote-session",
+    "risk_classes": [
+     "network_egress",
+     "execution"
+    ],
+    "rule_id": "command.codex-migrate.remote-session",
+    "rule_version": "1.0.0",
+    "safe_variants": [
+     {
+      "matcher": {
+       "config": {
+        "allow_leading_options": true,
+        "executables": [
+         "codex-migrate",
+         "codex-migrate.cmd",
+         "codex-migrate.exe"
+        ],
+        "fail_secure_unknown_options": true,
+        "forbidden_flags": [],
+        "interspersed_flags": [
+         "--apply",
+         "--json",
+         "--no-compress",
+         "--no-open",
+         "--verbose",
+         "-v"
+        ],
+        "interspersed_options_with_values": [
+         "--component",
+         "--host-key-alias",
+         "--identity-file",
+         "--known-hosts-file",
+         "--port",
+         "--source-home",
+         "--staging-name",
+         "--state-dir",
+         "--target",
+         "--target-home",
+         "--workspace"
+        ],
+        "inverse_flag_pairs": [],
+        "leading_options_with_values": [],
+        "options_with_values": [],
+        "required_flags": [
+         "--help"
+        ],
+        "required_flags_in_all_arguments": true,
+        "required_option_values": [],
+        "subcommands": [
+         "serve",
+         "export",
+         "inspect",
+         "recovery"
+        ]
+       },
+       "op": "executable.v1"
+      },
+      "title": "Command help",
+      "variant_id": "help"
+     }
+    ],
+    "safer_alternatives": [
+     "Confirm the --target SSH destination and --target-home path before opening a session."
+    ],
+    "severity": "high",
+    "title": "Codex Migrate remote destination session"
+   },
+   {
+    "action_classes": [
+     "Codex Migrate destination-changing operation"
+    ],
+    "default_mode": "review",
+    "description": "codex-migrate _ssh-rsync spawns the internal rsync-over-SSH transport stream to a destination; it is how migration payloads move between machines.",
+    "family": null,
+    "matcher": {
+     "config": {
+      "allow_leading_options": true,
+      "executables": [
+       "codex-migrate",
+       "codex-migrate.cmd",
+       "codex-migrate.exe"
+      ],
+      "fail_secure_unknown_options": true,
+      "forbidden_flags": [],
+      "interspersed_flags": [],
+      "interspersed_options_with_values": [],
+      "inverse_flag_pairs": [],
+      "leading_options_with_values": [],
+      "options_with_values": [],
+      "required_flags": [],
+      "required_flags_in_all_arguments": false,
+      "required_option_values": [],
+      "subcommands": [
+       "_ssh-rsync"
+      ]
+     },
+     "op": "executable.v1"
+    },
+    "native_capability": null,
+    "permission_id": "command.codex-migrate.permission.remote-session",
+    "risk_classes": [
+     "network_egress",
+     "execution"
+    ],
+    "rule_id": "command.codex-migrate.ssh-bridge",
+    "rule_version": "1.0.0",
+    "safe_variants": [],
+    "safer_alternatives": [
+     "This subcommand is spawned internally; review the parent codex-migrate session instead."
+    ],
+    "severity": "high",
+    "title": "Codex Migrate SSH rsync bridge"
+   }
+  ],
+  "safer_alternatives": [
+   "Run the command without --apply and inspect the read-only plan first.",
+   "Keep the source Mac and an independent backup until the migrated workspace is verified."
+  ],
+  "source": "built-in",
+  "version": "1.0.0"
+ },
+ "schema": "guard.command-extension-source.v1"
+}
