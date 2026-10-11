@@ -494,4 +494,18 @@ pub struct WorkspaceInventoryRequestV1 {
     /// Also report the lockfile warnings for `workspace_dir`.
     #[serde(default)]
     pub include_lockfile_warnings: bool,
+    /// Return only the package intent targets of the inventory (an empty
+    /// `inventory`), keeping each response inside the native size cap.
+    #[serde(default)]
+    pub targets_only: bool,
+    /// Also build the package intent target for one explicit package spec.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_spec: Option<WorkspacePackageSpecV1>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspacePackageSpecV1 {
+    pub ecosystem: String,
+    pub spec: String,
 }

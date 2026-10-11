@@ -16,9 +16,34 @@ from typing import Any
 
 from .native_context import _resolve_digest_home
 from .native_package_approval_hash import _transport
+from .runtime.package_intent_common import PackageIntentTarget
 
 _INVENTORY_FEATURE = "workspace-inventory-v1"
-_PAYLOAD_KEYS = frozenset({"manifest_paths", "lockfile_paths", "sbom_paths", "inventory", "diff", "lockfile_warnings"})
+_PAYLOAD_KEYS = frozenset(
+    {
+        "manifest_paths",
+        "lockfile_paths",
+        "sbom_paths",
+        "inventory",
+        "diff",
+        "lockfile_warnings",
+        "scan_targets",
+        "package_target",
+    }
+)
+_TARGET_OPTIONAL_STRINGS = (
+    "package_name",
+    "requested_specifier",
+    "source_url",
+    "source_kind",
+    "source_repository",
+    "source_revision_kind",
+    "source_identity",
+    "source_invalid_reason",
+    "alias",
+    "dependency_group",
+)
+_TARGET_KEYS = frozenset({"ecosystem", "raw_spec", "extras", "editable", *_TARGET_OPTIONAL_STRINGS})
 _ITEM_KEYS = ("ecosystem", "namespace", "name", "direct", "range", "version")
 _WARNING_KEYS = frozenset({"code", "message", "path"})
 _DIFF_KEYS = frozenset({"changed_package_count", "changed_paths"})
@@ -36,6 +61,8 @@ class WorkspaceInventory:
     inventory: tuple[dict[str, object], ...]
     diff: dict[str, object] | None
     lockfile_warnings: tuple[dict[str, object], ...]
+    scan_targets: tuple[PackageIntentTarget, ...]
+    package_target: PackageIntentTarget | None
 
 
 def _invalid() -> NativeWorkspaceInventoryError:
@@ -79,6 +106,27 @@ def _diff(value: object) -> dict[str, object] | None:
     return {"changed_package_count": count, "changed_paths": list(_strings(value["changed_paths"]))}
 
 
+def _target(value: object) -> PackageIntentTarget:
+    if not isinstance(value, dict) or set(value) != _TARGET_KEYS:
+        raise _invalid()
+    extras = value["extras"]
+    if not isinstance(value["ecosystem"], str) or not isinstance(value["raw_spec"], str):
+        raise _invalid()
+    if not isinstance(value["editable"], bool) or not isinstance(extras, list):
+        raise _invalid()
+    if not all(isinstance(extra, str) for extra in extras):
+        raise _invalid()
+    if not all(value[key] is None or isinstance(value[key], str) for key in _TARGET_OPTIONAL_STRINGS):
+        raise _invalid()
+    return PackageIntentTarget(
+        ecosystem=value["ecosystem"],
+        raw_spec=value["raw_spec"],
+        extras=tuple(extras),
+        editable=value["editable"],
+        **{key: value[key] for key in _TARGET_OPTIONAL_STRINGS},
+    )
+
+
 def native_workspace_inventory(
     store: Any,
     workspace_dir: Path,
@@ -87,6 +135,8 @@ def native_workspace_inventory(
     before_workspace_dir: Path | None = None,
     files_only: bool = False,
     include_lockfile_warnings: bool = False,
+    targets_only: bool = False,
+    package_spec: tuple[str, str] | None = None,
 ) -> WorkspaceInventory:
     """Return the resident-derived inventory of ``workspace_dir``."""
 
@@ -95,7 +145,10 @@ def native_workspace_inventory(
         "sbom_paths": [str(path) for path in sbom_paths],
         "files_only": files_only,
         "include_lockfile_warnings": include_lockfile_warnings,
+        "targets_only": targets_only,
     }
+    if package_spec is not None:
+        request["package_spec"] = {"ecosystem": package_spec[0], "spec": package_spec[1]}
     if before_workspace_dir is not None:
         request["before_workspace_dir"] = str(before_workspace_dir)
     guard_home = _resolve_digest_home(Path(store.guard_home) if getattr(store, "guard_home", None) else None)
@@ -110,7 +163,12 @@ def native_workspace_inventory(
         raise _invalid()
     inventory = payload["inventory"]
     warnings = payload["lockfile_warnings"]
-    if not isinstance(inventory, list) or not isinstance(warnings, list):
+    targets = payload["scan_targets"]
+    if not isinstance(inventory, list) or not isinstance(warnings, list) or not isinstance(targets, list):
+        raise _invalid()
+    if (package_spec is None) != (payload["package_target"] is None) or (targets_only and inventory):
+        raise _invalid()
+    if targets and not targets_only:
         raise _invalid()
     return WorkspaceInventory(
         manifest_paths=_strings(payload["manifest_paths"]),
@@ -119,4 +177,6 @@ def native_workspace_inventory(
         inventory=tuple(_item(item) for item in inventory),
         diff=_diff(payload["diff"]),
         lockfile_warnings=tuple(_warning(item) for item in warnings),
+        scan_targets=tuple(_target(item) for item in targets),
+        package_target=None if package_spec is None else _target(payload["package_target"]),
     )

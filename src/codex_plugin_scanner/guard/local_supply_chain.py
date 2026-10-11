@@ -58,12 +58,7 @@ from .runtime.package_intent_common import (
     PackageIntent,
     PackageIntentTarget,
     build_package_request_artifact,
-    composer_target,
-    coordinate_target,
-    js_target,
-    python_target,
     redact_package_request_token,
-    version_target,
 )
 from .runtime.package_protect_projection import (
     LOCAL_SUPPLY_CHAIN_HARNESS as _LOCAL_SUPPLY_CHAIN_HARNESS,
@@ -883,13 +878,14 @@ def build_workspace_audit_payload(
     target_workspace_dir = after_workspace_dir or workspace_dir
     posture = build_local_supply_chain_posture(store, config, now=now)
     diff_summary: dict[str, object] | None = None
+    effective_before_dir = (
+        before_workspace_dir if before_workspace_dir is not None and after_workspace_dir is not None else None
+    )
     workspace_inventory = native_workspace_inventory(
         store,
         target_workspace_dir,
         sbom_paths=sbom_paths,
-        before_workspace_dir=(
-            before_workspace_dir if before_workspace_dir is not None and after_workspace_dir is not None else None
-        ),
+        before_workspace_dir=effective_before_dir,
         include_lockfile_warnings=True,
     )
     manifest_paths = workspace_inventory.manifest_paths
@@ -945,7 +941,8 @@ def build_workspace_audit_payload(
                 evaluation = _workspace_local_evaluation(
                     store=store,
                     workspace_dir=target_workspace_dir,
-                    inventory=inventory,
+                    sbom_paths=sbom_paths,
+                    before_workspace_dir=effective_before_dir,
                     manifest_paths=manifest_paths,
                     lockfile_paths=lockfile_paths,
                     command_name=command_name,
@@ -959,7 +956,8 @@ def build_workspace_audit_payload(
             evaluation = _workspace_local_evaluation(
                 store=store,
                 workspace_dir=target_workspace_dir,
-                inventory=inventory,
+                sbom_paths=sbom_paths,
+                before_workspace_dir=effective_before_dir,
                 manifest_paths=manifest_paths,
                 lockfile_paths=lockfile_paths,
                 command_name=command_name,
@@ -969,7 +967,8 @@ def build_workspace_audit_payload(
         evaluation = _workspace_local_evaluation(
             store=store,
             workspace_dir=target_workspace_dir,
-            inventory=inventory,
+            sbom_paths=sbom_paths,
+            before_workspace_dir=effective_before_dir,
             manifest_paths=manifest_paths,
             lockfile_paths=lockfile_paths,
             command_name=command_name,
@@ -1007,15 +1006,23 @@ def _workspace_local_evaluation(
     *,
     store: Any,
     workspace_dir: Path,
-    inventory: tuple[dict[str, object], ...],
+    sbom_paths: Sequence[str],
+    before_workspace_dir: Path | None,
     manifest_paths: tuple[str, ...],
     lockfile_paths: tuple[str, ...],
     command_name: str,
     now: str,
 ) -> dict[str, object]:
+    targets = native_workspace_inventory(
+        store,
+        workspace_dir,
+        sbom_paths=sbom_paths,
+        before_workspace_dir=before_workspace_dir,
+        targets_only=True,
+    ).scan_targets
     intent = _workspace_scan_intent(
         command_name=command_name,
-        inventory=inventory,
+        targets=targets,
         manifest_paths=manifest_paths,
         lockfile_paths=lockfile_paths,
     )
@@ -1045,14 +1052,18 @@ def build_supply_chain_explain_payload(
     now: str,
 ) -> tuple[dict[str, object], int]:
     posture = build_local_supply_chain_posture(store, config, now=now)
-    workspace_files = native_workspace_inventory(store, workspace_dir, files_only=True)
+    workspace_files = native_workspace_inventory(
+        store, workspace_dir, files_only=True, package_spec=(ecosystem, package_spec)
+    )
     manifest_paths, lockfile_paths = workspace_files.manifest_paths, workspace_files.lockfile_paths
+    explained_target = workspace_files.package_target
+    assert explained_target is not None
     intent = PackageIntent(
         package_manager=_PACKAGE_MANAGER_BY_ECOSYSTEM.get(ecosystem, ecosystem),
         intent_kind="install",
         command_tokens=("hol-guard", "supply-chain", "explain", package_spec),
         redacted_command=shlex.join(("hol-guard", "supply-chain", "explain", package_spec)),
-        targets=(_target_for_package_spec(ecosystem, package_spec),),
+        targets=(explained_target,),
         manifest_paths=manifest_paths,
         lockfile_paths=lockfile_paths,
     )
@@ -2332,14 +2343,13 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
 def _workspace_scan_intent(
     *,
     command_name: str,
-    inventory: tuple[dict[str, object], ...],
+    targets: tuple[PackageIntentTarget, ...],
     manifest_paths: tuple[str, ...],
     lockfile_paths: tuple[str, ...],
 ) -> PackageIntent | None:
     resolved_manifest_paths, resolved_lockfile_paths = manifest_paths, lockfile_paths
-    if not inventory and not resolved_manifest_paths and not resolved_lockfile_paths:
+    if not targets and not resolved_manifest_paths and not resolved_lockfile_paths:
         return None
-    targets = tuple(_target_from_inventory_item(item) for item in inventory)
     package_manager = _package_manager_for_scan(resolved_manifest_paths)
     return PackageIntent(
         package_manager=package_manager,
@@ -2350,34 +2360,6 @@ def _workspace_scan_intent(
         manifest_paths=resolved_manifest_paths,
         lockfile_paths=resolved_lockfile_paths,
     )
-
-
-def _target_from_inventory_item(item: dict[str, object]) -> PackageIntentTarget:
-    qualified_name = (
-        f"{item['namespace']}/{item['name']}" if isinstance(item.get("namespace"), str) else str(item["name"])
-    )
-    version = item.get("version")
-    version_range = item.get("range")
-    ecosystem = str(item["ecosystem"])
-    if ecosystem == "npm":
-        suffix = str(version) if isinstance(version, str) else str(version_range or "")
-        spec = qualified_name if not suffix else f"{qualified_name}@{suffix}"
-        return js_target(spec)
-    if ecosystem == "pypi":
-        suffix = str(version) if isinstance(version, str) else str(version_range or "")
-        spec = qualified_name if not suffix else f"{qualified_name}{suffix}"
-        return python_target(spec)
-    if ecosystem == "maven":
-        suffix = str(version) if isinstance(version, str) else str(version_range or "")
-        spec = qualified_name if not suffix else f"{qualified_name}:{suffix}"
-        return coordinate_target(ecosystem, spec)
-    if ecosystem == "packagist":
-        suffix = str(version) if isinstance(version, str) else str(version_range or "")
-        spec = qualified_name if not suffix else f"{qualified_name}:{suffix}"
-        return composer_target(spec)
-    suffix = str(version) if isinstance(version, str) else str(version_range or "")
-    spec = qualified_name if not suffix else f"{qualified_name}@{suffix}"
-    return version_target(ecosystem, spec)
 
 
 def _should_use_cloud_workspace_audit(
@@ -3057,18 +3039,6 @@ def sync_supply_chain_cloud_state(
     payload["workspace_audits"] = workspace_audits
     payload.setdefault("synced_at", workspace_audits.get("synced_at"))
     return payload
-
-
-def _target_for_package_spec(ecosystem: str, package_spec: str) -> PackageIntentTarget:
-    if ecosystem == "npm":
-        return js_target(package_spec)
-    if ecosystem == "pypi":
-        return python_target(package_spec)
-    if ecosystem == "maven":
-        return coordinate_target(ecosystem, package_spec)
-    if ecosystem == "packagist":
-        return composer_target(package_spec)
-    return version_target(ecosystem, package_spec)
 
 
 def _package_manager_for_scan(manifest_paths: Sequence[str]) -> str:

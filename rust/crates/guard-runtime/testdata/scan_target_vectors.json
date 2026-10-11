@@ -1,0 +1,6988 @@
+{
+ "items": [
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "zeta",
+    "namespace": null,
+    "range": "^1.0.0",
+    "version": "1.4.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta",
+    "raw_spec": "zeta@1.4.0",
+    "requested_specifier": "1.4.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "alpha",
+    "namespace": null,
+    "range": "~0.9",
+    "version": "0.9.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha",
+    "raw_spec": "alpha@0.9.0",
+    "requested_specifier": "0.9.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "pkg",
+    "namespace": "@scope",
+    "range": "2.0.1",
+    "version": "2.0.1"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/pkg",
+    "raw_spec": "@scope/pkg@2.0.1",
+    "requested_specifier": "2.0.1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "jest",
+    "namespace": null,
+    "range": "^29",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "jest",
+    "raw_spec": "jest@^29",
+    "requested_specifier": "^29",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "zeta",
+    "namespace": null,
+    "range": "^1.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta",
+    "raw_spec": "zeta@^1.0.0",
+    "requested_specifier": "^1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "alpha",
+    "namespace": null,
+    "range": "~0.9",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha",
+    "raw_spec": "alpha@~0.9",
+    "requested_specifier": "~0.9",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "pkg",
+    "namespace": "@scope",
+    "range": "2.0.1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/pkg",
+    "raw_spec": "@scope/pkg@2.0.1",
+    "requested_specifier": "2.0.1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "left-pad",
+    "namespace": null,
+    "range": null,
+    "version": "1.3.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "left-pad",
+    "raw_spec": "left-pad@1.3.0",
+    "requested_specifier": "1.3.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "node",
+    "namespace": "@types",
+    "range": null,
+    "version": "20.1.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@types/node",
+    "raw_spec": "@types/node@20.1.0",
+    "requested_specifier": "20.1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "httpx",
+    "namespace": null,
+    "range": ">=0.27",
+    "version": "0.27.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "httpx0.27.0",
+    "raw_spec": "httpx0.27.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "pydantic",
+    "namespace": null,
+    "range": "2.7.1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "pydantic2.7.1",
+    "raw_spec": "pydantic2.7.1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "pytest",
+    "namespace": null,
+    "range": ">=8",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "pytest",
+    "raw_spec": "pytest>=8",
+    "requested_specifier": ">=8",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "flask",
+    "namespace": null,
+    "range": "2.0.1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "flask2.0.1",
+    "raw_spec": "flask2.0.1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "requests",
+    "namespace": null,
+    "range": ">=2.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "requests",
+    "raw_spec": "requests>=2.0",
+    "requested_specifier": ">=2.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "urllib3",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "urllib3",
+    "raw_spec": "urllib3",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "anyio",
+    "namespace": null,
+    "range": null,
+    "version": "4.4.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "anyio4.4.0",
+    "raw_spec": "anyio4.4.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "serde",
+    "namespace": null,
+    "range": "1.0",
+    "version": "1.0.200"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "serde",
+    "raw_spec": "serde@1.0.200",
+    "requested_specifier": "1.0.200",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "regex",
+    "namespace": null,
+    "range": "1.11",
+    "version": "1.11.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "regex",
+    "raw_spec": "regex@1.11.0",
+    "requested_specifier": "1.11.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "tempfile",
+    "namespace": null,
+    "range": "3",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "tempfile",
+    "raw_spec": "tempfile@3",
+    "requested_specifier": "3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "go",
+    "name": "github.com/pkg/errors",
+    "namespace": null,
+    "range": "v0.9.1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "github.com/pkg/errors",
+    "raw_spec": "github.com/pkg/errors@v0.9.1",
+    "requested_specifier": "v0.9.1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "go",
+    "name": "golang.org/x/text",
+    "namespace": null,
+    "range": "v0.14.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "golang.org/x/text",
+    "raw_spec": "golang.org/x/text@v0.14.0",
+    "requested_specifier": "v0.14.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "rubygems",
+    "name": "rails",
+    "namespace": null,
+    "range": "7.0.0",
+    "version": "7.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "rails",
+    "raw_spec": "rails@7.0.0",
+    "requested_specifier": "7.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "rubygems",
+    "name": "rack",
+    "namespace": null,
+    "range": null,
+    "version": "2.2.8"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "rack",
+    "raw_spec": "rack@2.2.8",
+    "requested_specifier": "2.2.8",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "maven",
+    "name": "org.example:demo",
+    "namespace": null,
+    "range": "1.2.3",
+    "version": "1.2.3=compileClasspath"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "org.example:demo",
+    "raw_spec": "org.example:demo:1.2.3=compileClasspath",
+    "requested_specifier": "1.2.3=compileClasspath",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "packagist",
+    "name": "vendor/pkg",
+    "namespace": null,
+    "range": "^1.0",
+    "version": "1.2.3"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "vendor/pkg",
+    "raw_spec": "vendor/pkg:1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "packagist",
+    "name": "vendor/dev",
+    "namespace": null,
+    "range": "2.0.0",
+    "version": "2.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "vendor/dev",
+    "raw_spec": "vendor/dev:2.0.0",
+    "requested_specifier": "2.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "maven",
+    "name": "com.google.guava:guava",
+    "namespace": null,
+    "range": "33.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "com.google.guava:guava",
+    "raw_spec": "com.google.guava:guava:33.0.0",
+    "requested_specifier": "33.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "deep-ok",
+    "namespace": null,
+    "range": "1.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "deep-ok",
+    "raw_spec": "deep-ok@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "react",
+    "namespace": null,
+    "range": "18.2.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "react",
+    "raw_spec": "react@18.2.0",
+    "requested_specifier": "18.2.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "left-pad",
+    "namespace": null,
+    "range": "^1.0.0",
+    "version": "1.3.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "left-pad",
+    "raw_spec": "left-pad@1.3.0",
+    "requested_specifier": "1.3.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "lib",
+    "namespace": "@scope",
+    "range": null,
+    "version": "2.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/lib",
+    "raw_spec": "@scope/lib@2.0",
+    "requested_specifier": "2.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "weird",
+    "namespace": null,
+    "range": null,
+    "version": "1"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "unsupported",
+    "editable": false,
+    "extras": [],
+    "package_name": "weird",
+    "raw_spec": "weird@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "requests",
+    "namespace": null,
+    "range": null,
+    "version": "2.31.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "requests2.31.0",
+    "raw_spec": "requests2.31.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "cargo",
+    "name": "serde",
+    "namespace": null,
+    "range": null,
+    "version": "1.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "serde",
+    "raw_spec": "serde@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "unsupported",
+    "name": "plain",
+    "namespace": null,
+    "range": null,
+    "version": "3.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "unsupported",
+    "editable": false,
+    "extras": [],
+    "package_name": "plain",
+    "raw_spec": "plain@3.0",
+    "requested_specifier": "3.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "added",
+    "namespace": null,
+    "range": "1.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "added",
+    "raw_spec": "added@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "zeta",
+    "namespace": null,
+    "range": "^2.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta",
+    "raw_spec": "zeta@^2.0.0",
+    "requested_specifier": "^2.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "flask",
+    "namespace": null,
+    "range": "3.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "flask3.0.0",
+    "raw_spec": "flask3.0.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "new",
+    "namespace": null,
+    "range": "1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "new1",
+    "raw_spec": "new1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "pkg",
+    "namespace": "@scope",
+    "range": null,
+    "version": "2.0.1"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/pkg",
+    "raw_spec": "@scope/pkg@2.0.1",
+    "requested_specifier": "2.0.1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "alpha",
+    "namespace": null,
+    "range": null,
+    "version": "0.9.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha",
+    "raw_spec": "alpha@0.9.0",
+    "requested_specifier": "0.9.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "alpha",
+    "namespace": null,
+    "range": " ~0.9 ",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha",
+    "raw_spec": "alpha@ ~0.9 ",
+    "requested_specifier": " ~0.9 ",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "b",
+    "namespace": "@scope",
+    "range": "2.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/b",
+    "raw_spec": "@scope/b@2.0.0",
+    "requested_specifier": "2.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "c",
+    "namespace": "@scope",
+    "range": "1.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/c",
+    "raw_spec": "@scope/c@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "zz",
+    "namespace": null,
+    "range": "3",
+    "version": "1.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "zz",
+    "raw_spec": "zz@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "aa",
+    "namespace": null,
+    "range": "2",
+    "version": "2.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "aa",
+    "raw_spec": "aa@2.0.0",
+    "requested_specifier": "2.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "mm",
+    "namespace": null,
+    "range": "^1",
+    "version": "1.2.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "mm",
+    "raw_spec": "mm@1.2.0",
+    "requested_specifier": "1.2.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "zeta",
+    "namespace": null,
+    "range": null,
+    "version": "1.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta",
+    "raw_spec": "zeta@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "inner-b",
+    "namespace": null,
+    "range": null,
+    "version": "2.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "inner-b",
+    "raw_spec": "inner-b@2.0.0",
+    "requested_specifier": "2.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "inner-a",
+    "namespace": null,
+    "range": null,
+    "version": "3.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "inner-a",
+    "raw_spec": "inner-a@3.0.0",
+    "requested_specifier": "3.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "npm",
+    "name": "alpha",
+    "namespace": null,
+    "range": null,
+    "version": "4.0.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha",
+    "raw_spec": "alpha@4.0.0",
+    "requested_specifier": "4.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "zeta",
+    "namespace": null,
+    "range": null,
+    "version": "1.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta1.0",
+    "raw_spec": "zeta1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "alpha",
+    "namespace": null,
+    "range": null,
+    "version": "2.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha2.0",
+    "raw_spec": "alpha2.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": false,
+    "ecosystem": "pypi",
+    "name": "mid",
+    "namespace": null,
+    "range": null,
+    "version": "3.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "mid3.0",
+    "raw_spec": "mid3.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "zeta",
+    "namespace": null,
+    "range": "1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta",
+    "raw_spec": "zeta@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "alpha",
+    "namespace": null,
+    "range": "2",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha",
+    "raw_spec": "alpha@2",
+    "requested_specifier": "2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "mid",
+    "namespace": null,
+    "range": "3",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "mid",
+    "raw_spec": "mid@3",
+    "requested_specifier": "3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "zeta",
+    "namespace": null,
+    "range": "==1",
+    "version": "1.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "zeta1.0",
+    "raw_spec": "zeta1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "alpha",
+    "namespace": null,
+    "range": "==2",
+    "version": "2.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "alpha2.0",
+    "raw_spec": "alpha2.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "mid",
+    "namespace": null,
+    "range": "==3",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "mid",
+    "raw_spec": "mid==3",
+    "requested_specifier": "3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "zulu",
+    "namespace": null,
+    "range": "^1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "zulu^1",
+    "raw_spec": "zulu^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "bravo",
+    "namespace": null,
+    "range": "^2",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "bravo^2",
+    "raw_spec": "bravo^2",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "lodash",
+    "namespace": null,
+    "range": "^4.17.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "lodash",
+    "raw_spec": "lodash@^4.17.0",
+    "requested_specifier": "^4.17.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "lodash",
+    "namespace": null,
+    "range": null,
+    "version": "4.17.21"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "lodash",
+    "raw_spec": "lodash@4.17.21",
+    "requested_specifier": "4.17.21",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "lodash",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "lodash",
+    "raw_spec": "lodash",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "pkg",
+    "namespace": "@scope",
+    "range": "git+https://user:tok@github.com/o/r.git#semver:^1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/pkg",
+    "raw_spec": "@scope/pkg@git+https://user:tok@github.com/o/r.git#semver:^1",
+    "requested_specifier": null,
+    "source_identity": "invalid:npm_source_ambiguous_userinfo:e2e8958aac54f598e731e432b4780d2e627272a2d0fea4672d7a5b02c6dc9db9",
+    "source_invalid_reason": "npm_source_ambiguous_userinfo",
+    "source_kind": "invalid",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "git+https://user:tok@github.com/o/r.git#semver:^1"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "left",
+    "namespace": "@org",
+    "range": "npm:other@1.2.3",
+    "version": null
+   },
+   "target": {
+    "alias": "@org/left",
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "other",
+    "raw_spec": "@org/left@npm:other@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "x",
+    "namespace": null,
+    "range": "github:owner/repo#abc",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@github:owner/repo#abc",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/owner/repo#mutable:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/owner/repo",
+    "source_revision_kind": "mutable_ref",
+    "source_url": "github:owner/repo#abc"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "y",
+    "namespace": null,
+    "range": "file:../y",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "y",
+    "raw_spec": "y@file:../y",
+    "requested_specifier": null,
+    "source_identity": "local:a10c93ae00fe81772af66320e553afcaf907fd2710ce6c8cc636cc8fc8e87d0c",
+    "source_invalid_reason": null,
+    "source_kind": "local",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "file:../y"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "z",
+    "namespace": null,
+    "range": "https://example.com/z.tgz",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "z",
+    "raw_spec": "z@https://example.com/z.tgz",
+    "requested_specifier": null,
+    "source_identity": "url:6be04bd0471937219da8ce7379b72725ad60f9a7dcaff3599bc3a8ae37774062",
+    "source_invalid_reason": null,
+    "source_kind": "url",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "https://example.com/z.tgz"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "w",
+    "namespace": null,
+    "range": "workspace:*",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "w",
+    "raw_spec": "w@workspace:*",
+    "requested_specifier": null,
+    "source_identity": "invalid:npm_source_protocol_unsupported:b1d80eee7f2faa4a210d6baf4788d970174c44d17c3f6f328addb593cb0b1be2",
+    "source_invalid_reason": "npm_source_protocol_unsupported",
+    "source_kind": "invalid",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "workspace:*"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "e",
+    "namespace": null,
+    "range": "",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "e",
+    "raw_spec": "e",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "requests",
+    "namespace": null,
+    "range": ">=2.0,<3",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "requests",
+    "raw_spec": "requests>=2.0,<3",
+    "requested_specifier": ">=2.0,<3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "requests",
+    "namespace": null,
+    "range": null,
+    "version": "2.31.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "requests2.31.0",
+    "raw_spec": "requests2.31.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "Flask[async]",
+    "namespace": null,
+    "range": "==2.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [
+     "async"
+    ],
+    "package_name": "Flask",
+    "raw_spec": "Flask[async]==2.0",
+    "requested_specifier": "2.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "pkg",
+    "namespace": null,
+    "range": "@ git+https://github.com/o/r.git@main",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "r.git@main",
+    "raw_spec": "pkg@ git+https://github.com/o/r.git@main",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "pkg@ git+https://github.com/o/r.git@main"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "pkg",
+    "namespace": null,
+    "range": "~=1.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg",
+    "raw_spec": "pkg~=1.0",
+    "requested_specifier": "~=1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "plain",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "plain",
+    "raw_spec": "plain",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "pypi",
+    "name": "u",
+    "namespace": null,
+    "range": "@ https://user:pw@host/u.whl",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "u.whl",
+    "raw_spec": "u@ https://user:pw@host/u.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "u@ https://user:pw@host/u.whl"
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "maven",
+    "name": "artifact",
+    "namespace": "org.example",
+    "range": "1.0.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "org.example/artifact:1.0.0",
+    "raw_spec": "org.example/artifact:1.0.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "maven",
+    "name": "artifact",
+    "namespace": "org.example",
+    "range": null,
+    "version": "2.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "org.example/artifact:2.0",
+    "raw_spec": "org.example/artifact:2.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "maven",
+    "name": "a:b",
+    "namespace": null,
+    "range": "3",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b:3",
+    "requested_specifier": "3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "maven",
+    "name": "solo",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "solo",
+    "raw_spec": "solo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "packagist",
+    "name": "pkg",
+    "namespace": "vendor",
+    "range": "^1.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "vendor/pkg",
+    "raw_spec": "vendor/pkg:^1.0",
+    "requested_specifier": "^1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "packagist",
+    "name": "pkg",
+    "namespace": "vendor",
+    "range": null,
+    "version": "1.2.3"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "vendor/pkg",
+    "raw_spec": "vendor/pkg:1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "packagist",
+    "name": "pkg",
+    "namespace": null,
+    "range": null,
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg",
+    "raw_spec": "pkg",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "crates",
+    "name": "serde",
+    "namespace": null,
+    "range": "1.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "serde",
+    "raw_spec": "serde@1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "go",
+    "name": "mod",
+    "namespace": "github.com/x",
+    "range": "v1.2.3",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "github.com/x/mod",
+    "raw_spec": "github.com/x/mod@v1.2.3",
+    "requested_specifier": "v1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "rubygems",
+    "name": "rails",
+    "namespace": null,
+    "range": "~> 7.0",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "rails@~",
+    "raw_spec": "rails@~> 7.0",
+    "requested_specifier": ">7.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "nuget",
+    "name": "Newtonsoft.Json",
+    "namespace": null,
+    "range": null,
+    "version": "13.0.1"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "Newtonsoft.Json",
+    "raw_spec": "Newtonsoft.Json@13.0.1",
+    "requested_specifier": "13.0.1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "cargo",
+    "name": "tokio",
+    "namespace": null,
+    "range": "=1",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "tokio@",
+    "raw_spec": "tokio@=1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "homebrew",
+    "name": "wget",
+    "namespace": null,
+    "range": null,
+    "version": "1.0"
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "wget",
+    "raw_spec": "wget@1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "item": {
+    "direct": true,
+    "ecosystem": "npm",
+    "name": "@odd",
+    "namespace": null,
+    "range": "1@2",
+    "version": null
+   },
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@odd@1@2",
+    "raw_spec": "@odd@1@2",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  }
+ ],
+ "specs": [
+  {
+   "ecosystem": "npm",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": "invalid:npm_source_protocol_unsupported:18663b191efa683a8aced2543e48672b3ebe2630c43d364419b847e07ff9fb8a",
+    "source_invalid_reason": "npm_source_protocol_unsupported",
+    "source_kind": "invalid",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "a:b:1.0"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": "invalid:npm_source_protocol_unsupported:6783a31eabf68ccc0660f935c0826282bdd2241f3a80a9f2d10d59aea9ebb5d8",
+    "source_invalid_reason": "npm_source_protocol_unsupported",
+    "source_kind": "invalid",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "a:b"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/a/b#missing",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/a/b",
+    "source_revision_kind": "missing",
+    "source_url": "a/b"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "r",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": "invalid:npm_source_ambiguous_userinfo:e2c5b941f4e66b9eeebc7059251d8a6b775325ff8977a7f94b2592787ce8bf63",
+    "source_invalid_reason": "npm_source_ambiguous_userinfo",
+    "source_kind": "invalid",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "git+https://tok@github.com/o/r.git#egg=r"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": "name",
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/owner/repo#missing",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/owner/repo",
+    "source_revision_kind": "missing",
+    "source_url": "owner/repo"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/o/r#missing",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/o/r",
+    "source_revision_kind": "missing",
+    "source_url": "git+https://github.com/o/r"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": "invalid:npm_source_ambiguous_userinfo:6b617bb9764a3257f960d69f1131a803561b77769349e3574e5adf277d9dbdfc",
+    "source_invalid_reason": "npm_source_ambiguous_userinfo",
+    "source_kind": "invalid",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "https://u:p@h/x.tgz"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": null,
+    "source_identity": "local:14f7cf2e28d1d83ae109a4d770c7140ff3141df9b1e03996cf193923768e193a",
+    "source_invalid_reason": null,
+    "source_kind": "local",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "file:../x"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": "url:4971dc7f78f3254e0cdd616e3152c92e8c50b3e1a1a099bdf8dbe8a433cbdf7e",
+    "source_invalid_reason": null,
+    "source_kind": "url",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "https://a/b.whl"
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [
+     "extra"
+    ],
+    "package_name": "name",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "r",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "git+https://tok@github.com/o/r.git#egg=r"
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": null,
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "pkg@ git+https://github.com/o/r"
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "https://u:p@h/x.tgz"
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "https://a/b.whl"
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@1.2.3",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name@^2",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name==1.0",
+    "raw_spec": "name==1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name>=1,<2",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]==1",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://tok@github.com/o/r.git#egg=r",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias@1",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": null,
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://u",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": "p@h/x.tgz",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "x@file:../x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "maven",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "maven",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@1.2.3",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name@^2",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name==1.0",
+    "raw_spec": "name==1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name>=1,<2",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]==1",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "a",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": "b:1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "a",
+    "raw_spec": "a:b",
+    "requested_specifier": "b",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": "^1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": "//tok@github.com/o/r.git#egg=r",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "alias@1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": "x@1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": "//github.com/o/r",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "https",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": "//u:p@h/x.tgz",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "x@file",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "packagist",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "packagist",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": "//a/b.whl",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "crates",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "crates",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "go",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "go",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "rubygems",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "rubygems",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "nuget",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "nuget",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "homebrew",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "homebrew",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "cargo",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "cargo",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name@1.2.3",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name@1.2.3",
+    "requested_specifier": "1.2.3",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "@scope/name@^2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/name",
+    "raw_spec": "@scope/name@^2",
+    "requested_specifier": "^2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name==1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name==1.0",
+    "requested_specifier": "1.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name>=1,<2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name",
+    "raw_spec": "name>=1,<2",
+    "requested_specifier": ">=1,<2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name[extra]==1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name[extra]",
+    "raw_spec": "name[extra]==1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "a:b:1.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b:1.0",
+    "raw_spec": "a:b:1.0",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "a:b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "a:b",
+    "raw_spec": "a:b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "a/b:^1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b:^1",
+    "raw_spec": "a/b:^1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "a/b",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "a/b",
+    "raw_spec": "a/b",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "git+https://tok@github.com/o/r.git#egg=r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "git+https://github.com/o/r.git",
+    "raw_spec": "git+https://tok@github.com/o/r.git#egg=r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name@npm:alias@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name@npm:alias",
+    "raw_spec": "name@npm:alias@1",
+    "requested_specifier": "1",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "",
+    "raw_spec": "",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "owner/repo",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "owner/repo",
+    "raw_spec": "owner/repo",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "@npm:x@1",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "@npm:x@1",
+    "raw_spec": "@npm:x@1",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "pkg@ git+https://github.com/o/r",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg@ git+https://github.com/o/r",
+    "raw_spec": "pkg@ git+https://github.com/o/r",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "https://u:p@h/x.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "https://h/x.tgz",
+    "raw_spec": "https://u:p@h/x.tgz",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "x@file:../x",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "x",
+    "raw_spec": "x@file:../x",
+    "requested_specifier": "file:../x",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "other",
+   "spec": "name @ https://a/b.whl",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "other",
+    "editable": false,
+    "extras": [],
+    "package_name": "name @ https://a/b.whl",
+    "raw_spec": "name @ https://a/b.whl",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "minimist@1.2.8",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "minimist",
+    "raw_spec": "minimist@1.2.8",
+    "requested_specifier": "1.2.8",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "left-pad@1.0.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "left-pad",
+    "raw_spec": "left-pad@1.0.0",
+    "requested_specifier": "1.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "express@4.18.2",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "express",
+    "raw_spec": "express@4.18.2",
+    "requested_specifier": "4.18.2",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "demo@http://packages.example.com/demo-1.0.0.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "demo",
+    "raw_spec": "demo@http://packages.example.com/demo-1.0.0.tgz",
+    "requested_specifier": null,
+    "source_identity": "url:6fc3d0b8e965bdcd75b7c7716a00fbb681b8909c137651e4161c6ca266808403",
+    "source_invalid_reason": null,
+    "source_kind": "url",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "http://packages.example.com/demo-1.0.0.tgz"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "@scope/demo@HTTP://packages.example.com/demo-1.0.0.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@scope/demo",
+    "raw_spec": "@scope/demo@HTTP://packages.example.com/demo-1.0.0.tgz",
+    "requested_specifier": null,
+    "source_identity": "url:6fc3d0b8e965bdcd75b7c7716a00fbb681b8909c137651e4161c6ca266808403",
+    "source_invalid_reason": null,
+    "source_kind": "url",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "HTTP://packages.example.com/demo-1.0.0.tgz"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "demo@https://packages.example.com/demo-1.0.0.tgz",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "demo",
+    "raw_spec": "demo@https://packages.example.com/demo-1.0.0.tgz",
+    "requested_specifier": null,
+    "source_identity": "url:b15de45bc818d0310174c3d912ed996b12a1955e5aaff3654d6e5b95210762be",
+    "source_invalid_reason": null,
+    "source_kind": "url",
+    "source_repository": null,
+    "source_revision_kind": "not_applicable",
+    "source_url": "https://packages.example.com/demo-1.0.0.tgz"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "demo@git+https://github.com/org/demo.git",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "demo",
+    "raw_spec": "demo@git+https://github.com/org/demo.git",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/org/demo#missing",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/org/demo",
+    "source_revision_kind": "missing",
+    "source_url": "git+https://github.com/org/demo.git"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "left-pad",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "left-pad",
+    "raw_spec": "left-pad",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "react@18.0.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "react",
+    "raw_spec": "react@18.0.0",
+    "requested_specifier": "18.0.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "@stripe/cli",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "@stripe/cli",
+    "raw_spec": "@stripe/cli",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "eslint",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "eslint",
+    "raw_spec": "eslint",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "typescript",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "typescript",
+    "raw_spec": "typescript",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "git+https://github.com/org/pkg.git",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg",
+    "raw_spec": "git+https://github.com/org/pkg.git",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/org/pkg#missing",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/org/pkg",
+    "source_revision_kind": "missing",
+    "source_url": "git+https://github.com/org/pkg.git"
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "hol-guard",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "hol-guard",
+    "raw_spec": "hol-guard",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "pypi",
+   "spec": "pkg @ git+https://github.com/org/pkg.git",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "pypi",
+    "editable": false,
+    "extras": [],
+    "package_name": "pkg",
+    "raw_spec": "pkg @ git+https://github.com/org/pkg.git",
+    "requested_specifier": null,
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": "git+https://github.com/org/pkg.git"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "minimist@^1.2.0",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "minimist",
+    "raw_spec": "minimist@^1.2.0",
+    "requested_specifier": "^1.2.0",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "guard@github:Hashgraph-Online/hol-guard.git#0123456789abcdef0123456789abcdef01234567",
+   "target": {
+    "alias": null,
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "guard",
+    "raw_spec": "guard@github:Hashgraph-Online/hol-guard.git#0123456789abcdef0123456789abcdef01234567",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/hashgraph-online/hol-guard#commit:0123456789abcdef0123456789abcdef01234567",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/hashgraph-online/hol-guard",
+    "source_revision_kind": "immutable_commit",
+    "source_url": "github:Hashgraph-Online/hol-guard.git#0123456789abcdef0123456789abcdef01234567"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "guard-alias@npm:github:hashgraph-online/hol-guard#0123456789abcdef0123456789abcdef01234567",
+   "target": {
+    "alias": "guard-alias",
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "hol-guard",
+    "raw_spec": "guard-alias@npm:github:hashgraph-online/hol-guard#0123456789abcdef0123456789abcdef01234567",
+    "requested_specifier": null,
+    "source_identity": "git:github.com/hashgraph-online/hol-guard#commit:0123456789abcdef0123456789abcdef01234567",
+    "source_invalid_reason": null,
+    "source_kind": "git",
+    "source_repository": "git:github.com/hashgraph-online/hol-guard",
+    "source_revision_kind": "immutable_commit",
+    "source_url": "github:hashgraph-online/hol-guard#0123456789abcdef0123456789abcdef01234567"
+   }
+  },
+  {
+   "ecosystem": "npm",
+   "spec": "guard-safe@npm:minimist@1.2.8",
+   "target": {
+    "alias": "guard-safe",
+    "dependency_group": null,
+    "ecosystem": "npm",
+    "editable": false,
+    "extras": [],
+    "package_name": "minimist",
+    "raw_spec": "guard-safe@npm:minimist@1.2.8",
+    "requested_specifier": "1.2.8",
+    "source_identity": null,
+    "source_invalid_reason": null,
+    "source_kind": null,
+    "source_repository": null,
+    "source_revision_kind": null,
+    "source_url": null
+   }
+  }
+ ]
+}

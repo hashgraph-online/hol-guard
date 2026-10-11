@@ -73,6 +73,8 @@ fn request(
         sbom_paths: sboms.to_vec(),
         files_only: mode == "files",
         include_lockfile_warnings: mode != "files",
+        targets_only: false,
+        package_spec: None,
     }
 }
 
@@ -108,13 +110,16 @@ fn recorded_python_vectors_match() {
                     .replace("{TMP}", &scratch.0.display().to_string())
             })
             .collect();
-        let payload = run(&request(
+        let mut payload = run(&request(
             &workspace,
             before.as_deref(),
             &sboms,
             vector["mode"].as_str().unwrap(),
         ))
         .unwrap();
+        let object = payload.as_object_mut().unwrap();
+        assert_eq!(object.remove("scan_targets").unwrap(), json!([]), "{name}");
+        assert!(object.remove("package_target").unwrap().is_null());
         assert_eq!(payload, vector["expected"], "{name}");
     }
 }
@@ -169,4 +174,37 @@ fn oversized_sbom_is_skipped() {
     .unwrap();
     assert_eq!(payload["sbom_paths"], json!(["big-sbom.json"]));
     assert_eq!(payload["inventory"], json!([]));
+}
+
+#[test]
+fn explicit_package_spec_yields_a_target() {
+    let scratch = Scratch::new("explicit-spec");
+    let mut explain = request(&scratch.0, None, &[], "files");
+    explain.package_spec = Some(guard_contracts::WorkspacePackageSpecV1 {
+        ecosystem: "npm".into(),
+        spec: "left-pad@1.3.0".into(),
+    });
+    let payload = run(&explain).unwrap();
+    assert_eq!(payload["package_target"]["package_name"], "left-pad");
+    assert_eq!(payload["package_target"]["requested_specifier"], "1.3.0");
+    assert_eq!(payload["scan_targets"], serde_json::json!([]));
+}
+
+#[test]
+fn targets_only_returns_one_target_per_inventory_item() {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let vector = vectors
+        .iter()
+        .find(|vector| vector["mode"] == "inventory" && vector["before_files"].is_null())
+        .unwrap();
+    let scratch = Scratch::new("targets-only");
+    write_files(&scratch.0, &vector["files"]);
+    let mut only = request(&scratch.0, None, &[], "inventory");
+    only.targets_only = true;
+    let payload = run(&only).unwrap();
+    assert_eq!(payload["inventory"], json!([]));
+    assert_eq!(
+        payload["scan_targets"].as_array().unwrap().len(),
+        vector["expected"]["inventory"].as_array().unwrap().len()
+    );
 }

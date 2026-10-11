@@ -6,7 +6,7 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.npm_source_spec import parse_npm_source_spec
-from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact, js_target
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
@@ -151,28 +151,6 @@ def test_query_credentials_are_redacted_without_changing_git_identity() -> None:
     assert secret.identity == plain.identity
     assert "VERY_SECRET" not in secret.redacted
     assert secret.redacted == "git:github.com/owner/repo#<mutable-ref>"
-
-
-def test_named_and_aliased_sources_reuse_the_canonical_parser() -> None:
-    named = js_target(f"guard@github:Hashgraph-Online/hol-guard.git#{COMMIT}")
-    aliased = js_target(f"guard-alias@npm:github:hashgraph-online/hol-guard#{COMMIT}")
-
-    assert named.package_name == "guard"
-    assert aliased.package_name == "hol-guard"
-    assert aliased.alias == "guard-alias"
-    assert named.source_identity == aliased.source_identity == f"{REPOSITORY}#commit:{COMMIT}"
-    assert named.requested_specifier is None
-    assert aliased.requested_specifier is None
-
-
-def test_registry_aliases_do_not_become_ambiguous_scp_sources() -> None:
-    target = js_target("guard-safe@npm:minimist@1.2.8")
-
-    assert target.alias == "guard-safe"
-    assert target.package_name == "minimist"
-    assert target.requested_specifier == "1.2.8"
-    assert target.source_kind is None
-    assert target.source_invalid_reason is None
 
 
 def test_deeply_nested_npm_aliases_fail_without_recursion() -> None:

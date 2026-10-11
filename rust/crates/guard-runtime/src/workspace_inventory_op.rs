@@ -26,6 +26,7 @@ use crate::workspace_inventory_files::{
     basename, expanduser, read_sbom_text, read_text, read_workspace_audit_text, resolve_sbom_paths,
     workspace_files,
 };
+use crate::workspace_scan_targets::{scan_targets, target_for_spec};
 
 const MANIFEST_BYTE_LIMIT: usize = 2_097_152;
 const MANIFEST_DEADLINE_MS: u64 = 50;
@@ -269,6 +270,15 @@ fn serialize_inventory(inventory: InventoryMap) -> Vec<Value> {
         .collect()
 }
 
+fn package_target(request: &WorkspaceInventoryRequestV1) -> Value {
+    request
+        .package_spec
+        .as_ref()
+        .map_or(Value::Null, |package| {
+            target_for_spec(&package.ecosystem, &package.spec).to_execution_dict()
+        })
+}
+
 fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, String> {
     let after_dir = request.workspace_dir.as_str();
     let (manifest_paths, lockfile_paths) = workspace_files(after_dir);
@@ -280,6 +290,8 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
             "inventory": [],
             "diff": null,
             "lockfile_warnings": [],
+            "scan_targets": [],
+            "package_target": package_target(request),
         }));
     }
     let sbom_paths = resolve_sbom_paths(after_dir, &request.sbom_paths);
@@ -302,13 +314,22 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
     } else {
         Vec::new()
     };
+    let inventory = serialize_inventory(inventory);
+    let (inventory, targets) = if request.targets_only {
+        let targets = scan_targets(&inventory)?;
+        (Vec::new(), targets)
+    } else {
+        (inventory, Vec::new())
+    };
     Ok(json!({
         "manifest_paths": manifest_paths,
         "lockfile_paths": lockfile_paths,
         "sbom_paths": sbom_paths,
-        "inventory": serialize_inventory(inventory),
+        "inventory": inventory,
         "diff": diff,
         "lockfile_warnings": warnings,
+        "scan_targets": targets,
+        "package_target": package_target(request),
     }))
 }
 
