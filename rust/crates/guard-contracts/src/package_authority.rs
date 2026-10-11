@@ -494,12 +494,27 @@ pub struct WorkspaceInventoryRequestV1 {
     /// Also report the lockfile warnings for `workspace_dir`.
     #[serde(default)]
     pub include_lockfile_warnings: bool,
-    /// Index of the first inventory item to return. The reply is capped, so a
-    /// large inventory is read as consecutive pages until `next_offset` is null.
+    /// Return only the package intent targets of the inventory (an empty
+    /// `inventory`), keeping each response inside the native size cap.
+    #[serde(default)]
+    pub targets_only: bool,
+    /// Also build the package intent target for one explicit package spec.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package_spec: Option<WorkspacePackageSpecV1>,
+    /// Index of the first inventory item (or scan target in `targets_only`
+    /// mode) to return. The reply is capped, so a large result is read as
+    /// consecutive pages until `next_offset` is null.
     #[serde(default)]
     pub inventory_offset: usize,
     /// Digest of the full inventory snapshot from page 1. Later pages must
     /// echo it. A workspace that changed between pages is rejected.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inventory_digest: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct WorkspacePackageSpecV1 {
+    pub ecosystem: String,
+    pub spec: String,
 }

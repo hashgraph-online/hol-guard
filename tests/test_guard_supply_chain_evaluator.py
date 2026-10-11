@@ -23,8 +23,6 @@ from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_reque
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
-    js_target,
-    python_target,
 )
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     _evidence_id,
@@ -32,6 +30,7 @@ from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_target_support import recorded_target
 from tests.silent_cloud_server import silent_cloud_sync_url
 from tests.support.network import stub_authenticated_urlopen
 
@@ -236,7 +235,7 @@ def _artifact_for_targets(
         intent_kind=intent_kind,
         command_tokens=command_tokens,
         redacted_command=redacted_command or " ".join(command_tokens),
-        targets=tuple(js_target(target) for target in targets),
+        targets=tuple(recorded_target("npm", target) for target in targets),
         manifest_paths=manifest_paths,
         lockfile_paths=lockfile_paths,
         flags=flags,
@@ -645,7 +644,7 @@ def test_evaluate_package_request_artifact_posts_open_range_for_unversioned_pypi
             intent_kind="install",
             command_tokens=("pipx", "install", "hol-guard", "--force"),
             redacted_command="pipx install hol-guard --force",
-            targets=(python_target("hol-guard"),),
+            targets=(recorded_target("pypi", "hol-guard"),),
             manifest_paths=(),
             lockfile_paths=(),
             flags=("--force",),
@@ -708,7 +707,7 @@ def test_evaluate_package_request_artifact_does_not_convert_pypi_source_specs_to
             intent_kind="install",
             command_tokens=("pip", "install", "pkg @ git+https://github.com/org/pkg.git"),
             redacted_command="pip install 'pkg @ git+https://github.com/org/pkg.git'",
-            targets=(python_target("pkg @ git+https://github.com/org/pkg.git"),),
+            targets=(recorded_target("pypi", "pkg @ git+https://github.com/org/pkg.git"),),
             manifest_paths=(),
             lockfile_paths=(),
             flags=(),

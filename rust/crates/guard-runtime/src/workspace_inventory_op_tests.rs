@@ -73,6 +73,8 @@ fn request(
         sbom_paths: sboms.to_vec(),
         files_only: mode == "files",
         include_lockfile_warnings: mode != "files",
+        targets_only: false,
+        package_spec: None,
         inventory_offset: 0,
         inventory_digest: None,
     }
@@ -117,8 +119,11 @@ fn recorded_python_vectors_match() {
             vector["mode"].as_str().unwrap(),
         ))
         .unwrap();
-        let next_offset = payload.as_object_mut().unwrap().remove("next_offset");
-        let digest = payload.as_object_mut().unwrap().remove("inventory_digest");
+        let object = payload.as_object_mut().unwrap();
+        assert_eq!(object.remove("scan_targets").unwrap(), json!([]), "{name}");
+        assert!(object.remove("package_target").unwrap().is_null());
+        let next_offset = object.remove("next_offset");
+        let digest = object.remove("inventory_digest");
         assert_eq!(next_offset, Some(Value::Null), "{name}");
         assert!(
             digest
@@ -181,6 +186,97 @@ fn oversized_sbom_is_skipped() {
     .unwrap();
     assert_eq!(payload["sbom_paths"], json!(["big-sbom.json"]));
     assert_eq!(payload["inventory"], json!([]));
+}
+
+#[test]
+fn explicit_package_spec_yields_a_target() {
+    let scratch = Scratch::new("explicit-spec");
+    let mut explain = request(&scratch.0, None, &[], "files");
+    explain.package_spec = Some(guard_contracts::WorkspacePackageSpecV1 {
+        ecosystem: "npm".into(),
+        spec: "left-pad@1.3.0".into(),
+    });
+    let payload = run(&explain).unwrap();
+    assert_eq!(payload["package_target"]["package_name"], "left-pad");
+    assert_eq!(payload["package_target"]["requested_specifier"], "1.3.0");
+    assert_eq!(payload["scan_targets"], serde_json::json!([]));
+}
+
+#[test]
+fn oversized_explicit_package_spec_is_rejected() {
+    let scratch = Scratch::new("oversized-spec");
+    let mut explain = request(&scratch.0, None, &[], "files");
+    explain.package_spec = Some(guard_contracts::WorkspacePackageSpecV1 {
+        ecosystem: "npm".into(),
+        spec: "n".repeat(1_048_576),
+    });
+    assert_eq!(
+        run(&explain).unwrap_err(),
+        "workspace_inventory_exceeds_resident_response"
+    );
+}
+
+#[test]
+fn targets_only_returns_one_target_per_inventory_item() {
+    let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
+    let vector = vectors
+        .iter()
+        .find(|vector| vector["mode"] == "inventory" && vector["before_files"].is_null())
+        .unwrap();
+    let scratch = Scratch::new("targets-only");
+    write_files(&scratch.0, &vector["files"]);
+    let mut only = request(&scratch.0, None, &[], "inventory");
+    only.targets_only = true;
+    let payload = run(&only).unwrap();
+    assert_eq!(payload["inventory"], json!([]));
+    assert_eq!(
+        payload["scan_targets"].as_array().unwrap().len(),
+        vector["expected"]["inventory"].as_array().unwrap().len()
+    );
+}
+
+#[test]
+fn large_target_list_is_returned_in_pages() {
+    let scratch = Scratch::new("paged-targets");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let mut components = String::from(r#"{"bomFormat":"CycloneDX","components":["#);
+    for index in 0..12_000 {
+        if index > 0 {
+            components.push(',');
+        }
+        components.push_str(&format!(
+            r#"{{"name":"package-with-a-long-name-{index:05}","version":"1.0.0","purl":"pkg:npm/package-with-a-long-name-{index:05}@1.0.0"}}"#
+        ));
+    }
+    components.push_str("]}");
+    fs::write(workspace.join("sbom.cdx.json"), components).unwrap();
+    let mut request = request(&workspace, None, &["sbom.cdx.json".to_owned()], "inventory");
+    request.targets_only = true;
+    let mut names: Vec<String> = Vec::new();
+    let mut pages = 0;
+    loop {
+        let bytes = evaluate_workspace_inventory(&request).unwrap();
+        assert!(bytes.len() < guard_contracts::MAX_NATIVE_RESPONSE_BYTES);
+        let payload = serde_json::from_slice::<Value>(&bytes).unwrap()["payload"].clone();
+        pages += 1;
+        assert_eq!(payload["inventory"], json!([]));
+        for target in payload["scan_targets"].as_array().unwrap() {
+            names.push(target["package_name"].as_str().unwrap().to_owned());
+        }
+        match payload["next_offset"].as_u64() {
+            Some(next) => {
+                request.inventory_offset = next as usize;
+                request.inventory_digest =
+                    Some(payload["inventory_digest"].as_str().unwrap().to_owned());
+            }
+            None => break,
+        }
+        assert!(pages < 64);
+    }
+    assert!(pages > 1);
+    assert_eq!(names.len(), 12_000);
+    assert_eq!(names[11_999], "package-with-a-long-name-11999");
 }
 
 #[test]

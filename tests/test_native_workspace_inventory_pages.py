@@ -18,6 +18,8 @@ def _page(items: list[dict[str, object]], next_offset: int | None) -> dict[str, 
         "next_offset": next_offset,
         "diff": None,
         "lockfile_warnings": [],
+        "scan_targets": [],
+        "package_target": None,
     }
 
 
@@ -57,3 +59,26 @@ def test_relative_workspaces_are_sent_absolute_and_pages_are_joined(monkeypatch,
     assert sent[1]["inventory_offset"] == 1
     assert sent[1]["inventory_digest"] == "sha256:" + "ab" * 32
     assert "inventory_digest" not in sent[0]
+
+
+def test_targets_only_pages_are_joined(monkeypatch, tmp_path: Path) -> None:
+    def target(name: str) -> dict[str, object]:
+        return {
+            "ecosystem": "npm",
+            "raw_spec": name,
+            "extras": [],
+            "editable": False,
+            **{key: None for key in bridge._TARGET_OPTIONAL_STRINGS},
+            "package_name": name,
+        }
+
+    def transport(request: dict[str, object], _guard_home: Path, **_kwargs: object) -> dict[str, object]:
+        first = request["inventory_offset"] == 0
+        payload = _page([], 1 if first else None)
+        payload["scan_targets"] = [target("left-pad" if first else "react")]
+        return payload
+
+    monkeypatch.setattr(bridge, "_transport", transport)
+    result = bridge.native_workspace_inventory(SimpleNamespace(guard_home=str(tmp_path)), tmp_path, targets_only=True)
+    assert result.inventory == ()
+    assert [item.package_name for item in result.scan_targets] == ["left-pad", "react"]
