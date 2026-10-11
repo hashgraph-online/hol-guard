@@ -114,4 +114,9 @@ fn malformed_and_out_of_range_spans_are_rejected() {
         &json!({"command":"echo","index":0,"state":["invalid",0,false]})
     )
     .is_err());
+    assert!(guard_command::shell_helpers::evaluate(
+        "trace",
+        &json!({"command":"(","index":0,"state":[null,u64::MAX,false]})
+    )
+    .is_err());
 }

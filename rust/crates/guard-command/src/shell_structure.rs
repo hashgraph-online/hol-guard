@@ -386,9 +386,14 @@ impl ShellScanState {
             None if v[0].is_null() => None,
             _ => return Err("shell_helpers_invalid_state"),
         };
+        let subshell_depth = usize::try_from(v[1].as_u64().ok_or("shell_helpers_invalid_state")?)
+            .map_err(|_| "shell_helpers_invalid_state")?;
+        if subshell_depth.checked_add(256 * 1024).is_none() {
+            return Err("shell_helpers_invalid_state");
+        }
         Ok(Self {
             quote,
-            subshell_depth: v[1].as_u64().ok_or("shell_helpers_invalid_state")? as usize,
+            subshell_depth,
             in_backtick: v[2].as_bool().ok_or("shell_helpers_invalid_state")?,
         })
     }

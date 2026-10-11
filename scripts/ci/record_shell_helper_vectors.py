@@ -145,6 +145,15 @@ def record() -> None:
                 },
             }
         )
+    command = "bash -c '" + "é" * 4100 + "'"
+    vectors.append(
+        {
+            "command": command,
+            "expected": {
+                "normalization": asdict(shell_command_wrappers.normalize_transparent_shell_command(command)),
+            },
+        }
+    )
     target = ROOT / "tests/fixtures/shell-helper-python.v1.json"
     target.write_text(
         json.dumps(
