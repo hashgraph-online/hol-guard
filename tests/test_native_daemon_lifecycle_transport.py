@@ -15,6 +15,10 @@ class _Identity:
 
 class _Status:
     identity = _Identity()
+    available = True
+    compatible = True
+    capabilities = object()
+    reason = "native_ready"
 
 
 @pytest.fixture(autouse=True)
@@ -309,3 +313,47 @@ def test_the_caller_deadline_bounds_the_cold_start_allowance(monkeypatch: pytest
     transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"}, deadline_monotonic=112.0)
 
     assert timeouts == [12.0]
+
+
+class _ProbeMiss:
+    identity = _Identity()
+    available = False
+    compatible = False
+    capabilities = None
+    reason = "native_unavailable"
+
+
+def test_a_transient_capability_probe_miss_is_waited_out_before_the_resident_is_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statuses = [_ProbeMiss(), _ProbeMiss(), _Status()]
+    monkeypatch.setattr(
+        transport, "native_runtime_status", lambda: statuses.pop(0) if len(statuses) > 1 else statuses[0]
+    )
+    monkeypatch.setattr(transport.time, "sleep", lambda _seconds: None)
+    seen: list[str] = []
+    monkeypatch.setattr(
+        transport,
+        "_resident_request",
+        lambda **_kwargs: seen.append("asked") or {"schema": transport._RESULT_SCHEMA},
+    )
+
+    transport._await_native_runtime(20.0)
+
+    assert statuses == [statuses[0]]
+    assert seen == []  # waiting never decides anything; the resident is asked afterwards
+
+
+def test_a_persistent_probe_miss_stops_waiting_and_names_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(transport, "native_runtime_status", lambda: _ProbeMiss())
+    monkeypatch.setattr(transport, "_resident_request", lambda **_kwargs: None)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: None)
+
+    with pytest.raises(transport.NativeDaemonLifecycleError) as raised:
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 20.0)
+
+    assert clock[0] <= transport._RUNTIME_PROBE_WAIT_SECONDS + 1.0
+    assert "runtime_unavailable:native_unavailable" in str(raised.value)

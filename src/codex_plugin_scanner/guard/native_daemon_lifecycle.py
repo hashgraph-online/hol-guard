@@ -51,6 +51,8 @@ _TIMEOUT_SECONDS = 10.0
 # answers. Grant that one spawn an allowance so a slow start does not become a
 # lifecycle outage that fails daemon startup; the caller's deadline still wins.
 _COLD_START_ALLOWANCE_SECONDS = 20.0
+_RUNTIME_PROBE_WAIT_SECONDS = 15.0
+_RUNTIME_PROBE_RETRY_SECONDS = 0.3
 
 FactResolver = Callable[[str], object]
 
@@ -169,6 +171,37 @@ def _timeout_seconds(deadline: float | None, *, cold_start: bool = False) -> flo
     return min(budget, remaining)
 
 
+def _await_native_runtime(timeout_seconds: float) -> None:
+    """Wait out a transient capability-probe miss before asking the resident.
+
+    A freshly installed runtime can fail its first ``capabilities`` probe on a cold host; that miss is
+    never cached and clears on the next attempt. Without a wait the one lifecycle request reads the miss
+    as "no resident" and the daemon operation fails. The verdict stays the resident's: this only waits
+    for the runtime to become usable and never decides anything.
+    """
+
+    deadline = time.monotonic() + min(timeout_seconds, _RUNTIME_PROBE_WAIT_SECONDS)
+    while True:
+        status = native_runtime_status()
+        if status.available and status.compatible and status.capabilities is not None:
+            return
+        if status.identity is None or status.capabilities is not None:
+            # No runtime binary at all, or a real incompatibility: neither is transient.
+            return
+        if time.monotonic() + _RUNTIME_PROBE_RETRY_SECONDS >= deadline:
+            return
+        time.sleep(_RUNTIME_PROBE_RETRY_SECONDS)
+
+
+def _runtime_unavailable_detail() -> str:
+    """Name why no client ran: an unusable runtime leaves no transport failure code."""
+
+    status = native_runtime_status()
+    if status.available and status.compatible and status.capabilities is not None:
+        return "no_client_code"
+    return f"runtime_unavailable:{status.reason}"
+
+
 def _resident_is_cold(home: Path) -> bool:
     """True when this process holds no warm resident client, so a spawn is due."""
 
@@ -212,6 +245,7 @@ def _round_trip(
         raise _fail("native_daemon_lifecycle_request_invalid") from error
     if not ensure_resident_prerequisite(home):
         raise _fail("native_daemon_lifecycle_prerequisite_unavailable")
+    _await_native_runtime(timeout_seconds)
     response = _resident_request(
         operation=_OPERATION,
         request=request,
@@ -224,7 +258,7 @@ def _round_trip(
     )
     if response is None:
         # ``_resident_request`` already recorded the failure; do not count it twice.
-        detail = native_resident_client_failure_code() or "no_client_code"
+        detail = native_resident_client_failure_code() or _runtime_unavailable_detail()
         raise _fail(f"native_daemon_lifecycle_unavailable:{detail}")
     if (
         response.get("schema") != _RESULT_SCHEMA
