@@ -312,14 +312,39 @@ def _socket_candidates(directories: Iterable[Path]) -> Iterable[Path]:
             continue
 
 
-def default_socket_roots() -> tuple[Path, ...]:
-    """Socket directories created by the resident: ``<tmp>/hgr-*`` (never recursive)."""
+# The resident binds its sockets under the fixed system tmp dir (see
+# ``socket_directory_path`` in the runtime), so the prune has to look there too.
+_SYSTEM_TMP_BASES = (Path("/private/tmp"), Path("/tmp"))  # NOSONAR: read-only scan, entries are owner-checked
+
+
+def _private_owned_dir(entry: os.DirEntry[str]) -> bool:
+    """A shared-tmp entry this user created and nobody else can write into."""
+
+    if not entry.is_dir(follow_symlinks=False):
+        return False
+    try:
+        metadata = entry.stat(follow_symlinks=False)
+    except OSError:
+        return False
+    getuid = getattr(os, "getuid", None)
+    if getuid is not None and metadata.st_uid != getuid():
+        return False
+    return not metadata.st_mode & (stat.S_IWGRP | stat.S_IWOTH)
+
+
+def default_socket_roots(bases: Iterable[Path] = _SYSTEM_TMP_BASES) -> tuple[Path, ...]:
+    """Socket directories created by the resident: ``<tmp>/hgr-*`` (never recursive).
+
+    Only directories owned by the current user and closed to group/other writes
+    are returned, so another local user cannot plant an ``hgr-*`` directory for
+    the prune to walk.
+    """
 
     roots: list[Path] = []
-    for base in (Path("/private/tmp"), Path("/tmp")):
+    for base in bases:
         try:
             for entry in os.scandir(base):
-                if entry.name.startswith("hgr-") and entry.is_dir(follow_symlinks=False):
+                if entry.name.startswith("hgr-") and _private_owned_dir(entry):
                     roots.append(Path(entry.path))
         except OSError:
             continue

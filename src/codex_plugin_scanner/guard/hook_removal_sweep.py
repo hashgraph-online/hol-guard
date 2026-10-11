@@ -89,6 +89,10 @@ def is_guard_hook_command(command: object) -> bool:
         tokens = shlex.split(command)
     except ValueError:
         tokens = command.split()
+    return _tokens_are_guard_hook(tokens)
+
+
+def _tokens_are_guard_hook(tokens: list[str]) -> bool:
     if not tokens:
         return False
     first = Path(tokens[0].replace("\\", "/")).name.lower()
@@ -111,7 +115,14 @@ def _handler_is_guard(handler: Mapping[str, object]) -> bool:
         return False
     if not all(isinstance(arg, str) for arg in args):
         return False
-    return is_guard_hook_command(shlex.join([command, *args]))
+    # Match each argv entry on its own. Joining them would let a marker form
+    # across plain words the user passed separately, and the sweep would
+    # delete that hook.
+    argv = [command, *args]
+    lowered = [arg.lower().replace('\\"', '"') for arg in argv]
+    if any(marker in arg for arg in lowered for marker in _GUARD_MARKERS):
+        return True
+    return _tokens_are_guard_hook(argv)
 
 
 def _is_handler_dict(node: object) -> bool:

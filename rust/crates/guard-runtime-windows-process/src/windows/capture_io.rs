@@ -46,7 +46,7 @@ fn complete_and_release(mut resources: Resources) {
         )
     {
         // An unverified operation must never outlive its allocation.
-        std::mem::forget(resources);
+        let _ = std::mem::ManuallyDrop::new(resources);
     }
 }
 
@@ -86,7 +86,7 @@ fn retain_until_completed(resources: Resources) {
         });
     if spawned.is_err() {
         if let Some(resources) = slot.lock().ok().and_then(|mut held| held.take()) {
-            std::mem::forget(resources);
+            let _ = std::mem::ManuallyDrop::new(resources);
         }
     }
 }

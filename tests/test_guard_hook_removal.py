@@ -83,6 +83,35 @@ def test_prune_matches_claude_exec_form_args() -> None:
     assert hooks["PreToolUse"][0]["hooks"] == [user_handler]
 
 
+@pytest.mark.parametrize(
+    "handler",
+    [
+        {"type": "command", "command": "/opt/guard bin/hol-guard", "args": ["hook", "--harness", "claude-code"]},
+        {"type": "command", "command": "/bin/sh", "args": ["-c", "HOL_GUARD_HOOK_ARGV=1 exec guard-shim"]},
+    ],
+)
+def test_prune_matches_exec_form_with_spaced_paths_and_markers(handler: dict[str, object]) -> None:
+    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
+    _pruned, removed = prune_guard_hooks(settings)
+    assert removed == ["PreToolUse"]
+
+
+def test_prune_keeps_exec_form_handlers_whose_marker_only_spans_arguments() -> None:
+    for args in (["hol guard", "managed"], ["hol", "guard", "managed"]):
+        handler = {"type": "command", "command": "/bin/echo", "args": args}
+        settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
+        pruned, removed = prune_guard_hooks(settings)
+        assert removed == []
+        assert pruned == settings
+
+
+def test_prune_removes_an_exec_form_handler_with_the_marker_in_one_argument() -> None:
+    handler = {"type": "command", "command": "/bin/echo", "args": ["hol guard managed"]}
+    settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
+    _pruned, removed = prune_guard_hooks(settings)
+    assert removed == ["PreToolUse"]
+
+
 def test_sweep_dry_run_does_not_write_and_json_rewrite_preserves_other_keys(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
     path.write_text(json.dumps(_claude_settings()))

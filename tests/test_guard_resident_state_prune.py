@@ -13,6 +13,7 @@ from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.repair_engine import build_report, repair_onefile_leaks, run_repair
 from codex_plugin_scanner.guard.resident_state_prune import (
     OWNER_LOCK_NAME,
+    default_socket_roots,
     probe_owner_lock,
     probe_socket,
     prune_native_runtime,
@@ -259,3 +260,17 @@ def test_report_status_rollup() -> None:
     assert build_report([step("ok"), step("changed")], dry_run=False)["status"] == "repaired"
     assert build_report([step("planned")], dry_run=True)["status"] == "needs_repair"
     assert build_report([step("changed"), step("error")], dry_run=False)["status"] == "partial"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and modes")
+def test_default_socket_roots_only_returns_private_directories_of_this_user(tmp_path: Path) -> None:
+    private = tmp_path / "hgr-private"
+    private.mkdir(mode=0o700)
+    shared = tmp_path / "hgr-shared"
+    shared.mkdir()
+    shared.chmod(0o777)
+    (tmp_path / "hgr-file").write_text("x")
+    (tmp_path / "hgr-link").symlink_to(private)
+    (tmp_path / "other").mkdir(mode=0o700)
+
+    assert default_socket_roots((tmp_path / "missing", tmp_path)) == (private,)
