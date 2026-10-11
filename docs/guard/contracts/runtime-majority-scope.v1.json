@@ -1058,6 +1058,17 @@
         "count": 1,
         "resolution": "external",
         "evidence": "Selects the stdlib tomllib module (Python 3.11+) or the third-party tomli backport by interpreter version; both are external to the package, so the call adds no in-package module."
+      },
+      {
+        "path": "src/codex_plugin_scanner/guard/runtime/__init__.py",
+        "count": 1,
+        "resolution": "follow",
+        "mode": "lazy",
+        "targets": [
+          ".wrapper_run",
+          ".runner"
+        ],
+        "evidence": "Package __getattr__ resolves the six names in the literal __all__ to .wrapper_run (guard_run) or .runner (the sync and receipt helpers) with import_module(module_name, __name__). Both targets are real submodules; wrapper_run is the guard run launch path so it is followed, and runner stays in scope as the lazy attribute owner except for the modules excluded by their own entries."
       }
     ]
   },
