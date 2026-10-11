@@ -96,7 +96,6 @@ const RESERVED: &[&str] = &[
     "false",
     "null",
     "undefined",
-    "text",
     "constructor",
     "prototype",
     "__proto__",

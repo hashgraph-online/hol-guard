@@ -100,3 +100,28 @@ fn temporary_write_keeps_link_permission_and_hidden_boundaries() {
         assert_ne!(result.minimum_action, "allow", "{}", target.display());
     }
 }
+
+#[cfg(target_os = "macos")]
+#[test]
+fn configured_darwin_temp_root_keeps_owned_leaf_and_overwrite_proofs() {
+    let mut fixture = fixture("darwin");
+    std::fs::remove_dir(&fixture.scratch).unwrap();
+    fixture.scratch = std::env::temp_dir().join(format!("hg-darwin-write-{}", std::process::id()));
+    std::fs::create_dir(&fixture.scratch).unwrap();
+    std::fs::set_permissions(&fixture.scratch, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let target = fixture.scratch.join("scratch-notes.txt");
+    assert_eq!(write(&fixture, &target).minimum_action, "allow");
+    std::fs::write(&target, "first draft").unwrap();
+    assert_eq!(write(&fixture, &target).minimum_action, "allow");
+    let hard = fixture.scratch.join("hard.txt");
+    std::fs::hard_link(&target, &hard).unwrap();
+    assert_ne!(write(&fixture, &hard).minimum_action, "allow");
+    let link = fixture.scratch.join("linked.txt");
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    assert_ne!(write(&fixture, &link).minimum_action, "allow");
+    std::fs::set_permissions(&fixture.scratch, std::fs::Permissions::from_mode(0o777)).unwrap();
+    assert_ne!(
+        write(&fixture, &fixture.scratch.join("public.txt")).minimum_action,
+        "allow"
+    );
+}

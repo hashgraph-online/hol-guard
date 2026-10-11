@@ -227,7 +227,9 @@ jobs:
 
   native-command-evaluators:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Cold ThinLTO builds plus the native contract gates exceed five minutes.
+    # Keep the release profile and size checks identical to packaged builds.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:

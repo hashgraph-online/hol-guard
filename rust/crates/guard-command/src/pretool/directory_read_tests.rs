@@ -282,6 +282,8 @@ fn omp_bounded_line_selectors_cover_files_and_directories() {
         format!("{}:1-5", source.display()),
         format!("{}:1-5", selected_directory.display()),
         "main.rs:1-5".to_owned(),
+        format!("{}:raw", source.display()),
+        "main.rs:raw".to_owned(),
         literal_colon_file.to_string_lossy().into_owned(),
     ] {
         let decision = read_directory("omp", &target, &home, &project);
@@ -313,6 +315,7 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
     std::fs::create_dir_all(&project).unwrap();
     std::fs::create_dir_all(&ssh).unwrap();
     std::fs::write(project.join(".env"), "selector-secret\n").unwrap();
+    std::fs::write(project.join("main.rs"), "fn main() {}\n").unwrap();
     std::fs::write(ssh.join("id_ed25519"), "private-key\n").unwrap();
     std::fs::write(&symlink_target, "outside\n").unwrap();
     #[cfg(unix)]
@@ -329,6 +332,11 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
         format!("{}:-5", project.display()),
         format!("{}:1+5", project.display()),
         format!("{}:1,5", project.display()),
+        format!("{}:raw", project.join(".env").display()),
+        format!("{}:raw", ssh.join("id_ed25519").display()),
+        format!("{}:raw", project.display()),
+        "main.rs:1-5:raw".to_owned(),
+        "main.rs:img".to_owned(),
     ] {
         let decision = read_directory("omp", &target, &home, &project);
         assert_ne!(decision.minimum_action, "allow", "{target}");
@@ -337,10 +345,12 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
 
     #[cfg(unix)]
     {
-        let target = format!("{}:1-5", _symlink.display());
-        let decision = read_directory("omp", &target, &home, &project);
-        assert_ne!(decision.minimum_action, "allow", "{target}");
-        assert!(!decision.explicitly_benign, "{target}");
+        for selector in ["1-5", "raw"] {
+            let target = format!("{}:{selector}", _symlink.display());
+            let decision = read_directory("omp", &target, &home, &project);
+            assert_ne!(decision.minimum_action, "allow", "{target}");
+            assert!(!decision.explicitly_benign, "{target}");
+        }
     }
 
     let _ = std::fs::remove_dir_all(root);

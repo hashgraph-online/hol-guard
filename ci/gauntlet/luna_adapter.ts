@@ -15,6 +15,20 @@ export function setModel(value: any) { model = value; }
 const zeroUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0,
   totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
+export function convertTools(tools: any[]) {
+  return tools.map(tool => {
+    if (tool.type !== 'function' || !tool.function
+      || (tool.function.strict !== undefined && typeof tool.function.strict !== 'boolean'))
+      throw new Error('Unsupported tool schema');
+    return { name: tool.function.name, label: tool.function.name,
+      description: tool.function.description ?? '', parameters: tool.function.parameters,
+      // Chat Completions defaults to non-strict; Responses must receive that
+      // choice explicitly to preserve optional fields in the original schema.
+      strict: tool.function.strict ?? false,
+      execute: async () => { throw new Error('Transport adapter cannot execute tools'); } };
+  });
+}
+
 export function convertMessages(messages: any[]) {
   const converted: any[] = [];
   const toolNames = new Map<string, string>();
@@ -206,6 +220,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       body = JSON.parse(text);
       requireTransportSelection(body, thinking);
       requirePromptable(convertMessages(body.messages));
+      convertTools(body.tools ?? []);
     } catch { return new Response('Invalid transport request', { status: 400 }); }
     const controller = new AbortController();
     const wire = new WireArguments();
@@ -213,11 +228,7 @@ const server = Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 255,
       initialState: { model, thinkingLevel: thinking, systemPrompt:
         body.messages.filter((m: any) => m.role === 'system' || m.role === 'developer')
           .map((m: any) => m.content).join('\n\n'),
-        tools: (body.tools ?? []).map((t: any) => ({ name: t.function.name,
-          label: t.function.name, description: t.function.description ?? '',
-          parameters: t.function.parameters, execute: async () => {
-            throw new Error('Transport adapter cannot execute tools');
-          } })), messages: [] },
+        tools: convertTools(body.tools ?? []), messages: [] },
       // The same normal authentication resolver used by native OMP sessions.
       // Credentials stay inside the pinned SDK; none are exported or logged.
       getApiKey: requestModel => registry.resolver(requestModel, 'guard-gauntlet-native-luna'),

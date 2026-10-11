@@ -2,7 +2,7 @@
 mod allowances;
 use allowances::{
     agent_skill_document, codex_notes_document, execution_output_log, guard_safety_doc,
-    project_skill_document,
+    omp_agent_document_path, project_skill_document,
 };
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
@@ -52,7 +52,7 @@ pub(super) fn bounded_omp_file_read_target(
     cwd: Option<&str>,
 ) -> bool {
     match bounded_selector_path(value, home_dir, cwd) {
-        BoundedSelectorPath::Base(base) => {
+        BoundedSelectorPath::Base(base) | BoundedSelectorPath::RawFile(base) => {
             return bounded_existing_file_read_target(&base, home_dir, cwd);
         }
         BoundedSelectorPath::Unsupported => return false,
@@ -84,7 +84,7 @@ pub(super) fn bounded_omp_directory_read_target(
         BoundedSelectorPath::Base(base) => {
             return bounded_omp_directory_read_target_without_selector(&base, home_dir, cwd);
         }
-        BoundedSelectorPath::Unsupported => return false,
+        BoundedSelectorPath::RawFile(_) | BoundedSelectorPath::Unsupported => return false,
         BoundedSelectorPath::NotSelector => {}
     }
     bounded_omp_directory_read_target_without_selector(value, home_dir, cwd)
@@ -130,12 +130,16 @@ enum BoundedSelectorPath {
     NotSelector,
     Unsupported,
     Base(String),
+    /// Bare `:raw` returns the same file's bytes without line formatting, so
+    /// it carries the plain file-read proof but never a directory listing.
+    RawFile(String),
 }
 
 /// OMP peels a selector only after proving that the complete input is not a
 /// literal filesystem path. Keep the native proof narrower than OMP: one
-/// positive bounded range (`:N-M`) only. Tails, open-ended ranges, compound
-/// selectors, and comma lists remain on the normal review path.
+/// positive bounded range (`:N-M`) or a bare file `:raw` only. Tails,
+/// open-ended ranges, compound selectors, and comma lists remain on the
+/// normal review path.
 fn bounded_selector_path(
     value: &str,
     home_dir: Option<&str>,
@@ -186,6 +190,15 @@ fn bounded_selector_path(
         } else {
             BoundedSelectorPath::NotSelector
         };
+    }
+    // `raw` alone; a colon left in the final component would be a compound
+    // selector such as `file:1-5:raw`, which stays on the review path.
+    let compound = base
+        .rsplit(['/', '\\'])
+        .next()
+        .is_some_and(|name| name.contains(':'));
+    if selector.eq_ignore_ascii_case("raw") && !compound {
+        return BoundedSelectorPath::RawFile(base.to_owned());
     }
     let Some((start, end)) = selector.split_once('-') else {
         return if selector_like {
@@ -414,6 +427,7 @@ fn resolved_path_allowed_for_operation(
             || guard_safety_doc(canonical, home_dir)
             || (read_only
                 && (agent_skill_document(canonical, home_dir)
+                    || omp_agent_document_path(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)))
             || (read_only && execution_output_log(canonical, home_dir)))

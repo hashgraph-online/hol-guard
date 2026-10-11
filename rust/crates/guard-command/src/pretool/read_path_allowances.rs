@@ -133,6 +133,45 @@ pub(in crate::pretool) fn agent_skill_document(
     false
 }
 
+/// OMP's document trees may be inspected, but its adjacent auth/config state
+/// may not. Directory callers still prove the reachable tree before search.
+pub(in crate::pretool) fn omp_agent_document_path(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+) -> bool {
+    let Some(home) = home_dir.and_then(|root| std::fs::canonicalize(root).ok()) else {
+        return false;
+    };
+    if guard_secure_fs::contains_symlink_component(canonical) {
+        return false;
+    }
+    let Ok(relative) = canonical.strip_prefix(&home) else {
+        return false;
+    };
+    let Some(parts) = relative
+        .components()
+        .map(|part| match part {
+            std::path::Component::Normal(value) => value.to_str(),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()
+    else {
+        return false;
+    };
+    if parts.first() != Some(&".agent")
+        || !matches!(parts.get(1), Some(&"skills" | &"artifacts"))
+        || parts[2..].iter().any(|value| value.starts_with('.'))
+    {
+        return false;
+    }
+    canonical.is_dir()
+        || (parts.len() >= 3
+            && canonical.is_file()
+            && canonical
+                .extension()
+                .is_some_and(|extension| extension == "md"))
+}
+
 /// `~/.hol-support/SAFETY.md` is the harness-facing safety guide that agents
 /// are instructed to read before acting; it gets the same explicit allowance
 /// the Python source-path classifier grants.

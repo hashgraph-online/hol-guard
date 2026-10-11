@@ -47,11 +47,15 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
     let skill_path =
         serde_json::to_string(home.join(".agent/skills/x/SKILL.md").to_str().unwrap()).unwrap();
     let skill_read = format!("display(await read({skill_path}))");
+    let skill_text = format!("const text = await read({skill_path}); display(text);");
     let secret_path = serde_json::to_string(home.join(".ssh/id_rsa").to_str().unwrap()).unwrap();
     let secret_read = format!("display(await read({secret_path}))");
     for code in [
         skill_read.as_str(),
+        skill_text.as_str(),
         "const r = await read('README.md'); display(r)",
+        "let text = await read('README.md'); display(text)",
+        "const text = await tool.read({path:'README.md'}); display(text.text)",
         "display(await read(`README.md`))",
         "display(await read('notes:1'))",
         "display(await tool.read({path:'notes:1'}))",
@@ -75,6 +79,9 @@ fn sdk_read_helper_uses_file_policy_and_rejects_unmodeled_programs() {
         "display(await read('README.md\\n'))",
         "display(await read('dir\\\\README.md'))",
         "display(await read('.env'))",
+        "const text = await read('.env'); display(text)",
+        "const text = await read('README.md'); text('other')",
+        "const text = await read('README.md'); display(text.constructor)",
         "display(await read('https://example.com'))",
         "display(await read('proc://job'))",
         "const p = 'README.md'; display(await read(p))",

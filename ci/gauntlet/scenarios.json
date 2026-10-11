@@ -466,7 +466,7 @@
       "required_tools": [
         "task"
       ],
-      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and report its first sentence. Then tell me what it reported."
+      "prompt": "Delegate a quick read-only lookup with the task tool: have the subtask read {{workspace}}/README.md and report its first sentence as plain text. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then tell me what it reported."
     },
     {
       "id": "omp-native-wait-on-task",
@@ -476,7 +476,7 @@
         "task",
         "wait"
       ],
-      "prompt": "Use the task tool to have a subtask read {{workspace}}/src/one.ts, then use the wait tool until it finishes and tell me what it reported."
+      "prompt": "Use the task tool to have a subtask read {{workspace}}/src/one.ts and report its contents as plain text. Give it this exact file path and ask it to read that file directly, without discovery or other project inspection. Then use the wait tool until it finishes and tell me what it reported."
     },
     {
       "id": "omp-native-read-home-skill-doc",
