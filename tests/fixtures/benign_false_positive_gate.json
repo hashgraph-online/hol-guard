@@ -169,6 +169,7 @@
     "omp-eval-bash-readonly@omp": "native_policy_warning",
     "omp-eval-glob@omp": "native_policy_warning",
     "omp-eval-print@omp": "native_pre_tool_unknown_review",
+    "omp-eval-py-read@omp": "native_policy_warning",
     "omp-eval-read-doc@omp": "native_policy_warning",
     "omp-eval-read-home-skill-doc@omp": "native_policy_warning",
     "omp-glob-home-skill-docs@omp": "native_file_read_review",
@@ -1310,6 +1311,23 @@
       "expect": "allow"
     },
     {
+      "id": "omp-eval-py-read",
+      "fix_area": "omp",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "print(read('src/a.ts'))",
+        "language": "py",
+        "reset": false,
+        "timeout": 20,
+        "title": "Reading a.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
       "id": "neg-cat-env",
       "fix_area": "negative",
       "harnesses": [
@@ -1478,6 +1496,23 @@
       "tool": "shell",
       "tool_input": {
         "command": "rm -rf src 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-omp-eval-py-read-env",
+      "fix_area": "negative",
+      "harnesses": [
+        "omp"
+      ],
+      "tool": "eval",
+      "tool_input": {
+        "code": "print(read('.env'))",
+        "language": "py",
+        "reset": false,
+        "timeout": 20,
+        "title": "Reading env"
       },
       "cwd": "worktree",
       "expect": "not_allow"
@@ -1651,6 +1686,7 @@
     "omp-eval-bash-readonly@omp": "advisory-warn",
     "omp-eval-glob@omp": "advisory-warn",
     "omp-eval-print@omp": "unassigned",
+    "omp-eval-py-read@omp": "advisory-warn",
     "omp-eval-read-doc@omp": "advisory-warn",
     "omp-eval-read-home-skill-doc@omp": "advisory-warn",
     "omp-glob-home-skill-docs@omp": "unassigned",
