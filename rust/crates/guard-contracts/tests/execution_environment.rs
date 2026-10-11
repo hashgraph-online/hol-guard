@@ -10,6 +10,7 @@ fn context() -> GuardExecutionEnvironmentV1 {
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: false,
+        library_search_paths: Default::default(),
     }
 }
 
@@ -22,11 +23,15 @@ fn shared_environment_shape_accepts_wire_boundaries_and_unicode_names() {
     assert!(value.has_valid_shape());
     value.environment_names = vec!["name\u{200d}joiner".into(), "name\u{a0}space".into()];
     assert!(value.has_valid_shape());
+    value
+        .library_search_paths
+        .insert("LD_LIBRARY_PATH".into(), "p".repeat(32 * 1024));
+    assert!(value.has_valid_shape());
 }
 
 #[test]
 fn shared_environment_shape_rejects_each_invalid_boundary() {
-    for case in 0..8 {
+    for case in 0..10 {
         let mut value = context();
         match case {
             0 => value.path.push('\0'),
@@ -36,6 +41,16 @@ fn shared_environment_shape_rejects_each_invalid_boundary() {
             4 => value.environment_names = vec!["n".repeat(257)],
             5 => value.environment_names = vec!["name\ncontrol".into()],
             6 => value.environment_digest = "A".repeat(64),
+            7 => {
+                value
+                    .library_search_paths
+                    .insert("LD_PRELOAD".into(), "/usr/lib".into());
+            }
+            8 => {
+                value
+                    .library_search_paths
+                    .insert("LD_LIBRARY_PATH".into(), "bad\0path".into());
+            }
             _ => {
                 value.environment_digest.pop();
             }

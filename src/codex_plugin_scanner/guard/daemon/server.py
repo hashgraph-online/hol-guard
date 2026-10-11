@@ -73,6 +73,8 @@ from ..native_daemon_route import (
     native_strict_loopback_origin,
 )
 from ..native_guard_store import NativeGuardStoreUnavailable
+from ..native_resident_revival import native_route_unavailable_body
+from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import native_status_request_scope
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
 from ..path_resolution_cache import cached_realpath
@@ -239,6 +241,8 @@ _DAEMON_CONNECTION_ADMISSION_WAIT_SECONDS = 0.05
 _DAEMON_CONTROL_ADMISSION_WAIT_SECONDS = 1.0
 _DAEMON_UNCLASSIFIED_WATCHDOG_POLL_SECONDS = 0.025
 _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS = 5.0
+# A watchdog tick may be inside a cold-start resident request (5s plus a 10s spawn allowance).
+_NATIVE_RESIDENT_WATCHDOG_STOP_JOIN_TIMEOUT_SECONDS = 16.0
 _DAEMON_CONTROL_PATHS = frozenset(
     {
         "/v1/healthz/details",
@@ -1347,7 +1351,7 @@ class _GuardDaemonHandler(
         try:
             route = native_route_facts("POST", parsed.path, guard_home=self._route_home())
         except NativeDaemonRouteError:
-            self._write_json({"error": "native_route_policy_unavailable"}, status=503)
+            self._write_json(native_route_unavailable_body(), status=503)
             return
         if route.route_class != "none" and not self._header_token_is_valid():
             self._write_unauthorized(extra_headers=self._cors_headers_for_request())
@@ -2930,6 +2934,7 @@ class GuardDaemonServer:
         self._thread: threading.Thread | None = None
         self._serve_loop_started = threading.Event()
         self._watchdog_thread: threading.Thread | None = None
+        self._native_resident_watchdog_thread: threading.Thread | None = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -3122,6 +3127,7 @@ class GuardDaemonServer:
                 self._start_command_activity_maintenance()
                 self._start_onefile_extraction_reclaim()
                 self._start_repair_self_check()
+                self._start_native_resident_watchdog()
             self._record_lifecycle("ready")
             self._owned_service_ready = True
             self._diagnostics.record("daemon_ready")
@@ -3318,6 +3324,13 @@ class GuardDaemonServer:
         repair_self_check.start_self_check(
             self._server.store,
             publish=publish,
+            stop=self._shutdown_started,
+            on_error=self._diagnostics.record_exception,
+        )
+
+    def _start_native_resident_watchdog(self) -> None:
+        self._native_resident_watchdog_thread = start_native_resident_watchdog(
+            self._server.store.guard_home,
             stop=self._shutdown_started,
             on_error=self._diagnostics.record_exception,
         )
@@ -3530,7 +3543,8 @@ class GuardDaemonServer:
         return thread if thread.is_alive() else None
 
     def _join_service_background_threads(self) -> bool:
-        deadline = time.monotonic() + _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS
+        started = time.monotonic()
+        deadline = started + _AIBOM_REFRESH_STOP_JOIN_TIMEOUT_SECONDS
         self._watchdog_thread = self._join_service_thread(
             getattr(self, "_watchdog_thread", None),
             deadline=deadline,
@@ -3559,6 +3573,10 @@ class GuardDaemonServer:
             getattr(self, "_onefile_extraction_reclaim_thread", None),
             deadline=deadline,
         )
+        self._native_resident_watchdog_thread = self._join_service_thread(
+            getattr(self, "_native_resident_watchdog_thread", None),
+            deadline=started + _NATIVE_RESIDENT_WATCHDOG_STOP_JOIN_TIMEOUT_SECONDS,
+        )
         return all(
             thread is None
             for thread in (
@@ -3569,6 +3587,7 @@ class GuardDaemonServer:
                 self._headless_cloud_sync_thread,
                 self._command_activity_maintenance_thread,
                 self._onefile_extraction_reclaim_thread,
+                self._native_resident_watchdog_thread,
             )
         )
 

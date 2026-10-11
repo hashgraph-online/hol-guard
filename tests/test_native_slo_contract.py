@@ -463,7 +463,7 @@ def test_large_classes_use_bounded_local_source_references(tmp_path: Path) -> No
 
 
 def test_installed_proof_and_soak_contract_are_wired_without_force_defaults() -> None:
-    workflow = Path(".github/workflows/native-wheel-ci.yml").read_text(encoding="utf-8")
+    workflow = Path(".github/workflows/nightly-native.yml").read_text(encoding="utf-8")
     documentation = Path("docs/guard/native-runtime-slo-proof.md").read_text(encoding="utf-8").lower()
     assert "--enforce" in workflow
     assert "--requests 100000" in workflow

@@ -45,6 +45,9 @@ mod workspace_review_contracts;
 pub use workspace_review_contracts::*;
 mod archive_inspection;
 pub use archive_inspection::*;
+
+mod archive_acquisition;
+pub use archive_acquisition::*;
 mod execution_environment;
 pub use execution_environment::*;
 mod context_digest;
@@ -61,6 +64,8 @@ mod hook_adapter;
 pub use hook_adapter::*;
 mod hook_artifact_compose;
 pub use hook_artifact_compose::*;
+mod consumer_artifact_compose;
+pub use consumer_artifact_compose::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
 mod contributed_mcp_decision;
@@ -134,6 +139,8 @@ pub use authoritative_decision::*;
 
 mod package_authority;
 pub use package_authority::*;
+mod package_audit_projection;
+pub use package_audit_projection::*;
 mod supply_chain_egress;
 pub use supply_chain_egress::*;
 

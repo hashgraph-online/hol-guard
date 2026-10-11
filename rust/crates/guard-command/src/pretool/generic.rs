@@ -137,16 +137,18 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
-    evaluate_envelope(
-        harness,
-        event,
-        payload,
-        controls,
-        deadline,
-        context,
-        execution_environment,
-        true,
-    )
+    super::git_probe::with_memo(|| {
+        evaluate_envelope(
+            harness,
+            event,
+            payload,
+            controls,
+            deadline,
+            context,
+            execution_environment,
+            true,
+        )
+    })
 }
 
 #[allow(clippy::too_many_arguments)]

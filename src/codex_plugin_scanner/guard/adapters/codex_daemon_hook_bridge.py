@@ -30,12 +30,17 @@ if __package__:
         CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
         current_process_identity,
     )
+    from .codex_daemon_dead_fastpath import NATIVE_RUNTIME_DEAD_REASON, NATIVE_RUNTIME_DEAD_REASON_CODE
     from .codex_daemon_hook_bridge_flow import bridge_review_response
     from .codex_daemon_hook_resume import apply_browser_approval_wait
 else:  # pragma: no cover - exercised by subprocess integration tests
     _package_root = str(Path(__file__).resolve().parents[3])
     if _package_root not in sys.path:
         sys.path.insert(0, _package_root)
+    from codex_plugin_scanner.guard.adapters.codex_daemon_dead_fastpath import (
+        NATIVE_RUNTIME_DEAD_REASON,
+        NATIVE_RUNTIME_DEAD_REASON_CODE,
+    )
     from codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge_flow import (
         bridge_review_response,
     )
@@ -440,6 +445,11 @@ def main(
                     isinstance(cause, dict) and cause.get("stage") == "daemon_dead_fast" for cause in failure_causes
                 ):
                     failure_reason = _DAEMON_DEAD_REASON
+                    if any(
+                        isinstance(c, dict) and c.get("reason_code") == NATIVE_RUNTIME_DEAD_REASON_CODE
+                        for c in failure_causes
+                    ):
+                        failure_reason = NATIVE_RUNTIME_DEAD_REASON
                 response = _unavailable_response(event_name, failure_reason, data)
         _write_transition_observation(data, response)
         sys.stdout.write(

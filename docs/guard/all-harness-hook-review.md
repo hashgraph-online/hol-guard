@@ -94,7 +94,7 @@ fallback, or synthesize an allow after native failure.
 
 The permanent ownership contract is recorded in
 `docs/guard/contracts/hook-data-plane-ownership.v2.json` and enforced by
-`.github/workflows/rust-authority-ownership.yml`.
+`.github/workflows/nightly-native.yml`.
 
 ## Why Not Server-Side Source Ref Synthesis?
 

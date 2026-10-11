@@ -52,6 +52,11 @@ f8b88c4dd133eb5cad8e039352a544ad39a09f96:rust/crates/guard-runtime/tests/fixture
 f8b88c4dd133eb5cad8e039352a544ad39a09f96:rust/crates/guard-runtime/tests/fixtures/daemon_lifecycle_vectors.json:generic-api-key:5462
 f8b88c4dd133eb5cad8e039352a544ad39a09f96:rust/crates/guard-runtime/tests/fixtures/daemon_lifecycle_vectors.json:generic-api-key:5463
 f8b88c4dd133eb5cad8e039352a544ad39a09f96:rust/crates/guard-runtime/tests/fixtures/daemon_lifecycle_vectors.json:generic-api-key:5464
+# Contained-runner parity vectors: SHA-256 digests of synthetic source files named after auth modules, not credentials.
+2f73337b205d31b92a0fe170f50c07b972870dde:rust/crates/guard-command/tests/fixtures/contained_runner_vectors.v1.json:generic-api-key:766
+2f73337b205d31b92a0fe170f50c07b972870dde:rust/crates/guard-command/tests/fixtures/contained_runner_vectors.v1.json:generic-api-key:767
+2f73337b205d31b92a0fe170f50c07b972870dde:rust/crates/guard-command/tests/fixtures/contained_runner_vectors.v1.json:generic-api-key:768
+2f73337b205d31b92a0fe170f50c07b972870dde:rust/crates/guard-command/tests/fixtures/contained_runner_vectors.v1.json:generic-api-key:769
 9e480d0cb630427f4d7870d725f14e68cc2689a4:tests/fixtures/hook_admission_parity/vectors.v1.json:generic-api-key:100
 9e480d0cb630427f4d7870d725f14e68cc2689a4:tests/fixtures/hook_admission_parity/vectors.v1.json:generic-api-key:116
 9e480d0cb630427f4d7870d725f14e68cc2689a4:tests/fixtures/hook_admission_parity/vectors.v1.json:generic-api-key:124

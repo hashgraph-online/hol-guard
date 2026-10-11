@@ -5,17 +5,18 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Any, TypedDict, TypeGuard, cast
 
 from ...models import ScanOptions
 from ..action_lattice import is_guard_action as _is_guard_action
-from ..action_lattice import most_restrictive_guard_action
 from ..adapters.base import HarnessContext
 from ..approval_gate import ApprovalGateGrant
-from ..capabilities import compute_capability_delta, normalize_artifact_capabilities, severity_from_deltas
+from ..capabilities import compute_capability_delta, normalize_artifact_capabilities
 from ..config import GuardConfig
 from ..incident import build_incident_context
 from ..models import (
@@ -26,21 +27,12 @@ from ..models import (
     HarnessDetection,
     PolicyDecision,
 )
-from ..policy import decide_action
+from ..native_consumer_artifact_compose import NativeConsumerComposeError, native_consumer_compose
 from ..receipts import build_receipt
 from ..risk import artifact_risk_signals_typed, artifact_risk_summary, summarize_signals
 from ..runtime.approval_context import (
-    approval_context_tokens_validation_reason,
     build_approval_context_token,
     build_runtime_launch_identity,
-)
-from ..runtime.approval_reuse import (
-    APPROVAL_REUSE_ACCEPTED,
-    APPROVAL_REUSE_NO_SAVED_DECISION,
-    ApprovalReuseDecision,
-    ApprovalReuseValidationFailure,
-    approval_reuse_authority_unavailable,
-    evaluate_approval_reuse,
 )
 from ..runtime.decisions import build_authoritative_decision
 from ..runtime.runner_native_authority import authority_error as native_authority_error
@@ -50,25 +42,12 @@ from ..skill_directory_identity import validated_complete_skill_directory_hash
 from ..store import GuardStore
 from ..types import (
     CapabilityDelta,
-    EvidenceSource,
     GuardSignal,
-    GuardVerdict,
-    GuardVerdictAction,
     HistoryContext,
     ProvenanceBundle,
     PublisherTrust,
-    ReviewPriority,
 )
 
-_EVIDENCE_SOURCE_VALUES: tuple[EvidenceSource, ...] = ("artifact", "prompt", "history", "cloud")
-_GUARD_VERDICT_ACTION_VALUES: tuple[GuardVerdictAction, ...] = (
-    "allow",
-    "warn",
-    "block",
-    "require_reapproval",
-    "sandbox_required",
-)
-_REVIEW_PRIORITY_VALUES: tuple[ReviewPriority, ...] = ("low", "medium", "high", "critical")
 _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS = frozenset(
     {
         "prompt_display_text",
@@ -81,10 +60,6 @@ _PROMPT_FILE_HASH_VOLATILE_METADATA_KEYS = frozenset(
 )
 _CONSUMER_APPROVAL_POLICY_VERSION = "consumer-evaluation-v1"
 _TRUSTED_REQUEST_OVERRIDE_REASON = "trusted_request_override_exact_context"
-_RUNTIME_DETECTOR_BLOCK_REASON = "runtime_detector_block"
-_RUNTIME_DETECTOR_REVIEW_REASON = "runtime_detector_review"
-_RUNTIME_DETECTOR_WARN_REASON = "runtime_detector_warn"
-_SKILL_DIRECTORY_IDENTITY_REASON = "skill_directory_identity_non_reusable"
 
 
 class ArtifactDiff(TypedDict):
@@ -101,18 +76,6 @@ def _now() -> str:
 
 def _is_decision_scope(value: object) -> TypeGuard[DecisionScope]:
     return isinstance(value, str) and value in DECISION_SCOPE_VALUES
-
-
-def _is_evidence_source(value: object) -> TypeGuard[EvidenceSource]:
-    return isinstance(value, str) and value in _EVIDENCE_SOURCE_VALUES
-
-
-def _sorted_evidence_sources(values: Iterable[str]) -> tuple[EvidenceSource, ...]:
-    sources: list[EvidenceSource] = []
-    for value in sorted(set(values)):
-        if _is_evidence_source(value):
-            sources.append(value)
-    return tuple(sources)
 
 
 def _serialize_artifact(artifact: GuardArtifact) -> dict[str, object]:
@@ -236,13 +199,6 @@ def diff_removed_artifact(previous: dict[str, object]) -> ArtifactDiff:
         "current_hash": None,
         "current_snapshot": previous,
     }
-
-
-def _guard_default_action(artifact: GuardArtifact) -> GuardAction | None:
-    value = artifact.metadata.get("guard_default_action")
-    if _is_guard_action(value):
-        return value
-    return None
 
 
 def _build_removed_provenance(previous: dict[str, object]) -> str:
@@ -378,125 +334,6 @@ def build_provenance_bundle(store: GuardStore, publisher: str | None) -> Provena
     )
 
 
-def score_verdict(
-    signals: tuple[GuardSignal, ...],
-    deltas: tuple[CapabilityDelta, ...],
-    provenance: ProvenanceBundle,
-    history: HistoryContext,
-) -> GuardVerdict:
-    """Produce a structured verdict before explicit policy override."""
-
-    signal_severity = max((signal.severity for signal in signals), default=1)
-    delta_severity = severity_from_deltas(deltas)
-    severity = max(signal_severity, delta_severity)
-    confidence_pool = [signal.confidence for signal in signals]
-    if deltas:
-        confidence_pool.append(0.78)
-    if provenance.source_kind != "none":
-        confidence_pool.append(0.74)
-    confidence = max(confidence_pool) if confidence_pool else 0.55
-    reasons = [signal.explanation for signal in sorted(signals, key=lambda item: item.severity, reverse=True)[:3]]
-    reasons.extend(delta.explanation for delta in deltas[:2])
-    if history.prior_approvals > 0 and history.prior_incidents == 0 and severity < 8:
-        reasons.append("Artifact has prior local approvals without recent incidents.")
-        confidence = min(0.98, confidence + 0.05)
-    if provenance.publisher_trust in {"flagged", "revoked"}:
-        severity = max(severity, 9)
-        reasons.append("Publisher trust is flagged by local advisory intelligence.")
-    evidence_sources = _sorted_evidence_sources(signal.evidence_source for signal in signals)
-    if history.prior_approvals > 0 or history.prior_incidents > 0:
-        evidence_sources = _sorted_evidence_sources((*evidence_sources, "history"))
-    if provenance.source_kind in {"curated", "signed", "attested"}:
-        evidence_sources = _sorted_evidence_sources((*evidence_sources, "cloud"))
-
-    recommended_actions = _recommended_actions(signals, deltas, severity)
-    suppressible = severity <= 6 and provenance.publisher_trust != "flagged"
-    review_priority = _review_priority_from_severity(severity)
-    action = _action_from_scoring(severity, confidence, provenance, deltas)
-
-    return GuardVerdict(
-        action=action,
-        severity=severity,
-        confidence=round(confidence, 3),
-        reasons=tuple(reasons[:4]),
-        recommended_next_actions=tuple(recommended_actions),
-        suppressible=suppressible,
-        review_priority=review_priority,
-        evidence_sources=evidence_sources or ("artifact",),
-        provenance_state=provenance.source_kind,
-        capability_delta=deltas,
-    )
-
-
-def _action_from_scoring(
-    severity: int,
-    confidence: float,
-    provenance: ProvenanceBundle,
-    deltas: tuple[CapabilityDelta, ...],
-) -> GuardVerdictAction:
-    if provenance.publisher_trust in {"flagged", "revoked"} and confidence >= 0.7:
-        return "block"
-    if severity >= 9 and confidence >= 0.75:
-        return "block"
-    if severity >= 8 and provenance.source_kind == "none":
-        return "sandbox_required"
-    if severity >= 7 or any(
-        delta.delta_type in {"secret_scope_expanded", "subprocess_added", "approval_surface_changed"}
-        for delta in deltas
-    ):
-        return "require_reapproval"
-    if severity >= 5:
-        return "warn"
-    return "allow"
-
-
-def _review_priority_from_severity(severity: int) -> ReviewPriority:
-    if severity >= 9:
-        return "critical"
-    if severity >= 7:
-        return "high"
-    if severity >= 5:
-        return "medium"
-    return "low"
-
-
-def _recommended_actions(
-    signals: tuple[GuardSignal, ...],
-    deltas: tuple[CapabilityDelta, ...],
-    severity: int,
-) -> list[str]:
-    actions: list[str] = []
-    delta_types = {delta.delta_type for delta in deltas}
-    if "new_network_host" in delta_types:
-        actions.append("review_network_destination")
-    if "secret_scope_expanded" in delta_types:
-        actions.append("rotate_exposed_secret")
-    if "subprocess_added" in delta_types or "approval_surface_changed" in delta_types:
-        actions.append("approve_once")
-    if any(signal.family == "policy" for signal in signals):
-        actions.append("open_investigation")
-    if severity >= 8:
-        actions.append("run_in_sandbox")
-    if not actions:
-        actions.extend(["approve_once", "defer_and_notify_team"])
-    ordered: list[str] = []
-    for action in actions:
-        if action not in ordered:
-            ordered.append(action)
-    return ordered
-
-
-def _default_action_from_verdict(verdict: GuardVerdict) -> GuardAction:
-    mapping: dict[GuardVerdictAction, GuardAction] = {
-        "allow": "allow",
-        "warn": "warn",
-        "block": "block",
-        "require_reapproval": "require-reapproval",
-        "sandbox_required": "sandbox-required",
-    }
-    return mapping[verdict.action]
-
-
 def _normalized_consumer_path(path: Path) -> str:
     try:
         return str(path.expanduser().resolve(strict=False))
@@ -569,20 +406,6 @@ def _skill_directory_identity_reusable(
     if metadata.get("inspection_complete") is False:
         return False
     return validated_complete_skill_directory_hash(metadata) is not None
-
-
-def _skill_directory_identity_evidence(reusable: bool | None) -> tuple[dict[str, object], ...]:
-    if reusable is not False:
-        return ()
-    return (
-        {
-            "source": "skill_directory_identity",
-            "status": "incomplete",
-            "reason_code": _SKILL_DIRECTORY_IDENTITY_REASON,
-            "reusable": False,
-            "action_floor": "require-reapproval",
-        },
-    )
 
 
 def _consumer_policy_context(
@@ -767,138 +590,6 @@ def _removed_consumer_approval_context_token(
     )
 
 
-def _consumer_saved_allow_validation_reason(
-    decision: Mapping[str, object],
-    *,
-    approval_context_hash: str,
-) -> ApprovalReuseValidationFailure | None:
-    if decision.get("action") != "allow":
-        return None
-    saved_hash = decision.get("artifact_hash")
-    if saved_hash is None and str(decision.get("scope") or "") in {"harness", "global"}:
-        return None
-    return cast(
-        ApprovalReuseValidationFailure,
-        approval_context_tokens_validation_reason(
-            saved_hash,
-            approval_context_hash,
-        ),
-    )
-
-
-def _compose_consumer_saved_policy(
-    *,
-    store: GuardStore,
-    harness: str,
-    artifact_id: str,
-    artifact_hash: str,
-    workspace: str | None,
-    publisher: str | None,
-    current_action: GuardAction,
-    identity_reusable: bool,
-    now: str,
-    memory_command: str | None = None,
-    memory_artifact_type: str | None = None,
-    memory_artifact_name: str | None = None,
-    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None = None,
-) -> tuple[ApprovalReuseDecision, bool]:
-    lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
-        harness,
-        artifact_id,
-        artifact_hash=artifact_hash,
-        workspace=workspace,
-        publisher=publisher,
-        now=now,
-        memory_command=memory_command,
-        memory_artifact_type=memory_artifact_type,
-        memory_artifact_name=memory_artifact_name,
-        consume_one_shot=False,
-    )
-    saved_decision = lookup["decision"]
-    ignored_integrity = lookup["ignored_local_integrity"]
-    has_saved_state = saved_decision is not None or ignored_integrity is not None
-    validation_reason: ApprovalReuseValidationFailure | None = None
-    saved_action: object | None = None
-    if saved_decision is not None:
-        saved_action = saved_decision.get("action")
-        validation_reason = (
-            "approval_reuse_integrity_failure"
-            if ignored_integrity is not None
-            else _consumer_saved_allow_validation_reason(
-                saved_decision,
-                approval_context_hash=artifact_hash,
-            )
-        )
-    elif ignored_integrity is not None:
-        saved_action = "require-reapproval"
-        validation_reason = "approval_reuse_integrity_failure"
-    else:
-        diagnosed_reason = store.approval_reuse_validation_reason(
-            harness,
-            artifact_id,
-            artifact_hash,
-            workspace,
-            publisher,
-            now,
-        )
-        if diagnosed_reason is not None:
-            has_saved_state = True
-            saved_action = "allow"
-            validation_reason = cast(ApprovalReuseValidationFailure, diagnosed_reason)
-
-    if not has_saved_state:
-        # No saved evidence: preserve the current action unchanged regardless
-        # of resident reachability (the resident composes the same
-        # no_saved_decision result; on transport failure we project it locally).
-        no_state = evaluate_approval_reuse(current_action)
-        if no_state is None:
-            no_state = approval_reuse_authority_unavailable(current_action)
-        return no_state, False
-
-    reuse = evaluate_approval_reuse(
-        current_action,
-        saved_action,
-        saved_decision_present=True,
-        validation_reason=validation_reason,
-        fresh_local_approval=(
-            identity_reusable and saved_decision is not None and saved_decision.get("fresh_local_approval") is True
-        ),
-        durable_exact_approval=(
-            identity_reusable and saved_decision is not None and saved_decision.get("durable_exact_approval") is True
-        ),
-    )
-    if reuse is None:
-        # Resident unreachable: no saved approval is claimed; the caller's
-        # current evaluation stands unchanged.
-        return approval_reuse_authority_unavailable(current_action), True
-    if reuse.should_claim and saved_decision is not None and pending_approval_claims is not None:
-        pending_approval_claims.append((saved_decision, artifact_id, artifact_hash))
-    return reuse, True
-
-
-def _approval_reuse_scanner_evidence(
-    reuse: ApprovalReuseDecision,
-    *,
-    has_saved_state: bool,
-) -> tuple[dict[str, object], ...]:
-    if not has_saved_state and reuse.reason_code == APPROVAL_REUSE_NO_SAVED_DECISION:
-        return ()
-    return ({"source": "approval_reuse", **reuse.to_evidence()},)
-
-
-def _runtime_detector_scanner_evidence(block_reason: str | None) -> tuple[dict[str, object], ...]:
-    if not block_reason:
-        return ()
-    return (
-        {
-            "source": "runtime_detector_registry",
-            "status": "blocked",
-            "reason_code": _RUNTIME_DETECTOR_BLOCK_REASON,
-            "reason": block_reason,
-        },
-    )
-
-
 def _runtime_detector_risk_signals(
     runtime_detector_context: Mapping[str, object] | None,
 ) -> tuple[RiskSignalV2, ...]:
@@ -923,19 +614,15 @@ def _runtime_detector_risk_signals(
     return tuple(signals)
 
 
-def _runtime_detector_context_authority(
+def _runtime_detector_composition(
     runtime_detector_context: Mapping[str, object] | None,
-) -> tuple[GuardAction | None, str | None]:
-    if runtime_detector_context is None:
-        return None, None
-    raw_composition = runtime_detector_context.get("composition")
-    if not isinstance(raw_composition, Mapping):
-        return None, None
-    action = raw_composition.get("action")
-    if not _is_guard_action(action) or action not in {"allow", "warn", "review", "block"}:
-        return None, None
-    reason = raw_composition.get("reason")
-    return action, reason if isinstance(reason, str) and reason.strip() else None
+) -> dict[str, object] | None:
+    """Project the detector composition fields the resident's authority reads."""
+
+    composition = (runtime_detector_context or {}).get("composition")
+    if not isinstance(composition, Mapping):
+        return None
+    return {"action": composition.get("action"), "reason": composition.get("reason")}
 
 
 def _merge_risk_signals(
@@ -952,173 +639,259 @@ def _merge_risk_signals(
     return tuple(merged)
 
 
-def _runtime_signal_scanner_evidence(signals: tuple[RiskSignalV2, ...]) -> tuple[dict[str, object], ...]:
-    return tuple(
-        {
-            "source": "runtime_detector_registry",
-            "kind": "risk_signal_v2",
-            "signal": signal.to_dict(),
-        }
-        for signal in signals
-    )
+_SAVED_DECISION_KEYS = ("action", "artifact_hash", "scope", "fresh_local_approval", "durable_exact_approval")
+_QUALIFICATION_KEYS = ("fresh_local_approval", "durable_exact_approval")
+_COMPOSE_UNAVAILABLE_REASON = "consumer_artifact_compose_unavailable"
 
 
-def _trusted_request_override_applies(
-    trusted_request_overrides: Mapping[str, str] | None,
-    *,
-    artifact_id: str,
-    approval_context_hash: str,
-    approval_reuse: ApprovalReuseDecision,
-) -> bool:
-    """Accept a freshly resolved request only for the exact re-evaluated context.
+def _scoring_inputs(
+    signals: tuple[GuardSignal, ...],
+    deltas: tuple[CapabilityDelta, ...],
+    provenance: ProvenanceBundle,
+    history: HistoryContext,
+) -> dict[str, object]:
+    """Project the scoring evidence the resident's current-action query reads."""
 
-    This is a trusted, current-request authority input, not saved approval
-    reuse.  It may satisfy a review/reapproval prompt after the launch state is
-    re-detected, but can never lower a terminal block, sandbox requirement, or
-    local-integrity failure.
-    """
-
-    expected_hash = (trusted_request_overrides or {}).get(artifact_id)
-    return bool(
-        expected_hash == approval_context_hash
-        and approval_reuse.action in {"review", "require-reapproval"}
-        and approval_reuse.reason_code != "approval_reuse_integrity_failure"
-    )
-
-
-def _claimed_saved_approval_applies(
-    claimed_saved_approval_overrides: Mapping[str, str] | None,
-    retained_saved_approval_overrides: Mapping[str, str] | None,
-    *,
-    artifact_id: str,
-    approval_context_hash: str,
-    current_action: GuardAction,
-    has_saved_state: bool,
-    approval_reuse: ApprovalReuseDecision,
-    qualification: Mapping[str, object] | None = None,
-) -> bool:
-    """Carry an atomically claimed saved allow into final persistence.
-
-    Native-qualified exact claims are recomposed against the current floor;
-    sandbox and block restrictions remain terminal.
-    """
-
-    consumed_claim_matches = (claimed_saved_approval_overrides or {}).get(artifact_id) == approval_context_hash
-    retained_claim_matches = (retained_saved_approval_overrides or {}).get(artifact_id) == approval_context_hash
-    if not (consumed_claim_matches or retained_claim_matches):
-        return False
-    if consumed_claim_matches and not has_saved_state:
-        qualified = qualification or {}
-        reuse = evaluate_approval_reuse(
-            current_action,
-            "allow",
-            saved_decision_present=True,
-            fresh_local_approval=qualified.get("fresh_local_approval") is True,
-            durable_exact_approval=qualified.get("durable_exact_approval") is True,
-        )
-        return bool(reuse is not None and reuse.accepted and reuse.should_claim)
-    # Persistent policies and explicitly reusable local approvals remain in
-    # the store after a successful claim. Finalize them only while the fresh
-    # lookup still resolves the same context to an accepted saved allow. This
-    # prevents a stale claim proof from bypassing a changed, expired, corrupt,
-    # blocking, or otherwise non-exact row.
-    return bool(
-        approval_reuse.accepted
-        and approval_reuse.saved_action == "allow"
-        and approval_reuse.reason_code == APPROVAL_REUSE_ACCEPTED
-        and approval_reuse.should_claim
-    )
-
-
-def _saved_approval_claim_evidence(
-    claimed_saved_approval_overrides: Mapping[str, str] | None,
-    retained_saved_approval_overrides: Mapping[str, str] | None,
-    *,
-    artifact_id: str,
-    approval_context_hash: str,
-    claimed: bool,
-) -> dict[str, str] | None:
-    """Serialize the exact internal claim proof that finalized this authority."""
-
-    if not claimed:
-        return None
-    if (claimed_saved_approval_overrides or {}).get(artifact_id) == approval_context_hash:
-        disposition = "consumed"
-    elif (retained_saved_approval_overrides or {}).get(artifact_id) == approval_context_hash:
-        disposition = "retained"
-    else:
-        raise ValueError("claimed saved approval is missing its exact context proof")
     return {
-        "status": disposition,
-        "approval_context_hash": approval_context_hash,
-        "reason_code": APPROVAL_REUSE_ACCEPTED,
+        "signals": [
+            {
+                "severity": int(signal.severity),
+                "confidence": float(signal.confidence),
+                "explanation": signal.explanation,
+                "family": signal.family,
+                "evidence_source": signal.evidence_source,
+            }
+            for signal in signals
+        ],
+        "deltas": [
+            {"delta_type": delta.delta_type, "severity": int(delta.severity), "explanation": delta.explanation}
+            for delta in deltas
+        ],
+        "provenance_source_kind": provenance.source_kind,
+        "publisher_trust": provenance.publisher_trust,
+        "prior_approvals": int(history.prior_approvals),
+        "prior_incidents": int(history.prior_incidents),
     }
 
 
-def _compose_runtime_policy_decision(
+def _native_current_action(
+    store: GuardStore,
+    config: GuardConfig,
     *,
-    approval_reuse: ApprovalReuseDecision,
-    has_saved_state: bool,
-    trusted_request_override: bool,
-    claimed_saved_approval: bool,
+    removed: bool,
+    artifact_type: str | None,
+    configured_action: str | None,
+    guard_default_action: str | None,
+    first_seen: bool,
+    changed: bool,
+    effective_default_action: GuardAction | None,
     skill_directory_identity_reusable: bool | None,
-    runtime_risk_signals_v2: tuple[RiskSignalV2, ...],
-    runtime_context_action: GuardAction | None,
-    runtime_detector_block_reason: str | None,
-    approval_context_hash: str,
-) -> tuple[GuardAction, bool, tuple[dict[str, object], ...], str]:
-    """Compose the runtime-adjusted policy action, authority, evidence, and reason code."""
-    policy_action: GuardAction = "allow" if trusted_request_override else approval_reuse.action
-    runtime_review_approved = bool(
-        trusted_request_override
-        or (
-            approval_reuse.accepted
-            and approval_reuse.current_action == "review"
-            and approval_reuse.saved_action == "allow"
+    scoring: Mapping[str, object],
+) -> dict[str, object]:
+    """Ask the resident for the scoring recommendation and current action.
+
+    Without an answer the artifact blocks (``compose_unavailable`` carries the
+    reason) so the evaluation still completes instead of aborting midway.
+    """
+
+    try:
+        return native_consumer_compose(
+            "current_action",
+            {
+                "removed": removed,
+                "artifact_type": artifact_type,
+                "configured_action": configured_action,
+                "guard_default_action": guard_default_action,
+                "first_seen": first_seen,
+                "changed": changed,
+                "effective_default_action": effective_default_action,
+                "config_changed_hash_action": config.changed_hash_action,
+                "config_default_action": config.default_action,
+                "skill_directory_identity_reusable": skill_directory_identity_reusable,
+                **scoring,
+            },
+            guard_home=getattr(store, "guard_home", None),
         )
+    except NativeConsumerComposeError as error:
+        return {
+            "current_action": "block",
+            "scanner_action": None,
+            "verdict": {
+                "action": "block",
+                "confidence": 0.0,
+                "evidence_sources": [],
+                "provenance_state": "none",
+                "reasons": ["Guard could not score this artifact, so it stays blocked."],
+                "recommended_next_actions": ["open_investigation"],
+                "review_priority": "critical",
+                "severity": 9,
+                "suppressible": False,
+            },
+            "compose_unavailable": error.code,
+        }
+
+
+def _compose_unavailable_decision(
+    code: str,
+    *,
+    configured_action: str | None,
+    scanner_action: GuardAction | None,
+    raw_scoring_recommendation: object,
+) -> dict[str, object]:
+    """Fail-closed runtime answer when the resident composed nothing.
+
+    The artifact blocks, no saved approval is claimed and no override applies.
+    """
+
+    return {
+        "approval_claim": None,
+        "approval_reuse": {
+            "action": "block",
+            "current_action": "block",
+            "current_normalization_reason_code": None,
+            "original_current_action": "block",
+            "original_current_type": "str",
+            "original_saved_action": None,
+            "original_saved_type": None,
+            "reason_code": _COMPOSE_UNAVAILABLE_REASON,
+            "saved_action": None,
+            "saved_normalization_reason_code": None,
+            "should_claim": False,
+            "status": "not-applicable",
+        },
+        "approval_source": "policy",
+        "append_pending_claim": False,
+        "authority_finalized": True,
+        "decision_reason": _COMPOSE_UNAVAILABLE_REASON,
+        "policy_action": "block",
+        "policy_composition": {
+            "configured_action": configured_action,
+            "current_action": "block",
+            "final_action": "block",
+            "native_compose_error": code,
+            "raw_scoring_recommendation": raw_scoring_recommendation,
+            "saved_action": None,
+            "saved_state_present": False,
+            "scanner_action": scanner_action,
+            "scoring_recommendation_non_authoritative": True,
+            "trusted_request_override": False,
+        },
+        "saved_state_present": False,
+        "scanner_evidence": [],
+        "trusted_request_override": False,
+    }
+
+
+@dataclass(frozen=True)
+class _ConsumerAuthorityInputs:
+    """Per-evaluation authority evidence shared by every artifact query."""
+
+    store: GuardStore
+    harness: str
+    workspace: str | None
+    now: str
+    trusted_request_overrides: Mapping[str, str]
+    claimed_saved_approval_overrides: Mapping[str, str]
+    retained_saved_approval_overrides: Mapping[str, str]
+    saved_approval_qualification_overrides: Mapping[str, Mapping[str, object]]
+    runtime_detector_composition: dict[str, object] | None
+    runtime_detector_block_reason: str | None
+    runtime_signals: list[dict[str, object]]
+    pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None
+
+
+def _native_runtime_decision(
+    inputs: _ConsumerAuthorityInputs,
+    *,
+    artifact_id: str,
+    approval_context_hash: str,
+    publisher: str | None,
+    memory_command: str | None,
+    memory_artifact_type: str | None,
+    memory_artifact_name: str | None,
+    current_action: GuardAction,
+    configured_action: str | None,
+    scanner_action: GuardAction | None,
+    raw_scoring_recommendation: object,
+    skill_directory_identity_reusable: bool | None,
+    compose_unavailable: object = None,
+) -> dict[str, object]:
+    """Gather saved-decision evidence; the resident composes the final authority.
+
+    A failed current-action query, or no answer here, blocks the artifact.
+    """
+
+    unavailable = partial(
+        _compose_unavailable_decision,
+        configured_action=configured_action,
+        scanner_action=scanner_action,
+        raw_scoring_recommendation=raw_scoring_recommendation,
     )
-    if runtime_context_action == "warn":
-        policy_action = most_restrictive_guard_action(policy_action, "warn")
-    if runtime_context_action == "review" and not runtime_review_approved:
-        policy_action = most_restrictive_guard_action(policy_action, "review")
-    if runtime_context_action == "block" or runtime_detector_block_reason:
-        policy_action = "block"
-    approval_authority_finalized = not approval_reuse.should_claim or claimed_saved_approval or trusted_request_override
-    approval_reuse_evidence = _approval_reuse_scanner_evidence(
-        approval_reuse,
-        has_saved_state=has_saved_state,
+    if isinstance(compose_unavailable, str):
+        return unavailable(compose_unavailable)
+    store = inputs.store
+    lookup = store.resolve_policy_decision_lookup_with_memory_pattern(
+        inputs.harness,
+        artifact_id,
+        artifact_hash=approval_context_hash,
+        workspace=inputs.workspace,
+        publisher=publisher,
+        now=inputs.now,
+        memory_command=memory_command,
+        memory_artifact_type=memory_artifact_type,
+        memory_artifact_name=memory_artifact_name,
+        consume_one_shot=False,
     )
-    scanner_evidence: tuple[dict[str, object], ...] = (
-        *_skill_directory_identity_evidence(skill_directory_identity_reusable),
-        *approval_reuse_evidence,
-        *_runtime_signal_scanner_evidence(runtime_risk_signals_v2),
-        *(
-            (
-                {
-                    "source": "trusted_request_override",
-                    "status": "accepted",
-                    "reason_code": _TRUSTED_REQUEST_OVERRIDE_REASON,
-                    "artifact_hash": approval_context_hash,
-                },
-            )
-            if trusted_request_override
-            else ()
-        ),
-        *_runtime_detector_scanner_evidence(runtime_detector_block_reason),
+    saved_decision = lookup["decision"]
+    ignored_integrity = lookup["ignored_local_integrity"] is not None
+    diagnosed_reason = (
+        store.approval_reuse_validation_reason(
+            inputs.harness,
+            artifact_id,
+            approval_context_hash,
+            inputs.workspace,
+            publisher,
+            inputs.now,
+        )
+        if saved_decision is None and not ignored_integrity
+        else None
     )
-    if runtime_detector_block_reason:
-        decision_reason = _RUNTIME_DETECTOR_BLOCK_REASON
-    elif runtime_context_action == "warn" and policy_action == "warn":
-        decision_reason = _RUNTIME_DETECTOR_WARN_REASON
-    elif runtime_context_action == "review" and policy_action == "review":
-        decision_reason = _RUNTIME_DETECTOR_REVIEW_REASON
-    elif trusted_request_override:
-        decision_reason = _TRUSTED_REQUEST_OVERRIDE_REASON
-    elif has_saved_state:
-        decision_reason = approval_reuse.reason_code
-    else:
-        decision_reason = policy_action
-    return policy_action, approval_authority_finalized, scanner_evidence, decision_reason
+    qualification = inputs.saved_approval_qualification_overrides.get(artifact_id)
+    try:
+        answer = native_consumer_compose(
+            "runtime_decision",
+            {
+                "current_action": current_action,
+                "configured_action": configured_action,
+                "scanner_action": scanner_action,
+                "raw_scoring_recommendation": raw_scoring_recommendation,
+                "skill_directory_identity_reusable": skill_directory_identity_reusable,
+                "approval_context_hash": approval_context_hash,
+                "saved_decision": (
+                    None if saved_decision is None else {key: saved_decision.get(key) for key in _SAVED_DECISION_KEYS}
+                ),
+                "ignored_local_integrity": ignored_integrity,
+                "diagnosed_reason": diagnosed_reason,
+                "trusted_request_override_hash": inputs.trusted_request_overrides.get(artifact_id),
+                "claimed_saved_approval_hash": inputs.claimed_saved_approval_overrides.get(artifact_id),
+                "retained_saved_approval_hash": inputs.retained_saved_approval_overrides.get(artifact_id),
+                "saved_approval_qualification": (
+                    None
+                    if qualification is None
+                    else {key: qualification.get(key) is True for key in _QUALIFICATION_KEYS}
+                ),
+                "runtime_detector_composition": inputs.runtime_detector_composition,
+                "runtime_detector_block_reason": inputs.runtime_detector_block_reason,
+                "runtime_signals": inputs.runtime_signals,
+            },
+            guard_home=getattr(store, "guard_home", None),
+        )
+    except NativeConsumerComposeError as error:
+        return unavailable(error.code)
+    pending = inputs.pending_approval_claims
+    if answer["append_pending_claim"] is True and saved_decision is not None and pending is not None:
+        pending.append((saved_decision, artifact_id, approval_context_hash))
+    return answer
 
 
 def detect_all(context: HarnessContext) -> list[HarnessDetection]:
@@ -1168,7 +941,20 @@ def evaluate_detection(
     prior_receipts = store.count_receipts(detection.harness) if persist else 0
     previous_snapshots = store.list_snapshots(detection.harness)
     runtime_risk_signals_v2 = _runtime_detector_risk_signals(runtime_detector_context)
-    runtime_context_action, runtime_context_reason = _runtime_detector_context_authority(runtime_detector_context)
+    authority_inputs = _ConsumerAuthorityInputs(
+        store=store,
+        harness=detection.harness,
+        workspace=workspace,
+        now=now,
+        trusted_request_overrides=trusted_request_overrides or {},
+        claimed_saved_approval_overrides=claimed_saved_approval_overrides or {},
+        retained_saved_approval_overrides=retained_saved_approval_overrides or {},
+        saved_approval_qualification_overrides=saved_approval_qualification_overrides or {},
+        runtime_detector_composition=_runtime_detector_composition(runtime_detector_context),
+        runtime_detector_block_reason=runtime_detector_block_reason,
+        runtime_signals=[signal.to_dict() for signal in runtime_risk_signals_v2],
+        pending_approval_claims=pending_approval_claims,
+    )
     current_artifact_ids: set[str] = set()
     for artifact in detection.artifacts:
         current_artifact_ids.add(artifact.artifact_id)
@@ -1249,36 +1035,27 @@ def evaluate_detection(
         )
         history_context = build_history_context(store, detection.harness, artifact.artifact_id, artifact.publisher)
         provenance_bundle = build_provenance_bundle(store, artifact.publisher)
-        verdict = score_verdict(structured_signals, capability_delta, provenance_bundle, history_context)
-        if configured_action is None and artifact.artifact_type in {
-            "prompt_request",
-            "file_read_request",
-            "tool_action_request",
-        }:
-            current_policy_action = _guard_default_action(artifact) or "require-reapproval"
-        elif is_first_seen and configured_action is None and effective_default_action is not None:
-            current_policy_action = effective_default_action
-        else:
-            current_policy_action = decide_action(
-                configured_action=configured_action,
-                default_action=effective_default_action,
-                config=config,
-                changed=bool(diff["changed"]),
-            )
-        scanner_action = _default_action_from_verdict(verdict)
-        current_policy_action = most_restrictive_guard_action(
-            current_policy_action,
-            scanner_action,
-        )
         skill_directory_identity_reusable = _skill_directory_identity_reusable(
             artifact_type=artifact.artifact_type,
             metadata=artifact.metadata,
         )
-        if skill_directory_identity_reusable is False:
-            current_policy_action = most_restrictive_guard_action(
-                current_policy_action,
-                "require-reapproval",
-            )
+        guard_default_action = artifact.metadata.get("guard_default_action")
+        current = _native_current_action(
+            store,
+            config,
+            removed=False,
+            artifact_type=artifact.artifact_type,
+            configured_action=configured_action,
+            guard_default_action=guard_default_action if isinstance(guard_default_action, str) else None,
+            first_seen=is_first_seen,
+            changed=bool(diff["changed"]),
+            effective_default_action=effective_default_action,
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            scoring=_scoring_inputs(structured_signals, capability_delta, provenance_bundle, history_context),
+        )
+        current_policy_action = cast(GuardAction, current["current_action"])
+        scanner_action = cast(GuardAction, current["scanner_action"])
+        verdict = cast(dict[str, Any], current["verdict"])
         approval_context_hash = _consumer_approval_context_token(
             detection=detection,
             artifact=artifact,
@@ -1292,126 +1069,38 @@ def evaluate_detection(
             current_action=current_policy_action,
             runtime_detector_context=runtime_detector_context,
         )
-        approval_reuse, has_saved_state = _compose_consumer_saved_policy(
-            store=store,
-            harness=detection.harness,
+        runtime = _native_runtime_decision(
+            authority_inputs,
             artifact_id=artifact.artifact_id,
-            artifact_hash=approval_context_hash,
-            workspace=workspace,
+            approval_context_hash=approval_context_hash,
             publisher=artifact.publisher,
-            current_action=current_policy_action,
-            identity_reusable=skill_directory_identity_reusable is not False,
-            now=now,
             memory_command=artifact.command,
             memory_artifact_type=artifact.artifact_type,
             memory_artifact_name=artifact.name,
-            pending_approval_claims=pending_approval_claims,
-        )
-        claimed_saved_approval = skill_directory_identity_reusable is not False and _claimed_saved_approval_applies(
-            claimed_saved_approval_overrides,
-            retained_saved_approval_overrides,
-            artifact_id=artifact.artifact_id,
-            approval_context_hash=approval_context_hash,
             current_action=current_policy_action,
-            has_saved_state=has_saved_state,
-            approval_reuse=approval_reuse,
-            qualification=(saved_approval_qualification_overrides or {}).get(artifact.artifact_id),
+            configured_action=configured_action,
+            scanner_action=scanner_action,
+            raw_scoring_recommendation=verdict["action"],
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            compose_unavailable=current.get("compose_unavailable"),
         )
-        approval_claim = _saved_approval_claim_evidence(
-            claimed_saved_approval_overrides,
-            retained_saved_approval_overrides,
-            artifact_id=artifact.artifact_id,
-            approval_context_hash=approval_context_hash,
-            claimed=claimed_saved_approval,
-        )
-        if claimed_saved_approval:
-            claimed_reuse = evaluate_approval_reuse(
-                current_policy_action,
-                "allow",
-                saved_decision_present=True,
-                fresh_local_approval=(
-                    (saved_approval_qualification_overrides or {})
-                    .get(artifact.artifact_id, {})
-                    .get("fresh_local_approval")
-                    is True
-                ),
-                durable_exact_approval=(
-                    (saved_approval_qualification_overrides or {})
-                    .get(artifact.artifact_id, {})
-                    .get("durable_exact_approval")
-                    is True
-                ),
-            )
-            approval_reuse = (
-                claimed_reuse
-                if claimed_reuse is not None
-                # Resident unreachable: the claim disposition is already
-                # recorded; project the current action unchanged with no
-                # additional claim authority.
-                else approval_reuse_authority_unavailable(current_policy_action)
-            )
-            has_saved_state = True
-        trusted_request_override = _trusted_request_override_applies(
-            trusted_request_overrides,
-            artifact_id=artifact.artifact_id,
-            approval_context_hash=approval_context_hash,
-            approval_reuse=approval_reuse,
-        )
-        policy_action, approval_authority_finalized, scanner_evidence, decision_reason = (
-            _compose_runtime_policy_decision(
-                approval_reuse=approval_reuse,
-                has_saved_state=has_saved_state,
-                trusted_request_override=trusted_request_override,
-                claimed_saved_approval=claimed_saved_approval,
-                skill_directory_identity_reusable=skill_directory_identity_reusable,
-                runtime_risk_signals_v2=runtime_risk_signals_v2,
-                runtime_context_action=runtime_context_action,
-                runtime_detector_block_reason=runtime_detector_block_reason,
-                approval_context_hash=approval_context_hash,
-            )
-        )
-        policy_composition = {
-            "configured_action": configured_action,
-            "current_action": current_policy_action,
-            "saved_action": approval_reuse.saved_action,
-            "saved_state_present": has_saved_state,
-            "scanner_action": scanner_action,
-            "raw_scoring_recommendation": verdict.action,
-            "scoring_recommendation_non_authoritative": True,
-            "trusted_request_override": trusted_request_override,
-            **(
-                {
-                    "skill_directory_identity_reusable": skill_directory_identity_reusable,
-                    "skill_directory_identity_floor": "require-reapproval",
-                }
-                if skill_directory_identity_reusable is False
-                else {}
-            ),
-            **({"saved_approval_claim": approval_claim} if approval_claim is not None else {}),
-            **(
-                {
-                    "runtime_detector_action": "block" if runtime_detector_block_reason else runtime_context_action,
-                    "runtime_detector_reason": runtime_detector_block_reason or runtime_context_reason,
-                }
-                if runtime_detector_block_reason or runtime_context_action is not None
-                else {}
-            ),
-            "final_action": policy_action,
-        }
+        approval_reuse = cast(dict[str, Any], runtime["approval_reuse"])
+        approval_claim = runtime["approval_claim"]
+        trusted_request_override = runtime["trusted_request_override"] is True
+        scanner_evidence = cast(list[dict[str, object]], runtime["scanner_evidence"])
+        policy_composition = cast(dict[str, object], runtime["policy_composition"])
         authoritative_decision = build_authoritative_decision(
-            policy_action,
-            reason=decision_reason,
+            cast(GuardAction, runtime["policy_action"]),
+            reason=cast(str, runtime["decision_reason"]),
             composition_trace=policy_composition,
             signals=risk_signals_v2,
-            authority_finalized=approval_authority_finalized,
+            authority_finalized=runtime["authority_finalized"] is True,
         )
         policy_action = authoritative_decision.action
         if authoritative_decision.enforcement.blocking:
             blocked = True
         risk_signals = tuple(signal.plain_reason for signal in authoritative_decision.signals)
-        has_runtime_authority = bool(
-            runtime_risk_signals_v2 or runtime_detector_block_reason or runtime_context_action is not None
-        )
+        has_runtime_authority = bool(runtime_risk_signals_v2) or "runtime_detector_action" in policy_composition
         risk_summary = (
             authoritative_decision.decision_v2.dashboard_primary_detail
             if has_runtime_authority
@@ -1453,17 +1142,7 @@ def evaluate_detection(
                 else None
             ),
             diff_summary=_build_diff_summary(diff),
-            approval_source=(
-                "runtime-detector"
-                if runtime_detector_block_reason
-                else "fresh-approval"
-                if trusted_request_override
-                else "saved-approval"
-                if approval_reuse.accepted and approval_reuse.saved_action == "allow"
-                else "saved-policy"
-                if approval_reuse.saved_action == "block"
-                else "policy"
-            ),
+            approval_source=cast(str, runtime["approval_source"]),
             scanner_evidence=scanner_evidence,
         )
         if persist:
@@ -1514,8 +1193,8 @@ def evaluate_detection(
                         "artifact_name": artifact.name,
                         "policy_action": policy_action,
                         "changed_fields": list(diff["changed_fields"]),
-                        "approval_reuse_status": approval_reuse.status,
-                        "approval_reuse_reason_code": approval_reuse.reason_code,
+                        "approval_reuse_status": approval_reuse["status"],
+                        "approval_reuse_reason_code": approval_reuse["reason_code"],
                     },
                     now,
                 )
@@ -1530,9 +1209,9 @@ def evaluate_detection(
                 "artifact_hash": diff["current_hash"],
                 "approval_context_hash": approval_context_hash,
                 "effective_workspace": workspace,
-                "approval_reuse_status": approval_reuse.status,
-                "approval_reuse_reason_code": approval_reuse.reason_code,
-                "approval_reuse": approval_reuse.to_evidence(),
+                "approval_reuse_status": approval_reuse["status"],
+                "approval_reuse_reason_code": approval_reuse["reason_code"],
+                "approval_reuse": dict(approval_reuse),
                 "scanner_evidence": list(scanner_evidence),
                 "trusted_request_override": {
                     "applied": trusted_request_override,
@@ -1541,27 +1220,27 @@ def evaluate_detection(
                 **({"approval_claim": approval_claim} if approval_claim is not None else {}),
                 "scoring_recommendation": {
                     "non_authoritative": True,
-                    "action": verdict.action,
+                    "action": verdict["action"],
                     "mapped_guard_action": scanner_action,
-                    "reasons": list(verdict.reasons),
-                    "confidence": verdict.confidence,
-                    "severity": verdict.severity,
-                    "evidence_sources": list(verdict.evidence_sources),
+                    "reasons": list(verdict["reasons"]),
+                    "confidence": verdict["confidence"],
+                    "severity": verdict["severity"],
+                    "evidence_sources": list(verdict["evidence_sources"]),
                 },
                 "risk_signals": list(risk_signals),
                 "risk_summary": risk_summary,
                 "signals": [signal.to_dict() for signal in structured_signals],
-                "confidence": verdict.confidence,
-                "severity": verdict.severity,
-                "evidence_sources": list(verdict.evidence_sources),
-                "provenance_state": verdict.provenance_state,
+                "confidence": verdict["confidence"],
+                "severity": verdict["severity"],
+                "evidence_sources": list(verdict["evidence_sources"]),
+                "provenance_state": verdict["provenance_state"],
                 "provenance": provenance_bundle.to_dict(),
                 "history_context": history_context.to_dict(),
                 "capability_snapshot": current_capabilities.to_dict(),
                 "capability_delta": [delta.to_dict() for delta in capability_delta],
-                "remediation": list(verdict.recommended_next_actions),
-                "suppressibility": verdict.suppressible,
-                "review_priority": verdict.review_priority,
+                "remediation": list(verdict["recommended_next_actions"]),
+                "suppressibility": verdict["suppressible"],
+                "review_priority": verdict["review_priority"],
                 "artifact_type": artifact.artifact_type,
                 "config_path": artifact.config_path,
                 "source_scope": artifact.source_scope,
@@ -1585,21 +1264,24 @@ def evaluate_detection(
             artifact_id,
             previous_publisher,
         )
-        current_policy_action = decide_action(
-            configured_action=configured_action,
-            default_action=effective_default_action,
-            config=config,
-            changed=True,
-        )
         skill_directory_identity_reusable = _skill_directory_identity_reusable(
             artifact_type=previous.get("artifact_type"),
             metadata=previous.get("metadata"),
         )
-        if skill_directory_identity_reusable is False:
-            current_policy_action = most_restrictive_guard_action(
-                current_policy_action,
-                "require-reapproval",
-            )
+        removed_current = _native_current_action(
+            store,
+            config,
+            removed=True,
+            artifact_type=None,
+            configured_action=configured_action,
+            guard_default_action=None,
+            first_seen=False,
+            changed=True,
+            effective_default_action=effective_default_action,
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            scoring=_scoring_inputs((), (), ProvenanceBundle(), HistoryContext()),
+        )
+        current_policy_action = cast(GuardAction, removed_current["current_action"])
         approval_context_hash = _removed_consumer_approval_context_token(
             harness=detection.harness,
             artifact_id=artifact_id,
@@ -1614,127 +1296,43 @@ def evaluate_detection(
         previous_command_value = previous.get("command")
         previous_artifact_type_value = previous.get("artifact_type")
         previous_name_value = previous.get("name")
-        approval_reuse, has_saved_state = _compose_consumer_saved_policy(
-            store=store,
-            harness=detection.harness,
+        runtime = _native_runtime_decision(
+            authority_inputs,
             artifact_id=artifact_id,
-            artifact_hash=approval_context_hash,
-            workspace=workspace,
+            approval_context_hash=approval_context_hash,
             publisher=previous_publisher,
-            current_action=current_policy_action,
-            identity_reusable=skill_directory_identity_reusable is not False,
-            now=now,
             memory_command=previous_command_value if isinstance(previous_command_value, str) else None,
             memory_artifact_type=(
                 previous_artifact_type_value if isinstance(previous_artifact_type_value, str) else None
             ),
             memory_artifact_name=previous_name_value if isinstance(previous_name_value, str) else None,
-            pending_approval_claims=pending_approval_claims,
-        )
-        claimed_saved_approval = skill_directory_identity_reusable is not False and _claimed_saved_approval_applies(
-            claimed_saved_approval_overrides,
-            retained_saved_approval_overrides,
-            artifact_id=artifact_id,
-            approval_context_hash=approval_context_hash,
             current_action=current_policy_action,
-            has_saved_state=has_saved_state,
-            approval_reuse=approval_reuse,
-            qualification=(saved_approval_qualification_overrides or {}).get(artifact_id),
-        )
-        approval_claim = _saved_approval_claim_evidence(
-            claimed_saved_approval_overrides,
-            retained_saved_approval_overrides,
-            artifact_id=artifact_id,
-            approval_context_hash=approval_context_hash,
-            claimed=claimed_saved_approval,
-        )
-        if claimed_saved_approval:
-            claimed_reuse = evaluate_approval_reuse(
-                current_policy_action,
-                "allow",
-                saved_decision_present=True,
-                fresh_local_approval=(
-                    (saved_approval_qualification_overrides or {}).get(artifact_id, {}).get("fresh_local_approval")
-                    is True
-                ),
-                durable_exact_approval=(
-                    (saved_approval_qualification_overrides or {}).get(artifact_id, {}).get("durable_exact_approval")
-                    is True
-                ),
-            )
-            approval_reuse = (
-                claimed_reuse
-                if claimed_reuse is not None
-                # Resident unreachable: the claim disposition is already
-                # recorded; project the current action unchanged with no
-                # additional claim authority.
-                else approval_reuse_authority_unavailable(current_policy_action)
-            )
-            has_saved_state = True
-        trusted_request_override = _trusted_request_override_applies(
-            trusted_request_overrides,
-            artifact_id=artifact_id,
-            approval_context_hash=approval_context_hash,
-            approval_reuse=approval_reuse,
-        )
-        policy_action, approval_authority_finalized, scanner_evidence, decision_reason = (
-            _compose_runtime_policy_decision(
-                approval_reuse=approval_reuse,
-                has_saved_state=has_saved_state,
-                trusted_request_override=trusted_request_override,
-                claimed_saved_approval=claimed_saved_approval,
-                skill_directory_identity_reusable=skill_directory_identity_reusable,
-                runtime_risk_signals_v2=runtime_risk_signals_v2,
-                runtime_context_action=runtime_context_action,
-                runtime_detector_block_reason=runtime_detector_block_reason,
-                approval_context_hash=approval_context_hash,
-            )
-        )
-        policy_composition = {
-            "configured_action": configured_action,
-            "current_action": current_policy_action,
-            "saved_action": approval_reuse.saved_action,
-            "saved_state_present": has_saved_state,
+            configured_action=configured_action,
             # Removal has no artifact body to score. Keep the historical warn
             # recommendation as diagnostic evidence, but do not claim it was
             # an enforcement input.
-            "scanner_action": None,
-            "raw_scoring_recommendation": "warn",
-            "scoring_recommendation_non_authoritative": True,
-            "trusted_request_override": trusted_request_override,
-            **(
-                {
-                    "skill_directory_identity_reusable": skill_directory_identity_reusable,
-                    "skill_directory_identity_floor": "require-reapproval",
-                }
-                if skill_directory_identity_reusable is False
-                else {}
-            ),
-            **({"saved_approval_claim": approval_claim} if approval_claim is not None else {}),
-            **(
-                {
-                    "runtime_detector_action": "block" if runtime_detector_block_reason else runtime_context_action,
-                    "runtime_detector_reason": runtime_detector_block_reason or runtime_context_reason,
-                }
-                if runtime_detector_block_reason or runtime_context_action is not None
-                else {}
-            ),
-            "final_action": policy_action,
-        }
+            scanner_action=None,
+            raw_scoring_recommendation="warn",
+            skill_directory_identity_reusable=skill_directory_identity_reusable,
+            compose_unavailable=removed_current.get("compose_unavailable"),
+        )
+        approval_reuse = cast(dict[str, Any], runtime["approval_reuse"])
+        approval_claim = runtime["approval_claim"]
+        trusted_request_override = runtime["trusted_request_override"] is True
+        scanner_evidence = cast(list[dict[str, object]], runtime["scanner_evidence"])
+        policy_composition = cast(dict[str, object], runtime["policy_composition"])
         authoritative_decision = build_authoritative_decision(
-            policy_action,
-            reason=decision_reason,
+            cast(GuardAction, runtime["policy_action"]),
+            reason=cast(str, runtime["decision_reason"]),
             composition_trace=policy_composition,
             signals=runtime_risk_signals_v2,
-            authority_finalized=approval_authority_finalized,
+            authority_finalized=runtime["authority_finalized"] is True,
         )
         policy_action = authoritative_decision.action
         if authoritative_decision.enforcement.blocking:
             blocked = True
         removed_risk_signals = tuple(signal.plain_reason for signal in authoritative_decision.signals)
-        has_runtime_authority = bool(
-            runtime_risk_signals_v2 or runtime_detector_block_reason or runtime_context_action is not None
-        )
+        has_runtime_authority = bool(runtime_risk_signals_v2) or "runtime_detector_action" in policy_composition
         removed_risk_summary = (
             authoritative_decision.decision_v2.dashboard_primary_detail
             if has_runtime_authority
@@ -1776,17 +1374,7 @@ def evaluate_detection(
                 else None
             ),
             diff_summary="artifact removed",
-            approval_source=(
-                "runtime-detector"
-                if runtime_detector_block_reason
-                else "fresh-approval"
-                if trusted_request_override
-                else "saved-approval"
-                if approval_reuse.accepted and approval_reuse.saved_action == "allow"
-                else "saved-policy"
-                if approval_reuse.saved_action == "block"
-                else "policy"
-            ),
+            approval_source=cast(str, runtime["approval_source"]),
             scanner_evidence=scanner_evidence,
         )
         if persist:
@@ -1816,8 +1404,8 @@ def evaluate_detection(
                     "artifact_name": str(artifact_name) if isinstance(artifact_name, str) else artifact_id,
                     "policy_action": policy_action,
                     "changed_fields": ["removed"],
-                    "approval_reuse_status": approval_reuse.status,
-                    "approval_reuse_reason_code": approval_reuse.reason_code,
+                    "approval_reuse_status": approval_reuse["status"],
+                    "approval_reuse_reason_code": approval_reuse["reason_code"],
                 },
                 now,
             )
@@ -1832,9 +1420,9 @@ def evaluate_detection(
                 "artifact_hash": previous_hash,
                 "approval_context_hash": approval_context_hash,
                 "effective_workspace": workspace,
-                "approval_reuse_status": approval_reuse.status,
-                "approval_reuse_reason_code": approval_reuse.reason_code,
-                "approval_reuse": approval_reuse.to_evidence(),
+                "approval_reuse_status": approval_reuse["status"],
+                "approval_reuse_reason_code": approval_reuse["reason_code"],
+                "approval_reuse": dict(approval_reuse),
                 "scanner_evidence": list(scanner_evidence),
                 "trusted_request_override": {
                     "applied": trusted_request_override,

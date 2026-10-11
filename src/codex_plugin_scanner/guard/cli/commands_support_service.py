@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_artifacts import _optional_string
 
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..daemon.start_classification import GuardDaemonStillStartingError
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -323,6 +324,9 @@ def _dispatch_guard_daemon_command(
         wake_token = getattr(args, "wake_token", None)
         try:
             ensure_guard_daemon(guard_home, home_dir=home_dir)
+        except GuardDaemonStillStartingError:
+            # A slow machine is still loading the daemon; it was left running.
+            print("Guard daemon is still starting.")
         finally:
             if isinstance(wake_token, str) and wake_token:
                 clear_guard_daemon_wake_reservation(guard_home, token=wake_token)

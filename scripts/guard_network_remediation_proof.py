@@ -76,7 +76,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
         "tests/test_guard_linux_network_observer.py",
     ),
     "REM-129": (
-        ".github/workflows/guard-gvisor-reference.yml",
+        ".github/workflows/nightly-native.yml",
         "tests/test_guard_gvisor_reference_runtime.py",
         "tests/test_guard_kubernetes_runtime.py",
     ),

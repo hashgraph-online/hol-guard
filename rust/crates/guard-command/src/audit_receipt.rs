@@ -125,7 +125,7 @@ fn is_actionable_package_finding(item: &Map<String, Value>) -> bool {
 }
 
 /// `_package_severity_rank` (:4246-4262).
-fn package_severity_rank(package: &Map<String, Value>) -> i64 {
+pub fn package_severity_rank(package: &Map<String, Value>) -> i64 {
     if let Some(severity) = package.get("normalized_severity").and_then(Value::as_str) {
         return severity_rank(severity);
     }
@@ -210,7 +210,7 @@ fn resolve_advisory_aliases_from_bundle(
                 let Some(advisory_id) = advisory.get("advisoryId").and_then(Value::as_str) else {
                     continue;
                 };
-                if advisory_id.trim().is_empty() {
+                if python_strip(advisory_id).is_empty() {
                     continue;
                 }
                 let mut alias_tuple = vec![advisory_id.to_string()];
@@ -218,7 +218,7 @@ fn resolve_advisory_aliases_from_bundle(
                     alias_tuple.extend(
                         raw.iter()
                             .filter_map(|a| a.as_str())
-                            .filter(|a| !a.trim().is_empty())
+                            .filter(|a| !python_strip(a).is_empty())
                             .map(str::to_owned),
                     );
                 }
@@ -237,7 +237,7 @@ fn resolve_advisory_aliases_from_bundle(
     }
     for advisory_id in advisory_ids {
         let add_alias = |value: &str, aliases: &mut Vec<String>, seen: &mut HashSet<String>| {
-            let trimmed = value.trim().to_uppercase();
+            let trimmed = python_strip(value).to_uppercase();
             if trimmed.is_empty() || seen.contains(&trimmed) {
                 return;
             }
@@ -258,25 +258,38 @@ fn resolve_advisory_aliases_from_bundle(
 /// carry a non-empty `advisoryAliases` list pass through untouched; otherwise
 /// bundle-resolved aliases are merged in (or the package passes through
 /// unchanged).
-fn enrich_package_with_advisory_aliases(
+/// Bundle-resolved `advisoryAliases` for one package, or `None` when the
+/// package already carries aliases, has no advisory ids, or resolves nothing.
+pub fn advisory_aliases_for_package(
     package: &Map<String, Value>,
     bundle: Option<&Map<String, Value>>,
-) -> Map<String, Value> {
+) -> Option<Vec<String>> {
     if package
         .get("advisoryAliases")
         .and_then(Value::as_array)
         .is_some_and(|existing| !existing.is_empty())
     {
-        return package.clone();
+        return None;
     }
     let advisory_ids = package_advisory_ids(package);
     if advisory_ids.is_empty() {
-        return package.clone();
+        return None;
     }
     let aliases = resolve_advisory_aliases_from_bundle(bundle, &advisory_ids);
     if aliases.is_empty() {
-        return package.clone();
+        None
+    } else {
+        Some(aliases)
     }
+}
+
+fn enrich_package_with_advisory_aliases(
+    package: &Map<String, Value>,
+    bundle: Option<&Map<String, Value>>,
+) -> Map<String, Value> {
+    let Some(aliases) = advisory_aliases_for_package(package, bundle) else {
+        return package.clone();
+    };
     let mut enriched = package.clone();
     enriched.insert(
         "advisoryAliases".to_string(),
@@ -550,6 +563,74 @@ pub fn audit_receipt_metadata(
     );
     receipt.insert("scanner_evidence".into(), Value::Object(scanner_evidence));
     receipt
+}
+
+// ---------------------------------------------------------------------------
+// CI severity gate and empty-inventory outcome.
+// ---------------------------------------------------------------------------
+
+/// `_ci_gate_result`: packages at or above `threshold` (unknown thresholds
+/// gate at `high`), reported by name.
+pub fn ci_gate_result(evaluation: &Map<String, Value>, threshold: &str) -> Map<String, Value> {
+    let threshold_rank = match threshold {
+        "unknown" | "low" | "medium" | "high" | "critical" => severity_rank(threshold),
+        _ => severity_rank("high"),
+    };
+    let mut matched_packages: Vec<Value> = Vec::new();
+    if let Some(packages) = evaluation.get("packages").and_then(Value::as_array) {
+        for package in packages {
+            let Some(package) = package.as_object() else {
+                continue;
+            };
+            if package_severity_rank(package) < threshold_rank {
+                continue;
+            }
+            if let Some(name) = package.get("name").and_then(Value::as_str) {
+                if !name.is_empty() {
+                    matched_packages.push(Value::String(name.to_owned()));
+                }
+            }
+        }
+    }
+    let mut out = Map::new();
+    out.insert("matched".into(), Value::Bool(!matched_packages.is_empty()));
+    out.insert("matched_packages".into(), Value::Array(matched_packages));
+    out.insert("threshold".into(), Value::String(threshold.to_owned()));
+    out
+}
+
+/// `_resolve_empty_audit_outcome`: `(audit_outcome, message)` for an audit
+/// whose workspace inventory is empty.
+pub fn resolve_empty_audit_outcome(
+    manifest_paths: &[String],
+    lockfile_paths: &[String],
+    posture: &Map<String, Value>,
+) -> (String, String) {
+    let status = py_str_field_or_default(posture, "status", "");
+    let detail = py_str_field_or_default(posture, "detail", "");
+    if status == "sync_required" {
+        return (
+            "sync_required".to_owned(),
+            "Sync Guard supply-chain intel on this device before auditing workspace packages."
+                .to_owned(),
+        );
+    }
+    if matches!(
+        status.as_str(),
+        "not_connected" | "workspace_required" | "expired" | "degraded"
+    ) {
+        return (status, detail);
+    }
+    if !lockfile_paths.is_empty() || !manifest_paths.is_empty() {
+        return (
+            "inventory_empty".to_owned(),
+            "Guard found project files but could not index any packages for audit.".to_owned(),
+        );
+    }
+    (
+        "no_project_files".to_owned(),
+        "No supported manifests or lockfiles found in this workspace.".to_owned(),
+    )
 }
 
 #[cfg(test)]

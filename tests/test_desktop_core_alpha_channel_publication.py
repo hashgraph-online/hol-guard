@@ -154,16 +154,188 @@ def test_unknown_publication_channel_is_rejected() -> None:
         wait_module.publication_ready(REPOSITORY, "123", SOURCE, "beta")
 
 
-def _registry(monkeypatch: pytest.MonkeyPatch, wheel: Path, *, version: str, digest: str | None = None) -> str:
-    filename = f"hol_guard-{ALPHA}-py3-none-macosx_11_0_arm64.whl"
+NATIVE = f"hol_guard-{ALPHA}-py3-none-macosx_11_0_arm64.whl"
+PURE = f"hol_guard-{ALPHA}-py3-none-any.whl"
+PURE_DIGEST = "c" * 64
+
+
+def _sha(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def _alpha_world(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    native_digest: str | None,
+    release: dict[str, object] | None = None,
+    pypi_files: dict[str, str] | None = None,
+    pypi_version: str = ALPHA,
+    pypi_status: int | None = None,
+) -> list[str]:
+    """Fake the live alpha prerelease (via gh) and PyPI; return the requested endpoints."""
+    requested: list[str] = []
+    assets = [{"name": PURE, "state": "uploaded", "digest": f"sha256:{PURE_DIGEST}"}]
+    if native_digest is not None:
+        assets.append({"name": NATIVE, "state": "uploaded", "digest": f"sha256:{native_digest}"})
+    payload = {"tag_name": ALPHA_TAG, "draft": False, "prerelease": True, "assets": assets, **(release or {})}
+
+    def api(command: list[str], **kwargs: object) -> str:
+        requested.append(command[-1])
+        return json.dumps(payload)
+
     metadata = {
-        "info": {"version": version},
+        "info": {"version": pypi_version},
         "urls": [
-            {
-                "filename": filename,
-                "digests": {"sha256": digest or hashlib.sha256(wheel.read_bytes()).hexdigest()},
-            }
+            {"filename": name, "digests": {"sha256": digest}}
+            for name, digest in (pypi_files if pypi_files is not None else {PURE: PURE_DIGEST}).items()
         ],
+    }
+
+    def urlopen(url: str, **kwargs: object) -> io.BytesIO:
+        requested.append(url)
+        if pypi_status is not None:
+            raise urllib.error.HTTPError(url, pypi_status, "error", {}, None)  # type: ignore[arg-type]
+        return io.BytesIO(json.dumps(metadata).encode())
+
+    monkeypatch.setattr(subprocess, "check_output", api)
+    monkeypatch.setattr("urllib.request.urlopen", urlopen)
+    return requested
+
+
+def _native_wheel(tmp_path: Path) -> Path:
+    wheel = tmp_path / "attested-macos-arm64.whl"
+    wheel.write_bytes(b"attested alpha wheel")
+    return wheel
+
+
+def _alpha_ready(wheel: Path) -> bool:
+    return wait_module.registry_ready(ALPHA, wheel, NATIVE, "alpha", repo=REPOSITORY)
+
+
+def test_alpha_ready_when_prerelease_asset_matches_and_pypi_has_the_pure_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = _native_wheel(tmp_path)
+    requested = _alpha_world(monkeypatch, native_digest=_sha(wheel.read_bytes()))
+    assert _alpha_ready(wheel) is True
+    assert requested == [
+        f"repos/{REPOSITORY}/releases/tags/{ALPHA_TAG}",
+        f"https://pypi.org/pypi/hol-guard/{ALPHA}/json",
+    ]
+
+
+def test_alpha_does_not_require_the_native_wheel_on_pypi(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    wheel = _native_wheel(tmp_path)
+    _alpha_world(monkeypatch, native_digest=_sha(wheel.read_bytes()), pypi_files={PURE: PURE_DIGEST})
+    assert _alpha_ready(wheel) is True
+
+
+def test_alpha_filename_defaults_to_the_wheel_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    wheel = tmp_path / NATIVE
+    wheel.write_bytes(b"attested alpha wheel")
+    _alpha_world(monkeypatch, native_digest=_sha(wheel.read_bytes()))
+    assert wait_module.registry_ready(ALPHA, wheel, None, "alpha", repo=REPOSITORY) is True
+
+
+def test_alpha_not_ready_when_the_prerelease_asset_is_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    requested = _alpha_world(monkeypatch, native_digest=None)
+    assert _alpha_ready(_native_wheel(tmp_path)) is False
+    assert requested == [f"repos/{REPOSITORY}/releases/tags/{ALPHA_TAG}"]
+
+
+def test_alpha_ignores_assets_that_are_not_uploaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    wheel = _native_wheel(tmp_path)
+    _alpha_world(
+        monkeypatch,
+        native_digest=None,
+        release={
+            "assets": [
+                {"name": NATIVE, "state": "starter", "digest": f"sha256:{_sha(wheel.read_bytes())}"},
+                {"name": PURE, "state": "uploaded", "digest": f"sha256:{PURE_DIGEST}"},
+            ]
+        },
+    )
+    assert _alpha_ready(wheel) is False
+
+
+def test_alpha_prerelease_asset_digest_mismatch_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _alpha_world(monkeypatch, native_digest="0" * 64)
+    with pytest.raises(ValueError, match="digest mismatch"):
+        _alpha_ready(_native_wheel(tmp_path))
+
+
+def test_alpha_prerelease_asset_without_a_digest_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _alpha_world(
+        monkeypatch,
+        native_digest=None,
+        release={"assets": [{"name": NATIVE, "state": "uploaded", "digest": None}]},
+    )
+    with pytest.raises(ValueError, match="digest mismatch"):
+        _alpha_ready(_native_wheel(tmp_path))
+
+
+@pytest.mark.parametrize(
+    "release",
+    [{"draft": True}, {"prerelease": False}, {"tag_name": "alpha/v3.4.0a1"}],
+)
+def test_alpha_requires_a_live_published_prerelease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, release: dict[str, object]
+) -> None:
+    wheel = _native_wheel(tmp_path)
+    _alpha_world(monkeypatch, native_digest=_sha(wheel.read_bytes()), release=release)
+    with pytest.raises(ValueError, match="not published"):
+        _alpha_ready(wheel)
+
+
+def test_alpha_not_ready_until_pypi_exposes_the_pure_wheel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    wheel = _native_wheel(tmp_path)
+    digest = _sha(wheel.read_bytes())
+    _alpha_world(monkeypatch, native_digest=digest, pypi_status=404)
+    assert _alpha_ready(wheel) is False
+    # A native wheel on PyPI is irrelevant: only the pure wheel proves alpha publication.
+    _alpha_world(monkeypatch, native_digest=digest, pypi_files={NATIVE: digest})
+    assert _alpha_ready(wheel) is False
+
+
+def test_alpha_not_ready_when_the_prerelease_lacks_the_pure_wheel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = _native_wheel(tmp_path)
+    _alpha_world(
+        monkeypatch,
+        native_digest=None,
+        release={"assets": [{"name": NATIVE, "state": "uploaded", "digest": f"sha256:{_sha(wheel.read_bytes())}"}]},
+    )
+    assert _alpha_ready(wheel) is False
+
+
+def test_alpha_pypi_failures_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    wheel = _native_wheel(tmp_path)
+    digest = _sha(wheel.read_bytes())
+    _alpha_world(monkeypatch, native_digest=digest, pypi_files={PURE: "0" * 64})
+    with pytest.raises(ValueError, match="pure wheel does not match"):
+        _alpha_ready(wheel)
+    _alpha_world(monkeypatch, native_digest=digest, pypi_version="3.4.0a1")
+    with pytest.raises(ValueError, match="PyPI version mismatch"):
+        _alpha_ready(wheel)
+    _alpha_world(monkeypatch, native_digest=digest, pypi_status=403)
+    with pytest.raises(urllib.error.HTTPError):
+        _alpha_ready(wheel)
+
+
+def test_alpha_registry_check_requires_the_release_repository(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="release repository"):
+        wait_module.registry_ready(ALPHA, tmp_path / "wheel", NATIVE, "alpha")
+
+
+def test_stable_registry_check_never_reads_the_alpha_prerelease(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    wheel = tmp_path / "hol_guard-3.4.0-py3-none-macosx_11_0_arm64.whl"
+    wheel.write_bytes(b"stable wheel")
+    metadata = {
+        "info": {"version": "3.4.0"},
+        "urls": [{"filename": wheel.name, "digests": {"sha256": _sha(b"stable wheel")}}],
     }
     requested: list[str] = []
 
@@ -171,26 +343,13 @@ def _registry(monkeypatch: pytest.MonkeyPatch, wheel: Path, *, version: str, dig
         requested.append(url)
         return io.BytesIO(json.dumps(metadata).encode())
 
+    def forbidden(*args: object, **kwargs: object) -> str:
+        raise AssertionError("stable readiness must not call gh")
+
     monkeypatch.setattr("urllib.request.urlopen", urlopen)
-    assert wait_module.registry_ready(ALPHA, wheel, filename, "alpha") is True
-    return requested[0]
-
-
-def test_alpha_registry_check_reads_the_alpha_version_and_matches_the_wheel(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    wheel = tmp_path / "attested-macos-arm64.whl"
-    wheel.write_bytes(b"attested alpha wheel")
-    assert _registry(monkeypatch, wheel, version=ALPHA) == f"https://pypi.org/pypi/hol-guard/{ALPHA}/json"
-
-
-def test_alpha_registry_mismatch_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    wheel = tmp_path / "attested-macos-arm64.whl"
-    wheel.write_bytes(b"attested alpha wheel")
-    with pytest.raises(ValueError, match="mismatch"):
-        _registry(monkeypatch, wheel, version="3.4.0a1")
-    with pytest.raises(ValueError, match="mismatch"):
-        _registry(monkeypatch, wheel, version=ALPHA, digest="0" * 64)
+    monkeypatch.setattr(subprocess, "check_output", forbidden)
+    assert wait_module.registry_ready("3.4.0", wheel) is True
+    assert requested == ["https://pypi.org/pypi/hol-guard/3.4.0/json"]
 
 
 @pytest.mark.parametrize("version", ["3.4.0", "3.4.0a0", "v3.4.0a2", "4.0.0a1", "3.4.0a2.post1"])
@@ -225,10 +384,13 @@ def test_alpha_wait_passes_the_channel_through(tmp_path: Path, monkeypatch: pyte
         return True
 
     monkeypatch.setattr(wait_module, "publication_ready", ready)
-    monkeypatch.setattr(wait_module, "registry_ready", lambda *args: bool(seen.append(args) or True))
+    monkeypatch.setattr(
+        wait_module, "registry_ready", lambda *args, **kwargs: bool(seen.append((*args, kwargs)) or True)
+    )
     wait_module.wait(ALPHA, tmp_path / "wheel", timeout=1, channel="alpha")
     assert seen[0] == (REPOSITORY, "123", SOURCE, "alpha")
-    assert seen[1][-1] == "alpha"
+    assert seen[1][3] == "alpha"
+    assert seen[1][-1] == {"repo": REPOSITORY}
 
 
 def test_alpha_wait_retries_transient_registry_errors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -247,7 +409,7 @@ def test_alpha_wait_retries_transient_registry_errors(tmp_path: Path, monkeypatc
         return True
 
     monkeypatch.setattr(wait_module, "publication_ready", ready)
-    monkeypatch.setattr(wait_module, "registry_ready", lambda *args: True)
+    monkeypatch.setattr(wait_module, "registry_ready", lambda *args, **kwargs: True)
     monkeypatch.setattr(wait_module.time, "sleep", lambda *args: None)
     wait_module.wait(ALPHA, tmp_path / "wheel", timeout=1, channel="alpha")
     assert len(attempts) == 2

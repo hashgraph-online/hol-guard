@@ -28,6 +28,12 @@ from pathlib import Path
 FAILED_START_WINDOW_SECONDS = 120.0
 FAILED_START_MARKER = "daemon-start-failed.json"
 DEAD_DAEMON_REASON_CODE = "daemon_dead_repair_needed"
+NATIVE_RUNTIME_DEAD_REASON_CODE = "native_resident_restart_circuit_open"
+# The one copy of this denial: the bridge, the daemon hook worker and the pool all use it.
+NATIVE_RUNTIME_DEAD_REASON = (
+    "HOL Guard's native runtime is not running and could not be restarted. "
+    "Run `hol-guard repair` in a terminal, then retry."
+)
 
 
 def _marker_path(state_path: str | Path) -> Path:
@@ -106,11 +112,32 @@ def clear_start_failure(state_path: str | Path) -> None:
         _marker_path(state_path).unlink()
 
 
+def native_runtime_refused(error: BaseException) -> bool:
+    """True when the daemon reports that the native runtime refused to restart.
+
+    The daemon names the refusal in the body of its 503 route answer. The body is
+    not authenticated, so it is used only to deny sooner and to name the repair
+    command; it can never allow anything.
+    """
+
+    detail = getattr(error, "detail", None)
+    if getattr(error, "status", None) != 503 or not isinstance(detail, str):
+        return False
+    try:
+        body = json.loads(detail)
+    except ValueError:
+        return False
+    return isinstance(body, dict) and body.get("reason_code") == NATIVE_RUNTIME_DEAD_REASON_CODE
+
+
 __all__ = [
     "DEAD_DAEMON_REASON_CODE",
     "FAILED_START_WINDOW_SECONDS",
+    "NATIVE_RUNTIME_DEAD_REASON",
+    "NATIVE_RUNTIME_DEAD_REASON_CODE",
     "clear_start_failure",
     "daemon_provably_dead",
+    "native_runtime_refused",
     "recent_start_failure",
     "record_start_failure",
     "should_fail_fast",

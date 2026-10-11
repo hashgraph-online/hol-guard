@@ -65,7 +65,7 @@ POLICY_AUTHORITY = Path("rust/crates/guard-runtime/src/policy_store_authority.rs
 RESIDENT_PROTOCOL = Path("rust/crates/guard-runtime/src/resident_protocol.rs")
 MANAGED_RESIDENT = Path("rust/crates/guard-runtime/src/managed_resident.rs")
 MANAGED_OWNER_LOCK = Path("rust/crates/guard-runtime/src/managed_resident_owner_lock.rs")
-WORKFLOW = Path(".github/workflows/rust-authority-ownership.yml")
+WORKFLOW = Path(".github/actions/ci-job-quality/action.yml")
 PUBLISH_WORKFLOW = Path(".github/workflows/publish.yml")
 ENROLLMENT_DOC = Path("docs/guard/native-approval-enrollment.md")
 
@@ -323,7 +323,7 @@ def _check_release_root(root: Path, *, require_environment: bool) -> None:
 def _check_ownership_contract(root: Path) -> None:
     workflow = _read(root / WORKFLOW)
     if "native_approval_contract_gate.py" not in workflow:
-        raise RuntimeError("Rust authority workflow does not run the approval-specific gate")
+        raise RuntimeError("required quality job does not run the approval-specific gate")
     if "--root ." not in workflow:
         raise RuntimeError("approval gate invocation is not rooted at the checkout")
     publish = _read(root / PUBLISH_WORKFLOW)

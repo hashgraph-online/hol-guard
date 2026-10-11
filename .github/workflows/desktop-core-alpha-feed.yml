@@ -194,7 +194,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$RELEASE_CHANNEL" == "alpha" ]]; then
-            # An alpha dispatch must prove its own publication run and PyPI wheel, even when the
+            # An alpha dispatch must prove its own publication run, the live prerelease's native wheel
+            # digest and the PyPI pure wheel (alphas upload no platform wheels to PyPI), even when the
             # sidecar assets already exist; the wait fails the run rather than deferring silently.
             python3 -I scripts/release/wait_for_core_publication.py \
               --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" --filename "$ATTESTED_WHEEL_FILENAME" \

@@ -33,7 +33,11 @@ from uuid import uuid4
 
 from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
 from .native_execution import _resident_request
-from .native_resident_client import native_resident_client_failure_code, native_resident_client_ready
+from .native_resident_client import (
+    native_resident_client_failure_code,
+    native_resident_client_ready,
+    record_native_resident_client_failure_code,
+)
 from .native_resident_prerequisite_reason import prerequisite_unavailable_code
 from .native_runtime import native_runtime_probe_missed, native_runtime_status
 from .native_runtime_resilience import native_record_resident_failure, native_record_resident_success
@@ -54,6 +58,17 @@ _TIMEOUT_SECONDS = 10.0
 _COLD_START_ALLOWANCE_SECONDS = 20.0
 _RUNTIME_PROBE_WAIT_SECONDS = 15.0
 _RUNTIME_PROBE_RETRY_SECONDS = 0.3
+# The resident and its client each cap one request well below this module's budget (a few seconds), so on a
+# loaded host a single request can lapse with a deadline code while most of the caller's budget is unspent.
+# A verdict is a pure function of its request, so asking again is safe; retry only these codes, only while
+# the caller's remaining budget can still fit a meaningful attempt.
+_TRANSIENT_DEADLINE_CODES = frozenset(
+    {"native_client_deadline_exceeded", "native_request_deadline_exceeded", "native_client_timed_out"}
+)
+# Every failed attempt counts toward the shared native circuit breaker (opens at 3 consecutive failures), so a
+# single operation must not be able to open it alone: one retry at most.
+_MAX_DEADLINE_ATTEMPTS = 2
+_MIN_RETRY_BUDGET_SECONDS = 1.0
 
 FactResolver = Callable[[str], object]
 
@@ -255,20 +270,34 @@ def _round_trip(
     timeout_seconds -= _await_native_runtime(timeout_seconds)
     if timeout_seconds <= 0:
         raise _fail("native_daemon_lifecycle_deadline")
-    response = _resident_request(
-        operation=_OPERATION,
-        request=request,
-        guard_home=home,
-        timeout_seconds=timeout_seconds,
-        required_feature=DAEMON_LIFECYCLE_FEATURE,
-        response_schema=_RESULT_SCHEMA,
-        max_request_bytes=_MAX_REQUEST_BYTES,
-        record_success=False,
-    )
-    if response is None:
+    started = time.monotonic()
+    attempt = 0
+    while True:
+        attempt += 1
+        # A stale code from an earlier attempt must not be read as this attempt's failure.
+        record_native_resident_client_failure_code(None)
+        remaining = timeout_seconds if attempt == 1 else timeout_seconds - (time.monotonic() - started)
+        response = _resident_request(
+            operation=_OPERATION,
+            request=request,
+            guard_home=home,
+            timeout_seconds=remaining,
+            required_feature=DAEMON_LIFECYCLE_FEATURE,
+            response_schema=_RESULT_SCHEMA,
+            max_request_bytes=_MAX_REQUEST_BYTES,
+            record_success=False,
+        )
+        if response is not None:
+            break
         # ``_resident_request`` already recorded the failure; do not count it twice.
         detail = native_resident_client_failure_code() or _runtime_unavailable_detail()
-        raise _fail(f"native_daemon_lifecycle_unavailable:{detail}")
+        left = timeout_seconds - (time.monotonic() - started)
+        if (
+            detail not in _TRANSIENT_DEADLINE_CODES
+            or attempt >= _MAX_DEADLINE_ATTEMPTS
+            or left < _MIN_RETRY_BUDGET_SECONDS
+        ):
+            raise _fail(f"native_daemon_lifecycle_unavailable:{detail}")
     if (
         response.get("schema") != _RESULT_SCHEMA
         or response.get("request_id") != request["request_id"]

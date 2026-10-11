@@ -7,8 +7,30 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_git_execution_safety
+from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
+from codex_plugin_scanner.guard.runtime import native_command_evaluation
+
+
+@pytest.fixture(autouse=True)
+def _patient_native_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep loaded CI runners from turning routine answers into fail-closed timeouts.
+
+    The hook path gives native review 0.5 s. A coverage shard can spend longer than
+    that starting the evaluator, and Guard then (correctly) reports
+    ``native_unavailable``. These tests are about the verdict, not the latency
+    budget, so the native call gets the 1 s ceiling that ``review_pre_tool_native``
+    allows any caller.
+    """
+
+    review = native_command_evaluation.review_command_native
+
+    def patient(*args: object, **kwargs: object) -> object:
+        kwargs.setdefault("timeout_seconds", 1.0)
+        return review(*args, **kwargs)
+
+    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", patient)
 
 
 def _artifact(command: str, *, home: Path) -> GuardArtifact | None:

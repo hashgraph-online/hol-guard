@@ -288,9 +288,32 @@ def check_external_references(
         _check_attribute_chains(nodes, module.path, bindings, {m: p for m, p in by_module.items() if p is not own})
 
 
+def is_type_checking_test(test: ast.expr) -> bool:
+    """True for the ``typing`` sentinel only: ``TYPE_CHECKING`` or ``typing.TYPE_CHECKING``.
+
+    An attribute of any other object (a runtime flag that happens to share the name) is
+    not the sentinel, so its branch stays part of the retained runtime code.
+    """
+    if isinstance(test, ast.Name):
+        return test.id == "TYPE_CHECKING"
+    return (
+        isinstance(test, ast.Attribute)
+        and test.attr == "TYPE_CHECKING"
+        and isinstance(test.value, ast.Name)
+        and test.value.id in {"typing", "typing_extensions"}
+    )
+
+
 def _retained_nodes(node: ast.AST, skip: set[int]) -> Iterator[ast.AST]:
+    """Walk retained statements; ``if TYPE_CHECKING`` bodies are not runtime code."""
     for child in ast.iter_child_nodes(node):
         if isinstance(child, ast.stmt) and child.lineno in skip:
+            continue
+        if isinstance(child, ast.If) and is_type_checking_test(child.test):
+            yield child
+            for orelse in child.orelse:
+                yield orelse
+                yield from _retained_nodes(orelse, skip)
             continue
         yield child
         yield from _retained_nodes(child, skip)

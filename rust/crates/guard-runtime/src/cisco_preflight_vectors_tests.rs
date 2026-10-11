@@ -1,6 +1,9 @@
 //! Parity vectors recorded from the retired Python Cisco preflight, replayed
 //! against real temporary directory layouts, plus revalidation checks the
 //! Python could only exercise by monkeypatching.
+// The layout replays build real directory trees and run only on unix, so the
+// helpers they share are unused on Windows.
+#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
 
 use std::path::{Path, PathBuf};
 

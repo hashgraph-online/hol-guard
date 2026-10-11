@@ -1,6 +1,6 @@
 # Release wheel size budgets
 
-Native wheel CI and publishing run `python scripts/ci/check_wheel_size.py --dist-dir native-dist`.
+The nightly native workflow and publishing run `python scripts/ci/check_wheel_size.py --dist-dir native-dist`.
 The active CI lane also checks native executable budgets on its existing build
 with `--native-dir rust/target/release --platform manylinux_2_17_x86_64`; this
 adds no compilation and does not claim wheel download-size coverage.

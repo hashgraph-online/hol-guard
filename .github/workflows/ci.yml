@@ -742,81 +742,42 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-  native-windows-evaluators:
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  windows-native-runtime:
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: windows-latest
-    # A cold Windows release build of both binaries takes 12-15 minutes.
-    timeout-minutes: 25
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
-        with:
-          python-version: "3.12"
-      - uses: ./.github/actions/setup-rust
-        with:
-          save-main-cache: "true"
-      - name: Build Windows native command evaluators once for both updater Python versions
-        shell: pwsh
-        env:
-          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
-        run: |
-          python scripts/refresh_extension_artifacts.py --trust-only
-          if ($LASTEXITCODE -ne 0) {
-            throw "Staging Windows native trust bindings failed with exit code $LASTEXITCODE"
-          }
-          cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
-          if ($LASTEXITCODE -ne 0) {
-            throw "Building Windows native command evaluators failed with exit code $LASTEXITCODE"
-          }
-      - name: Verify current Windows native command projections
-        shell: pwsh
-        run: |
-          python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source.exe
-          if ($LASTEXITCODE -ne 0) {
-            throw "Verifying Windows native command projections failed with exit code $LASTEXITCODE"
-          }
-      - name: Verify Windows native runtime source binding
-        shell: pwsh
-        env:
-          EXPECTED_SOURCE_SHA: ${{ github.sha }}
-        run: |
-          $runtime = (Resolve-Path -LiteralPath "rust/target/release/hol-guard-runtime.exe").Path
-          $capabilitiesJson = & $runtime capabilities
-          if ($LASTEXITCODE -ne 0) {
-            throw "Reading Windows native runtime capabilities failed with exit code $LASTEXITCODE"
-          }
-          $capabilities = $capabilitiesJson | ConvertFrom-Json
-          if ($capabilities.build_sha -ne $env:EXPECTED_SOURCE_SHA) {
-            throw "Windows native runtime does not match this checkout's source SHA"
-          }
-      - name: Upload this attempt's verified Windows native command evaluators
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: pytest-native-command-evaluators-Windows-${{ github.sha }}-${{ github.run_attempt }}
-          path: |
-            rust/target/release/guard-command-source.exe
-            rust/target/release/hol-guard-runtime.exe
-          if-no-files-found: error
-          retention-days: 1
+      - uses: ./.github/actions/ci-job-windows-native-runtime
 
-  windows-updater:
-    needs: [native-command-evaluators, native-windows-evaluators]
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+  windows-packaged-daemon:
+    needs: [plan, native-command-evaluators, windows-native-runtime]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      needs.windows-native-runtime.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
     runs-on: windows-latest
-    timeout-minutes: 15
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.12"]
+        native-diagnostics: ["0", "1"]
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-      - uses: ./.github/actions/ci-job-windows-updater
+      - uses: ./.github/actions/ci-job-windows-packaged-daemon
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
+          native-diagnostics: ${{ matrix.native-diagnostics }}
 
   # Shadow aggregate: reports the merged required-result contract. In shadow mode
   # it needs the full required set and evaluates the planner's lane choice so the
@@ -826,7 +787,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform]
+    needs: [plan, native-workspace, native-command-evaluators, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-packaged-daemon]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -859,7 +820,8 @@ jobs:
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","cisco-full","pi-exact-continuation","cross-platform"]
+                      "dashboard","cisco-full","pi-exact-continuation","cross-platform",
+                      "windows-native-runtime","windows-packaged-daemon"]
           missing = [j for j in always_on + required if j not in needs]
           if missing:
               print("::error::required jobs absent from needs graph: "+", ".join(missing))

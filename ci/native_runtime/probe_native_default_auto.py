@@ -342,12 +342,14 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
             timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
-        mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
+        # Count the route corpus receipts before the mode invariants send their
+        # own PostToolUse requests, which write receipts of their own.
         evidence_stats = wait_for_receipt_corpus(
             writer,
             expected=len(route_receipts),
             timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
+        mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):

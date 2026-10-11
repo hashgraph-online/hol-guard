@@ -187,7 +187,7 @@ fn bounded_output(
     input: Option<Vec<u8>>,
     deadline: Instant,
 ) -> Option<Vec<u8>> {
-    const LIMIT: u64 = 1024 * 1024;
+    const LIMIT: u64 = super::super::git_probe::LISTING_LIMIT;
     if Instant::now() >= deadline {
         return None;
     }

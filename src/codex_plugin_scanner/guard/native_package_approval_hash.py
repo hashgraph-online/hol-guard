@@ -113,6 +113,7 @@ def _transport(
     operation: str = "package_approval_hash",
     feature: str = _APPROVAL_HASH_FEATURE,
     error: type[RuntimeError] = NativePackageApprovalHashError,
+    max_request_bytes: int = _MAX_REQUEST_BYTES,
 ) -> dict[str, Any]:
     """Send one package-authority request and return the strictly checked payload."""
 
@@ -131,7 +132,7 @@ def _transport(
         guard_home=guard_home,
         timeout_seconds=2.0,
         required_features=(feature,),
-        max_request_bytes=_MAX_REQUEST_BYTES,
+        max_request_bytes=max_request_bytes,
     )
     if (
         not isinstance(response, dict)

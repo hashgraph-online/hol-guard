@@ -533,6 +533,16 @@ def render_notes(
         lines.append("```bash")
         lines.append(f'uv tool install "./hol_guard-{version}-py3-none-any.whl[cisco]"')
         lines.append("```")
+    elif channel == "alpha":
+        lines.append(
+            "Install the native alpha with `hol-guard update --alpha`, or with the platform wheel "
+            f"attached to [this prerelease](https://github.com/{repo}/releases/tag/{tag}). "
+            "The PyPI upload is the pure wheel only and does not include the native runtime."
+        )
+        lines.append("")
+        lines.append("```bash")
+        lines.append("hol-guard update --alpha")
+        lines.append("```")
     else:
         lines.append("Install this release:")
         lines.append("")

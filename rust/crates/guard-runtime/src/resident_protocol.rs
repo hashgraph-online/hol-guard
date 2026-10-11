@@ -7,9 +7,9 @@ use guard_contracts::{
     ApprovalReuseDiagnosticRequestV1, ApprovalReuseRequestV1, ApprovalScopeRequestV1,
     ApprovalValidateRequestV3, ApprovalValidateRequestV4, CiscoPreflightRequestV1,
     ClaimApprovalReuseDecisionsRequestV1, CodexToolOutputRequestV1, CommandEffectBatchRequestV1,
-    CommandEffectRequestV1, CompoundGitInspectionRequestV1, ContainedExecuteRequestV1,
-    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
-    ContainedTestHookRequestV1, ContainedTypescriptExecuteRequestV1,
+    CommandEffectRequestV1, CompoundGitInspectionRequestV1, ConsumerArtifactComposeRequestV1,
+    ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
+    ContainedPackageScriptExecuteRequestV1, ContainedTypescriptExecuteRequestV1,
     ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1,
     ContributedMcpDecisionRequestV1, CursorObserverProofRequestV1, DaemonHandlerRequestV1,
     DaemonLifecycleDecisionRequestV1, DaemonRouteRequestV1, DataFlowAnalyzeRequestV1,
@@ -20,13 +20,13 @@ use guard_contracts::{
     McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
     McpStdioSessionSendRequestV1, McpToolEvidenceRequestV1, McpToolPolicyDecideRequestV1,
     NativeHookRequestV1, PackageAdvisoryIdsRequestV1, PackageApprovalHashRequestV1,
-    PackageAuthorityDecideRequestV1, PackageEvaluationComposeRequestV1,
-    PackageIntentParseRequestV1, PackagePolicyResolveRequestV1, PackagePostureRequestV1,
-    PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1, PromptAnalyzeRequestV1,
-    RequestContextRequestV1, RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, ShimAdminRequestV1,
-    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
-    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    PackageAuditProjectionRequestV1, PackageAuthorityDecideRequestV1,
+    PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PackagePolicyResolveRequestV1,
+    PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
+    PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
+    RuntimeCapabilitiesV1, ShimAdminRequestV1, SkillDirectoryIdentityRequestV1,
+    SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES,
+    NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -85,6 +85,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-resident-client-v1".into(),
         "native-resident-lifecycle-v1".into(),
         guard_contracts::ARCHIVE_INSPECTION_FEATURE.into(),
+        guard_contracts::ARCHIVE_ACQUISITION_FEATURE.into(),
         guard_contracts::CONTEXT_DIGEST_FEATURE.into(),
         guard_contracts::COMMAND_EFFECT_FEATURE.into(),
         guard_contracts::COMMAND_EFFECT_BATCH_FEATURE.into(),
@@ -103,6 +104,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::PACKAGE_APPROVAL_HASH_FEATURE.into(),
         guard_contracts::PACKAGE_POLICY_RESOLVE_FEATURE.into(),
         guard_contracts::PACKAGE_POSTURE_FEATURE.into(),
+        guard_contracts::PACKAGE_AUDIT_PROJECTION_FEATURE.into(),
         guard_contracts::WORKSPACE_INVENTORY_FEATURE.into(),
         guard_contracts::SUPPLY_CHAIN_EVAL_FEATURE.into(),
         guard_contracts::SHIM_ADMIN_FEATURE.into(),
@@ -125,6 +127,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         guard_contracts::DAEMON_ROUTE_FEATURE.into(),
         guard_contracts::DAEMON_HANDLER_FEATURE.into(),
         guard_contracts::HOOK_ARTIFACT_COMPOSE_FEATURE.into(),
+        guard_contracts::CONSUMER_ARTIFACT_COMPOSE_FEATURE.into(),
         guard_contracts::HOOK_ADAPTER_FEATURE.into(),
         guard_contracts::MCP_TOOL_EVIDENCE_FEATURE.into(),
         guard_contracts::LOCAL_MCP_GRANT_FEATURE.into(),
@@ -166,6 +169,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 pub(crate) enum ResidentOperationV1 {
+    ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),
@@ -207,8 +211,6 @@ pub(crate) enum ResidentOperationV1 {
     ContainedWorkspaceWriteExecute(ContainedWorkspaceWriteExecuteRequestV1),
     #[allow(dead_code)]
     ContainedExecute(ContainedExecuteRequestV1),
-    #[allow(dead_code)]
-    ContainedTestHook(ContainedTestHookRequestV1),
     ShimAdmin(ShimAdminRequestV1),
     McpStdioProbe(McpStdioProbeRequestV1),
     McpStdioCancel(McpStdioCancelRequest),
@@ -221,6 +223,7 @@ pub(crate) enum ResidentOperationV1 {
     PackageApprovalHash(PackageApprovalHashRequestV1),
     PackagePolicyResolve(PackagePolicyResolveRequestV1),
     PackagePosture(PackagePostureRequestV1),
+    PackageAuditProjection(PackageAuditProjectionRequestV1),
     WorkspaceInventory(WorkspaceInventoryRequestV1),
     PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
     GitExecutionSafety(GitExecutionSafetyRequestV1),
@@ -238,6 +241,7 @@ pub(crate) enum ResidentOperationV1 {
     DaemonHandler(DaemonHandlerRequestV1),
     HookAdapter(HookAdapterRequestV1),
     HookArtifactCompose(HookArtifactComposeRequestV1),
+    ConsumerArtifactCompose(ConsumerArtifactComposeRequestV1),
     McpToolEvidence(McpToolEvidenceRequestV1),
     LocalMcpGrantDecide(LocalMcpGrantRequestV1),
     McpProxyDecide(McpProxyDecisionRequestV1),
@@ -288,7 +292,7 @@ pub(crate) struct WorkspaceReviewAuthorityEnrollRequestV1 {
 #[serde(untagged)]
 pub(crate) enum ResidentRequestV1 {
     Operation(Box<ResidentOperationV1>),
-    Edge(GuardHookEnvelopeV2),
+    Edge(Box<GuardHookEnvelopeV2>),
     Hook(NativeHookRequestV1),
 }
 
@@ -402,19 +406,14 @@ mod tests {
         .expect("schema-unsupported error is JSON");
         assert_eq!(unsupported["error"], "native_request_schema_unsupported");
 
-        let unknown_lifecycle: Value = serde_json::from_slice(&safe_error_response(
+        for code in [
             "native_resident_future_unregistered_code",
-            false,
-        ))
-        .expect("redacted lifecycle error is JSON");
-        assert_eq!(unknown_lifecycle["error"], "native_request_invalid_json");
-
-        let unknown_policy: Value = serde_json::from_slice(&safe_error_response(
             "native_policy_snapshot_future_unregistered_code",
-            false,
-        ))
-        .expect("redacted policy error is JSON");
-        assert_eq!(unknown_policy["error"], "native_request_invalid_json");
+        ] {
+            let redacted: Value = serde_json::from_slice(&safe_error_response(code, false))
+                .expect("redacted error is JSON");
+            assert_eq!(redacted["error"], "native_request_invalid_json");
+        }
         for code in [
             "native_business_policy_floor_invalid",
             "native_business_policy_removal_requires_authority",

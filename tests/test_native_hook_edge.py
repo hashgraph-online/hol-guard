@@ -11,6 +11,7 @@ from codex_plugin_scanner.guard import native_command_model
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.daemon.hook_request_parsing import runtime_hook_event_name
 from codex_plugin_scanner.guard.hook_execution_environment import (
+    LIBRARY_SEARCH_PATH_NAMES,
     collect_hook_execution_environment,
 )
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
@@ -30,6 +31,27 @@ from codex_plugin_scanner.guard.native_runtime import (
 def test_git_config_no_system_accepts_git_truthy_values(monkeypatch, value):
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", value)
     assert collect_hook_execution_environment()["git_config_no_system"] is True
+
+
+def test_loader_search_paths_are_stamped_by_value_and_injection_variables_are_not(monkeypatch):
+    for name in LIBRARY_SEARCH_PATH_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/usr/lib")
+    monkeypatch.setenv("DYLD_FALLBACK_LIBRARY_PATH", "")
+    monkeypatch.setenv("LD_PRELOAD", "/synthetic/preload.so")
+    monkeypatch.setenv("DYLD_INSERT_LIBRARIES", "/synthetic/insert.dylib")
+    context = collect_hook_execution_environment()
+    assert context["library_search_paths"] == {"LD_LIBRARY_PATH": "/usr/local/cuda/lib64:/usr/lib"}
+    assert {"LD_PRELOAD", "DYLD_INSERT_LIBRARIES"} <= set(context["environment_names"])
+    # A value over the native path bound is withheld; the name alone keeps Git reads reviewed.
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/x" * 20_000)
+    oversized = collect_hook_execution_environment()
+    assert oversized["library_search_paths"] == {}
+    assert "LD_LIBRARY_PATH" in oversized["environment_names"]
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/lib/\udcff")
+    surrogate = collect_hook_execution_environment()
+    assert surrogate["library_search_paths"] == {}
+    assert "LD_LIBRARY_PATH" in surrogate["environment_names"]
 
 
 def test_execution_lookup_context_is_feature_gated_and_omits_environment_values(monkeypatch):

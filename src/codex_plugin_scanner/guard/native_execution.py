@@ -139,6 +139,10 @@ def _resident_request(
     result_schema = {
         "prompt_analyze": "guard-prompt-analyze-result.v1",
         "mcp_stdio_probe": "guard-mcp-stdio-probe-result.v1",
+        "contained_node_execute": "guard-contained-node-execute-result.v1",
+        "contained_typescript_execute": "guard-contained-typescript-execute-result.v1",
+        "contained_package_script_execute": "guard-contained-package-script-execute-result.v1",
+        "contained_workspace_write_execute": "guard-contained-workspace-write-execute-result.v1",
     }.get(operation)
     if result_schema is not None:
         # These versioned Rust replies have no status field. Do not discard
@@ -207,8 +211,9 @@ def _contained_request(
         "manager": manager,
         "argv": list(argv),
         "guard_home": str(guard_home),
-        "evidence": evidence,
     }
+    if evidence is not None:
+        request["evidence"] = evidence
     if extra_fields:
         request.update(extra_fields)
     decoded = _resident_request(
@@ -224,24 +229,76 @@ def _contained_request(
     return result if isinstance(result, dict) else None
 
 
+_CONTAINED_RUNNER_MAX_SECONDS = 600.0
+# The resident spends time outside the contained process: a pre-run health
+# probe (up to 5 s plus a 5 s kill wait), hashing and copying the workspace
+# snapshot (5 s discovery budget plus copy time) and up to 5 s reaping a
+# timed-out process. The slack must cover all of it so the resident, not the
+# client, reports a timeout and a finished run is never discarded.
+_CONTAINED_RUNNER_TRANSPORT_SLACK_SECONDS = 60.0
+
+
+def _contained_runner_request(
+    *,
+    op_prefix: str,
+    request_schema: str,
+    workspace: Path,
+    manager: str,
+    argv: Sequence[str],
+    guard_home: Path,
+    shim_directory: Path,
+    environment: Mapping[str, str],
+    timeout_seconds: float,
+    evidence: dict[str, object] | None,
+) -> dict[str, object] | None:
+    """Send one contained local-runner request.
+
+    ``timeout_seconds`` is the contained process timeout. The transport budget
+    adds slack so the resident, not the client, reports a process timeout, and
+    the resident's per-operation ceiling is raised to match.
+    """
+
+    process_timeout = min(max(float(timeout_seconds), 0.1), _CONTAINED_RUNNER_MAX_SECONDS)
+    extra_fields: dict[str, object] = {
+        "shim_directory": str(shim_directory),
+        "environment": dict(environment),
+        "timeout_seconds": process_timeout,
+    }
+    return _contained_request(
+        op_prefix=op_prefix,
+        request_schema=request_schema,
+        workspace=workspace,
+        manager=manager,
+        argv=argv,
+        guard_home=guard_home,
+        evidence=evidence,
+        extra_fields=extra_fields,
+        timeout_seconds=process_timeout + _CONTAINED_RUNNER_TRANSPORT_SLACK_SECONDS,
+    )
+
+
 def contained_node_execute_native(
     workspace: Path,
     manager: str,
     argv: Sequence[str],
     *,
     guard_home: Path,
-    evidence: dict[str, object] | None = None,
-    timeout_seconds: float = 30.0,
+    shim_directory: Path,
+    environment: Mapping[str, str],
+    evidence: dict[str, object],
+    timeout_seconds: float = 120.0,
 ) -> ContainedNodeResult | None:
-    result = _contained_request(
+    result = _contained_runner_request(
         op_prefix="contained_node_execute",
         request_schema="guard-contained-node-execute-request.v1",
         workspace=workspace,
         manager=manager,
         argv=argv,
         guard_home=guard_home,
-        evidence=evidence,
+        shim_directory=shim_directory,
+        environment=environment,
         timeout_seconds=timeout_seconds,
+        evidence=evidence,
     )
     if result is None:
         return None
@@ -257,18 +314,22 @@ def contained_typescript_execute_native(
     argv: Sequence[str],
     *,
     guard_home: Path,
-    evidence: dict[str, object] | None = None,
-    timeout_seconds: float = 30.0,
+    shim_directory: Path,
+    environment: Mapping[str, str],
+    evidence: dict[str, object],
+    timeout_seconds: float = 120.0,
 ) -> ContainedTypeScriptResult | None:
-    result = _contained_request(
+    result = _contained_runner_request(
         op_prefix="contained_typescript_execute",
         request_schema="guard-contained-typescript-execute-request.v1",
         workspace=workspace,
         manager=manager,
         argv=argv,
         guard_home=guard_home,
-        evidence=evidence,
+        shim_directory=shim_directory,
+        environment=environment,
         timeout_seconds=timeout_seconds,
+        evidence=evidence,
     )
     if result is None:
         return None
@@ -284,23 +345,21 @@ def contained_package_script_execute_native(
     argv: Sequence[str],
     *,
     guard_home: Path,
-    shim_directory: Path | None = None,
-    environment: Mapping[str, str] | None = None,
-    timeout_seconds: float = 30.0,
+    shim_directory: Path,
+    environment: Mapping[str, str],
+    timeout_seconds: float = 120.0,
 ) -> ContainedPackageScriptResult | None:
-    result = _contained_request(
+    result = _contained_runner_request(
         op_prefix="contained_package_script_execute",
         request_schema="guard-contained-package-script-execute-request.v1",
         workspace=workspace,
         manager=manager,
         argv=argv,
         guard_home=guard_home,
-        extra_fields={
-            "shim_directory": str(shim_directory) if shim_directory else None,
-            "environment": dict(environment) if environment else None,
-            "timeout_seconds": timeout_seconds,
-        },
+        shim_directory=shim_directory,
+        environment=environment,
         timeout_seconds=timeout_seconds,
+        evidence=None,
     )
     if result is None:
         return None

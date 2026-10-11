@@ -43,6 +43,7 @@ base64ct = "1.6.0"
 caseless = "0.2.2"
 ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
 url = "=2.5.8"
+unicode-normalization = "0.1.25"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.3", features = ["process", "signal"] }

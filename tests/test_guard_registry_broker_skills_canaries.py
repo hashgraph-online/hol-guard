@@ -13,11 +13,11 @@ These tests verify that:
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.consumer.service import (
-    build_provenance_bundle,
-    score_verdict,
-)
-from codex_plugin_scanner.guard.types import ProvenanceBundle
+from pathlib import Path
+
+from codex_plugin_scanner.guard.consumer.service import _scoring_inputs, build_provenance_bundle
+from codex_plugin_scanner.guard.native_consumer_artifact_compose import native_consumer_compose
+from codex_plugin_scanner.guard.types import HistoryContext, ProvenanceBundle
 
 _HOL_REGISTRY_PUBLISHER = "@hol-org/registry"
 _HOL_REGISTRY_ADVISORY_CLEAN = {
@@ -46,6 +46,31 @@ class _FakeStore:
         return self._advisories[:limit]
 
 
+def _verdict(guard_home: Path, provenance: ProvenanceBundle, history: HistoryContext) -> dict:
+    """The resident's scoring recommendation for an artifact with no signals or deltas."""
+
+    answer = native_consumer_compose(
+        "current_action",
+        {
+            "removed": False,
+            "artifact_type": "skill",
+            "configured_action": None,
+            "guard_default_action": None,
+            "first_seen": False,
+            "changed": False,
+            "effective_default_action": None,
+            "config_changed_hash_action": "require-reapproval",
+            "config_default_action": "warn",
+            "skill_directory_identity_reusable": None,
+            **_scoring_inputs((), (), provenance, history),
+        },
+        guard_home=guard_home,
+    )
+    verdict = answer["verdict"]
+    assert isinstance(verdict, dict)
+    return verdict
+
+
 class TestRegistryBrokerSkillsAttested:
     """Attested scenario: attestationVerified=True → curated + known-good."""
 
@@ -66,31 +91,17 @@ class TestRegistryBrokerSkillsAttested:
         refs = self._provenance().evidence_refs
         assert "HOL-2025-REGISTRY-001" in refs
 
-    def test_verdict_action_is_allow_for_clean_artifact(self) -> None:
-        from codex_plugin_scanner.guard.types import (
-            HistoryContext,
+    def test_verdict_action_is_allow_for_clean_artifact(self, native_approval_reuse_runtime: Path) -> None:
+        verdict = _verdict(
+            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=3, prior_incidents=0)
         )
+        assert verdict["action"] == "allow"
 
-        provenance = self._provenance()
-        verdict = score_verdict(
-            signals=(),
-            deltas=(),
-            provenance=provenance,
-            history=HistoryContext(prior_approvals=3, prior_incidents=0),
+    def test_evidence_sources_includes_cloud(self, native_approval_reuse_runtime: Path) -> None:
+        verdict = _verdict(
+            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=0, prior_incidents=0)
         )
-        assert verdict.action == "allow"
-
-    def test_evidence_sources_includes_cloud(self) -> None:
-        from codex_plugin_scanner.guard.types import HistoryContext
-
-        provenance = self._provenance()
-        verdict = score_verdict(
-            signals=(),
-            deltas=(),
-            provenance=provenance,
-            history=HistoryContext(prior_approvals=0, prior_incidents=0),
-        )
-        assert "cloud" in verdict.evidence_sources
+        assert "cloud" in verdict["evidence_sources"]
 
 
 class TestRegistryBrokerSkillsNonAttested:
@@ -133,51 +144,27 @@ class TestRegistryBrokerSkillsRemediationRequired:
     def test_publisher_trust_is_flagged(self) -> None:
         assert self._provenance().publisher_trust == "flagged"
 
-    def test_verdict_severity_is_nine_or_more(self) -> None:
-        from codex_plugin_scanner.guard.types import HistoryContext
-
-        provenance = self._provenance()
-        verdict = score_verdict(
-            signals=(),
-            deltas=(),
-            provenance=provenance,
-            history=HistoryContext(prior_approvals=5, prior_incidents=0),
+    def test_verdict_severity_is_nine_or_more(self, native_approval_reuse_runtime: Path) -> None:
+        verdict = _verdict(
+            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=5, prior_incidents=0)
         )
-        assert verdict.severity >= 9
+        assert verdict["severity"] >= 9
 
-    def test_verdict_action_is_not_allow(self) -> None:
-        from codex_plugin_scanner.guard.types import HistoryContext
-
-        provenance = self._provenance()
-        verdict = score_verdict(
-            signals=(),
-            deltas=(),
-            provenance=provenance,
-            history=HistoryContext(prior_approvals=5, prior_incidents=0),
+    def test_verdict_action_is_not_allow(self, native_approval_reuse_runtime: Path) -> None:
+        verdict = _verdict(
+            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=5, prior_incidents=0)
         )
-        assert verdict.action != "allow"
+        assert verdict["action"] != "allow"
 
-    def test_verdict_reasons_mention_flagged_trust(self) -> None:
-        from codex_plugin_scanner.guard.types import HistoryContext
-
-        provenance = self._provenance()
-        verdict = score_verdict(
-            signals=(),
-            deltas=(),
-            provenance=provenance,
-            history=HistoryContext(prior_approvals=0, prior_incidents=0),
+    def test_verdict_reasons_mention_flagged_trust(self, native_approval_reuse_runtime: Path) -> None:
+        verdict = _verdict(
+            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=0, prior_incidents=0)
         )
-        combined = " ".join(verdict.reasons).lower()
+        combined = " ".join(verdict["reasons"]).lower()
         assert "flagged" in combined or "advisory" in combined or "trust" in combined
 
-    def test_suppressible_is_false_for_flagged_publisher(self) -> None:
-        from codex_plugin_scanner.guard.types import HistoryContext
-
-        provenance = self._provenance()
-        verdict = score_verdict(
-            signals=(),
-            deltas=(),
-            provenance=provenance,
-            history=HistoryContext(prior_approvals=0, prior_incidents=0),
+    def test_suppressible_is_false_for_flagged_publisher(self, native_approval_reuse_runtime: Path) -> None:
+        verdict = _verdict(
+            native_approval_reuse_runtime, self._provenance(), HistoryContext(prior_approvals=0, prior_incidents=0)
         )
-        assert verdict.suppressible is False
+        assert verdict["suppressible"] is False

@@ -193,7 +193,7 @@ the frozen package resources; it does not discover built-in policy from a mutabl
 extension directory at startup. External extensions retain their opt-in requirement.
 
 A source checkout or generic wheel build does not qualify a platform release. The
-[native wheel workflow](.github/workflows/native-wheel-ci.yml) assembles and tests the native
+[nightly native workflow](.github/workflows/nightly-native.yml) assembles and tests the native
 runtime and source compiler with their manifests; the
 [installed Builder matrix](docs/guard/extension-builder/VALIDATION.md#installed-wheel-matrix)
 checks authoring outside the checkout. Include the relevant CI results in the PR.

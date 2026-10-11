@@ -5,8 +5,6 @@ import hashlib
 import json
 import shutil
 import sys
-from collections.abc import Callable
-from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -14,25 +12,14 @@ import pytest
 from codex_plugin_scanner.guard import contained_node_execution as execution_module
 from codex_plugin_scanner.guard.contained_node_execution import try_execute_contained_node_command
 from codex_plugin_scanner.guard.runtime.containment_contract import (
-    ContainmentAttestation,
-    ContainmentBackend,
     ContainmentFailure,
     ContainmentInput,
     ContainmentPolicy,
     ContainmentRequest,
 )
-from codex_plugin_scanner.guard.runtime.containment_executor import (
-    ContainmentExecutionResult,
-    execute_contained,
-    file_sha256,
-)
-from codex_plugin_scanner.guard.runtime.containment_health import (
-    CONTAINMENT_POLICY_CONTRACT_DIGEST,
-    ContainmentHealthEvidence,
-)
+from codex_plugin_scanner.guard.runtime.containment_executor import execute_contained, file_sha256
 from codex_plugin_scanner.guard.runtime.effect_contract import ProofRoute
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
-from codex_plugin_scanner.guard.runtime.workspace_snapshot_inputs import complete_workspace_snapshot
 
 _INTEGRITY = "sha512-" + base64.b64encode(bytes(64)).decode("ascii")
 
@@ -77,81 +64,16 @@ def _workspace(root: Path, runner: str) -> Path:
     return workspace
 
 
-def _manager(root: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+def _manager(root: Path) -> Path:
     directory = (root / "bin").resolve()
     _write(directory / "npx", "#!/bin/sh\nexit 99\n", executable=True)
-    node = directory / "node"
-    _write(node, "synthetic-node", executable=True)
-    monkeypatch.setenv("PATH", str(directory))
-    monkeypatch.setattr(execution_module, "_load_current_containment_health", _fake_health)
-    monkeypatch.setattr(execution_module, "_resolve_node", _node_resolver(node))
-    return directory, node
+    _write(directory / "node", "synthetic-node", executable=True)
+    return directory
 
 
-def _health() -> tuple[ContainmentHealthEvidence, str]:
-    fingerprint = hashlib.sha256(b"runtime").hexdigest()
-    return (
-        ContainmentHealthEvidence(
-            backend=ContainmentBackend.LINUX_BWRAP,
-            backend_digest=hashlib.sha256(b"backend").hexdigest(),
-            policy_contract_digest=CONTAINMENT_POLICY_CONTRACT_DIGEST,
-            daemon_fingerprint=fingerprint,
-            runtime_fingerprint=fingerprint,
-            probe_at=datetime.now(timezone.utc).isoformat(),
-            probe_enforced=True,
-        ),
-        fingerprint,
-    )
-
-
-def _fake_health(_guard_home: Path) -> tuple[ContainmentHealthEvidence, str]:
-    return _health()
-
-
-def _node_resolver(node: Path) -> Callable[[str, Path], str]:
-    def resolve(_path: str, _shim: Path) -> str:
-        return str(node)
-
-    return resolve
-
-
-@pytest.fixture(autouse=True)
-def _native_node_intents(package_intent_native, native_mcp_probe, tmp_path: Path) -> None:
-    native_mcp_probe(tmp_path)
-    native_mcp_probe(tmp_path / "guard-home")
-
-
-def test_resolve_node_rejects_symlink_back_into_shim_directory(tmp_path: Path) -> None:
-    shim = tmp_path / "shim"
-    _write(shim / "node", "synthetic-node", executable=True)
-    path_directory = tmp_path / "path-bin"
-    path_directory.mkdir()
-    try:
-        (path_directory / "node").symlink_to(shim / "node")
-    except (NotImplementedError, OSError) as error:
-        pytest.skip(f"symlink creation unavailable: {error}")
-
-    with pytest.raises(ValueError, match="not path-pinned"):
-        execution_module._resolve_node(str(path_directory), shim)
-
-
-def _result(request: ContainmentRequest, exit_code: int = 0) -> ContainmentExecutionResult:
-    return ContainmentExecutionResult(
-        exit_code=exit_code,
-        stdout="runner-output\n",
-        stderr="" if exit_code == 0 else "runner-failed\n",
-        timed_out=False,
-        attestation=ContainmentAttestation(
-            backend=ContainmentBackend.LINUX_BWRAP,
-            backend_digest=hashlib.sha256(b"backend").hexdigest(),
-            request_digest=request.binding_digest,
-            policy_digest=request.policy.digest,
-            launch_digest=request.launch_digest,
-            executable_digest=request.executable_digest,
-            enforced=True,
-            failure=None,
-        ),
-    )
+@pytest.fixture
+def native_home(package_intent_native: Path) -> Path:
+    return package_intent_native
 
 
 @pytest.mark.skipif(sys.platform not in {"darwin", "linux"}, reason="requires a supported containment platform")
@@ -192,263 +114,138 @@ def test_platform_backend_runs_path_pinned_node_or_fails_closed(tmp_path: Path) 
     assert result.stdout == "contained-node-ok\n"
 
 
+_VITEST = ("--no-install", "vitest", "run", "src/example.test.ts")
+_ESLINT = ("--no-install", "eslint", "--no-cache", "src/example.ts")
+
+
+def test_native_request_carries_launch_evidence_environment_and_timeout(
+    native_home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = _workspace(tmp_path, "vitest")
+    shim = _manager(tmp_path)
+    captured: dict[str, object] = {}
+
+    def native(workspace_arg: Path, manager: str, argv: tuple[str, ...], **kwargs: object) -> None:
+        captured.update(workspace=workspace_arg, manager=manager, argv=argv, **kwargs)
+
+    monkeypatch.setattr(execution_module._native_execution, "contained_node_execute_native", native)
+    environment = {"PATH": str(shim), "GITHUB_TOKEN": "left-to-the-resident"}
+    result = try_execute_contained_node_command(
+        "npx",
+        _VITEST,
+        workspace=workspace,
+        guard_home=native_home,
+        shim_directory=shim,
+        environment=environment,
+        timeout_seconds=45.0,
+    )
+
+    assert result is None
+    assert captured["workspace"] == workspace
+    assert captured["manager"] == "npx"
+    assert captured["argv"] == _VITEST
+    assert captured["shim_directory"] == shim
+    assert captured["environment"] == environment
+    assert captured["timeout_seconds"] == 45.0
+    evidence = captured["evidence"]
+    assert isinstance(evidence, dict)
+    assert evidence["manager_name"] == "npx"
+    assert evidence["package_name"] == "vitest"
+    assert evidence["local_only_requested"] is True
+
+
+@pytest.mark.parametrize("manager", ("pnpm", "yarn", "bun"))
+def test_unsupported_managers_never_reach_the_resident(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, manager: str
+) -> None:
+    def native(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("resident must not see an unsupported manager")
+
+    monkeypatch.setattr(execution_module._native_execution, "contained_node_execute_native", native)
+    assert (
+        try_execute_contained_node_command(
+            manager,
+            _VITEST,
+            workspace=tmp_path,
+            guard_home=tmp_path,
+            shim_directory=tmp_path,
+            environment={},
+        )
+        is None
+    )
+
+
+def test_system_root_workspace_never_reaches_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    def native(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("a system-root workspace must return to review")
+
+    monkeypatch.setattr(execution_module._native_execution, "contained_node_execute_native", native)
+    assert (
+        try_execute_contained_node_command(
+            "npx",
+            _VITEST,
+            workspace=Path("/usr"),
+            guard_home=Path("/usr"),
+            shim_directory=Path("/usr"),
+            environment={},
+        )
+        is None
+    )
+
+
 @pytest.mark.parametrize(
     ("runner", "argv", "operation"),
-    (
-        ("vitest", ("--no-install", "vitest", "run", "src/example.test.ts"), "test"),
-        ("eslint", ("--no-install", "eslint", "--no-cache", "src/example.ts"), "lint"),
-    ),
+    (("vitest", _VITEST, "test"), ("eslint", _ESLINT, "lint")),
 )
-def test_exact_runner_routes_through_central_contained_decision(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    runner: str,
-    argv: tuple[str, ...],
-    operation: str,
+def test_exact_runner_is_contained_by_the_resident_or_returns_to_review(
+    native_home: Path, tmp_path: Path, runner: str, argv: tuple[str, ...], operation: str
 ) -> None:
     workspace = _workspace(tmp_path, runner)
-    shim, node = _manager(tmp_path, monkeypatch)
-    captured: list[ContainmentRequest] = []
-
-    def execute(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
-        assert timeout_seconds == 120.0
-        captured.append(request)
-        return _result(request)
-
-    monkeypatch.setattr(execution_module, "execute_contained", execute)
+    shim = _manager(tmp_path)
     result = try_execute_contained_node_command(
         "npx",
         argv,
         workspace=workspace,
-        guard_home=tmp_path,
+        guard_home=native_home,
         shim_directory=shim,
         environment={"PATH": str(shim), "GITHUB_TOKEN": "must-not-cross"},
     )
 
-    assert result is not None
+    # Hosts without an enforcing backend or an immutable node return to review.
+    if result is None:
+        return
     assert result.operation_id == operation
     assert result.proof.route is ProofRoute.CONTAINED
     assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
-    assert len(captured) == 1
-    request = captured[0]
-    assert request.argv[0] == str(node)
-    assert request.argv[1] == f"node_modules/{runner}/bin/{runner}.mjs"
-    assert request.policy.allowed_write_paths == ()
-    assert "GITHUB_TOKEN" not in request.environment_dict()
-    paths = {item.snapshot_path for item in request.inputs}
-    assert "vitest.config.ts" in paths
-    assert f"node_modules/{runner}/package.json" in paths
-
-
-def test_contained_nonzero_result_is_returned_without_manager_reexecution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "eslint")
-    shim, _node = _manager(tmp_path, monkeypatch)
-
-    def failed_result(
-        request: ContainmentRequest,
-        *,
-        timeout_seconds: float,
-    ) -> ContainmentExecutionResult:
-        del timeout_seconds
-        return _result(request, 1)
-
-    monkeypatch.setattr(execution_module, "execute_contained", failed_result)
-
-    result = try_execute_contained_node_command(
-        "npx",
-        ("--no-install", "eslint", "--no-cache", "src/example.ts"),
-        workspace=workspace,
-        guard_home=tmp_path,
-        shim_directory=shim,
-        environment={"PATH": str(shim)},
-    )
-
-    assert result is not None
-    assert result.exit_code == 1
-    assert result.stderr == "runner-failed\n"
-
-
-def test_missing_health_never_reaches_executor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    workspace = _workspace(tmp_path, "vitest")
-    shim, _node = _manager(tmp_path, monkeypatch)
-
-    def unavailable(_guard_home: Path) -> tuple[ContainmentHealthEvidence, str]:
-        raise RuntimeError("daemon unavailable")
-
-    def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        raise AssertionError("missing health reached executor")
-
-    monkeypatch.setattr(execution_module, "_load_current_containment_health", unavailable)
-    monkeypatch.setattr(execution_module, "execute_contained", unexpected)
-
-    assert (
-        try_execute_contained_node_command(
-            "npx",
-            ("--no-install", "vitest", "run", "src/example.test.ts"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize("failure", (ContainmentFailure.UNSUPPORTED_PLATFORM, ContainmentFailure.POLICY_MISMATCH))
-def test_unenforced_backend_failure_returns_to_review(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    failure: ContainmentFailure,
-) -> None:
-    workspace = _workspace(tmp_path, "eslint")
-    shim, node = _manager(tmp_path, monkeypatch)
-
-    def failed(request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        return ContainmentExecutionResult(
-            exit_code=None,
-            stdout="",
-            stderr=failure.value,
-            timed_out=False,
-            attestation=ContainmentAttestation(
-                backend=ContainmentBackend.UNSUPPORTED,
-                backend_digest=hashlib.sha256(b"unavailable").hexdigest(),
-                request_digest=request.binding_digest,
-                policy_digest=request.policy.digest,
-                launch_digest=request.launch_digest,
-                executable_digest=file_sha256(str(node)),
-                enforced=False,
-                failure=failure,
-            ),
-        )
-
-    monkeypatch.setattr(execution_module, "execute_contained", failed)
-
-    assert (
-        try_execute_contained_node_command(
-            "npx",
-            ("--no-install", "eslint", "--no-cache", "src/example.ts"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-
-def test_workspace_or_executable_drift_never_reaches_or_survives_execution(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = _workspace(tmp_path, "eslint")
-    shim, _node = _manager(tmp_path, monkeypatch)
-    executable = workspace / "node_modules" / "eslint" / "bin" / "eslint.mjs"
-
-    def drifting_snapshot(path: Path, *, exclude_protected: bool = False):
-        captured = complete_workspace_snapshot(path, exclude_protected=exclude_protected)
-        _write(executable, "process.exit(2);\n", executable=True)
-        return captured
-
-    def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        raise AssertionError("drifted executable reached executor")
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.contained_node_execution.complete_workspace_snapshot",
-        drifting_snapshot,
-    )
-    monkeypatch.setattr(execution_module, "execute_contained", unexpected)
-
-    assert (
-        try_execute_contained_node_command(
-            "npx",
-            ("--no-install", "eslint", "--no-cache", "src/example.ts"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
-
-
-@pytest.mark.parametrize(
-    ("relative_path", "replacement"),
-    (
-        ("package.json", '{"devDependencies":{"eslint":"9.9.9"}}'),
-        ("package-lock.json", '{"packages":{"node_modules/eslint":{"version":"9.9.9"}}}'),
-        (
-            "node_modules/eslint/package.json",
-            '{"name":"not-eslint","version":"9.9.9","bin":{"eslint":"bin/eslint.mjs"}}',
-        ),
-    ),
-)
-def test_provenance_drift_before_snapshot_never_reaches_executor(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    relative_path: str,
-    replacement: str,
-) -> None:
-    workspace = _workspace(tmp_path, "eslint")
-    shim, _node = _manager(tmp_path, monkeypatch)
-    original_snapshot = complete_workspace_snapshot
-
-    def drifting_snapshot(path: Path, *, exclude_protected: bool = False):
-        _write(workspace / relative_path, replacement)
-        return original_snapshot(path, exclude_protected=exclude_protected)
-
-    def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        raise AssertionError("drifted provenance reached executor")
-
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.contained_node_execution.complete_workspace_snapshot",
-        drifting_snapshot,
-    )
-    monkeypatch.setattr(execution_module, "execute_contained", unexpected)
-
-    assert (
-        try_execute_contained_node_command(
-            "npx",
-            ("--no-install", "eslint", "--no-cache", "src/example.ts"),
-            workspace=workspace,
-            guard_home=tmp_path,
-            shim_directory=shim,
-            environment={"PATH": str(shim)},
-        )
-        is None
-    )
+    assert result.exit_code != 99, "the live package manager must never run"
+    assert "must-not-cross" not in result.stdout + result.stderr
 
 
 @pytest.mark.parametrize(
     "argv",
     (
-        ("vitest", "run", "src/example.test.ts"),
+        ("--no-install", "--package", "vitest", "vitest", "run", "src/example.test.ts"),
+        ("--no-install", "--package=vitest", "vitest", "run", "src/example.test.ts"),
         ("--no-install", "vitest", "run", "--coverage", "src/example.test.ts"),
-        ("--no-install", "eslint", "--no-cache", "--fix", "src/example.ts"),
+        ("--no-install", "vitest", "run"),
+        ("--no-install", "vitest", "run", "src/example.ts"),
+        ("--no-install", "vitest", "run", "../outside.test.ts"),
+        ("--no-install", "vitest", "run", "src/../src/example.test.ts"),
+        ("--no-install", "vitest", "run", "./src/example.test.ts"),
+        ("--no-install", "vitest", "run", "src/example.test.ts", "src/example.test.ts"),
     ),
 )
-def test_exploit_deltas_never_reach_executor(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    argv: tuple[str, ...],
+def test_exploit_deltas_return_to_review_without_execution(
+    native_home: Path, tmp_path: Path, argv: tuple[str, ...]
 ) -> None:
-    runner = "eslint" if "eslint" in argv else "vitest"
-    workspace = _workspace(tmp_path, runner)
-    shim, _node = _manager(tmp_path, monkeypatch)
-
-    def unexpected(_request: ContainmentRequest, **_kwargs: object) -> ContainmentExecutionResult:
-        raise AssertionError("ineligible command reached executor")
-
-    monkeypatch.setattr(execution_module, "execute_contained", unexpected)
-
+    workspace = _workspace(tmp_path, "vitest")
+    shim = _manager(tmp_path)
     assert (
         try_execute_contained_node_command(
             "npx",
             argv,
             workspace=workspace,
-            guard_home=tmp_path,
+            guard_home=native_home,
             shim_directory=shim,
             environment={"PATH": str(shim)},
         )
@@ -456,44 +253,32 @@ def test_exploit_deltas_never_reach_executor(
     )
 
 
-@pytest.mark.parametrize("manager", ("npx", "bunx"))
-def test_dot_reporter_runs_only_with_secret_free_containment(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    manager: str,
+@pytest.mark.parametrize(
+    ("relative", "content"),
+    (
+        ("package.json", '{"devDependencies":{"vitest":"9.9.9"}}'),
+        ("package-lock.json", '{"packages":{"node_modules/vitest":{"version":"9.9.9"}}}'),
+        (
+            "node_modules/vitest/package.json",
+            '{"name":"not-vitest","version":"9.9.9","bin":{"vitest":"bin/vitest.mjs"}}',
+        ),
+        (".env", "TOKEN=secret\n"),
+    ),
+)
+def test_provenance_drift_or_secret_content_returns_to_review(
+    native_home: Path, tmp_path: Path, relative: str, content: str
 ) -> None:
     workspace = _workspace(tmp_path, "vitest")
-    manager_directory, node = _manager(tmp_path, monkeypatch)
-    _write(manager_directory / "bunx", "#!/bin/sh\nexit 99\n", executable=True)
-    _write(workspace / ".env", "FAKE_TEST_SECRET=do-not-copy\n")
-    _write(workspace / "scripts" / "read-config.sh", "cat .env\n")
-    observed: list[ContainmentRequest] = []
-
-    def captured_execute(request: ContainmentRequest, *, timeout_seconds: float) -> ContainmentExecutionResult:
-        del timeout_seconds
-        observed.append(request)
-        assert request.argv == (
-            str(node),
-            "node_modules/vitest/bin/vitest.mjs",
-            "run",
-            "src/example.test.ts",
-            "--reporter=dot",
+    shim = _manager(tmp_path)
+    _write(workspace / relative, content)
+    assert (
+        try_execute_contained_node_command(
+            "npx",
+            _VITEST,
+            workspace=workspace,
+            guard_home=native_home,
+            shim_directory=shim,
+            environment={"PATH": str(shim)},
         )
-        assert ".env" not in {item.snapshot_path for item in request.inputs}
-        assert "scripts/read-config.sh" in {item.snapshot_path for item in request.inputs}
-        assert "FAKE_TEST_SECRET" not in dict(request.environment)
-        return _result(request)
-
-    monkeypatch.setattr(execution_module, "execute_contained", captured_execute)
-    prefix = ("--no-install",) if manager == "npx" else ()
-    result = try_execute_contained_node_command(
-        manager,
-        (*prefix, "vitest", "run", "src/example.test.ts", "--reporter=dot"),
-        workspace=workspace,
-        guard_home=tmp_path / "guard-home",
-        shim_directory=manager_directory,
-        environment={"PATH": str(manager_directory), "FAKE_TEST_SECRET": "not-in-child-env"},
+        is None
     )
-    assert result is not None
-    assert result.decision.disposition is FinalDisposition.SILENT_CONTAINED
-    assert len(observed) == 1

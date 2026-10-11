@@ -1,10 +1,12 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 #[path = "git_config_filters.rs"]
 mod filters;
+#[path = "git_config_textconv.rs"]
+mod textconv;
 
 const CONFIG_LIMIT: u64 = 65_536;
 
@@ -24,18 +26,27 @@ pub(super) fn execution_free(
     ) {
         return None;
     }
-    Some(
-        probe(
-            executable,
-            arguments,
-            remaining,
-            context,
-            deadline,
-            execution_environment,
-            stdout_piped,
+    let key = (
+        executable.to_owned(),
+        arguments.to_vec(),
+        context.home_dir.map(str::to_owned),
+        context.cwd.map(str::to_owned),
+        stdout_piped,
+    );
+    super::git_probe::memoized(key, || {
+        Some(
+            probe(
+                executable,
+                arguments,
+                remaining,
+                context,
+                deadline,
+                execution_environment,
+                stdout_piped,
+            )
+            .unwrap_or(false),
         )
-        .unwrap_or(false),
-    )
+    })
 }
 
 fn probe(
@@ -50,7 +61,7 @@ fn probe(
     let operation = remaining.first()?.as_str();
     // Configuration plus root, path and attribute inspection share this budget.
     // The caller's overall deadline remains the upper bound.
-    let inspection_deadline = Instant::now() + Duration::from_secs(2);
+    let inspection_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
     let deadline = deadline
         .unwrap_or(inspection_deadline)
         .min(inspection_deadline);
@@ -65,7 +76,7 @@ fn probe(
     let home = fs::canonicalize(declared_home).ok()?;
     let cwd = fs::canonicalize(declared_cwd).ok()?;
     let leading = &arguments[..arguments.len().checked_sub(remaining.len())?];
-    if !home.is_dir() || !cwd.is_dir() || !clean_environment(execution_environment) {
+    if !home.is_dir() || !cwd.is_dir() || !clean_environment(execution_environment, &home, &cwd) {
         return None;
     }
     let binary = trusted_command(executable, &home, &cwd, execution_environment)?;
@@ -153,6 +164,12 @@ fn probe(
         })
         .last()
         == Some(true);
+    let option_flags = options
+        .clone()
+        .map(String::as_str)
+        .filter(|value| value.starts_with('-'))
+        .collect::<Vec<_>>();
+    let textconv_runs = !no_textconv && textconv::may_run(operation, &option_flags);
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
@@ -241,7 +258,7 @@ fn probe(
                 !no_external && !value.is_empty()
             }
             key if key.starts_with("diff.") && key.ends_with(".textconv") => {
-                !no_textconv && !value.is_empty()
+                textconv_runs && !value.is_empty()
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => matches!(operation, "log" | "show") && value.contains("%G"),
@@ -332,6 +349,8 @@ fn git_pager_disabled(
 
 pub(super) fn clean_environment(
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    home: &Path,
+    cwd: &Path,
 ) -> bool {
     let names = match execution_environment {
         Some(context) => {
@@ -349,7 +368,12 @@ pub(super) fn clean_environment(
             if declares_no_system != context.git_config_no_system {
                 return false;
             }
-            if !context.has_valid_shape() {
+            if !context.has_valid_shape()
+                || context
+                    .library_search_paths
+                    .keys()
+                    .any(|name| !context.environment_names.contains(name))
+            {
                 return false;
             }
             context.environment_names.clone()
@@ -359,8 +383,17 @@ pub(super) fn clean_environment(
             .map(|(name, _)| name.to_string_lossy().into_owned())
             .collect(),
     };
-    !names.iter().any(|key| {
-        let key = key.to_ascii_uppercase();
+    !names.iter().any(|name| {
+        // A loader search path the hook stamped is checked entry by entry;
+        // every other loader variable, including injection, stays a refusal.
+        if execution_environment.is_some_and(|context| {
+            context.library_search_paths.get(name).is_some_and(|value| {
+                super::trusted_location::trusted_library_search_path(value, home, cwd)
+            })
+        }) {
+            return false;
+        }
+        let key = name.to_ascii_uppercase();
         key.starts_with("GIT_TRACE")
             || key.starts_with("DYLD_")
             || key.starts_with("LD_")
@@ -427,46 +460,5 @@ pub(super) fn trusted_command(
         }
         found?
     };
-    let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
-    if path.starts_with(home)
-        || path.starts_with(cwd)
-        || path.starts_with(std::env::temp_dir())
-        || canonical_temp
-            .as_deref()
-            .is_some_and(|directory| path.starts_with(directory))
-        || path.starts_with("/tmp")
-        || path.starts_with("/private/tmp")
-    {
-        return None;
-    }
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::MetadataExt;
-        let home_metadata = fs::metadata(home).ok()?;
-        let owner = home_metadata.uid();
-        for ancestor in std::iter::once(path.as_path()).chain(path.ancestors().skip(1)) {
-            let metadata = fs::metadata(ancestor).ok()?;
-            if metadata.mode() & 0o002 != 0
-                || (metadata.mode() & 0o020 != 0
-                    && metadata.uid() != owner
-                    && metadata.gid() != home_metadata.gid())
-                || !matches!(metadata.uid(), uid if uid == 0 || uid == owner)
-            {
-                return None;
-            }
-        }
-    }
-    #[cfg(windows)]
-    {
-        // The system's own folder locations, not the caller-controlled and
-        // runtime-filtered ProgramFiles/SystemRoot environment variables.
-        if !guard_runtime_windows_process::trusted_install_roots()
-            .into_iter()
-            .filter_map(|root| fs::canonicalize(root).ok())
-            .any(|root| path.starts_with(root))
-        {
-            return None;
-        }
-    }
-    Some(path)
+    super::trusted_location::trusted_location(&path, home, cwd).then_some(path)
 }

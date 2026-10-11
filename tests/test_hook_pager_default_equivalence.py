@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.adapters import pi_extension_source
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _render_bounded_hook_script
 from codex_plugin_scanner.guard.hook_execution_environment import (
     HOOK_EXECUTION_ENVIRONMENT_KEY,
+    LIBRARY_SEARCH_PATH_NAMES,
     pager_default_equivalent,
     stamp_hook_input_text,
 )
@@ -201,3 +202,35 @@ def test_pi_sender_keeps_present_but_empty_pager_names(
     unset = _pi_execution_environment(tmp_path, env)
     assert "GIT_PAGER" not in unset["environment_names"]
     assert unset["git_pager_disabled"] is False
+
+
+def test_all_senders_stamp_the_same_loader_search_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    script = guard_home / "zcode.py"
+    script.write_text(
+        _render_bounded_hook_script(guard_home=guard_home, harness="zcode", timeout_seconds=8),
+        encoding="utf-8",
+    )
+    generated = _load(script, "generated_zcode_loader_path_hook")
+    entry = _load(FROZEN_ENTRYPOINT, "hol_guard_entry_loader_path_test")
+    for name in LIBRARY_SEARCH_PATH_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/usr/local/cuda/lib64:/usr/lib")
+    monkeypatch.setenv("DYLD_FALLBACK_LIBRARY_PATH", "")
+    monkeypatch.setenv("LD_PRELOAD", "/synthetic/preload.so")
+    expected = {"LD_LIBRARY_PATH": "/usr/local/cuda/lib64:/usr/lib"}
+
+    contexts = [
+        json.loads(stamp_hook_input_text("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
+        json.loads(generated._stamp_hook_input("{}"))[HOOK_EXECUTION_ENVIRONMENT_KEY],
+        entry._codex_execution_environment(),
+    ]
+    if shutil.which("node") is not None:
+        contexts.append(_pi_execution_environment(tmp_path, dict(os.environ)))
+    for context in contexts:
+        assert context["library_search_paths"] == expected
+        assert "LD_PRELOAD" in context["environment_names"]
