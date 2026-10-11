@@ -122,6 +122,11 @@ mod guard_store_cmd_rollups;
 mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
 mod guard_store_db;
+mod guard_store_inventory;
+#[cfg(test)]
+mod guard_store_inventory_page_tests;
+#[cfg(test)]
+mod guard_store_inventory_vectors_tests;
 mod guard_store_json;
 mod guard_store_lineage;
 mod guard_store_op;
