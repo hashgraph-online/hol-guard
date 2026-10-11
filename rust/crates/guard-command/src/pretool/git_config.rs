@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 #[path = "git_config_filters.rs"]
 mod filters;
+#[path = "git_config_textconv.rs"]
+mod textconv;
 
 const CONFIG_LIMIT: u64 = 65_536;
 
@@ -153,6 +155,12 @@ fn probe(
         })
         .last()
         == Some(true);
+    let option_flags = options
+        .clone()
+        .map(String::as_str)
+        .filter(|value| value.starts_with('-'))
+        .collect::<Vec<_>>();
+    let textconv_runs = !no_textconv && textconv::may_run(operation, &option_flags);
     let mut effective = std::collections::BTreeMap::new();
     for record in output.split('\0').filter(|record| !record.is_empty()) {
         let (key, value) = record.split_once('\n')?;
@@ -241,7 +249,7 @@ fn probe(
                 !no_external && !value.is_empty()
             }
             key if key.starts_with("diff.") && key.ends_with(".textconv") => {
-                !no_textconv && !value.is_empty()
+                textconv_runs && !value.is_empty()
             }
             key if key.starts_with("filter.") => filtered && !value.is_empty() && !filters_unused,
             "format.pretty" => matches!(operation, "log" | "show") && value.contains("%G"),
