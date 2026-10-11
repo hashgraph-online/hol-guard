@@ -782,6 +782,18 @@
           "src/codex_plugin_scanner/guard/managed_install_proof.py"
         ],
         "reason": "Reviewed: managed install proof binding and verification. PaseoHarnessAdapter.detect (adapters/paseo.py) calls paseo_install.provider_status, which runs verify_managed_install_proof to report each provider's protection status. Adapter detection stays in scope for every harness (the adapter setup exclusions leave detect counted), so the verifier stays counted with it. Binding (bind_managed_install_proof) is reached only from the excluded install paths."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/codex_hook_command_line.py",
+          "src/codex_plugin_scanner/guard/codex_hook_compatibility.py",
+          "src/codex_plugin_scanner/guard/codex_hook_file_integrity.py",
+          "src/codex_plugin_scanner/guard/codex_hook_integrity.py",
+          "src/codex_plugin_scanner/guard/codex_hook_manifest.py",
+          "src/codex_plugin_scanner/guard/codex_hook_package_identity.py",
+          "src/codex_plugin_scanner/guard/codex_install_transaction.py"
+        ],
+        "reason": "Reviewed: Codex hook manifest, integrity and install-transaction modules. The Codex hook bridge no longer imports them at load; launch validation and the installer load them lazily, and they stay counted as runtime because launch trust still runs them until the native resident owns it."
       }
     ],
     "tests": {

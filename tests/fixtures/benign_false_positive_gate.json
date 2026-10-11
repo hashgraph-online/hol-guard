@@ -2,10 +2,6 @@
   "_comment": "Data-driven benign false-positive gate. 'harnesses' expands to one case per harness (id@harness). 'pending_fix' lists expanded case ids known to fail on the Linux CI host until the named fix lands; on CI the test fails if a listed case unexpectedly passes, so remove entries as fixes merge. 'pending_pr' names the in-flight PR that fixes each pending case ('unassigned' if none). 'pending_always' lists review cases whose approval row is expected to lack an Always option until #3961 lands; any other review row for read-only git, file reads or tool reads must offer Always.",
   "version": 1,
   "pending_fix": {
-    "ls-slug-dir@claude-code": "native_command_review_required",
-    "ls-slug-dir@codex": "native_command_review_required",
-    "ls-slug-dir@omp": "native_command_review_required",
-    "ls-slug-dir@zcode": "native_command_review_required",
     "pytest-quiet@claude-code": "native_command_review_required",
     "pytest-quiet@codex": "native_command_review_required",
     "pytest-quiet@omp": "native_command_review_required",
@@ -2049,10 +2045,6 @@
     }
   ],
   "pending_pr": {
-    "ls-slug-dir@claude-code": "unassigned",
-    "ls-slug-dir@codex": "unassigned",
-    "ls-slug-dir@omp": "unassigned",
-    "ls-slug-dir@zcode": "unassigned",
     "pytest-quiet@claude-code": "unassigned",
     "pytest-quiet@codex": "unassigned",
     "pytest-quiet@omp": "unassigned",

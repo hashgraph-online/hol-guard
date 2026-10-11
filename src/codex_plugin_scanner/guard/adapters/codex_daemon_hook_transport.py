@@ -17,6 +17,8 @@ from .codex_daemon_hook_auth import (
     _daemon_url,
     _DaemonResponseError,
     _http_json_response,
+    _json_object,
+    _remaining_seconds,
     _verify_challenge_response,
 )
 
@@ -29,14 +31,6 @@ _MAX_HOOK_REQUEST_BYTES = 1_000_000
 
 class _DaemonGenerationChangedError(ValueError):
     """The authenticated daemon generation rotated during one hook request."""
-
-
-def _json_object(text: str) -> dict[str, object] | None:
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
 
 
 def _with_remaining_hint(data: str, deadline: float) -> str:
@@ -60,11 +54,6 @@ def _event_name(data: str) -> str:
         return "PreToolUse"
     value = payload.get("hook_event_name", payload.get("event", "PreToolUse"))
     return value.strip() if isinstance(value, str) and value.strip() else "PreToolUse"
-
-
-def _remaining_seconds(deadline: float, *, cap: float | None = None) -> float:
-    remaining = max(0.0, deadline - time.monotonic())
-    return remaining if cap is None else min(remaining, cap)
 
 
 def _daemon_json_get(

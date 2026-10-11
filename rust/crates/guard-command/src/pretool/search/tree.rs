@@ -183,6 +183,23 @@ pub(in crate::pretool) fn safe_glob_operand(
     })
 }
 
+/// An unquoted bracket operand that matches nothing. Bash passes such a word
+/// through literally, so `ls app/[slug]` lists the Next.js route directory
+/// named `[slug]`; zsh's `nomatch` fails the command instead. The literal
+/// directory must clear the quoted-literal screens. A class that could match
+/// a leading dot under `dotglob`, including through a range, does not qualify,
+/// nor does syntax this matcher would close at the wrong `]`.
+pub(in crate::pretool) fn safe_unmatched_bracket_operand(
+    value: &str,
+    context: ReadContext<'_>,
+    recursive: bool,
+) -> bool {
+    !value.contains(['*', '?', '!'])
+        && !super::glob_class::bracket_fallback_unsafe(value)
+        && expand_glob_matches(value, context).is_some_and(|matches| matches.is_empty())
+        && safe_literal_bracket_tree(value, context, recursive)
+}
+
 /// Content-search glob operand: every match is walked, and matches inside an
 /// Oh My Pi agent-state tree are refused as for a literal search root.
 pub(in crate::pretool) fn safe_glob_search_operand(value: &str, context: ReadContext<'_>) -> bool {
@@ -320,6 +337,12 @@ fn walk(root: PathBuf, excluded_files: &[&str], excluded_directories: &[&str]) -
 /// and a single `*` without it. A wildcard before the last component only
 /// descends into directories, as the shell does.
 fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
+    expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
+}
+
+/// [`expand_glob`] that reports a pattern matching nothing as an empty list,
+/// so a caller can tell it apart from an unsafe match.
+fn expand_glob_matches(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
     if value.is_empty()
         || value.len() > 4096
         || value.contains(HAZARDS)
@@ -415,7 +438,7 @@ fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
         }
         matches.push(path);
     }
-    (!matches.is_empty()).then_some(matches)
+    Some(matches)
 }
 
 /// Whether the shell continues below this path: `Some(true)` for a real

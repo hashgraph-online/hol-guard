@@ -50,6 +50,8 @@ from ..windows_paths import (
     windows_process_liveness,
     windows_terminate_process_if_creation_time,
 )
+from .auth_token import auth_token_path as _auth_token_path
+from .auth_token import load_guard_daemon_auth_token as load_guard_daemon_auth_token
 from .discovery import (
     authenticate_daemon_state,
     daemon_discovery_key_path,
@@ -1376,15 +1378,6 @@ def _load_authenticated_daemon_identity(guard_home: Path) -> tuple[dict[str, obj
     return payload, auth_token
 
 
-def load_guard_daemon_auth_token(guard_home: Path) -> str | None:
-    token = read_private_regular_text(
-        _auth_token_path(guard_home),
-        max_bytes=4096,
-        require_private_parent=True,
-    )
-    return token or None
-
-
 def ensure_guard_daemon_auth_token(guard_home: Path) -> str:
     """Return the guard home's daemon auth token, creating it only when absent.
 
@@ -2268,10 +2261,6 @@ def _guard_daemon_pending_launch_state_is_resolved(guard_home: Path) -> bool:
         if pending is not None:
             return False
     return _daemon_lifecycle_artifact_is_exact_tombstone(path)
-
-
-def _auth_token_path(guard_home: Path) -> Path:
-    return guard_home / "daemon-auth-token"
 
 
 def _remove_invalid_daemon_discovery_key(guard_home: Path) -> bool:

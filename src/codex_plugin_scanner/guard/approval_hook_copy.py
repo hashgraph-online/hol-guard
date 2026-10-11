@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .daemon.manager import load_guard_daemon_auth_token
+from .daemon.auth_token import load_guard_daemon_auth_token
 from .local_dashboard_session import build_approval_browser_url
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
