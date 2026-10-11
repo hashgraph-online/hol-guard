@@ -5,10 +5,18 @@ pub(super) fn git_helper_context_required(
     model: &CanonicalCommandV1,
     context: PathContext<'_>,
 ) -> bool {
-    exact_safe_command_with_context(model, true, context)
-        && model.segments.iter().any(|segment| {
-            segment.executable.as_deref().is_some_and(|executable| {
-                executable_basename(executable) == "git"
+    if !exact_safe_command_with_context(model, true, context) {
+        return false;
+    }
+    // A relative `-C` after a verified `cd` resolves against the destination.
+    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let context = PathContext {
+        cwd: destination.as_deref().or(context.cwd),
+        ..context
+    };
+    model.segments.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            executable_basename(executable) == "git"
                     // Leading `-C`/`-P` options precede the subcommand.
                     && crate::command_compatibility::git_inspection_arguments(
                         &segment.arguments,
@@ -28,8 +36,8 @@ pub(super) fn git_helper_context_required(
                                     .iter()
                                     .any(|argument| argument == "--no-textconv"))
                     })
-            })
         })
+    })
 }
 
 /// Only a harness-stamped execution environment can prove which configuration

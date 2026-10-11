@@ -162,3 +162,49 @@ fn cd_outside_the_workspace_or_into_secret_locations_is_not_allowed() {
     }
     let _ = outside;
 }
+
+#[test]
+fn cd_history_read_helper_config_is_judged_in_the_destination() {
+    let (space, _cleanup) = workspace("destination-log");
+    // A clean reported cwd must not stand in for the helper-configured target.
+    let clean = space.root.join("clean");
+    std::fs::create_dir_all(&clean).unwrap();
+    git(&space.root, &["init", "--quiet", clean.to_str().unwrap()]);
+    git(
+        &space.repository,
+        &["config", "diff.external", "./synthetic-never-execute"],
+    );
+    for read in ["log -1", "diff --stat", "show HEAD"] {
+        let command = format!("cd {} && git {read}", space.repository.display());
+        let result = decide(&space, &clean, &command);
+        assert_ne!(result.decision, "allow", "{command}");
+        assert!(!result.explicitly_benign, "{command}");
+    }
+}
+
+#[test]
+fn relative_dash_c_after_cd_resolves_against_the_destination() {
+    let (space, _cleanup) = workspace("nested-dash-c");
+    // `child` exists only beneath the cd destination, not the reported cwd.
+    let child = space.repository.join("child");
+    git(
+        &space.repository,
+        &["init", "--quiet", child.to_str().unwrap()],
+    );
+    std::fs::write(child.join("notes.txt"), "child\n").unwrap();
+    git(&child, &["add", "-A"]);
+    git(&child, &["commit", "--quiet", "-m", "child"]);
+    let command = format!("cd {} && git -C child log -1", space.repository.display());
+    let result = decide(&space, &space.root, &command);
+    assert_eq!(
+        result.decision, "allow",
+        "{command}: {}",
+        result.reason_code
+    );
+    git(
+        &child,
+        &["config", "diff.external", "./synthetic-never-execute"],
+    );
+    let result = decide(&space, &space.root, &command);
+    assert_ne!(result.decision, "allow", "{command}");
+}
