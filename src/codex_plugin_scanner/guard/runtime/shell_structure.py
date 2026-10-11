@@ -62,15 +62,16 @@ class ShellScanState:
         self.quote: str | None = None
         self.subshell_depth = 0
         self.in_backtick = False
-        self._top_level = True
+        self._top_level: bool | None = None
         self._key: tuple[object, ...] | None = None
         self._rows: dict[int, tuple[tuple[object, ...], list[Any]]] = {}
         self._expected: tuple[object, ...] = (None, 0, False)
 
     @property
     def is_top_level(self) -> bool:
-        if (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
-            return call("top_level", "", state=[self.quote, self.subshell_depth, self.in_backtick])
+        if self._top_level is None or (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
+            self._top_level = call("top_level", "", state=[self.quote, self.subshell_depth, self.in_backtick])
+            self._expected = (self.quote, self.subshell_depth, self.in_backtick)
         return self._top_level
 
     def advance(self, command: str, index: int) -> int:

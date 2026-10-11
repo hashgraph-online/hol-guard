@@ -1,6 +1,8 @@
 {
   "schema": "shell-helper-python.v1",
   "sources": {
+    "src/codex_plugin_scanner/guard/runtime/env_wrapper.py": "e4f46e49ca92b342d9449245eb67064b749d13a844934dcc68b83a383cfe4bcd",
+    "src/codex_plugin_scanner/guard/runtime/interpreter_options.py": "193d26d4434ac4b7a079f3ec311ee9dcfd4d097a5cfec2a1cec63ebbf273d17f",
     "src/codex_plugin_scanner/guard/runtime/shell_structure.py": "01fb4f0525876ab940cb5f3480254d112a46e3a4b823459a28247c9a005bb65e",
     "src/codex_plugin_scanner/guard/runtime/data_flow.py": "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09",
     "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py": "5b9cfa2345ffbbcb059220d97e3b70df74612dfc49b3804cd2a2701477579842"

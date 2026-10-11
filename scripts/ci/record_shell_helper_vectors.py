@@ -13,6 +13,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = {
+    "src/codex_plugin_scanner/guard/runtime/env_wrapper.py": (
+        "e4f46e49ca92b342d9449245eb67064b749d13a844934dcc68b83a383cfe4bcd"
+    ),
+    "src/codex_plugin_scanner/guard/runtime/interpreter_options.py": (
+        "193d26d4434ac4b7a079f3ec311ee9dcfd4d097a5cfec2a1cec63ebbf273d17f"
+    ),
     "src/codex_plugin_scanner/guard/runtime/data_flow.py": (
         "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09"
     ),
@@ -30,7 +36,7 @@ def record() -> None:
     # Retrieve only the pinned original sources; tests consume frozen values.
     sources = {}
     originals = {}
-    for name in ("shell_structure", "data_flow", "shell_command_wrappers"):
+    for name in ("env_wrapper", "interpreter_options", "shell_structure", "data_flow", "shell_command_wrappers"):
         path = f"src/codex_plugin_scanner/guard/runtime/{name}.py"
         code = subprocess.run(
             ["git", "show", f"da723a48b221c135cbce3bade1bab3ddb4959044:{path}"],
