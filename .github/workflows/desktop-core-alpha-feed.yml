@@ -2,6 +2,7 @@ name: Publish Desktop Core stable feed
 on:
   pull_request:
     paths:
+      - .github/actions/release-api-token/**
       - .github/workflows/desktop-core-alpha-feed.yml
       - tests/test_desktop_core_alpha_feed_security.py
       - tests/test_desktop_core_feed_queue.py
@@ -28,6 +29,7 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/actions/release-api-token/**
       - .github/workflows/desktop-core-alpha-feed.yml
       - scripts/release/wait_for_core_publication.py
       - scripts/release/ready_core_releases.py
@@ -130,6 +132,14 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse 'HEAD^{commit}')" = "$GITHUB_SHA"
           test -z "$(git status --porcelain)"
+      # App tokens expire after an hour, so release reads and the final upload mint separately.
+      - name: Select release API token for release reads
+        id: release-token-read
+        uses: ./.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: read
       - name: Validate release channel request
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -163,7 +173,7 @@ jobs:
       - name: Discover newest published stable Core release, or the exact requested alpha prerelease
         id: release
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-read.outputs.token }}
           CORE_RELEASE_CHANNEL: ${{ inputs.release_channel || 'stable' }}
           REQUESTED_CORE_VERSION: ${{ inputs.core_version || '' }}
         shell: bash
@@ -217,7 +227,7 @@ jobs:
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-read.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -260,7 +270,7 @@ jobs:
         env:
           CORE_TAG: ${{ steps.release.outputs.tag }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-read.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
@@ -719,10 +729,18 @@ jobs:
           PUBLICATION_SOURCE_SHA: ${{ inputs.publication_source_sha || steps.registry.outputs.publication_source_sha || '' }}
           CORE_VERSION: ${{ steps.release.outputs.version }}
         run: python3 -I scripts/release/wait_for_core_publication.py --version "$CORE_VERSION" --wheel "$RUNNER_TEMP/attested-macos-arm64.whl" --filename "$ATTESTED_WHEEL_FILENAME" --bundle "$RUNNER_TEMP/core-trust-assets/hol-guard-v${CORE_VERSION}.intoto.jsonl" --channel "$RELEASE_CHANNEL"
+      - name: Select release API token for asset upload
+        id: release-token-write
+        if: steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
+        uses: ./.github/actions/release-api-token
+        with:
+          client-id: ${{ vars.HOL_RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.HOL_RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
       - name: Require alpha prerelease and tag to still be published
         if: env.RELEASE_CHANNEL == 'alpha' && steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-write.outputs.token }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
         shell: bash
@@ -741,7 +759,7 @@ jobs:
         env:
           CORE_VERSION: ${{ steps.release.outputs.version }}
           CORE_TAG: ${{ steps.release.outputs.tag }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.release-token-write.outputs.token }}
         shell: bash
         run: |
           set -euo pipefail
