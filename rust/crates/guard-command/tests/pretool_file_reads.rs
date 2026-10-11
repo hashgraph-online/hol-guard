@@ -350,3 +350,43 @@ fn skill_links_and_safety_guide_keep_their_verified_scope() {
         );
     }
 }
+
+/// Guard's managed AGENTS.md tells Codex to read `~/.hol-support/SAFETY.md`
+/// first, and Codex often reads it together with the project README.
+#[cfg(unix)]
+#[test]
+fn codex_multi_file_cat_proves_every_operand() {
+    let home = devin_home();
+    let project = home.join("project");
+    std::fs::write(project.join("README.md"), "fixture").unwrap();
+    let decide = |command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "codex",
+            "PreToolUse",
+            &json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}),
+            None,
+            None,
+            home.to_str(),
+            project.to_str(),
+        )
+    };
+    for command in [
+        "cat ~/.hol-support/SAFETY.md README.md",
+        "cat README.md ~/.hol-support/SAFETY.md",
+        "cat -n README.md pyproject.toml",
+        "cat -- README.md pyproject.toml",
+    ] {
+        assert_eq!(decide(command).minimum_action, "allow", "{command}");
+    }
+    let too_many = format!("cat{}", " README.md".repeat(17));
+    for command in [
+        "cat ~/.hol-support/SAFETY.md .env",
+        "cat README.md ~/.ssh/id_rsa",
+        "cat README.md credentials.txt",
+        "cat README.md /etc/passwd",
+        "cat README.md -",
+        too_many.as_str(),
+    ] {
+        assert_ne!(decide(command).minimum_action, "allow", "{command}");
+    }
+}

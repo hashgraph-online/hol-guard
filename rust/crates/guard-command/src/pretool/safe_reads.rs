@@ -111,18 +111,24 @@ pub(super) fn safe_sed_arguments(
             || (targets.is_empty() && piped_input))
 }
 
+/// Upper bound on `cat` file operands. Each operand needs its own path proof,
+/// so this only keeps the per-command proof cost bounded.
+const MAX_PLAIN_FILE_TARGETS: usize = 16;
+
+/// `cat a b` reads exactly what `cat a; cat b` reads, so every operand gets the
+/// same single-file proof instead of sending multi-file reads to review.
 pub(super) fn safe_plain_file_arguments(
     arguments: &[String],
     context: super::PathContext<'_>,
 ) -> bool {
-    let mut saw_target = false;
+    let mut targets = 0usize;
     let mut after_options = false;
     for argument in arguments {
         if after_options {
-            if argument == "-" || !command_read_target(argument, context, false) || saw_target {
+            if argument == "-" || !command_read_target(argument, context, false) {
                 return false;
             }
-            saw_target = true;
+            targets += 1;
             continue;
         }
         if argument == "--" {
@@ -145,12 +151,9 @@ pub(super) fn safe_plain_file_arguments(
         if !command_read_target(argument, context, false) {
             return false;
         }
-        if saw_target {
-            return false;
-        }
-        saw_target = true;
+        targets += 1;
     }
-    saw_target
+    (1..=MAX_PLAIN_FILE_TARGETS).contains(&targets)
 }
 
 pub(super) fn safe_head_tail_arguments(
