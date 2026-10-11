@@ -257,7 +257,14 @@ fn unwrap_lean_ctx(parts: &[String]) -> Option<(String, Vec<String>)> {
 
 /// `_unwrap_shell_string_wrapper` (:206-220).
 fn unwrap_shell_string_wrapper(parts: &[String]) -> Option<(String, Vec<String>)> {
-    let payload = shell_interpreter_command_payload(parts, 0)?;
+    let trimmed: Vec<String> = parts
+        .iter()
+        .map(|p| {
+            p.trim_matches(crate::command_option_parsing::python_is_whitespace)
+                .to_owned()
+        })
+        .collect();
+    let payload = shell_interpreter_command_payload(&trimmed, 0)?;
     Some((
         payload.script_text,
         parts[payload.tokens_consumed + 1..].to_vec(),

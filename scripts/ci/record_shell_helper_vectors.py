@@ -98,6 +98,8 @@ def record() -> None:
             "bash -O extglob -c 'echo value'",
             "bash -oc extglob 'echo value' -- tail",
             "bash --rcfile=/dev/null +o nounset -c 'echo value'",
+            "bash \u001c--norc\u001f -c '\u001cecho value\u001f'",
+            "bash -c '\u001c\u001f'",
         ]
     )
     vectors = []
