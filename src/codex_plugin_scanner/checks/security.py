@@ -30,6 +30,7 @@ from .security_secret_patterns import (
     _python_symbolic_reference_spans,
     _screen_route_map_spans,
 )
+from .security_shell_reads import ShellCredentialRead, _runtime_credential_findings, _shell_credential_reads
 
 EXCLUDED_DIRS = {"node_modules", ".git", "dist", ".next", "coverage", ".turbo", "__pycache__", ".venv", "venv"}
 
@@ -469,6 +470,7 @@ def _should_skip_secret_match(
     offsets: tuple[int, ...] | None = None,
     field_name_spans: tuple[tuple[int, int], ...] = (),
     python_reference_spans: frozenset[tuple[int, int]] = frozenset(),
+    shell_read_spans: tuple[tuple[int, int], ...] = (),
 ) -> bool:
     """Decide whether a match qualifies for a scoped non-secret or example exemption."""
     candidate = _extract_secret_candidate(detector, match)
@@ -483,11 +485,12 @@ def _should_skip_secret_match(
             return True
         if _is_generated_token_expression(relative_path, content, match):
             return True
-        span_index = bisect.bisect_right(field_name_spans, (match.start(), len(content))) - 1
-        if span_index >= 0:
-            start, end = field_name_spans[span_index]
-            if start <= match.start() and match.end() <= end:
-                return True
+        for spans in (field_name_spans, shell_read_spans):
+            span_index = bisect.bisect_right(spans, (match.start(), len(content))) - 1
+            if span_index >= 0:
+                start, end = spans[span_index]
+                if start <= match.start() and match.end() <= end:
+                    return True
     if not _is_example_surface(relative_path):
         return False
     if _looks_like_placeholder_secret(candidate):
@@ -506,11 +509,15 @@ def _should_skip_secret_match(
     return False
 
 
-def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | None:
+def _first_hardcoded_secret_line(
+    relative_path: Path, content: str, *, shell_reads: tuple[ShellCredentialRead, ...] | None = None
+) -> int | None:
     """Find the first retained secret line while enforcing the per-file match budget."""
     offsets = _newline_offsets(content)
     lines = content.splitlines()
     python_reference_spans = _python_symbolic_reference_spans(relative_path, content)
+    reads = _shell_credential_reads(relative_path, content) if shell_reads is None else shell_reads
+    shell_read_spans = tuple(read.span for read in reads)
     field_name_spans = tuple(
         sorted(_field_name_map_spans(relative_path, content) + _screen_route_map_spans(relative_path, content))
     )
@@ -537,6 +544,7 @@ def _first_hardcoded_secret_line(relative_path: Path, content: str) -> int | Non
                 offsets=offsets,
                 field_name_spans=field_name_spans,
                 python_reference_spans=python_reference_spans,
+                shell_read_spans=shell_read_spans,
             ):
                 continue
             first_offset = match.start()
@@ -650,7 +658,9 @@ def check_license(plugin_dir: Path) -> CheckResult:
         )
 
 
-def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+def _check_no_hardcoded_secrets(
+    plugin_dir: Path, files: tuple[Path, ...] | None, runtime_findings: list[Finding]
+) -> CheckResult:
     findings: list[tuple[str, int]] = []
     resolved_plugin_dir = plugin_dir.resolve()
     try:
@@ -667,7 +677,13 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
                 return unreadable_scan_input_failure(
                     "No hardcoded secrets", max_points=7, path=relative_path.as_posix()
                 )
-            line_number = _first_hardcoded_secret_line(relative_path, content)
+            shell_reads = _shell_credential_reads(relative_path, content)
+            if len(shell_reads) > MAX_SECRET_MATCHES_PER_FILE:
+                raise ScanBudgetExceededError(
+                    f"runtime reads exceeded {MAX_SECRET_MATCHES_PER_FILE} in {relative_path}"
+                )
+            runtime_findings.extend(_runtime_credential_findings(relative_path, content, shell_reads))
+            line_number = _first_hardcoded_secret_line(relative_path, content, shell_reads=shell_reads)
             if line_number is not None:
                 findings.append((relative_path.as_posix(), line_number))
     except ScanInputUnreadableError as exc:
@@ -680,7 +696,11 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
         return _resource_budget_failure("No hardcoded secrets", max_points=7, reason=str(exc))
     if not findings:
         return CheckResult(
-            name="No hardcoded secrets", passed=True, points=7, max_points=7, message="No hardcoded secrets detected"
+            name="No hardcoded secrets",
+            passed=True,
+            points=7,
+            max_points=7,
+            message="No hardcoded secrets detected",
         )
     shown = [path for path, _line_number in findings[:5]]
     suffix = f" and {len(findings) - 5} more" if len(findings) > 5 else ""
@@ -704,6 +724,30 @@ def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None 
             for path, line_number in findings
         ),
     )
+
+
+def check_credential_access(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> tuple[CheckResult, CheckResult]:
+    """Scan once and keep literal scoring separate from advisory capabilities."""
+    runtime_findings: list[Finding] = []
+    literal_check = _check_no_hardcoded_secrets(plugin_dir, files, runtime_findings)
+    complete = all(finding.rule_id == "HARDCODED_SECRET" for finding in literal_check.findings)
+    message = (
+        "Runtime credential access requires review"
+        if runtime_findings
+        else "No supported runtime credential-access pattern detected; other access is not ruled out"
+    )
+    return literal_check, CheckResult(
+        name="Runtime credential access",
+        passed=complete,
+        points=0,
+        max_points=0,
+        message=message if complete else f"Runtime credential review incomplete: {literal_check.message}",
+        findings=tuple(runtime_findings),
+    )
+
+
+def check_no_hardcoded_secrets(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+    return check_credential_access(plugin_dir, files)[0]
 
 
 def check_no_dangerous_mcp(plugin_dir: Path) -> CheckResult:
@@ -981,7 +1025,7 @@ def run_security_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
     return (
         check_security_md(plugin_dir),
         check_license(plugin_dir),
-        check_no_hardcoded_secrets(plugin_dir),
+        *check_credential_access(plugin_dir),
         check_no_dangerous_mcp(plugin_dir),
         check_mcp_transport_security(plugin_dir),
         check_no_approval_bypass_defaults(plugin_dir),
