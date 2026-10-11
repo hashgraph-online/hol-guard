@@ -6,12 +6,12 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-#[cfg(unix)]
-use guard_contracts::RequestContextExecutableV1;
 use guard_contracts::{
     RequestContextBuildV1, RequestContextKindV1, RequestContextPolicyV1, RequestContextRequestV1,
-    RequestContextSourceV1, ShellContextV1, REQUEST_CONTEXT_REQUEST_SCHEMA, REQUEST_CONTEXT_SCHEMA,
+    RequestContextSourceV1, REQUEST_CONTEXT_REQUEST_SCHEMA, REQUEST_CONTEXT_SCHEMA,
 };
+#[cfg(unix)]
+use guard_contracts::{RequestContextExecutableV1, ShellContextV1};
 use serde_json::{json, Value};
 
 use super::{evaluate_request_context_request, request_digest, Budget};
