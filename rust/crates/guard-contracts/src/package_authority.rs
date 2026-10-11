@@ -501,6 +501,11 @@ pub struct WorkspaceInventoryRequestV1 {
     /// Also build the package intent target for one explicit package spec.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub package_spec: Option<WorkspacePackageSpecV1>,
+    /// Index of the first inventory item (or scan target in `targets_only`
+    /// mode) to return. The reply is capped, so a large result is read as
+    /// consecutive pages until `next_offset` is null.
+    #[serde(default)]
+    pub inventory_offset: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

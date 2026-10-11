@@ -1566,5 +1566,49 @@
   "mode": "inventory",
   "name": "toml_dependency_order",
   "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": null,
+     "version": "2.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": null,
+     "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "mid",
+     "namespace": null,
+     "range": null,
+     "version": "3.0.0"
+    }
+   ],
+   "lockfile_paths": [
+    "bun.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [],
+   "sbom_paths": []
+  },
+  "files": {
+   "bun.lock": "{\"lockfileVersion\": 1, \"packages\": {\"zeta\": [\"zeta@2.0.0\", \"\", {}], \"alpha\": [\"alpha@1.0.0\", \"\", {}], \"zeta-alias\": [\"zeta@1.0.0\", \"\", {}], \"mid\": [\"mid@3.0.0\", \"\", {}], \"alpha-two\": [\"alpha@0.5.0\", \"\", {}]}}"
+  },
+  "mode": "inventory",
+  "name": "bun_lock_first_version_order",
+  "sbom_paths": []
  }
 ]

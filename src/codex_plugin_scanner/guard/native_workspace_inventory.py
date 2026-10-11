@@ -22,6 +22,7 @@ _INVENTORY_FEATURE = "workspace-inventory-v1"
 _PAYLOAD_KEYS = frozenset(
     {
         "manifest_paths",
+        "next_offset",
         "lockfile_paths",
         "sbom_paths",
         "inventory",
@@ -44,6 +45,7 @@ _TARGET_OPTIONAL_STRINGS = (
     "dependency_group",
 )
 _TARGET_KEYS = frozenset({"ecosystem", "raw_spec", "extras", "editable", *_TARGET_OPTIONAL_STRINGS})
+_MAX_PAGES = 1024
 _ITEM_KEYS = ("ecosystem", "namespace", "name", "direct", "range", "version")
 _WARNING_KEYS = frozenset({"code", "message", "path"})
 _DIFF_KEYS = frozenset({"changed_package_count", "changed_paths"})
@@ -140,8 +142,10 @@ def native_workspace_inventory(
 ) -> WorkspaceInventory:
     """Return the resident-derived inventory of ``workspace_dir``."""
 
+    # The resident resolves paths against its own working directory, so send
+    # absolute paths rather than the caller's relative ones.
     request: dict[str, object] = {
-        "workspace_dir": str(workspace_dir),
+        "workspace_dir": str(Path(workspace_dir).expanduser().absolute()),
         "sbom_paths": [str(path) for path in sbom_paths],
         "files_only": files_only,
         "include_lockfile_warnings": include_lockfile_warnings,
@@ -150,33 +154,52 @@ def native_workspace_inventory(
     if package_spec is not None:
         request["package_spec"] = {"ecosystem": package_spec[0], "spec": package_spec[1]}
     if before_workspace_dir is not None:
-        request["before_workspace_dir"] = str(before_workspace_dir)
+        request["before_workspace_dir"] = str(Path(before_workspace_dir).expanduser().absolute())
     guard_home = _resolve_digest_home(Path(store.guard_home) if getattr(store, "guard_home", None) else None)
-    payload = _transport(
-        request,
-        guard_home,
-        operation="workspace_inventory",
-        feature=_INVENTORY_FEATURE,
-        error=NativeWorkspaceInventoryError,
-    )
-    if set(payload) != _PAYLOAD_KEYS:
+    first: dict[str, Any] | None = None
+    items: list[object] = []
+    target_items: list[object] = []
+    offset = 0
+    for _ in range(_MAX_PAGES):
+        payload = _transport(
+            {**request, "inventory_offset": offset},
+            guard_home,
+            operation="workspace_inventory",
+            feature=_INVENTORY_FEATURE,
+            error=NativeWorkspaceInventoryError,
+        )
+        if set(payload) != _PAYLOAD_KEYS:
+            raise _invalid()
+        page = payload["inventory"]
+        page_targets = payload["scan_targets"]
+        next_offset = payload["next_offset"]
+        if not isinstance(page, list) or not isinstance(page_targets, list):
+            raise _invalid()
+        if (targets_only and page) or (page_targets and not targets_only):
+            raise _invalid()
+        if first is None:
+            first = payload
+        items.extend(page)
+        target_items.extend(page_targets)
+        if next_offset is None:
+            break
+        if not isinstance(next_offset, int) or isinstance(next_offset, bool) or next_offset <= offset:
+            raise _invalid()
+        offset = next_offset
+    else:
         raise _invalid()
-    inventory = payload["inventory"]
-    warnings = payload["lockfile_warnings"]
-    targets = payload["scan_targets"]
-    if not isinstance(inventory, list) or not isinstance(warnings, list) or not isinstance(targets, list):
+    warnings = first["lockfile_warnings"]
+    if not isinstance(warnings, list):
         raise _invalid()
-    if (package_spec is None) != (payload["package_target"] is None) or (targets_only and inventory):
-        raise _invalid()
-    if targets and not targets_only:
+    if (package_spec is None) != (first["package_target"] is None):
         raise _invalid()
     return WorkspaceInventory(
-        manifest_paths=_strings(payload["manifest_paths"]),
-        lockfile_paths=_strings(payload["lockfile_paths"]),
-        sbom_paths=_strings(payload["sbom_paths"]),
-        inventory=tuple(_item(item) for item in inventory),
-        diff=_diff(payload["diff"]),
+        manifest_paths=_strings(first["manifest_paths"]),
+        lockfile_paths=_strings(first["lockfile_paths"]),
+        sbom_paths=_strings(first["sbom_paths"]),
+        inventory=tuple(_item(item) for item in items),
+        diff=_diff(first["diff"]),
         lockfile_warnings=tuple(_warning(item) for item in warnings),
-        scan_targets=tuple(_target(item) for item in targets),
-        package_target=None if package_spec is None else _target(payload["package_target"]),
+        scan_targets=tuple(_target(item) for item in target_items),
+        package_target=None if package_spec is None else _target(first["package_target"]),
     )

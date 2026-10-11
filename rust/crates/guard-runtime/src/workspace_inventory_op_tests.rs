@@ -75,6 +75,7 @@ fn request(
         include_lockfile_warnings: mode != "files",
         targets_only: false,
         package_spec: None,
+        inventory_offset: 0,
     }
 }
 
@@ -120,6 +121,7 @@ fn recorded_python_vectors_match() {
         let object = payload.as_object_mut().unwrap();
         assert_eq!(object.remove("scan_targets").unwrap(), json!([]), "{name}");
         assert!(object.remove("package_target").unwrap().is_null());
+        assert_eq!(object.remove("next_offset"), Some(Value::Null), "{name}");
         assert_eq!(payload, vector["expected"], "{name}");
     }
 }
@@ -206,5 +208,125 @@ fn targets_only_returns_one_target_per_inventory_item() {
     assert_eq!(
         payload["scan_targets"].as_array().unwrap().len(),
         vector["expected"]["inventory"].as_array().unwrap().len()
+    );
+}
+
+#[test]
+fn large_target_list_is_returned_in_pages() {
+    let scratch = Scratch::new("paged-targets");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let mut components = String::from(r#"{"bomFormat":"CycloneDX","components":["#);
+    for index in 0..12_000 {
+        if index > 0 {
+            components.push(',');
+        }
+        components.push_str(&format!(
+            r#"{{"name":"package-with-a-long-name-{index:05}","version":"1.0.0","purl":"pkg:npm/package-with-a-long-name-{index:05}@1.0.0"}}"#
+        ));
+    }
+    components.push_str("]}");
+    fs::write(workspace.join("sbom.cdx.json"), components).unwrap();
+    let mut request = request(&workspace, None, &["sbom.cdx.json".to_owned()], "inventory");
+    request.targets_only = true;
+    let mut names: Vec<String> = Vec::new();
+    let mut pages = 0;
+    loop {
+        let bytes = evaluate_workspace_inventory(&request).unwrap();
+        assert!(bytes.len() < guard_contracts::MAX_NATIVE_RESPONSE_BYTES);
+        let payload = serde_json::from_slice::<Value>(&bytes).unwrap()["payload"].clone();
+        pages += 1;
+        assert_eq!(payload["inventory"], json!([]));
+        for target in payload["scan_targets"].as_array().unwrap() {
+            names.push(target["package_name"].as_str().unwrap().to_owned());
+        }
+        match payload["next_offset"].as_u64() {
+            Some(next) => request.inventory_offset = next as usize,
+            None => break,
+        }
+        assert!(pages < 64);
+    }
+    assert!(pages > 1);
+    assert_eq!(names.len(), 12_000);
+    assert_eq!(names[11_999], "package-with-a-long-name-11999");
+}
+
+#[test]
+fn relative_workspace_dirs_are_rejected() {
+    let mut relative = request(Path::new("/tmp/unused-workspace"), None, &[], "inventory");
+    relative.workspace_dir = "relative/workspace".into();
+    assert_eq!(
+        run(&relative).unwrap_err(),
+        "native_workspace_inventory_invalid"
+    );
+    let scratch = Scratch::new("relative-before");
+    let mut relative = request(&scratch.0, None, &[], "inventory");
+    relative.before_workspace_dir = Some("relative/before".into());
+    assert_eq!(
+        run(&relative).unwrap_err(),
+        "native_workspace_inventory_invalid"
+    );
+}
+
+#[test]
+fn large_inventory_is_returned_in_pages() {
+    let scratch = Scratch::new("paged");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let mut components = String::from(r#"{"bomFormat":"CycloneDX","components":["#);
+    for index in 0..12_000 {
+        if index > 0 {
+            components.push(',');
+        }
+        components.push_str(&format!(
+            r#"{{"name":"package-with-a-long-name-{index:05}","version":"1.0.0"}}"#
+        ));
+    }
+    components.push_str("]}");
+    fs::write(workspace.join("sbom.cdx.json"), components).unwrap();
+    let mut names: Vec<String> = Vec::new();
+    let mut pages = 0;
+    let mut request = request(&workspace, None, &["sbom.cdx.json".to_owned()], "inventory");
+    loop {
+        let bytes = evaluate_workspace_inventory(&request).unwrap();
+        assert!(bytes.len() < guard_contracts::MAX_NATIVE_RESPONSE_BYTES);
+        let payload = serde_json::from_slice::<Value>(&bytes).unwrap()["payload"].clone();
+        pages += 1;
+        for entry in payload["inventory"].as_array().unwrap() {
+            names.push(entry["name"].as_str().unwrap().to_owned());
+        }
+        match payload["next_offset"].as_u64() {
+            Some(next) => {
+                assert!(next as usize > request.inventory_offset);
+                request.inventory_offset = next as usize;
+            }
+            None => break,
+        }
+        assert!(pages < 64);
+    }
+    assert!(pages > 1);
+    assert_eq!(names.len(), 12_000);
+    assert_eq!(names[0], "package-with-a-long-name-00000");
+    assert_eq!(names[11_999], "package-with-a-long-name-11999");
+}
+
+#[test]
+fn inventory_row_larger_than_the_resident_reply_is_rejected() {
+    let scratch = Scratch::new("row-too-large");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let name = "n".repeat(crate::MAX_NATIVE_RESPONSE_BYTES);
+    let sbom =
+        format!(r#"{{"bomFormat":"CycloneDX","components":[{{"name":"{name}","version":"1"}}]}}"#);
+    fs::write(workspace.join("sbom.cdx.json"), sbom).unwrap();
+    assert_eq!(
+        run(&request(
+            &workspace,
+            None,
+            &["sbom.cdx.json".to_owned()],
+            "inventory",
+        ))
+        .unwrap_err(),
+        "workspace_inventory_exceeds_resident_response"
     );
 }

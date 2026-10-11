@@ -71,12 +71,36 @@ impl<'de> Deserialize<'de> for Ordered {
                 let mut positions: HashMap<String, usize> = HashMap::new();
                 while let Some(key) = map.next_key::<String>()? {
                     // `arbitrary_precision` hands numbers over as a one-entry
-                    // map holding the literal text.
+                    // map holding the literal text. A genuine object that merely
+                    // uses the same key (extra keys, or a non-numeric value) is
+                    // kept as an ordinary entry.
                     if entries.is_empty() && key == NUMBER_TOKEN {
-                        let literal = map.next_value::<String>()?;
-                        return serde_json::from_str::<Value>(&literal)
-                            .map(Ordered::Other)
-                            .map_err(serde::de::Error::custom);
+                        let first = map.next_value::<Ordered>()?;
+                        let literal_number = first
+                            .as_str()
+                            .and_then(|text| serde_json::from_str::<Value>(text).ok())
+                            .filter(Value::is_number);
+                        let next = map.next_key::<String>()?;
+                        match (literal_number, next) {
+                            (Some(number), None) => return Ok(Ordered::Other(number)),
+                            (_, None) => {
+                                positions.insert(key.clone(), 0);
+                                entries.push((key, first));
+                            }
+                            (_, Some(next_key)) => {
+                                positions.insert(key.clone(), entries.len());
+                                entries.push((key, first));
+                                let value = map.next_value::<Ordered>()?;
+                                match positions.get(&next_key).copied() {
+                                    Some(position) => entries[position].1 = value,
+                                    None => {
+                                        positions.insert(next_key.clone(), entries.len());
+                                        entries.push((next_key, value));
+                                    }
+                                }
+                            }
+                        }
+                        continue;
                     }
                     let value = map.next_value::<Ordered>()?;
                     match positions.get(&key) {
@@ -165,5 +189,39 @@ mod tests {
         assert_eq!(object.get("n"), Some(&Ordered::Other(serde_json::json!(3))));
         assert_eq!(object.get("t"), Some(&Ordered::Other(Value::Bool(true))));
         assert!(object.get("o").unwrap().as_object().is_some());
+    }
+
+    #[test]
+    fn object_reusing_the_number_token_key_stays_an_object() {
+        let parsed = parse(r#"{"$serde_json::private::Number": "x", "b": "2"}"#);
+        let keys: Vec<&str> = parsed
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(key, _)| key.as_str())
+            .collect();
+        assert_eq!(keys, ["$serde_json::private::Number", "b"]);
+        let parsed = parse(
+            r#"{"$serde_json::private::Number": "1", "dependencies": {"left-pad": "1.0.0"}, "name": "app"}"#,
+        );
+        let object = parsed.as_object().unwrap();
+        let keys: Vec<&str> = object.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(
+            keys,
+            ["$serde_json::private::Number", "dependencies", "name"]
+        );
+        assert_eq!(
+            object
+                .get("dependencies")
+                .unwrap()
+                .as_object()
+                .unwrap()
+                .get("left-pad")
+                .unwrap()
+                .as_str(),
+            Some("1.0.0")
+        );
+        let parsed = parse(r#"{"$serde_json::private::Number": {"a": "1"}}"#);
+        assert!(parsed.as_object().is_some());
     }
 }

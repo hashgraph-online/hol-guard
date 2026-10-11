@@ -5,6 +5,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use guard_command::local_supply_chain::is_audit_sensitive_basename;
 use guard_command::package_intent_common::{
     existing_relative_paths, resolve_path_within_workspace,
 };
@@ -57,14 +58,6 @@ const SKIP_DIRS: [&str; 15] = [
 ];
 const MAX_DEPTH: usize = 3;
 pub(crate) const MAX_SBOM_BYTES: u64 = 10 * 1024 * 1024;
-const SENSITIVE_BASENAMES: [&str; 6] = [
-    ".env",
-    ".env.local",
-    ".env.development",
-    ".env.production",
-    ".env.test",
-    ".envrc",
-];
 
 pub(crate) fn expanduser(path: &str) -> PathBuf {
     if path == "~" || path.starts_with("~/") {
@@ -94,14 +87,9 @@ pub(crate) fn read_text(path: &Path) -> Option<String> {
     Some(text.replace("\r\n", "\n").replace('\r', "\n"))
 }
 
-fn is_sensitive_basename(name: &str) -> bool {
-    let lowered = name.to_lowercase();
-    SENSITIVE_BASENAMES.contains(&lowered.as_str()) || lowered.starts_with(".env.")
-}
-
 /// `_read_workspace_audit_text`.
 pub(crate) fn read_workspace_audit_text(workspace: &Path, relative_path: &str) -> Option<String> {
-    if is_sensitive_basename(basename(relative_path)) {
+    if is_audit_sensitive_basename(basename(relative_path)) {
         return None;
     }
     let resolved = resolve_path_within_workspace(workspace, relative_path)?;
