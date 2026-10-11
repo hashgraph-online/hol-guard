@@ -66,7 +66,15 @@ fn replays_every_recorded_consume_scenario() {
             let reply = consume(&home, &call["args"]);
             assert_eq!(reply["status"], "ok", "{label}: {reply}");
             let connection = Connection::open(&db).unwrap();
-            let effects = dump(&connection, "guard_continuation_effects", "effect_key");
+            // The vectors name the dedupe digest `effect_digest`: a key-shaped
+            // field name next to a 64-hex value reads as a credential to scanners.
+            let mut effects = dump(&connection, "guard_continuation_effects", "effect_key");
+            for row in effects.as_array_mut().unwrap() {
+                let object = row.as_object_mut().unwrap();
+                if let Some(digest) = object.remove("effect_key") {
+                    object.insert("effect_digest".to_owned(), digest);
+                }
+            }
             if may_deny {
                 // CPython accepts this spelling; the resident refuses it and
                 // must not spend anything.

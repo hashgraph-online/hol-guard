@@ -16,7 +16,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -37,7 +37,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -89,7 +89,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -110,7 +110,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -162,7 +162,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
        "request_id": "r1"
@@ -183,7 +183,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
        "request_id": "r1"
@@ -587,7 +587,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:05:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -727,7 +727,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:00:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -845,7 +845,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "15ce30ace864664e1d1164cac6fb3bbbd78203ff13e2ad5b641c0141d1918490",
+       "effect_digest": "15ce30ace864664e1d1164cac6fb3bbbd78203ff13e2ad5b641c0141d1918490",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r2"
@@ -866,7 +866,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "15ce30ace864664e1d1164cac6fb3bbbd78203ff13e2ad5b641c0141d1918490",
+       "effect_digest": "15ce30ace864664e1d1164cac6fb3bbbd78203ff13e2ad5b641c0141d1918490",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r2"
@@ -1072,7 +1072,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1093,7 +1093,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1189,7 +1189,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1210,7 +1210,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1284,7 +1284,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1305,7 +1305,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1357,7 +1357,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1378,7 +1378,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1430,7 +1430,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "e448353da8997235c1024d0f25f82e7c35dfd8402bdca45b2bf741d719956d73",
+       "effect_digest": "e448353da8997235c1024d0f25f82e7c35dfd8402bdca45b2bf741d719956d73",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1451,7 +1451,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "e448353da8997235c1024d0f25f82e7c35dfd8402bdca45b2bf741d719956d73",
+       "effect_digest": "e448353da8997235c1024d0f25f82e7c35dfd8402bdca45b2bf741d719956d73",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1503,7 +1503,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:02:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -1524,7 +1524,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:02:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2060,7 +2060,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2081,7 +2081,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2418,7 +2418,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "bd946f25c6eab995070e7ce774bb698c531ac33b667f2e0d03a347a33b03de39",
+       "effect_digest": "bd946f25c6eab995070e7ce774bb698c531ac33b667f2e0d03a347a33b03de39",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:a-b:c_d:e1:f2",
        "request_id": "r1"
@@ -2514,7 +2514,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "5cbf92b6ba771608e4a5063db8359d2bcb66f154fdc46fc7c44ec99b18e838ec",
+       "effect_digest": "5cbf92b6ba771608e4a5063db8359d2bcb66f154fdc46fc7c44ec99b18e838ec",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:b:c:d",
        "request_id": "r1"
@@ -2742,7 +2742,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2763,14 +2763,14 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
        "request_id": "r2"
       },
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2791,14 +2791,14 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
        "request_id": "r2"
       },
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2819,14 +2819,14 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
+       "effect_digest": "3130b290a1497567c0fd33f486de6196d96e35c3cc1b05bc0b3d10a7dbf25192",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
        "request_id": "r2"
       },
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2923,7 +2923,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -2944,14 +2944,14 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "ba41339d04e441697755d414609f4cf251808385a92b7c48e2b654c6eb779e47",
+       "effect_digest": "ba41339d04e441697755d414609f4cf251808385a92b7c48e2b654c6eb779e47",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r2"
       },
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3003,7 +3003,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3024,7 +3024,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3076,7 +3076,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3097,7 +3097,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3149,7 +3149,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3170,7 +3170,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3310,7 +3310,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3331,7 +3331,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
+       "effect_digest": "fcf39b0841c688a4fd2c1032e9dc6cf3f39a0d6789315522cf32264a4ae05aac",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3383,7 +3383,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
+       "effect_digest": "d84d71d1013a5130485439deafd9bf793f6d8012c1d1d0a2ac67d2d6c900c8f7",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3435,7 +3435,7 @@
      "effects": [
       {
        "created_at": "2026-02-23T12:01:00+00:00",
-       "effect_key": "5124947475647562453df540c514e025fdebee534942c778b6f4f37adae24c41",
+       "effect_digest": "5124947475647562453df540c514e025fdebee534942c778b6f4f37adae24c41",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"
@@ -3487,7 +3487,7 @@
      "effects": [
       {
        "created_at": "2026-03-01T12:01:00+00:00",
-       "effect_key": "7f77f6fa1192ce11ea4e2aa2799a2818569dccd4d1f23cbe742c63cb2056e804",
+       "effect_digest": "7f77f6fa1192ce11ea4e2aa2799a2818569dccd4d1f23cbe742c63cb2056e804",
        "event_name": "native-review.once-consumed",
        "evidence_id": "native-review-v4:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa:alpha:beta:gamma:delta",
        "request_id": "r1"

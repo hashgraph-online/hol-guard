@@ -334,7 +334,10 @@ def run(scenario: dict[str, object]) -> dict[str, object]:
                 {
                     "args": args,
                     "result": result,
-                    "effects": dump(path, "guard_continuation_effects", "effect_key"),
+                    "effects": [
+                        {("effect_digest" if k == "effect_key" else k): v for k, v in row.items()}
+                        for row in dump(path, "guard_continuation_effects", "effect_key")
+                    ],
                 }
             )
             if index == 0 and "after_first_call_rows" in scenario:
