@@ -50,3 +50,7 @@ def extract_pipes(command: str) -> tuple[ShellPipe, ...]:
 
 def extract_command_segments(command: str) -> tuple[str, ...]:
     return tuple(call("segments", command))
+
+
+def _split_top_level_pipes(command: str) -> tuple[str, ...]:
+    return tuple(call("pipe_segments", command))

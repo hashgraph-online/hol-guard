@@ -23,6 +23,7 @@ fn original_python_shell_helpers_replay() {
         let command = &vector["command"];
         for action in [
             "segments",
+            "pipe_segments",
             "redirects",
             "pipes",
             "heredocs",

@@ -36,6 +36,7 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
         )?
         .is_top_level())),
         "segments" => Ok(json!(data_flow::extract_command_segments(command))),
+        "pipe_segments" => Ok(json!(data_flow::split_top_level_pipes(command))),
         "redirects" => Ok(json!(data_flow::extract_input_redirects(command))),
         "pipes" => Ok(json!(data_flow::extract_pipes(command)
             .into_iter()

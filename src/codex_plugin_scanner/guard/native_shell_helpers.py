@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, cast
 
 
 class NativeShellHelpersError(RuntimeError):
@@ -70,7 +70,7 @@ def _valid(action: str, value: Any) -> bool:
         return type(value) is str
     if action in {"trusted_path", "top_level"}:
         return type(value) is bool
-    if action in {"segments", "redirects"}:
+    if action in {"segments", "redirects", "pipe_segments"}:
         return type(value) is list and all(type(v) is str for v in value)
     shapes = {
         "pipes": {"left": str, "right": str},
@@ -109,7 +109,7 @@ def _valid(action: str, value: Any) -> bool:
             type(r) is dict
             and set(r) == set(shape)
             and all(type(r[k]) is t for k, t in shape.items())
-            and (action != "normalization" or all(type(s) is str for s in r["wrapper_chain"]))
+            and (action != "normalization" or all(type(s) is str for s in cast(list[Any], r["wrapper_chain"])))
             for r in rows
         )
     )

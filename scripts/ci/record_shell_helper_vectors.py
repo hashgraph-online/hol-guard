@@ -5,13 +5,13 @@ from __future__ import annotations
 import hashlib
 import itertools
 import json
+import subprocess
+import sys
+import types
 from dataclasses import asdict
 from pathlib import Path
 
-from codex_plugin_scanner.guard.runtime import data_flow, shell_command_wrappers, shell_structure
-
 ROOT = Path(__file__).resolve().parents[2]
-MODULES = (data_flow, shell_structure, shell_command_wrappers)
 EXPECTED = {
     "src/codex_plugin_scanner/guard/runtime/data_flow.py": (
         "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09"
@@ -26,12 +26,30 @@ EXPECTED = {
 
 
 def record() -> None:
-    sources = {
-        str(Path(m.__file__).resolve().relative_to(ROOT)): hashlib.sha256(Path(m.__file__).read_bytes()).hexdigest()
-        for m in MODULES
-    }
-    if sources != EXPECTED:
-        raise RuntimeError("Recording requires the pinned original Python sources")
+    # This offline recorder is never an executable oracle in runtime tests.
+    # Retrieve only the pinned original sources; tests consume frozen values.
+    sources = {}
+    originals = {}
+    for name in ("shell_structure", "data_flow", "shell_command_wrappers"):
+        path = f"src/codex_plugin_scanner/guard/runtime/{name}.py"
+        code = subprocess.run(
+            ["git", "show", f"da723a48b221c135cbce3bade1bab3ddb4959044:{path}"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+        ).stdout
+        sources[path] = hashlib.sha256(code).hexdigest()
+        if sources[path] != EXPECTED[path]:
+            raise RuntimeError("Recording requires the pinned original Python sources")
+        module_name = f"codex_plugin_scanner.guard.runtime.{name}"
+        module = types.ModuleType(module_name)
+        module.__package__ = "codex_plugin_scanner.guard.runtime"
+        sys.modules[module_name] = module
+        exec(compile(code, path, "exec"), module.__dict__)
+        originals[name] = module
+    data_flow = originals["data_flow"]
+    shell_structure = originals["shell_structure"]
+    shell_command_wrappers = originals["shell_command_wrappers"]
     commands = [
         "",
         "echo ok",
@@ -90,6 +108,7 @@ def record() -> None:
                 "expected": {
                     "segments": data_flow.extract_command_segments(command),
                     "redirects": data_flow.extract_input_redirects(command),
+                    "pipe_segments": data_flow._split_top_level_pipes(command),
                     "pipes": [asdict(p) for p in data_flow.extract_pipes(command)],
                     "heredocs": [asdict(h) for h in heredocs],
                     "substitutions": [asdict(s) for s in shell_structure.extract_command_substitution_spans(command)],
