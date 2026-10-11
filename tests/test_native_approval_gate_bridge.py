@@ -21,7 +21,7 @@ def _provision(monkeypatch: pytest.MonkeyPatch, answer, *, failure_code: str | N
         identity=SimpleNamespace(path=Path("/native"), sha256="sha"),
         capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v2")),
     )
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: status)
 
     def respond(**kwargs: object) -> bytes | None:
         # A callable answer is built from the request, as the resident binds it.
@@ -166,5 +166,28 @@ def test_runtime_without_the_current_approval_gate_capability_is_not_asked(
         identity=SimpleNamespace(path=Path("/native"), sha256="sha"),
         capabilities=SimpleNamespace(features=("resident-protocol-v2", "approval-gate-v1")),
     )
-    monkeypatch.setattr(bridge, "native_runtime_status", lambda: stale)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda **_kw: stale)
     assert bridge.approval_gate_native("require_approval_decision", tmp_path) is None
+
+
+@pytest.mark.parametrize(("warm", "minimum", "maximum"), [(True, 3.0, 5.5), (False, 13.0, 15.5)])
+def test_cold_resident_gets_a_spawn_allowance_and_a_warm_one_keeps_the_tight_budget(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    warm: bool,
+    minimum: float,
+    maximum: float,
+) -> None:
+    budgets: list[float] = []
+    _provision(monkeypatch, _ok({"grant": None}))
+    answer = _ok({"grant": None})
+
+    def respond(**kwargs: object) -> bytes | None:
+        budgets.append(float(kwargs["deadline_monotonic"]) - bridge.time.monotonic())  # type: ignore[arg-type]
+        return answer(json.loads(kwargs["payload"])["request"])  # type: ignore[arg-type]
+
+    monkeypatch.setattr(bridge, "native_resident_client_request", respond)
+    monkeypatch.setattr(bridge, "native_resident_client_ready", lambda *_args, **_kwargs: warm)
+
+    assert bridge.approval_gate_native("require_approval_decision", tmp_path) == {"grant": None}
+    assert minimum <= budgets[0] <= maximum
