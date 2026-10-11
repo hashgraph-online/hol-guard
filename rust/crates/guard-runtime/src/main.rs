@@ -57,7 +57,7 @@ mod compound_git_facts_tests;
 mod compound_git_inspection_op;
 #[cfg(test)]
 mod compound_git_inspection_op_tests;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod compound_git_inspection_vectors_tests;
 mod compound_git_paths;
 mod compound_git_segments;

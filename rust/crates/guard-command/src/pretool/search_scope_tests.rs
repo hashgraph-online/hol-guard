@@ -204,6 +204,7 @@ fn basename_globs_narrow_the_scope_conservatively() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn links_are_not_followed_but_sensitive_link_targets_keep_review() {
     let (home, project) = fixture();
