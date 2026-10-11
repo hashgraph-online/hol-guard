@@ -1,0 +1,858 @@
+{
+  "build": {
+    "base": null,
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "Kelados text-to-speech command",
+            "Kelados local TTS server command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Kelados CLI commands that write synthesized audio files to disk or start a local HTTP server for text-to-speech synthesis. The read-only `kelados voices` subcommand is not matched; Guard's default handling applies to it.",
+          "ecosystem_ids": [],
+          "executables": [
+            "kelados"
+          ],
+          "extension_id": "command.kelados",
+          "homepage": "https://github.com/LovekeshAnand/Kelados",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "Kelados TTS command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Kelados text-to-speech command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `kelados speak`, which synthesizes audio from inline text or a file (-f/--file) and writes a WAV file to the path given by -o/--output. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches of the kelados package.",
+              "example_command": "kelados speak \"Hello world\" -v af_heart -o hello.wav",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Kelados text-to-speech synthesis",
+              "permission_id": "command.kelados.permission.speak",
+              "replacement_permission_id": null,
+              "risk_tier": "low",
+              "safer_guidance": [
+                "Confirm the output path (-o) before running speak to avoid overwriting an existing file.",
+                "Run `kelados voices` first to review available voice IDs."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Kelados local TTS server command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `kelados serve`, which starts a local HTTP server exposing /v1/audio/speech and /v1/text-to-speech/:voice endpoints on the configured port (default 8880). The server accepts a bearer key for authentication. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches of the kelados package.",
+              "example_command": "kelados serve --port 8880 --key my-secret",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Kelados local TTS server",
+              "permission_id": "command.kelados.permission.serve",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Bind to 127.0.0.1 (the default host) rather than 0.0.0.0 to keep the server local.",
+                "Set a bearer key with --key to require authentication on all endpoints.",
+                "Review the port to confirm no existing service is exposed at that address."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.kelados",
+            "url": "https://github.com/LovekeshAnand"
+          },
+          "reference_urls": [
+            "https://github.com/LovekeshAnand/Kelados/blob/main/sdk/bin/kelados.js",
+            "https://github.com/LovekeshAnand/Kelados/blob/main/sdk/src/server.js",
+            "https://www.npmjs.com/package/kelados"
+          ],
+          "required": false,
+          "risk_classes": [
+            "local_write",
+            "network_exposure"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Kelados text-to-speech command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `kelados speak`, which synthesizes audio from inline text or a file and writes a WAV to the output path. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "kelados",
+                        "kelados.cmd",
+                        "kelados.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--file",
+                        "--output",
+                        "--speed",
+                        "--voice",
+                        "-f",
+                        "-o",
+                        "-s",
+                        "-v"
+                      ],
+                      "paths": [
+                        [
+                          "speak"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe",
+                        "bunx",
+                        "bunx.cmd",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "paths": [
+                        [
+                          "kelados",
+                          "speak"
+                        ],
+                        [
+                          "kelados@1.0.0",
+                          "speak"
+                        ],
+                        [
+                          "kelados@1.0.1",
+                          "speak"
+                        ],
+                        [
+                          "kelados@1.0.2",
+                          "speak"
+                        ],
+                        [
+                          "kelados@latest",
+                          "speak"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe",
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--package",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "paths": [
+                        [
+                          "exec",
+                          "kelados",
+                          "speak"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe",
+                        "yarn",
+                        "yarn.cmd",
+                        "yarn.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "paths": [
+                        [
+                          "dlx",
+                          "kelados",
+                          "speak"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.kelados.permission.speak",
+              "risk_classes": [
+                "local_write"
+              ],
+              "rule_id": "command.kelados.speak",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Confirm the output path (-o) before running speak to avoid overwriting an existing file.",
+                "Run `kelados voices` first to review available voice IDs."
+              ],
+              "severity": "low",
+              "title": "Kelados text-to-speech synthesis"
+            },
+            {
+              "action_classes": [
+                "Kelados local TTS server command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `kelados serve`, which starts a local HTTP server for TTS synthesis. Covers the installed bin and npx, bunx, npm exec, pnpm dlx and yarn dlx launches. Options placed before the subcommand (e.g. kelados --host 0.0.0.0 serve) are also matched.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": true,
+                      "executables": [
+                        "kelados",
+                        "kelados.cmd",
+                        "kelados.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [
+                        "--host",
+                        "--key",
+                        "--port"
+                      ],
+                      "options_with_values": [
+                        "--host",
+                        "--key",
+                        "--port"
+                      ],
+                      "paths": [
+                        [
+                          "serve"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe",
+                        "bunx",
+                        "bunx.cmd",
+                        "bunx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--host",
+                        "--key",
+                        "--package",
+                        "--port",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--host",
+                        "--key",
+                        "--port"
+                      ],
+                      "paths": [
+                        [
+                          "kelados",
+                          "serve"
+                        ],
+                        [
+                          "kelados@1.0.0",
+                          "serve"
+                        ],
+                        [
+                          "kelados@1.0.1",
+                          "serve"
+                        ],
+                        [
+                          "kelados@1.0.2",
+                          "serve"
+                        ],
+                        [
+                          "kelados@latest",
+                          "serve"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe",
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--host",
+                        "--key",
+                        "--package",
+                        "--port",
+                        "-p"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--host",
+                        "--key",
+                        "--port"
+                      ],
+                      "paths": [
+                        [
+                          "exec",
+                          "kelados",
+                          "serve"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe",
+                        "yarn",
+                        "yarn.cmd",
+                        "yarn.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--host",
+                        "--key",
+                        "--port"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--host",
+                        "--key",
+                        "--port"
+                      ],
+                      "paths": [
+                        [
+                          "dlx",
+                          "kelados",
+                          "serve"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    },
+                    "op": "executable-path-set.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.kelados.permission.serve",
+              "risk_classes": [
+                "network_exposure"
+              ],
+              "rule_id": "command.kelados.serve",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Bind to 127.0.0.1 (the default host) rather than 0.0.0.0 to keep the server local.",
+                "Set a bearer key with --key to require authentication on all endpoints.",
+                "Review the port to confirm no existing service is exposed at that address."
+              ],
+              "severity": "medium",
+              "title": "Kelados local TTS server"
+            }
+          ],
+          "safer_alternatives": [
+            "Confirm the output path before running speak.",
+            "Bind the server to 127.0.0.1 and set a bearer key with --key."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.kelados",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "kelados speak \"Hello world\" -o out.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-bare",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "kelados speak \"Hello world\" -v af_heart -o hello.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-with-voice",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "kelados speak -f input.txt -o out.wav --speed 1.2",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-file-input",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "kelados.cmd speak \"Hi\" -o hi.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-windows-shim",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "npx kelados speak \"Hello\" -o hello.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-npx",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "npx kelados@latest speak \"Hello\" -o hello.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-npx-latest",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "npx kelados@1.0.2 speak \"Hello\" -o hello.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-npx-pinned",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "npm exec kelados speak \"Hi\" -o hi.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-npm-exec",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "pnpm dlx kelados speak \"Hi\" -o hi.wav",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "speak-pnpm-dlx",
+      "rule_id": "command.kelados.speak"
+    },
+    {
+      "command": "kelados serve",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-bare",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "kelados serve --port 9000 --key my-secret",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-with-options",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "kelados --host 0.0.0.0 serve",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-leading-host",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "kelados --host 0.0.0.0 --port 8080 serve",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-leading-host-and-port",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "npx kelados serve --port 8880",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-npx",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "npx kelados --host 0.0.0.0 serve",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-npx-interspersed-host",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "npx kelados@1.0.2 serve --key secret",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-npx-pinned",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "npm exec kelados serve",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-npm-exec",
+      "rule_id": "command.kelados.serve"
+    },
+    {
+      "command": "yarn dlx kelados serve --port 8880",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kelados"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "serve-yarn-dlx",
+      "rule_id": "command.kelados.serve"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}
