@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.daemon.server as daemon_server_module
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.grok import GrokHarnessAdapter, grok_runtime_hooks_verified
 from codex_plugin_scanner.guard.approvals import _live_hook_verification
@@ -18,9 +17,9 @@ from codex_plugin_scanner.guard.cli.install_commands import (
     apply_managed_install,
     grok_hooks_protection_ready,
 )
-from codex_plugin_scanner.guard.daemon.server import (
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
+from codex_plugin_scanner.guard.daemon.server_control_connect_flow import (
     _PROTECTION_REPAIR_PROBE_COMMAND,
-    GuardDaemonServer,
     _repair_command_activity_persistence_health,
 )
 from codex_plugin_scanner.guard.managed_install_proof import (
@@ -31,6 +30,7 @@ from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.native_command_test_support import real_native_command_evaluation
 
 _NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
@@ -388,7 +388,7 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
 
     _, failed_hooks = repair_failing_managed_harness_hooks(store)
     snapshot, evaluation = _bound_native_repair_evaluation()
-    monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: snapshot)
+    patch_daemon_global(monkeypatch, "current_extension_control_snapshot", lambda: snapshot)
 
     def native_evaluate(command: str, **kwargs: object):
         assert command == _PROTECTION_REPAIR_PROBE_COMMAND
@@ -396,7 +396,7 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
         assert kwargs["extension_control_snapshot"] is snapshot
         return evaluation
 
-    monkeypatch.setattr(daemon_server_module, "evaluate_command_native", native_evaluate)
+    patch_daemon_global(monkeypatch, "evaluate_command_native", native_evaluate)
     _repair_command_activity_persistence_health(store)
     store.maintain_command_activity(now=_NOW, detail_retain_days=30)
 
@@ -414,8 +414,8 @@ def test_repair_keeps_persistence_error_when_native_evaluation_is_unavailable(
 ) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
-    monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: None)
-    monkeypatch.setattr(daemon_server_module, "evaluate_command_native", lambda *_args, **_kwargs: None)
+    patch_daemon_global(monkeypatch, "current_extension_control_snapshot", lambda: None)
+    patch_daemon_global(monkeypatch, "evaluate_command_native", lambda *_args, **_kwargs: None)
 
     probe_reason = _repair_command_activity_persistence_health(store)
 

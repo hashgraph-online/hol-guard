@@ -20,16 +20,12 @@ from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_pre_hook_command_activity_best_effort,
 )
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import (
     DAEMON_DISCOVERY_PROTOCOL_VERSION,
     load_authenticated_daemon_state,
 )
 from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from codex_plugin_scanner.guard.daemon.server import (
-    GuardDaemonServer,
-    _GuardDaemonHttpServer,
-)
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer, _GuardDaemonHttpServer
 from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
 from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_override,
@@ -37,6 +33,7 @@ from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_operation_deadline_monotonic,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
@@ -419,8 +416,8 @@ def test_storage_maintenance_failure_requests_immediate_retry(
 
     daemon = object.__new__(GuardDaemonServer)
     object.__setattr__(daemon, "_server", SimpleNamespace(store=FailingStore()))
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "load_guard_config",
         lambda _guard_home: SimpleNamespace(evidence_retain_days=30),
     )

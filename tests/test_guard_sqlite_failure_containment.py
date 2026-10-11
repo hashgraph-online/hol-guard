@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import store_connection_schema
+from codex_plugin_scanner.guard.daemon import server_control_cloud_sync as _ctl_cloud_sync
 from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity
 from codex_plugin_scanner.guard.store import GuardStore
@@ -698,7 +699,6 @@ def test_maybe_queue_first_cloud_sync_returns_none_when_profile_raises_sqlite(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 
     store = GuardStore(tmp_path / "guard-home")
     monkeypatch.setattr(
@@ -707,4 +707,4 @@ def test_maybe_queue_first_cloud_sync_returns_none_when_profile_raises_sqlite(
         lambda: (_ for _ in ()).throw(sqlite3.DatabaseError("database disk image is malformed")),
     )
 
-    assert daemon_server_module._maybe_queue_first_cloud_sync(store=store) is None
+    assert _ctl_cloud_sync._maybe_queue_first_cloud_sync(store=store) is None

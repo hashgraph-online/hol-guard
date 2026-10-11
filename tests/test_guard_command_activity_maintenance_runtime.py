@@ -13,6 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import server as daemon_server
+from tests.daemon_control_patching import patch_daemon_global
 
 
 class _SequencedEvent:
@@ -78,7 +79,7 @@ def test_long_lived_daemon_rechecks_daily_and_uses_global_retention(monkeypatch:
         loaded.append((home, workspace))
         return _LoadedConfig(evidence_retain_days=90)
 
-    monkeypatch.setattr(daemon_server, "load_guard_config", load)
+    patch_daemon_global(monkeypatch, "load_guard_config", load)
     daemon_server.GuardDaemonServer._maintain_command_activity_best_effort(service)
     assert loaded == [(Path("/global-home"), None)]
 

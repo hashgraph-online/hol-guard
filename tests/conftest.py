@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.daemon_control_patching import patch_daemon_global
 from tests.guard_test_invariants import TEST_INVARIANTS, invariant_markers_for_nodeid
 
 pytest_plugins = [
@@ -297,8 +298,8 @@ def _isolate_daemon_background_refresh_workers(
         if request.node.get_closest_marker(marker) is None:
             monkeypatch.setattr(daemon_server.GuardDaemonServer, method_name, lambda _self: None)
     if request.node.get_closest_marker("daemon_headless_queue") is None:
-        monkeypatch.setattr(
-            daemon_server,
+        patch_daemon_global(
+            monkeypatch,
             "_queue_headless_cloud_sync",
             lambda *, store: {
                 "status": "not_configured",
