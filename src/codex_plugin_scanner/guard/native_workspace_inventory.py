@@ -22,10 +22,11 @@ _INVENTORY_FEATURE = "workspace-inventory-v1"
 _PAYLOAD_KEYS = frozenset(
     {
         "manifest_paths",
-        "next_offset",
         "lockfile_paths",
         "sbom_paths",
         "inventory",
+        "inventory_digest",
+        "next_offset",
         "diff",
         "lockfile_warnings",
         "scan_targets",
@@ -160,9 +161,13 @@ def native_workspace_inventory(
     items: list[object] = []
     target_items: list[object] = []
     offset = 0
+    digest: str | None = None
     for _ in range(_MAX_PAGES):
+        page_request = {**request, "inventory_offset": offset}
+        if digest is not None:
+            page_request["inventory_digest"] = digest
         payload = _transport(
-            {**request, "inventory_offset": offset},
+            page_request,
             guard_home,
             operation="workspace_inventory",
             feature=_INVENTORY_FEATURE,
@@ -173,12 +178,18 @@ def native_workspace_inventory(
         page = payload["inventory"]
         page_targets = payload["scan_targets"]
         next_offset = payload["next_offset"]
+        page_digest = payload["inventory_digest"]
         if not isinstance(page, list) or not isinstance(page_targets, list):
+            raise _invalid()
+        if not isinstance(page_digest, str) or not page_digest.startswith("sha256:"):
             raise _invalid()
         if (targets_only and page) or (page_targets and not targets_only):
             raise _invalid()
-        if first is None:
+        if digest is None:
             first = payload
+            digest = page_digest
+        elif page_digest != digest:
+            raise _invalid()
         items.extend(page)
         target_items.extend(page_targets)
         if next_offset is None:
@@ -187,6 +198,8 @@ def native_workspace_inventory(
             raise _invalid()
         offset = next_offset
     else:
+        raise _invalid()
+    if first is None:
         raise _invalid()
     warnings = first["lockfile_warnings"]
     if not isinstance(warnings, list):

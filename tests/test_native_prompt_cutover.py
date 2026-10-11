@@ -12,7 +12,9 @@ from codex_plugin_scanner.guard import native_execution, native_prompt
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import runner
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
 from codex_plugin_scanner.guard.store import GuardStore
 
 
@@ -44,7 +46,9 @@ def test_real_resident_prompt_artifacts_and_reapproval(prompt_home, tmp_path):
     assert not native_prompt.should_force_reapproval([], None)
     context = HarnessContext(home_dir=tmp_path, guard_home=prompt_home, workspace_dir=tmp_path)
     detection = HarnessDetection(harness="codex", installed=True, command_available=True, config_paths=(), artifacts=())
-    artifacts = runner.prompt_requests_to_artifacts(detection=detection, context=context, requests=requests)
+    artifacts = guard_run_evaluation.prompt_requests_to_artifacts(
+        detection=detection, context=context, requests=requests
+    )
     assert len(artifacts) == 1
     assert artifacts[0].metadata["prompt_request_class"] == "secret_read"
     assert artifacts[0].artifact_id.endswith(requests[0].request_id[:24])
@@ -67,16 +71,16 @@ def test_real_resident_attachment_intent(prompt_home, text, state):
 def test_missing_or_malformed_authority_cannot_start_harness(monkeypatch, tmp_path, reply):
     monkeypatch.setattr(native_execution, "_resident_request", lambda **_: reply)
     monkeypatch.setattr(
-        runner,
+        wrapper_run,
         "detect_harness",
         lambda *_: HarnessDetection(
             harness="codex", installed=True, command_available=True, config_paths=(), artifacts=()
         ),
     )
-    monkeypatch.setattr(runner, "evaluate_detection", lambda *_args, **_kwargs: pytest.fail("evaluation reached"))
+    monkeypatch.setattr(wrapper_run, "evaluate_detection", lambda *_args, **_kwargs: pytest.fail("evaluation reached"))
     context = HarnessContext(home_dir=tmp_path, guard_home=tmp_path / "guard", workspace_dir=tmp_path)
     with pytest.raises(native_prompt.NativePromptAnalysisError):
-        runner.guard_run(
+        wrapper_run.guard_run(
             "codex",
             context,
             GuardStore(context.guard_home),

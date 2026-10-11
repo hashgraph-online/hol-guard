@@ -14,6 +14,7 @@ def _page(items: list[dict[str, object]], next_offset: int | None) -> dict[str, 
         "lockfile_paths": [],
         "sbom_paths": [],
         "inventory": items,
+        "inventory_digest": "sha256:" + "ab" * 32,
         "next_offset": next_offset,
         "diff": None,
         "lockfile_warnings": [],
@@ -79,3 +80,5 @@ def test_targets_only_pages_are_joined(monkeypatch, tmp_path: Path) -> None:
     result = bridge.native_workspace_inventory(SimpleNamespace(guard_home=str(tmp_path)), tmp_path, targets_only=True)
     assert result.inventory == ()
     assert [item.package_name for item in result.scan_targets] == ["left-pad", "react"]
+    assert sent[1]["inventory_digest"] == "sha256:" + "ab" * 32
+    assert "inventory_digest" not in sent[0]

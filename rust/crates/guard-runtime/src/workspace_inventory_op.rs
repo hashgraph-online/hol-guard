@@ -266,11 +266,21 @@ fn lockfile_warnings(
 /// at 2 MiB, so the slice leaves room for the paths, diff and warnings.
 const INVENTORY_PAGE_BYTES: usize = 1_048_576;
 
-/// One page of inventory items (or scan targets) starting at `offset` plus the offset of the next
-/// page, or `None` when the page reaches the end. A single item that cannot
-/// fit in a resident reply is an error. It is not omitted, and an offset past
-/// the inventory is not reported as an empty success.
-fn page_values(items: Vec<Value>, offset: usize) -> Result<(Vec<Value>, Option<usize>), String> {
+fn snapshot_digest(material: &Value) -> Result<String, String> {
+    let mut bytes = Vec::new();
+    crate::context_digest_json::write_canonical_json_with_limit(material, &mut bytes, usize::MAX)
+        .map_err(|_| invalid())?;
+    Ok(format!(
+        "sha256:{}",
+        guard_policy_snapshot::digest_bytes(&bytes)
+    ))
+}
+
+/// One page of inventory items (or scan targets) starting at `offset` plus the
+/// offset of the next page, or `None` when the page reaches the end. A single
+/// item that cannot fit in a resident reply is an error. It is not omitted, and
+/// an offset past the inventory is not reported as an empty success.
+fn page_values(items: &[Value], offset: usize) -> Result<(Vec<Value>, Option<usize>), String> {
     let total = items.len();
     if offset > total || (offset == total && total > 0) {
         return Err(invalid());
@@ -278,8 +288,8 @@ fn page_values(items: Vec<Value>, offset: usize) -> Result<(Vec<Value>, Option<u
     let mut page = Vec::new();
     let mut bytes = 0usize;
     let mut index = offset;
-    for value in items.into_iter().skip(offset) {
-        let encoded = serde_json::to_vec(&value).map_err(|_| invalid())?;
+    for entry in items.iter().skip(offset) {
+        let encoded = serde_json::to_vec(entry).map_err(|_| invalid())?;
         if encoded.len() >= crate::MAX_NATIVE_RESPONSE_BYTES {
             return Err("workspace_inventory_exceeds_resident_response".to_owned());
         }
@@ -288,7 +298,7 @@ fn page_values(items: Vec<Value>, offset: usize) -> Result<(Vec<Value>, Option<u
             break;
         }
         bytes += size;
-        page.push(value);
+        page.push(entry.clone());
         index += 1;
     }
     Ok((page, (index < total).then_some(index)))
@@ -307,11 +317,23 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
     let after_dir = request.workspace_dir.as_str();
     let (manifest_paths, lockfile_paths) = workspace_files(after_dir);
     if request.files_only {
+        if request.inventory_offset > 0 {
+            return Err(invalid());
+        }
+        let digest = snapshot_digest(&json!({
+            "manifest_paths": manifest_paths,
+            "lockfile_paths": lockfile_paths,
+            "sbom_paths": [],
+            "inventory": [],
+            "diff": null,
+            "lockfile_warnings": [],
+        }))?;
         return Ok(json!({
             "manifest_paths": manifest_paths,
             "lockfile_paths": lockfile_paths,
             "sbom_paths": [],
             "inventory": [],
+            "inventory_digest": digest,
             "next_offset": null,
             "diff": null,
             "lockfile_warnings": [],
@@ -344,11 +366,23 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
         .into_iter()
         .map(Value::Object)
         .collect();
+    let digest = snapshot_digest(&json!({
+        "manifest_paths": manifest_paths,
+        "lockfile_paths": lockfile_paths,
+        "sbom_paths": sbom_paths,
+        "inventory": items,
+        "diff": diff,
+        "lockfile_warnings": warnings,
+    }))?;
+    if request.inventory_offset > 0 && request.inventory_digest.as_deref() != Some(digest.as_str())
+    {
+        return Err(invalid());
+    }
     let (inventory, targets, next_offset) = if request.targets_only {
-        let (targets, next_offset) = page_values(scan_targets(&items)?, request.inventory_offset)?;
+        let (targets, next_offset) = page_values(&scan_targets(&items)?, request.inventory_offset)?;
         (Vec::new(), targets, next_offset)
     } else {
-        let (page, next_offset) = page_values(items, request.inventory_offset)?;
+        let (page, next_offset) = page_values(&items, request.inventory_offset)?;
         (page, Vec::new(), next_offset)
     };
     Ok(json!({
@@ -356,6 +390,7 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
         "lockfile_paths": lockfile_paths,
         "sbom_paths": sbom_paths,
         "inventory": inventory,
+        "inventory_digest": digest,
         "next_offset": next_offset,
         "diff": diff,
         "lockfile_warnings": warnings,

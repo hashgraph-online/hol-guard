@@ -16,6 +16,7 @@ import pytest
 
 from codex_plugin_scanner.guard import native_runner_authority as module
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
+from codex_plugin_scanner.guard.runtime import guard_run_receipts as guard_run_receipts
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
 from codex_plugin_scanner.guard.runtime import runner_native_authority as authority
 from codex_plugin_scanner.guard.store import GuardStore
@@ -325,7 +326,7 @@ def _seed_receipts(store: GuardStore, rows: list[tuple[str, str]]) -> None:
 
 
 def _append(store: GuardStore) -> None:
-    guard_runner._append_authority_evidence_to_receipts(
+    guard_run_receipts._append_authority_evidence_to_receipts(
         store,
         after_rowid=0,
         evaluation={"artifacts": [{"artifact_id": "wanted"}]},

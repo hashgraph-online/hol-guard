@@ -76,6 +76,7 @@ fn request(
         targets_only: false,
         package_spec: None,
         inventory_offset: 0,
+        inventory_digest: None,
     }
 }
 
@@ -121,7 +122,16 @@ fn recorded_python_vectors_match() {
         let object = payload.as_object_mut().unwrap();
         assert_eq!(object.remove("scan_targets").unwrap(), json!([]), "{name}");
         assert!(object.remove("package_target").unwrap().is_null());
-        assert_eq!(object.remove("next_offset"), Some(Value::Null), "{name}");
+        let next_offset = object.remove("next_offset");
+        let digest = object.remove("inventory_digest");
+        assert_eq!(next_offset, Some(Value::Null), "{name}");
+        assert!(
+            digest
+                .as_ref()
+                .and_then(Value::as_str)
+                .is_some_and(|value| value.starts_with("sha256:")),
+            "{name}"
+        );
         assert_eq!(payload, vector["expected"], "{name}");
     }
 }
@@ -241,7 +251,11 @@ fn large_target_list_is_returned_in_pages() {
             names.push(target["package_name"].as_str().unwrap().to_owned());
         }
         match payload["next_offset"].as_u64() {
-            Some(next) => request.inventory_offset = next as usize,
+            Some(next) => {
+                request.inventory_offset = next as usize;
+                request.inventory_digest =
+                    Some(payload["inventory_digest"].as_str().unwrap().to_owned());
+            }
             None => break,
         }
         assert!(pages < 64);
@@ -300,6 +314,8 @@ fn large_inventory_is_returned_in_pages() {
             Some(next) => {
                 assert!(next as usize > request.inventory_offset);
                 request.inventory_offset = next as usize;
+                request.inventory_digest =
+                    Some(payload["inventory_digest"].as_str().unwrap().to_owned());
             }
             None => break,
         }
@@ -309,6 +325,50 @@ fn large_inventory_is_returned_in_pages() {
     assert_eq!(names.len(), 12_000);
     assert_eq!(names[0], "package-with-a-long-name-00000");
     assert_eq!(names[11_999], "package-with-a-long-name-11999");
+}
+
+#[test]
+fn workspace_change_between_pages_is_rejected() {
+    let scratch = Scratch::new("page-changed");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let mut components = String::from(r#"{"bomFormat":"CycloneDX","components":["#);
+    for index in 0..12_000 {
+        if index > 0 {
+            components.push(',');
+        }
+        components.push_str(&format!(
+            r#"{{"name":"package-with-a-long-name-{index:05}","version":"1.0.0"}}"#
+        ));
+    }
+    components.push_str("]}");
+    let sbom = workspace.join("sbom.cdx.json");
+    fs::write(&sbom, &components).unwrap();
+    let first = run(&request(
+        &workspace,
+        None,
+        &["sbom.cdx.json".to_owned()],
+        "inventory",
+    ))
+    .unwrap();
+    let next = first["next_offset"].as_u64().unwrap() as usize;
+    assert!(next > 0);
+    fs::write(
+        &sbom,
+        components.replacen(
+            "package-with-a-long-name-00000",
+            "package-with-a-long-name-zzzzz",
+            1,
+        ),
+    )
+    .unwrap();
+    let mut continued = request(&workspace, None, &["sbom.cdx.json".to_owned()], "inventory");
+    continued.inventory_offset = next;
+    continued.inventory_digest = Some(first["inventory_digest"].as_str().unwrap().to_owned());
+    assert_eq!(
+        run(&continued).unwrap_err(),
+        "native_workspace_inventory_invalid"
+    );
 }
 
 #[test]
