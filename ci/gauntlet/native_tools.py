@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import Scenario
+from .command_outputs import _text
+from .input_evidence import post_input_matches
 
 PRIVATE_TEMP_ROOTS = ("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/")
 SCRATCH_NAME = "scratch-notes.txt"
@@ -23,8 +25,13 @@ def _created_directory(result: Any) -> str | None:
     content = result.get("content") if isinstance(result, dict) else None
     if not isinstance(content, list) or len(content) != 1 or not isinstance(content[0], dict):
         return None
-    lines = str(content[0].get("text", "")).strip().splitlines()
-    if len(lines) != 1 or not lines[0] or ".." in lines[0].split("/"):
+    # The pinned SDK adds a timing footer. Strip only the exact suffix bound
+    # to the host's wallTimeMs, retaining all command stdout for the proof.
+    text = _text({"name": "bash", "result": result})
+    if text is None:
+        return None
+    lines = text.strip().splitlines()
+    if len(lines) != 1 or not lines[0].startswith("/") or ".." in lines[0].split("/"):
         return None
     return posixpath.normpath(lines[0])
 
@@ -54,6 +61,15 @@ def native_tools_scope_error(
     because the denial itself can stop the remaining steps and must surface as a false positive.
     """
     allowed = set(scenario.required_tools) | ({"bash"} if scenario.commands else set())
+    bridged = {call["id"] for call in calls if "bridge_parent_id" in call}
+    bridge_file = {
+        "omp-native-eval-reads-skill-doc": "{{home}}/.agent/skills/x/SKILL.md",
+    }.get(scenario.id)
+    for call in calls:
+        if call["id"] in bridged and (
+            bridge_file is None or call["name"] != "read" or _write_path(call["args"]) != bridge_file
+        ):
+            return "eval bridge used an unexpected tool or file"
     delegated = case.get("delegated_call_ids", [])
     if (
         not isinstance(delegated, list)
@@ -74,7 +90,16 @@ def native_tools_scope_error(
         if call["id"] not in delegated:
             continue
         if call["name"] == "read":
-            if _write_path(call["args"]) not in delegated_paths:
+            path = _write_path(call["args"])
+            result = call.get("result", {})
+            details = result.get("details", {}) if isinstance(result, dict) else {}
+            meta = details.get("meta", {}) if isinstance(details, dict) else {}
+            source = meta.get("source", {}) if isinstance(meta, dict) else {}
+            resolved = source.get("value") if isinstance(source, dict) else None
+            if path not in delegated_paths and not (
+                resolved in delegated_paths
+                and post_input_matches("read", call["args"], {**call["args"], "path": resolved}, result)
+            ):
                 return "delegated lookup read outside its requested file"
         elif call["name"] == "yield":
             data = call["args"].get("data")
@@ -91,7 +116,7 @@ def native_tools_scope_error(
                     return "delegated report referenced an unexpected file"
         else:
             return "delegated work used an unexpected tool"
-    if any(call["name"] not in allowed for call in calls if call["id"] not in delegated):
+    if any(call["name"] not in allowed for call in calls if call["id"] not in set(delegated) | bridged):
         return "the model used a tool outside the scenario"
     listed = set(scenario.commands)
     for call in calls:

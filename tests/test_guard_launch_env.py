@@ -23,7 +23,8 @@ from codex_plugin_scanner.guard.cli import commands_support_hook_payload as guar
 from codex_plugin_scanner.guard.codex_config import read_toml_payload
 from codex_plugin_scanner.guard.consumer.service import diff_artifact
 from codex_plugin_scanner.guard.policy_integrity import PolicyIntegrityVerificationResult
-from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 
@@ -103,7 +104,7 @@ class _CompletedProcess:
 
 def _patch_harness_run(monkeypatch, fake_run):
     """Mock only target harnesses, preserving native and interpreter probes."""
-    original = guard_runner_module.subprocess.run
+    original = wrapper_run_finish.subprocess.run
     harnesses = {"codex", "copilot", "opencode", "hermes", "gemini", "cursor-agent"}
 
     def run(command, *args, **kwargs):
@@ -115,7 +116,7 @@ def _patch_harness_run(monkeypatch, fake_run):
                 return fake_run(command, *args, **kwargs)
         return original(command, *args, **kwargs)
 
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", run)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", run)
 
 
 def _capture_launch(monkeypatch) -> dict[str, object]:
@@ -931,7 +932,7 @@ def test_guard_run_opencode_reapproves_changed_plugin_and_skill_content(monkeypa
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _guard_home: "http://127.0.0.1:4455")
     monkeypatch.setattr(guard_hook_payload_module, "open_browser_url", lambda _url: True)
     context = HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir)
-    baseline_detection = guard_runner_module.detect_harness("opencode", context)
+    baseline_detection = wrapper_run.detect_harness("opencode", context)
     store = GuardStore(home_dir)
     for artifact in baseline_detection.artifacts:
         artifact_diff = diff_artifact(None, artifact)

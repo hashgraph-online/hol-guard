@@ -30,6 +30,27 @@ from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_b
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 
 
+@pytest.fixture(autouse=True)
+def _snapshot_tests_without_resident_posture(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the cloud snapshot tests independent of the posture resident op.
+
+    These tests assert the cloud snapshot, not the supply-chain posture, and
+    some pin that building it opens a single store connection and leaves the
+    stored integrity state untouched. The posture op needs the resident's
+    verifier key, which provisioning writes for a throwaway guard home, and
+    the Windows enterprise lab cannot provision a resident for such homes at
+    all. The posture bridge has its own tests against the real resident.
+    """
+
+    from codex_plugin_scanner.guard import local_supply_chain
+
+    monkeypatch.setattr(
+        local_supply_chain,
+        "native_local_supply_chain_posture",
+        lambda *_args, **_kwargs: {"status": "not_configured"},
+    )
+
+
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
 

@@ -102,7 +102,7 @@ def guard_inventory(
             return {}, "missing or duplicate native pre/post response"
         if not input_matches(call["name"], call["args"], pre[0]["input"]):
             return {}, "host execution differs from the input reviewed by Guard"
-        if post and not post_input_matches(call["name"], pre[0]["input"], post[0]["input"]):
+        if post and not post_input_matches(call["name"], pre[0]["input"], post[0]["input"], call.get("result")):
             return {}, "native pre/post tool inputs disagree"
         if pre[0]["decision"] == "allow" and len(post) != 1:
             return {}, "executed tool lacks native post-tool protection evidence"
