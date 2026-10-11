@@ -133,10 +133,14 @@ def gate_environment(tmp_path_factory: pytest.TempPathFactory) -> Iterator[tuple
     fixture = build_fixture(tmp_path_factory.mktemp("benign-fp-gate"))
     patch = pytest.MonkeyPatch()
     patch.setenv("HOME", str(fixture.home))
-    # Git finds the fixture ~/.gitconfig through HOME, as on a real host. Any
-    # GIT_CONFIG_* override makes the native Git proofs fail closed, which
-    # once hid every worktree read case behind a gate-only review.
-    patch.delenv("GIT_CONFIG_GLOBAL", raising=False)
+    # Git finds the fixture ~/.gitconfig through HOME, as on a real host. The
+    # native Git proofs fail closed on any GIT_*, LD_* or DYLD_* override in
+    # the agent environment. A test-only GIT_CONFIG_GLOBAL, and later the
+    # LD_LIBRARY_PATH that setup-python exports on CI runners, each hid every
+    # Git read case behind a review that real agents never see.
+    for name in list(os.environ):
+        if name.upper().startswith(("GIT_", "LD_", "DYLD_")):
+            patch.delenv(name)
     patch.setenv("XDG_CONFIG_HOME", str(fixture.home / ".config"))
     patch.setenv("HOL_GUARD_NATIVE", "force")
     binary = os.environ.get("HOL_GUARD_NATIVE_BINARY")
