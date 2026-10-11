@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, get_args
 
 from .models import GuardAction
-from .native_resident_client import native_resident_client_request
+from .native_resident_client import native_resident_client_request, record_native_resident_error_frame
 from .native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
     native_record_resident_failure,
@@ -130,6 +130,8 @@ def _resident_request(
         if not record_success:
             native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_malformed")
         return None
+    if "schema" not in decoded:
+        record_native_resident_error_frame(decoded)
     if response_schema is not None and decoded.get("schema") != response_schema:
         native_record_resident_failure(status.identity.sha256, guard_home, reason=f"native_{operation}_schema")
         return None

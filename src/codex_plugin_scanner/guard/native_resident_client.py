@@ -24,7 +24,7 @@ from .codex_hook_launch_runtime import (
     run_isolated_hook_process as _legacy_run_isolated_hook_process,
 )
 from .fork_safety import forget_in_child
-from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .native_approval_errors import FINITE_FAILURE_CODES, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
 from .native_resident_stream import _PersistentNativeClient, _StreamFailure
 from .path_resolution_cache import cached_realpath
 
@@ -78,6 +78,17 @@ def native_resident_client_failure_code() -> str | None:
 def record_native_resident_client_failure_code(code: str | None) -> None:
     """Record a privacy-safe failure code for the current native client request."""
     _LAST_FAILURE_CODE.set(code)
+
+
+def record_native_resident_error_frame(decoded: Mapping[str, object]) -> None:
+    """Keep the code from a framed resident refusal such as ``{"error": code}``.
+
+    The client stream answers a failed resident round trip with a framed error instead of exiting, so
+    the transport succeeds and the code would otherwise be dropped as an unexpected schema.
+    """
+    code = decoded.get("error")
+    if isinstance(code, str) and len(code) <= _MAX_FAILURE_CODE_LENGTH and code in FINITE_FAILURE_CODES:
+        _LAST_FAILURE_CODE.set(code)
 
 
 def _allowlisted_failure_code(stderr: str) -> str | None:
@@ -609,6 +620,7 @@ __all__ = [
     "native_resident_client_request",
     "native_resident_client_transport",
     "record_native_resident_client_failure_code",
+    "record_native_resident_error_frame",
     "retire_native_resident_for_update",
     "stop_native_resident",
 ]

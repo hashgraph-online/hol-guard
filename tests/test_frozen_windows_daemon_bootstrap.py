@@ -70,7 +70,12 @@ def _diagnostics(env: dict[str, str]) -> str:
             if entry.is_file():
                 lines.append(f"{entry.name}={_safe_read(entry)[-300:]!r}")
     for entry in guard_home.rglob("managed-resident-phases.v1.log"):
-        phases = [line for line in _safe_read(entry).splitlines() if line.startswith("native_resident_phase ")]
+        text = _safe_read(entry)
+        if text.startswith("<"):
+            # The resident may hold the file without read sharing; say so instead of dropping the evidence.
+            lines.append(f"{entry.name}={text}")
+            continue
+        phases = [line for line in text.splitlines() if line.startswith("native_resident_phase ")]
         lines.extend(phases[-96:])
     return " | ".join(lines)
 
