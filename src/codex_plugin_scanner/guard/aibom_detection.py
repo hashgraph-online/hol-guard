@@ -10,7 +10,7 @@ from typing import Literal
 from ..marketplace_support import extract_marketplace_source, load_marketplace_context
 from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
 from .codex_skill_config import load_codex_skill_config_rules, resolve_codex_skill_enabled
-from .inventory_contract import fingerprint_mapping, fingerprint_text
+from .inventory_contract_fingerprints import fingerprint_mapping, fingerprint_text
 from .models import GuardArtifact, HarnessDetection
 from .runtime.approval_context import build_configured_environment_hash, build_configured_header_values_hash
 from .skill_directory_identity import (

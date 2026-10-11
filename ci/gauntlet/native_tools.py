@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import Scenario
+from .command_outputs import _text
 from .input_evidence import post_input_matches
 
 PRIVATE_TEMP_ROOTS = ("/tmp/", "/private/tmp/", "/var/folders/", "/private/var/folders/")
@@ -24,8 +25,13 @@ def _created_directory(result: Any) -> str | None:
     content = result.get("content") if isinstance(result, dict) else None
     if not isinstance(content, list) or len(content) != 1 or not isinstance(content[0], dict):
         return None
-    lines = str(content[0].get("text", "")).strip().splitlines()
-    if len(lines) != 1 or not lines[0] or ".." in lines[0].split("/"):
+    # The pinned SDK adds a timing footer. Strip only the exact suffix bound
+    # to the host's wallTimeMs, retaining all command stdout for the proof.
+    text = _text({"name": "bash", "result": result})
+    if text is None:
+        return None
+    lines = text.strip().splitlines()
+    if len(lines) != 1 or not lines[0].startswith("/") or ".." in lines[0].split("/"):
         return None
     return posixpath.normpath(lines[0])
 
