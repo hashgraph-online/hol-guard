@@ -27,7 +27,7 @@ from ..mdm.lifecycle import (
     user_status,
     validate_user_home,
 )
-from ..mdm.network import diagnose_endpoint
+from ..mdm.network_diagnostics import diagnose_endpoint
 from ..mdm.policy import load_managed_policy
 from ..mdm.supervisor import install_machine_supervisor, remove_machine_supervisor
 

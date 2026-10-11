@@ -112,6 +112,11 @@ def test_scope_judge_requires_listed_commands_and_private_temp_writes() -> None:
     mk = {**_call("bash", command="mktemp -d"), "result": {"content": [{"type": "text", "text": "/tmp/tmp.ab\n"}]}}
     scratch = _call("write", path="/tmp/tmp.ab/scratch-notes.txt")
     assert native_tools_scope_error(temp, [mk, scratch, scratch], {}) is None
+    timed = {**mk, "result": {"content": [{"type": "text", "text": "/tmp/tmp.ab\n\n\nWall time: 0.03 seconds"}],
+                              "details": {"wallTimeMs": 33.046916}}}
+    assert native_tools_scope_error(temp, [timed, scratch, scratch], {}) is None
+    timed["result"]["details"]["wallTimeMs"] = 100
+    assert native_tools_scope_error(temp, [timed, scratch, scratch], {}) is not None
     # One write is not an overwrite; shared /tmp, traversal and other directories are out of scope.
     assert native_tools_scope_error(temp, [mk, scratch], {}) is not None
     for path in (
@@ -135,6 +140,27 @@ def test_scope_judge_lets_a_guard_denial_surface_as_a_false_positive() -> None:
     assert native_tools_scope_error(temp, [denied, stray], {}, guard_denied=True) is not None
 
 
+def test_private_temp_output_requires_metadata_bound_timing_and_one_absolute_path() -> None:
+    from ci.gauntlet.native_tools import _created_directory
+
+    def result(text, details=None):
+        value = {"content": [{"type": "text", "text": text}]}
+        if details is not None:
+            value["details"] = details
+        return value
+
+    stdout = "/tmp/tmp.created\n"
+    timed = stdout + "\n\nWall time: 0.03 seconds"
+    assert _created_directory(result(stdout)) == "/tmp/tmp.created"
+    assert _created_directory(result(timed, {"wallTimeMs": 33.046916})) == "/tmp/tmp.created"
+    for value in [result(timed), result(timed, {"wallTimeMs": 100}),
+                  result(timed, {"wallTimeMs": float("nan")}),
+                  result("relative\n"), result("/tmp/../other\n"),
+                  result("/tmp/one\n/tmp/two\n"),
+                  result(timed + "\nextra", {"wallTimeMs": 33.046916})]:
+        assert _created_directory(value) is None
+
+
 def test_private_temp_cleanup_removes_only_the_directory_mktemp_created(tmp_path, monkeypatch) -> None:
     from ci.gauntlet.native_tools import cleanup_private_temp
 
@@ -144,14 +170,18 @@ def test_private_temp_cleanup_removes_only_the_directory_mktemp_created(tmp_path
         directory.mkdir(mode=0o700)
         (directory / "scratch-notes.txt").write_text("second draft", encoding="utf-8")
 
-    def events(directory, command="mktemp -d"):
+    def events(directory, command="mktemp -d", timed=False):
+        result = {"content": [{"type": "text", "text": f"{directory}\n"}]}
+        if timed:
+            result["content"][0]["text"] += "\n\nWall time: 0.03 seconds"
+            result["details"] = {"wallTimeMs": 33.046916}
         return [
             {"type": "tool_execution_start", "toolCallId": "a", "toolName": "bash", "args": {"command": command}},
             {
                 "type": "tool_execution_end",
                 "toolCallId": "a",
                 "toolName": "bash",
-                "result": {"content": [{"type": "text", "text": f"{directory}\n"}]},
+                "result": result,
             },
         ]
 
@@ -160,7 +190,7 @@ def test_private_temp_cleanup_removes_only_the_directory_mktemp_created(tmp_path
         [{"type": "tool_execution_start", "toolName": "write", "args": {"path": str(existing / "scratch-notes.txt")}}]
     )
     assert existing.exists()
-    cleanup_private_temp(events(created))
+    cleanup_private_temp(events(created, timed=True))
     assert not created.exists() and existing.exists()
 
 
