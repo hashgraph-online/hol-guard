@@ -52,8 +52,17 @@ fn omp_skill_sources_keep_sensitive_and_hidden_path_floors() {
     assert!(
         classify_scannable_source_path(skill.to_str().unwrap(), &cwd, Some(&home), true).allowed
     );
+    let report = home.join(".agent/artifacts/report.md");
+    fs::create_dir_all(report.parent().unwrap()).unwrap();
+    fs::write(&report, "inert report").unwrap();
+    assert!(
+        classify_scannable_source_path(report.to_str().unwrap(), &cwd, Some(&home), true).allowed
+    );
     for relative in [
         ".agent/auth.json",
+        ".agent/artifacts/auth.md",
+        ".agent/artifacts/.hidden/report.md",
+        ".agent/artifacts/report.json",
         ".agent/skills/example/.env",
         ".agent/skills/example/../secret.txt",
     ] {
@@ -67,6 +76,17 @@ fn omp_skill_sources_keep_sensitive_and_hidden_path_floors() {
     }
     #[cfg(unix)]
     {
+        let artifact_link = home.join(".agent/artifacts/linked.md");
+        std::os::unix::fs::symlink(&report, &artifact_link).unwrap();
+        assert!(
+            !classify_scannable_source_path(
+                artifact_link.to_str().unwrap(),
+                &cwd,
+                Some(&home),
+                true
+            )
+            .allowed
+        );
         let link = home.join(".agent/skills/example/linked.md");
         std::os::unix::fs::symlink(&skill, &link).unwrap();
         assert!(

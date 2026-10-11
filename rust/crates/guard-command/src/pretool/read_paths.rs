@@ -2,7 +2,7 @@
 mod allowances;
 use allowances::{
     agent_skill_document, codex_notes_document, execution_output_log, guard_safety_doc,
-    project_skill_document,
+    omp_agent_document_path, project_skill_document,
 };
 
 pub(super) fn safe_read_target(argument: &str) -> bool {
@@ -414,6 +414,7 @@ fn resolved_path_allowed_for_operation(
             || guard_safety_doc(canonical, home_dir)
             || (read_only
                 && (agent_skill_document(canonical, home_dir)
+                    || omp_agent_document_path(canonical, home_dir)
                     || project_skill_document(canonical, home_dir, cwd)
                     || codex_notes_document(canonical, home_dir)))
             || (read_only && execution_output_log(canonical, home_dir)))
