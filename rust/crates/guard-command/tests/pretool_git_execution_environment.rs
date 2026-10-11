@@ -84,13 +84,20 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
             "{name}"
         );
     }
-    // Toolchain installers export library search paths for every process;
-    // they do not change how Git reads configuration.
+    // The execution context carries names and an opaque digest, not values.
+    // The config probe clears the environment, but an allowed `git` still
+    // runs in the caller environment, so a search path of `.` or an empty
+    // entry can load a library the probe never saw. Name-only search paths
+    // stay unproven.
     let mut search_paths = context.clone();
-    search_paths
-        .environment_names
-        .extend(["LD_LIBRARY_PATH".into(), "DYLD_LIBRARY_PATH".into()]);
-    assert_eq!(evaluate(&search_paths).decision, "allow");
+    search_paths.environment_names.extend([
+        "LD_LIBRARY_PATH".into(),
+        "DYLD_LIBRARY_PATH".into(),
+        "DYLD_FALLBACK_LIBRARY_PATH".into(),
+        "DYLD_FRAMEWORK_PATH".into(),
+        "DYLD_FALLBACK_FRAMEWORK_PATH".into(),
+    ]);
+    assert_ne!(evaluate(&search_paths).decision, "allow");
     for name in ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"] {
         let mut preloaded = context.clone();
         preloaded.environment_names.push(name.into());

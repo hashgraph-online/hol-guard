@@ -352,8 +352,8 @@ pub(super) fn clean_environment(
     !names.iter().any(|key| {
         let key = key.to_ascii_uppercase();
         key.starts_with("GIT_TRACE")
-            || (key.starts_with("DYLD_") && !library_search_path(&key))
-            || (key.starts_with("LD_") && !library_search_path(&key))
+            || key.starts_with("DYLD_")
+            || key.starts_with("LD_")
             || (key.starts_with("GIT_CONFIG")
                 && !(key == "GIT_CONFIG_NOSYSTEM"
                     && execution_environment.is_some_and(|context| context.git_config_no_system)))
@@ -371,24 +371,12 @@ pub(super) fn clean_environment(
                     | "GIT_WORK_TREE"
                     | "GIT_EXEC_PATH"
                     | "GIT_DISCOVERY_ACROSS_FILESYSTEM"
+                    | "LD_PRELOAD"
+                    | "LD_LIBRARY_PATH"
+                    | "DYLD_INSERT_LIBRARIES"
+                    | "DYLD_LIBRARY_PATH"
             )
     })
-}
-
-/// Library search paths (conda, CUDA, toolchain installers and CI Python
-/// setup export these) change where every program on the host resolves its
-/// shared libraries, not how Git reads configuration, so they do not make a
-/// Git read any less provable than `ls` or `cat` in the same environment.
-/// Preload, audit and insertion hooks still fail closed.
-fn library_search_path(key: &str) -> bool {
-    matches!(
-        key,
-        "LD_LIBRARY_PATH"
-            | "DYLD_LIBRARY_PATH"
-            | "DYLD_FALLBACK_LIBRARY_PATH"
-            | "DYLD_FRAMEWORK_PATH"
-            | "DYLD_FALLBACK_FRAMEWORK_PATH"
-    )
 }
 
 pub(super) fn trusted_command(
