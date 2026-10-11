@@ -39,6 +39,7 @@ use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
 use crate::guard_store_sessions as sessions;
+use crate::guard_store_storage_maintenance as storage_maintenance;
 
 const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
 const CACHE_SIZE_KIB: i64 = 256 * 1024;
@@ -239,7 +240,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_artifact_snapshots"
         | "list_artifact_inventory"
         | "find_artifact_inventory_item"
-        | "get_artifact_capability" => Kind::Read,
+        | "get_artifact_capability"
+        | "run_storage_housekeeping" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -277,7 +279,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "mark_inventory_removed"
         | "save_artifact_capability"
         | "upsert_provenance_cache"
-        | "next_aibom_trust_attestation_sequence" => Kind::Write,
+        | "next_aibom_trust_attestation_sequence"
+        | "maintain_storage" => Kind::Write,
         _ => return None,
     })
 }
@@ -403,6 +406,8 @@ fn dispatch(
         "next_aibom_trust_attestation_sequence" => {
             inventory::next_attestation_sequence(connection, args)
         }
+        "maintain_storage" => storage_maintenance::maintain(connection, args),
+        "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }

@@ -13,6 +13,13 @@ from codex_plugin_scanner.guard.store_receipt_rollups import (
     backfill_receipt_rollups,
     receipt_rollups_need_backfill,
 )
+from codex_plugin_scanner.guard.store_storage_maintenance import (
+    DEFAULT_GUARD_EVENT_LIMIT,
+    DEFAULT_RECEIPT_DETAIL_LIMIT,
+    DEFAULT_UPLOADED_CLOUD_EVENT_LIMIT,
+    STORAGE_MAINTENANCE_BUSY_TIMEOUT_MS,
+    StorageMaintenanceResult,
+)
 from tests.test_native_decision_receipt import _receipt as native_test_receipt
 
 
@@ -351,3 +358,96 @@ def test_schema_upgrade_is_serialized_across_store_processes(tmp_path: Path) -> 
     assert all(reopened.path == store.path for reopened in stores)
     with store._connect() as connection:  # pyright: ignore[reportPrivateUsage]
         assert connection.execute("select count(*) from schema_migrations where version = 20").fetchone()[0] == 1
+
+
+def _stub_native_maintenance(
+    store: GuardStore,
+    payload: object,
+    calls: list[tuple[str, dict[str, object], float | None]],
+    *,
+    housekeeping_error: Exception | None = None,
+) -> None:
+    def native_call(method: str, args: dict[str, object], *, busy_timeout_seconds: float | None = None) -> object:
+        calls.append((method, dict(args), busy_timeout_seconds))
+        if method == "run_storage_housekeeping" and housekeeping_error is not None:
+            raise housekeeping_error
+        return payload if method == "maintain_storage" else None
+
+    store._native_store_call = native_call  # type: ignore[method-assign]  # pyright: ignore[reportPrivateUsage]
+
+
+def test_storage_maintenance_sends_precomputed_cutoffs_and_short_busy_wait(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    now = datetime(2026, 7, 25, 12, tzinfo=timezone.utc)
+    calls: list[tuple[str, dict[str, object], float | None]] = []
+    payload = {
+        "completed": False,
+        "receipts_archived": 3,
+        "native_decision_receipts_deleted": 2,
+        "guard_events_deleted": 1,
+        "cloud_events_deleted": 4,
+        "pages_reclaimed": 5,
+    }
+    _stub_native_maintenance(store, payload, calls)
+
+    result = store.maintain_storage(now=now, detail_retain_days=30, batch_size=7)
+
+    assert result == StorageMaintenanceResult(True, False, 3, 2, 1, 4, 5)
+    assert calls == [
+        (
+            "maintain_storage",
+            {
+                "now": now.isoformat(),
+                "cutoff": (now - timedelta(days=30)).isoformat(),
+                "cloud_cutoff": (now - timedelta(days=7)).isoformat(),
+                "batch_size": 7,
+                "receipt_detail_limit": DEFAULT_RECEIPT_DETAIL_LIMIT,
+                "guard_event_limit": DEFAULT_GUARD_EVENT_LIMIT,
+                "uploaded_cloud_event_limit": DEFAULT_UPLOADED_CLOUD_EVENT_LIMIT,
+            },
+            STORAGE_MAINTENANCE_BUSY_TIMEOUT_MS / 1000,
+        )
+    ]
+
+
+def test_completed_storage_maintenance_housekeeping_never_fails_the_pass(tmp_path: Path) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    calls: list[tuple[str, dict[str, object], float | None]] = []
+    payload = {
+        "completed": True,
+        "receipts_archived": 0,
+        "native_decision_receipts_deleted": 0,
+        "guard_events_deleted": 0,
+        "cloud_events_deleted": 0,
+        "pages_reclaimed": 0,
+    }
+    _stub_native_maintenance(store, payload, calls, housekeeping_error=sqlite3.OperationalError("database is locked"))
+
+    result = store.maintain_storage(now=datetime(2026, 7, 25, tzinfo=timezone.utc), detail_retain_days=30)
+
+    assert result.completed is True
+    assert [call[0] for call in calls] == ["maintain_storage", "run_storage_housekeeping"]
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        None,
+        [],
+        {"completed": 1, "receipts_archived": 0},
+        {
+            "completed": True,
+            "receipts_archived": -1,
+            "native_decision_receipts_deleted": 0,
+            "guard_events_deleted": 0,
+            "cloud_events_deleted": 0,
+            "pages_reclaimed": 0,
+        },
+    ],
+)
+def test_storage_maintenance_rejects_malformed_resident_replies(tmp_path: Path, payload: object) -> None:
+    store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
+    _stub_native_maintenance(store, payload, [])
+
+    with pytest.raises(ValueError, match="native_storage_maintenance_payload_invalid"):
+        store.maintain_storage(now=datetime(2026, 7, 25, tzinfo=timezone.utc), detail_retain_days=30)
