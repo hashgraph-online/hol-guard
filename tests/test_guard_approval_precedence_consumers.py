@@ -30,7 +30,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.package_intent import PackageIntent, build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_common import PackageIntent, build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,

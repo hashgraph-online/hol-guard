@@ -165,7 +165,8 @@ from ..runtime.false_positive_rules import (
 )
 from ..runtime.github_capability_interaction import github_capability_requires_confirmation
 from ..runtime.harness_attribution import resolve_runtime_hook_harness
-from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
+from ..runtime.package_intent_common import build_package_request_artifact
+from ..runtime.package_intent_parser import extract_package_intent_request
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncEndpointUntrustedError,

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.package_intent import extract_package_intent_request
+from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
 
 _HARNESS_COVERAGE_MATRIX = (
     {

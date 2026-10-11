@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.package_intent import (
+from codex_plugin_scanner.guard.runtime.package_intent_parser import (
     extract_package_intent_request,
     parse_package_intent,
 )
@@ -28,9 +28,12 @@ def test_extract_uses_selected_guard_home_over_ambient_home(
     foreign_home.mkdir()
     request = {"command": "npm install left-pad@1.3.0"}
 
-    assert extract_package_intent_request(
-        "shell", request, action_envelope_command=None, workspace=tmp_path, guard_home=foreign_home
-    ) is None
+    assert (
+        extract_package_intent_request(
+            "shell", request, action_envelope_command=None, workspace=tmp_path, guard_home=foreign_home
+        )
+        is None
+    )
 
     monkeypatch.setattr(config, "resolve_guard_home", lambda: foreign_home)
     selected = extract_package_intent_request(

@@ -19,7 +19,8 @@ from urllib.parse import unquote, urlparse
 import pytest
 
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
-from codex_plugin_scanner.guard.runtime.package_intent import build_package_request_artifact, parse_package_intent
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
 from tests.test_guard_js_supply_chain_phase11 import WORKSPACE_ID, _bundle_response, _package, _write_text

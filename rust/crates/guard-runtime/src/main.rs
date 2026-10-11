@@ -273,6 +273,8 @@ mod supply_chain_egress;
 mod supply_chain_eval_seams;
 mod totp;
 mod workflow_capability_store;
+mod workspace_inventory_files;
+mod workspace_inventory_op;
 
 pub(crate) use resident_protocol::{capabilities, encode_response, strict_json_value};
 pub(crate) use resident_transport::{

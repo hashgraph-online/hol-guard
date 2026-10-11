@@ -1,0 +1,1570 @@
+[
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": "1.4.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": "0.9.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": "2.0.1"
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package-lock.json": "{\"packages\": {\"\": {\"dependencies\": {\"zeta\": \"^1\"}}, \"node_modules/zeta\": {\"version\": \"1.4.0\"}, \"node_modules/@scope/pkg\": {\"version\": \"2.0.1\"}, \"node_modules/alpha\": {\"version\": \"0.9.0\"}}}",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "inventory",
+  "name": "node_project",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "left-pad",
+     "namespace": null,
+     "range": null,
+     "version": "1.3.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "node",
+     "namespace": "@types",
+     "range": null,
+     "version": "20.1.0"
+    }
+   ],
+   "lockfile_paths": [
+    "pnpm-lock.yaml",
+    "yarn.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
+   "pnpm-lock.yaml": "lockfileVersion: '6.0'\npackages:\n  /left-pad@1.3.0:\n    resolution: {integrity: x}\n",
+   "yarn.lock": "\"left-pad@^1.0.0\":\n  version \"1.3.0\"\n\n\"@types/node@^20\":\n  version \"20.1.0\"\n"
+  },
+  "mode": "inventory",
+  "name": "node_yarn_pnpm",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "httpx",
+     "namespace": null,
+     "range": ">=0.27",
+     "version": "0.27.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "pydantic",
+     "namespace": null,
+     "range": "2.7.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "pytest",
+     "namespace": null,
+     "range": ">=8",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "flask",
+     "namespace": null,
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "requests",
+     "namespace": null,
+     "range": ">=2.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "urllib3",
+     "namespace": null,
+     "range": null,
+     "version": null
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "anyio",
+     "namespace": null,
+     "range": null,
+     "version": "4.4.0"
+    }
+   ],
+   "lockfile_paths": [
+    "uv.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "pyproject.toml",
+    "requirements.txt"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "pyproject.toml": "[project]\nname = \"x\"\ndependencies = [\"httpx>=0.27\", \"pydantic==2.7.1\"]\n[project.optional-dependencies]\ndev = [\"pytest>=8\"]\n",
+   "requirements.txt": "flask==2.0.1 # web\r\nrequests>=2.0\r\n-e ./local\r\nurllib3 @ https://example.com/u.whl\r\n",
+   "uv.lock": "version = 1\n[[package]]\nname = \"httpx\"\nversion = \"0.27.0\"\n\n[[package]]\nname = \"anyio\"\nversion = \"4.4.0\"\n"
+  },
+  "mode": "inventory",
+  "name": "python_project",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "cargo",
+     "name": "serde",
+     "namespace": null,
+     "range": "1.0",
+     "version": "1.0.200"
+    },
+    {
+     "direct": true,
+     "ecosystem": "cargo",
+     "name": "regex",
+     "namespace": null,
+     "range": "1.11",
+     "version": "1.11.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "cargo",
+     "name": "tempfile",
+     "namespace": null,
+     "range": "3",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "go",
+     "name": "github.com/pkg/errors",
+     "namespace": null,
+     "range": "v0.9.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "go",
+     "name": "golang.org/x/text",
+     "namespace": null,
+     "range": "v0.14.0",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [
+    "Cargo.lock",
+    "go.sum"
+   ],
+   "lockfile_warnings": [
+    {
+     "code": "lockfile_parse_warning",
+     "message": "Guard could not parse go.sum for workspace audit.",
+     "path": "go.sum"
+    }
+   ],
+   "manifest_paths": [
+    "Cargo.toml",
+    "go.mod"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "Cargo.lock": "[[package]]\nname = \"serde\"\nversion = \"1.0.200\"\n\n[[package]]\nname = \"regex\"\nversion = \"1.11.0\"\n",
+   "Cargo.toml": "[dependencies]\nserde = \"1.0\"\nregex = { version = \"1.11\" }\n[dev-dependencies]\ntempfile = \"3\"\n",
+   "go.mod": "module example.com/m\n\ngo 1.22\n\nrequire (\n\tgithub.com/pkg/errors v0.9.1\n\tgolang.org/x/text v0.14.0\n)\n",
+   "go.sum": "github.com/pkg/errors v0.9.1 h1:abc=\n"
+  },
+  "mode": "inventory",
+  "name": "rust_go",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "rubygems",
+     "name": "rails",
+     "namespace": null,
+     "range": "7.0.0",
+     "version": "7.0.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "rubygems",
+     "name": "rack",
+     "namespace": null,
+     "range": null,
+     "version": "2.2.8"
+    },
+    {
+     "direct": true,
+     "ecosystem": "maven",
+     "name": "org.example:demo",
+     "namespace": null,
+     "range": "1.2.3",
+     "version": "1.2.3=compileClasspath"
+    },
+    {
+     "direct": true,
+     "ecosystem": "packagist",
+     "name": "vendor/pkg",
+     "namespace": null,
+     "range": "^1.0",
+     "version": "1.2.3"
+    },
+    {
+     "direct": true,
+     "ecosystem": "packagist",
+     "name": "vendor/dev",
+     "namespace": null,
+     "range": "2.0.0",
+     "version": "2.0.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "maven",
+     "name": "com.google.guava:guava",
+     "namespace": null,
+     "range": "33.0.0",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [
+    "Gemfile.lock",
+    "composer.lock",
+    "gradle.lockfile"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "Gemfile",
+    "build.gradle",
+    "composer.json",
+    "pom.xml"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "Gemfile": "gem 'rails', '7.0.0'\ngem \"rack\"\n",
+   "Gemfile.lock": "GEM\n  remote: https://rubygems.org/\n  specs:\n    rails (7.0.0)\n    rack (2.2.8)\n\nPLATFORMS\n  ruby\n",
+   "build.gradle": "dependencies {\n  implementation 'org.example:demo:1.2.3'\n}\n",
+   "composer.json": "{\"require\": {\"vendor/pkg\": \"^1.0\"}, \"require-dev\": {\"vendor/dev\": \"2.0.0\"}}",
+   "composer.lock": "{\"packages\": [{\"name\": \"vendor/pkg\", \"version\": \"1.2.3\"}], \"packages-dev\": [{\"name\": \"vendor/dev\", \"version\": \"2.0.0\"}]}",
+   "gradle.lockfile": "org.example:demo:1.2.3=compileClasspath\n",
+   "pom.xml": "<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><dependencies><dependency><groupId>com.google.guava</groupId><artifactId>guava</artifactId><version>33.0.0</version></dependency></dependencies></project>"
+  },
+  "mode": "inventory",
+  "name": "jvm_php_ruby",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "deep-ok",
+     "namespace": null,
+     "range": "1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "react",
+     "namespace": null,
+     "range": "18.2.0",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json",
+    "a/b/c/package.json",
+    "dashboard/package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   ".git/package.json": "{}",
+   "a/b/c/d/package.json": "{\"dependencies\": {\"too-deep\": \"1.0.0\"}}",
+   "a/b/c/package.json": "{\"dependencies\": {\"deep-ok\": \"1.0.0\"}}",
+   "build/requirements.txt": "skipped==1\n",
+   "dashboard/package.json": "{\"dependencies\": {\"react\": \"18.2.0\"}}",
+   "node_modules/x/package.json": "{\"dependencies\": {\"skipped\": \"1.0.0\"}}",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
+   "worktrees/w/package.json": "{}"
+  },
+  "mode": "inventory",
+  "name": "nested_discovery",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "left-pad",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": "1.3.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "node",
+     "namespace": "@types",
+     "range": null,
+     "version": "20.1.0"
+    }
+   ],
+   "lockfile_paths": [
+    "yarn.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package.json": "{\"dependencies\": {\"left-pad\": \"^1.0.0\"}}",
+   "yarn.lock": "\"left-pad@^1.0.0\":\n  version \"1.3.0\"\n\n\"@types/node@^20\":\n  version \"20.1.0\"\n"
+  },
+  "mode": "inventory",
+  "name": "duplicate_merge",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "left-pad",
+     "namespace": null,
+     "range": null,
+     "version": "1.3.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "lib",
+     "namespace": "@scope",
+     "range": null,
+     "version": "2.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "weird",
+     "namespace": null,
+     "range": null,
+     "version": "1"
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "requests",
+     "namespace": null,
+     "range": null,
+     "version": "2.31.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "cargo",
+     "name": "serde",
+     "namespace": null,
+     "range": null,
+     "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "plain",
+     "namespace": null,
+     "range": null,
+     "version": "3.0"
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": [
+    "bom.json",
+    "nested/spdx.json",
+    "bad.json",
+    "unsupported.json",
+    "array.json"
+   ]
+  },
+  "files": {
+   "array.json": "[]",
+   "bad.json": "{not json",
+   "bom.json": "{\"bomFormat\": \"CycloneDX\", \"components\": [{\"name\": \"left-pad\", \"version\": \"1.3.0\", \"purl\": \"pkg:npm/left-pad@1.3.0\"}, {\"name\": \"lib\", \"version\": \"2.0\", \"purl\": \"pkg:npm/%40scope/lib@2.0\"}, {\"name\": \"weird\", \"version\": \"1\"}, {\"purl\": \"pkg:pypi/requests@2.31.0\"}]}",
+   "nested/spdx.json": "{\"spdxVersion\": \"SPDX-2.3\", \"packages\": [{\"name\": \"serde\", \"versionInfo\": \"1.0.0\", \"externalRefs\": [{\"referenceType\": \"purl\", \"referenceLocator\": \"pkg:cargo/serde@1.0.0\"}]}, {\"name\": \"plain\", \"versionInfo\": \"3.0\"}]}",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
+   "unsupported.json": "{\"hello\": 1}"
+  },
+  "mode": "inventory",
+  "name": "sbom_cyclonedx_spdx",
+  "sbom_paths": [
+   "bom.json",
+   "nested/spdx.json",
+   "bad.json",
+   "unsupported.json",
+   "array.json",
+   "missing.json",
+   "./bom.json"
+  ]
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "left-pad",
+     "namespace": null,
+     "range": null,
+     "version": "1.3.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "lib",
+     "namespace": "@scope",
+     "range": null,
+     "version": "2.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "weird",
+     "namespace": null,
+     "range": null,
+     "version": "1"
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "requests",
+     "namespace": null,
+     "range": null,
+     "version": "2.31.0"
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": [
+    "bom.json"
+   ]
+  },
+  "files": {
+   "../outside/bom.json": "{\"spdxVersion\": \"SPDX-2.3\", \"packages\": [{\"name\": \"serde\", \"versionInfo\": \"1.0.0\", \"externalRefs\": [{\"referenceType\": \"purl\", \"referenceLocator\": \"pkg:cargo/serde@1.0.0\"}]}, {\"name\": \"plain\", \"versionInfo\": \"3.0\"}]}",
+   "bom.json": "{\"bomFormat\": \"CycloneDX\", \"components\": [{\"name\": \"left-pad\", \"version\": \"1.3.0\", \"purl\": \"pkg:npm/left-pad@1.3.0\"}, {\"name\": \"lib\", \"version\": \"2.0\", \"purl\": \"pkg:npm/%40scope/lib@2.0\"}, {\"name\": \"weird\", \"version\": \"1\"}, {\"purl\": \"pkg:pypi/requests@2.31.0\"}]}",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "inventory",
+  "name": "sbom_outside_workspace",
+  "sbom_paths": [
+   "{TMP}/outside/bom.json",
+   "bom.json"
+  ]
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "left-pad",
+     "namespace": null,
+     "range": null,
+     "version": "1.3.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "lib",
+     "namespace": "@scope",
+     "range": null,
+     "version": "2.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "weird",
+     "namespace": null,
+     "range": null,
+     "version": "1"
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "requests",
+     "namespace": null,
+     "range": null,
+     "version": "2.31.0"
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [],
+   "sbom_paths": [
+    "bom.json"
+   ]
+  },
+  "files": {
+   "bom.json": "{\"bomFormat\": \"CycloneDX\", \"components\": [{\"name\": \"left-pad\", \"version\": \"1.3.0\", \"purl\": \"pkg:npm/left-pad@1.3.0\"}, {\"name\": \"lib\", \"version\": \"2.0\", \"purl\": \"pkg:npm/%40scope/lib@2.0\"}, {\"name\": \"weird\", \"version\": \"1\"}, {\"purl\": \"pkg:pypi/requests@2.31.0\"}]}"
+  },
+  "mode": "inventory",
+  "name": "sbom_only",
+  "sbom_paths": [
+   "bom.json"
+  ]
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [],
+   "sbom_paths": []
+  },
+  "files": {
+   "README.md": "hi"
+  },
+  "mode": "inventory",
+  "name": "empty_workspace",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json",
+    "requirements.txt"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package.json": "{broken",
+   "requirements.txt": ""
+  },
+  "mode": "inventory",
+  "name": "unparseable_manifest",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   ".env": "SECRET=1",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "inventory",
+  "name": "sensitive_basename_skipped",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [
+    "bun.lockb",
+    "package-lock.json",
+    "uv.lock",
+    "yarn.lock"
+   ],
+   "lockfile_warnings": [
+    {
+     "code": "bun_lockfile_binary_fallback",
+     "message": "Guard detected bun.lockb but Bun stores it as a binary lockfile, so audit fell back to manifest-only monitoring.",
+     "path": "bun.lockb"
+    },
+    {
+     "code": "lockfile_parse_warning",
+     "message": "Guard could not parse package-lock.json for workspace audit.",
+     "path": "package-lock.json"
+    },
+    {
+     "code": "lockfile_parse_warning",
+     "message": "Guard could not parse uv.lock for workspace audit.",
+     "path": "uv.lock"
+    },
+    {
+     "code": "lockfile_unreadable",
+     "message": "Guard could not read yarn.lock for workspace audit.",
+     "path": "yarn.lock"
+    }
+   ],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "bun.lockb": {
+    "hex": "00ff00"
+   },
+   "package-lock.json": "{}",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
+   "uv.lock": "not toml [",
+   "yarn.lock": {
+    "hex": "ffff"
+   }
+  },
+  "mode": "inventory",
+  "name": "warnings_bun_empty_unreadable",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [
+    "poetry.lock"
+   ],
+   "lockfile_warnings": [
+    {
+     "code": "lockfile_unreadable",
+     "message": "Guard could not read poetry.lock for workspace audit.",
+     "path": "poetry.lock"
+    }
+   ],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "../outside/poetry.lock": "[[package]]\nname = \"x\"\nversion = \"1\"\n",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
+   "poetry.lock": {
+    "symlink": "../outside/poetry.lock"
+   }
+  },
+  "mode": "inventory",
+  "name": "warnings_symlink_escape",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": "~0.9",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json",
+    "real/package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package.json": {
+    "symlink": "real/package.json"
+   },
+   "real/package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "inventory",
+  "name": "symlinked_manifest_inside",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package.json": "\ufeff{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "inventory",
+  "name": "bom_prefixed_manifest",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [],
+   "lockfile_paths": [
+    "uv.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json",
+    "sub/Cargo.toml"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}",
+   "sub/Cargo.toml": "[dependencies]\nserde = \"1.0\"\nregex = { version = \"1.11\" }\n[dev-dependencies]\ntempfile = \"3\"\n",
+   "uv.lock": "version = 1\n[[package]]\nname = \"httpx\"\nversion = \"0.27.0\"\n\n[[package]]\nname = \"anyio\"\nversion = \"4.4.0\"\n"
+  },
+  "mode": "files",
+  "name": "files_only",
+  "sbom_paths": []
+ },
+ {
+  "before_files": {
+   "package-lock.json": "{\"packages\": {\"node_modules/zeta\": {\"version\": \"1.4.0\"}}}",
+   "package.json": "{\"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \"0.9\", \"gone\": \"1\"}}",
+   "requirements.txt": "flask==2.0.0\n"
+  },
+  "expected": {
+   "diff": {
+    "changed_package_count": 6,
+    "changed_paths": [
+     "package.json",
+     "requirements.txt",
+     "package-lock.json"
+    ]
+   },
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "added",
+     "namespace": null,
+     "range": "1.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^2.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "flask",
+     "namespace": null,
+     "range": "3.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "new",
+     "namespace": null,
+     "range": "1",
+     "version": null
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": null,
+     "version": "2.0.1"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": null,
+     "version": "0.9.0"
+    }
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json",
+    "requirements.txt"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package-lock.json": "{\"packages\": {\"\": {\"dependencies\": {\"zeta\": \"^1\"}}, \"node_modules/zeta\": {\"version\": \"1.4.0\"}, \"node_modules/@scope/pkg\": {\"version\": \"2.0.1\"}, \"node_modules/alpha\": {\"version\": \"0.9.0\"}}}",
+   "package.json": "{\"dependencies\": {\"zeta\": \"^2.0.0\", \"alpha\": \"0.9\", \"added\": \"1.0.0\"}}",
+   "requirements.txt": "flask==3.0.0\nnew==1\n"
+  },
+  "mode": "diff",
+  "name": "diff_changes",
+  "sbom_paths": []
+ },
+ {
+  "before_files": {
+   "Cargo.toml": "[dependencies]\nserde = \"1.0\"\nregex = { version = \"1.11\" }\n[dev-dependencies]\ntempfile = \"3\"\n",
+   "go.mod": "module example.com/m\n\ngo 1.22\n\nrequire (\n\tgithub.com/pkg/errors v0.9.1\n\tgolang.org/x/text v0.14.0\n)\n"
+  },
+  "expected": {
+   "diff": {
+    "changed_package_count": 4,
+    "changed_paths": [
+     "package.json"
+    ]
+   },
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "pkg",
+     "namespace": "@scope",
+     "range": "2.0.1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": " ~0.9 ",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "jest",
+     "namespace": null,
+     "range": "^29",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": "^1.0.0",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "Cargo.toml",
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "Cargo.toml": "[dependencies]\nserde = \"1.0\"\nregex = { version = \"1.11\" }\n[dev-dependencies]\ntempfile = \"3\"\n",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "diff",
+  "name": "diff_added_and_removed_files",
+  "sbom_paths": []
+ },
+ {
+  "before_files": {
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "expected": {
+   "diff": {
+    "changed_package_count": 0,
+    "changed_paths": []
+   },
+   "inventory": [
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "left-pad",
+     "namespace": null,
+     "range": null,
+     "version": "1.3.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "lib",
+     "namespace": "@scope",
+     "range": null,
+     "version": "2.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "unsupported",
+     "name": "weird",
+     "namespace": null,
+     "range": null,
+     "version": "1"
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "requests",
+     "namespace": null,
+     "range": null,
+     "version": "2.31.0"
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": [
+    "bom.json"
+   ]
+  },
+  "files": {
+   "bom.json": "{\"bomFormat\": \"CycloneDX\", \"components\": [{\"name\": \"left-pad\", \"version\": \"1.3.0\", \"purl\": \"pkg:npm/left-pad@1.3.0\"}, {\"name\": \"lib\", \"version\": \"2.0\", \"purl\": \"pkg:npm/%40scope/lib@2.0\"}, {\"name\": \"weird\", \"version\": \"1\"}, {\"purl\": \"pkg:pypi/requests@2.31.0\"}]}",
+   "package.json": "{\"name\": \"demo\", \"dependencies\": {\"zeta\": \"^1.0.0\", \"alpha\": \" ~0.9 \", \"@scope/pkg\": \"2.0.1\"}, \"devDependencies\": {\"jest\": \"^29\"}}"
+  },
+  "mode": "diff",
+  "name": "diff_unchanged_with_sbom",
+  "sbom_paths": [
+   "bom.json"
+  ]
+ },
+ {
+  "before_files": {
+   "app/package.json": "{\"dependencies\": {\"@scope/b\": \"1.0.0\"}}"
+  },
+  "expected": {
+   "diff": {
+    "changed_package_count": 2,
+    "changed_paths": [
+     "app/package.json"
+    ]
+   },
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "b",
+     "namespace": "@scope",
+     "range": "2.0.0",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "c",
+     "namespace": "@scope",
+     "range": "1.0.0",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "app/package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "app/package.json": "{\"dependencies\": {\"@scope/b\": \"2.0.0\", \"@scope/c\": \"1.0.0\"}}"
+  },
+  "mode": "diff",
+  "name": "diff_nested_scoped",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "zz",
+     "namespace": null,
+     "range": "3",
+     "version": "1.0.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "aa",
+     "namespace": null,
+     "range": "2",
+     "version": "2.0.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "npm",
+     "name": "mm",
+     "namespace": null,
+     "range": "^1",
+     "version": "1.2.0"
+    }
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "package.json"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "package-lock.json": "{\"lockfileVersion\": 3, \"ratio\": 1.5, \"big\": 123456789012345678901234567890, \"packages\": {\"\": {\"name\": \"x\"}, \"node_modules/zz\": {\"version\": \"1.0.0\", \"n\": 7}, \"node_modules/aa\": {\"version\": \"2.0.0\", \"flag\": true, \"nothing\": null}, \"node_modules/mm\": {\"version\": \"1.2.0\", \"list\": [1, {\"a\": 2}]}}}",
+   "package.json": "{\"dependencies\": {\"zz\": \"3\", \"aa\": \"2\"}, \"version\": 3, \"peerDependencies\": {\"mm\": \"^1\"}}"
+  },
+  "mode": "inventory",
+  "name": "package_lock_numbers_and_order",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "zeta",
+     "namespace": null,
+     "range": null,
+     "version": "1.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "inner-b",
+     "namespace": null,
+     "range": null,
+     "version": "2.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "inner-a",
+     "namespace": null,
+     "range": null,
+     "version": "3.0.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "npm",
+     "name": "alpha",
+     "namespace": null,
+     "range": null,
+     "version": "4.0.0"
+    }
+   ],
+   "lockfile_paths": [
+    "package-lock.json"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [],
+   "sbom_paths": []
+  },
+  "files": {
+   "package-lock.json": "{\"lockfileVersion\": 1, \"dependencies\": {\"zeta\": {\"version\": \"1.0.0\", \"dependencies\": {\"inner-b\": {\"version\": \"2.0.0\"}, \"inner-a\": {\"version\": \"3.0.0\"}}}, \"alpha\": {\"version\": \"4.0.0\"}}}"
+  },
+  "mode": "inventory",
+  "name": "package_lock_v1_nested_order",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "zeta",
+     "namespace": null,
+     "range": null,
+     "version": "1.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "alpha",
+     "namespace": null,
+     "range": null,
+     "version": "2.0"
+    },
+    {
+     "direct": false,
+     "ecosystem": "pypi",
+     "name": "mid",
+     "namespace": null,
+     "range": null,
+     "version": "3.0"
+    }
+   ],
+   "lockfile_paths": [
+    "Pipfile.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [],
+   "sbom_paths": []
+  },
+  "files": {
+   "Pipfile.lock": "{\"_meta\": {\"hash\": {\"sha256\": \"x\"}, \"pipfile-spec\": 6}, \"default\": {\"zeta\": {\"version\": \"==1.0\"}, \"alpha\": {\"version\": \"==2.0\"}}, \"develop\": {\"mid\": {\"version\": \"==3.0\"}}}"
+  },
+  "mode": "inventory",
+  "name": "pipfile_lock_order",
+  "sbom_paths": []
+ },
+ {
+  "before_files": null,
+  "expected": {
+   "diff": null,
+   "inventory": [
+    {
+     "direct": true,
+     "ecosystem": "cargo",
+     "name": "zeta",
+     "namespace": null,
+     "range": "1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "cargo",
+     "name": "alpha",
+     "namespace": null,
+     "range": "2",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "cargo",
+     "name": "mid",
+     "namespace": null,
+     "range": "3",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "zeta",
+     "namespace": null,
+     "range": "==1",
+     "version": "1.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "alpha",
+     "namespace": null,
+     "range": "==2",
+     "version": "2.0"
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "mid",
+     "namespace": null,
+     "range": "==3",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "zulu",
+     "namespace": null,
+     "range": "^1",
+     "version": null
+    },
+    {
+     "direct": true,
+     "ecosystem": "pypi",
+     "name": "bravo",
+     "namespace": null,
+     "range": "^2",
+     "version": null
+    }
+   ],
+   "lockfile_paths": [
+    "poetry.lock"
+   ],
+   "lockfile_warnings": [],
+   "manifest_paths": [
+    "Cargo.toml",
+    "Pipfile",
+    "pyproject.toml"
+   ],
+   "sbom_paths": []
+  },
+  "files": {
+   "Cargo.toml": "[dependencies]\nzeta = \"1\"\nalpha = \"2\"\n[dev-dependencies]\nmid = \"3\"\n",
+   "Pipfile": "[packages]\nzeta = \"==1\"\nalpha = \"==2\"\n[dev-packages]\nmid = \"==3\"\n",
+   "poetry.lock": "[[package]]\nname = \"zeta\"\nversion = \"1.0\"\n[[package]]\nname = \"alpha\"\nversion = \"2.0\"\n",
+   "pyproject.toml": "[project]\nname = \"x\"\ndependencies = [\"zeta>=1\", \"alpha==2\"]\n[tool.poetry.dependencies]\npython = \"^3.9\"\nzulu = \"^1\"\nbravo = {version = \"^2\"}\n"
+  },
+  "mode": "inventory",
+  "name": "toml_dependency_order",
+  "sbom_paths": []
+ }
+]

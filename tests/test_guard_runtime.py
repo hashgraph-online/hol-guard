@@ -77,10 +77,8 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_tokens_validation_reason,
     build_approval_context_token,
 )
-from codex_plugin_scanner.guard.runtime.package_intent import (
-    build_package_request_artifact,
-    extract_package_intent_request,
-)
+from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
+from codex_plugin_scanner.guard.runtime.package_intent_parser import extract_package_intent_request
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
