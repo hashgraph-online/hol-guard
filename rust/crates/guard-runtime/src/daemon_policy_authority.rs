@@ -29,12 +29,16 @@
 //! authority.
 
 use std::fs;
-use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::io;
+use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
 #[cfg(unix)]
 use std::process::{Child, Command, Stdio};
+#[cfg(unix)]
 use std::sync::mpsc;
+#[cfg(unix)]
 use std::thread;
 use std::time::Duration;
 #[cfg(unix)]
