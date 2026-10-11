@@ -101,6 +101,18 @@ def test_harness_watch_auto_reverts_to_inherit_after_window(tmp_path: Path) -> N
     assert reverted.protection_posture == "protected"
 
 
+def test_harness_watch_auto_revert_ignores_unparseable_stamp(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    from codex_plugin_scanner.guard.harness_posture import harness_watch_auto_revert_due
+
+    guard_home = tmp_path / ".hol-guard"
+    update_guard_settings(guard_home, {"harness_postures": {"codex": "watch"}})
+    config = load_guard_config(guard_home)
+    broken = replace(config, harness_watch_entered_at={"codex": "not-a-timestamp"})
+    assert harness_watch_auto_revert_due(broken, now=datetime.now(timezone.utc)) == ()
+
+
 def test_harness_watch_auto_revert_disabled_with_zero_hours(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     update_guard_settings(guard_home, {"watch_auto_revert_hours": 0, "harness_postures": {"codex": "watch"}})

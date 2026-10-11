@@ -1,12 +1,13 @@
 //! Validation of stored ISO-8601 timestamps, matching the subset of
-//! `datetime.fromisoformat` that Guard ever produces or reads back.
+//! `datetime.fromisoformat` that every supported CPython (3.10+) parses.
 //!
-//! Supported: `YYYY-MM-DD` and `YYYYMMDD`, optionally followed by a one
-//! character separator and an extended (`HH[:MM[:SS[.f+]]]`) or basic
-//! (`HH[MM[SS[.f+]]]`) time and a `+HH[:MM[:SS]]` / `-HH[MM]` offset. ISO week
-//! dates and a space before the offset are not supported and are treated as
-//! invalid: the loader is the single authority, so it accepts only forms that
-//! every supported CPython (3.10+) parses the same way.
+//! Supported: extended `YYYY-MM-DD`, optionally followed by a one character
+//! separator and `HH:MM[:SS[.fff|.ffffff]]`, then optionally a
+//! `+HH:MM[:SS[.fff|.ffffff]]` / `-HH:MM[:SS[.fff|.ffffff]]` offset (a trailing
+//! `Z` is read as `+00:00`). Fractions only follow seconds. Basic forms, comma
+//! fractions, hour-only times, ISO week dates and a space before the offset are
+//! treated as invalid: the loader is the single authority, so it never admits a
+//! stamp that any supported CPython would reject.
 
 fn digits(text: &str) -> Option<u32> {
     if text.is_empty() || !text.bytes().all(|byte| byte.is_ascii_digit()) {
@@ -30,41 +31,27 @@ fn valid_date(year: u32, month: u32, day: u32) -> bool {
     year >= 1 && (1..=days).contains(&day)
 }
 
-fn split_fraction(text: &str) -> Option<&str> {
-    match text.find(['.', ',']) {
-        None => Some(text),
-        Some(at) => {
-            let fraction = &text[at + 1..];
-            digits(fraction)?;
-            Some(&text[..at])
-        }
-    }
+/// `.fff` or `.ffffff` after the seconds field.
+fn valid_fraction(text: &str) -> bool {
+    matches!(text.len(), 3 | 6) && digits(text).is_some()
 }
 
-/// `HH[:MM[:SS]]` or `HH[MM[SS]]` with every field in range.
-fn valid_clock(text: &str, allow_fraction: bool) -> bool {
-    let body = if allow_fraction {
-        match split_fraction(text) {
-            Some(body) => body,
-            None => return false,
-        }
-    } else {
-        text
+/// `HH:MM[:SS[.f]]` with every field two digits and in range.
+fn valid_clock(text: &str, limits: [u32; 3]) -> bool {
+    let (body, fraction) = match text.split_once('.') {
+        Some((body, fraction)) => (body, Some(fraction)),
+        None => (text, None),
     };
-    let fields: Vec<&str> = if body.contains(':') {
-        body.split(':').collect()
-    } else if matches!(body.len(), 2 | 4 | 6) {
-        (0..body.len())
-            .step_by(2)
-            .map(|at| &body[at..at + 2])
-            .collect()
-    } else {
-        return false;
-    };
-    if fields.is_empty() || fields.len() > 3 || fields.iter().any(|field| field.len() != 2) {
+    let fields: Vec<&str> = body.split(':').collect();
+    if !(2..=3).contains(&fields.len()) || fields.iter().any(|field| field.len() != 2) {
         return false;
     }
-    let limits = [24, 60, 60];
+    if fraction.is_some() && fields.len() != 3 {
+        return false;
+    }
+    if fraction.is_some_and(|fraction| !valid_fraction(fraction)) {
+        return false;
+    }
     fields
         .iter()
         .zip(limits)
@@ -73,31 +60,24 @@ fn valid_clock(text: &str, allow_fraction: bool) -> bool {
 
 pub(crate) fn is_valid_iso_datetime(value: &str) -> bool {
     let text = value.replace('Z', "+00:00");
-    if !text.is_ascii() {
+    if !text.is_ascii() || text.len() < 10 {
         return false;
     }
-    let (date, rest) =
-        if text.len() >= 10 && text.as_bytes()[4] == b'-' && text.as_bytes()[7] == b'-' {
-            (&text[..10], &text[10..])
-        } else if text.len() >= 8 {
-            (&text[..8], &text[8..])
-        } else {
-            return false;
-        };
-    let compact: String = date.chars().filter(|c| *c != '-').collect();
-    if compact.len() != 8 {
+    let bytes = text.as_bytes();
+    if bytes[4] != b'-' || bytes[7] != b'-' {
         return false;
     }
     let (Some(year), Some(month), Some(day)) = (
-        digits(&compact[..4]),
-        digits(&compact[4..6]),
-        digits(&compact[6..8]),
+        digits(&text[..4]),
+        digits(&text[5..7]),
+        digits(&text[8..10]),
     ) else {
         return false;
     };
     if !valid_date(year, month, day) {
         return false;
     }
+    let rest = &text[10..];
     if rest.is_empty() {
         return true;
     }
@@ -106,8 +86,46 @@ pub(crate) fn is_valid_iso_datetime(value: &str) -> bool {
         Some(at) => (&time_text[..at], Some(&time_text[at + 1..])),
         None => (time_text, None),
     };
-    if !valid_clock(clock, true) {
+    if !valid_clock(clock, [24, 60, 60]) {
         return false;
     }
-    offset.is_none_or(|zone| valid_clock(zone, true))
+    offset.is_none_or(|zone| valid_clock(zone, [24, 60, 60]))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_valid_iso_datetime;
+
+    #[test]
+    fn accepts_forms_every_supported_cpython_parses() {
+        for stamp in [
+            "2026-01-01",
+            "2026-01-01T10:30",
+            "2026-01-01T10:30:15",
+            "2026-01-01T10:30:15.123",
+            "2026-01-01T10:30:15.123456Z",
+            "2026-01-01 10:30:15+05:30",
+            "2026-01-01T10:30:15-05:00:30",
+        ] {
+            assert!(is_valid_iso_datetime(stamp), "{stamp}");
+        }
+    }
+
+    #[test]
+    fn rejects_forms_some_supported_cpython_rejects() {
+        for stamp in [
+            "2026-01-01T10.5",
+            "2026-01-01T10:30.5",
+            "2026-01-01T10:30:15+05.5",
+            "20260101",
+            "20260101T103015",
+            "2026-01-01T10:30:15,123",
+            "2026-01-01T10:30:15.12",
+            "2026-01-01T10",
+            "2026-01-01T25:00",
+            "2026-02-30",
+        ] {
+            assert!(!is_valid_iso_datetime(stamp), "{stamp}");
+        }
+    }
 }
