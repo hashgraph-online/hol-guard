@@ -742,6 +742,43 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+  windows-native-runtime:
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-windows-native-runtime
+
+  windows-packaged-daemon:
+    needs: [plan, native-command-evaluators, windows-native-runtime]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      needs.windows-native-runtime.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: windows-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        native-diagnostics: ["0", "1"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-windows-packaged-daemon
+        with:
+          python-version: "3.12"
+          native-diagnostics: ${{ matrix.native-diagnostics }}
+
   native-windows-evaluators:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
@@ -826,7 +863,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform]
+    needs: [plan, native-workspace, native-command-evaluators, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-packaged-daemon]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -859,7 +896,8 @@ jobs:
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","cisco-full","pi-exact-continuation","cross-platform"]
+                      "dashboard","cisco-full","pi-exact-continuation","cross-platform",
+                      "windows-native-runtime","windows-packaged-daemon"]
           missing = [j for j in always_on + required if j not in needs]
           if missing:
               print("::error::required jobs absent from needs graph: "+", ".join(missing))

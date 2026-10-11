@@ -1,0 +1,1064 @@
+{
+  "schema": "hol-guard.archive-acquisition-parity.v1",
+  "base_commit": "d1e893e2d310f7cd2fc3c212ea930c3acb1e75f0",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/runtime/restricted_archive_contract.py": "680eefe299c87de47e3db0269c79e97387dfb9155d51f40e304b12b0b929b23e",
+    "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py": "c03f8bedb2ad75272391068f86e16bc52c44ee41bd73c24628b43f5729b50d05",
+    "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py": "9771e902dc9bca564b291d2e80990a66464e1f4e732f0e5b5bd521600c7e00c4",
+    "src/codex_plugin_scanner/guard/runtime/restricted_archive_download.py": "66a1e556f79f9faec3ca095d5691585a8b0c075e10b626ed7a085755a99d10f5",
+    "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py": "b1949b71cd9e81935a3bb51b26ce564b9a496db0f83986114023f277bc510256"
+  },
+  "destinations": [
+    {
+      "input": "",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": false
+    },
+    {
+      "input": "https://packages.example.com/archive.tgz",
+      "expected": {
+        "url": "https://packages.example.com/archive.tgz",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/archive.tgz",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "HTTPS://PACKAGES.EXAMPLE.COM.:443",
+      "expected": {
+        "url": "https://packages.example.com/",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com:8443/a/../b?x=%2F&y=1",
+      "expected": {
+        "url": "https://packages.example.com:8443/a/../b?x=%2F&y=1",
+        "hostname": "packages.example.com",
+        "port": 8443,
+        "request_target": "/a/../b?x=%2F&y=1",
+        "host_header": "packages.example.com:8443"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/\u00e9.tgz",
+      "expected": {
+        "url": "https://packages.example.com/%C3%A9.tgz",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/%C3%A9.tgz",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a%20b?x=\u00e9",
+      "expected": {
+        "url": "https://packages.example.com/a%20b?x=%C3%A9",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/a%20b?x=%C3%A9",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a#fragment",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a#",
+      "expected": {
+        "url": "https://packages.example.com/a",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a?",
+      "expected": {
+        "url": "https://packages.example.com/a",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com:0/a",
+      "expected": {
+        "url": "https://packages.example.com/a",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com:/a",
+      "expected": {
+        "url": "https://packages.example.com/a",
+        "hostname": "packages.example.com",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "packages.example.com"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com:+443/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com:65536/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com:abc/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://user@packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://user:secret@packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://@packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": " https://packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a ",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a\n",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a\u007f",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a\\b",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https:\\packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https:/packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https:packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https:///packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "http://packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": false
+    },
+    {
+      "input": "ftp://packages.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": false
+    },
+    {
+      "input": "https://\u00e9.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination uses an ambiguous non-ASCII hostname."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a%",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a%2",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/a%zz",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://packages.example.com/?x=%xy",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://-bad.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://bad-.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://bad_name.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://bad..example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.com/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://127.0.0.1/a",
+      "expected": {
+        "url": "https://127.0.0.1/a",
+        "hostname": "127.0.0.1",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "127.0.0.1"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://8.8.8.8/a",
+      "expected": {
+        "url": "https://8.8.8.8/a",
+        "hostname": "8.8.8.8",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "8.8.8.8"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://[::1]/a",
+      "expected": {
+        "url": "https://[::1]/a",
+        "hostname": "::1",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "[::1]"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://[2001:4860:4860::8888]:8443/a",
+      "expected": {
+        "url": "https://[2001:4860:4860::8888]:8443/a",
+        "hostname": "2001:4860:4860::8888",
+        "port": 8443,
+        "request_target": "/a",
+        "host_header": "[2001:4860:4860::8888]:8443"
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://[fe80::1%25en0]/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://[not-an-ip]/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    },
+    {
+      "input": "https://registry.npmjs.org/a",
+      "expected": {
+        "url": "https://registry.npmjs.org/a",
+        "hostname": "registry.npmjs.org",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "registry.npmjs.org"
+      },
+      "is_external": false
+    },
+    {
+      "input": "https://REGISTRY.NPMJS.ORG./a",
+      "expected": {
+        "url": "https://registry.npmjs.org/a",
+        "hostname": "registry.npmjs.org",
+        "port": 443,
+        "request_target": "/a",
+        "host_header": "registry.npmjs.org"
+      },
+      "is_external": false
+    },
+    {
+      "input": "https://registry.npmjs.org@evil.example/a",
+      "expected": {
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination is not a canonical public HTTPS URL."
+      },
+      "is_external": true
+    }
+  ],
+  "addresses": [
+    {
+      "input": "0.0.0.0",
+      "expected": false
+    },
+    {
+      "input": "0.1.2.3",
+      "expected": false
+    },
+    {
+      "input": "8.8.8.8",
+      "expected": true
+    },
+    {
+      "input": "10.0.0.1",
+      "expected": false
+    },
+    {
+      "input": "100.64.0.1",
+      "expected": false
+    },
+    {
+      "input": "100.100.100.200",
+      "expected": false
+    },
+    {
+      "input": "127.0.0.1",
+      "expected": false
+    },
+    {
+      "input": "169.254.169.254",
+      "expected": false
+    },
+    {
+      "input": "172.16.0.1",
+      "expected": false
+    },
+    {
+      "input": "192.0.0.8",
+      "expected": false
+    },
+    {
+      "input": "192.0.0.9",
+      "expected": true
+    },
+    {
+      "input": "192.0.0.10",
+      "expected": true
+    },
+    {
+      "input": "192.0.0.11",
+      "expected": false
+    },
+    {
+      "input": "192.0.2.1",
+      "expected": false
+    },
+    {
+      "input": "192.168.0.1",
+      "expected": false
+    },
+    {
+      "input": "198.18.0.1",
+      "expected": false
+    },
+    {
+      "input": "198.51.100.1",
+      "expected": false
+    },
+    {
+      "input": "203.0.113.1",
+      "expected": false
+    },
+    {
+      "input": "224.0.0.1",
+      "expected": false
+    },
+    {
+      "input": "240.0.0.1",
+      "expected": false
+    },
+    {
+      "input": "255.255.255.255",
+      "expected": false
+    },
+    {
+      "input": "::",
+      "expected": false
+    },
+    {
+      "input": "::1",
+      "expected": false
+    },
+    {
+      "input": "::ffff:8.8.8.8",
+      "expected": true
+    },
+    {
+      "input": "::ffff:127.0.0.1",
+      "expected": false
+    },
+    {
+      "input": "2001:db8::1",
+      "expected": false
+    },
+    {
+      "input": "2001:4860:4860::8888",
+      "expected": true
+    },
+    {
+      "input": "2002:0808:0808::1",
+      "expected": false
+    },
+    {
+      "input": "2002:7f00:0001::1",
+      "expected": false
+    },
+    {
+      "input": "2001:0000:4136:e378:8000:63bf:3fff:fdd2",
+      "expected": false
+    },
+    {
+      "input": "fc00::1",
+      "expected": false
+    },
+    {
+      "input": "fe80::1",
+      "expected": false
+    },
+    {
+      "input": "ff02::1",
+      "expected": false
+    }
+  ],
+  "downloads": [
+    {
+      "name": "success",
+      "input": {
+        "name": "success",
+        "responses": [
+          {
+            "status": 200,
+            "body": "archive",
+            "headers": {
+              "Content-Length": "7"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "download",
+        "sha256": "0eb3e36bfb24dcd9bb1d1bece1531216b59539a8fde17ee80224af0653c92aa3",
+        "size": 7,
+        "final_url": "https://packages.example.com/dir/archive.tgz",
+        "suffix": ".tgz",
+        "mode": 256
+      }
+    },
+    {
+      "name": "empty",
+      "input": {
+        "name": "empty",
+        "responses": [
+          {
+            "status": 200
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "download",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "size": 0,
+        "final_url": "https://packages.example.com/dir/archive.tgz",
+        "suffix": ".tgz",
+        "mode": 256
+      }
+    },
+    {
+      "name": "size-overflow",
+      "input": {
+        "name": "size-overflow",
+        "max_bytes": 3,
+        "responses": [
+          {
+            "status": 200,
+            "body": "1234"
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_download_size_limit",
+        "message": "External archive exceeded Guard's download size limit."
+      }
+    },
+    {
+      "name": "declared-overflow",
+      "input": {
+        "name": "declared-overflow",
+        "responses": [
+          {
+            "status": 200,
+            "headers": {
+              "Content-Length": "17"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_download_size_limit",
+        "message": "External archive exceeded Guard's download size limit."
+      }
+    },
+    {
+      "name": "truncated",
+      "input": {
+        "name": "truncated",
+        "responses": [
+          {
+            "status": 200,
+            "body": "ab",
+            "headers": {
+              "Content-Length": "3"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_incomplete_response",
+        "message": "External archive response ended before its declared content length."
+      }
+    },
+    {
+      "name": "encoding",
+      "input": {
+        "name": "encoding",
+        "responses": [
+          {
+            "status": 200,
+            "headers": {
+              "Content-Encoding": "gzip"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_content_encoding_rejected",
+        "message": "External archive response used an unsupported content encoding."
+      }
+    },
+    {
+      "name": "bad-length",
+      "input": {
+        "name": "bad-length",
+        "responses": [
+          {
+            "status": 200,
+            "headers": {
+              "Content-Length": "no"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_incomplete_response",
+        "message": "External archive response declared an invalid content length."
+      }
+    },
+    {
+      "name": "negative-length",
+      "input": {
+        "name": "negative-length",
+        "responses": [
+          {
+            "status": 200,
+            "headers": {
+              "Content-Length": "-1"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_incomplete_response",
+        "message": "External archive response declared an invalid content length."
+      }
+    },
+    {
+      "name": "http-error",
+      "input": {
+        "name": "http-error",
+        "responses": [
+          {
+            "status": 403
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_http_error",
+        "message": "External archive server returned a non-success response."
+      }
+    },
+    {
+      "name": "headers-count",
+      "input": {
+        "name": "headers-count",
+        "responses": [
+          {
+            "status": 200,
+            "headers": {
+              "X-0": "v",
+              "X-1": "v",
+              "X-2": "v",
+              "X-3": "v",
+              "X-4": "v",
+              "X-5": "v",
+              "X-6": "v",
+              "X-7": "v",
+              "X-8": "v",
+              "X-9": "v",
+              "X-10": "v",
+              "X-11": "v",
+              "X-12": "v",
+              "X-13": "v",
+              "X-14": "v",
+              "X-15": "v",
+              "X-16": "v",
+              "X-17": "v",
+              "X-18": "v",
+              "X-19": "v",
+              "X-20": "v",
+              "X-21": "v",
+              "X-22": "v",
+              "X-23": "v",
+              "X-24": "v",
+              "X-25": "v",
+              "X-26": "v",
+              "X-27": "v",
+              "X-28": "v",
+              "X-29": "v",
+              "X-30": "v",
+              "X-31": "v",
+              "X-32": "v",
+              "X-33": "v",
+              "X-34": "v",
+              "X-35": "v",
+              "X-36": "v",
+              "X-37": "v",
+              "X-38": "v",
+              "X-39": "v",
+              "X-40": "v",
+              "X-41": "v",
+              "X-42": "v",
+              "X-43": "v",
+              "X-44": "v",
+              "X-45": "v",
+              "X-46": "v",
+              "X-47": "v",
+              "X-48": "v",
+              "X-49": "v",
+              "X-50": "v",
+              "X-51": "v",
+              "X-52": "v",
+              "X-53": "v",
+              "X-54": "v",
+              "X-55": "v",
+              "X-56": "v",
+              "X-57": "v",
+              "X-58": "v",
+              "X-59": "v",
+              "X-60": "v",
+              "X-61": "v",
+              "X-62": "v",
+              "X-63": "v",
+              "X-64": "v"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_response_headers_invalid",
+        "message": "External archive response headers were malformed or exceeded Guard's limit."
+      }
+    },
+    {
+      "name": "header-control",
+      "input": {
+        "name": "header-control",
+        "responses": [
+          {
+            "status": 200,
+            "headers": {
+              "X-Bad": "x\r\ny"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_response_headers_invalid",
+        "message": "External archive response headers were malformed or exceeded Guard's limit."
+      }
+    },
+    {
+      "name": "mixed-dns",
+      "input": {
+        "name": "mixed-dns",
+        "addresses": [
+          "8.8.8.8",
+          "127.0.0.1"
+        ],
+        "responses": []
+      },
+      "opened": [],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_dns_ambiguous",
+        "message": "External archive destination returned mixed public and non-public DNS addresses."
+      }
+    },
+    {
+      "name": "private-dns",
+      "input": {
+        "name": "private-dns",
+        "addresses": [
+          "127.0.0.1"
+        ],
+        "responses": []
+      },
+      "opened": [],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination resolved to a non-public address."
+      }
+    },
+    {
+      "name": "redirect-loop",
+      "input": {
+        "name": "redirect-loop",
+        "max_redirects": 0,
+        "responses": [
+          {
+            "status": 302,
+            "headers": {
+              "Location": "/next.tgz"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_redirect_limit",
+        "message": "External archive exceeded Guard's redirect limit."
+      }
+    },
+    {
+      "name": "redirect-relative",
+      "input": {
+        "name": "redirect-relative",
+        "responses": [
+          {
+            "status": 302,
+            "headers": {
+              "Location": "../next.tgz"
+            }
+          },
+          {
+            "status": 200,
+            "body": "a"
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz",
+        "https://packages.example.com/next.tgz"
+      ],
+      "expected": {
+        "kind": "download",
+        "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+        "size": 1,
+        "final_url": "https://packages.example.com/next.tgz",
+        "suffix": ".tgz",
+        "mode": 256
+      }
+    },
+    {
+      "name": "redirect-query",
+      "input": {
+        "name": "redirect-query",
+        "responses": [
+          {
+            "status": 302,
+            "headers": {
+              "Location": "?x=1"
+            }
+          },
+          {
+            "status": 200,
+            "body": "a"
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz",
+        "https://packages.example.com/dir/archive.tgz?x=1"
+      ],
+      "expected": {
+        "kind": "download",
+        "sha256": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+        "size": 1,
+        "final_url": "https://packages.example.com/dir/archive.tgz?x=1",
+        "suffix": ".tgz",
+        "mode": 256
+      }
+    },
+    {
+      "name": "redirect-http",
+      "input": {
+        "name": "redirect-http",
+        "responses": [
+          {
+            "status": 302,
+            "headers": {
+              "Location": "http://packages.example.com/next"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_redirect_rejected",
+        "message": "External archive redirect did not provide a valid public HTTPS destination."
+      }
+    },
+    {
+      "name": "redirect-local",
+      "input": {
+        "name": "redirect-local",
+        "responses": [
+          {
+            "status": 302,
+            "headers": {
+              "Location": "https://127.0.0.1/next"
+            }
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_destination_rejected",
+        "message": "External archive destination resolved to a non-public address."
+      }
+    },
+    {
+      "name": "redirect-missing",
+      "input": {
+        "name": "redirect-missing",
+        "responses": [
+          {
+            "status": 302
+          }
+        ]
+      },
+      "opened": [
+        "https://packages.example.com/dir/archive.tgz"
+      ],
+      "expected": {
+        "kind": "failure",
+        "code": "external_archive_redirect_rejected",
+        "message": "External archive redirect did not provide a valid destination."
+      }
+    }
+  ]
+}

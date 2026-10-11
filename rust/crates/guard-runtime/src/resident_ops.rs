@@ -88,6 +88,9 @@ pub(crate) fn evaluate_resident_bytes(
             crate::edge::evaluate_envelope_with_store(*request, policy_store)
         }
         ResidentRequestV1::Operation(request) => match *request {
+            ResidentOperationV1::ArchiveAcquisition(request) => {
+                crate::archive_acquisition_op::evaluate_archive_acquisition_request(&request)
+            }
             ResidentOperationV1::CommandModel(request) => {
                 crate::oneshot::evaluate_command_model_request(&request)
             }
@@ -455,6 +458,7 @@ pub(crate) fn evaluate_resident_bytes(
 /// The Guard home an operation acts on, for operations that open per-home state.
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
+        ResidentOperationV1::ArchiveAcquisition(request) => Some(&request.guard_home),
         ResidentOperationV1::ApprovalReuseDiagnostic(request) => Some(&request.guard_home),
         ResidentOperationV1::ClaimApprovalReuseDecisions(request) => Some(&request.guard_home),
         ResidentOperationV1::GuardStore(request) => Some(&request.guard_home),

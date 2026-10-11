@@ -1,10 +1,9 @@
 """External-archive downloads for the resident's supply-chain evaluation.
 
-The resident never opens a socket and never reads an archive. When it needs
-one it asks the caller to download it under the managed network policy and to
-inspect the blob offline with the sandboxed native worker. This module does
-exactly that and reports the digest, the size and the inspector's verdict. The
-resident decides what they mean.
+The caller delegates downloads to bounded native acquisition under the managed
+network policy, then inspects the blob offline with the network-denied native
+worker. This module reports the digest, size and inspector's verdict to the
+resident package authority.
 
 With ``retain`` the verified blobs are kept (mode 0400, system temp) so a
 reviewed launch can run against the bytes that were inspected. Blobs the
@@ -19,7 +18,6 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from .mdm.network_transport import ManagedNetworkError, resolved_network_policy, validate_destination
 from .native_archive_inspection import inspect_archive_native
 from .runtime.restricted_archive_contract import RestrictedArchiveDownload, RestrictedArchiveFailure
 from .runtime.restricted_archive_download import download_restricted_archive
@@ -56,11 +54,6 @@ class ArchiveFulfilment:
 
     def _fulfil(self, need: Mapping[str, Any], started: float) -> dict[str, object]:
         url = str(need["url"])
-        try:
-            policy, _managed = resolved_network_policy(None)
-            validate_destination(url, policy)
-        except ManagedNetworkError as error:
-            return {"kind": "archive_failure", "code": str(error)[:128], "message": "Managed network policy refused"}
         spec = need.get("inspect")
         aggregate = _required_timeout(spec.get("aggregate_timeout_seconds")) if isinstance(spec, Mapping) else None
         download_timeout = float(need["timeout_seconds"])

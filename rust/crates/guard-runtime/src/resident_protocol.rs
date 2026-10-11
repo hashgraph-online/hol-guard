@@ -85,6 +85,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-resident-client-v1".into(),
         "native-resident-lifecycle-v1".into(),
         guard_contracts::ARCHIVE_INSPECTION_FEATURE.into(),
+        guard_contracts::ARCHIVE_ACQUISITION_FEATURE.into(),
         guard_contracts::CONTEXT_DIGEST_FEATURE.into(),
         guard_contracts::COMMAND_EFFECT_FEATURE.into(),
         guard_contracts::COMMAND_EFFECT_BATCH_FEATURE.into(),
@@ -167,6 +168,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "operation", content = "request", rename_all = "snake_case")]
 pub(crate) enum ResidentOperationV1 {
+    ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),
     CommandModel(CommandModelRequestV1),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),

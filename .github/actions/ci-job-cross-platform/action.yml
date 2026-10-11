@@ -38,19 +38,19 @@ runs:
     run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
   - uses: ./.github/actions/setup-rust
-    if: runner.os == 'macOS' || runner.os == 'Windows'
+    if: runner.os == 'macOS'
   - name: Install content-addressed compiler cache
-    if: runner.os == 'macOS' || runner.os == 'Windows'
+    if: runner.os == 'macOS'
     uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
     with:
       version: v0.18.0
   - name: Route the runtime build through the compiler cache
     # The rust-cache key includes the runner image's toolchains, so it misses
     # on every PR between an image rollout and the next completed main push,
-    # and these builds then recompile every crate (about 4 min on macOS, 7 on
-    # Windows). sccache keys on content and main pushes write objects as they
-    # compile, so a cancelled main run still warms it. PRs only read.
-    if: runner.os == 'macOS' || runner.os == 'Windows'
+    # and the macOS build then recompiles every crate (about 4 min). sccache
+    # keys on content and main pushes write objects as they compile, so a
+    # cancelled main run still warms it. PRs only read.
+    if: runner.os == 'macOS'
     shell: bash
     env:
       SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
@@ -84,49 +84,3 @@ runs:
     run: uv run --no-sync pytest tests/test_codex_hook_fallback_isolation.py -k "isolated_process_timeout_kills_descendants
       or isolated_process_closes_descendant_held_pipes_after_parent_exit" --tb=short
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
-  - name: Build the native runtime for the packaged Windows Core daemon gate
-    # The daemon lifecycle decisions are owned by the native resident, so the
-    # packaged daemon cannot start without a runtime; release packaging stages
-    # the attested wheel runtime, and this gate supplies the CI-built one.
-    if: runner.os == 'Windows'
-    shell: pwsh
-    run: |
-      $ErrorActionPreference = 'Stop'
-      $PSNativeCommandUseErrorActionPreference = $true
-      cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
-      "HOL_GUARD_PACKAGED_GATE_NATIVE_BINARY=$env:GITHUB_WORKSPACE\rust\target\release\hol-guard-runtime.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-  - name: Build and exercise packaged Windows Core daemon gate
-    if: runner.os == 'Windows'
-    shell: pwsh
-    run: |
-      $ErrorActionPreference = 'Stop'
-      $PSNativeCommandUseErrorActionPreference = $true
-      $dist = Join-Path $env:RUNNER_TEMP "hol-guard-frozen"
-      $work = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-work"
-      $spec = Join-Path $env:RUNNER_TEMP "hol-guard-frozen-spec"
-      $versionFile = Join-Path $env:RUNNER_TEMP "hol-guard-version-info.txt"
-      New-Item -ItemType Directory -Force -Path $dist, $work, $spec | Out-Null
-      uv sync --frozen --no-dev --group ci-test --extra mdm-build --python ${{ inputs.python-version }}
-      $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
-      uv run --no-sync python scripts/mdm/windows/write-version-info.py `
-        --version $version --output $versionFile
-      uv run --no-sync python -I scripts/release/stage_guard_cloud_review_artifacts.py `
-        --source-root (Get-Location).Path
-      if ($LASTEXITCODE -ne 0) {
-        throw "Staging Guard cloud review artifacts failed with exit code $LASTEXITCODE"
-      }
-      uv run --no-sync pyinstaller --clean --noconfirm --onedir --name hol-guard `
-        --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner `
-        --version-file $versionFile `
-        --distpath $dist --workpath $work --specpath $spec `
-        scripts/mdm/hol-guard-entry.py
-      if ($LASTEXITCODE -ne 0) {
-        throw "PyInstaller failed with exit code $LASTEXITCODE"
-      }
-      $env:HOL_GUARD_FROZEN_TEST_EXECUTABLE = Join-Path $dist "hol-guard/hol-guard.exe"
-      if (-not (Test-Path -LiteralPath $env:HOL_GUARD_FROZEN_TEST_EXECUTABLE -PathType Leaf)) {
-        throw "Frozen hol-guard executable was not produced"
-      }
-      $env:HOL_GUARD_NATIVE_BINARY = $env:HOL_GUARD_PACKAGED_GATE_NATIVE_BINARY
-      $env:HOL_GUARD_NATIVE = "force"
-      uv run --no-sync pytest tests/test_frozen_windows_daemon_bootstrap.py --tb=short -rP

@@ -1,10 +1,9 @@
 """Brokered network egress for resident package evaluation.
 
-The resident cannot dial out, so Python performs the exchanges it asks for under
-the managed network policy. These tests pin that policy: a managed host that
-disallows public registries must never reach them, and an unmanaged host behind
-an environment proxy must keep working. The resident side is covered by the
-Rust crate; here the resident is replaced by a scripted fake.
+The retained metadata exchanger performs managed HTTP exchanges; archives use
+native acquisition. These tests pin registry refusal and environment-proxy
+behavior. Package evaluation uses a scripted fake, while archive refusal runs
+through the actual resident.
 """
 
 from __future__ import annotations
@@ -24,10 +23,12 @@ import pytest
 from codex_plugin_scanner.guard import native_supply_chain_archive as archive_module
 from codex_plugin_scanner.guard import native_supply_chain_egress as egress
 from codex_plugin_scanner.guard import native_supply_chain_eval as transport
-from codex_plugin_scanner.guard.mdm import network_transport
+from codex_plugin_scanner.guard.mdm import network_transport, network_trust
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
-from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+from codex_plugin_scanner.guard.native_context import _canonical_request_sha256, bound_context_digest_home
 from codex_plugin_scanner.guard.native_package_authority import _RESULT_SCHEMA
+from codex_plugin_scanner.guard.native_policy_snapshot import provision_native_policy_verifier_key
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.runtime.restricted_archive_contract import RestrictedArchiveFailure
 
 
@@ -96,17 +97,20 @@ def test_managed_host_without_public_registries_never_reaches_them(
 
 
 def test_managed_host_without_public_registries_refuses_the_archive_download(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, native_hook_force: Path
 ) -> None:
     _managed(monkeypatch, allow_public_registries=False)
     reached = _forbid_network(monkeypatch)
-    monkeypatch.setattr(
-        archive_module,
-        "download_restricted_archive",
-        lambda *_a, **_k: pytest.fail("the archive must not be fetched"),
-    )
+    provision_native_policy_verifier_key(tmp_path, b"\x0d" * 32)
+    # Use synthetic trust; native managed refusal happens before DNS or TLS.
+    monkeypatch.setattr(network_transport, "managed_ssl_context", lambda _policy: SimpleNamespace())
+    monkeypatch.setattr(network_trust, "export_managed_trust_roots", lambda _context: [b"synthetic root"])
     exchanger = _exchanger(tmp_path)
-    exchanger.fulfil({"needs": [_need("https://files.pythonhosted.org/a.tgz", klass="archive")]})
+    try:
+        with bound_context_digest_home(tmp_path):
+            exchanger.fulfil({"needs": [_need("https://files.pythonhosted.org/a.tgz", klass="archive")]})
+    finally:
+        close_native_residents()
     outcome = exchanger.supplied[0]["outcome"]
     assert isinstance(outcome, dict)
     assert outcome["kind"] == "archive_failure"

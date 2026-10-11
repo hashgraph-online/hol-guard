@@ -27,12 +27,6 @@ def _need(aggregate: float) -> dict[str, object]:
     }
 
 
-@pytest.fixture(autouse=True)
-def _permissive_network(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(native_supply_chain_archive, "resolved_network_policy", lambda _value: (None, False))
-    monkeypatch.setattr(native_supply_chain_archive, "validate_destination", lambda _url, _policy: None)
-
-
 def test_non_numeric_aggregate_timeout_does_not_download(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     forbid_download(monkeypatch, "download started for a non-numeric timeout")
     fulfilment = ArchiveFulfilment(guard_home=tmp_path, scratch_dir=tmp_path, retain=False)

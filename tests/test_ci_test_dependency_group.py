@@ -49,7 +49,7 @@ def test_reporting_and_optional_workers_preserve_their_dependency_boundaries() -
         "uv sync --frozen --no-dev --group ci-test --extra cisco --group cisco-mcp --python 3.13"
         in commands["cisco-full"]
     )
-    assert "uv sync --frozen --no-dev --group ci-test --extra mdm-build" in commands["cross-platform"]
+    assert "uv sync --frozen --no-dev --group ci-test --extra mdm-build" in commands["windows-packaged-daemon"]
     assert "uv sync --frozen --extra dev" in commands["quality"]
 
 

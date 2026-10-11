@@ -45,6 +45,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # Archive-inspection transport: lease, request binding, and the
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
+        # Native acquisition request binding and managed trust DTO transport.
+        "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         # Per-request status reuse. stat() only rechecks the validated binary.
         "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
@@ -80,6 +82,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # The request digest correlates resident framing; it never owns a
         # semantic approval, policy, or context identity or decision.
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
+        "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
         # Same correlation-only digest for the store-policy claim and diagnostic ops.
@@ -359,8 +362,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
         "src/codex_plugin_scanner/guard/runtime/prompt_injection.py",
         "src/codex_plugin_scanner/guard/runtime/read_only_git_audit.py",
-        "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",
-        "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py",
         "src/codex_plugin_scanner/guard/runtime/routine_local_node.py",
         "src/codex_plugin_scanner/guard/runtime/routine_node_identity.py",
         "src/codex_plugin_scanner/guard/runtime/routine_setup_commands.py",

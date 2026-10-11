@@ -45,6 +45,9 @@ mod workspace_review_contracts;
 pub use workspace_review_contracts::*;
 mod archive_inspection;
 pub use archive_inspection::*;
+
+mod archive_acquisition;
+pub use archive_acquisition::*;
 mod execution_environment;
 pub use execution_environment::*;
 mod context_digest;

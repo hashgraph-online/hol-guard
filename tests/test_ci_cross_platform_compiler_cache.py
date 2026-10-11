@@ -1,4 +1,4 @@
-"""The macOS and Windows runtime builds must reuse content-addressed objects."""
+"""The macOS runtime build must reuse content-addressed objects."""
 
 from __future__ import annotations
 
@@ -22,8 +22,7 @@ def test_runtime_builds_run_after_the_compiler_cache_is_routed() -> None:
     steps = _steps()
     routed = _index(steps, "Route the runtime build through the compiler cache")
     assert _index(steps, "Install content-addressed compiler cache") < routed
-    for build in ("Build the native runtime for skill-directory identity", "Build the native runtime for the packaged"):
-        assert routed < _index(steps, build)
+    assert routed < _index(steps, "Build the native runtime for skill-directory identity")
     script = steps[routed]["run"]
     assert "RUSTC_WRAPPER=sccache" in script
     assert "SCCACHE_GHA_VERSION=cross-platform-runtime" in script
