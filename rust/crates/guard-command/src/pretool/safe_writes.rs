@@ -157,6 +157,12 @@ pub(super) fn safe_file_mutation_arguments(
     context: super::PathContext<'_>,
 ) -> bool {
     match (command, arguments) {
+        // The standard directory-only form creates one unique private leaf;
+        // it never opens, overwrites, or removes an existing path. Subsequent
+        // writes still require the separate owned-temporary-directory proof.
+        ("mktemp", [flag]) if flag == "-d" => {
+            super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+        }
         ("mkdir", [target]) => {
             !target.starts_with('-')
                 && bounded_write_target(target, context.home_dir, context.cwd, true, false)

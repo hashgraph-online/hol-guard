@@ -317,7 +317,7 @@ pub(super) fn exact_safe_segment_with_context(
             model.segments.len() == 1
                 && safe_reads::safe_copy_arguments(&segment.arguments, context)
         }
-        "mkdir" | "touch" | "mv" => {
+        "mktemp" | "mkdir" | "touch" | "mv" => {
             model.segments.len() == 1
                 && safe_reads::safe_file_mutation_arguments(basename, &segment.arguments, context)
         }

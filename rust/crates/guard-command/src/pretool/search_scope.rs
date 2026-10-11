@@ -56,7 +56,7 @@ pub(super) fn claude_grep_directory_scope_proven(
     let Some(root) = verified_directory_root(target, home_dir, cwd) else {
         return false;
     };
-    walk_scope(&root, &filter, true).is_ok()
+    walk_scope(&root, &filter, true, false).is_ok()
 }
 
 /// Host-neutral variant for hosts whose search semantics are not modeled
@@ -95,7 +95,16 @@ pub(super) fn unfiltered_directory_scope_proven(
     std::fs::canonicalize(candidate)
         .ok()
         .filter(|root| root.is_dir())
-        .is_some_and(|root| walk_scope(&root, &filter, false).is_ok())
+        .is_some_and(|root| {
+            let agent_documents = home_dir
+                .and_then(|home| std::fs::canonicalize(home).ok())
+                .is_some_and(|home| {
+                    [".agent/skills", ".agent/artifacts"]
+                        .iter()
+                        .any(|tree| root.starts_with(home.join(tree)))
+                });
+            walk_scope(&root, &filter, false, agent_documents).is_ok()
+        })
 }
 
 fn claude_grep_input(payload: &Value) -> Option<&Map<String, Value>> {
@@ -224,6 +233,7 @@ fn walk_scope(
     root: &Path,
     filter: &SearchFilter,
     honor_ignores: bool,
+    agent_documents: bool,
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| honor_ignores);
     let mut tiers = IgnoreTiers::default();
@@ -275,6 +285,9 @@ fn walk_scope(
             }
             // Metadata only: never follow links or open a candidate secret.
             let metadata = std::fs::symlink_metadata(&path).map_err(|_| ScopeUnproven)?;
+            if agent_documents && (name.starts_with('.') || metadata.file_type().is_symlink()) {
+                return Err(ScopeUnproven);
+            }
             if metadata.file_type().is_symlink() {
                 // Claude's Grep does not follow links. Still refuse a link
                 // whose name or file target is sensitive, in case it would.

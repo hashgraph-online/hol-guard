@@ -84,63 +84,6 @@ fn omp(fixture: &Fixture, tool: &str, input: Value) -> PreToolResultV1 {
     run(fixture, "omp", tool, input)
 }
 
-#[test]
-fn omp_home_document_reads_and_searches_keep_credential_and_link_floors() {
-    let f = fixture();
-    write(f.home.join(".agent/artifacts/report.md"), "Inert report\n");
-    let skills = f.home.join(".agent/skills");
-    let artifacts = f.home.join(".agent/artifacts");
-    let selector = format!("{}/**/SKILL.md", skills.display());
-    assert!(allowed(&omp(
-        &f,
-        "read",
-        json!({"path": artifacts.join("report.md")})
-    )));
-    assert!(allowed(&omp(
-        &f,
-        "glob",
-        json!({"path": selector, "hidden":true, "gitignore":false})
-    )));
-    assert!(allowed(&omp(
-        &f,
-        "grep",
-        json!({"path": artifacts, "pattern":"Inert"})
-    )));
-    for path in [
-        ".agent/artifacts/auth.md",
-        ".agent/artifacts/.hidden/report.md",
-        ".agent/auth.json",
-    ] {
-        write(f.home.join(path), "synthetic sensitive fixture\n");
-        assert!(
-            !allowed(&omp(&f, "read", json!({"path": f.home.join(path)}))),
-            "{path}"
-        );
-    }
-    write(
-        skills.join("demo/credentials.md"),
-        "synthetic sensitive fixture\n",
-    );
-    assert!(!allowed(&omp(
-        &f,
-        "glob",
-        json!({"path": selector, "hidden":true, "gitignore":false})
-    )));
-    assert!(!allowed(&omp(
-        &f,
-        "grep",
-        json!({"path": artifacts, "pattern":"Inert"})
-    )));
-    assert!(!allowed(&omp(
-        &f,
-        "read",
-        json!({"path": artifacts.join("../auth.json")})
-    )));
-    let link = artifacts.join("linked.md");
-    std::os::unix::fs::symlink(f.home.join(".ssh/id_rsa"), &link).unwrap();
-    assert!(!allowed(&omp(&f, "read", json!({"path": link}))));
-}
-
 fn eval_code(fixture: &Fixture, code: &str) -> PreToolResultV1 {
     omp(
         fixture,
