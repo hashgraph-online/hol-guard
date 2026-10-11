@@ -32,10 +32,13 @@ use std::fs;
 use std::io::{self, Read, Write};
 use std::net::{Shutdown, TcpStream};
 use std::path::{Path, PathBuf};
+#[cfg(unix)]
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
 
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -61,7 +64,9 @@ const DAEMON_STATE_JSON_MAX_BYTES: u64 = 64 * 1024;
 const DAEMON_RESPONSE_MAX_BYTES: usize = 256 * 1024;
 /// `_GUARD_DAEMON_PROCESS_QUERY_MAX_BYTES` / `_TIMEOUT_SECONDS`
 /// (manager.py:111-:112).
+#[cfg(unix)]
 const PROCESS_QUERY_MAX_BYTES: usize = 1024 * 1024;
+#[cfg(unix)]
 const PROCESS_QUERY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Health-request deadline (manager.py:1206 uses `health_timeout=1.0`;
 /// policy_authority_client.py:35 uses 2s for the policy socket).
@@ -69,6 +74,7 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(1);
 /// Policy request socket timeout (policy_authority_client.py:35).
 const POLICY_TIMEOUT: Duration = Duration::from_secs(2);
 /// Trusted `ps` locations (manager.py:112, :2556-:2562).
+#[cfg(unix)]
 const POSIX_PS_PATHS: [&str; 2] = ["/bin/ps", "/usr/bin/ps"];
 /// Launcher basenames recognized in serve argv (manager.py:2885-:2894).
 const RECOGNIZED_LAUNCHERS: [&str; 4] = [
@@ -819,6 +825,7 @@ fn trusted_posix_ps_path() -> Option<PathBuf> {
 }
 
 /// `_bounded_process_query_stdout` (manager.py:2661-:2731).
+#[cfg(unix)]
 fn bounded_process_query_stdout(args: &[&str]) -> Option<String> {
     let mut child: Child = Command::new(args[0])
         .args(&args[1..])
