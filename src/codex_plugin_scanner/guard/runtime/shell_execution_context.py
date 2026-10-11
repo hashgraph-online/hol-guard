@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import shlex
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -95,6 +95,10 @@ class ShellExecutionContext:
     reason_code: str | None
     directory_change_present: bool
     native: _NativeBinding | None = field(default=None, compare=False, repr=False)
+    environment_secret_dump: bool | None = field(default=None, compare=False, repr=False)
+    environment_secret_scope: tuple[str, Path | None, Path | None] | None = field(
+        default=None, compare=False, repr=False
+    )
 
     @property
     def effective_cwds(self) -> tuple[Path, ...]:
@@ -281,7 +285,11 @@ def model_shell_execution_context(
     if isinstance(result, NativeRequestContextFailure) or result.shell is None:
         return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)
     try:
-        return _context_from_report(result.shell)
+        return replace(
+            _context_from_report(result.shell),
+            environment_secret_dump=result.environment_secret_dump,
+            environment_secret_scope=(command_text, cwd, home_dir),
+        )
     except (KeyError, TypeError, ValueError, AttributeError):
         # A reply that decodes badly is not a context: stay incomplete.
         return _unavailable_context(command_text, SHELL_CWD_NATIVE_UNAVAILABLE)

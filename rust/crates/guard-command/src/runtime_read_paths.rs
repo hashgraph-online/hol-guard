@@ -18,7 +18,7 @@ pub(crate) const MAX_DECODED_PAYLOAD_BYTES: u64 = 32 * 1024;
 /// `os.path.realpath`-shaped canonicalization: on Windows the verbatim
 /// `\\?\` prefix `std::fs::canonicalize` adds is removed so the text
 /// compares with `normalize_path` output.
-fn canonicalize_text(path: &Path) -> std::io::Result<PathBuf> {
+pub(crate) fn canonicalize_text(path: &Path) -> std::io::Result<PathBuf> {
     std::fs::canonicalize(path).map(strip_verbatim_prefix)
 }
 
