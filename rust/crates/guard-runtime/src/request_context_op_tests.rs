@@ -6,15 +6,17 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+use guard_contracts::RequestContextExecutableV1;
 use guard_contracts::{
-    RequestContextBuildV1, RequestContextExecutableV1, RequestContextKindV1,
-    RequestContextPolicyV1, RequestContextRequestV1, RequestContextSourceV1, ShellContextV1,
-    REQUEST_CONTEXT_REQUEST_SCHEMA, REQUEST_CONTEXT_SCHEMA,
+    RequestContextBuildV1, RequestContextKindV1, RequestContextPolicyV1, RequestContextRequestV1,
+    RequestContextSourceV1, ShellContextV1, REQUEST_CONTEXT_REQUEST_SCHEMA, REQUEST_CONTEXT_SCHEMA,
 };
 use serde_json::{json, Value};
 
 use super::{evaluate_request_context_request, request_digest, Budget};
 
+#[cfg(unix)]
 const PARITY_FIXTURE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../tests/fixtures/request-context-parity/cases.v1.json"
@@ -84,6 +86,7 @@ fn code_of(request: &RequestContextRequestV1) -> String {
     response["code"].as_str().unwrap().to_owned()
 }
 
+#[cfg(unix)]
 fn materialize(root: &Path, fs_spec: &Value) {
     for entry in fs_spec.as_array().unwrap() {
         let path = root.join(entry["path"].as_str().unwrap());
@@ -99,6 +102,7 @@ fn materialize(root: &Path, fs_spec: &Value) {
     }
 }
 
+#[cfg(unix)]
 fn rel(root: &Path, value: &Value) -> Value {
     let Some(text) = value.as_str() else {
         return Value::Null;
@@ -113,6 +117,7 @@ fn rel(root: &Path, value: &Value) -> Value {
     }
 }
 
+#[cfg(unix)]
 fn identity_mode(value: &Value) -> Value {
     if value.is_null() {
         Value::Null
@@ -121,6 +126,7 @@ fn identity_mode(value: &Value) -> Value {
     }
 }
 
+#[cfg(unix)]
 fn normalize_segment(root: &Path, segment: &Value) -> Value {
     json!({
         "tokens": segment["tokens"].as_array().unwrap().iter().map(|token| {
@@ -341,10 +347,12 @@ fn process_cwd_fallback_reports_the_process_source() {
     let _ = fs::remove_dir_all(&root);
 }
 
+#[cfg(unix)]
 fn context_of(response: &Value) -> ShellContextV1 {
     serde_json::from_value(payload_of(response)["shell"]["context"].clone()).unwrap()
 }
 
+#[cfg(unix)]
 fn validate(context: &ShellContextV1, index: u64) -> Value {
     run(&request(RequestContextKindV1::ValidateSegment {
         context: context.clone(),

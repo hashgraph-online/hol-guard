@@ -95,7 +95,9 @@ class FakeGitHub:
         if path.startswith("contracts/extensions/trust/") and (ref, path) not in self.file_payloads:
             runtime_id = path.removeprefix("contracts/extensions/trust/").removesuffix(".v1.json")
             return {
-                "schemaVersion": "guard.extension-trust-binding.v1", "extension": runtime_id, "trustClass": "external",
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": runtime_id,
+                "trustClass": "external",
             }
         value = self.file_payloads.get((ref, path))
         if value is None and not missing_ok:

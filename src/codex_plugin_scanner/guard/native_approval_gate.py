@@ -25,7 +25,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_context import _canonical_request_sha256, ensure_resident_prerequisite
-from .native_resident_client import native_resident_client_failure_code, native_resident_client_request
+from .native_resident_client import (
+    native_resident_client_failure_code,
+    native_resident_client_ready,
+    native_resident_client_request,
+)
 from .native_runtime import _isolated_environment, _native_error, native_runtime_status
 from .native_runtime_resilience import (
     native_record_overload,
@@ -52,6 +56,7 @@ _TOTP_SESSION_ENV_KEYS = (
     "SSH_TTY",
 )
 _UNAVAILABLE_CODE = "native_approval_gate_unavailable"
+_COLD_START_ALLOWANCE_SECONDS = 10.0
 # Resident errors meaning this guard home was never provisioned for a resident
 # (no verifier key, no private state directory). They are the same answer as
 # "runtime off"; every other failure of a provisioned resident fails closed.
@@ -221,7 +226,11 @@ def approval_gate_native(
     native runtime is provisioned for this process.
     """
     global _request_counter
-    status = native_runtime_status()
+    # The first probe of a cold runtime may spend the cold-start allowance, but never more than this
+    # request's own total budget.
+    status = native_runtime_status(
+        deadline_monotonic=time.monotonic() + timeout_seconds + _COLD_START_ALLOWANCE_SECONDS
+    )
     if (
         not status.available
         or not status.compatible
@@ -267,6 +276,11 @@ def approval_gate_native(
     if device_label is not None:
         request["device_label"] = device_label
 
+    if not native_resident_client_ready(status.identity.path, guard_home):
+        # No warm client in this process, so this request pays a resident spawn and its first answer. A
+        # one-shot CLI step on a cold runner exceeds the warm budget and would fail closed on a healthy
+        # resident. The allowance is a ceiling for that one request; a warm resident still answers at once.
+        timeout_seconds += _COLD_START_ALLOWANCE_SECONDS
     deadline_monotonic = time.monotonic() + timeout_seconds
     deadline_budget_ms = max(1, min(9_000, int(timeout_seconds * 1_000)))
     resident = json.dumps(

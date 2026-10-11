@@ -481,7 +481,12 @@ def accepted_claimant_ids(
     client: GitHubApi, extension_id: str, ref: str, listing: dict[str, Any] | None
 ) -> tuple[str, ...]:
     return verified_claimant_ids(
-        client, extension_id, ref, listing, validate_listing=accepted_github_ids, contribution_paths=contribution_paths,
+        client,
+        extension_id,
+        ref,
+        listing,
+        validate_listing=accepted_github_ids,
+        contribution_paths=contribution_paths,
     )
 
 
@@ -709,8 +714,11 @@ def _plan_notice_items(
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
         merge_ids = accepted_claimant_ids(client, extension_id, merge_sha, current_listing)
         newly_added = extension_id in contribution_changes and not contribution_exists(client, extension_id, before_sha)
-        if newly_added and not merge_ids and current_listing is not None and (
-            current_listing.get("maintainerGithubIds") == []
+        if (
+            newly_added
+            and not merge_ids
+            and current_listing is not None
+            and (current_listing.get("maintainerGithubIds") == [])
         ):
             # A historical empty override may have since been removed. Recover
             # only the original author who is accepted by current authority.
