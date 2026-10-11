@@ -106,6 +106,17 @@ fn other_wrappers_stay_out_of_containment() {
     let root = fixture();
     let project = root.join("project");
     let project = project.to_str().unwrap();
+    // `git status` in this checkout is a proven read. CI exports
+    // LD_LIBRARY_PATH, and that search path must not push the read to review
+    // or into containment.
+    let git_status = format!("cd {project}/web && git status");
+    for harness in ["omp", "zcode"] {
+        let status = classify(&root, harness, &git_status);
+        assert_ne!(
+            status.minimum_action, "sandbox-required",
+            "{harness}: {git_status}"
+        );
+    }
     let outside = root.join("outside");
     let outside = outside.to_str().unwrap();
     let parent = root.to_str().unwrap();
@@ -119,7 +130,6 @@ fn other_wrappers_stay_out_of_containment() {
             format!("cd {project}/missing && bunx vitest run x"),
             "cd web && bunx vitest run x".into(),
             "cd /tmp && bunx vitest run x".into(),
-            format!("cd {project}/web && git status"),
             format!("cd {project}/web && git add ."),
             format!("cd {project}/web && git commit -m wip"),
             "bunx vitest run x | tail -f".into(),
