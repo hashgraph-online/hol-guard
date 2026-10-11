@@ -130,8 +130,8 @@ jobs:
     name: Resolve main alpha version
     needs: authorize-release
     # Native compilation embeds the exact version, so a "next" alpha is resolved here,
-    # in parallel with Build + Verify, instead of after it. Build + Verify recomputes the
-    # version independently; the prepared-binary identity check rejects any difference.
+    # in parallel with the native compile, instead of after Build + Verify. Build + Verify
+    # adopts this exact version and revalidates it, so both jobs always agree.
     if: >-
       vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
       github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
@@ -235,12 +235,16 @@ jobs:
 
   build:
     name: Build + Verify
+    # always() lets Build + Verify run when the alpha resolver is skipped (every non-alpha
+    # event); the authorization result still gates it.
     if: >-
+      always() && !cancelled() &&
+      needs.authorize-release.result == 'success' &&
       (github.event_name != 'workflow_dispatch' || github.run_attempt == 1) &&
       (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
       (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
-    needs: authorize-release
+    needs: [authorize-release, resolve-alpha-version]
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -309,6 +313,7 @@ jobs:
           RELEASE_TRAIN: ${{ github.event.inputs.release_train }}
           RELEASE_VERSION: ${{ github.event.inputs.release_version }}
           EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
+          RESOLVED_ALPHA_VERSION: ${{ needs.resolve-alpha-version.outputs.version }}
           RELEASE_PUBLISHING_ENABLED: ${{ vars.RELEASE_PUBLISHING_ENABLED }}
         run: |
           BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
@@ -381,7 +386,12 @@ jobs:
                 --argjson testpypi "$TESTPYPI_VERSIONS" \
                 --argjson tags "$TAG_VERSIONS" \
                 '$pypi + $testpypi + $tags | unique')
-              if [[ "$RELEASE_VERSION" == "next" ]]; then
+              if [[ "$RELEASE_VERSION" == "next" && -n "$RESOLVED_ALPHA_VERSION" ]]; then
+                # The native binaries embed the resolver's version; adopt it so a tag or
+                # upload that lands between the two jobs cannot split them. The checks
+                # below still reject it if it is now published or reserved.
+                RELEASE_VERSION="$RESOLVED_ALPHA_VERSION"
+              elif [[ "$RELEASE_VERSION" == "next" ]]; then
                 RELEASE_VERSION=$(uv run --no-sync python scripts/compute_alpha_release_version.py \
                   --release-train main --base-version "$BASE_VERSION" <<< "$EXISTING_VERSIONS")
               fi

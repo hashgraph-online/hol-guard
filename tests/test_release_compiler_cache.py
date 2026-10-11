@@ -37,14 +37,42 @@ def _release_compile_steps():
 )
 def test_release_compiler_cache_is_written_only_by_trusted_main_pushes(ref, event, mode):
     for _, step in _release_compile_steps():
-        expression = step["env"]["SCCACHE_GHA_RW_MODE"].strip()[3:-2]
-        for name, value in {"github.ref": ref, "github.event_name": event}.items():
-            expression = expression.replace(name, repr(value))
-        expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
-        tree = ast.parse(expression, mode="eval")
-        permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.Constant)
-        assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-mode expression"
-        assert eval(compile(tree, "<cache-mode>", "eval"), {"__builtins__": {}}) == mode
+        assert _evaluate(step["env"]["SCCACHE_GHA_RW_MODE"], ref=ref, event=event, fast_codegen=False) == mode
+
+
+@pytest.mark.parametrize(
+    ("ref", "event", "mode"),
+    [
+        ("refs/heads/main", "workflow_dispatch", "READ_WRITE"),
+        ("refs/heads/main", "push", "READ_WRITE"),
+        ("refs/heads/contributor", "workflow_dispatch", "READ_ONLY"),
+        ("refs/pull/3770/merge", "pull_request", "READ_ONLY"),
+        ("refs/tags/v3.35.0", "workflow_dispatch", "READ_ONLY"),
+    ],
+)
+def test_fast_alpha_compiler_cache_warms_from_main_in_its_own_namespace(ref, event, mode):
+    (_, prepare), _ = _release_compile_steps()
+    env = prepare["env"]
+    assert _evaluate(env["SCCACHE_GHA_RW_MODE"], ref=ref, event=event, fast_codegen=True) == mode
+    # Fast-codegen objects never mix with the fat-LTO stable namespace.
+    assert _evaluate(env["SCCACHE_GHA_VERSION"], ref=ref, event=event, fast_codegen=True) == "release-native-fast-v1"
+    assert _evaluate(env["SCCACHE_GHA_VERSION"], ref=ref, event=event, fast_codegen=False) == "release-native-v1"
+
+
+def _evaluate(value, *, ref, event, fast_codegen):
+    expression = value.strip()[3:-2]
+    for name, replacement in {
+        "github.ref": ref,
+        "github.event_name": event,
+        "inputs.fast_codegen": fast_codegen,
+    }.items():
+        expression = expression.replace(name, repr(replacement))
+    expression = expression.replace("== true", "== True")
+    expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
+    tree = ast.parse(expression, mode="eval")
+    permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.Constant)
+    assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-mode expression"
+    return eval(compile(tree, "<cache-mode>", "eval"), {"__builtins__": {}})
 
 
 def test_release_compilation_is_content_addressed_and_feature_unified():

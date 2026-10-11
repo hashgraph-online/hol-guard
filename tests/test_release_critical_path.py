@@ -295,7 +295,13 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
     jobs = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
     assert jobs["precompile-native"]["needs"] == ["authorize-release", "resolve-alpha-version"]
     assert jobs["resolve-alpha-version"]["needs"] == "authorize-release"
-    assert jobs["build"]["needs"] == "authorize-release"
+    # Build + Verify adopts the resolved alpha version so it can never differ from the binaries.
+    assert jobs["build"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    assert "needs.authorize-release.result == 'success'" in jobs["build"]["if"]
+    assert "!cancelled()" in jobs["build"]["if"]
+    version_step = next(step for step in jobs["build"]["steps"] if step.get("id") == "version")
+    assert version_step["env"]["RESOLVED_ALPHA_VERSION"] == "${{ needs.resolve-alpha-version.outputs.version }}"
+    assert 'RELEASE_VERSION="$RESOLVED_ALPHA_VERSION"' in version_step["run"]
     assert jobs["build-native-guard-wheels"]["needs"] == ["build", "precompile-native"]
     assert "publish-main-pypi" not in jobs["publish-main-assets"]["needs"]
     assert jobs["wake-main-core-feeds"]["needs"] == ["build", "publish-main-assets"]
