@@ -27,7 +27,8 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
         .get("command")
         .and_then(Value::as_str)
         .ok_or("shell_helpers_invalid")?;
-    if command.len() > crate::MAX_COMMAND_BYTES {
+    // Workflow and heredoc callers admit inputs larger than command models.
+    if command.len() > 256 * 1024 {
         return Err("shell_helpers_bounds");
     }
     match action {
@@ -91,7 +92,9 @@ pub fn evaluate(action: &str, input: &Value) -> Result<Value, &'static str> {
             let mut state = shell_structure::ShellScanState::from_snapshot(&input["state"])?;
             let mut index = input["index"].as_u64().ok_or("shell_helpers_invalid")? as usize;
             let mut rows = Vec::new();
-            while index < chars.len() {
+            // Page transitions below the resident response bound; callers resume
+            // from the last native state without interpreting shell syntax.
+            while index < chars.len() && rows.len() < 16_384 {
                 let start = index;
                 index = state.advance(&chars, index);
                 let (quote, depth, backtick) = state.snapshot();

@@ -64,9 +64,8 @@ class ShellScanState:
         self.in_backtick = False
         self._top_level = True
         self._key: tuple[object, ...] | None = None
-        self._rows: dict[int, list[Any]] = {}
+        self._rows: dict[int, tuple[tuple[object, ...], list[Any]]] = {}
         self._expected: tuple[object, ...] = (None, 0, False)
-        self._next_index = 0
 
     @property
     def is_top_level(self) -> bool:
@@ -77,12 +76,16 @@ class ShellScanState:
     def advance(self, command: str, index: int) -> int:
         key = (command, *runtime_key())
         state = (self.quote, self.subshell_depth, self.in_backtick)
-        if key != self._key or state != self._expected or index != self._next_index or index not in self._rows:
+        cached = self._rows.get(index)
+        if key != self._key or cached is None or cached[0] != state:
             rows = call("trace", command, state=list(state), index=index)
-            self._rows = {row[0]: row for row in rows}
+            self._rows = {}
+            preceding = state
+            for row in rows:
+                self._rows[row[0]] = (preceding, row)
+                preceding = tuple(row[2:5])
             self._key = key
-        row = self._rows[index]
+        row = self._rows[index][1]
         self.quote, self.subshell_depth, self.in_backtick, self._top_level = row[2:]
         self._expected = (self.quote, self.subshell_depth, self.in_backtick)
-        self._next_index = row[1]
         return row[1]

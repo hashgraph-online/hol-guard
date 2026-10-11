@@ -6,7 +6,7 @@ import time
 from typing import Any, cast
 
 
-class NativeShellHelpersError(RuntimeError):
+class NativeShellHelpersError(RuntimeError, ValueError):
     """The native shell owner could not supply a bound answer."""
 
 

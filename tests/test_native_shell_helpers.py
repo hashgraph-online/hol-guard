@@ -50,7 +50,7 @@ def test_transport_rejects_unbound_or_malformed_answers(monkeypatch, fault):
 def test_public_helpers_replay_original_python_vectors(native_hook_force, monkeypatch, tmp_path):
     monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / "guard"))
     fixture = json.loads((Path(__file__).parent / "fixtures/shell-helper-python.v1.json").read_text())
-    for vector in fixture["vectors"][12:15]:
+    for vector in (fixture["vectors"][i] for i in (5, 8, 9, 13)):
         command, expected = vector["command"], vector["expected"]
         heredocs = shell_structure.extract_heredocs(command)
         assert list(data_flow.extract_command_segments(command)) == expected["segments"]
@@ -82,4 +82,26 @@ def test_scan_state_reuses_one_native_trace_and_invalidates_runtime(monkeypatch)
     assert len(seen) == 1
     identity[0] = "second"
     assert state.advance("ab", 0) == 1
+    assert len(seen) == 2
+
+
+def test_scan_state_reuses_compatible_jumps_but_rejects_wrong_pre_state(monkeypatch):
+    seen = []
+    monkeypatch.setattr(shell_structure, "runtime_key", lambda: ("native",))
+
+    def trace(action, command, **fields):
+        seen.append(fields)
+        return [
+            [0, 1, None, 0, False, True],
+            [1, 2, None, 0, False, True],
+            [2, 3, "'", 0, False, False],
+            [3, 4, "'", 0, False, False],
+        ]
+
+    monkeypatch.setattr(shell_structure, "call", trace)
+    state = shell_structure.ShellScanState()
+    assert state.advance("ab'c", 0) == 1
+    assert state.advance("ab'c", 2) == 3
+    assert len(seen) == 1
+    assert state.advance("ab'c", 1) == 2
     assert len(seen) == 2

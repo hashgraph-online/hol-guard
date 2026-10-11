@@ -272,13 +272,15 @@ fn extract_command_substitution_spans_impl(
         }
         if quote != Some('\'') && starts_with(&chars, index, "$(") {
             let (extracted, end_index) = extract_parenthesized(&chars, index + 2);
-            if !extracted.trim().is_empty() {
+            let whitespace = crate::command_option_parsing::python_is_whitespace;
+            if !extracted.trim_matches(whitespace).is_empty() {
                 let body_start = index + 2;
-                let leading = extracted.len() - extracted.trim_start().len();
-                let trailing = extracted.trim_end().len();
+                let leading = extracted.chars().count()
+                    - extracted.trim_start_matches(whitespace).chars().count();
+                let trailing = extracted.trim_end_matches(whitespace).chars().count();
                 substitutions.push(ShellCommandSubstitution {
                     kind: "dollar",
-                    body: extracted.trim().to_owned(),
+                    body: extracted.trim_matches(whitespace).to_owned(),
                     start: index,
                     body_start: body_start + leading,
                     body_end: body_start + trailing,
@@ -290,13 +292,15 @@ fn extract_command_substitution_spans_impl(
         }
         if quote != Some('\'') && ch == '`' {
             let (extracted, end_index) = extract_backtick(&chars, index + 1);
-            if !extracted.trim().is_empty() {
+            let whitespace = crate::command_option_parsing::python_is_whitespace;
+            if !extracted.trim_matches(whitespace).is_empty() {
                 let body_start = index + 1;
-                let leading = extracted.len() - extracted.trim_start().len();
-                let trailing = extracted.trim_end().len();
+                let leading = extracted.chars().count()
+                    - extracted.trim_start_matches(whitespace).chars().count();
+                let trailing = extracted.trim_end_matches(whitespace).chars().count();
                 substitutions.push(ShellCommandSubstitution {
                     kind: "backtick",
-                    body: extracted.trim().to_owned(),
+                    body: extracted.trim_matches(whitespace).to_owned(),
                     start: index,
                     body_start: body_start + leading,
                     body_end: body_start + trailing,

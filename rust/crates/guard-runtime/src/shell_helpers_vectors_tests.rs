@@ -34,6 +34,9 @@ fn original_python_shell_helpers_replay() {
             "normalization",
             "trace",
         ] {
+            if vector["expected"].get(action).is_none() {
+                continue;
+            }
             let mut input = json!({"command":command});
             if action.starts_with("masked_") {
                 input["heredocs"] = vector["expected"]["heredocs"].clone();
@@ -42,19 +45,59 @@ fn original_python_shell_helpers_replay() {
                 input["state"] = json!([null, 0, false]);
                 input["index"] = json!(0);
             }
-            let request = ShellHelpersRequest {
+            let mut request = ShellHelpersRequest {
                 schema: "guard-shell-helpers-request.v1".into(),
                 request_id: "parity".into(),
                 action: action.into(),
                 input,
                 timeout_ms: 10_000,
             };
-            let reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+            let mut reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+            if action == "trace" {
+                let mut rows = reply["result"].as_array().unwrap().clone();
+                while rows.last().is_some_and(|r| {
+                    r[1].as_u64().unwrap() < command.as_str().unwrap().chars().count() as u64
+                }) {
+                    let last = rows.last().unwrap();
+                    request.input["index"] = last[1].clone();
+                    request.input["state"] = json!([last[2], last[3], last[4]]);
+                    reply = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+                    let page = reply["result"].as_array().unwrap();
+                    assert!(!page.is_empty());
+                    rows.extend(page.iter().cloned());
+                }
+                reply["result"] = json!(rows);
+            }
             assert_eq!(
                 reply["result"], vector["expected"][action],
                 "action={action}, command={command}"
             );
         }
+    }
+}
+
+#[test]
+fn request_binding_matches_python_ascii_and_unicode_canonical_hashes() {
+    // Frozen hashlib/json.dumps outputs from the original Python transport.
+    for (command, digest) in [
+        (
+            "echo value",
+            "79a1fced92569b36164be981bafdd7850d280e06c384c86769c2597ec913cd02",
+        ),
+        (
+            "echo $(printf 'é🙂')",
+            "f82ec33cb2e9fa38483c39804c4d402eb5350d7529d141d853ba6c8872541ae8",
+        ),
+    ] {
+        let request = ShellHelpersRequest {
+            schema: "guard-shell-helpers-request.v1".into(),
+            request_id: "binding".into(),
+            action: "segments".into(),
+            input: json!({"command":command}),
+            timeout_ms: 10_000,
+        };
+        let reply: Value = serde_json::from_slice(&evaluate(&request).unwrap()).unwrap();
+        assert_eq!(reply["request_sha256"], digest);
     }
 }
 

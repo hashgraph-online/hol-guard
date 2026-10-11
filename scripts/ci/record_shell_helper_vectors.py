@@ -73,6 +73,8 @@ def record() -> None:
         "a >&2 & b",
         "a &>output; b",
         "echo \u001c; echo end",
+        "echo $(\u001c é🙂 \u001f)",
+        "echo `\u001c é🙂 \u001f`",
     ]
     wrappers = ["env FOO=bar", "command", "time -p", "nice -n 2", "nohup", "stdbuf -o L"]
     commands.extend(
@@ -90,6 +92,7 @@ def record() -> None:
             "bash -lc 'unterminated",
             "./bin/bash -c 'echo value'",
             "echo " + "é" * 4100,
+            "echo " + "x" * 20_000,
         ]
     )
     vectors = []
@@ -119,6 +122,19 @@ def record() -> None:
                     "masked_complete": shell_structure.mask_complete_heredocs(command, heredocs),
                     "normalization": asdict(shell_command_wrappers.normalize_transparent_shell_command(command)),
                     "trace": trace,
+                },
+            }
+        )
+    for command in ("echo " + "x" * 65_536, "cat <<EOF\n" + "x" * 190_000 + "\nEOF\necho done"):
+        heredocs = shell_structure.extract_heredocs(command)
+        vectors.append(
+            {
+                "command": command,
+                "expected": {
+                    "heredocs": [asdict(h) for h in heredocs],
+                    "substitutions": [asdict(s) for s in shell_structure.extract_command_substitution_spans(command)],
+                    "masked_bodies": shell_structure.mask_heredoc_bodies(command, heredocs),
+                    "masked_complete": shell_structure.mask_complete_heredocs(command, heredocs),
                 },
             }
         )
