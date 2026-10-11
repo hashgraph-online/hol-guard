@@ -89,7 +89,7 @@
         "surface": "native_resident_transport"
       },
       {
-        "module": "codex_plugin_scanner.guard.runtime.runner",
+        "module": "codex_plugin_scanner.guard.runtime.wrapper_run",
         "surface": "guard_run_and_launch"
       },
       {
@@ -448,6 +448,14 @@
         ]
       },
       {
+        "id": "cloud-sync-transport",
+        "category": "async_control_plane",
+        "reason": "Cloud connect, OAuth refresh/DPoP, receipt, runtime-session, supply-chain-bundle and policy-bundle sync transport (runtime/runner.py). Every public entry point (sync_receipts, sync_runtime_session, sync_supply_chain_bundle, sync_local_guard_cloud_proof, prepare_guard_cloud_connect_authorization, repair_guard_cloud_connect_storage, the cloud-review and command-queue workers and the daemon's cloud policy-bundle and managed-controls delivery handlers that import its urlopen/auth/bundle helpers) runs from `guard connect`/`guard sync`, the cloud-review sync worker or the command-queue loop, never inside hook admission, decision or enforcement. The Rust runtime has no HTTP client, so the network, token refresh and retry loop stay in Python by design; the policy computation inside it (payload shaping, scrubbing, cursor/ack arithmetic, verdict digests, bundle verification) already runs in the resident through runner_native_sync/runner_native_authority. The only request-adjacent caller is the Hermes launch credential lookup (guard_run_launch._resolve_hermes_guard_access_token), which reads the cached token and, when it is absent or near expiry, runs the same OAuth refresh HTTP request as `guard sync` before the harness starts. That refresh is network transport the Rust runtime cannot perform; the lookup is best-effort, runs once at the execution boundary after the authority verdict, and never decides admission. The run-side lookup wrapper stays in scope.",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/runner.py"
+        ]
+      },
+      {
         "id": "repair-lifecycle",
         "category": "control_plane",
         "reason": "Explicit and periodic Guard repair: `guard repair` (cli/commands_repair), POST /v1/repair and the removal endpoint (daemon/repair_api via _handle_repair_api) and the 600 s repair self-check thread (daemon/repair_self_check started by _start_repair_self_check). None runs inside hook admission, decision or enforcement. resident_state_prune.py and daemon/runtime_repair.py are reached only from repair_engine (repair_native_runtime, repair_daemon) and the daemon package's lazy export used by the repair CLI handler.",
@@ -481,8 +489,7 @@
           "src/codex_plugin_scanner/guard/containment_*.py",
           "src/codex_plugin_scanner/guard/shims.py",
           "src/codex_plugin_scanner/guard/package_shim_*.py",
-          "src/codex_plugin_scanner/guard/protect.py",
-          "src/codex_plugin_scanner/guard/runtime/runner.py"
+          "src/codex_plugin_scanner/guard/protect.py"
         ],
         "reason": "Reviewed: module is a decision, parser/scanner, transport, process-dispatch or containment component invoked by a runtime route."
       },
@@ -632,9 +639,11 @@
           "src/codex_plugin_scanner/guard/store_mcp_workflows.py",
           "src/codex_plugin_scanner/guard/store_policy_list.py",
           "src/codex_plugin_scanner/guard/text.py",
-          "src/codex_plugin_scanner/guard/trust_metadata_boundary.py"
+          "src/codex_plugin_scanner/guard/trust_metadata_boundary.py",
+          "src/codex_plugin_scanner/guard/cloud_exceptions.py",
+          "src/codex_plugin_scanner/guard/policy_bundle_decisions.py"
         ],
-        "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_*/local_mcp_grant_decision trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), codex_binding_capture_join."
+        "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_*/local_mcp_grant_decision trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), codex_binding_capture_join, cloud_exceptions (store_cloud_events) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
       }
     ],
     "tests": {

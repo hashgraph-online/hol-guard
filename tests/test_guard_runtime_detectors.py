@@ -11,7 +11,9 @@ import pytest
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_codex_hook_payload
 from codex_plugin_scanner.guard.runtime.detectors import (
     DETECTOR_CATEGORY_TAGS,
@@ -540,9 +542,9 @@ def test_guard_run_invokes_detector_registry_only_when_feature_flag_enabled(tmp_
     def evaluate_stub(*_args: object, **_kwargs: object) -> dict[str, object]:
         return {"blocked": False, "artifacts": [], "receipts_recorded": 0}
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -557,8 +559,8 @@ def test_guard_run_invokes_detector_registry_only_when_feature_flag_enabled(tmp_
         runtime_detector_registry=True,
     )
 
-    disabled_result = guard_runner_module.guard_run("codex", context, store, disabled, True, [])
-    enabled_result = guard_runner_module.guard_run("codex", context, store, enabled, True, [])
+    disabled_result = wrapper_run.guard_run("codex", context, store, disabled, True, [])
+    enabled_result = wrapper_run.guard_run("codex", context, store, enabled, True, [])
 
     assert calls == ["secret.local"]
     assert "runtime_detector_signals_v2" not in disabled_result
@@ -586,9 +588,9 @@ def test_guard_run_keeps_detector_results_after_blocked_resolver_reevaluation(tm
     def blocked_resolver_stub(_detection: HarnessDetection, _evaluation: dict[str, object]) -> dict[str, object]:
         return {"blocked": True, "artifacts": [], "approval_delivery": "queued"}
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -601,7 +603,7 @@ def test_guard_run_keeps_detector_results_after_blocked_resolver_reevaluation(tm
         runtime_detector_registry=True,
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         context,
         GuardStore(tmp_path / "guard-home"),
@@ -649,17 +651,17 @@ def test_detector_composition_can_block_unblocked_evaluation(tmp_path):
         guard_home=tmp_path / "guard-home",
     )
 
-    original_registry = guard_runner_module._DEFAULT_DETECTOR_REGISTRY
-    guard_runner_module._DEFAULT_DETECTOR_REGISTRY = (guard_runner_module.register_default_detectors, registry)
+    original_registry = guard_run_evaluation._DEFAULT_DETECTOR_REGISTRY
+    guard_run_evaluation._DEFAULT_DETECTOR_REGISTRY = (guard_run_evaluation.register_default_detectors, registry)
     try:
-        result = guard_runner_module._evaluation_with_detector_registry(
+        result = guard_run_evaluation._evaluation_with_detector_registry(
             evaluation,
             _action(),
             context,
             config,
         )
     finally:
-        guard_runner_module._DEFAULT_DETECTOR_REGISTRY = original_registry
+        guard_run_evaluation._DEFAULT_DETECTOR_REGISTRY = original_registry
 
     assert result["blocked"] is True
     assert result["blocked_by_detector"] == "bypass signal 'guard.bypass' forces block"
@@ -693,15 +695,15 @@ def test_guard_run_detector_block_without_artifacts_uses_run_authority(tmp_path,
     )
     detector_calls: list[str] = []
     detector = RecordingDetector("guard.bypass", ("bypass",), detector_calls, bypass_signal)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("run-level detector block must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
         GuardStore(home_dir),
@@ -744,7 +746,7 @@ def test_authoritative_detector_block_controls_artifact_persistence(tmp_path):
     store = GuardStore(home_dir)
     detector_reason = "bypass signal 'guard.bypass' forces block"
 
-    result = guard_runner_module.evaluate_detection(
+    result = wrapper_run.evaluate_detection(
         detection,
         store,
         config,
@@ -806,7 +808,7 @@ def test_guard_run_detector_block_leaves_saved_review_allow_unclaimed(tmp_path, 
         runtime_detector_registry=True,
     )
     store = GuardStore(home_dir)
-    initial = guard_runner_module.evaluate_detection(detection, store, config, persist=False)
+    initial = wrapper_run.evaluate_detection(detection, store, config, persist=False)
     context_hash = str(initial["artifacts"][0]["approval_context_hash"])
     approval_id = store.record_local_once_approval(
         request_id="detector-claim-gate",
@@ -836,15 +838,15 @@ def test_guard_run_detector_block_leaves_saved_review_allow_unclaimed(tmp_path, 
     )
     detector_calls: list[str] = []
     detector = RecordingDetector("guard.bypass", ("bypass",), detector_calls, bypass_signal)
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("detector-blocked launch must not execute"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
         store,
@@ -914,7 +916,7 @@ def test_guard_run_detector_review_precedes_saved_allow_reuse_and_persists_autho
         runtime_detector_registry=True,
     )
     store = GuardStore(home_dir)
-    initial = guard_runner_module.evaluate_detection(detection, store, config, persist=False)
+    initial = wrapper_run.evaluate_detection(detection, store, config, persist=False)
     original_context_hash = str(initial["artifacts"][0]["approval_context_hash"])
     approval_id = store.record_local_once_approval(
         request_id="detector-review-claim-gate",
@@ -949,20 +951,20 @@ def test_guard_run_detector_review_precedes_saved_allow_reuse_and_persists_autho
         detector_calls,
         persistence_signal,
     )
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
     monkeypatch.setattr(
         store,
         "claim_approval_reuse_decisions",
         lambda *_args, **_kwargs: pytest.fail("detector review must be current before any saved-allow claim"),
     )
     monkeypatch.setattr(
-        guard_runner_module.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("unresolved detector review must not launch"),
     )
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
         store,
@@ -1060,13 +1062,13 @@ def test_guard_run_detector_block_is_terminal_before_any_review_resolver(tmp_pat
             advisory_id=None,
         ),
     )
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
 
     def unexpected_resolver(*_args, **_kwargs):
         pytest.fail("a terminal detector block must not enter an approval resolver")
 
-    result = guard_runner_module.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(home_dir=home_dir, workspace_dir=workspace_dir, guard_home=home_dir),
         GuardStore(home_dir),
@@ -1125,10 +1127,10 @@ def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monke
             raw_payload_redacted={"prompt": sensitive_prompt},
         )
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
-    monkeypatch.setattr(guard_runner_module, "_guard_run_action_envelope", action_envelope_stub)
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "_guard_run_action_envelope", action_envelope_stub)
 
     context = HarnessContext(
         home_dir=tmp_path / "home",
@@ -1147,7 +1149,7 @@ def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monke
         runtime_detector_debug_trace=True,
     )
 
-    guard_runner_module.guard_run(
+    wrapper_run.guard_run(
         "codex",
         context,
         GuardStore(tmp_path / "guard-home-disabled"),
@@ -1155,7 +1157,7 @@ def test_guard_run_writes_detector_debug_trace_only_when_enabled(tmp_path, monke
         True,
         [],
     )
-    enabled_result = guard_runner_module.guard_run(
+    enabled_result = wrapper_run.guard_run(
         "codex",
         context,
         GuardStore(tmp_path / "guard-home-enabled"),
@@ -1191,9 +1193,9 @@ def test_guard_run_surfaces_detector_debug_trace_write_errors(tmp_path, monkeypa
     def evaluate_stub(*_args: object, **_kwargs: object) -> dict[str, object]:
         return {"blocked": False, "artifacts": [], "receipts_recorded": 0}
 
-    monkeypatch.setattr(guard_runner_module, "detect_harness", lambda _harness, _context: detection)
-    monkeypatch.setattr(guard_runner_module, "evaluate_detection", evaluate_stub)
-    monkeypatch.setattr(guard_runner_module, "register_default_detectors", lambda: (detector,))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda _harness, _context: detection)
+    monkeypatch.setattr(wrapper_run, "evaluate_detection", evaluate_stub)
+    monkeypatch.setattr(guard_run_evaluation, "register_default_detectors", lambda: (detector,))
 
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()
@@ -1210,7 +1212,7 @@ def test_guard_run_surfaces_detector_debug_trace_write_errors(tmp_path, monkeypa
         runtime_detector_debug_trace=True,
     )
 
-    result = guard_runner_module.guard_run("codex", context, GuardStore(guard_home), config, True, [])
+    result = wrapper_run.guard_run("codex", context, GuardStore(guard_home), config, True, [])
 
     assert calls == ["secret.local"]
     assert result["runtime_detector_signals_v2"] == [_signal("secret:local", "secret").to_dict()]
