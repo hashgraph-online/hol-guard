@@ -1904,7 +1904,14 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     def fake_pid_is_running(_pid):
         return pid_running["value"]
 
-    def fake_kill(pid, _signal):
+    real_kill = os.kill
+
+    def fake_kill(pid, signal_number):
+        # os.kill is patched process-wide; a signal another thread sends to an unrelated process
+        # (for example a resident client retiring its own child) must neither be recorded nor mark
+        # the process under test as dead.
+        if pid != 11111:
+            return real_kill(pid, signal_number)
         killed.append(pid)
         pid_running["value"] = False
 
@@ -2281,7 +2288,14 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_processes_without_state_file(
     def fake_pid_is_running(_pid):
         return pid_running["value"]
 
-    def fake_kill(pid, _signal):
+    real_kill = os.kill
+
+    def fake_kill(pid, signal_number):
+        # os.kill is patched process-wide; a signal another thread sends to an unrelated process
+        # (for example a resident client retiring its own child) must neither be recorded nor mark
+        # the process under test as dead.
+        if pid != 33333:
+            return real_kill(pid, signal_number)
         killed.append(pid)
         pid_running["value"] = False
 
