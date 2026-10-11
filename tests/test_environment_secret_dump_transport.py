@@ -157,7 +157,7 @@ def test_unrelated_context_build_does_not_request_secret_scan(tmp_path: Path, mo
     context = shell_execution_context.model_shell_execution_context("ls", cwd=tmp_path, home_dir=tmp_path)
     assert context.native is not None
     assert context.environment_secret_dump is None
-    assert calls[0]["action"]["body"]["classify_environment_secrets"] is False
+    assert "classify_environment_secrets" not in calls[0]["action"]["body"]
 
 
 def test_benign_shell_pipeline_fails_closed_on_native_outage(tmp_path: Path, monkeypatch) -> None:

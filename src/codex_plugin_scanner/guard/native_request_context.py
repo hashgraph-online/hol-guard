@@ -170,10 +170,11 @@ def native_request_context_build(
             "fallback_cwd": _absolute_text(_process_cwd()) if cwd is None else None,
             "home_dir": _absolute_text(home_dir),
             "script": script,
-            "classify_environment_secrets": classify_environment_secrets,
             "target": target,
             "executable": _executable_wire(executable),
         }
+        if classify_environment_secrets:
+            body["classify_environment_secrets"] = classify_environment_secrets
     except OSError:
         return NativeRequestContextFailure("native_request_context_request_invalid")
     payload = _call({"kind": "build", "body": body}, source=source, guard_home=guard_home, budget_ms=budget_ms)

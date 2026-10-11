@@ -99,12 +99,16 @@ pub struct RequestContextBuildV1 {
     #[serde(default)]
     pub script: Option<String>,
     /// Fold environment-secret classification into this shell context build.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub classify_environment_secrets: bool,
     #[serde(default)]
     pub target: Option<String>,
     #[serde(default)]
     pub executable: Option<RequestContextExecutableV1>,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
