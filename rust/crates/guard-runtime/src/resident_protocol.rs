@@ -85,6 +85,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "hook-harness-response-v1".into(),
         "git-execution-context-v1".into(),
         "native-resident-client-v1".into(),
+        "shell-helpers-v1".into(),
         "native-resident-lifecycle-v1".into(),
     ];
     features.extend(
@@ -188,6 +189,7 @@ pub(crate) enum ResidentOperationV1 {
     RuntimeDetectorRun(RuntimeDetectorRunRequestV1),
     RunnerAuthority(RunnerAuthorityRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
+    ShellHelpers(crate::shell_helpers_op::ShellHelpersRequest),
     ApprovalProofDecide(ApprovalProofRequestV1),
     CursorObserverProof(CursorObserverProofRequestV1),
     HookAuthorityState(HookAuthorityStateRequestV1),

@@ -31,8 +31,8 @@ pub fn normalize_transparent_shell_command(
     cwd: Option<&Path>,
     home_dir: Option<&Path>,
 ) -> ShellCommandNormalization {
-    let stripped = command_text.trim();
-    if stripped.is_empty() || stripped.len() > SHELL_COMMAND_NORMALIZE_MAX_BYTES {
+    let stripped = command_text.trim_matches(crate::command_option_parsing::python_is_whitespace);
+    if stripped.is_empty() || stripped.chars().count() > SHELL_COMMAND_NORMALIZE_MAX_BYTES {
         return ShellCommandNormalization {
             raw_command: stripped.to_owned(),
             normalized_command: stripped.to_owned(),
@@ -570,7 +570,7 @@ fn join_command_fragments(fragments: &[&str]) -> String {
         .map(|f| f.to_string())
         .collect::<Vec<_>>()
         .join(" ")
-        .trim()
+        .trim_matches(crate::command_option_parsing::python_is_whitespace)
         .to_owned()
 }
 
@@ -586,5 +586,8 @@ fn join_shell_tokens(tokens: &[String]) -> String {
             }
         })
         .collect();
-    rendered.join(" ").trim().to_owned()
+    rendered
+        .join(" ")
+        .trim_matches(crate::command_option_parsing::python_is_whitespace)
+        .to_owned()
 }

@@ -15,7 +15,8 @@ fn heredoc_operator_pattern() -> &'static Regex {
 }
 
 /// `ShellHeredoc` (:10-23).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ShellHeredoc {
     pub delimiter: String,
     pub body: String,
@@ -29,7 +30,7 @@ pub struct ShellHeredoc {
 }
 
 /// `ShellCommandSubstitution` (:25-34).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 #[allow(dead_code)]
 pub struct ShellCommandSubstitution {
     pub kind: &'static str, // "dollar" | "backtick"
@@ -370,6 +371,26 @@ pub struct ShellScanState {
 }
 
 impl ShellScanState {
+    pub fn from_snapshot(value: &serde_json::Value) -> Result<Self, &'static str> {
+        let v = value.as_array().ok_or("shell_helpers_invalid_state")?;
+        if v.len() != 3 {
+            return Err("shell_helpers_invalid_state");
+        }
+        let quote = match v[0].as_str() {
+            Some("'") => Some('\''),
+            Some("\"") => Some('"'),
+            None if v[0].is_null() => None,
+            _ => return Err("shell_helpers_invalid_state"),
+        };
+        Ok(Self {
+            quote,
+            subshell_depth: v[1].as_u64().ok_or("shell_helpers_invalid_state")? as usize,
+            in_backtick: v[2].as_bool().ok_or("shell_helpers_invalid_state")?,
+        })
+    }
+    pub fn snapshot(&self) -> (Option<char>, usize, bool) {
+        (self.quote, self.subshell_depth, self.in_backtick)
+    }
     pub fn new() -> Self {
         ShellScanState {
             quote: None,

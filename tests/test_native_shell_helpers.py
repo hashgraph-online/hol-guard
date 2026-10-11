@@ -1,0 +1,85 @@
+"""Bound transport failures and original-vector replay through public APIs."""
+
+from __future__ import annotations
+
+import json
+from dataclasses import asdict
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard import native_execution, native_shell_helpers
+from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+from codex_plugin_scanner.guard.runtime import data_flow, shell_command_wrappers, shell_structure
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["missing", "request_id", "request_sha256", "schema", "status", "code", "extra", "wrong_type", "bool_index"],
+)
+def test_transport_rejects_unbound_or_malformed_answers(monkeypatch, fault):
+    monkeypatch.setattr(native_shell_helpers, "runtime_key", lambda: ("native",))
+
+    def reply(**kwargs):
+        request = kwargs["request"]
+        result = {
+            "schema": "guard-shell-helpers-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": _canonical_request_sha256(request),
+            "status": "ok",
+            "code": "ok",
+            "result": ["echo"],
+        }
+        if fault == "missing":
+            return None
+        if fault == "extra":
+            result["extra"] = True
+        elif fault == "wrong_type":
+            result["result"] = [False]
+        elif fault == "bool_index":
+            result["result"] = [[True, 1, None, 0, False, True]]
+        else:
+            result[fault] = "invalid"
+        return result
+
+    monkeypatch.setattr(native_execution, "_resident_request", reply)
+    with pytest.raises(native_shell_helpers.NativeShellHelpersError):
+        native_shell_helpers.call("trace" if fault == "bool_index" else "segments", "echo")
+
+
+def test_public_helpers_replay_original_python_vectors(native_hook_force, monkeypatch, tmp_path):
+    monkeypatch.setenv("HOL_GUARD_HOME", str(tmp_path / "guard"))
+    fixture = json.loads((Path(__file__).parent / "fixtures/shell-helper-python.v1.json").read_text())
+    for vector in fixture["vectors"][12:15]:
+        command, expected = vector["command"], vector["expected"]
+        heredocs = shell_structure.extract_heredocs(command)
+        assert list(data_flow.extract_command_segments(command)) == expected["segments"]
+        assert list(data_flow.extract_input_redirects(command)) == expected["redirects"]
+        assert [asdict(p) for p in data_flow.extract_pipes(command)] == expected["pipes"]
+        assert [asdict(h) for h in heredocs] == expected["heredocs"]
+        assert [asdict(s) for s in shell_structure.extract_command_substitution_spans(command)] == expected[
+            "substitutions"
+        ]
+        assert shell_structure.mask_complete_heredocs(command, heredocs) == expected["masked_complete"]
+        result = asdict(shell_command_wrappers.normalize_transparent_shell_command(command))
+        result["wrapper_chain"] = list(result["wrapper_chain"])
+        assert result == expected["normalization"]
+
+
+def test_scan_state_reuses_one_native_trace_and_invalidates_runtime(monkeypatch):
+    seen = []
+    identity = ["first"]
+    monkeypatch.setattr(shell_structure, "runtime_key", lambda: tuple(identity))
+
+    def trace(action, command, **fields):
+        seen.append((action, command, fields))
+        return [[0, 1, None, 0, False, True], [1, 2, None, 0, False, True]]
+
+    monkeypatch.setattr(shell_structure, "call", trace)
+    state = shell_structure.ShellScanState()
+    assert state.advance("ab", 0) == 1
+    assert state.advance("ab", 1) == 2
+    assert len(seen) == 1
+    identity[0] = "second"
+    assert state.advance("ab", 0) == 1
+    assert len(seen) == 2

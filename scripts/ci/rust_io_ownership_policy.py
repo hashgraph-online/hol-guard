@@ -133,6 +133,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Resident-op dispatch bridge: decodes the bounded native response and
         # returns a DTO; it does not interpret response content into a decision.
         "src/codex_plugin_scanner/guard/native_execution.py",
+        "src/codex_plugin_scanner/guard/native_shell_helpers.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
         # Bounded response decoding for the resident approval-identity/hash result.

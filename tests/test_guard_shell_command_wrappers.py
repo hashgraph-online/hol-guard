@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import shell_command_wrappers
 from codex_plugin_scanner.guard.runtime.actions import normalize_opencode_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
@@ -14,6 +13,8 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
     normalize_transparent_shell_command,
 )
+
+pytestmark = pytest.mark.usefixtures("native_hook_force")
 
 
 def test_normalize_transparent_shell_command_unwraps_lean_ctx_chain() -> None:
@@ -112,28 +113,6 @@ def test_normalize_transparent_shell_command_rejects_user_local_wrapper(tmp_path
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
-
-
-def test_normalize_transparent_shell_command_unwraps_trusted_absolute_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    wrapped = "/usr/bin/env bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
-
-    def trust_env(path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
-        del cwd, home_dir
-        return path == Path("/usr/bin/env")
-
-    monkeypatch.setattr(
-        shell_command_wrappers,
-        "is_trusted_absolute_command_path",
-        trust_env,
-    )
-
-    normalized = normalize_transparent_shell_command(wrapped)
-
-    assert normalized.wrapper_chain == ("env", "bash")
-    assert normalized.normalized_command.startswith("sed -n")
-    assert "/usr/bin/env" not in normalized.normalized_command
 
 
 def test_normalize_transparent_shell_command_keeps_repo_local_shell_visible() -> None:

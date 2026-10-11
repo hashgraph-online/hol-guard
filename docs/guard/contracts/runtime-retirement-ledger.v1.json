@@ -41,6 +41,13 @@
  ],
  "retired_tests": [
   {
+   "old_node": "tests/test_guard_shell_command_wrappers.py::test_normalize_transparent_shell_command_unwraps_trusted_absolute_env",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::trusted_absolute_env_wrapper_uses_native_observations"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
    "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_loopback_redirect_before_connection",
    "replacement_nodes": [
     "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
@@ -3996,6 +4003,30 @@
  },
  "implementation_base_sha": "1dc81dd4319cdf18e4b1c0fd3d061f732601b188",
  "replaced_implementations": [
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/data_flow.py",
+   "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
+   "source_sha256": "2cae49b5d617d61d89f7b6da5788f75652e8c4043088902267c50adec50c9d09",
+   "remaining_role": "Public structures and native transport only; segmentation, pipe and redirect semantics retired.",
+   "native_replacements": ["rust/crates/guard-command/src/data_flow.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/shell_structure.py",
+   "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
+   "source_sha256": "01fb4f0525876ab940cb5f3480254d112a46e3a4b823459a28247c9a005bb65e",
+   "remaining_role": "Source-span DTOs and native scan-trace projection only; quote, heredoc, substitution and masking algorithms retired.",
+   "native_replacements": ["rust/crates/guard-command/src/shell_structure.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py",
+   "base_commit": "da723a48b221c135cbce3bade1bab3ddb4959044",
+   "source_sha256": "5b9cfa2345ffbbcb059220d97e3b70df74612dfc49b3804cd2a2701477579842",
+   "remaining_role": "Public normalization DTO and resident transport only; wrapper parsing and path trust authority retired.",
+   "native_replacements": ["rust/crates/guard-command/src/shell_command_wrappers.rs", "rust/crates/guard-runtime/src/shell_helpers_op.rs"],
+   "parity_fixture": "tests/fixtures/shell-helper-python.v1.json"
+  },
   {
    "path": "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
    "base_commit": "8d96ae755a1d4906394d387cd3af4068c533a848",

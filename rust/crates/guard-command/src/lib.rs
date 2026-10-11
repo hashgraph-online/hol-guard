@@ -202,6 +202,7 @@ mod sfrs_tool_request;
 mod shell_command_wrappers;
 pub mod shell_execution_context;
 mod shell_execution_context_support;
+pub mod shell_helpers;
 mod shell_model_limits;
 mod shell_read_literal_wrapper;
 mod shell_secret_read_flow;
