@@ -97,11 +97,19 @@ def test_prune_matches_exec_form_with_spaced_paths_and_markers(handler: dict[str
 
 
 def test_prune_keeps_exec_form_handlers_whose_marker_only_spans_arguments() -> None:
-    handler = {"type": "command", "command": "/bin/echo", "args": ["hol guard", "managed"]}
+    for args in (["hol guard", "managed"], ["hol", "guard", "managed"]):
+        handler = {"type": "command", "command": "/bin/echo", "args": args}
+        settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
+        pruned, removed = prune_guard_hooks(settings)
+        assert removed == []
+        assert pruned == settings
+
+
+def test_prune_removes_an_exec_form_handler_with_the_marker_in_one_argument() -> None:
+    handler = {"type": "command", "command": "/bin/echo", "args": ["hol guard managed"]}
     settings = {"hooks": {"PreToolUse": [{"matcher": "*", "hooks": [handler]}]}}
-    pruned, removed = prune_guard_hooks(settings)
-    assert removed == []
-    assert pruned == settings
+    _pruned, removed = prune_guard_hooks(settings)
+    assert removed == ["PreToolUse"]
 
 
 def test_sweep_dry_run_does_not_write_and_json_rewrite_preserves_other_keys(tmp_path: Path) -> None:
