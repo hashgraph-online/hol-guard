@@ -253,17 +253,18 @@ fn large_target_list_is_returned_in_pages() {
 
 #[test]
 fn relative_workspace_dirs_are_rejected() {
-    let mut relative = request(Path::new("/tmp/unused-workspace"), None, &[], "inventory");
-    relative.workspace_dir = "relative/workspace".into();
+    let mut relative_workspace =
+        request(Path::new("/tmp/unused-workspace"), None, &[], "inventory");
+    relative_workspace.workspace_dir = "relative/workspace".into();
     assert_eq!(
-        run(&relative).unwrap_err(),
+        run(&relative_workspace).unwrap_err(),
         "native_workspace_inventory_invalid"
     );
     let scratch = Scratch::new("relative-before");
-    let mut relative = request(&scratch.0, None, &[], "inventory");
-    relative.before_workspace_dir = Some("relative/before".into());
+    let mut relative_before = request(&scratch.0, None, &[], "inventory");
+    relative_before.before_workspace_dir = Some("relative/before".into());
     assert_eq!(
-        run(&relative).unwrap_err(),
+        run(&relative_before).unwrap_err(),
         "native_workspace_inventory_invalid"
     );
 }

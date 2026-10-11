@@ -236,3 +236,25 @@ pub(crate) fn read_sbom_text(disk_path: &Path) -> Option<String> {
     }
     read_text(disk_path)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn audit_read_refuses_the_shared_sensitive_basenames() {
+        let root = std::env::temp_dir().join(format!("ws-sensitive-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join(".env"), "SECRET=1").unwrap();
+        fs::write(root.join(".env.local"), "SECRET=2").unwrap();
+        fs::write(root.join("package.json"), "{\"name\":\"app\"}").unwrap();
+        assert_eq!(read_workspace_audit_text(&root, ".env"), None);
+        assert_eq!(read_workspace_audit_text(&root, ".env.local"), None);
+        assert_eq!(
+            read_workspace_audit_text(&root, "package.json").as_deref(),
+            Some("{\"name\":\"app\"}")
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+}
