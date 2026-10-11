@@ -203,6 +203,20 @@ fn explicit_package_spec_yields_a_target() {
 }
 
 #[test]
+fn oversized_explicit_package_spec_is_rejected() {
+    let scratch = Scratch::new("oversized-spec");
+    let mut explain = request(&scratch.0, None, &[], "files");
+    explain.package_spec = Some(guard_contracts::WorkspacePackageSpecV1 {
+        ecosystem: "npm".into(),
+        spec: "n".repeat(1_048_576),
+    });
+    assert_eq!(
+        run(&explain).unwrap_err(),
+        "workspace_inventory_exceeds_resident_response"
+    );
+}
+
+#[test]
 fn targets_only_returns_one_target_per_inventory_item() {
     let vectors: Vec<Value> = serde_json::from_str(VECTORS).unwrap();
     let vector = vectors

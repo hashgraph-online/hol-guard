@@ -304,17 +304,26 @@ fn page_values(items: &[Value], offset: usize) -> Result<(Vec<Value>, Option<usi
     Ok((page, (index < total).then_some(index)))
 }
 
-fn package_target(request: &WorkspaceInventoryRequestV1) -> Value {
-    request
-        .package_spec
-        .as_ref()
-        .map_or(Value::Null, |package| {
-            target_for_spec(&package.ecosystem, &package.spec).to_execution_dict()
-        })
+/// Largest explicit package target a reply carries. The target repeats the
+/// spec several times, so an oversized spec is refused before the reply is built
+/// rather than failing at response encoding.
+const PACKAGE_TARGET_MAX_BYTES: usize = 262_144;
+
+fn package_target(request: &WorkspaceInventoryRequestV1) -> Result<Value, String> {
+    let Some(package) = request.package_spec.as_ref() else {
+        return Ok(Value::Null);
+    };
+    let target = target_for_spec(&package.ecosystem, &package.spec).to_execution_dict();
+    let encoded = serde_json::to_vec(&target).map_err(|_| invalid())?;
+    if encoded.len() > PACKAGE_TARGET_MAX_BYTES {
+        return Err("workspace_inventory_exceeds_resident_response".to_owned());
+    }
+    Ok(target)
 }
 
 fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, String> {
     let after_dir = request.workspace_dir.as_str();
+    let package_target = package_target(request)?;
     let (manifest_paths, lockfile_paths) = workspace_files(after_dir);
     if request.files_only {
         if request.inventory_offset > 0 {
@@ -338,7 +347,7 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
             "diff": null,
             "lockfile_warnings": [],
             "scan_targets": [],
-            "package_target": package_target(request),
+            "package_target": package_target,
         }));
     }
     let sbom_paths = resolve_sbom_paths(after_dir, &request.sbom_paths);
@@ -395,7 +404,7 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
         "diff": diff,
         "lockfile_warnings": warnings,
         "scan_targets": targets,
-        "package_target": package_target(request),
+        "package_target": package_target,
     }))
 }
 

@@ -25,8 +25,6 @@ from pathlib import Path
 from typing import ClassVar
 
 from cloud_vector_cases import BASE_COMMIT, CONNECTED, NOW, TABLES, WORKSPACE_ID, cases
-from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
-from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _workspace_fingerprint
 
 from codex_plugin_scanner.guard.models import PolicyDecision
 from codex_plugin_scanner.guard.runtime import runner as guard_runner
@@ -34,9 +32,11 @@ from codex_plugin_scanner.guard.runtime import supply_chain_package_eval as eval
 from codex_plugin_scanner.guard.runtime.package_intent_common import (
     PackageIntent,
     build_package_request_artifact,
+    js_target,
 )
+from codex_plugin_scanner.guard.runtime.supply_chain_package_eval import evaluate_package_request_artifact
+from codex_plugin_scanner.guard.runtime.supply_chain_package_services import _workspace_fingerprint
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.package_target_support import recorded_target
 
 
 def artifact_for(targets: list[str], lockfile_paths: list[str]) -> object:
@@ -46,7 +46,7 @@ def artifact_for(targets: list[str], lockfile_paths: list[str]) -> object:
         intent_kind="install",
         command_tokens=tokens,
         redacted_command=" ".join(tokens),
-        targets=tuple(recorded_target("npm", target) for target in targets),
+        targets=tuple(js_target(target) for target in targets),
         manifest_paths=(),
         lockfile_paths=tuple(lockfile_paths),
         flags=(),

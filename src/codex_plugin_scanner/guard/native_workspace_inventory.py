@@ -66,6 +66,7 @@ class WorkspaceInventory:
     lockfile_warnings: tuple[dict[str, object], ...]
     scan_targets: tuple[PackageIntentTarget, ...]
     package_target: PackageIntentTarget | None
+    inventory_digest: str
 
 
 def _invalid() -> NativeWorkspaceInventoryError:
@@ -215,4 +216,5 @@ def native_workspace_inventory(
         lockfile_warnings=tuple(_warning(item) for item in warnings),
         scan_targets=tuple(_target(item) for item in target_items),
         package_target=None if package_spec is None else _target(first["package_target"]),
+        inventory_digest=str(digest),
     )

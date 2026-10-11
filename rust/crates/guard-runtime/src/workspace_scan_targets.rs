@@ -1,62 +1,31 @@
 //! Package intent targets for workspace scans: one target per inventory item
-//! and one for an explicit package spec, built with the same ecosystem
-//! dispatch the Python scan used. Targets are returned as exact execution
-//! dictionaries so the caller can rebuild its intent without re-deriving them.
+//! and one for an explicit package spec, built by the shared guard-command
+//! helpers. Targets are returned as exact execution dictionaries so the caller
+//! can rebuild its intent without re-deriving them.
 
-use guard_command::package_intent_common::{
-    composer_target, coordinate_target, js_target, python_target, version_target,
-    PackageIntentTarget,
-};
-use serde_json::{Map, Value};
+use guard_command::package_intent_common::PackageIntentTarget;
+use guard_command::workspace_inventory::{target_for_package_spec, target_from_inventory_item};
+use serde_json::Value;
 
-/// The ecosystem dispatch shared by inventory items and explicit specs.
+/// The target for an explicit package spec, from the shared ecosystem dispatch.
 pub(crate) fn target_for_spec(ecosystem: &str, spec: &str) -> PackageIntentTarget {
-    match ecosystem {
-        "npm" => js_target(spec),
-        "pypi" => python_target(spec, false, None, Vec::new()),
-        "maven" => coordinate_target(ecosystem, spec),
-        "packagist" => composer_target(spec),
-        _ => version_target(ecosystem, spec, None),
-    }
+    target_for_package_spec(ecosystem, spec)
 }
 
-fn string_field<'a>(item: &'a Map<String, Value>, key: &str) -> Option<&'a str> {
-    item.get(key).and_then(Value::as_str)
-}
-
-/// The package spec a lockfile or manifest inventory item stands for.
-fn item_spec(item: &Map<String, Value>) -> Option<(String, String)> {
-    let ecosystem = string_field(item, "ecosystem")?;
-    let name = string_field(item, "name")?;
-    let qualified = match string_field(item, "namespace") {
-        Some(namespace) => format!("{namespace}/{name}"),
-        None => name.to_owned(),
-    };
-    let suffix = string_field(item, "version")
-        .or_else(|| string_field(item, "range"))
-        .unwrap_or("");
-    let spec = if suffix.is_empty() {
-        qualified
-    } else {
-        let separator = match ecosystem {
-            "pypi" => "",
-            "maven" | "packagist" => ":",
-            _ => "@",
-        };
-        format!("{qualified}{separator}{suffix}")
-    };
-    Some((ecosystem.to_owned(), spec))
-}
-
+/// One target per inventory item, from the shared inventory-item derivation.
+/// Items that do not carry a string ecosystem and name are rejected.
 pub(crate) fn scan_targets(inventory: &[Value]) -> Result<Vec<Value>, String> {
     inventory
         .iter()
         .map(|entry| {
-            let (ecosystem, spec) = entry
+            let item = entry
                 .as_object()
-                .and_then(item_spec)
+                .filter(|item| {
+                    item.get("ecosystem").is_some_and(Value::is_string)
+                        && item.get("name").is_some_and(Value::is_string)
+                })
                 .ok_or_else(|| "native_workspace_inventory_invalid".to_owned())?;
-            Ok(target_for_spec(&ecosystem, &spec).to_execution_dict())
+            Ok(target_from_inventory_item(item).to_execution_dict())
         })
         .collect()
 }

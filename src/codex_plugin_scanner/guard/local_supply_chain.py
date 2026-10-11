@@ -37,7 +37,7 @@ from .models import GuardAction, GuardArtifact
 from .native_package_approval_hash import native_package_approval_hash, native_package_current_action
 from .native_package_policy_resolve import native_resolve_stored_package_policy
 from .native_supply_chain_posture import native_local_supply_chain_posture
-from .native_workspace_inventory import native_workspace_inventory
+from .native_workspace_inventory import NativeWorkspaceInventoryError, native_workspace_inventory
 from .package_execution_context import PackageExecutionContext, build_package_execution_context
 from .redaction import redact_local_path, redact_text
 from .runtime.approval_context import (
@@ -946,6 +946,7 @@ def build_workspace_audit_payload(
                     manifest_paths=manifest_paths,
                     lockfile_paths=lockfile_paths,
                     command_name=command_name,
+                    inventory_digest=workspace_inventory.inventory_digest,
                     now=now,
                 )
         except (runner.GuardSyncAuthorizationExpiredError, runner.GuardSyncNotConfiguredError, RuntimeError):
@@ -961,6 +962,7 @@ def build_workspace_audit_payload(
                 manifest_paths=manifest_paths,
                 lockfile_paths=lockfile_paths,
                 command_name=command_name,
+                inventory_digest=workspace_inventory.inventory_digest,
                 now=now,
             )
     else:
@@ -972,6 +974,7 @@ def build_workspace_audit_payload(
             manifest_paths=manifest_paths,
             lockfile_paths=lockfile_paths,
             command_name=command_name,
+            inventory_digest=workspace_inventory.inventory_digest,
             now=now,
         )
     evaluation = _enrich_evaluation_packages_with_advisory_aliases(evaluation, store)
@@ -1011,15 +1014,23 @@ def _workspace_local_evaluation(
     manifest_paths: tuple[str, ...],
     lockfile_paths: tuple[str, ...],
     command_name: str,
+    inventory_digest: str,
     now: str,
 ) -> dict[str, object]:
-    targets = native_workspace_inventory(
+    # The targets walk repeats the audit's inventory options so its snapshot
+    # digest is comparable; a workspace that changed in between is rejected
+    # instead of scoring a different package set than the one reported.
+    scanned = native_workspace_inventory(
         store,
         workspace_dir,
         sbom_paths=sbom_paths,
         before_workspace_dir=before_workspace_dir,
+        include_lockfile_warnings=True,
         targets_only=True,
-    ).scan_targets
+    )
+    if scanned.inventory_digest != inventory_digest:
+        raise NativeWorkspaceInventoryError("Native workspace_inventory snapshot changed during audit")
+    targets = scanned.scan_targets
     intent = _workspace_scan_intent(
         command_name=command_name,
         targets=targets,

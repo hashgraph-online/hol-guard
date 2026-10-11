@@ -271,6 +271,22 @@
   "source_revision_kind": null,
   "source_url": null
  },
+ "npm|unresolved-npm-pkg@1.0.0": {
+  "alias": null,
+  "dependency_group": null,
+  "ecosystem": "npm",
+  "editable": false,
+  "extras": [],
+  "package_name": "unresolved-npm-pkg",
+  "raw_spec": "unresolved-npm-pkg@1.0.0",
+  "requested_specifier": "1.0.0",
+  "source_identity": null,
+  "source_invalid_reason": null,
+  "source_kind": null,
+  "source_repository": null,
+  "source_revision_kind": null,
+  "source_url": null
+ },
  "pypi|hol-guard": {
   "alias": null,
   "dependency_group": null,
