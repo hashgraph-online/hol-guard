@@ -40,8 +40,8 @@ def _decide(
     )
 
 
-@pytest.mark.parametrize("command", ["cargo --version", "pytest --version", "rg -V"])
-def test_version_probe_of_a_code_launcher_is_eligible(
+@pytest.mark.parametrize("command", ["rg -V", "rg --version"])
+def test_version_probe_of_a_plain_binary_is_eligible(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, command: str
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
@@ -52,6 +52,11 @@ def test_version_probe_of_a_code_launcher_is_eligible(
     "command",
     [
         "python3 test_calc.py",
+        # pytest loads conftest.py and plugins before it handles --version, and
+        # rustup resolves cargo from rust-toolchain.toml, so the launcher binary
+        # alone does not bind what runs.
+        "pytest --version",
+        "cargo --version",
         # The resident gives an interpreter with no entrypoint a fresh nonce.
         "python3 --version",
         "node -V",
@@ -94,7 +99,15 @@ def test_code_and_write_tools_stay_once_only(
 
 @pytest.mark.parametrize(
     "reason_code",
-    ["secret_read", "local_secret_read", "credential_exfiltration", "prompt_injection", "encoded_exfiltration"],
+    [
+        "secret_read",
+        "local_secret_read",
+        "credential_exfiltration",
+        "prompt_injection",
+        "encoded_exfiltration",
+        "native_sensitive_prompt",
+        "native_sensitive_access_review",
+    ],
 )
 @pytest.mark.parametrize(
     ("tool", "tool_input"), [("Bash", {"command": "cat README.md"}), ("todo", {"ops": []}), ("read", {"path": "a"})]

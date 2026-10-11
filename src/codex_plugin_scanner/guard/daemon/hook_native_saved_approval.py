@@ -40,6 +40,7 @@ _NATIVE_EXACT_ACTION_POLICY_VERSION = "native-exact-action-v1"
 # prompt: it never carries a persistent allow, whatever the command looks like.
 _RISK_REASON_MARKERS = (
     "secret",
+    "sensitive",
     "credential",
     "exfil",
     "injection",

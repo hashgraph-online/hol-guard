@@ -82,9 +82,6 @@ _DESTRUCTIVE_EXECUTABLES = frozenset(
     {"rm", "rmdir", "unlink", "shred", "dd", "mv", "chmod", "chown", "truncate", "mkfs", "kill", "pkill", "killall"}
     | {"curl", "wget", "ssh", "scp", "sftp", "rsync", "nc", "ncat", "telnet", "ftp"}
 )
-# A lone version flag makes any program print its version and exit; it loads no
-# project code, so the binary's own launch identity is the whole proof.
-_VERSION_PROBE_ARGUMENTS = frozenset({("--version",), ("-V",), ("-version",)})
 _MAX_COMPOUND_SEGMENTS = 8
 _FIND_EXEC_OPTIONS = frozenset({"-exec", "-execdir", "-ok", "-okdir"})
 # Existing file operands are content-bound so an edited script, program or
@@ -200,13 +197,6 @@ def _segment_launch(
             raise OnceOnlyError(UNPROVEN_LAUNCH)
         git = git_readonly_identity(arguments, cwd=cwd, home_dir=home_dir)
         return {"kind": "direct", "identity": binary, "git": git, "operands": operands}
-    if _is_version_probe(segment, name):
-        launch = build_runtime_launch_identity(
-            segment.executable, args=segment.arguments, structured_command=True, cwd=cwd, home_dir=home_dir
-        )
-        if not runtime_launch_identity_is_reusable(launch):
-            raise OnceOnlyError(UNPROVEN_LAUNCH)
-        return {"kind": "direct", "identity": launch, "operands": operands, "version_probe": True}
     if name in _LOCAL_BIN_RUNNERS:
         local_bin = None if compound else _runner_local_bin(command, name, arguments, cwd=cwd, home_dir=home_dir)
         if local_bin is None:
@@ -224,21 +214,6 @@ def _segment_launch(
     if not runtime_launch_identity_is_reusable(launch):
         raise OnceOnlyError(UNPROVEN_LAUNCH)
     return {"kind": "direct", "identity": launch, "operands": operands}
-
-
-def _is_version_probe(segment: object, name: str) -> bool:
-    """True for ``<program> --version`` with no environment, wrapper or path override."""
-
-    from ..runtime.command_model import CommandSegment
-
-    assert isinstance(segment, CommandSegment)
-    return (
-        name not in {"git", "sudo", "doas", "env", "xargs", "parallel", "timeout", "nohup", "watch"}
-        and tuple(segment.arguments) in _VERSION_PROBE_ARGUMENTS
-        and not segment.environment_names
-        and not segment.wrapper_chain
-        and not segment.path_overridden
-    )
 
 
 def _argument_is_sensitive(argument: str, *, cwd: Path, home_dir: Path | None) -> bool:
