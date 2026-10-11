@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import cast, get_args
 from uuid import uuid4
 
 from codex_plugin_scanner.guard.config import GuardConfig, resolve_risk_action
@@ -197,9 +198,9 @@ def policy_action_for_cisco_signals(
         }
     )
     action = payload.get("policy_action")
-    if not isinstance(action, str):
+    if action not in get_args(GuardAction):
         raise NativeCiscoPreflightError
-    return action  # type: ignore[return-value]
+    return cast(GuardAction, action)
 
 
 def build_cisco_deep_scan_payload(

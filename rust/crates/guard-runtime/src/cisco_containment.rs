@@ -222,10 +222,11 @@ pub(crate) fn validated_target(
     roots: &[ApprovedRoot],
 ) -> Result<Validated, Contain> {
     let expanded = expand(target, home);
-    let candidate = if expanded.is_absolute() {
-        expanded
+    // Path semantics: a trailing separator or a `.` component never changes the target.
+    let candidate: PathBuf = if expanded.is_absolute() {
+        expanded.components().collect()
     } else {
-        resolution_root.join(expanded)
+        resolution_root.join(expanded).components().collect()
     };
     let (path, meta) = resolve(&candidate).ok_or_else(|| fail("target_unresolved", SELECTED))?;
     let Some(root) = most_specific(&path, roots) else {
