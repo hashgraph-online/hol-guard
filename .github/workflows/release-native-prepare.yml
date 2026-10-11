@@ -18,6 +18,11 @@ on:
       version:
         required: true
         type: string
+      fast_codegen:
+        description: Alpha-only per-crate codegen; the version must be a canonical alpha.
+        required: false
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -49,6 +54,7 @@ jobs:
     env:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       VERSION: ${{ inputs.version }}
+      FAST_CODEGEN: ${{ inputs.fast_codegen == true }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}
@@ -76,7 +82,7 @@ jobs:
           BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
           RELEASE_VERSION="${VERSION:-$BASE_VERSION}"
           if [[ "$RELEASE_VERSION" != "$BASE_VERSION" ]]; then
-            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(a[1-9][0-9]*)?$ ]]
             uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$RELEASE_VERSION"
           fi
           while IFS= read -r changed_path; do
@@ -104,14 +110,16 @@ jobs:
       - name: Cache trusted release compilation
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
-          prefix-key: release-native-v1
+          prefix-key: release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}
           workspaces: rust
           shared-key: release-${{ matrix.target }}
           # Fresh checkouts reset source mtimes, so cached workspace crates are
           # always stale; content-addressed sccache below covers them instead.
           cache-workspace-crates: false
           cache-bin: false
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          # Fast-profile dependencies have their own cache key, which only authorized
+          # main alpha dispatches (never pull requests) may populate.
+          save-if: ${{ (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main' }}
       - name: Install content-addressed compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
@@ -128,6 +136,10 @@ jobs:
           SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
         run: |
           set -euo pipefail
+          # Per-crate codegen makes larger binaries that are allowed only in alpha
+          # prereleases (GitHub release assets, never PyPI); refuse any other version.
+          [[ "$FAST_CODEGEN" != "true" ]] || [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+a[1-9][0-9]*$ ]]
+          [[ "$FAST_CODEGEN" != "true" ]] || export CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
           # One invocation keeps nix feature unification identical for both binaries,
           # so shared workspace crates compile once. The generator only writes files
           # that no build script reads, so it can verify the finished compiler.

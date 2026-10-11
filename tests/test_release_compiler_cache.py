@@ -62,7 +62,12 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
     wheel_steps = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]["steps"]
     for steps in (prepare_steps, wheel_steps):
         cache = next(item for item in steps if "rust-cache@" in item.get("uses", ""))
-        assert cache["with"]["prefix-key"] == "release-native-v1"
+        # The prepare workflow adds "-fast" only for alpha fast-codegen builds; wheel jobs and
+        # every stable build keep the shared fat-profile key.
+        assert cache["with"]["prefix-key"] in {
+            "release-native-v1",
+            "release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}",
+        }
         assert cache["with"]["cache-workspace-crates"] is False
     script = prepare["run"]
     builds = [line for line in script.splitlines() if line.strip().startswith("cargo build")]

@@ -293,7 +293,8 @@ def test_feed_discovery_skips_unfinished_and_ambiguous_releases(tmp_path):
 
 def test_compilation_and_signing_run_beside_packaging_and_registry_verification():
     jobs = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
-    assert jobs["precompile-native"]["needs"] == "authorize-release"
+    assert jobs["precompile-native"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    assert jobs["resolve-alpha-version"]["needs"] == "authorize-release"
     assert jobs["build"]["needs"] == "authorize-release"
     assert jobs["build-native-guard-wheels"]["needs"] == ["build", "precompile-native"]
     assert "publish-main-pypi" not in jobs["publish-main-assets"]["needs"]
