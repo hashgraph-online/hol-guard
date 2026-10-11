@@ -89,19 +89,19 @@ fn git_query_uses_bounded_request_context_not_resident_path() {
     // runs in the caller environment, so a search path of `.` or an empty
     // entry can load a library the probe never saw. Name-only search paths
     // stay unproven.
-    let mut search_paths = context.clone();
-    search_paths.environment_names.extend([
-        "LD_LIBRARY_PATH".into(),
-        "DYLD_LIBRARY_PATH".into(),
-        "DYLD_FALLBACK_LIBRARY_PATH".into(),
-        "DYLD_FRAMEWORK_PATH".into(),
-        "DYLD_FALLBACK_FRAMEWORK_PATH".into(),
-    ]);
-    assert_ne!(evaluate(&search_paths).decision, "allow");
-    for name in ["LD_PRELOAD", "LD_AUDIT", "DYLD_INSERT_LIBRARIES"] {
-        let mut preloaded = context.clone();
-        preloaded.environment_names.push(name.into());
-        assert_ne!(evaluate(&preloaded).decision, "allow", "{name}");
+    for name in [
+        "LD_LIBRARY_PATH",
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+        "DYLD_FRAMEWORK_PATH",
+        "DYLD_FALLBACK_FRAMEWORK_PATH",
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+    ] {
+        let mut loader = context.clone();
+        loader.environment_names.push(name.into());
+        assert_ne!(evaluate(&loader).decision, "allow", "{name}");
     }
     // A model-chosen search path on the command line is not the exported
     // toolchain environment and still is not a proven Git read.
