@@ -65,6 +65,8 @@ mod contributed_mcp_decision;
 pub use contributed_mcp_decision::*;
 mod local_mcp_grant;
 pub use local_mcp_grant::*;
+mod cisco_preflight;
+pub use cisco_preflight::*;
 mod mcp_proxy_decision;
 pub use mcp_proxy_decision::*;
 mod daemon_lifecycle_decision;

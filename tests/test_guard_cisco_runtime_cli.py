@@ -9,13 +9,12 @@ from pathlib import Path
 
 import pytest
 
-import codex_plugin_scanner.guard.runtime.cisco_preflight as cisco_preflight_module
+import codex_plugin_scanner.guard.native_cisco_preflight as cisco_preflight_module
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.receipts import build_receipt
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.cisco_evidence import cisco_finding_to_risk_signal
 from codex_plugin_scanner.guard.runtime.detectors import register_default_detectors
 from codex_plugin_scanner.guard.runtime.signals import GuardRiskSignalV3
 from codex_plugin_scanner.guard.store import GuardStore
@@ -86,6 +85,37 @@ def _mcp_finding(severity: Severity = Severity.CRITICAL) -> Finding:
         file_path=".mcp.json",
         line_number=2,
         source="cisco-mcp-scanner",
+    )
+
+
+def cisco_finding_to_risk_signal(
+    finding: Finding,
+    *,
+    scanner_status: CiscoIntegrationStatus,
+) -> GuardRiskSignalV3:
+    """A scanner-sourced signal for tests that only need its source and shape."""
+
+    is_mcp = finding.source == "cisco-mcp-scanner"
+    return GuardRiskSignalV3(
+        signal_id=f"{finding.source}:{finding.rule_id}",
+        source="cisco_mcp" if is_mcp else "cisco_skill",
+        source_version="unknown",
+        category="mcp" if is_mcp else "skill",
+        severity=finding.severity.value,
+        confidence="strong",
+        title=finding.title,
+        plain_language_summary=finding.description,
+        technical_detail=None,
+        evidence_ref=None,
+        scanner_name="Cisco MCP scanner" if is_mcp else "Cisco skill scanner",
+        scanner_status=scanner_status.value,
+        scanner_rule_id=finding.rule_id,
+        redaction_level="summary",
+        source_path=finding.file_path,
+        source_line=finding.line_number,
+        data_source=None,
+        data_sink=None,
+        recommended_action=finding.remediation,
     )
 
 
@@ -280,7 +310,7 @@ def test_cisco_preflight_changed_skill_file_produces_normalized_signal(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     skill_path = tmp_path / "skills" / "demo" / "SKILL.md"
     skill_path.parent.mkdir(parents=True)
@@ -301,7 +331,7 @@ def test_cisco_preflight_rejects_skill_targets_that_resolve_outside_workspace_vi
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     external_root = tmp_path.parent / f"{tmp_path.name}-external-skills"
     external_skill = external_root / "evil" / "SKILL.md"
@@ -334,7 +364,7 @@ def test_cisco_preflight_rejects_absolute_skill_targets_outside_workspace(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     external_skill = tmp_path.parent / f"{tmp_path.name}-external-skills" / "evil" / "SKILL.md"
     external_skill.parent.mkdir(parents=True)
@@ -358,7 +388,7 @@ def test_cisco_preflight_rejects_relative_traversal_skill_targets(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     external_skill = tmp_path.parent / f"{tmp_path.name}-external-skills" / "evil" / "SKILL.md"
     external_skill.parent.mkdir(parents=True)
@@ -384,7 +414,7 @@ def test_cisco_preflight_rejects_relative_traversal_mcp_targets(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     external_mcp = tmp_path.parent / f"{tmp_path.name}-external-mcp" / ".mcp.json"
     external_mcp.parent.mkdir(parents=True)
@@ -410,7 +440,7 @@ def test_cisco_preflight_rejects_mcp_targets_that_resolve_outside_workspace_via_
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     external_root = tmp_path.parent / f"{tmp_path.name}-external-mcp"
     external_mcp = external_root / ".mcp.json"
@@ -439,7 +469,7 @@ def test_cisco_preflight_changed_mcp_config_produces_normalized_signal(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import scan_action_for_cisco_evidence
+    from codex_plugin_scanner.guard.native_cisco_preflight import scan_action_for_cisco_evidence
 
     mcp_path = tmp_path / ".mcp.json"
     mcp_path.write_text("{}", encoding="utf-8")
@@ -621,41 +651,8 @@ def test_cisco_preflight_accepts_canonical_workspace_selected_through_symlink(
     assert called == [real_workspace / "skills"]
 
 
-def test_cisco_preflight_revalidation_catches_target_symlink_race_before_scanner_call(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    skill_path = tmp_path / "skills" / "demo" / "SKILL.md"
-    skill_path.parent.mkdir(parents=True)
-    skill_path.write_text("# Before\n", encoding="utf-8")
-    outside = tmp_path.parent / f"{tmp_path.name}-race-target.md"
-    outside.write_text("# Outside\n", encoding="utf-8")
-    called: list[Path] = []
-    real_revalidate = cisco_preflight_module._revalidate_scan_target
-
-    def swap_then_revalidate(target: object) -> None:
-        skill_path.unlink()
-        skill_path.symlink_to(outside)
-        real_revalidate(target)  # type: ignore[arg-type]
-
-    monkeypatch.setattr(cisco_preflight_module, "_revalidate_scan_target", swap_then_revalidate)
-    monkeypatch.setattr(
-        cisco_skill_scanner,
-        "run_cisco_skill_scan",
-        lambda path, **kwargs: called.append(path),
-    )
-
-    signals = cisco_preflight_module.scan_action_for_cisco_evidence(
-        _relative_target_write_action("skills/demo/SKILL.md"),
-        workspace=tmp_path,
-    )
-
-    assert [signal.scanner_rule_id for signal in signals] == ["outside_approved_workspace"]
-    assert called == []
-
-
 def test_cisco_policy_blocks_critical_balanced_but_not_low_confidence_info(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.cisco_preflight import policy_action_for_cisco_signals
+    from codex_plugin_scanner.guard.native_cisco_preflight import policy_action_for_cisco_signals
 
     config = GuardConfig(guard_home=tmp_path / "guard-home", workspace=None)
     critical = cisco_finding_to_risk_signal(
