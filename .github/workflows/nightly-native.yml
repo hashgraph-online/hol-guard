@@ -271,6 +271,7 @@ jobs:
           export HOL_GUARD_PACKAGE_VERSION="$VERSION"
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime --bin hol-guard-runtime
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Run with a constrained descriptor budget
         run: |
           ulimit -n 128
@@ -338,6 +339,7 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           HOL_GUARD_NATIVE_BINARY: ${{ env.RUNTIME }}
+          HOL_GUARD_NATIVE_REGRESSION: "1"
         run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
       - name: Validate real native client lifecycle
         if: ${{ !cancelled() }}
