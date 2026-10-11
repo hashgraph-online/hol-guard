@@ -1904,7 +1904,14 @@ def test_ensure_guard_daemon_reaps_stale_ephemeral_daemon_states(tmp_path, monke
     def fake_pid_is_running(_pid):
         return pid_running["value"]
 
-    def fake_kill(pid, _signal):
+    real_kill = os.kill
+
+    def fake_kill(pid, signal_number):
+        # Only the stale daemon is fake. Closing a native resident stream that an earlier test left
+        # in the client pool terminates a real child, which must not mark the stale daemon dead.
+        if pid != 11111:
+            real_kill(pid, signal_number)
+            return
         killed.append(pid)
         pid_running["value"] = False
 
