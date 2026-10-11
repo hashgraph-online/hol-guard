@@ -138,6 +138,16 @@ assert result.wrapper_chain == ("bash",)
     assert result.returncode == 0, result.stderr or result.stdout
 
 
+def test_large_escaped_heredoc_replays_across_resident_wire(native_hook_force):
+    fixture = json.loads((Path(__file__).parent / "fixtures/shell-helper-python.v1.json").read_text())
+    vector = next(v for v in fixture["vectors"] if len(v["command"]) > 65_536 and "\u001c" in v["command"])
+    command, expected = vector["command"], vector["expected"]
+    heredocs = shell_structure.extract_heredocs(command)
+    assert [asdict(h) for h in heredocs] == expected["heredocs"]
+    assert shell_structure.mask_heredoc_bodies(command, heredocs) == expected["masked_bodies"]
+    assert shell_structure.mask_complete_heredocs(command, heredocs) == expected["masked_complete"]
+
+
 def test_prerequisite_time_consumes_the_same_transport_deadline(monkeypatch, tmp_path):
     from codex_plugin_scanner.guard import native_context
 

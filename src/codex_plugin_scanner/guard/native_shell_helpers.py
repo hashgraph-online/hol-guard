@@ -49,7 +49,7 @@ def call(action: str, command: str, **fields: Any) -> Any:
         required_feature="shell-helpers-v1",
         status=status,
         response_schema="guard-shell-helpers-result.v1",
-        max_request_bytes=6 * 256 * 1024 + 4096,
+        max_request_bytes=6 * 1024 * 1024,
     )
     if (
         answer is None

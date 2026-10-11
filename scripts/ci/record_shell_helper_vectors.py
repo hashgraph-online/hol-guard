@@ -132,7 +132,11 @@ def record() -> None:
                 },
             }
         )
-    for command in ("echo " + "x" * 65_536, "cat <<EOF\n" + "x" * 190_000 + "\nEOF\necho done"):
+    for command in (
+        "echo " + "x" * 65_536,
+        "cat <<EOF\n" + "x" * 190_000 + "\nEOF\necho done",
+        "cat <<EOF\n" + "\u001c" * 140_000 + "\nEOF",
+    ):
         heredocs = shell_structure.extract_heredocs(command)
         vectors.append(
             {
