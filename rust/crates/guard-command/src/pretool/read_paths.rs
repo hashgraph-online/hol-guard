@@ -3,6 +3,8 @@ mod allowances;
 pub(super) use allowances::inside_agent_state_tree;
 #[path = "omp_read_targets.rs"]
 mod omp_targets;
+#[path = "private_temporary_workspace.rs"]
+mod private_temporary;
 use allowances::{
     agent_home_state, agent_skill_document, codex_notes_document, execution_output_log,
     guard_safety_doc, project_skill_document,
@@ -206,6 +208,7 @@ pub(super) fn resolved_path_allowed_for_operation(
         "/private/var",
     ];
     if (!verified_temporary
+        && !private_temporary::inside_private_temporary_workspace(canonical, home_dir, cwd)
         && ROOTS
             .iter()
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))

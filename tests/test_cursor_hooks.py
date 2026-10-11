@@ -1266,6 +1266,75 @@ def test_cursor_after_shell_requires_observer_fields(tmp_path: Path) -> None:
     assert saved is False
 
 
+def test_cursor_after_shell_refuses_pending_state_that_expires_during_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timedelta
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.cli import commands_support_permission_store as permission_store
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-expiry-boundary"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    generation_id = "gen-cursor-expiry-boundary"
+    _record_cursor_pending_for_test(
+        store=store,
+        guard_home=home_dir,
+        guard_commands_module=guard_commands_module,
+        conversation_id=conversation_id,
+        command=command,
+        workspace_dir=workspace_dir,
+        generation_id=generation_id,
+    )
+    pending = guard_commands_module._load_cursor_pending_shell_permission(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+    )
+    assert pending is not None
+    saved_at = datetime.fromisoformat(str(pending["saved_at"]))
+    clocks = iter(
+        (
+            (saved_at + timedelta(seconds=29 * 60)).isoformat(),
+            (saved_at + timedelta(seconds=31 * 60)).isoformat(),
+        )
+    )
+    monkeypatch.setattr(permission_store, "_now", lambda: next(clocks))
+    payload = prepare_cursor_hook_payload(
+        {
+            "conversation_id": conversation_id,
+            "generation_id": generation_id,
+            "hook_event_name": "afterShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+            "duration": 15,
+        }
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=payload,
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_shell_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=command,
+            workspace_dir=workspace_dir,
+            approval_binding=generation_id,
+        ),
+    )
+    assert saved is False
+    assert guard_commands_module._load_cursor_native_shell_allowance(store, payload) is None
+
+
 def test_cursor_hook_should_block() -> None:
     assert cursor_hook_should_block(policy_action="block") is True
     assert cursor_hook_should_block(policy_action="allow") is False

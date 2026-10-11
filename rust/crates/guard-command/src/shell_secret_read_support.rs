@@ -1020,13 +1020,20 @@ pub(crate) fn search_operands_are_safe(
     root: Option<&Path>,
 ) -> bool {
     let roles = search_file_operand_roles(command_name, args);
-    roles.iter().all(|(operand, is_search_glob)| {
+    let lexically_safe = roles.iter().all(|(operand, is_search_glob)| {
         if *is_search_glob {
             search_glob_pattern_is_safe(operand, root)
         } else {
             read_only_lookup_target_is_safe(operand, true, root)
         }
-    })
+    });
+    if !lexically_safe {
+        return false;
+    }
+    match root {
+        None => true,
+        Some(root) => local_read_operands_resolve_safely(command_name, args, root, root),
+    }
 }
 
 const SEARCH_VALUE_OPTIONS: &[&str] = &[

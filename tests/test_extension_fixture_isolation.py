@@ -157,8 +157,8 @@ def test_catalog_and_contributor_interfaces_remain_in_the_repository():
 
 def test_authoring_checks_current_resources_before_tests_and_installed_wheel():
     """Verify authoring checks current resources before tests and installed wheel."""
-    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text()))
-    steps = workflow["jobs"]["authoring"]["steps"]
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text()))
+    steps = workflow["jobs"]["extension-builder"]["steps"]
     prepare = next(
         i for i, step in enumerate(steps) if step.get("name") == "Prepare and verify current extension projections"
     )
@@ -168,7 +168,6 @@ def test_authoring_checks_current_resources_before_tests_and_installed_wheel():
     )
     assert prepare < tests < wheel
     script = steps[prepare]["run"]
-    assert "--changed-from" in script
     assert "--check" in script
     assert "git checkout" not in script and "git clean" not in script
     assert "if" not in steps[prepare] and not steps[prepare].get("continue-on-error")

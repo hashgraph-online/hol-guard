@@ -18,15 +18,23 @@ if TYPE_CHECKING:
 CONTROL_BINDING_REFRESH_ERRORS = frozenset(
     {"native_command_control_mutation_in_progress", "native_command_control_authority_not_current"}
 )
+# The resident holds one current snapshot per Guard home. A short-lived CLI
+# hook or another publisher can supersede the generation this worker last
+# saw ACKed, so the worker refreshes its own binding and retries once.
+SNAPSHOT_NOT_CURRENT_ERROR = "native_policy_snapshot_not_current"
+NATIVE_REVIEW_REFRESH_ERRORS = CONTROL_BINDING_REFRESH_ERRORS | {SNAPSHOT_NOT_CURRENT_ERROR}
 
 
 class NativePolicyBindingRefreshError(RuntimeError):
-    def __init__(self, code: str, generation: object = None) -> None:
-        if code not in CONTROL_BINDING_REFRESH_ERRORS:
+    def __init__(self, code: str, generation: object = None, *, recording_only: bool = False) -> None:
+        if code not in NATIVE_REVIEW_REFRESH_ERRORS:
             raise ValueError("unsupported native binding refresh")
         super().__init__(code)
         self.code = code
         self.generation = generation if isinstance(generation, int) and not isinstance(generation, bool) else None
+        # Posture of the rejected ACKed binding, so a refresh that cannot
+        # complete keeps a Watch binding recording instead of stopping.
+        self.recording_only = recording_only is True
 
 
 def review_native_edge(
@@ -83,7 +91,10 @@ def review_native_edge(
                 if callable(request_refresh):
                     request_refresh(error.generation)
                     snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
-                    if snapshot is not None and snapshot.get("mode") == "enforce" and time.monotonic() < deadline:
+                    refreshed = snapshot is not None and (
+                        error.code == SNAPSHOT_NOT_CURRENT_ERROR or snapshot.get("mode") == "enforce"
+                    )
+                    if refreshed and time.monotonic() < deadline:
                         continue
             response = _record_unavailable_native(
                 worker,
@@ -94,7 +105,9 @@ def review_native_edge(
                 workspace=workspace,
                 home_dir=home_dir,
                 guard_home=guard_home,
-                recording_only=False,
+                # Control-binding failures only refresh enforce bindings and
+                # stay blocking; a superseded Watch snapshot keeps recording.
+                recording_only=error.code == SNAPSHOT_NOT_CURRENT_ERROR and error.recording_only,
             )
             response["native_failure_code"] = error.code
             return response

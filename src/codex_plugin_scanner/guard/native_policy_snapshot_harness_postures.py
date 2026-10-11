@@ -23,17 +23,13 @@ import json
 import logging
 import os
 import secrets
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .harness_posture import runtime_harness_key
-from .native_policy_snapshot_codec import _normalized_harness_selector_v3, derive_native_policy_verifier_key
+from .native_policy_snapshot_codec import derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .protection_posture import VALID_PROTECTION_POSTURES
-
-if TYPE_CHECKING:
-    from .config import GuardConfig
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +38,6 @@ HARNESS_POSTURES_SIDECAR_NAME = "harness-postures-v1.json"
 _SIDECAR_SCHEMA = "guard-harness-postures.v1"
 _SIDECAR_DOMAIN = b"hol-guard/harness-postures/v1\0"
 _MAX_SIDECAR_BYTES = 16 * 1024
-_STRENGTH = {"watch": 0, "protected": 1, "extra_careful": 2}
 
 
 def valid_harness_postures(value: object) -> dict[str, str]:
@@ -55,54 +50,6 @@ def valid_harness_postures(value: object) -> dict[str, str]:
         for key, posture in value.items()
         if isinstance(key, str) and key and isinstance(posture, str) and posture in VALID_PROTECTION_POSTURES
     }
-
-
-def merge_harness_postures(policies: Iterable[Mapping[str, object]]) -> dict[str, str]:
-    """Strictest-wins across the configs compiled into one snapshot."""
-
-    merged: dict[str, str] = {}
-    for policy in policies:
-        for harness, posture in valid_harness_postures(policy.get(HARNESS_POSTURES_BINDING_KEY)).items():
-            previous = merged.get(harness)
-            if previous is None or _STRENGTH[posture] > _STRENGTH[previous]:
-                merged[harness] = posture
-    return merged
-
-
-def posture_risk_overlay(base: object, config: GuardConfig) -> object:
-    """Add per-harness risk floors for overrides stricter than the baseline.
-
-    Rust joins ``harness_risk_actions`` as strengthening floors, so the overlay
-    can only tighten. It is what makes Protected/Extra careful real for one
-    harness while the global posture is Watch, and Extra careful real while the
-    global posture is Protected. Watch overrides add nothing here: they are
-    applied by Python as recording-only after native evaluation.
-    """
-
-    from .action_lattice import most_restrictive_guard_action
-    from .harness_posture import global_effective_posture
-    from .protection_posture import POSTURE_RISK_ACTIONS
-
-    overrides = config.harness_postures or {}
-    if not overrides:
-        return base
-    baseline = _STRENGTH[global_effective_posture(config)]
-    merged: dict[str, dict[str, str]] = {}
-    if isinstance(base, Mapping):
-        for key, value in base.items():
-            if isinstance(value, Mapping):
-                merged[str(key)] = {str(risk): str(action) for risk, action in value.items()}
-    for harness, posture in sorted(overrides.items()):
-        floors = POSTURE_RISK_ACTIONS.get(posture)
-        if floors is None or _STRENGTH.get(posture, 0) <= baseline:
-            continue
-        selector = _normalized_harness_selector_v3(harness)
-        key = next((name for name in merged if _normalized_harness_selector_v3(name) == selector), harness)
-        target = merged.setdefault(key, {})
-        for risk_class, action in floors.items():
-            current = target.get(risk_class)
-            target[risk_class] = action if current is None else most_restrictive_guard_action(current, action)
-    return merged
 
 
 def _verifier_key_for_store(store: object) -> bytes | None:

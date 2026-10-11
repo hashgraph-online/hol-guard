@@ -69,6 +69,7 @@ pub(super) fn git_helpers_proven_inert(
             executable_basename(executable) != "git"
                 || (segment.environment_names.is_empty()
                     && super::directory_targets::drive_targets_quoted(segment)
+                    && super::directory_targets::home_targets_unquoted(segment)
                     && git_config::execution_free(
                         executable,
                         &segment.arguments,

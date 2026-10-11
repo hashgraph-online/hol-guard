@@ -231,6 +231,8 @@ def test_package_script_native_returns_dataclass_not_unvalidated_dict(monkeypatc
         "bun",
         ["run", "test"],
         guard_home=tmp_path,
+        shim_directory=tmp_path,
+        environment={},
     )
     assert isinstance(result, ContainedPackageScriptResult)
     assert isinstance(result.proof, PositiveProof)
@@ -242,6 +244,8 @@ def test_package_script_native_returns_dataclass_not_unvalidated_dict(monkeypatc
             "bun",
             ["run", "test"],
             guard_home=tmp_path,
+            shim_directory=tmp_path,
+            environment={},
         )
         is None
     )

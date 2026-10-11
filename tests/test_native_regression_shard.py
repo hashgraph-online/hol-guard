@@ -106,13 +106,12 @@ def test_duplicate_test_cannot_replace_a_missing_test() -> None:
 
 def test_platform_gates_require_complete_inventory_and_all_native_proofs() -> None:
     """Verify platform gates require complete inventory and all native proofs."""
-    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
-    for name in ["linux-x64", "windows-x64", "macos"]:
-        job = jobs[name]
-        assert job["if"] == "always()"
-        assert "native-regression-complete" in job["needs"]
-        assert "test -n" in job["steps"][0]["run"]
-        assert 'test "$result" = success || exit 1' in job["steps"][0]["run"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text()))["jobs"]
+    complete = jobs["native-regression-complete"]
+    assert complete["if"] == "always()"
+    assert set(complete["needs"]) == {"linux-regression", "windows-regression", "macos-regression"}
+    assert "test -n" in complete["steps"][0]["run"]
+    assert 'test "$result" = success || exit 1' in complete["steps"][0]["run"]
     for platform in ["linux", "windows", "macos"]:
         regression = jobs[f"{platform}-regression"]
         assert regression["needs"] == f"{platform}-build"
@@ -150,7 +149,7 @@ def test_required_status_aggregators_run_after_cancellation() -> None:
     """Verify required status aggregators run after cancellation."""
     for filename, names in {
         "ci.yml": ["ci-python-312"],
-        "native-wheel-ci.yml": ["linux-x64", "windows-x64", "macos", "native-regression-complete"],
+        "nightly-native.yml": ["native-regression-complete"],
     }.items():
         workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / filename).read_text()))
         cancel = workflow["concurrency"]["cancel-in-progress"]
@@ -164,7 +163,7 @@ def test_required_status_aggregators_run_after_cancellation() -> None:
 
 def test_every_native_runner_and_reconciler_use_the_same_shard_count() -> None:
     """Verify every native runner and reconciler use the same shard count."""
-    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text()))["jobs"]
     for platform in ("linux", "windows", "macos"):
         job = jobs[f"{platform}-regression"]
         count = len(job["strategy"]["matrix"]["shard"])

@@ -16,6 +16,7 @@ from .codex_daemon_hook_auth import (
     _http_json_response,
     _verify_challenge_response,
 )
+from .codex_daemon_hook_transport import _with_remaining_hint
 
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
@@ -80,10 +81,12 @@ def authenticated_claude_hook_response(
         connection.timeout = remaining
         if connection.sock is not None:
             connection.sock.settimeout(remaining)
+        # The daemon times the hook from its own arrival, so tell it how long
+        # this client will still wait; it must answer before that.
         connection.request(
             "POST",
             hook_path,
-            body=data.encode("utf-8"),
+            body=_with_remaining_hint(data, deadline).encode("utf-8"),
             headers={
                 "Content-Type": "application/json",
                 "Connection": "close",

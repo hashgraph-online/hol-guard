@@ -16,6 +16,7 @@ from ..approval_scope_support import (
 )
 from ..approvals import ApprovalRequestAlreadyResolvedError, ApprovalRequestNotFoundError, apply_approval_resolution
 from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
+from ..native_resident_revival import native_route_unavailable_body
 from .command_activity_api import handle_command_activity_feedback
 from .extension_control_api import ExtensionControlApiError
 from .local_approval_continuation import apply_local_approval_continuation
@@ -260,7 +261,7 @@ class _ControlPostRoutes:
         try:
             resolution = native_resolve_request(parsed.path, payload, guard_home=self._route_home())
         except NativeDaemonRouteError:
-            self._write_json({"resolved": False, "error": "native_route_policy_unavailable"}, status=503)
+            self._write_json({"resolved": False, **native_route_unavailable_body()}, status=503)
             return
         if resolution.outcome == "not_matched":
             self.send_response(404)

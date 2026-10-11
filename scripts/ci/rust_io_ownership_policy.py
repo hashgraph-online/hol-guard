@@ -45,6 +45,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # Archive-inspection transport: lease, request binding, and the
         # bounded native worker invocation; all archive semantics are Rust.
         "src/codex_plugin_scanner/guard/native_archive_inspection.py",
+        # Native acquisition request binding and managed trust DTO transport.
+        "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
         "src/codex_plugin_scanner/guard/native_runtime.py",
         # Per-request status reuse. stat() only rechecks the validated binary.
         "src/codex_plugin_scanner/guard/native_runtime_request_scope.py",
@@ -80,6 +82,7 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # The request digest correlates resident framing; it never owns a
         # semantic approval, policy, or context identity or decision.
         "src/codex_plugin_scanner/guard/native_approval_reuse.py",
+        "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
         # Same correlation-only digest for the approval-proof resident op.
         "src/codex_plugin_scanner/guard/native_approval_proof.py",
         # Same correlation-only digest for the store-policy claim and diagnostic ops.
@@ -94,6 +97,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_resident_decision.py",
         # Same correlation-only digest for the hook artifact composition op.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
+        # Same correlation-only digest for the consumer artifact composition op.
+        "src/codex_plugin_scanner/guard/native_consumer_artifact_compose.py",
         # Same correlation-only digest for the per-harness hook adapter op.
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
@@ -134,6 +139,7 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
         "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",
         "src/codex_plugin_scanner/guard/native_supply_chain_posture.py",
+        "src/codex_plugin_scanner/guard/native_package_audit_projection.py",
         "src/codex_plugin_scanner/guard/native_workspace_inventory.py",
         # Decodes the bounded resident command-effect result envelope and binds
         # it to the request; the decision itself is computed in Rust.
@@ -163,6 +169,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # Decodes the bounded resident hook artifact composition response; the
         # answer is strictly bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_hook_artifact_compose.py",
+        # Decodes the bounded resident consumer artifact composition response;
+        # the answer is strictly bound and validated, never reinterpreted.
+        "src/codex_plugin_scanner/guard/native_consumer_artifact_compose.py",
         # Decodes the bounded resident hook adapter response; the answer is
         # strictly bound and validated, never reinterpreted.
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
@@ -186,6 +195,8 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_mcp_runtime_evidence.py",
         # Decodes the bounded resident false-positive-rules response envelope.
         "src/codex_plugin_scanner/guard/native_false_positive_rules.py",
+        # Transports the native environment-secret classifier; no local script reads.
+        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/environment_secret_dump.py",
         # Decodes the bounded resident runner-authority response envelope and
         # projects typed runner state to it; Rust owns every authority answer.
         "src/codex_plugin_scanner/guard/native_runner_authority.py",
@@ -357,8 +368,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
         "src/codex_plugin_scanner/guard/runtime/prompt_injection.py",
         "src/codex_plugin_scanner/guard/runtime/read_only_git_audit.py",
-        "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",
-        "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py",
         "src/codex_plugin_scanner/guard/runtime/routine_local_node.py",
         "src/codex_plugin_scanner/guard/runtime/routine_node_identity.py",
         "src/codex_plugin_scanner/guard/runtime/routine_setup_commands.py",

@@ -142,9 +142,72 @@ def publication_ready(repo: str, run_id: str, source_sha: str, channel: str = "s
     return False
 
 
-def registry_ready(version: str, wheel: Path, filename: str | None = None, channel: str = "stable") -> bool:
+def _alpha_release_digests(repo: str, version: str) -> dict[str, str | None]:
+    """Map each uploaded asset of the live alpha prerelease to its sha256 (None when GitHub reports none)."""
+    tag = f"alpha/v{version}"
+    release = json.loads(
+        subprocess.check_output(["gh", "api", f"repos/{repo}/releases/tags/{tag}"], text=True, timeout=20)
+    )
+    if release.get("tag_name") != tag or release.get("draft") is not False or release.get("prerelease") is not True:
+        raise ValueError("alpha prerelease is not published; withholding updater assets")
+    digests: dict[str, str | None] = {}
+    for asset in release["assets"]:
+        if asset.get("state") == "uploaded":
+            match = re.fullmatch(r"sha256:([0-9a-f]{64})", asset.get("digest") or "")
+            digests[asset["name"]] = match[1] if match else None
+    return digests
+
+
+def _alpha_registry_ready(version: str, wheel: Path, filename: str | None, repo: str) -> bool:
+    """Alpha PyPI carries only the pure wheel; platform wheels exist solely on the GitHub prerelease.
+
+    The native wheel was verified against the release provenance bundle when it was downloaded
+    (authorize_macos_core_source.sh). Here it must still match the live prerelease asset, and PyPI
+    must expose the same pure wheel the prerelease carries.
+    """
+    digests = _alpha_release_digests(repo, version)
+    name = filename or wheel.name
+    if name not in digests:
+        return False
+    if digests[name] != hashlib.sha256(wheel.read_bytes()).hexdigest():
+        raise ValueError(
+            "alpha prerelease asset digest mismatch; withholding updater assets "
+            "(the live prerelease no longer carries the wheel the Core build was authorized from)"
+        )
+    pure = f"hol_guard-{version}-py3-none-any.whl"
+    if pure not in digests:
+        return False
+    try:
+        with urllib.request.urlopen(f"https://pypi.org/pypi/hol-guard/{version}/json", timeout=20) as response:
+            metadata = json.loads(response.read(2_000_000))
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return False
+        raise
+    if metadata["info"]["version"] != version:
+        raise ValueError("PyPI version mismatch; withholding updater assets")
+    matches = [item for item in metadata["urls"] if item["filename"] == pure]
+    if not matches:
+        return False
+    if len(matches) != 1 or digests[pure] is None or matches[0]["digests"]["sha256"] != digests[pure]:
+        raise ValueError("PyPI pure wheel does not match the alpha prerelease; withholding updater assets")
+    return True
+
+
+def registry_ready(
+    version: str,
+    wheel: Path,
+    filename: str | None = None,
+    channel: str = "stable",
+    *,
+    repo: str | None = None,
+) -> bool:
     if channel not in _VERSION_PATTERNS or not _VERSION_PATTERNS[channel].fullmatch(version):
         raise ValueError(f"invalid {channel} version")
+    if channel == "alpha":
+        if repo is None:
+            raise ValueError("alpha readiness requires the release repository")
+        return _alpha_registry_ready(version, wheel, filename, repo)
     try:
         with urllib.request.urlopen(f"https://pypi.org/pypi/hol-guard/{version}/json", timeout=20) as response:
             metadata = json.loads(response.read(2_000_000))
@@ -168,6 +231,12 @@ def registry_ready(version: str, wheel: Path, filename: str | None = None, chann
     return True
 
 
+def _registry_ready(version: str, wheel: Path, filename: str | None, channel: str) -> bool:
+    if channel == "alpha":
+        return registry_ready(version, wheel, filename, channel, repo=os.environ["GITHUB_REPOSITORY"])
+    return registry_ready(version, wheel, filename, channel)
+
+
 def wait(
     version: str, wheel: Path, timeout: float = 600, *, filename: str | None = None, channel: str = "stable"
 ) -> None:
@@ -183,7 +252,7 @@ def wait(
                 raise ValueError("alpha publication requires the publishing run identity")
             else:
                 ready = True
-            if ready and registry_ready(version, wheel, filename, channel):
+            if ready and _registry_ready(version, wheel, filename, channel):
                 print("Registry publication verified; signed updater assets may be published.")
                 return
         except urllib.error.HTTPError as error:
@@ -224,7 +293,7 @@ if __name__ == "__main__":
             os.environ["PUBLICATION_SOURCE_SHA"],
             args.channel,
         )
-        ready = ready and registry_ready(args.version, args.wheel, args.filename, args.channel)
+        ready = ready and _registry_ready(args.version, args.wheel, args.filename, args.channel)
         print("registry_ready=" + str(ready).lower())
     else:
         wait(args.version, args.wheel, filename=args.filename, channel=args.channel)

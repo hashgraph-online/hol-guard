@@ -282,12 +282,12 @@ pub(super) fn exact_safe_segment_with_context(
         return false;
     };
     let basename = executable_basename(executable);
-    let inert_search = matches!(basename, "rg" | "grep")
+    let inert_search = matches!(basename, "rg" | "grep" | "fd")
         && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
     if (!inert_search
         && !super::source_file_read_segment(segment)
         && sensitive_command(&segment.text))
-        || (!matches!(basename, "rg" | "grep")
+        || (!matches!(basename, "rg" | "grep" | "fd")
             && segment
                 .arguments
                 .iter()
@@ -343,6 +343,7 @@ pub(super) fn exact_safe_segment_with_context(
         "git" => {
             safe_git_arguments(&segment.arguments, allow_git_helper_context, context)
                 && super::directory_targets::drive_targets_quoted(segment)
+                && super::directory_targets::home_targets_unquoted(segment)
         }
         "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
@@ -368,8 +369,13 @@ pub(super) fn exact_safe_segment_with_context(
             segment.pipeline_index > 0
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments)
         }
-        "rg" | "grep" => {
+        "rg" | "grep" | "fd" => {
             search::safe_search_arguments_with_context(basename, &segment.arguments, context)
+                && super::directory_targets::search_home_targets_safe(
+                    segment,
+                    context.cwd,
+                    context.home_dir,
+                )
         }
         "sed" => {
             safe_reads::safe_sed_arguments(&segment.arguments, segment.pipeline_index > 0, context)

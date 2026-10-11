@@ -13,6 +13,13 @@ from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
+_SENT = {
+    "status": "sent",
+    "reason": "turn_start_sent",
+    "thread_id": "thread-1",
+    "strategy": "codex-app-server-turn",
+}
+
 
 def _request(request_id: str, launch_target: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(
@@ -81,11 +88,11 @@ def test_phase14_package_approval_resume_targets_only_matching_request(
 ) -> None:
     captured_payloads: list[dict[str, object]] = []
 
-    def _fake_send(**kwargs):
-        captured_payloads.extend(kwargs["payloads"])
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+    def _fake_continue(wire, home, timeout_ms):
+        captured_payloads.append(wire)
+        return {"result": _SENT}
 
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-minimist", "npm install minimist@1.2.8"), "2026-05-19T10:00:00+00:00")
     store.add_approval_request(_request("req-lodash", "npm install lodash@4.17.21"), "2026-05-19T10:00:00+00:00")

@@ -1871,6 +1871,182 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "home-rg-abs-child-repo",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n export ${ORG}/app-portal"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "home-rg-tilde-child-repo",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n export ~/Code/org/app-portal/src"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "home-fd-sibling-listing",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -t d -d 1 api ${ORG}"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "home-fd-child-extension",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -e ts index app-portal"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "home-git-c-child-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C app-portal log --oneline -3"
+      },
+      "cwd": "org",
+      "expect": "allow"
+    },
+    {
+      "id": "home-git-c-sibling-log",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ../service-api log --oneline -3"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "home-git-c-sibling-abs-status",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${ORG}/service-api status --short"
+      },
+      "cwd": "org_app",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-home-fd-hidden",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -H id_rsa ${HOME}"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-fd-exec",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "fd -e ts . app-portal -x cat"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-rg-ssh-root",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n KEY ${HOME}/.ssh"
+      },
+      "cwd": "org",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-home-git-c-ssh",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/.ssh log"
+      },
+      "cwd": "org_app",
+      "expect": "not_allow"
     }
   ],
   "pending_pr": {

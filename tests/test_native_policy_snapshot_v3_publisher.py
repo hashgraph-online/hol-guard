@@ -11,9 +11,6 @@ from . import test_native_policy_snapshot_persistence as _persistence_tests
 from . import test_native_policy_snapshot_publisher as _publisher_tests
 from . import test_native_policy_snapshot_windows as _windows_tests
 
-test_policy_merge_never_downgrades_enforcing_posture_to_watch = (
-    _contract_tests.test_policy_merge_never_downgrades_enforcing_posture_to_watch
-)
 test_v3_builder_derives_and_provisions_verifier_before_snapshot_push = (
     _contract_tests.test_v3_builder_derives_and_provisions_verifier_before_snapshot_push
 )

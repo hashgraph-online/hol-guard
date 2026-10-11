@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 const CONFIG_LIMIT: u64 = 65_536;
 const WORKTREE_PROBE_LIMIT: u64 = 8 * 1024;
@@ -17,7 +17,7 @@ pub(super) fn worktree_add_execution_free(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> Option<bool> {
-    let probe_deadline = Instant::now() + Duration::from_secs(2);
+    let probe_deadline = Instant::now() + super::git_probe::PROBE_BUDGET;
     let deadline = deadline.unwrap_or(probe_deadline).min(probe_deadline);
     if Instant::now() >= deadline || !destination.is_absolute() {
         return None;

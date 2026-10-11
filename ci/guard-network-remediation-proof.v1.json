@@ -146,7 +146,7 @@
       "outcome": "partial",
       "complete": false,
       "evidence": [
-        ".github/workflows/guard-gvisor-reference.yml",
+        ".github/workflows/nightly-native.yml",
         "tests/test_guard_gvisor_reference_runtime.py",
         "tests/test_guard_kubernetes_runtime.py"
       ],

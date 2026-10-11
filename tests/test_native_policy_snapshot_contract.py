@@ -36,34 +36,6 @@ def test_windows_scope_aliases_share_one_digest_identity() -> None:
     )
 
 
-def test_policy_merge_never_downgrades_enforcing_posture_to_watch() -> None:
-    protected = {**_config(), "mode": "enforce", "protection_posture": "protected"}
-    watch = {**_config(), "mode": "observe", "protection_posture": "watch"}
-
-    merged = snapshot_module._merge_effective_native_policies((protected, watch))
-
-    assert merged["protection_posture"] == "protected"
-    assert merged["mode"] == "enforce"
-
-    claude_alias = {
-        **_config(),
-        "harness_actions": {"claude": "review"},
-        "harness_risk_actions": {"claude": {"execution": "review"}},
-    }
-    claude_canonical = {
-        **_config(),
-        "harness_actions": {"claude-code": "block"},
-        "harness_risk_actions": {"claude-code": {"execution": "block"}},
-    }
-    alias_merged = snapshot_module._merge_effective_native_policies((claude_alias, claude_canonical))
-
-    assert alias_merged["harness_actions"] == {"claude": "block", "claude-code": "block"}
-    assert alias_merged["harness_risk_actions"] == {
-        "claude": {"execution": "block"},
-        "claude-code": {"execution": "block"},
-    }
-
-
 def test_v3_builder_derives_and_provisions_verifier_before_snapshot_push(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     guard_home.mkdir()

@@ -3,6 +3,9 @@
  "baseline_sha": "b22841ac004b9d8a6deccdeee1a1be3600fddfb9",
  "scope": "RMN-009 resident retirement complete; offline archive inspection retired to guard-archive via hol-guard-runtime archive-inspect; RMN-008 and RMN-010 through RMN-014 hook-oracle cutover incomplete pending live prompt, permission, and package caller closure",
  "retired_source_paths": [
+  "src/codex_plugin_scanner/guard/runtime/restricted_archive_deadline.py",
+  "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",
+  "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook_claude.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook_compat_bootstrap.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook_compat_loader.py",
@@ -34,6 +37,128 @@
   "src/codex_plugin_scanner/guard/runtime/offline_archive_worker.py"
  ],
  "retired_tests": [
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_loopback_redirect_before_connection",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_ambiguous_unicode_hostname_before_dns",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_destination_parity",
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_public_address_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_accepts_bounded_public_https_archive",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_mixed_public_private_dns_answers",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_peer_outside_validated_dns_set",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_peer.rs::kernel_peer_mismatch_is_refused_before_tls"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_non_public_or_credentialed_destinations",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_destination_parity",
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_public_address_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_fails_closed_on_truncated_response",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_enforces_streamed_size_limit",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_non_https_or_credentialed_redirect",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_enforces_redirect_limit",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_declared_oversized_body",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_fails_closed_on_slow_body",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_https_tests.rs::real_https_headers_and_body_share_one_absolute_deadline"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_enforces_deadline_while_writing_blob",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_write.rs::late_write_stays_on_unlinked_inode_and_keeps_admission"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_rejects_oversized_response_headers",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_parity_tests.rs::recorded_download_parity"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_reports_tls_failure",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_https_tests.rs::untrusted_certificate_is_refused_before_http",
+    "rust/crates/guard-command/src/restricted_archive_https_tests.rs::trusted_certificate_for_another_hostname_is_refused_before_http"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_enforces_one_absolute_deadline_during_headers",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_https_tests.rs::real_https_headers_and_body_share_one_absolute_deadline"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_guard_restricted_archive_download.py::test_restricted_archive_download_ignores_ambient_proxy_and_authorization",
+   "replacement_nodes": [
+    "rust/crates/guard-command/src/restricted_archive_https_tests.rs::managed_https_redirects_preserve_signed_query_and_request_headers"
+   ],
+   "status": "native_behavior_ported_requires_ci"
+  },
   {
    "old_node": "ci/native_runtime/test_guard_native_runtime_resident.py::test_resident_runtime_reuses_one_contained_service",
    "replacement_nodes": [

@@ -185,6 +185,67 @@ def test_mcp_probe_accepts_native_result_without_outer_status(transport, tmp_pat
     )
 
 
+def test_hook_authority_state_bound_error_is_not_a_resident_failure(transport, tmp_path):
+    transport.status.capabilities.features = (
+        "resident-protocol-v2",
+        "hook-authority-state-v1",
+    )
+    reply = {
+        "schema": "guard-hook-authority-state-result.v1",
+        "status": "error",
+        "code": "native_hook_authority_state_store_unavailable",
+    }
+    transport.client.return_value = json.dumps(reply).encode()
+    actual = bridge._resident_request(
+        operation="hook_authority_state",
+        request={"request_id": "hook-authority-state-error"},
+        guard_home=tmp_path,
+        timeout_seconds=5.0,
+        required_feature="hook-authority-state-v1",
+        response_schema="guard-hook-authority-state-result.v1",
+        record_success=False,
+    )
+    assert actual == reply
+    transport.failed.assert_not_called()
+    transport.succeeded.assert_not_called()
+
+
+@pytest.mark.parametrize("runner", ["node", "typescript", "package_script", "workspace_write"])
+def test_contained_runner_replies_are_accepted_without_outer_status(transport, tmp_path, runner):
+    reply = {"schema": f"guard-contained-{runner.replace('_', '-')}-execute-result.v1", "result": {"stdout": ""}}
+    transport.client.return_value = json.dumps(reply).encode()
+    assert (
+        bridge._resident_request(
+            operation=f"contained_{runner}_execute",
+            request={},
+            guard_home=tmp_path,
+            timeout_seconds=1.0,
+            required_feature="contained-execution-v1",
+        )
+        == reply
+    )
+    transport.succeeded.assert_called_once_with("a" * 64, tmp_path)
+
+
+def test_contained_runner_transport_budget_covers_resident_overhead(transport, tmp_path):
+    transport.client.return_value = b'{"schema":"guard-contained-node-execute-result.v1","result":null}'
+    bridge._contained_runner_request(
+        op_prefix="contained_node_execute",
+        request_schema="guard-contained-node-execute-request.v1",
+        workspace=tmp_path,
+        manager="npx",
+        argv=("--no-install", "vitest", "run"),
+        guard_home=tmp_path,
+        shim_directory=tmp_path,
+        environment={},
+        timeout_seconds=100.0,
+        evidence=None,
+    )
+    envelope = json.loads(transport.client.call_args.kwargs["payload"])
+    assert envelope["deadline_budget_ms"] >= 100_000 + 60_000
+    assert transport.client.call_args.kwargs["timeout_seconds"] >= 160.0
+
+
 @pytest.mark.parametrize(
     "frame,expected",
     [

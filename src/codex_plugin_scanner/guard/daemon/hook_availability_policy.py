@@ -171,6 +171,7 @@ def availability_harness_response(
     home_dir: Path | None = None,
     guard_home: Path | None = None,
     recording_only: bool = False,
+    prompt_reason: str | None = None,
 ) -> dict[str, object]:
     """Render a schema-valid harness result when native review is unavailable."""
 
@@ -185,7 +186,7 @@ def availability_harness_response(
                 "decision": "deny",
                 "minimum_action": "block",
                 "reason_code": "native_prompt_unavailable",
-                "reason": "HOL Guard could not complete native prompt review safely.",
+                "reason": prompt_reason or "HOL Guard could not complete native prompt review safely.",
             },
         )
     if canonical_lifecycle is not None:

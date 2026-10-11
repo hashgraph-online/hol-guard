@@ -12463,10 +12463,11 @@ def test_guard_hook_claude_notice_storage_failures_fall_back_to_generic_prompt(t
         guard_commands_module, "schedule_guard_daemon_ensure", lambda _guard_home, **_kwargs: "http://127.0.0.1:4455"
     )
 
-    def _raise_locked(*args, **kwargs):
-        raise sqlite3.Error("locked")
-
-    monkeypatch.setattr(GuardStore, "set_sync_payload", _raise_locked)
+    # Hook authority state lives in the native resident, which reports a locked store as no reply.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.cli.commands_support_hook_state.hook_authority_state",
+        lambda *_args, **_kwargs: None,
+    )
     pre_tool_event = {
         "session_id": "session-claude-4",
         "tool_name": "Read",

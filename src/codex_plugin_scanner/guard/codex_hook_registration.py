@@ -15,7 +15,6 @@ from .codex_hook_command_line import (
     plain_json_hook_argv,
 )
 from .codex_hook_file_integrity import split_hook_command
-from .codex_hook_foreign_groups import is_foreign_guard_codex_hook_group, prune_foreign_guard_codex_hook_groups
 from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_owner_commands import has_codex_harness_tokens, python_codex_hook_command
 from .frozen_runtime_commands import frozen_codex_bridge_tokens_are_live
@@ -439,12 +438,10 @@ __all__ = [
     "finalize_codex_doctor_setup_status",
     "finalize_codex_doctor_warnings",
     "install_managed_codex_hook_groups",
-    "is_foreign_guard_codex_hook_group",
     "live_guard_codex_hooks_intercept",
     "live_owned_codex_event_matches",
     "missing_guard_hook_program",
     "overlay_live_owned_event_matches",
-    "prune_foreign_guard_codex_hook_groups",
     "remove_manifest_bound_hook_events",
     "require_codex_hook_owner",
 ]

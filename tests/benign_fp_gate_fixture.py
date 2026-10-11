@@ -11,7 +11,11 @@ never exercises:
 * a project skill document, a ``[slug]`` route directory and a file whose name
   resembles a credential workflow but is ordinary source;
 * a second repository with a tracked gitlink plus a filter attribute, the one
-  git shape that must keep requiring review.
+  git shape that must keep requiring review;
+* repositories below HOME in a parent directory that is not itself a
+  repository (``~/Code/org/app-portal`` and ``~/Code/org/service-api``), each
+  with ``.github`` metadata, the layout agents use when they search a child
+  repository by absolute path or inspect a sibling with ``git -C``.
 """
 
 from __future__ import annotations
@@ -52,6 +56,7 @@ class BenignFixture:
     guard_home: Path
     private_tmp: Path
     tmp_worktree: Path
+    org: Path
 
     def cleanup(self) -> None:
         """Remove the directories this fixture created outside its own root."""
@@ -66,6 +71,7 @@ class BenignFixture:
             "${NESTED}": str(self.nested),
             "${GITLINK_REPO}": str(self.gitlink_repo),
             "${PRIVATE_TMP}": str(self.private_tmp),
+            "${ORG}": str(self.org),
         }
 
     def cwd(self, name: str) -> Path:
@@ -76,6 +82,8 @@ class BenignFixture:
             "nested": self.nested,
             "tmp_worktree": self.tmp_worktree,
             "gitlink_repo": self.gitlink_repo,
+            "org": self.org,
+            "org_app": self.org / "app-portal",
         }[name]
 
 
@@ -161,4 +169,16 @@ def build_fixture(root: Path) -> BenignFixture:
         home=home,
     )
     _git(gitlink_repo, "commit", "--quiet", "-m", "gitlink base", home=home)
-    return BenignFixture(root, home, parent, worktree, nested, gitlink_repo, guard_home, private_tmp, tmp_worktree)
+
+    # Repositories below HOME whose shared parent is not a repository.
+    org = home / "Code" / "org"
+    for name in ("app-portal", "service-api"):
+        repository = org / name
+        repository.mkdir(parents=True)
+        _git(repository, "init", "--quiet", "--initial-branch=main", home=home)
+        _write(repository / ".github" / "workflows" / "ci.yml", "name: ci\n")
+        _write(repository / "src" / "index.ts", f"export const name = '{name}';\n")
+        _write(repository / "README.md", f"# {name}\n")
+        _git(repository, "add", "-A", home=home)
+        _git(repository, "commit", "--quiet", "-m", f"{name} base", home=home)
+    return BenignFixture(root, home, parent, worktree, nested, gitlink_repo, guard_home, private_tmp, tmp_worktree, org)

@@ -10,6 +10,7 @@ from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 from .native_command_control_binding import capture_native_command_control_binding
+from .native_policy_effective import effective_native_policy_v3
 from .native_policy_snapshot_codec import _digest_v3, _valid_digest_v3, derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import (
     _MAX_GENERATION,
@@ -22,7 +23,7 @@ from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_MAX_EXPIRY_MS,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_contract import _valid_u64_v3, effective_native_policy_v3
+from .native_policy_snapshot_contract import _valid_u64_v3
 from .native_policy_snapshot_policy import _config_value, _scope_digest_v3
 from .native_policy_snapshot_storage import (
     _read_v3_generation_state,
@@ -119,7 +120,12 @@ def _snapshot_inputs_v3(
     business_policy: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> tuple[dict[str, object], str, str, str, str]:
-    effective_policy = effective_native_policy_v3(config)
+    from .native_policy_snapshot_business_bridge import require_native_snapshot_runtime
+
+    # Refuse on the selected resident's availability and deadline before any
+    # composer spawn, so a missing consumer keeps its specific reason.
+    require_native_snapshot_runtime(business=business_policy is not None)
+    effective_policy = effective_native_policy_v3(config, deadline_monotonic=deadline_monotonic)
     raw_mode = _config_value(config, "mode", "prompt")
     if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
         raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
@@ -128,8 +134,6 @@ def _snapshot_inputs_v3(
     # A synthetic, non-installed constructor value supplies Rust's semantic
     # identity. Generation/times/key do not participate in policy identity, so
     # the pure result is memoized per runtime and input digest.
-    from .native_policy_snapshot_business_bridge import require_native_snapshot_runtime
-
     # A memoized result never outlives the resident's availability: fail closed
     # before consulting it.
     require_native_snapshot_runtime(business=business_policy is not None)

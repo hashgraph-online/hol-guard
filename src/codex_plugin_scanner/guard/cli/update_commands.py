@@ -56,6 +56,21 @@ from ..runtime.extension_control_authority import AuthorityHealth
 from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _repair_context_from_managed_install
+from .update_alpha_native_wheel import (
+    ALPHA_UPDATE_COMMAND,
+    AlphaNativeWheelError,
+    alpha_native_install_recorded,
+    bundled_native_runtime_missing,
+    is_alpha_version,
+    native_platform_supported,
+    native_runtime_payload,
+    plan_alpha_native_update,
+    prepare_alpha_native_wheel,
+    record_alpha_native_install,
+)
+from .update_alpha_native_wheel import (
+    failure_payload as alpha_native_failure_payload,
+)
 from .update_alpha_tag_lookup import build_alpha_liveness_checker
 from .update_artifact import (
     TrustedWheelArtifact,
@@ -526,6 +541,11 @@ def _run_guard_update_unlocked(
         installed_version=current_version,
     )
     vcs_install = _vcs_install_payload(direct_url)
+    native_install_recorded = (
+        include_alpha
+        and local_archive_install is not None
+        and alpha_native_install_recorded(resolved_guard_home, archive_sha256=_direct_url_archive_sha256(direct_url))
+    )
     payload["current_version"] = current_version
     if direct_url is not None:
         payload["direct_url"] = _public_direct_url_payload(direct_url)
@@ -561,6 +581,7 @@ def _run_guard_update_unlocked(
             and str(local_archive_install.get("archive_type") or "") == "wheel"
             and not force_pypi_reinstall
             and requested_wheel_path is None
+            and not native_install_recorded
         ):
             payload["status"] = "skipped"
             payload["changed"] = False
@@ -608,6 +629,39 @@ def _run_guard_update_unlocked(
         if isinstance(latest_version, str) and latest_version.strip():
             target_version = latest_version.strip()
             use_pypi = True
+    runtime_missing = include_alpha and is_alpha_version(current_version) and bundled_native_runtime_missing()
+    runtime_platform_supported = native_platform_supported()
+    alpha_native_plan = (
+        plan_alpha_native_update(
+            include_alpha=include_alpha,
+            current_version=current_version,
+            target_version=target_version,
+            runtime_missing=runtime_missing,
+            platform_supported=runtime_platform_supported,
+        )
+        if requested_wheel_path is None and not force_pypi_reinstall
+        else None
+    )
+    alpha_native_download = None
+    if alpha_native_plan is not None and not dry_run:
+        try:
+            alpha_native_download, alpha_native_note = prepare_alpha_native_wheel(
+                alpha_native_plan,
+                network_policy=network_policy,
+            )
+        except AlphaNativeWheelError as error:
+            alpha_native_failure_payload(payload, error)
+            return payload, 1
+        if alpha_native_download is None:
+            # A soft repair failure leaves the install alone rather than running another installer.
+            _append_payload_note(payload, alpha_native_note)
+            payload["status"] = "current"
+            payload["changed"] = False
+            payload["resulting_version"] = current_version
+            payload["message"] = already_current_update_message(version_check)
+            return payload, 0
+        else:
+            requested_wheel_path = alpha_native_download.path
     trusted_wheel: TrustedWheelArtifact | None = None
     if requested_wheel_path is not None:
         try:
@@ -617,6 +671,18 @@ def _run_guard_update_unlocked(
             )
         except UpdateArtifactError as error:
             return _trusted_update_failure(payload, UpdateSubprocessError(error.reason_code))
+        finally:
+            if alpha_native_download is not None:
+                alpha_native_download.cleanup()
+        if alpha_native_download is not None and (
+            trusted_wheel.sha256 != alpha_native_download.sha256
+            or Version(trusted_wheel.version) != Version(alpha_native_download.version)
+        ):
+            return _trusted_update_failure(
+                payload,
+                UpdateSubprocessError("update_artifact_identity_changed"),
+                trusted_wheel=trusted_wheel,
+            )
     downgrade_candidate = trusted_wheel.version if trusted_wheel is not None else target_version
     if _authority_blocks_downgrade(
         store,
@@ -639,7 +705,9 @@ def _run_guard_update_unlocked(
         installer,
         use_pypi=use_pypi,
         target_version=target_version,
-        wheel_path=requested_wheel_path,
+        wheel_path=requested_wheel_path
+        if requested_wheel_path is not None or alpha_native_plan is None
+        else Path(f"hol_guard-{alpha_native_plan.version}-py3-none-<platform>.whl"),
     )
     execution_display_command = _update_command(
         installer,
@@ -656,12 +724,24 @@ def _run_guard_update_unlocked(
     payload.update(
         {
             "command": command,
-            "retry_command": _safe_update_retry_command(requested_wheel_path, include_alpha=include_alpha),
+            "retry_command": _safe_update_retry_command(
+                None if alpha_native_plan is not None else requested_wheel_path,
+                include_alpha=include_alpha,
+            ),
             "binary_diagnostics": _binary_diagnostics(command, installer),
             "version_check": version_check,
         }
     )
-    if requested_wheel_path is not None:
+    if alpha_native_plan is not None:
+        payload["upgrade_source"] = "github_alpha_release"
+        payload["release_channel"] = "alpha"
+        payload["native_wheel_reason"] = alpha_native_plan.reason
+        if alpha_native_plan.reason == "repair":
+            payload["recovery_reinstall"] = True
+        if trusted_wheel is not None:
+            payload["wheel_sha256"] = trusted_wheel.sha256
+            payload["wheel_version"] = trusted_wheel.version
+    elif requested_wheel_path is not None:
         payload["upgrade_source"] = "local_wheel"
         if trusted_wheel is not None:
             payload["wheel_sha256"] = trusted_wheel.sha256
@@ -670,13 +750,16 @@ def _run_guard_update_unlocked(
         payload["upgrade_source"] = update_context.source.public_name
         if include_alpha:
             payload["release_channel"] = "alpha"
+    if runtime_missing and runtime_platform_supported:
+        payload["native_runtime"] = native_runtime_payload(True, platform_supported=runtime_platform_supported)
     already_current = (
         requested_wheel_path is None
+        and alpha_native_plan is None
         and not force_pypi_reinstall
         and version_check.get("update_available") is False
         and str(version_check.get("status") or "") == "current"
         and local_source_install is None
-        and local_archive_install is None
+        and (local_archive_install is None or native_install_recorded)
         and vcs_install is None
     )
     if dry_run:
@@ -695,6 +778,11 @@ def _run_guard_update_unlocked(
             use_pypi=use_pypi,
             wheel_path=requested_wheel_path,
         )
+        if alpha_native_plan is not None:
+            payload["message"] = (
+                f"Would install the native alpha wheel for {alpha_native_plan.version} from its GitHub prerelease. "
+                f"Run `{ALPHA_UPDATE_COMMAND}` to apply."
+            )
         if trusted_wheel is not None:
             trusted_wheel.cleanup()
         return payload, 0
@@ -895,7 +983,15 @@ def _run_guard_update_unlocked(
                         retain_trusted_wheel=installer_execution_started,
                     )
                 )
-        if trusted_wheel is not None:
+        if trusted_wheel is not None and alpha_native_plan is not None:
+            record_alpha_native_install(
+                resolved_guard_home,
+                version=resulting_version,
+                sha256=trusted_wheel.sha256,
+            )
+            trusted_wheel.cleanup()
+            payload["native_runtime"] = native_runtime_payload(bundled_native_runtime_missing())
+        elif trusted_wheel is not None:
             _record_verified_local_wheel_receipt(
                 payload,
                 update_context=update_context,
@@ -1268,7 +1364,7 @@ def _success_status(payload: dict[str, object]) -> str:
         and current_version not in {"", "unknown"}
         and resulting_version not in {"", "unknown"}
     )
-    is_local_wheel = str(payload.get("upgrade_source") or "") == "local_wheel"
+    is_local_wheel = str(payload.get("upgrade_source") or "") in {"local_wheel", "github_alpha_release"}
     versions_differ = versions_known and current_version != resulting_version
     versions_equal = versions_known and current_version == resulting_version
     still_behind_pypi = (not is_local_wheel) and _is_stale_install(payload)
@@ -2987,7 +3083,16 @@ def build_guard_update_status_payload(*, guard_home: Path | None = None) -> dict
             blocked_reason = (
                 "This install was set up from local source code. Re-run your usual local install command instead."
             )
-        elif local_archive_install is not None and str(local_archive_install.get("archive_type") or "") == "wheel":
+        elif (
+            local_archive_install is not None
+            and str(local_archive_install.get("archive_type") or "") == "wheel"
+            and not (
+                include_alpha
+                and alpha_native_install_recorded(
+                    resolved_guard_home, archive_sha256=_direct_url_archive_sha256(direct_url)
+                )
+            )
+        ):
             auto_updatable = False
             if bool(local_archive_install.get("path_exists")):
                 blocked_reason = (

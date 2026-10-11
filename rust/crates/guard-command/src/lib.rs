@@ -135,16 +135,51 @@ mod powershell_parser;
 mod powershell_reads;
 use parser_executables::*;
 use parser_segments::*;
+pub mod environment_secret_dump;
 pub mod pretool;
 mod runtime_read_paths;
 pub mod secret_path_probe;
 mod sfrs_agent_guidance;
 mod sfrs_benign_reads;
 mod sfrs_constants;
+#[cfg(unix)]
+mod sfrs_developer_graph;
+#[cfg(all(test, unix))]
+mod sfrs_developer_graph_vectors;
+mod sfrs_developer_inspection;
+#[cfg(test)]
+mod sfrs_developer_vectors;
 mod sfrs_docker_args;
+#[cfg(test)]
+mod sfrs_docker_vectors;
+#[cfg(all(test, unix))]
+mod sfrs_fs_vectors;
+mod sfrs_gh_bindings;
+mod sfrs_gh_control_flow;
+mod sfrs_gh_definitions;
+mod sfrs_gh_environment;
+mod sfrs_gh_redirections;
+mod sfrs_gh_service;
+mod sfrs_gh_shell;
+#[cfg(test)]
+mod sfrs_gh_shell_vectors;
+mod sfrs_git_cached_diff;
+#[cfg(unix)]
+mod sfrs_git_index;
+#[cfg(test)]
+mod sfrs_github_vectors;
+#[cfg(all(test, unix))]
+mod sfrs_index_vectors;
+mod sfrs_interpreter_scripts;
+mod sfrs_jq;
 mod sfrs_json;
 mod sfrs_patterns;
+mod sfrs_python_imports;
+#[cfg(unix)]
+mod sfrs_quote_parsing;
 mod sfrs_quote_tokens;
+#[cfg(all(test, unix))]
+mod sfrs_quote_vectors;
 mod sfrs_read_only_filters;
 pub mod sfrs_replay;
 mod sfrs_request_data;
@@ -154,8 +189,16 @@ mod sfrs_search_filters;
 mod sfrs_selectors;
 mod sfrs_shell_tokens;
 mod sfrs_shlex;
+mod sfrs_source_edit;
+#[cfg(unix)]
+mod sfrs_source_edit_context;
+mod sfrs_static_safety;
+#[cfg(test)]
+mod sfrs_static_vectors;
+mod sfrs_substitution;
 #[cfg(test)]
 mod sfrs_token_vectors;
+mod sfrs_tool_request;
 mod shell_command_wrappers;
 pub mod shell_execution_context;
 mod shell_execution_context_support;
@@ -499,6 +542,8 @@ pub mod command_operation_classification;
 pub mod composition_rules;
 #[cfg(unix)]
 pub mod contained_execution;
+#[cfg(unix)]
+pub mod contained_runner;
 pub mod data_flow_rules;
 pub mod decisions;
 pub mod detectors;
@@ -542,7 +587,12 @@ pub mod mcp_stdio_session;
 pub mod pep440;
 pub mod registry_metadata_transport;
 pub mod restricted_archive;
+mod restricted_archive_address;
+mod restricted_archive_destination;
+mod restricted_archive_peer;
+mod restricted_archive_stream;
 pub mod restricted_archive_transport;
+mod restricted_archive_write;
 #[cfg(unix)]
 pub mod restricted_pytest;
 pub mod resume_template;

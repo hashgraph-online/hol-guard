@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from .native_command_control_binding import capture_native_command_control_binding
+from .native_policy_effective import effective_native_policy_v3
 from .native_policy_snapshot_codec import (
     _canonical_json_bytes_v3,
     _validate_json_limits_v3,
@@ -29,11 +30,7 @@ from .native_policy_snapshot_constants import (
     POLICY_SNAPSHOT_PUSH_SCHEMA,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_policy import (
-    _config_value,
-    _scope_digest_v3,
-    effective_native_policy_v3,
-)
+from .native_policy_snapshot_policy import _config_value, _scope_digest_v3
 
 if TYPE_CHECKING:
     from .config import GuardConfig
@@ -107,7 +104,11 @@ def build_policy_snapshot_v3(
         raise NativePolicySnapshotError("native_policy_snapshot_identity_invalid")
     if not isinstance(verifier_key, bytes) or len(verifier_key) != _VERIFIER_KEY_BYTES:
         raise NativePolicySnapshotError("native_policy_verifier_key_invalid")
-    effective_policy = effective_native_policy_v3(config)
+    from .native_policy_snapshot_business_bridge import require_native_snapshot_runtime
+
+    # Select the resident (keeping its specific refusal reason) before any composer spawn.
+    require_native_snapshot_runtime(business=business_policy is not None)
+    effective_policy = effective_native_policy_v3(config, deadline_monotonic=deadline_monotonic)
     binding = capture_native_command_control_binding(command_extensions) if command_extensions is not None else None
     raw_mode = _config_value(config, "mode", "prompt")
     if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:

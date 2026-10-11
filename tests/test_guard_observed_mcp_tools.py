@@ -404,11 +404,3 @@ def test_large_tool_catalog_is_authenticated_in_native_snapshot(tmp_path: Path) 
     signing["effective_policy"]["mcp_tool_actions"]["codex:mcp__server__tool_0"] = "block"
     changed = json.dumps(signing, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     assert hmac.new(b"k" * 32, POLICY_SNAPSHOT_INTEGRITY_DOMAIN + changed, hashlib.sha256).hexdigest() != expected
-
-
-def test_native_policy_never_accepts_namespace_wide_allow() -> None:
-    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
-    from codex_plugin_scanner.guard.native_policy_snapshot_policy import _observed_mcp_action_map
-
-    with pytest.raises(NativePolicySnapshotError):
-        _observed_mcp_action_map({"codex:mcp__server__*": "allow"})

@@ -211,6 +211,10 @@ def test_render_notes_alpha_channel_and_empty_history() -> None:
         source_sha="a" * 40,
     )
     assert "opt-in prerelease" in alpha
+    assert "`hol-guard update --alpha`" in alpha
+    assert "platform wheel attached to [this prerelease]" in alpha
+    assert "pure wheel only" in alpha
+    assert 'uv tool install "hol-guard[cisco]==3.0.0a290"' not in alpha
     assert "since [Guard 3.0.0a289]" in alpha
 
     empty = render_notes(

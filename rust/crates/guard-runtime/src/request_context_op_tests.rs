@@ -79,6 +79,9 @@ fn payload_of(response: &Value) -> &Value {
     &response["payload"]
 }
 
+#[path = "request_context_environment_secret_tests.rs"]
+mod environment_secret;
+
 fn code_of(request: &RequestContextRequestV1) -> String {
     let response = run(request);
     assert_eq!(response["status"], "error", "{response}");

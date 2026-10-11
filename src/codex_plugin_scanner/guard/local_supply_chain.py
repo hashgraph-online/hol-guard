@@ -35,6 +35,12 @@ from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
 from .native_package_approval_hash import native_package_approval_hash, native_package_current_action
+from .native_package_audit_projection import (
+    native_advisory_aliases,
+    native_audit_receipt_metadata,
+    native_ci_gate_result,
+    native_empty_audit_outcome,
+)
 from .native_package_policy_resolve import native_resolve_stored_package_policy
 from .native_supply_chain_posture import native_local_supply_chain_posture
 from .native_workspace_inventory import NativeWorkspaceInventoryError, native_workspace_inventory
@@ -103,7 +109,6 @@ _MANIFEST_CANDIDATES = (
     "composer.json",
     "Gemfile",
 )
-_INFORMATIONAL_REASON_CODES = frozenset({"unknown_package", "no_cached_match"})
 _PACKAGE_MANAGER_BY_ECOSYSTEM = {
     "npm": "npm",
     "pypi": "pip",
@@ -137,13 +142,6 @@ _CLOUD_AUDIT_JOB_PAGE_SIZE = 1
 _CLOUD_AUDIT_JOB_POLL_INTERVAL_SECONDS = 0.5
 _CLOUD_AUDIT_JOB_POLL_TIMEOUT_SECONDS = 20
 _CLOUD_AUDIT_SYNC_PAGE_SIZE = 25
-_SEVERITY_RANK = {
-    "unknown": 0,
-    "low": 1,
-    "medium": 2,
-    "high": 3,
-    "critical": 4,
-}
 _PACKAGE_FIREWALL_REFRESH_MIN_INTERVAL_SECONDS = 300.0
 _PACKAGE_FIREWALL_REFRESH_STATE_FILE = "package-firewall-refresh.json"
 _PACKAGE_FIREWALL_REFRESH_LOCK = threading.Lock()
@@ -533,111 +531,13 @@ def resolve_supply_chain_audit_workspace_dir(
     return None
 
 
-def _package_advisory_ids(package: dict[str, object]) -> list[str]:
-    advisory_ids: list[str] = []
-    seen: set[str] = set()
-
-    def add_id(value: object) -> None:
-        if not isinstance(value, str):
-            return
-        trimmed = value.strip()
-        if not trimmed or trimmed in seen:
-            return
-        seen.add(trimmed)
-        advisory_ids.append(trimmed)
-
-    for key in ("advisoryIds", "advisory_ids", "relatedAdvisoryIds", "related_advisory_ids"):
-        raw = package.get(key)
-        if isinstance(raw, list):
-            for entry in raw:
-                add_id(entry)
-    add_id(package.get("advisoryId"))
-    add_id(package.get("advisory_id"))
-    reasons = package.get("reasons")
-    if isinstance(reasons, list):
-        for reason in reasons:
-            if not isinstance(reason, dict):
-                continue
-            add_id(reason.get("advisoryId"))
-            add_id(reason.get("advisory_id"))
-    return advisory_ids
-
-
-def _cached_supply_chain_bundle_payload(store: Any) -> dict[str, object] | None:
-    workspace_id = store.get_cloud_workspace_id()
-    if workspace_id is None:
-        return None
-    cached_bundle = store.get_cached_supply_chain_bundle(workspace_id)
-    if not isinstance(cached_bundle, dict):
-        return None
-    bundle_payload = cached_bundle.get("bundle")
-    if isinstance(bundle_payload, dict):
-        return bundle_payload
-    return None
-
-
-def _resolve_advisory_aliases_from_bundle(
-    bundle: dict[str, object] | None,
-    advisory_ids: list[str],
-) -> list[str]:
-    aliases: list[str] = []
-    seen: set[str] = set()
-    lookup: dict[str, tuple[str, ...]] = {}
-    if isinstance(bundle, dict):
-        advisories = bundle.get("advisories")
-        if isinstance(advisories, list):
-            for advisory in advisories:
-                if not isinstance(advisory, dict):
-                    continue
-                advisory_id = advisory.get("advisoryId")
-                if not isinstance(advisory_id, str) or not advisory_id.strip():
-                    continue
-                raw_aliases = advisory.get("aliases")
-                alias_tuple: tuple[str, ...] = (advisory_id,)
-                if isinstance(raw_aliases, list):
-                    alias_tuple = (
-                        advisory_id,
-                        *[alias for alias in raw_aliases if isinstance(alias, str) and alias.strip()],
-                    )
-                upper_tuple = tuple(alias.upper() for alias in alias_tuple)
-                lookup[advisory_id.upper()] = upper_tuple
-                for alias in alias_tuple:
-                    lookup.setdefault(alias.upper(), upper_tuple)
-
-    def add_alias(value: str) -> None:
-        trimmed = value.strip().upper()
-        if not trimmed or trimmed in seen:
-            return
-        seen.add(trimmed)
-        aliases.append(trimmed)
-
-    for advisory_id in advisory_ids:
-        add_alias(advisory_id)
-        resolved = lookup.get(advisory_id.upper())
-        if resolved is None:
-            continue
-        for alias in resolved:
-            add_alias(alias)
-    return aliases
-
-
-def _enrich_package_with_advisory_aliases(
-    package: dict[str, object],
+def audit_receipt_metadata(
+    result: dict[str, object],
     *,
-    bundle: dict[str, object] | None,
+    workspace_dir: Path | None = None,
+    store: Any | None = None,
 ) -> dict[str, object]:
-    existing_aliases = package.get("advisoryAliases")
-    if isinstance(existing_aliases, list) and existing_aliases:
-        return package
-    advisory_ids = _package_advisory_ids(package)
-    if not advisory_ids:
-        return package
-    aliases = _resolve_advisory_aliases_from_bundle(bundle, advisory_ids)
-    if not aliases:
-        return package
-    enriched = dict(package)
-    enriched["advisoryAliases"] = aliases
-    return enriched
+    return native_audit_receipt_metadata(result, workspace_dir=workspace_dir, store=store)
 
 
 def _enrich_evaluation_packages_with_advisory_aliases(
@@ -647,200 +547,13 @@ def _enrich_evaluation_packages_with_advisory_aliases(
     packages = evaluation.get("packages")
     if not isinstance(packages, list):
         return evaluation
-    bundle = _cached_supply_chain_bundle_payload(store)
+    aliases = native_advisory_aliases(packages, store=store)
     enriched_packages: list[dict[str, object]] = []
-    for package in packages:
+    for index, package in enumerate(packages):
         if not isinstance(package, dict):
             continue
-        enriched_packages.append(_enrich_package_with_advisory_aliases(package, bundle=bundle))
+        enriched_packages.append({**package, "advisoryAliases": aliases[index]} if index in aliases else package)
     return {**evaluation, "packages": enriched_packages}
-
-
-def _package_reason_codes(item: dict[str, object]) -> frozenset[str]:
-    reasons = item.get("reasons")
-    if not isinstance(reasons, list):
-        return frozenset()
-    codes: set[str] = set()
-    for reason in reasons:
-        if not isinstance(reason, dict):
-            continue
-        code = str(reason.get("code") or "").strip()
-        if code:
-            codes.add(code)
-    return frozenset(codes)
-
-
-def _is_actionable_package_finding(item: dict[str, object]) -> bool:
-    decision = str(item.get("decision") or "monitor")
-    if decision in {"block", "ask", "warn"}:
-        return True
-    reason_codes = _package_reason_codes(item)
-    if not reason_codes:
-        return decision not in {"allow", "monitor"}
-    return not reason_codes.issubset(_INFORMATIONAL_REASON_CODES)
-
-
-def _audit_package_inventory_for_receipt(
-    package_items: list[dict[str, object]],
-    *,
-    limit: int = 500,
-    bundle: dict[str, object] | None = None,
-) -> list[dict[str, object]]:
-    ranked = sorted(
-        package_items,
-        key=lambda item: (
-            str(item.get("ecosystem") or ""),
-            str(item.get("name") or ""),
-        ),
-    )
-    return [_enrich_package_with_advisory_aliases(item, bundle=bundle) for item in ranked[:limit]]
-
-
-def _audit_package_findings_for_receipt(
-    package_items: list[dict[str, object]],
-    *,
-    limit: int = 100,
-    bundle: dict[str, object] | None = None,
-) -> list[dict[str, object]]:
-    decision_rank_map = {"block": 4, "ask": 3, "warn": 2, "monitor": 1, "allow": 0}
-    ranked: list[tuple[int, int, dict[str, object]]] = []
-    for item in package_items:
-        if not _is_actionable_package_finding(item):
-            continue
-        decision = str(item.get("decision") or "monitor")
-        severity_rank = _package_severity_rank(item)
-        decision_rank = decision_rank_map.get(decision, 0)
-        ranked.append((decision_rank, severity_rank, item))
-    ranked.sort(key=lambda entry: (entry[0], entry[1]), reverse=True)
-    return [_enrich_package_with_advisory_aliases(item, bundle=bundle) for _, _, item in ranked[:limit]]
-
-
-def workspace_audit_path_hashes(
-    workspace_dir: Path | None,
-    manifest_paths: Sequence[str],
-    lockfile_paths: Sequence[str],
-) -> dict[str, list[str]]:
-    if workspace_dir is None:
-        return {"manifest_hashes": [], "lockfile_hashes": []}
-    return {
-        "manifest_hashes": _hash_existing_paths(workspace_dir, manifest_paths),
-        "lockfile_hashes": _hash_existing_paths(workspace_dir, lockfile_paths),
-    }
-
-
-def _resolve_empty_audit_outcome(
-    *,
-    manifest_paths: Sequence[str],
-    lockfile_paths: Sequence[str],
-    posture: dict[str, object],
-) -> tuple[str, str]:
-    supply_status = str(posture.get("status") or "")
-    supply_detail = str(posture.get("detail") or "")
-    if supply_status == "sync_required":
-        return (
-            "sync_required",
-            "Sync Guard supply-chain intel on this device before auditing workspace packages.",
-        )
-    if supply_status in {"not_connected", "workspace_required", "expired", "degraded"}:
-        return (supply_status, supply_detail)
-    if lockfile_paths or manifest_paths:
-        return (
-            "inventory_empty",
-            "Guard found project files but could not index any packages for audit.",
-        )
-    return (
-        "no_project_files",
-        "No supported manifests or lockfiles found in this workspace.",
-    )
-
-
-def _incomplete_audit_receipt_metadata(
-    result: dict[str, object],
-    *,
-    workspace_dir: Path | None = None,
-) -> dict[str, object]:
-    message = str(result.get("message") or "Workspace audit did not complete.")
-    outcome = str(result.get("audit_outcome") or "incomplete")
-    manifest_raw = result.get("manifest_paths")
-    manifest_paths = (
-        [str(path) for path in manifest_raw if isinstance(path, str)] if isinstance(manifest_raw, (list, tuple)) else []
-    )
-    lockfile_raw = result.get("lockfile_paths")
-    lockfile_paths = (
-        [str(path) for path in lockfile_raw if isinstance(path, str)] if isinstance(lockfile_raw, (list, tuple)) else []
-    )
-    path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
-    policy_decision: GuardAction = (
-        "review" if outcome in {"sync_required", "inventory_empty", "no_project_files"} else "warn"
-    )
-    return {
-        "policy_decision": policy_decision,
-        "capabilities_summary": message,
-        "artifact_name": "Workspace supply-chain audit",
-        "scanner_evidence": {
-            "operation": "audit",
-            "audit_status": "incomplete",
-            "audit_outcome": outcome,
-            "audit_decision": "monitor",
-            "blocked_package_count": 0,
-            "total_packages": 0,
-            "manifest_paths": manifest_paths,
-            "lockfile_paths": lockfile_paths,
-            "manifest_hashes": path_hashes["manifest_hashes"],
-            "lockfile_hashes": path_hashes["lockfile_hashes"],
-            "package_findings": [],
-        },
-    }
-
-
-def audit_receipt_metadata(
-    result: dict[str, object],
-    *,
-    workspace_dir: Path | None = None,
-    store: Any | None = None,
-) -> dict[str, object]:
-    evaluation = result.get("evaluation")
-    if not isinstance(evaluation, dict):
-        return _incomplete_audit_receipt_metadata(result, workspace_dir=workspace_dir)
-    decision = str(evaluation.get("decision") or "monitor")
-    packages = evaluation.get("packages")
-    package_items = [item for item in packages if isinstance(item, dict)] if isinstance(packages, list) else []
-    blocked_packages = [item for item in package_items if str(item.get("decision") or "") == "block"]
-    bundle = _cached_supply_chain_bundle_payload(store) if store is not None else None
-    package_findings = _audit_package_findings_for_receipt(package_items, bundle=bundle)
-    package_inventory = _audit_package_inventory_for_receipt(package_items, bundle=bundle)
-    policy_decision: GuardAction = "allow"
-    if decision == "block":
-        policy_decision = "block"
-    elif decision == "ask":
-        policy_decision = "review"
-    elif decision == "warn":
-        policy_decision = "warn"
-    inventory = result.get("inventory")
-    inventory_summary = inventory if isinstance(inventory, dict) else {}
-    manifest_paths = list(_string_items(result.get("manifest_paths")))
-    lockfile_paths = list(_string_items(result.get("lockfile_paths")))
-    path_hashes = workspace_audit_path_hashes(workspace_dir, manifest_paths, lockfile_paths)
-    return {
-        "policy_decision": policy_decision,
-        "capabilities_summary": (
-            f"Workspace audit completed with {policy_decision} decision across "
-            f"{inventory_summary.get('total_packages', len(package_items))} packages."
-        ),
-        "artifact_name": "Workspace supply-chain audit",
-        "scanner_evidence": {
-            "operation": "audit",
-            "audit_decision": decision,
-            "blocked_package_count": len(blocked_packages),
-            "lockfile_paths": lockfile_paths,
-            "manifest_paths": manifest_paths,
-            "manifest_hashes": path_hashes["manifest_hashes"],
-            "lockfile_hashes": path_hashes["lockfile_hashes"],
-            "total_packages": inventory_summary.get("total_packages", len(package_items)),
-            "package_inventory": package_inventory,
-            "package_findings": package_findings,
-        },
-    }
 
 
 def build_workspace_scan_payload(
@@ -894,10 +607,11 @@ def build_workspace_audit_payload(
     inventory = workspace_inventory.inventory
     diff_summary = workspace_inventory.diff
     if not inventory:
-        audit_outcome, message = _resolve_empty_audit_outcome(
+        audit_outcome, message = native_empty_audit_outcome(
             manifest_paths=manifest_paths,
             lockfile_paths=lockfile_paths,
             posture=posture,
+            store=store,
         )
         return (
             {
@@ -998,7 +712,7 @@ def build_workspace_audit_payload(
         payload["fallback_reason"] = fallback_reason
     exit_code = _evaluation_exit_code(str(evaluation.get("decision") or "monitor"))
     if ci:
-        ci_result = _ci_gate_result(evaluation, threshold=fail_on)
+        ci_result = native_ci_gate_result(evaluation, threshold=fail_on, store=store)
         payload["ci"] = ci_result
         if ci_result["matched"]:
             exit_code = 3
@@ -2816,44 +2530,6 @@ def _normalize_cloud_audit_response(response: dict[str, object]) -> dict[str, ob
         "status": str(response.get("status") or "completed"),
         "workspace_id": str(response.get("workspaceId") or ""),
     }
-
-
-def _ci_gate_result(evaluation: dict[str, object], *, threshold: str) -> dict[str, object]:
-    threshold_rank = _SEVERITY_RANK.get(threshold, _SEVERITY_RANK["high"])
-    matched_packages: list[str] = []
-    packages = evaluation.get("packages")
-    if isinstance(packages, list):
-        for package in packages:
-            if not isinstance(package, dict):
-                continue
-            if _package_severity_rank(package) < threshold_rank:
-                continue
-            package_name = package.get("name")
-            if isinstance(package_name, str) and package_name:
-                matched_packages.append(package_name)
-    return {
-        "matched": bool(matched_packages),
-        "matched_packages": matched_packages,
-        "threshold": threshold,
-    }
-
-
-def _package_severity_rank(package: dict[str, object]) -> int:
-    normalized_severity = package.get("normalized_severity")
-    if isinstance(normalized_severity, str):
-        return _SEVERITY_RANK.get(normalized_severity, _SEVERITY_RANK["unknown"])
-    reasons = package.get("reasons")
-    if not isinstance(reasons, list):
-        return _SEVERITY_RANK["unknown"]
-    highest = _SEVERITY_RANK["unknown"]
-    for reason in reasons:
-        if not isinstance(reason, dict):
-            continue
-        severity = reason.get("severity")
-        if not isinstance(severity, str):
-            continue
-        highest = max(highest, _SEVERITY_RANK.get(severity, _SEVERITY_RANK["unknown"]))
-    return highest
 
 
 def _inventory_summary(inventory: tuple[dict[str, object], ...]) -> dict[str, int]:

@@ -30,6 +30,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = guard_config_load::run_command(io::stdin().lock())?;
             write_bytes_response(&response)
         }
+        [command, flag] if policy_effective::is_command(command) && flag == "--stdin" => {
+            let response = policy_effective::run_command(io::stdin().lock())?;
+            write_bytes_response(&response)
+        }
         [command, flag] if business_source_codec::is_command(command) && flag == "--stdin" => {
             let response = business_source_codec::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
@@ -129,6 +133,11 @@ pub(super) fn run() -> Result<(), String> {
         }
         [command, flag, state_dir] if command == "resident-stop" && flag == "--state-dir" => {
             managed_resident::stop_managed(std::path::Path::new(state_dir), false)
+        }
+        [command, flag, state_dir]
+            if command == "resident-reset-restart-budget" && flag == "--state-dir" =>
+        {
+            managed_resident::reset_restart_budget(std::path::Path::new(state_dir))
         }
         [command, flag] if command == "command-model" && flag == "--stdin" => {
             let bytes = read_stdin_bounded()?;
@@ -258,7 +267,7 @@ pub(super) fn run() -> Result<(), String> {
             )
         }
         _ => Err(
-            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
+            "usage: hol-guard-runtime compile-business-policy --stdin | capabilities --json | rule-contract --json | self-test --json | hook --stdin | migrate-policy --state-dir STATE_DIR | prepare-approval-enrollment --state-dir STATE_DIR | enroll-approval-authority --state-dir STATE_DIR --record RECORD | prepare-approval-v4-enrollment --state-dir STATE_DIR --rp-id RP_ID --origin ORIGIN | enroll-approval-v4-authority --state-dir STATE_DIR --record RECORD | enroll-workspace-review-authority --state-dir STATE_DIR --record RECORD | workspace-review-decision --stdin STATE_DIR --request-id REQUEST_ID | hook-client --stdin STATE_DIR | resident-client --stdin STATE_DIR | resident-client-stream --stdin STATE_DIR | command-model --stdin | pre-tool --stdin | archive-inspect --stdin | context-digest --stdin | serve --socket PATH | serve --tcp-loopback 127.0.0.1:PORT | resident-stop --state-dir STATE_DIR [--retire-clients] | resident-reset-restart-budget --state-dir STATE_DIR | serve-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA | supervise-managed --state-dir STATE_DIR --generation N --owner-process-id PID --runtime-sha256 SHA"
                 .into(),
         ),
     }

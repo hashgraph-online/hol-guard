@@ -253,11 +253,20 @@
       {
         "id": "cloud-command-queue",
         "category": "async_control_plane",
-        "reason": "Guard Cloud command-queue worker and executors; remote job processing, not request-path enforcement.",
+        "reason": "Guard Cloud command-queue worker and executors; remote job processing, not request-path enforcement. runtime/command_capability.py holds the queue capability verification and job authorization; its only in-scope caller is approvals._build_runtime_snapshot, which adds the informational cloud_command_capability field to the approval-center runtime snapshot. That snapshot is built only by the dashboard runtime read route and the `approvals` CLI status read, never from hook admission, decision, consume or dispatch. Through it the module was the sole in-scope importer of review_contracts and review_signature_verification, which leave scope with it.",
         "path": [
           "src/codex_plugin_scanner/guard/runtime/command_queue*.py",
+          "src/codex_plugin_scanner/guard/runtime/command_capability.py",
           "src/codex_plugin_scanner/guard/runtime/command_executors.py",
           "src/codex_plugin_scanner/guard/daemon/command_queue_worker.py"
+        ]
+      },
+      {
+        "id": "runtime-protection-health-report",
+        "category": "offline_reporting",
+        "reason": "Protection-health summary shown on the dashboard runtime page and in `guard approvals` status. runtime/protection_health_runtime.py turns stored daemon, install and hook-verification state into display signals for a snapshot field. Its only in-scope caller is approvals._build_runtime_snapshot, which is built solely by the dashboard runtime read route and the approvals CLI status command; no hook, daemon enforcement or policy path imports it, and the headline state it feeds is informational.",
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/protection_health_runtime.py"
         ]
       },
       {
@@ -455,9 +464,11 @@
       {
         "id": "embedded-hook-templates",
         "category": "generated_asset",
-        "reason": "Python string templates that emit TypeScript/JS/shell harness hook assets at install time; generated artifacts, not Python executed on the request path.",
+        "reason": "Python string templates that emit TypeScript/JS/shell harness hook assets at install time; generated artifacts, not Python executed on the request path. The current Pi extension emitters (pi_extension_source*.py: header, body, tail, shared-v1 and runtime variants, rendered by managed_extension_source for install, update and drift comparison) and pi_extension_runtime_ownership.py (which only resolves the Guard CLI command and recovery arguments embedded in that generated TypeScript) are the same kind of module as the previous-extension emitters already listed here; their only importers are the Pi adapter, its support shim and the update command (extension install, drift check and update), plus the emitters themselves.",
         "path": [
           "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
           "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
           "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
@@ -469,6 +480,15 @@
         "reason": "Cloud connect, OAuth refresh/DPoP, receipt, runtime-session, supply-chain-bundle and policy-bundle sync transport (runtime/runner.py). Every public entry point (sync_receipts, sync_runtime_session, sync_supply_chain_bundle, sync_local_guard_cloud_proof, prepare_guard_cloud_connect_authorization, repair_guard_cloud_connect_storage, the cloud-review and command-queue workers and the daemon's cloud policy-bundle and managed-controls delivery handlers that import its urlopen/auth/bundle helpers) runs from `guard connect`/`guard sync`, the cloud-review sync worker or the command-queue loop, never inside hook admission, decision or enforcement. The Rust runtime has no HTTP client, so the network, token refresh and retry loop stay in Python by design; the policy computation inside it (payload shaping, scrubbing, cursor/ack arithmetic, verdict digests, bundle verification) already runs in the resident through runner_native_sync/runner_native_authority. The only request-adjacent caller is the Hermes launch credential lookup (guard_run_launch._resolve_hermes_guard_access_token), which reads the cached token and, when it is absent or near expiry, runs the same OAuth refresh HTTP request as `guard sync` before the harness starts. That refresh is network transport the Rust runtime cannot perform; the lookup is best-effort, runs once at the execution boundary after the authority verdict, and never decides admission. The run-side lookup wrapper stays in scope.",
         "path": [
           "src/codex_plugin_scanner/guard/runtime/runner.py"
+        ]
+      },
+      {
+        "id": "cloud-memory-decision-outbox",
+        "category": "async_control_plane",
+        "reason": "Producer of the guard.memory-decision.v1 cloud outbox event that feeds Guard Cloud's Suggested Memory candidates. memory_decision_outbox.py and memory_decision_event.py are reached only through approvals._enqueue_memory_decision_for_resolution, the last step of apply_approval_resolution (daemon approval POST, CLI approval command, bulk allow-once), after the human decision is already recorded; every failure is swallowed. They are in the static closure only because approvals.py imports them eagerly, and hook modules import approvals; no hook admission, decision or run path calls them. They write a cloud_events row and a memory-decision-sourced local receipt for the async sync worker; nothing in enforcement reads either as an input to a verdict.",
+        "path": [
+          "src/codex_plugin_scanner/guard/memory_decision_outbox.py",
+          "src/codex_plugin_scanner/guard/memory_decision_event.py"
         ]
       },
       {
@@ -591,7 +611,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/codex_hook_foreign_groups.py",
           "src/codex_plugin_scanner/guard/codex_hook_health.py",
           "src/codex_plugin_scanner/guard/codex_hook_identity.py",
           "src/codex_plugin_scanner/guard/codex_hook_inventory.py",
@@ -603,7 +622,7 @@
           "src/codex_plugin_scanner/guard/codex_hook_trust.py",
           "src/codex_plugin_scanner/guard/cursor_hook_health.py"
         ],
-        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands/preflight, foreign-group and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration, owner_commands and foreign_groups; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_owner_preflight and codex_hook_health are tiny status/install-only modules left in scope under the in-doubt rule."
+        "reason": "Reviewed: codex hook inventory, identity, sources, trust, registration, owner commands/preflight and health modules: codex_hook_trust_stale is called from codex_native_hook_state, which gates launch_command/preview_launch_commands for codex, and it imports registration and owner_commands; runtime_trust is used by frozen_codex_runtime.trusted_hook_launch; inventory/identity/sources are used by the same adapter. codex_hook_owner_preflight and codex_hook_health are tiny status/install-only modules left in scope under the in-doubt rule."
       },
       {
         "path": [
@@ -627,8 +646,6 @@
           "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
           "src/codex_plugin_scanner/guard/runtime/js_semver.py",
           "src/codex_plugin_scanner/guard/runtime/local_cli_compound.py",
-          "src/codex_plugin_scanner/guard/runtime/local_node_runner_evidence.py",
-          "src/codex_plugin_scanner/guard/runtime/local_node_runner_options.py",
           "src/codex_plugin_scanner/guard/runtime/lockfile_evaluation_support.py",
           "src/codex_plugin_scanner/guard/runtime/manifest_dependency_targets.py",
           "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
@@ -640,10 +657,9 @@
           "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
           "src/codex_plugin_scanner/guard/runtime/skill_paths.py",
           "src/codex_plugin_scanner/guard/runtime/source_paths.py",
-          "src/codex_plugin_scanner/guard/runtime/typescript_snapshot_inputs.py",
           "src/codex_plugin_scanner/guard/runtime/workspace_snapshot_inputs.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, local_node_runner_*, typescript_snapshot_inputs, workspace_snapshot_inputs, contained_test_hook/wrapper, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, local_cli_compound, mcp_connection_identity, mcp_server_grants. Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, local_cli_compound, mcp_connection_identity, mcp_server_grants. Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [
@@ -725,20 +741,33 @@
           "src/codex_plugin_scanner/guard/adapters/paseo_config.py",
           "src/codex_plugin_scanner/guard/adapters/paseo_install.py",
           "src/codex_plugin_scanner/guard/adapters/pi.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_body.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_body_shared_v1.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_header.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_header_shared_v1.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_runtime.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_tail.py",
-          "src/codex_plugin_scanner/guard/adapters/pi_extension_source_tail_shared_v1.py",
           "src/codex_plugin_scanner/guard/adapters/pi_support.py",
           "src/codex_plugin_scanner/guard/adapters/zcode.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"
         ],
         "reason": "Reviewed: adapter implementations behind the harness registry. Adapters normalize harness payloads into hook requests, so they sit on the hook path, and hook-path authority is never excluded. Install and setup methods that have a function_exclusions entry are excluded as install_config, not hook path; install helpers without an entry (for example in the Cline, OpenCode and OpenClaw support modules) stay counted, which understates the Rust share."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/adapters/claude_code.py",
+          "src/codex_plugin_scanner/guard/aibom_detection.py",
+          "src/codex_plugin_scanner/guard/codex_config.py",
+          "src/codex_plugin_scanner/guard/codex_skill_config.py",
+          "src/codex_plugin_scanner/guard/inventory_agent_types.py",
+          "src/codex_plugin_scanner/guard/inventory_contract_constants.py",
+          "src/codex_plugin_scanner/guard/inventory_contract_fingerprints.py",
+          "src/codex_plugin_scanner/guard/inventory_contract_models.py",
+          "src/codex_plugin_scanner/guard/inventory_contract_redaction.py",
+          "src/codex_plugin_scanner/guard/path_security.py",
+          "src/codex_plugin_scanner/guard/portable_skill_directory_discovery.py",
+          "src/codex_plugin_scanner/guard/portable_skill_directory_identity.py",
+          "src/codex_plugin_scanner/guard/portable_skill_directory_support.py",
+          "src/codex_plugin_scanner/guard/skill_directory_discovery.py",
+          "src/codex_plugin_scanner/guard/skill_directory_identity.py",
+          "src/codex_plugin_scanner/guard/skill_directory_identity_contract.py",
+          "src/codex_plugin_scanner/marketplace_support.py"
+        ],
+        "reason": "Reviewed: claude_code adapter and its inventory/skill-directory and aibom detection helpers. The Claude hook client no longer imports them; they load lazily from the frozen hook and the adapter registry for install, inventory and approval flows, not per tool call."
       }
     ],
     "tests": {
@@ -751,6 +780,8 @@
     "generated": {
       "path": [
         "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
         "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
         "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
         "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"

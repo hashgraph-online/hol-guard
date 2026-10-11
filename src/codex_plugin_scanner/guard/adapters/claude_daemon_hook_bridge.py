@@ -19,7 +19,6 @@ from ..codex_hook_launch_runtime import (
     run_isolated_hook_process,
 )
 from ..hook_execution_environment import stamp_hook_input_text
-from .claude_code import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .claude_daemon_hook_transport import authenticated_claude_hook_response
 from .claude_daemon_state import daemon_port_from_state, state_path_for_query
 from .claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY as PERMISSION_PASSTHROUGH_KEY
@@ -37,11 +36,15 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
     "approval question to protect you."
 )
 _HARNESS_TIMEOUT_BUDGET_SECONDS = 10
-# The identity challenge and hook POST share this budget. Parallel tool calls queue
-# at the daemon, and on slower Windows hosts two seconds expired mid-review; a fresh
-# fallback process could not finish in what was left of the hook deadline.
-_DAEMON_IO_TIMEOUT_SECONDS = 4
+# The identity challenge and hook POST share this budget. On loaded Windows hosts
+# the challenge round trip alone took about two seconds, leaving the daemon too
+# little time to review. A timeout at this cap leaves less than the recovery
+# minimum before the fallback reserve, so recovery is skipped and the local
+# fallback still reviews.
+_DAEMON_IO_TIMEOUT_SECONDS = 5.5
 _RECOVERY_TIMEOUT_SECONDS = 3
+# Do not start a recovery process that the fallback reserve would kill.
+_MINIMUM_RECOVERY_SECONDS = 1.5
 # Recovery and its retry stop this long before the hook deadline, so a daemon that
 # times out and then fails to recover still leaves the local fallback time to review.
 _FALLBACK_RESERVE_SECONDS = 2
@@ -74,7 +77,6 @@ def main(
 ) -> int:
     """Proxy Claude hook stdin to the Guard daemon, falling back to the Python hook."""
 
-    _ = CLAUDE_GUARD_DAEMON_HOOK_MARKER
     deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
     body, oversized = read_stdin_text(_MAX_HOOK_INPUT_BYTES)
     if oversized:
@@ -456,10 +458,15 @@ def _recover_retry_or_fallback(
     failure_kind: str = "transport-failure",
 ) -> str:
     recovery_deadline = None if deadline is None else deadline - _FALLBACK_RESERVE_SECONDS
-    if recovery_command and _run_recovery_command(
-        recovery_command,
-        deadline=recovery_deadline,
-        failure_kind=failure_kind,
+    recovery_window = _remaining_seconds(recovery_deadline, cap=_RECOVERY_TIMEOUT_SECONDS)
+    if (
+        recovery_command
+        and recovery_window >= _MINIMUM_RECOVERY_SECONDS
+        and _run_recovery_command(
+            recovery_command,
+            deadline=recovery_deadline,
+            failure_kind=failure_kind,
+        )
     ):
         try:
             endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")

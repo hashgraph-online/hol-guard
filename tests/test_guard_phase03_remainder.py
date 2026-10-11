@@ -108,11 +108,10 @@ def test_update_alpha_pins_latest_alpha_release(monkeypatch: pytest.MonkeyPatch)
         "runpip",
         "hol-guard",
         "install",
-        "--upgrade",
         "--force-reinstall",
-        "--pre",
-        "hol-guard==2.1.0a35",
+        "hol_guard-2.1.0a35-py3-none-<platform>.whl",
     ]
+    assert payload["upgrade_source"] == "github_alpha_release"
     assert payload["retry_command"] == "hol-guard update --alpha"
     assert payload["release_channel"] == "alpha"
     assert payload["version_check"]["release_channel"] == "alpha"

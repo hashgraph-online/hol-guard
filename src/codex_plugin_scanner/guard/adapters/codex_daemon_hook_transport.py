@@ -22,6 +22,9 @@ from .codex_daemon_hook_auth import (
 
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MINIMUM_OPERATION_SECONDS = 0.01
+# Same ceiling as the hook stdin reader. A timing hint must not push a body the
+# daemon would already have accepted over this limit.
+_MAX_HOOK_REQUEST_BYTES = 1_000_000
 
 
 class _DaemonGenerationChangedError(ValueError):
@@ -41,7 +44,14 @@ def _with_remaining_hint(data: str, deadline: float) -> str:
     if payload is None:
         return data
     payload["guard_remaining_ms"] = min(60_000, max(1, int((deadline - time.monotonic()) * 1000)))
-    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+    hinted = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    try:
+        hinted_bytes = hinted.encode("utf-8")
+    except UnicodeEncodeError:
+        return data
+    if len(hinted_bytes) > _MAX_HOOK_REQUEST_BYTES:
+        return data
+    return hinted
 
 
 def _event_name(data: str) -> str:

@@ -214,6 +214,49 @@ fn resident_refuses_operations_for_another_guard_home() {
     let _ = fs::remove_dir_all(&root);
 }
 
+fn hook_authority_state_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "operation": "hook_authority_state",
+        "request": {
+            "schema": guard_contracts::HOOK_AUTHORITY_STATE_REQUEST_SCHEMA,
+            "request_id": "hook-authority-home-pin",
+            "store_path": store_path.to_string_lossy(),
+            "guard_home": guard_home.to_string_lossy(),
+            "op": "state_is_fresh",
+            "now": "2026-10-11T15:00:00+00:00",
+            "saved_at": "2026-10-11T15:00:00+00:00",
+            "max_age_seconds": 1,
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn resident_refuses_hook_authority_state_for_a_foreign_store() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let other = std::env::temp_dir().join(format!(
+        "hol-guard-foreign-hook-store-{}",
+        std::process::id()
+    ));
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &hook_authority_state_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_eq!(
+        evaluate(&root, &root.join("nested").join("guard.db")),
+        mismatch
+    );
+    assert_eq!(evaluate(&root, &root.join("other.db")), mismatch);
+    assert!(evaluate(&root, &root.join("guard.db")).is_ok());
+    let _ = fs::remove_dir_all(&root);
+}
+
 fn local_cli_grant_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
     let source = guard_contracts::LocalCliIdentitySourceV1::RegistryPackage {
         name: "cowsay".to_owned(),

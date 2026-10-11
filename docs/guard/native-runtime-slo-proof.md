@@ -44,7 +44,7 @@ a 2 percent RSS plateau and a 30-second deadline; the post-c64 peak is compared
 against that steady-state baseline. The resident growth gate remains at most
 12 percent.
 
-Native wheel CI runs the no-environment installed-wheel probe and enforces the
+The nightly native workflow runs the no-environment installed-wheel probe and enforces the
 adapter SLO. Windows remains outside this wave. The stress script exposes
 bounded thread, descriptor, and RSS aggregates. CI runs its `--enforce-soak`
 profile for 100,000 requests over a populated 250,000-receipt store; local

@@ -117,7 +117,8 @@ class _StreamingDaemonHandler(_AuthenticatedDaemonHandler):
         self.send_header("Content-Type", "application/json")
         self.end_headers()
         try:
-            for _ in range(50):
+            # Keep streaming past the bridge's whole daemon IO budget.
+            for _ in range(int(bridge._DAEMON_IO_TIMEOUT_SECONDS * 10) + 20):
                 self.wfile.write(b"{")
                 self.wfile.flush()
                 time.sleep(0.1)
@@ -631,3 +632,58 @@ def test_malformed_permission_passthrough_is_denied(output):
         data=json.dumps({"hook_event_name": "PermissionRequest"}),
     )
     assert json.loads(response)["hookSpecificOutput"]["decision"]["behavior"] == "deny"
+
+
+def test_hook_post_tells_the_daemon_how_long_the_bridge_will_wait(tmp_path: Path) -> None:
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700)
+    daemon_server = HTTPServer(("127.0.0.1", 0), _AuthenticatedDaemonHandler)
+    daemon_thread = threading.Thread(target=daemon_server.serve_forever, daemon=True)
+    daemon_thread.start()
+    daemon_port = daemon_server.server_address[1]
+    _write_authenticated_daemon_files(guard_home, daemon_port)
+    _AuthenticatedDaemonHandler.captured_hook_body = None
+
+    try:
+        bridge._post_to_loopback_daemon(
+            f"http://127.0.0.1:{daemon_port}/v1/hooks/claude-code?guard-home={guard_home}",
+            '{"hook_event_name":"PreToolUse","tool_name":"Bash"}',
+            state_path=guard_home / "daemon-state.json",
+        )
+    finally:
+        daemon_server.shutdown()
+        daemon_thread.join(timeout=5)
+
+    assert _AuthenticatedDaemonHandler.captured_hook_body is not None
+    body = json.loads(_AuthenticatedDaemonHandler.captured_hook_body)
+    assert body["tool_name"] == "Bash"
+    assert 0 < body["guard_remaining_ms"] <= bridge._DAEMON_IO_TIMEOUT_SECONDS * 1000
+
+
+def test_remaining_hint_preserves_unicode_and_omits_itself_when_it_will_not_fit() -> None:
+    from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
+        _MAX_HOOK_REQUEST_BYTES,
+        _with_remaining_hint,
+    )
+
+    prompt = "é" * 200_000
+    original = json.dumps(
+        {"hook_event_name": "PreToolUse", "prompt": prompt},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    ascii_form = json.dumps(json.loads(original), ensure_ascii=True, separators=(",", ":"))
+    assert len(original.encode("utf-8")) < _MAX_HOOK_REQUEST_BYTES < len(ascii_form.encode("utf-8"))
+    hinted = _with_remaining_hint(original, time.monotonic() + 5)
+    parsed = json.loads(hinted)
+    assert parsed["prompt"] == prompt
+    assert "guard_remaining_ms" in parsed
+    assert "\\u00e9" not in hinted
+    assert len(hinted.encode("utf-8")) <= _MAX_HOOK_REQUEST_BYTES
+
+    prefix = '{"hook_event_name":"PreToolUse","blob":"'
+    suffix = '"}'
+    room = _MAX_HOOK_REQUEST_BYTES - len(prefix.encode("utf-8")) - len(suffix.encode("utf-8"))
+    packed = prefix + ("a" * room) + suffix
+    assert len(packed.encode("utf-8")) == _MAX_HOOK_REQUEST_BYTES
+    assert _with_remaining_hint(packed, time.monotonic() + 5) == packed

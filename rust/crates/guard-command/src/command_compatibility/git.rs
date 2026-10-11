@@ -221,7 +221,8 @@ pub(super) fn observe_with_context(
     };
     let command = arguments[command_index].as_str();
     let inspection = inspection_arguments(arguments, context)
-        .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment));
+        .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
+        .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment));
     let plumbing = (command_index == 0 && read_only_plumbing(arguments))
         || inspection.is_some_and(read_only_plumbing);
     if plumbing {

@@ -255,11 +255,11 @@ def test_trust_binding_parser_imports_without_installed_dependencies():
 
 
 def test_builder_stages_trust_before_dependency_install_and_native_build():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text())
+    workflow = yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text())
     events = workflow.get("on", workflow.get(True))
-    assert "pull_request" in events and "pull_request_target" not in events
+    assert "pull_request_target" not in events
     assert workflow["permissions"] == {"contents": "read"}
-    steps = workflow["jobs"]["authoring"]["steps"]
+    steps = workflow["jobs"]["extension-builder"]["steps"]
     checkout_step = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert "ref" not in checkout_step["with"]  # Use GitHub's merge checkout, not the stale PR head.
     trust = next(i for i, step in enumerate(steps) if "--trust-only" in step.get("run", ""))
@@ -280,7 +280,6 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
         "test_guard_extension_trust.py",
         "test_guard_extension_contribution.py",
         "test_guard_mcp_server_contribution.py",
-        "test_extension_builder_ci_preparation.py",
     ):
         assert path in steps[tests]["run"]
     verifier = "scripts/ci/verify_extension_builder_install.py"

@@ -8,6 +8,7 @@ import pytest
 
 import codex_plugin_scanner.guard.native_policy_snapshot_publisher as publisher_module
 from codex_plugin_scanner.guard.native_policy_snapshot import NativePolicySnapshotPublisher
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
 from codex_plugin_scanner.guard.store import GuardStore
 
 from .native_policy_snapshot_test_fixtures import _DeterministicClock
@@ -189,6 +190,37 @@ def test_run_loop_preserves_failed_retry_backoff_across_stable_database_writes(
         assert attempts[0] is not None and attempts[0] > clock.monotonic
         assert publisher._retry_not_before_monotonic == attempts[0]
         assert publisher._failure_count == 1
+    finally:
+        publisher.close()
+
+
+def test_unavailable_composer_on_a_database_hint_withdraws_the_ack(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clock = _DeterministicClock()
+    publisher = NativePolicySnapshotPublisher(
+        store=GuardStore(tmp_path / "guard-home"),
+        client_request=lambda **_kwargs: b"unused",
+        wall_clock=clock.wall_time,
+        monotonic_clock=clock.monotonic_time,
+    )
+    publisher._snapshot = {"expires_at_ms": int(clock.wall * 1_000) + 60_000, "generation": 1}
+    publisher._acked = True
+    publisher._observed_policy_fingerprint = ("digest", "enforce", "controls")
+
+    def compile_policy(**_: object) -> dict[str, object]:
+        raise NativePolicySnapshotError("native_policy_effective_unavailable")
+
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", compile_policy)
+    database_change = {str(publisher.guard_home / "guard.db-wal")}
+    try:
+        assert publisher.is_ready()
+        assert publisher._policy_input_changed(database_change)
+        assert publisher._acked is False
+        assert not publisher.is_ready()
+        assert not publisher._policy_input_changed(database_change)
+        assert publisher._acked is False
     finally:
         publisher.close()
 

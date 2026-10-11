@@ -32,9 +32,7 @@ _MANIFEST = json.loads(
 )
 _READ_ONLY_FAMILIES = ("navigation-public-read", "source-search-read", "git-local")
 _READ_ONLY_EXTRA = {("shell-composition", "cd-pipeline"), ("shell-composition", "json-pipeline")}
-PENDING: dict[str, str] = {
-    "source-search-read/source-files": "native_command_review_required",
-}
+PENDING: dict[str, str] = {}
 
 
 def _seeds() -> list[tuple[str, str]]:

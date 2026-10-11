@@ -13,6 +13,13 @@ from codex_plugin_scanner.guard import codex_app_server as codex_app_server_modu
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
+_SENT = {
+    "status": "sent",
+    "reason": "turn_start_sent",
+    "thread_id": "thread-1",
+    "strategy": "codex-app-server-turn",
+}
+
 
 def _request(request_id: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(
@@ -83,12 +90,12 @@ def test_guard_approvals_resume_retries_failed_codex_resume(
 ) -> None:
     send_calls = 0
 
-    def _fake_send(**kwargs):
+    def _fake_continue(wire, home, timeout_ms):
         nonlocal send_calls
         send_calls += 1
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+        return {"result": _SENT}
 
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
 
     home_dir = tmp_path / "guard-home"
     store = GuardStore(home_dir)
@@ -118,13 +125,13 @@ def test_guard_approvals_resume_uses_codex_home_default_socket(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    socket_paths: list[str] = []
+    codex_homes: list[object] = []
 
-    def _fake_send(**kwargs):
-        socket_paths.append(str(kwargs["socket_path"]))
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+    def _fake_continue(wire, home, timeout_ms):
+        codex_homes.append(wire["metadata"].get("codex_home"))
+        return {"result": _SENT}
 
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
 
     home_dir = tmp_path / "guard-home"
     codex_home = tmp_path / "codex-home"
@@ -152,7 +159,7 @@ def test_guard_approvals_resume_uses_codex_home_default_socket(
 
     assert rc == 0
     assert output["status"] == "sent"
-    assert socket_paths == [str(socket_path)]
+    assert codex_homes == [str(codex_home)]
 
 
 def test_default_codex_app_server_socket_probe_uses_codex_home(

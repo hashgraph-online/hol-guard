@@ -13,19 +13,9 @@ from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOWS = (
-    "rust-authority-ownership.yml",
-    "rust-command-model-differential.yml",
-    "rust-command-shadow.yml",
-    "rust-daemon-edge-hardening.yml",
-    "rust-posttool-authority-acceptance.yml",
+    "nightly-native.yml",
     "rust-pretool-adversarial.yml",
-    "rust-pretool-authority-acceptance.yml",
-    "rust-runtime-differential.yml",
-    "rust-runtime-mutation-differential.yml",
     "rust-runtime-performance.yml",
-    "rust-runtime-recovery.yml",
-    "rust-runtime-rule-contract.yml",
-    "rust-runtime-windows-resident.yml",
 )
 
 
@@ -34,7 +24,11 @@ def test_native_python_proofs_stage_matching_resources(name: str) -> None:
     """Verify native Python proofs stage matching resources."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text()))
     observed = 0
-    for job in workflow["jobs"].values():
+    for job_name, job in workflow["jobs"].items():
+        if job_name in {"extension-builder", "linux-build", "windows-build"}:
+            # extension-builder verifies projections through prepare_extension_contribution.py --compiler. The wheel
+            # build jobs verify the compiler in their own build steps and run no Python proofs against the output.
+            continue
         steps = job.get("steps", [])
         for index, step in enumerate(steps):
             script = step.get("run", "")

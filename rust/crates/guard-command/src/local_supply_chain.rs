@@ -1711,42 +1711,42 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_script", "warn"),
                 ("persistence", "warn"),
                 ("guard_bypass", "warn"),
-                ("cloud_advisory", "warn"),
+                ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
             ],
         ),
         (
             "balanced",
             &[
-                ("local_secret_read", "review"),
-                ("credential_exfiltration", "block"),
-                ("data_flow_exfiltration", "block"),
-                ("destructive_shell", "block"),
-                ("encoded_execution", "block"),
+                ("local_secret_read", "require-reapproval"),
+                ("credential_exfiltration", "require-reapproval"),
+                ("data_flow_exfiltration", "require-reapproval"),
+                ("destructive_shell", "require-reapproval"),
+                ("encoded_execution", "require-reapproval"),
                 ("network_egress", "warn"),
-                ("prompt_injection", "review"),
+                ("prompt_injection", "require-reapproval"),
                 ("mcp_dangerous_tool", "require-reapproval"),
-                ("malicious_skill", "block"),
-                ("package_script", "review"),
-                ("persistence", "review"),
+                ("malicious_skill", "require-reapproval"),
+                ("package_script", "warn"),
+                ("persistence", "require-reapproval"),
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
-                ("encoded_exfiltration", "block"),
+                ("encoded_exfiltration", "require-reapproval"),
             ],
         ),
         (
             "strict",
             &[
-                ("local_secret_read", "block"),
-                ("credential_exfiltration", "block"),
+                ("local_secret_read", "require-reapproval"),
+                ("credential_exfiltration", "require-reapproval"),
                 ("data_flow_exfiltration", "block"),
-                ("destructive_shell", "block"),
-                ("encoded_execution", "block"),
-                ("network_egress", "warn"),
+                ("destructive_shell", "require-reapproval"),
+                ("encoded_execution", "require-reapproval"),
+                ("network_egress", "require-reapproval"),
                 ("prompt_injection", "block"),
                 ("mcp_dangerous_tool", "block"),
                 ("malicious_skill", "block"),
-                ("package_script", "block"),
+                ("package_script", "require-reapproval"),
                 ("persistence", "block"),
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
@@ -1803,7 +1803,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
         .unwrap_or(&[])
 }
 
-fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
+pub fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
     security_level_risk_rows(level)
         .iter()
         .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
@@ -1863,7 +1863,7 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
         .map(|(_, rows)| *rows)
 }
 
-fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
+pub fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
     posture_risk_rows(posture).map(|rows| {
         rows.iter()
             .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))

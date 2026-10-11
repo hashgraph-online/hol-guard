@@ -11,17 +11,14 @@ from typing import TYPE_CHECKING, cast
 from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
+from .native_policy_effective import compose_effective_native_policies
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
     NATIVE_POLICY_VERIFIER_KEY_NAME,
     NATIVE_RUNTIME_STATE_DIRECTORY,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_policy import (
-    _merge_effective_native_policies,
-    _stricter_action,
-    effective_native_policy_v3,
-)
+from .native_policy_snapshot_policy import _stricter_action
 
 if TYPE_CHECKING:
     from .runtime.extension_control_runtime import ExtensionControlRuntime
@@ -235,13 +232,7 @@ class NativePolicySnapshotPublisherInputs:
             selected_workspaces = tuple(sorted(selected, key=str))
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
-        policy = _merge_effective_native_policies(
-            tuple(
-                effective_native_policy_v3(config)
-                | {"mode": config.mode, "harness_postures": dict(getattr(config, "harness_postures", None) or {})}
-                for config in configs
-            )
-        )
+        policy = compose_effective_native_policies(tuple(configs))
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
         except sqlite3.Error as error:
@@ -366,7 +357,11 @@ class NativePolicySnapshotPublisherInputs:
                 cast(str, effective_policy["mode"]),
                 self._source_control_fingerprint(self._compiled_command_extensions(), source),
             )
-        except (OSError, NativePolicySnapshotError, TypeError, ValueError, RuntimeError):
+        except NativePolicySnapshotError:
+            # A missing composer cannot prove the database write left the
+            # effective policy unchanged. Record unavailable and withdraw.
+            current_fingerprint = ("unavailable", "", "")
+        except (OSError, TypeError, ValueError, RuntimeError):
             current_fingerprint = ("unavailable", "", "")
         # Observation is independent of acknowledgment: unchanged inputs must
         # not reset a failed publication's retry backoff on every database write.

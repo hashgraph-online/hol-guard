@@ -16,6 +16,7 @@ from ..native_resident_client import (
     native_resident_client_failure_code,
     record_native_resident_client_failure_code,
 )
+from ..native_resident_revival import native_unavailable_reason
 from ..native_runtime import NativeRuntimeStatus
 from ..runtime.structured_output_mediation import (
     StructuredContentMediation,
@@ -38,6 +39,7 @@ from .hook_native_review_fence import native_review_fence
 from .hook_policy_repair import apply_command_policy_repair
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
+    SNAPSHOT_NOT_CURRENT_ERROR,
     NativePolicyBindingRefreshError,
     review_native_edge,
 )
@@ -213,16 +215,21 @@ def _record_unavailable_native(
     guard_home: Path,
     recording_only: bool,
 ) -> dict[str, object]:
+    failure_code = native_resident_client_failure_code()
     response = availability_harness_response(
         payload,
         harness=harness,
         event_name=event_name,
         reason_code=reason_code,
-        reason="HOL Guard could not complete the native hook decision safely.",
+        reason=native_unavailable_reason(
+            failure_code,
+            "HOL Guard could not complete the native hook decision safely.",
+        ),
         workspace=workspace,
         home_dir=home_dir,
         guard_home=guard_home,
         recording_only=recording_only,
+        prompt_reason=native_unavailable_reason(failure_code, "") or None,
     )
     route = "native_degraded" if response.get("reason_code") == "native_degraded_emergency_safe" else "native_fail_safe"
     host.metrics.record_route(route)
@@ -434,12 +441,16 @@ class HookWorkerNativeMixin:
             failure = native_resident_client_failure_code()
             if (
                 isinstance(failure, str)
-                and failure in CONTROL_BINDING_REFRESH_ERRORS
                 and event_name in {"PreToolUse", "UserPromptSubmit"}
                 and policy_snapshot is not None
-                and policy_snapshot.get("mode") == "enforce"
+                and (
+                    failure == SNAPSHOT_NOT_CURRENT_ERROR
+                    or (failure in CONTROL_BINDING_REFRESH_ERRORS and policy_snapshot.get("mode") == "enforce")
+                )
             ):
-                raise NativePolicyBindingRefreshError(failure, policy_snapshot.get("generation"))
+                raise NativePolicyBindingRefreshError(
+                    failure, policy_snapshot.get("generation"), recording_only=recording_only
+                )
             if event_name == "PostToolUse":
                 self._record_post_tool_activity(
                     harness=harness,

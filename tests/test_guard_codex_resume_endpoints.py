@@ -16,6 +16,13 @@ from codex_plugin_scanner.guard.live_process_identity import current_process_ide
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
+_SENT = {
+    "status": "sent",
+    "reason": "turn_start_sent",
+    "thread_id": "thread-1",
+    "strategy": "codex-app-server-turn",
+}
+
 
 def _request(request_id: str) -> GuardApprovalRequest:
     return GuardApprovalRequest(
@@ -154,12 +161,11 @@ def test_codex_block_does_not_resume_codex_thread(
 ) -> None:
     captured_payloads: list[dict[str, object]] = []
 
-    def _fake_send(**kwargs):
-        payloads = kwargs["payloads"]
-        captured_payloads.extend(payloads)
-        return {"id": 3, "result": {"turnId": "turn-2"}}, "turn_completed"
+    def _fake_continue(wire, home, timeout_ms):
+        captured_payloads.append(wire)
+        return {"result": _SENT}
 
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
 
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-block"), "2026-05-19T10:00:00+00:00")
@@ -456,12 +462,11 @@ def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_prese
 ) -> None:
     captured_payloads: list[dict[str, object]] = []
 
-    def _fake_send(**kwargs):
-        payloads = kwargs["payloads"]
-        captured_payloads.extend(payloads)
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+    def _fake_continue(wire, home, timeout_ms):
+        captured_payloads.append(wire)
+        return {"result": _SENT}
 
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
 
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-allow-command"), "2026-05-19T10:00:00+00:00")
@@ -488,136 +493,10 @@ def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_prese
         daemon.stop()
 
     assert payload["codexResume"]["status"] == "sent"
-    prompt = captured_payloads[3]["params"]["input"][0]["text"]
-    assert "HOL Guard approved request `req-allow-command` for this exact command:" in prompt
-    assert "python - <<'PY'" in prompt
-    assert "Retry that exact command now using the existing saved approval." in prompt
-
-
-def test_codex_approval_steers_active_turn_before_starting_another(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured_payloads: list[list[dict[str, object]]] = []
-
-    def _fake_send(**kwargs):
-        payloads = kwargs["payloads"]
-        captured_payloads.append(payloads)
-        return {"id": 3, "result": {"turnId": "turn-1"}}, "turn_steered"
-
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-active-turn"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-active-turn.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-active-turn",
-        socket_path=socket_path,
-        command_text="python -m pytest",
-        status="approval_wait_timeout",
-    )
-
-    result = codex_app_server_module.resume_codex_thread_for_request(
-        store=store,
-        request_id="req-active-turn",
-        action="allow",
-    )
-
-    assert result is not None
-    assert result["status"] == "sent"
-    assert result["reason"] == "turn_steer_sent"
-    assert result["strategy"] == "codex-app-server-steer"
-    methods = [payload["method"] for payload in captured_payloads[0]]
-    assert methods == ["initialize", "initialized", "thread/resume", "turn/steer"]
-    steer_params = captured_payloads[0][-1]["params"]
-    assert steer_params["threadId"] == "thread-1"
-    assert steer_params["expectedTurnId"] == "turn-1"
-    assert "Retry that exact command now" in steer_params["input"][0]["text"]
-
-
-def test_codex_approval_starts_next_turn_when_original_turn_is_idle(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured_payloads: list[list[dict[str, object]]] = []
-
-    def _fake_send(**kwargs):
-        payloads = kwargs["payloads"]
-        captured_payloads.append(payloads)
-        method = payloads[-1]["method"]
-        if method == "turn/steer":
-            return {
-                "id": 3,
-                "error": {
-                    "code": -32602,
-                    "message": "no active turn to steer",
-                },
-            }, "turn_start_response"
-        return {"id": 3, "result": {"turn": {"id": "turn-2"}}}, "turn_completed"
-
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-idle-turn"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-idle-turn.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-idle-turn",
-        socket_path=socket_path,
-        command_text="python -m pytest",
-        status="approval_wait_timeout",
-    )
-
-    result = codex_app_server_module.resume_codex_thread_for_request(
-        store=store,
-        request_id="req-idle-turn",
-        action="allow",
-    )
-
-    assert result is not None
-    assert result["status"] == "sent"
-    assert result["reason"] == "turn_start_sent"
-    assert result["strategy"] == "codex-app-server-turn"
-    assert [payloads[-1]["method"] for payloads in captured_payloads] == ["turn/steer", "turn/start"]
-
-
-def test_codex_approval_starts_next_turn_when_steer_connection_fails(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    captured_methods: list[str] = []
-
-    def _fake_send(**kwargs):
-        method = kwargs["payloads"][-1]["method"]
-        captured_methods.append(method)
-        if method == "turn/steer":
-            raise OSError("transient connection failure")
-        return {"id": 3, "result": {"turn": {"id": "turn-2"}}}, "turn_start_response"
-
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-steer-connection"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-steer-connection.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-steer-connection",
-        socket_path=socket_path,
-        command_text="python -m pytest",
-        status="approval_wait_timeout",
-    )
-
-    result = codex_app_server_module.resume_codex_thread_for_request(
-        store=store,
-        request_id="req-steer-connection",
-        action="allow",
-    )
-
-    assert result is not None
-    assert result["status"] == "sent"
-    assert result["strategy"] == "codex-app-server-turn"
-    assert captured_methods == ["turn/steer", "turn/start"]
+    [wire] = captured_payloads
+    assert wire["approval_request_id"] == "req-allow-command"
+    assert wire["action"] == "allow"
+    assert wire["metadata"]["command_text"] == "python - <<'PY'\nprint('guard')\nPY"
 
 
 def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_missing(
@@ -674,12 +553,12 @@ def test_request_resume_retry_is_idempotent_after_success(
 ) -> None:
     send_calls = 0
 
-    def _fake_send(**kwargs):
+    def _fake_continue(wire, home, timeout_ms):
         nonlocal send_calls
         send_calls += 1
-        return {"id": 2, "result": {"turnId": "turn-2"}}, "turn_completed"
+        return {"result": _SENT}
 
-    monkeypatch.setattr(codex_app_server_module, "_send_app_server_websocket_messages", _fake_send)
+    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
 
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-idempotent"), "2026-05-19T10:00:00+00:00")
