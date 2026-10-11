@@ -107,10 +107,15 @@ fn capture(
     let mut approved = vec![
         base.join("lib"),
         base.join("lib64"),
-        base.join("Lib"),
         PathBuf::from("/usr/lib"),
         PathBuf::from("/usr/local/lib"),
     ];
+    // The capitalised layout is Windows-only. Probing it elsewhere aliases
+    // `lib` on case-insensitive filesystems (default macOS APFS), where the
+    // canonical-spelling check correctly refuses the alias.
+    if cfg!(windows) {
+        approved.push(base.join("Lib"));
+    }
     if let Some(framework) = base.ancestors().find(|path| {
         path.file_name()
             .is_some_and(|name| name == "Python.framework")
@@ -140,11 +145,10 @@ fn capture(
     if let Some(config) = &config {
         config.validate_version(&version)?;
     }
-    approved.extend([
-        requested_root.join("lib"),
-        requested_root.join("lib64"),
-        requested_root.join("Lib"),
-    ]);
+    approved.extend([requested_root.join("lib"), requested_root.join("lib64")]);
+    if cfg!(windows) {
+        approved.push(requested_root.join("Lib"));
+    }
     let mut capture = Capture {
         files: BTreeMap::new(),
         directories: BTreeSet::new(),
@@ -165,8 +169,9 @@ fn capture(
     };
     capture.tree(&stdlib, &target, true)?;
     let site = target.join("site-packages");
-    let site_roots = if venv {
-        vec![
+    let mut site_roots = Vec::new();
+    if venv {
+        site_roots.extend([
             requested_root
                 .join("lib")
                 .join(format!("python{version}"))
@@ -175,11 +180,11 @@ fn capture(
                 .join("lib64")
                 .join(format!("python{version}"))
                 .join("site-packages"),
-            requested_root.join("Lib/site-packages"),
-        ]
-    } else {
-        Vec::new()
-    };
+        ]);
+        if cfg!(windows) {
+            site_roots.push(requested_root.join("Lib/site-packages"));
+        }
+    }
     let mut roots = site_roots;
     if include_system {
         roots.extend([
