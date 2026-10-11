@@ -47,8 +47,26 @@ def _cases() -> list[tuple[str, int, dict[str, Any], dict[str, Any]]]:
     ]
 
 
+_PAGED_RESIDENT_METHODS = frozenset({"list_artifact_snapshots", "list_artifact_inventory"})
+
+
 def _invoke(store: GuardStore, source: dict[str, Any]) -> object:
     return getattr(store, source["method"])(*source.get("args", ()), **source.get("kwargs", {}))
+
+
+def _recorded_resident_reply(step: dict[str, Any]) -> object:
+    """The resident page for a recorded list, or the recorded payload for other calls.
+
+    Inventory list vectors store the row array. The resident now returns that
+    array as one page with no further cursor.
+    """
+
+    payload = step["native_payload"]
+    if step["method"] in _PAGED_RESIDENT_METHODS:
+        if not isinstance(payload, list):
+            raise AssertionError("recorded inventory page rows must be a list")
+        return {"rows": payload, "next": None}
+    return payload
 
 
 def test_every_scenario_has_matching_recorded_steps() -> None:
@@ -75,7 +93,7 @@ def test_wrappers_send_the_recorded_wire_arguments(
             native_guard_store._raise_for_code(
                 ERROR_CODES[step["error"]["type"]], {"message": step["error"]["message"]}
             )
-        return step["native_payload"], None
+        return _recorded_resident_reply(step), None
 
     monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", capture)
     label = f"{name}#{index} {step['label']}"
