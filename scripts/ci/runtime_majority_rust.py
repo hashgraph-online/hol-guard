@@ -16,10 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-try:
-    import tomllib
-except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
-    import tomli as tomllib  # type: ignore[no-redef]
+from scripts.ci.runtime_majority_crates import crate_roots, linked_crates, load_crate_graph
 
 TEST_FILE_NAMES = re.compile(r"(?:_tests?\.rs|^tests?\.rs)$")
 TEST_DIR_NAMES = frozenset({"tests", "testdata", "benches", "examples", "fuzz"})
@@ -319,53 +316,30 @@ def child_modules(source: str, code: str, flags: bytearray) -> list[tuple[str, s
     return result
 
 
-def _dependency_tables(manifest: dict[str, Any]) -> list[dict[str, Any]]:
-    tables = [manifest.get("dependencies", {})]
-    for target in manifest.get("target", {}).values():
-        tables.append(target.get("dependencies", {}))
-    return [table for table in tables if isinstance(table, dict)]
-
-
-def load_crate_graph(rust_root: Path) -> dict[str, tuple[Path, list[str], dict[str, Any]]]:
-    """Map crate name -> (directory, linked path-dependency names, manifest)."""
-    crates: dict[str, tuple[Path, dict[str, Any]]] = {}
-    for manifest_path in sorted((rust_root / "crates").glob("*/Cargo.toml")):
-        manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
-        crates[str(manifest["package"]["name"])] = (manifest_path.parent, manifest)
-    graph: dict[str, tuple[Path, list[str], dict[str, Any]]] = {}
-    for name, (directory, manifest) in crates.items():
-        deps: list[str] = []
-        for table in _dependency_tables(manifest):
-            for dep_name, spec in table.items():
-                if isinstance(spec, dict) and "path" in spec:
-                    target = (directory / str(spec["path"])).resolve()
-                    for other, (other_dir, _) in crates.items():
-                        if other_dir.resolve() == target:
-                            deps.append(other)
-                elif dep_name in crates:
-                    deps.append(dep_name)
-        graph[name] = (directory, sorted(set(deps)), manifest)
-    return graph
-
-
-def linked_crates(graph: dict[str, tuple[Path, list[str], dict[str, Any]]], binary_crate: str) -> list[str]:
-    seen: list[str] = []
-    stack = [binary_crate]
-    while stack:
-        current = stack.pop()
-        if current in seen:
+def module_children(
+    current: Path, source: str, code: str, flags: bytearray
+) -> tuple[list[tuple[str, Path | None]], list[Path]]:
+    """Out-of-line ``mod`` children (alias, resolved file) and live ``include!`` targets of one file."""
+    directory = current.parent
+    owns_directory = current.name in {"lib.rs", "main.rs", "mod.rs"}
+    child_dir = directory if owns_directory else directory / current.stem
+    modules: list[tuple[str, Path | None]] = []
+    for name, explicit in child_modules(source, code, flags):
+        candidates = (
+            [directory / explicit]
+            if explicit
+            else [child_dir / f"{name}.rs", child_dir / name / "mod.rs", directory / f"{name}.rs"]
+        )
+        found = next((candidate for candidate in candidates if candidate.is_file()), None)
+        modules.append((name, found.resolve() if found else None))
+    includes: list[Path] = []
+    for match in _INCLUDE.finditer(source):
+        if flags[match.start()] != 1:  # comment, string literal, or cfg(test) region
             continue
-        seen.append(current)
-        stack.extend(graph[current][1])
-    return sorted(seen)
-
-
-def crate_roots(directory: Path, manifest: dict[str, Any], *, binary: bool) -> list[Path]:
-    if binary:
-        roots = [directory / str(item.get("path", "src/main.rs")) for item in manifest.get("bin", [])]
-        return roots or [directory / "src/main.rs"]
-    lib = manifest.get("lib", {})
-    return [directory / str(lib.get("path", "src/lib.rs"))]
+        target = directory / match.group(1)
+        if target.is_file():
+            includes.append(target.resolve())
+    return modules, includes
 
 
 def walk_module_tree(root_file: Path) -> tuple[list[Path], list[str]]:
@@ -380,26 +354,13 @@ def walk_module_tree(root_file: Path) -> tuple[list[Path], list[str]]:
         seen[current] = None
         source = current.read_text(encoding="utf-8")
         _, _, code, flags = analyze_source(source)
-        directory = current.parent
-        owns_directory = current.name in {"lib.rs", "main.rs", "mod.rs"}
-        child_dir = directory if owns_directory else directory / current.stem
-        for name, explicit in child_modules(source, code, flags):
-            candidates = (
-                [directory / explicit]
-                if explicit
-                else [child_dir / f"{name}.rs", child_dir / name / "mod.rs", directory / f"{name}.rs"]
-            )
-            found = next((candidate for candidate in candidates if candidate.is_file()), None)
+        modules, includes = module_children(current, source, code, flags)
+        for name, found in modules:
             if found is None:
                 unresolved.append(f"{current}:{name}")
             else:
-                stack.append(found.resolve())
-        for match in _INCLUDE.finditer(source):
-            if flags[match.start()] != 1:  # comment, string literal, or cfg(test) region
-                continue
-            target = directory / match.group(1)
-            if target.is_file():
-                stack.append(target.resolve())
+                stack.append(found)
+        stack.extend(includes)
     return sorted(seen), unresolved
 
 
@@ -462,6 +423,7 @@ def measure_rust(
                 elif override:
                     totals["unlinked"] += loc
                     exclusions.append(_exclusion(relative, str(override["category"]), str(override["reason"]), loc))
+                    exclusions[-1]["evidence"] = str(override["evidence"])
                 else:
                     counts.append(RustFileCount(relative, name, loc, test_loc))
                 continue
@@ -478,7 +440,12 @@ def measure_rust(
             else:
                 totals["unlinked"] += loc
             exclusions.append(_exclusion(relative, category, reason, loc))
-    meta = {"linked_crates": linked, "binary_crate": binary_crate, "unresolved_modules": sorted(unresolved)}
+    meta = {
+        "linked_crates": linked,
+        "binary_crate": binary_crate,
+        "unresolved_modules": sorted(unresolved),
+        "crate_deps": {name: set(graph[name][1]) for name in graph},
+    }
     return counts, exclusions, totals, meta
 
 

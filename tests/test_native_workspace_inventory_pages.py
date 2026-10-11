@@ -57,6 +57,8 @@ def test_relative_workspaces_are_sent_absolute_and_pages_are_joined(monkeypatch,
     assert str(sent[0]["before_workspace_dir"]).endswith("/rel-before")
     assert [item["name"] for item in inventory.inventory] == ["left-pad", "react"]
     assert sent[1]["inventory_offset"] == 1
+    assert sent[1]["inventory_digest"] == "sha256:" + "ab" * 32
+    assert "inventory_digest" not in sent[0]
 
 
 def test_targets_only_pages_are_joined(monkeypatch, tmp_path: Path) -> None:
@@ -80,5 +82,3 @@ def test_targets_only_pages_are_joined(monkeypatch, tmp_path: Path) -> None:
     result = bridge.native_workspace_inventory(SimpleNamespace(guard_home=str(tmp_path)), tmp_path, targets_only=True)
     assert result.inventory == ()
     assert [item.package_name for item in result.scan_targets] == ["left-pad", "react"]
-    assert sent[1]["inventory_digest"] == "sha256:" + "ab" * 32
-    assert "inventory_digest" not in sent[0]

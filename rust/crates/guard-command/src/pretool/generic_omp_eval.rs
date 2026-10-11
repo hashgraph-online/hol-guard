@@ -9,8 +9,10 @@
 //! `Promise.all`, `JSON.stringify`, and `.text`. Every extracted call is then
 //! evaluated as the equivalent standalone tool; any non-allow reviews the
 //! whole program. Everything else, including comments, templates with
-//! interpolation, operators, other identifiers and non-`js` languages, is
-//! rejected rather than interpreted.
+//! interpolation, operators, other identifiers and other languages, is
+//! rejected rather than interpreted. A `py` program may only be whole lines of
+//! the Python prelude's `read(literal_path)`, optionally inside `print` or
+//! `display`.
 
 use super::{strict_tool_input, OmpContext};
 use crate::pretool::generic::extract::GenericSignals;
@@ -287,24 +289,12 @@ impl Parser {
         let Token::Str(path) = self.next()? else {
             return None;
         };
-        // The SDK resolves raw filesystem paths against cwd. It does not
-        // expand ~, parse line selectors, or normalize Windows separators.
-        // Reject spellings the standalone tool would interpret differently.
-        if path.starts_with('~')
-            || path.contains("://")
-            || path.contains(['\\', '$'])
-            || path.trim() != path
-            || path.chars().any(char::is_control)
-            || self.calls.len() >= MAX_CALLS
-        {
+        if self.calls.len() >= MAX_CALLS {
             return None;
         }
+        let call = read_helper_call(path)?;
         self.eat(')')?;
-        self.calls.push(Call {
-            tool: "read".to_owned(),
-            args: vec![("path".to_owned(), Lit::Str(path))],
-            sdk_read_helper: true,
-        });
+        self.calls.push(call);
         Some(())
     }
 
@@ -376,6 +366,95 @@ pub(super) fn parse_program(code: &str) -> Option<Vec<Call>> {
     };
     parser.program()?;
     (!parser.calls.is_empty()).then_some(parser.calls)
+}
+
+/// The SDK `read(path)` helper in both kernels resolves a raw filesystem path
+/// against cwd. It does not expand ~, parse line selectors, or normalize
+/// Windows separators, so spellings the standalone tool would interpret
+/// differently are rejected.
+fn read_helper_call(path: String) -> Option<Call> {
+    if path.starts_with('~')
+        || path.contains("://")
+        || path.contains(['\\', '$'])
+        || path.trim() != path
+        || path.chars().any(char::is_control)
+    {
+        return None;
+    }
+    Some(Call {
+        tool: "read".to_owned(),
+        args: vec![("path".to_owned(), Lit::Str(path))],
+        sdk_read_helper: true,
+    })
+}
+
+/// Parse a Python kernel program made only of whole lines of `read(LIT)`,
+/// `print(read(LIT))` or `display(read(LIT))`. The Python prelude's `read`
+/// is `Path(path).read_text()` for a plain path, the same contract as the JS
+/// helper. Indented lines, continuations, string prefixes, comments and every
+/// other statement are rejected.
+pub(super) fn parse_python(code: &str) -> Option<Vec<Call>> {
+    if code.len() > MAX_CODE_BYTES {
+        return None;
+    }
+    let mut calls = Vec::new();
+    for line in code.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        if line.starts_with(char::is_whitespace) || calls.len() >= MAX_CALLS {
+            return None;
+        }
+        // The shared lexer decodes JS escapes and backtick strings. Python
+        // keeps the backslash, and a backtick string never reaches read().
+        // Reject both so the proven path is the literal text.
+        if line.contains(['\\', '`']) {
+            return None;
+        }
+        let tokens = tokenize(line)?;
+        let inner = match tokens.as_slice() {
+            [Token::Ident(word), Token::Punct('('), inner @ .., Token::Punct(')')]
+                if word == "print" || word == "display" =>
+            {
+                inner
+            }
+            all => all,
+        };
+        let [Token::Ident(word), Token::Punct('('), Token::Str(path), Token::Punct(')')] = inner
+        else {
+            return None;
+        };
+        if word != "read" {
+            return None;
+        }
+        calls.push(read_helper_call(path.clone())?);
+    }
+    (!calls.is_empty()).then_some(calls)
+}
+
+#[test]
+fn python_read_lines_are_parsed_as_reads() {
+    let calls =
+        parse_python("print(read('calc.py'))\ndisplay(read(\"a.ts\"))\nread('b')\n").unwrap();
+    assert_eq!(calls.len(), 3);
+    for code in [
+        "import os",
+        "print(read('a'));import os",
+        "  print(read('a'))",
+        "print(read(r'a'))",
+        "print(read('a', 1, 5))",
+        "print(read('~/.ssh/id_rsa'))",
+        "print(read('a'))  # note",
+        "print(read('a'))\rimport os",
+        "print(read(\n'a'))",
+        "x = read('a')",
+        "",
+        "print(read('a\\b'))",
+        "print(read('a`b'))",
+        "read(`a`)",
+    ] {
+        assert!(parse_python(code).is_none(), "{code:?}");
+    }
 }
 
 #[test]
@@ -453,7 +532,8 @@ pub(super) fn evaluate(
         return None;
     }
     let input = strict_tool_input(payload)?;
-    if input.get("language")?.as_str()? != "js"
+    let language = input.get("language")?.as_str()?;
+    if !matches!(language, "js" | "py")
         || !input.iter().all(|(key, value)| match key.as_str() {
             "code" | "language" | "title" => value.is_string(),
             "reset" => value.is_boolean(),
@@ -463,7 +543,12 @@ pub(super) fn evaluate(
     {
         return None;
     }
-    let calls = parse_program(input.get("code")?.as_str()?)?;
+    let code = input.get("code")?.as_str()?;
+    let calls = if language == "py" {
+        parse_python(code)?
+    } else {
+        parse_program(code)?
+    };
     let mut ran_shell = false;
     for call in &calls {
         let inner = standalone_payload(call, context)?;
