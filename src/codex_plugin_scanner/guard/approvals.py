@@ -25,13 +25,12 @@ from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
     IneligibleApprovalScopeError,
-    exact_action_allow_persistence_eligible,
+    apply_scope_surfaces,
     package_request_portable_workspace_scope,
-    request_scope_contract,
-    request_scope_contract_payload,
+    request_scope_observation,
     resolve_request_scope_selection,
     resolve_request_workspace_scope,
-    tool_call_exact_context_token,
+    scope_payload_for_request,
 )
 from .cli.connect_flow import (
     connect_retry_refresh_race_from_reason,
@@ -675,7 +674,7 @@ def apply_approval_resolution(
     local_tool_grant_target: object | None = None,
     local_tool_grant_duration: object | None = None,
 ) -> dict[str, object]:
-    request = store.get_approval_request(request_id)
+    request = store.get_approval_request(request_id, derive_scope=False)
     if request is None:
         raise ApprovalRequestNotFoundError(f"Unknown approval request: {request_id}")
     if request["status"] != "pending":
@@ -710,12 +709,14 @@ def apply_approval_resolution(
             duration=local_tool_grant_duration,
             now=resolved_at,
         )
+    contract, exact_token = request_scope_observation(request)
     selection = resolve_request_scope_selection(
         request,
         action=action,
         requested_scope=scope,
         contract_version=scope_contract_version,
         contract_digest=scope_contract_digest,
+        contract=contract,
     )
     requested_scope = selection.requested_scope
     scope = selection.applied_scope
@@ -723,10 +724,10 @@ def apply_approval_resolution(
         persist_policy = None
     elif scope == "artifact" and persist_policy is True:
         if scope_contract_version is not None:
-            if not exact_action_allow_persistence_eligible(request):
+            if not contract.exact_action_persistence_eligible:
                 raise IneligibleApprovalScopeError(
                     "saved_allow_scope_ineligible" if action == "allow" else "saved_block_scope_ineligible",
-                    request_scope_contract(request),
+                    contract,
                     action="allow" if action == "allow" else "block",
                     requested_scope=scope,
                 )
@@ -768,9 +769,7 @@ def apply_approval_resolution(
             resolve_scope_matches=resolve_scope_matches,
             requires_local_once=action == "allow" and requires_local_once_approval(request),
             resolved_workspace=resolved_workspace,
-            native_exact_token=(
-                tool_call_exact_context_token(request) if persist_policy is True and scope == "artifact" else None
-            ),
+            native_exact_token=exact_token if persist_policy is True and scope == "artifact" else None,
             resolved_at=resolved_at,
         )
     except ApprovalResolutionPlanUnavailableError as error:
@@ -927,7 +926,7 @@ def apply_approval_resolution(
             local_once_fallback=local_once_fallback,
         )
         issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-        result.update(request_scope_contract_payload(request))
+        result.update(scope_payload_for_request(request, contract))
         result["requested_scope"] = requested_scope
         result["applied_scope"] = scope
         if selection.warning is not None:
@@ -956,7 +955,7 @@ def apply_approval_resolution(
             resolved_at=resolved_at,
             approval_gate_grant=resolved_gate_grant,
         )
-    updated = store.get_approval_request(request_id)
+    updated = store.get_approval_request(request_id, derive_scope=False)
     if updated is None:
         raise ValueError(f"Approval request disappeared: {request_id}")
     _record_resolution_event(
@@ -969,7 +968,8 @@ def apply_approval_resolution(
         local_once_fallback=local_once_fallback,
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
-    updated.update(request_scope_contract_payload(request))
+    updated.update(scope_payload_for_request(request, contract))
+    apply_scope_surfaces(updated)
     updated["requested_scope"] = requested_scope
     updated["applied_scope"] = scope
     if selection.warning is not None:
@@ -1128,7 +1128,7 @@ def _enqueue_memory_decision_for_resolution(
     error must never break the local approval that already succeeded.
     """
     try:
-        request = store.get_approval_request(request_id)
+        request = store.get_approval_request(request_id, derive_scope=False)
     except Exception:
         request = None
     if not request:

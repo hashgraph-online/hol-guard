@@ -190,19 +190,24 @@ def compose_package_evaluation_patch(
     return patch
 
 
-def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
-    """Apply the native verdict patch to ``evaluation`` without recomputing it."""
+def apply_package_evaluation_patch(evaluation: Any, patch: Mapping[str, Any]) -> Any:
+    """Apply a structurally valid native verdict patch without recomputing it."""
 
-    patch = compose_package_evaluation_patch(kind, evaluation, **facts)
+    if not set(patch) <= _PATCH_KEYS:
+        raise _invalid()
     changes: dict[str, Any] = {}
     for key in ("decision", "policy_action", "risk_summary"):
         if key in patch:
             if not isinstance(patch[key], str):
-                raise NativePackageEvaluationComposeError("Native package composition patch invalid")
+                raise _invalid()
             changes[key] = patch[key]
+    if "policy_action" in changes and changes["policy_action"] not in _GUARD_ACTIONS:
+        raise _invalid()
+    if "decision" in changes and changes["decision"] not in _PACKAGE_DECISIONS:
+        raise _invalid()
     if "record_monitor_evidence" in patch:
         if not isinstance(patch["record_monitor_evidence"], bool):
-            raise NativePackageEvaluationComposeError("Native package composition patch invalid")
+            raise _invalid()
         changes["record_monitor_evidence"] = patch["record_monitor_evidence"]
     for key in ("reasons", "packages"):
         if key in patch:
@@ -210,7 +215,18 @@ def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> A
     if "user_copy" in patch:
         copy = patch["user_copy"]
         if not isinstance(copy, Mapping) or set(copy) != _USER_COPY_KEYS:
-            raise NativePackageEvaluationComposeError("Native package composition patch invalid")
+            raise _invalid()
+        for key, value in copy.items():
+            if not (isinstance(value, str) or (value is None and key in {"next_step", "dashboard_url"})):
+                raise _invalid()
+        if not isinstance(copy["title"], str) or not isinstance(copy["summary"], str):
+            raise _invalid()
         user_copy_type = type(evaluation.user_copy)
         changes["user_copy"] = user_copy_type(**{key: copy[key] for key in _USER_COPY_KEYS})
     return replace(evaluation, **changes)
+
+
+def compose_package_evaluation(kind: str, evaluation: Any, **facts: object) -> Any:
+    """Apply the native verdict patch to ``evaluation`` without recomputing it."""
+
+    return apply_package_evaluation_patch(evaluation, compose_package_evaluation_patch(kind, evaluation, **facts))

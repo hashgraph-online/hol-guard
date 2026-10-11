@@ -2962,7 +2962,29 @@ pub(crate) fn evaluate_package_advisory_ids(
     ) {
         return rejected;
     }
-    let artifact = artifact_from_value(&request.artifact);
+    let matched_ids = matched_advisory_ids(&request.artifact, &request.store_path)?;
+    let mut payload = Map::new();
+    payload.insert(
+        "matched_advisory_ids".into(),
+        Value::Array(matched_ids.into_iter().map(Value::String).collect()),
+    );
+    serde_json::to_vec(&SupplyChainEvalResultV1 {
+        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.into(),
+        request_id: request.request_id.clone(),
+        request_sha256,
+        status: "ok".into(),
+        code: "ok".into(),
+        payload: Some(Value::Object(payload)),
+    })
+    .map_err(|_| "native_package_advisory_result_invalid".to_owned())
+}
+
+/// Sorted ids of every cached advisory matching the artifact's package targets.
+pub(crate) fn matched_advisory_ids(
+    artifact: &Value,
+    store_path: &str,
+) -> Result<std::collections::BTreeSet<String>, String> {
+    let artifact = artifact_from_value(artifact);
     let identities: Vec<Value> =
         guard_command::target_identities::package_target_identities(&artifact)
             .iter()
@@ -2970,7 +2992,7 @@ pub(crate) fn evaluate_package_advisory_ids(
             .collect();
     let model = guard_command::target_identities::NativeAdvisoryModel;
     let connection = rusqlite::Connection::open_with_flags(
-        &request.store_path,
+        store_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
     )
     .map_err(|_| "native_package_advisory_store_unavailable".to_owned())?;
@@ -3010,20 +3032,7 @@ pub(crate) fn evaluate_package_advisory_ids(
             }
         }
     }
-    let mut payload = Map::new();
-    payload.insert(
-        "matched_advisory_ids".into(),
-        Value::Array(matched_ids.into_iter().map(Value::String).collect()),
-    );
-    serde_json::to_vec(&SupplyChainEvalResultV1 {
-        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.into(),
-        request_id: request.request_id.clone(),
-        request_sha256,
-        status: "ok".into(),
-        code: "ok".into(),
-        payload: Some(Value::Object(payload)),
-    })
-    .map_err(|_| "native_package_advisory_result_invalid".to_owned())
+    Ok(matched_ids)
 }
 
 #[cfg(test)]

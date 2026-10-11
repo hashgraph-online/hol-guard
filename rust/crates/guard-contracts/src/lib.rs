@@ -51,6 +51,8 @@ mod context_digest;
 pub use context_digest::*;
 mod local_cli_identity;
 pub use local_cli_identity::*;
+mod approval_scope;
+pub use approval_scope::*;
 mod approval_proof;
 mod cursor_observer_proof;
 pub use approval_proof::*;

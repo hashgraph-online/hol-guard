@@ -20,6 +20,7 @@ use serde_json::{json, Value};
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::guard_store_args::Args;
+use crate::guard_store_clients as clients;
 use crate::guard_store_cmd_activity as activity;
 use crate::guard_store_cmd_api as api;
 use crate::guard_store_cmd_feedback as feedback;
@@ -36,6 +37,7 @@ use crate::guard_store_outbox_queries as queries;
 use crate::guard_store_outbox_reads as reads;
 use crate::guard_store_outbox_recover::recover_sequences;
 use crate::guard_store_outbox_requeue::{repair_rejected_correlation, requeue_method};
+use crate::guard_store_sessions as sessions;
 
 const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
 const CACHE_SIZE_KIB: i64 = 256 * 1024;
@@ -222,7 +224,16 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "command_activity_by_request_correlation"
         | "is_exact_command_activity_pre_replay"
         | "command_activity_rollups_are_reconciled"
-        | "count_command_shadow_observations" => Kind::Read,
+        | "count_command_shadow_observations"
+        | "get_guard_session"
+        | "list_guard_sessions"
+        | "get_guard_operation"
+        | "list_guard_operations"
+        | "get_guard_operation_for_approval_request"
+        | "list_guard_operation_items"
+        | "get_guard_client_attachment"
+        | "list_guard_client_attachments"
+        | "has_guard_surface_open" => Kind::Read,
         "list_command_activity_page"
         | "command_activity_analytics"
         | "list_command_activity_invalidations"
@@ -246,7 +257,13 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "maintain_command_activity"
         | "rebuild_command_activity_rollups"
         | "record_command_activity_feedback"
-        | "clear_command_activity_evidence" => Kind::Write,
+        | "clear_command_activity_evidence"
+        | "upsert_guard_session"
+        | "upsert_guard_operation"
+        | "add_guard_operation_item"
+        | "attach_guard_client"
+        | "renew_guard_client_attachment"
+        | "record_guard_surface_open" => Kind::Write,
         _ => return None,
     })
 }
@@ -340,6 +357,23 @@ fn dispatch(
         "command_activity_diagnostics" => privacy::diagnostics(connection, args),
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
+        "upsert_guard_session" => sessions::upsert_session(connection, args),
+        "get_guard_session" => sessions::get_session(connection, args),
+        "list_guard_sessions" => sessions::list_sessions(connection, args),
+        "upsert_guard_operation" => sessions::upsert_operation(connection, args),
+        "get_guard_operation" => sessions::get_operation(connection, args),
+        "list_guard_operations" => sessions::list_operations(connection, args),
+        "get_guard_operation_for_approval_request" => {
+            sessions::operation_for_approval_request(connection, args)
+        }
+        "add_guard_operation_item" => sessions::add_operation_item(connection, args),
+        "list_guard_operation_items" => sessions::list_operation_items(connection, args),
+        "attach_guard_client" => clients::attach_client(connection, args),
+        "renew_guard_client_attachment" => clients::renew_attachment(connection, args),
+        "get_guard_client_attachment" => clients::get_attachment(connection, args),
+        "list_guard_client_attachments" => clients::list_attachments(connection, args),
+        "record_guard_surface_open" => clients::record_surface_open(connection, args),
+        "has_guard_surface_open" => clients::has_surface_open(connection, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }
 }
