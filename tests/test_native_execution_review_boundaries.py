@@ -11,6 +11,7 @@ import pytest
 from codex_plugin_scanner.guard import config, local_supply_chain, native_execution, native_prompt
 from codex_plugin_scanner.guard.contained_workspace_write_execution import ContainedWriteOperation
 from codex_plugin_scanner.guard.models import GuardAction
+from codex_plugin_scanner.guard.runtime import guard_run_evaluation as guard_run_evaluation
 from codex_plugin_scanner.guard.runtime import local_mcp_stdio, runner
 from codex_plugin_scanner.guard.runtime.effect_decision import FinalDisposition
 from codex_plugin_scanner.guard.types import PromptRequest, PromptRequestClass
@@ -140,7 +141,7 @@ def test_prompt_transport_errors_are_explicit(monkeypatch, error):
 
     monkeypatch.setattr(native_execution, "prompt_analyze_native", fail)
     with pytest.raises(native_prompt.NativePromptAnalysisError, match="native_prompt_analysis_unavailable"):
-        runner._prompt_analyze_native("extract", prompt_text="test")
+        guard_run_evaluation._prompt_analyze_native("extract", prompt_text="test")
 
 
 def test_prompt_programming_errors_are_not_hidden(monkeypatch):
@@ -149,7 +150,7 @@ def test_prompt_programming_errors_are_not_hidden(monkeypatch):
 
     monkeypatch.setattr(native_execution, "prompt_analyze_native", fail)
     with pytest.raises(RuntimeError, match="programming regression"):
-        runner._prompt_analyze_native("extract", prompt_text="test")
+        guard_run_evaluation._prompt_analyze_native("extract", prompt_text="test")
 
 
 @pytest.mark.parametrize("native", [[{"request_id": "r", "request_class": "read"}, None], [None]])
@@ -157,15 +158,17 @@ def test_prompt_extraction_rejects_every_malformed_native_result(monkeypatch, na
     monkeypatch.setattr(native_prompt, "analyze", lambda *_args, **_kwargs: native)
     assert not hasattr(runner, "_extract_prompt_requests_python")
     with pytest.raises(native_prompt.NativePromptAnalysisError, match="invalid_result"):
-        runner.extract_prompt_requests("test")
+        native_prompt.extract_prompt_requests("test")
 
 
 def test_artifact_translation_rejects_partial_native_results(monkeypatch, tmp_path):
-    monkeypatch.setattr(runner, "_prompt_policy_path", lambda *_: tmp_path / "policy")
-    monkeypatch.setattr(runner, "_prompt_analyze_native", lambda *_args, **_kwargs: [{"artifact_id": "a"}, None])
+    monkeypatch.setattr(guard_run_evaluation, "_prompt_policy_path", lambda *_: tmp_path / "policy")
+    monkeypatch.setattr(
+        guard_run_evaluation, "_prompt_analyze_native", lambda *_args, **_kwargs: [{"artifact_id": "a"}, None]
+    )
     assert not hasattr(runner, "_prompt_requests_to_artifacts_python")
     with pytest.raises(native_prompt.NativePromptAnalysisError, match="invalid_result"):
-        runner.prompt_requests_to_artifacts(
+        guard_run_evaluation.prompt_requests_to_artifacts(
             detection=SimpleNamespace(harness="claude-code"), context=SimpleNamespace(guard_home=tmp_path), requests=[]
         )
 
@@ -187,7 +190,7 @@ def test_approval_filter_cannot_turn_non_string_into_permission(monkeypatch):
         severity=1,
         confidence=1.0,
     )
-    assert runner.should_force_reapproval([request], {"approved_prompt_classes": [42, "read"]})
+    assert native_prompt.should_force_reapproval([request], {"approved_prompt_classes": [42, "read"]})
     assert captured["approved_classes"] == ["read"]
 
 
