@@ -161,7 +161,23 @@ pub(crate) fn exact_drive_spelling(text: &str, canonical: &std::path::Path) -> b
     bytes.len() >= 3
         && bytes[1] == b':'
         && matches!(bytes[2], b'/' | b'\\')
-        && canonical.as_os_str() == format!(r"\\?\{}", text.replace('/', "\\")).as_str()
+        && canonical.as_os_str() == format!(r"\\?\{}", drive_separators(text)).as_str()
+}
+
+/// A drive path with each run of separators written as one backslash.
+/// Windows resolves `C:\\a\\b` and `C:/a//b` to `C:\a\b`, so this changes
+/// only the spelling of a separator, never which directory is named.
+#[cfg(any(windows, test))]
+fn drive_separators(text: &str) -> String {
+    let mut spelled = String::with_capacity(text.len());
+    for character in text.chars() {
+        if !matches!(character, '/' | '\\') {
+            spelled.push(character);
+        } else if !spelled.ends_with('\\') {
+            spelled.push('\\');
+        }
+    }
+    spelled
 }
 
 /// `exact_drive_spelling` for a drive-absolute target that must exist.
@@ -172,7 +188,26 @@ pub(crate) fn exact_existing_drive_target(target: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::shell_alters_backslash;
+    use super::{drive_separators, shell_alters_backslash};
+
+    #[test]
+    fn repeated_drive_separators_spell_one_backslash() {
+        assert_eq!(
+            drive_separators(r"C:\\Users\\a\\project"),
+            r"C:\Users\a\project"
+        );
+        assert_eq!(
+            drive_separators("C:/Users//a/project"),
+            r"C:\Users\a\project"
+        );
+        assert_eq!(drive_separators(r"C:\Users\a"), r"C:\Users\a");
+        // Case, dot components and short names are untouched, so they still
+        // fail the exact comparison against the canonical path.
+        assert_eq!(
+            drive_separators(r"c:\\users\\..\\PROGRA~1"),
+            r"c:\users\..\PROGRA~1"
+        );
+    }
 
     #[test]
     fn only_backslashes_the_shell_keeps_are_accepted() {
