@@ -16,6 +16,7 @@ from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
 from .render_doctor_readiness import build_doctor_harness_table, readiness_text
+from .render_skill_scan import skill_scan_rows, skill_scan_title
 from .render_uninstall import render_self_uninstall
 from .update_repair_notes import render_protection_repair_failures
 
@@ -1621,18 +1622,9 @@ def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, obje
     table.add_column("Risks", justify="right", no_wrap=True)
     table.add_column("Severities", no_wrap=True)
     table.add_column("Signals", overflow="fold")
-    for entry in skill_scan:
-        severity_text = ", ".join(_coerce_string_list(entry.get("severities")))
-        signal_text = " ".join(_coerce_string_list(entry.get("signal_ids")))
-        risk_count = str(entry.get("risk_count", 0))
-        table.add_row(str(entry.get("skill_path", "?")), risk_count, severity_text, signal_text)
-    console.print(
-        Panel(
-            table,
-            title=f"[bold red]Skill security scan — {len(skill_scan)} file(s) with risks[/bold red]",
-            border_style="red",
-        )
-    )
+    for row in skill_scan_rows(skill_scan):
+        table.add_row(*row)
+    console.print(Panel(table, title=f"[bold red]{skill_scan_title(skill_scan)}[/bold red]", border_style="red"))
 
 
 def _managed_install_workspace_label(workspace: object) -> str:

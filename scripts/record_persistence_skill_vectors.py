@@ -6,7 +6,9 @@ Usage: GUARD_PY_SNAPSHOT=<path to src dir of the reference snapshot> \
     python scripts/record_persistence_skill_vectors.py [snapshot_src]
 
 Imports the reference Python implementation and writes JSON fixtures consumed
-by the Rust tests in rust/crates/guard-command. Deterministic output.
+by the Rust tests in rust/crates/guard-command. Deterministic output. The
+Python skill content detector is retired, so the skill vectors need a snapshot
+from before that retirement (55e051a711 or earlier).
 """
 
 from __future__ import annotations

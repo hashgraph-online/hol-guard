@@ -142,10 +142,9 @@ def _run_claim(kind: str, store: Any, decision: dict[str, object], authority: An
 
         return claim_package_policy(authority, decision)
     if kind == "legacy_local":
-        approval_id = decision.get("approval_id")
-        if not isinstance(approval_id, str):
+        if not isinstance(decision.get("approval_id"), str):
             raise NativePackagePolicyResolveError("Native package policy claim invalid")
-        return store.claim_local_once_approval(approval_id, claimed_at=now, expected_decision=decision)
+        return store.claim_approval_reuse_decision(decision, now=now, consume_local_once=True)
     if kind == "store":
         return store.claim_approval_reuse_decision(decision, now=now)
     raise NativePackagePolicyResolveError("Native package policy claim invalid")

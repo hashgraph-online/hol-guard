@@ -6,7 +6,7 @@ use guard_contracts::{
     ApprovalQueueIdentityRequestV1, ApprovalResolutionPlanRequestV1,
     ApprovalReuseDiagnosticRequestV1, ApprovalReuseRequestV1, ApprovalScopeRequestV1,
     ApprovalValidateRequestV3, ApprovalValidateRequestV4, CiscoPreflightRequestV1,
-    ClaimApprovalReuseDecisionsRequestV1, CodexThreadContinueRequestV1, CodexToolOutputRequestV1,
+    ClaimApprovalReuseDecisionsRequestV1, CodexRequestResumeRequestV1, CodexToolOutputRequestV1,
     CommandEffectBatchRequestV1, CommandEffectRequestV1, CompoundGitInspectionRequestV1,
     ConsumerArtifactComposeRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
     ContainedPackageScriptExecuteRequestV1, ContainedTypescriptExecuteRequestV1,
@@ -23,11 +23,11 @@ use guard_contracts::{
     PackageApprovalHashRequestV1, PackageAuditProjectionRequestV1, PackageAuthorityDecideRequestV1,
     PackageEvaluationComposeRequestV1, PackageIntentParseRequestV1, PackagePolicyResolveRequestV1,
     PackagePostureRequestV1, PolicyBundleAuthorityRequestV1, PolicyDecisionLookupRequestV1,
-    PromptAnalyzeRequestV1, RequestContextRequestV1, RunnerAuthorityRequestV1,
-    RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1, ShimAdminRequestV1,
-    SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1, WorkspaceInventoryRequestV1,
-    MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES, NATIVE_PROTOCOL_VERSION,
-    NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
+    PromptAnalyzeRequestV1, ProtectRequestRequestV1, RequestContextRequestV1,
+    RunnerAuthorityRequestV1, RuntimeCapabilitiesV1, RuntimeDetectorRunRequestV1,
+    ShimAdminRequestV1, SkillDirectoryIdentityRequestV1, SupplyChainEvalRequestV1,
+    WorkspaceInventoryRequestV1, MAX_NATIVE_RESPONSE_BYTES, NATIVE_APPROVAL_ERROR_CODES,
+    NATIVE_PROTOCOL_VERSION, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -87,6 +87,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "native-resident-client-v1".into(),
         "shell-helpers-v1".into(),
         "native-resident-lifecycle-v1".into(),
+        "secrets-cli-v1".into(),
     ];
     features.extend(
         crate::resident_op_features::RESIDENT_OP_FEATURES
@@ -142,10 +143,11 @@ pub(crate) enum ResidentOperationV1 {
     CommandEffectDecideBatch(CommandEffectBatchRequestV1),
     ApprovalReuseDecide(ApprovalReuseRequestV1),
     GithubCliClassify(GithubCliClassifyRequestV1),
+    ProtectRequest(ProtectRequestRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),
     ApprovalBulkEligibility(ApprovalBulkEligibilityRequestV1),
-    CodexThreadContinue(CodexThreadContinueRequestV1),
+    CodexRequestResume(CodexRequestResumeRequestV1),
     ApprovalQueueIdentity(ApprovalQueueIdentityRequestV1),
     ApprovalResolutionPlan(ApprovalResolutionPlanRequestV1),
     ApprovalScope(ApprovalScopeRequestV1),
@@ -291,162 +293,5 @@ pub(crate) fn safe_error_response(code: &str, retryable: bool) -> Vec<u8> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{evaluate_resident_bytes, safe_error_response};
-    use guard_contracts::NATIVE_APPROVAL_MAX_BYTES;
-    use serde_json::Value;
-    use std::fs;
-    use std::path::PathBuf;
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn policy_store() -> (crate::policy_store::PolicySnapshotStore, PathBuf) {
-        let suffix = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "hol-guard-resident-enrollment-test-{}-{suffix}",
-            std::process::id()
-        ));
-        #[cfg(windows)]
-        let root = crate::resident_state::ensure_private_directory(&root, true).unwrap();
-        #[cfg(not(windows))]
-        fs::create_dir(&root).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&root, fs::Permissions::from_mode(0o700)).unwrap();
-        }
-        let key_path = root.join("policy-verifier.key");
-        #[cfg(windows)]
-        {
-            use std::io::Write;
-            let mut file = crate::resident_state::private_file(&key_path, false, &root).unwrap();
-            file.write_all(&[23u8; 32]).unwrap();
-        }
-        #[cfg(not(windows))]
-        fs::write(&key_path, [23u8; 32]).unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&key_path, fs::Permissions::from_mode(0o600)).unwrap();
-        }
-        let store = crate::policy_store::PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
-        (store, root)
-    }
-
-    #[test]
-    fn approval_error_transport_is_finite() {
-        let known: Value =
-            serde_json::from_slice(&safe_error_response("native_approval_replay", false))
-                .expect("known approval error is JSON");
-        assert_eq!(known["error"], "native_approval_replay");
-
-        let unknown: Value = serde_json::from_slice(&safe_error_response(
-            "native_approval_future_unregistered_code",
-            false,
-        ))
-        .expect("redacted approval error is JSON");
-        assert_eq!(unknown["error"], "native_request_invalid_json");
-
-        let lifecycle: Value = serde_json::from_slice(&safe_error_response(
-            "native_resident_start_in_progress",
-            true,
-        ))
-        .expect("known lifecycle error is JSON");
-        assert_eq!(lifecycle["error"], "native_resident_start_in_progress");
-
-        let unsupported: Value = serde_json::from_slice(&safe_error_response(
-            "native_request_schema_unsupported",
-            false,
-        ))
-        .expect("schema-unsupported error is JSON");
-        assert_eq!(unsupported["error"], "native_request_schema_unsupported");
-
-        for code in [
-            "native_resident_future_unregistered_code",
-            "native_policy_snapshot_future_unregistered_code",
-        ] {
-            let redacted: Value = serde_json::from_slice(&safe_error_response(code, false))
-                .expect("redacted error is JSON");
-            assert_eq!(redacted["error"], "native_request_invalid_json");
-        }
-        for code in [
-            "native_business_policy_floor_invalid",
-            "native_business_policy_removal_requires_authority",
-            "native_business_source_authority_missing",
-            "native_business_source_authority_invalid",
-            "native_business_source_authority_not_current",
-            "native_business_source_mutation_in_progress",
-            "native_business_source_enforce_required",
-        ] {
-            let response: Value =
-                serde_json::from_slice(&safe_error_response(code, false)).unwrap();
-            assert_eq!(response["error"], code);
-            assert_eq!(response["retryable"], false);
-        }
-        let unknown_business: Value = serde_json::from_slice(&safe_error_response(
-            "native_business_policy_future_unregistered_code",
-            false,
-        ))
-        .unwrap();
-        assert_eq!(unknown_business["error"], "native_request_invalid_json");
-    }
-
-    #[test]
-    fn approval_requests_have_a_smaller_raw_payload_bound() {
-        let padding = "x".repeat(NATIVE_APPROVAL_MAX_BYTES);
-        let request =
-            format!(r#"{{"operation":"approval_challenge","request":{{"padding":"{padding}"}}}}"#);
-        assert_eq!(
-            evaluate_resident_bytes(request.as_bytes(), None).unwrap_err(),
-            "native_approval_request_bounds_exceeded"
-        );
-    }
-
-    #[test]
-    fn resident_workspace_enrollment_requires_canonical_absolute_candidate() {
-        let (store, root) = policy_store();
-        let relative = br#"{"operation":"workspace_review_authority_enroll","request":{"record_path":"relative.json"}}"#;
-        assert_eq!(
-            evaluate_resident_bytes(relative, Some(&store)).unwrap_err(),
-            "native_workspace_review_authority_invalid"
-        );
-        let noncanonical = br#"{"request":{"record_path":"relative.json"},"operation":"workspace_review_authority_enroll"}"#;
-        assert_eq!(
-            evaluate_resident_bytes(noncanonical, Some(&store)).unwrap_err(),
-            "native_workspace_review_decision_noncanonical"
-        );
-        let absent = serde_json::json!({
-            "operation": "workspace_review_authority_enroll",
-            "request": {"record_path": root.join("absent.json").to_string_lossy()},
-        });
-        let canonical = guard_policy_snapshot::canonical_json_bytes(&absent).unwrap();
-        assert_eq!(
-            evaluate_resident_bytes(&canonical, Some(&store)).unwrap_err(),
-            "native_workspace_review_authority_missing"
-        );
-        drop(store);
-        fs::remove_dir_all(root).unwrap();
-    }
-}
-
-#[cfg(test)]
-mod capability_platform_tests {
-    #[test]
-    fn prompt_capability_is_portable_and_containment_matches_dispatch() {
-        let features = super::capabilities().features;
-        assert!(features
-            .iter()
-            .any(|feature| feature == guard_contracts::PROMPT_ANALYZE_FEATURE));
-        assert!(features
-            .iter()
-            .any(|feature| feature == guard_contracts::DATA_FLOW_ANALYZE_FEATURE));
-        assert_eq!(
-            features
-                .iter()
-                .any(|feature| feature == guard_contracts::CONTAINED_EXECUTION_FEATURE),
-            cfg!(unix)
-        );
-    }
-}
+#[path = "resident_protocol_tests.rs"]
+mod tests;

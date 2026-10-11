@@ -262,3 +262,128 @@ fn quoted_home_or_variable_roots_are_reviewed_and_rootless_fd_matches_dot() {
         );
     }
 }
+
+#[test]
+fn search_of_sibling_repository_by_absolute_home_or_parent_path_is_allowed() {
+    let layout = layout("rg-sibling");
+    let cwd = layout.org.join("app-portal");
+    let sibling = layout.org.join("service-api");
+    for command in [
+        format!("rg -n fixture {}", sibling.display()),
+        format!("rg -n fixture {}/src", sibling.display()),
+        "rg -n fixture ~/Code/org/service-api".to_owned(),
+        "rg -n fixture ../service-api".to_owned(),
+        "rg -n fixture ../service-api/src".to_owned(),
+        "rg --files ../service-api".to_owned(),
+    ] {
+        assert_decision(&cwd, &layout.home, &command, true);
+    }
+}
+
+#[test]
+fn search_of_sibling_outside_a_real_repository_or_with_hidden_flags_is_reviewed() {
+    let layout = layout("rg-sibling-negative");
+    let cwd = layout.org.join("app-portal");
+    let plain = layout.org.join("plain-notes");
+    std::fs::create_dir_all(&plain).unwrap();
+    std::fs::write(plain.join(".env"), "TOKEN=fixture\n").unwrap();
+    let mut commands = vec![
+        "rg -n fixture ..".to_owned(),
+        "rg -n fixture ../plain-notes".to_owned(),
+        format!("rg -n fixture {}", plain.display()),
+        "rg --hidden -n fixture ../service-api".to_owned(),
+        "rg -uu -n fixture ../service-api".to_owned(),
+        "rg --no-ignore -n fixture ~/Code/org/service-api".to_owned(),
+        "rg -n fixture ../service-api/.git".to_owned(),
+        "rg -n fixture ../../..".to_owned(),
+    ];
+    #[cfg(unix)]
+    {
+        // A `.git` link to another repository does not make a repository root.
+        let forged = layout.org.join("forged");
+        std::fs::create_dir_all(&forged).unwrap();
+        std::fs::write(forged.join(".env"), "TOKEN=fixture\n").unwrap();
+        std::os::unix::fs::symlink(layout.org.join("service-api/.git"), forged.join(".git"))
+            .unwrap();
+        commands.push("rg -n fixture ../forged".to_owned());
+    }
+    for command in commands {
+        assert_decision(&cwd, &layout.home, &command, false);
+    }
+}
+
+fn write(path: PathBuf, text: &str) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, text).unwrap();
+}
+
+#[test]
+fn sibling_search_prunes_plainly_gitignored_directories() {
+    let layout = layout("rg-sibling-ignored");
+    let sibling = layout.org.join("service-api");
+    write(
+        sibling.join(".gitignore"),
+        "# build output\n/target\nnode_modules/\ncerts/\n",
+    );
+    write(sibling.join("target/debug/server.pem"), "fixture\n");
+    write(sibling.join("node_modules/pkg/credentials.json"), "{}\n");
+    write(sibling.join("web/certs/client.p12"), "fixture\n");
+    let cwd = layout.org.join("app-portal");
+    assert_decision(&cwd, &layout.home, "rg -n fixture ../service-api", true);
+    assert_decision(&cwd, &layout.home, "rg -n fixture ../service-api/web", true);
+    // Named on the command line, an ignored directory is still searched.
+    assert_decision(
+        &cwd,
+        &layout.home,
+        "rg -n fixture ../service-api/target",
+        false,
+    );
+    assert_decision(
+        &cwd,
+        &layout.home,
+        "rg -n fixture ../service-api/web/certs",
+        false,
+    );
+}
+
+#[test]
+fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
+    let cases: [(&str, &[(&str, &str)]); 6] = [
+        (
+            "dot-ignore",
+            &[(".ignore", "!.env\n"), (".env", "TOKEN=fixture\n")],
+        ),
+        ("rgignore", &[("src/.rgignore", "!.env\n")]),
+        ("negated", &[(".gitignore", "target\n!.env\n")]),
+        ("nested-negated", &[("src/.gitignore", "!.env\n")]),
+        ("exclude", &[(".git/info/exclude", "!.env\n")]),
+        (
+            "credentials",
+            &[("config/credentials.txt", "TOKEN=fixture\n")],
+        ),
+    ];
+    for (name, files) in cases {
+        let layout = layout(&format!("rg-sibling-{name}"));
+        let sibling = layout.org.join("service-api");
+        for (path, text) in files {
+            write(sibling.join(path), text);
+        }
+        let cwd = layout.org.join("app-portal");
+        assert_decision(&cwd, &layout.home, "rg -n fixture ../service-api", false);
+    }
+    let layout = layout("rg-sibling-parent-ignore");
+    write(layout.org.join(".ignore"), "!.env\n");
+    let cwd = layout.org.join("app-portal");
+    assert_decision(&cwd, &layout.home, "rg -n fixture ../service-api", false);
+
+    let nested = self::layout("rg-sibling-subdirectory");
+    let sibling = nested.org.join("service-api");
+    write(sibling.join("web/.gitignore"), "!.env\n");
+    write(sibling.join("web/src/main.rs"), "fn main() {}\n");
+    write(sibling.join(".github/workflows/ci.yml"), "on: push\n");
+    let cwd = nested.org.join("app-portal");
+    for operand in ["../service-api/web/src", "../service-api/.github"] {
+        let command = format!("rg -n fixture {operand}");
+        assert_decision(&cwd, &nested.home, &command, false);
+    }
+}

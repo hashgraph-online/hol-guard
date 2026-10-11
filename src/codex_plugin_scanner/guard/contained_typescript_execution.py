@@ -7,25 +7,16 @@ parses the launch intent the resident needs as evidence.
 from __future__ import annotations
 
 import shlex
-from dataclasses import dataclass
 from pathlib import Path
 
 from . import native_execution as _native_execution
+from .contained_runner_result import ContainedRunnerResult
 from .runtime.contained_execution_common import (
     canonical_existing_directory as _canonical_directory,
 )
-from .runtime.effect_decision import EffectDecision, PositiveProof
 from .runtime.package_intent_parser import parse_package_intent
 
-
-@dataclass(frozen=True, slots=True)
-class ContainedTypeScriptResult:
-    exit_code: int
-    stdout: str
-    stderr: str
-    proof: PositiveProof
-    decision: EffectDecision
-    operation_id: str = "typecheck"
+ContainedTypeScriptResult = ContainedRunnerResult
 
 
 def try_execute_contained_typescript(

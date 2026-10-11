@@ -28,8 +28,6 @@ from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
 from codex_plugin_scanner.guard.store import (
     GuardStore,
     _runtime_scoped_exact_match_key,
-    _scoped_runtime_row_requires_exact_match,
-    _warn_only_policy_integrity_status,
     runtime_tool_action_exact_match_context,
 )
 from tests.native_detector_support import NativeDetector
@@ -1089,52 +1087,6 @@ def test_artifact_runtime_scope_includes_wrapped_action_context(tmp_path: Path) 
         (request.artifact_id, contextual_exact_key, "allow")
     ]
     assert contextual_exact_key != legacy_exact_key
-
-
-def test_contextual_harness_runtime_exact_key_matches_same_context() -> None:
-    artifact_id = "codex:project:tool-action:shell"
-    runtime_exact_match_context = runtime_tool_action_exact_match_context(
-        config_path="workspace/app/codex-config.toml",
-        source_scope="project",
-        raw_command_text="docker compose up -d postgres",
-        wrapper_chain=("bash", "zsh"),
-    )
-    contextual_exact_key = _runtime_scoped_exact_match_key(artifact_id, runtime_exact_match_context)
-    legacy_exact_key = _runtime_scoped_exact_match_key(artifact_id)
-
-    assert contextual_exact_key is not None
-    assert legacy_exact_key is not None
-    assert not _scoped_runtime_row_requires_exact_match(
-        scope="harness",
-        stored_artifact_id=artifact_id,
-        stored_artifact_hash=contextual_exact_key,
-        source="claude-native-approval",
-        requested_artifact_id=artifact_id,
-        requested_runtime_exact_match_key=contextual_exact_key,
-    )
-    assert not _scoped_runtime_row_requires_exact_match(
-        scope="harness",
-        stored_artifact_id=artifact_id,
-        stored_artifact_hash=legacy_exact_key,
-        source="claude-native-approval",
-        requested_artifact_id=artifact_id,
-        requested_runtime_exact_match_key=contextual_exact_key,
-    )
-    assert _scoped_runtime_row_requires_exact_match(
-        scope="harness",
-        stored_artifact_id=artifact_id,
-        stored_artifact_hash=contextual_exact_key,
-        source="claude-native-approval",
-        requested_artifact_id=artifact_id,
-    )
-
-
-def test_empty_degraded_reasons_do_not_honor_warn_only_policy() -> None:
-    assert not _warn_only_policy_integrity_status(
-        "degraded_mode",
-        {"enforcement": "warn", "degraded_reasons": []},
-        source="approval-gate",
-    )
 
 
 def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> None:

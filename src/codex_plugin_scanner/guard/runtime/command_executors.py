@@ -25,9 +25,7 @@ from ..config import load_guard_config
 from ..continuation_runtime import continue_request_after_application
 from ..harness_resume import resume_harness_operation, safe_resume_metadata
 from ..local_supply_chain import (
-    build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
-    resolve_supply_chain_audit_workspace_dir,
     sync_supply_chain_cloud_state,
 )
 from ..package_shim_status import record_package_shim_audit_result
@@ -38,6 +36,7 @@ from ..shims import (
     probe_package_shim_intercepts,
 )
 from ..store import GuardStore
+from ..supply_chain_workspace_audit import build_workspace_audit_payload, resolve_supply_chain_audit_workspace_dir
 from .audit_workspace import audit_workspace_is_bound_to_context, bind_relative_audit_workspace
 from .command_payload import mapping as _mapping
 from .command_payload import optional_text as _text

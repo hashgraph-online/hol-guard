@@ -14,7 +14,7 @@ pub const HOOK_RENDER_REQUEST_SCHEMA: &str = "guard-hook-render-request.v1";
 /// Schema discriminator for the result.
 pub const HOOK_RENDER_RESULT_SCHEMA: &str = "guard-hook-render-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const HOOK_RENDER_FEATURE: &str = "hook-render-v1";
+pub const HOOK_RENDER_FEATURE: &str = "hook-render-v2";
 /// Largest canonical request serialization the op will accept.
 pub const HOOK_RENDER_MAX_BYTES: usize = 256 * 1024;
 
@@ -24,7 +24,7 @@ pub struct HookRenderRequestV1 {
     pub schema: String,
     #[serde(default)]
     pub request_id: String,
-    /// `pre_tool`, `pre_tool_review` or `recording_only_pre_tool`.
+    /// `pre_tool`, `pre_tool_review`, `recording_only_pre_tool`, `cli_response` or `cli_document`.
     pub kind: String,
     pub harness: String,
     /// The verdict to render; absent for `recording_only_pre_tool`.
@@ -41,6 +41,10 @@ pub struct HookRenderRequestV1 {
     pub reason_code: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// Composed outcome for the `cli_*` kinds: canonical harness, event,
+    /// policy action, reason, system message, envelope and the path flags.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

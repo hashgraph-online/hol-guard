@@ -9,19 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import codex_app_server as codex_app_server_module
 from codex_plugin_scanner.guard import codex_resume as codex_resume_module
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-
-_SENT = {
-    "status": "sent",
-    "reason": "turn_start_sent",
-    "thread_id": "thread-1",
-    "strategy": "codex-app-server-turn",
-}
+from tests.codex_app_server_fake import codex_app_server
 
 
 def _request(request_id: str) -> GuardApprovalRequest:
@@ -157,44 +150,34 @@ def _seed_codex_operation(
 
 def test_codex_block_does_not_resume_codex_thread(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured_payloads: list[dict[str, object]] = []
-
-    def _fake_continue(wire, home, timeout_ms):
-        captured_payloads.append(wire)
-        return {"result": _SENT}
-
-    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-block"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-control.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-block",
-        socket_path=socket_path,
-        status="approval_wait_timeout",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-
-    try:
-        payload = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-block/block",
-            {"scope": "artifact", "reason": "blocked"},
-            timeout=15,
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-block",
+            socket_path=server.socket_path,
+            status="approval_wait_timeout",
         )
-    finally:
-        daemon.stop()
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            payload = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-block/block",
+                {"scope": "artifact", "reason": "blocked"},
+                timeout=15,
+            )
+        finally:
+            daemon.stop()
 
     assert payload["codexResume"]["status"] == "skipped"
     assert payload["codexResume"]["reason"] == "blocked_not_resumed"
     assert payload["codexResume"]["supported"] is False
-    assert captured_payloads == []
+    assert server.messages == []
 
 
 def test_codex_block_with_missing_socket_does_not_start_headless_resume(
@@ -458,45 +441,42 @@ def test_request_resume_retry_endpoint_requires_guard_token(tmp_path: Path) -> N
 
 def test_codex_allow_resume_prompt_includes_exact_command_when_metadata_is_present(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    captured_payloads: list[dict[str, object]] = []
-
-    def _fake_continue(wire, home, timeout_ms):
-        captured_payloads.append(wire)
-        return {"result": _SENT}
-
-    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-allow-command"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-allow-command.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-allow-command",
-        socket_path=socket_path,
-        command_text="python - <<'PY'\nprint('guard')\nPY",
-        status="approval_wait_timeout",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-
-    try:
-        payload = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-allow-command/approve",
-            {"scope": "artifact", "reason": "reviewed"},
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-allow-command",
+            socket_path=server.socket_path,
+            command_text="python - <<'PY'\nprint('guard')\nPY",
+            status="approval_wait_timeout",
         )
-    finally:
-        daemon.stop()
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            payload = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-allow-command/approve",
+                {"scope": "artifact", "reason": "reviewed"},
+            )
+        finally:
+            daemon.stop()
 
     assert payload["codexResume"]["status"] == "sent"
-    [wire] = captured_payloads
-    assert wire["approval_request_id"] == "req-allow-command"
-    assert wire["action"] == "allow"
-    assert wire["metadata"]["command_text"] == "python - <<'PY'\nprint('guard')\nPY"
+    [continuation] = server.continuations()
+    assert continuation["params"]["responsesapiClientMetadata"] == {
+        "hol_guard_request_id": "req-allow-command",
+        "hol_guard_resolution": "allow",
+    }
+    [prompt] = continuation["params"]["input"]
+    assert prompt["text"] == (
+        "HOL Guard approved request `req-allow-command` for this exact command:\n"
+        "python - <<'PY'\nprint('guard')\nPY\n"
+        "Retry that exact command now using the existing saved approval."
+    )
 
 
 def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_missing(
@@ -549,48 +529,38 @@ def test_request_resume_retry_endpoint_keeps_same_thread_failure_after_socket_mi
 
 def test_request_resume_retry_is_idempotent_after_success(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    send_calls = 0
-
-    def _fake_continue(wire, home, timeout_ms):
-        nonlocal send_calls
-        send_calls += 1
-        return {"result": _SENT}
-
-    monkeypatch.setattr(codex_app_server_module, "_continue_in_resident", _fake_continue)
-
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-idempotent"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex-idempotent.sock"
-    socket_path.write_text("", encoding="utf-8")
-    _seed_codex_operation(
-        store,
-        request_id="req-idempotent",
-        socket_path=socket_path,
-        status="approval_wait_timeout",
-    )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
-
-    try:
-        _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-idempotent/approve",
-            {"scope": "artifact", "reason": "reviewed"},
+    with codex_app_server() as server:
+        _seed_codex_operation(
+            store,
+            request_id="req-idempotent",
+            socket_path=server.socket_path,
+            status="approval_wait_timeout",
         )
-        retried = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-idempotent/resume",
-            {},
-        )
-    finally:
-        daemon.stop()
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
 
+        try:
+            approved = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-idempotent/approve",
+                {"scope": "artifact", "reason": "reviewed"},
+            )
+            retried = _post_json(
+                daemon.port,
+                daemon._server.auth_token,
+                "/v1/requests/req-idempotent/resume",
+                {},
+            )
+        finally:
+            daemon.stop()
+
+    assert approved["codexResume"]["status"] == "sent"
     assert retried["status"] == "already_sent"
-    assert send_calls == 1
+    assert len(server.continuations()) == 1
 
 
 def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_resume(
@@ -631,24 +601,26 @@ def test_codex_approve_fails_without_app_server_socket_and_never_starts_exec_res
     assert "original Codex chat" in payload["codexResume"]["message"]
 
 
-def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
+def test_codex_approve_returns_the_resident_resume_record(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    send_calls = 0
+    calls: list[dict[str, object]] = []
 
-    def _fake_resume(**kwargs):
-        nonlocal send_calls
-        send_calls += 1
+    def _fake_resume_call(store: object, **kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
         return {
-            "status": "sent",
-            "reason": "turn_start_sent",
-            "thread_id": "session-default-socket-1",
-            "strategy": "codex-app-server-thread",
-            "supported": True,
+            "resume": {
+                "request_id": kwargs["request_id"],
+                "status": "sent",
+                "reason": "turn_start_sent",
+                "thread_id": "session-default-socket-1",
+                "strategy": "codex-app-server-thread",
+                "supported": True,
+            }
         }
 
-    monkeypatch.setattr(codex_resume_module, "resume_codex_thread_for_request", _fake_resume)
+    monkeypatch.setattr(codex_resume_module, "_resume_call", _fake_resume_call)
 
     store = GuardStore(tmp_path / "guard-home")
     store.add_approval_request(_request("req-default-socket"), "2026-05-19T10:00:00+00:00")
@@ -677,7 +649,7 @@ def test_codex_approve_uses_default_app_server_when_hook_omits_socket(
 
     assert payload["codexResume"]["status"] == "sent"
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert send_calls == 1
+    assert [call["call"] for call in calls] == ["retry"]
 
 
 def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
@@ -715,46 +687,60 @@ def test_codex_approve_returns_failed_resume_when_app_server_socket_missing(
     assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
 
 
-def test_codex_approve_returns_app_server_failure_after_transport_error_reason(
-    tmp_path: Path,
+def test_request_resume_retry_reports_a_missing_resident_as_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    def _fake_resume(**kwargs):
-        return {
-            "status": "failed",
-            "reason": "ConnectionRefusedError",
-            "thread_id": "session-transport-1",
-        }
+    from codex_plugin_scanner.guard.codex_resume import ResumeUnavailableError
+    from codex_plugin_scanner.guard.daemon.server_control_policy import _ControlPolicyRoutes
 
-    monkeypatch.setattr(codex_resume_module, "resume_codex_thread_for_request", _fake_resume)
+    written: dict[str, object] = {}
 
-    store = GuardStore(tmp_path / "guard-home")
-    store.add_approval_request(_request("req-transport"), "2026-05-19T10:00:00+00:00")
-    socket_path = tmp_path / "codex.sock"
-    socket_path.write_text("", encoding="utf-8")
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    _seed_codex_operation(
-        store,
-        request_id="req-transport",
-        socket_path=socket_path,
-        thread_id="session-transport-1",
-        workspace=str(workspace),
-        status="approval_wait_timeout",
+    def _write_json(payload: dict[str, object], *, status: int = 200) -> None:
+        written["payload"] = payload
+        written["status"] = status
+
+    routes = _ControlPolicyRoutes.__new__(_ControlPolicyRoutes)
+    routes._write_json = _write_json  # type: ignore[method-assign]
+    routes.server = type("_Server", (), {"store": object()})()
+
+    def _retry(*args: object, **kwargs: object) -> dict[str, object]:
+        raise ResumeUnavailableError()
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.server_control_policy.retry_request_resume",
+        _retry,
     )
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
-    daemon.start()
+    routes._handle_request_resume_retry("req-unavailable")
 
-    try:
-        payload = _post_json(
-            daemon.port,
-            daemon._server.auth_token,
-            "/v1/requests/req-transport/approve",
-            {"scope": "artifact", "reason": "reviewed"},
-        )
-    finally:
-        daemon.stop()
+    assert written == {"payload": {"error": "resume_unavailable"}, "status": 503}
 
-    assert payload["codexResume"]["status"] == "failed"
-    assert payload["codexResume"]["strategy"] == "codex-app-server-thread"
-    assert payload["codexResume"]["reason"] == "ConnectionRefusedError"
+
+def test_request_resume_read_reports_a_missing_resident_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from codex_plugin_scanner.guard.daemon.server_control_policy import _ControlPolicyRoutes
+
+    written: dict[str, object] = {}
+
+    def _write_json(payload: dict[str, object], *, status: int = 200) -> None:
+        written["payload"] = payload
+        written["status"] = status
+
+    store = type(
+        "_Store",
+        (),
+        {
+            "guard_home": tmp_path,
+            "path": tmp_path / "guard.db",
+            "get_approval_request": lambda self, request_id: {"request_id": request_id},
+        },
+    )()
+    routes = _ControlPolicyRoutes.__new__(_ControlPolicyRoutes)
+    routes._write_json = _write_json  # type: ignore[method-assign]
+    routes.server = type("_Server", (), {"store": store})()
+    monkeypatch.setattr("codex_plugin_scanner.guard.codex_resume.ensure_resident_prerequisite", lambda home: False)
+
+    routes._handle_request_resume_read("req-unavailable")
+
+    assert written == {"payload": {"error": "resume_unavailable"}, "status": 503}

@@ -68,6 +68,14 @@ pub struct ClaimApprovalReuseDecisionsRequestV1 {
     /// Required whenever a member needs integrity state or bundle identities.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence_binding: Option<ClaimEvidenceBindingV1>,
+    /// Consume every local-once member, including package-request approvals
+    /// that the default disposition retains for reuse.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub consume_local_once: bool,
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// The store-resident sources the shipped evidence was derived from.

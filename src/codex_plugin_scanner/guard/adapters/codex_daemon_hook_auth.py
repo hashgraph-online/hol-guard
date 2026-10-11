@@ -87,7 +87,14 @@ def _sign_discovery_payload(discovery_key: str, payload: dict[str, object]) -> s
 
 def _authenticated_state(state_path: str | Path) -> tuple[dict[str, object], str]:
     path = Path(state_path)
-    discovery_key = _private_file_text(path.parent / "daemon-discovery-key", label="daemon discovery key")
+    try:
+        discovery_key = _private_file_text(path.parent / "daemon-discovery-key", label="daemon discovery key")
+    except ValueError:
+        # A home whose daemon has never started has neither file yet; that is a
+        # daemon that is not up, not state that failed authentication.
+        if not os.path.lexists(path):
+            raise ValueError("daemon state is unavailable") from None
+        raise
     try:
         payload = json.loads(_private_file_text(path, label="daemon state"))
     except json.JSONDecodeError as error:

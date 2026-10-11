@@ -29,6 +29,7 @@ use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
+use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
     count_recoverable_unbound, load_binding, normalized_binding, reassign_quarantined,
     refresh_same_subject,
@@ -269,6 +270,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "list_command_activity_invalidations"
         | "command_activity_diagnostics"
         | "list_command_shadow_observations"
+        | "observed_mcp_tool_actions"
         | "workflow_capability_plan" => Kind::Snapshot,
         "workflow_capability_commit" => Kind::Write,
         "refresh_review_event_outbox_binding_for_identity"
@@ -406,6 +408,7 @@ fn dispatch(
         "command_activity_diagnostics" => privacy::diagnostics(connection, args),
         "count_command_shadow_observations" => privacy::count_shadow(connection),
         "list_command_shadow_observations" => privacy::list_shadow(connection, args),
+        "observed_mcp_tool_actions" => observed_mcp::observed_mcp_tool_actions(connection),
         "workflow_capability_plan" => wfcap::plan(connection, args),
         "workflow_capability_commit" => wfcap::commit(connection, args),
         "upsert_guard_session" => sessions::upsert_session(connection, args),

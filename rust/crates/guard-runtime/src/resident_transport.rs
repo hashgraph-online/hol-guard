@@ -270,21 +270,21 @@ fn write_overload(pending: &mut PendingRequest) {
 
 /// Continuation I/O can run for the caller's whole minute. Keep it off the
 /// evaluation workers. Two side threads are enough; a third fails closed.
-const CODEX_THREAD_CONTINUE_SIDE_LIMIT: usize = 2;
-static CODEX_THREAD_CONTINUE_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+const CODEX_RESUME_RETRY_SIDE_LIMIT: usize = 2;
+static CODEX_RESUME_RETRY_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
 
 struct ContinuationSlot;
 
 impl Drop for ContinuationSlot {
     fn drop(&mut self) {
-        CODEX_THREAD_CONTINUE_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+        CODEX_RESUME_RETRY_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
 fn reserve_continuation_slot() -> bool {
-    let mut in_flight = CODEX_THREAD_CONTINUE_IN_FLIGHT.load(Ordering::Acquire);
-    while in_flight < CODEX_THREAD_CONTINUE_SIDE_LIMIT {
-        match CODEX_THREAD_CONTINUE_IN_FLIGHT.compare_exchange_weak(
+    let mut in_flight = CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire);
+    while in_flight < CODEX_RESUME_RETRY_SIDE_LIMIT {
+        match CODEX_RESUME_RETRY_IN_FLIGHT.compare_exchange_weak(
             in_flight,
             in_flight + 1,
             Ordering::AcqRel,
@@ -297,15 +297,22 @@ fn reserve_continuation_slot() -> bool {
     false
 }
 
-fn is_codex_thread_continue(request: &[u8]) -> bool {
+/// Only a resume retry sends a continuation; the other resume calls are
+/// store reads and writes that stay on the evaluation workers.
+fn is_codex_resume_retry(request: &[u8]) -> bool {
     crate::strict_json_value(request).is_ok_and(|value| {
-        value.get("operation").and_then(serde_json::Value::as_str) == Some("codex_thread_continue")
+        value.get("operation").and_then(serde_json::Value::as_str) == Some("codex_request_resume")
+            && value
+                .get("request")
+                .and_then(|request| request.get("call"))
+                .and_then(serde_json::Value::as_str)
+                == Some("retry")
     })
 }
 
 /// The slot is already reserved. A thread that cannot be started drops the
 /// connection and releases the slot.
-fn spawn_codex_thread_continue(
+fn spawn_codex_resume_retry(
     pending: PendingRequest,
     request: Vec<u8>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
@@ -335,7 +342,7 @@ fn spawn_codex_thread_continue(
         })
         .is_err()
     {
-        CODEX_THREAD_CONTINUE_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+        CODEX_RESUME_RETRY_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
     }
 }
 
@@ -371,9 +378,9 @@ fn handle_pending_request(
         let digest = Sha256::digest(&request);
         if !constant_time_eq(&digest, &pending.request_digest) {
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
-        } else if is_codex_thread_continue(&request) {
+        } else if is_codex_resume_retry(&request) {
             if reserve_continuation_slot() {
-                spawn_codex_thread_continue(pending, request, policy_store.clone());
+                spawn_codex_resume_retry(pending, request, policy_store.clone());
             } else {
                 write_overload(&mut pending);
             }
@@ -420,7 +427,7 @@ pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
     drop(overflow);
     worker_pool::drain(workers, Duration::from_secs(2));
     let deadline = Instant::now() + Duration::from_secs(2);
-    while CODEX_THREAD_CONTINUE_IN_FLIGHT.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+    while CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(5));
     }
 }

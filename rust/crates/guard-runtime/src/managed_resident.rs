@@ -402,10 +402,13 @@ const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
 /// minutes) plus a minute of transport slack for the probe and snapshot, so their budget must not be clamped to the
 /// nine-second ceiling that would abort a legitimate test run mid-flight.
 const CONTAINED_RUNNER_TIMEOUT_CEILING_MS: u64 = 670_000;
-/// A Codex thread continuation waits up to a minute for the app server to
-/// accept the turn; the caller adds five seconds of transport grace.
-const CODEX_THREAD_CONTINUE_TIMEOUT_CEILING_MS: u64 =
-    guard_contracts::CODEX_THREAD_CONTINUE_MAX_TIMEOUT_MS + 5_000;
+/// A Codex resume retry waits up to a minute for the app server to accept
+/// the turn and up to its busy timeout for the store; the caller adds five
+/// seconds of transport grace.
+const CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS: u64 =
+    guard_contracts::CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS
+        + guard_contracts::CODEX_REQUEST_RESUME_MAX_BUSY_TIMEOUT_MS
+        + 5_000;
 
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
     let value = crate::strict_json_value(payload).ok();
@@ -419,7 +422,7 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
             | "contained_typescript_execute"
             | "contained_package_script_execute",
         ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
-        Some("codex_thread_continue") => CODEX_THREAD_CONTINUE_TIMEOUT_CEILING_MS,
+        Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
         _ => CLIENT_TIMEOUT_CEILING_MS,
     };
     let budget = value

@@ -1,7 +1,7 @@
-//! `CodexThreadContinue` - resident op that tells the Codex thread which
-//! queued an approval how it was resolved.
+//! Codex thread continuation: tells the Codex thread which queued an approval
+//! how it was resolved, for a `codex_request_resume` retry.
 //!
-//! The caller ships the stored Codex operation metadata. The resident picks
+//! The caller passes the stored Codex operation metadata. This picks
 //! the thread, turn, socket and command fields, refuses unsafe thread ids and
 //! sockets outside the caller's home or temporary directories, and sends the
 //! continuation prompt over the Codex app-server WebSocket. With a known turn
@@ -11,16 +11,10 @@ use std::path::{Component, Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use guard_command::command_option_parsing::python_is_alphanumeric;
-use guard_contracts::{
-    CodexThreadContinueRequestV1, CodexThreadContinueResultV1, CODEX_THREAD_CONTINUE_MAX_BYTES,
-    CODEX_THREAD_CONTINUE_MAX_TIMEOUT_MS, CODEX_THREAD_CONTINUE_REQUEST_SCHEMA,
-    CODEX_THREAD_CONTINUE_RESULT_SCHEMA,
-};
 use serde_json::{json, Map, Value};
 
 use crate::cloud_request_text::first_optional_string;
 use crate::codex_app_server_socket::{exchange, Failure};
-use crate::package_authority_op::request_digest_with_limit;
 
 const THREAD_ID_KEYS: [&str; 5] = [
     "codex_thread_id",
@@ -42,44 +36,25 @@ const STRATEGY_TURN: &str = "codex-app-server-turn";
 const STRATEGY_STEER: &str = "codex-app-server-steer";
 const SOCKET_UNAVAILABLE_MESSAGE: &str = "Codex App remote-control socket is unavailable. HOL Guard will not start `codex exec resume` because that creates a separate background run instead of continuing the visible Codex chat.";
 const REJECTED_MESSAGE: &str = "Codex app-server rejected the continuation.";
-const INVALID: &str = "native_codex_thread_continue_invalid";
-
-pub(crate) fn evaluate_codex_thread_continue_request(
-    request: &CodexThreadContinueRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest_with_limit(request, CODEX_THREAD_CONTINUE_MAX_BYTES)
-        .map_err(|_| "native_codex_thread_continue_too_large".to_owned())?;
-    let (status, code, payload) = match evaluate(request) {
-        Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
-        Err(code) => ("error".to_owned(), code, None),
-    };
-    crate::encode_response(&CodexThreadContinueResultV1 {
-        schema: CODEX_THREAD_CONTINUE_RESULT_SCHEMA.to_owned(),
-        request_id: request.request_id.clone(),
-        request_sha256,
-        status,
-        code,
-        payload,
-    })
-}
-
-fn evaluate(request: &CodexThreadContinueRequestV1) -> Result<Value, String> {
-    if request.schema != CODEX_THREAD_CONTINUE_REQUEST_SCHEMA
-        || request.timeout_ms == 0
-        || request.timeout_ms > CODEX_THREAD_CONTINUE_MAX_TIMEOUT_MS
-    {
-        return Err(INVALID.to_owned());
-    }
-    let result = match &request.metadata {
-        Value::Object(metadata) => continue_thread(request, metadata),
-        _ => Value::Null,
-    };
-    Ok(json!({ "result": result }))
+/// What one continuation needs besides the stored operation metadata.
+pub(crate) struct ContinueRequest<'a> {
+    /// The approval request whose resolution is being reported to Codex.
+    pub(crate) approval_request_id: &'a str,
+    /// `allow`, or any other resolution, which is reported as a block.
+    pub(crate) action: &'a str,
+    /// The caller's home directory: expands `~` and bounds trusted sockets.
+    pub(crate) home_dir: Option<&'a str>,
+    /// The caller's temporary directory, also a trusted socket location.
+    pub(crate) temp_dir: Option<&'a str>,
+    /// The caller's working directory, for a relative socket path.
+    pub(crate) cwd: Option<&'a str>,
+    /// How long to wait for Codex to accept the continuation.
+    pub(crate) timeout_ms: u64,
 }
 
 /// `resume_codex_thread_for_request` after the operation lookup.
 pub(crate) fn continue_thread(
-    request: &CodexThreadContinueRequestV1,
+    request: &ContinueRequest<'_>,
     metadata: &Map<String, Value>,
 ) -> Value {
     let deadline = Instant::now() + Duration::from_millis(request.timeout_ms);
@@ -118,7 +93,7 @@ pub(crate) fn continue_thread(
         });
     }
     let command_text = first_optional_string(metadata, &COMMAND_TEXT_KEYS);
-    let prompt = continuation_prompt(&request.action, &request.approval_request_id, command_text);
+    let prompt = continuation_prompt(request.action, request.approval_request_id, command_text);
     let resolution = if request.action == "allow" {
         "allow"
     } else {
@@ -274,16 +249,15 @@ struct SocketRoots {
 }
 
 impl SocketRoots {
-    fn new(request: &CodexThreadContinueRequestV1) -> Self {
-        let absolute = |text: &Option<String>| {
-            text.as_deref()
-                .filter(|text| Path::new(text).is_absolute())
+    fn new(request: &ContinueRequest<'_>) -> Self {
+        let absolute = |text: Option<&str>| {
+            text.filter(|text| Path::new(text).is_absolute())
                 .map(PathBuf::from)
         };
-        let home = absolute(&request.home_dir);
+        let home = absolute(request.home_dir);
         let mut roots: Vec<PathBuf> = vec![PathBuf::from("/tmp"), PathBuf::from("/var/tmp")];
         roots.extend(home.clone());
-        roots.extend(absolute(&request.temp_dir));
+        roots.extend(absolute(request.temp_dir));
         let roots = roots
             .iter()
             .filter_map(|root| root.to_str())
@@ -291,7 +265,7 @@ impl SocketRoots {
             .collect();
         Self {
             home,
-            cwd: absolute(&request.cwd),
+            cwd: absolute(request.cwd),
             roots,
         }
     }

@@ -331,7 +331,7 @@ def test_bounded_cli_failure_uses_fail_closed_pretool_responses() -> None:
 
 
 def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
-    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_bridge import _daemon_response_to_native
+    from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
 
     stdout, _stderr, code = _daemon_response_to_native(
         {"reason_code": "native_pre_tool_unavailable", "reason": "native miss"},

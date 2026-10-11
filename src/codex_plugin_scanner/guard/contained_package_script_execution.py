@@ -6,21 +6,12 @@ and enforcement, and decides the verdict.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 from . import native_execution as _native_execution
-from .runtime.effect_decision import EffectDecision, PositiveProof
+from .contained_runner_result import ContainedRunnerResult
 
-
-@dataclass(frozen=True, slots=True)
-class ContainedPackageScriptResult:
-    exit_code: int
-    stdout: str
-    stderr: str
-    proof: PositiveProof
-    decision: EffectDecision
-    operation_id: str
+ContainedPackageScriptResult = ContainedRunnerResult
 
 
 def try_execute_contained_package_script(

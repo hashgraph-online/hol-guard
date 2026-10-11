@@ -115,8 +115,9 @@ class StorePortableProjectMemoryMixin:
         now: str | None = None,
         runtime_exact_match_context: str | None = None,
         consume_one_shot: bool = True,
+        local_once_only: bool = False,
     ) -> PolicyDecisionLookupResult:
-        portable_workspace = self._portable_project_workspace(workspace)
+        portable_workspace = None if local_once_only else self._portable_project_workspace(workspace)
         if portable_workspace is None:
             return super().resolve_policy_decision_lookup(
                 harness,
@@ -127,6 +128,7 @@ class StorePortableProjectMemoryMixin:
                 now=now,
                 runtime_exact_match_context=runtime_exact_match_context,
                 consume_one_shot=consume_one_shot,
+                local_once_only=local_once_only,
             )
 
         # Portable Git metadata is classification, not authentication. Always

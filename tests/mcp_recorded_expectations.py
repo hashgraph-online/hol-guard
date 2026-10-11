@@ -41,13 +41,13 @@ def instapods_matches(artifact: Any) -> bool:
     ``delete_pod`` carries the review default, so a match strengthens an allow to
     review while a non-match decides nothing.
     """
-    from codex_plugin_scanner.guard.runtime import mcp_server_grants
     from codex_plugin_scanner.guard.runtime.extension_control_contract import ControlLayerKind, ControlState
 
+    from . import mcp_extension_driver as extension_driver
     from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 
     store = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-instapods", ControlState.ENABLED),))
-    decision = mcp_server_grants.apply_contributed_mcp_decision(store, artifact, "allow")
+    decision = extension_driver.apply_contributed_mcp_decision(store, artifact, "allow")
     if decision is None:
         return False
     assert decision[0:2] == ("review", "catalog-mcp-extension")

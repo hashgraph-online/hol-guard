@@ -19,10 +19,8 @@ from ..config import (
     load_guard_config,
 )
 from ..local_supply_chain import (
-    build_workspace_audit_payload,
     managed_install_audit_workspace_dirs,
     resolve_package_firewall_entitlement_with_refresh,
-    resolve_supply_chain_audit_workspace_dir,
 )
 from ..native_daemon_handler import (
     native_supply_chain_error,
@@ -53,6 +51,7 @@ from ..supply_chain_repair import (
     coordinate_supply_chain_repair,
     repair_sync_intelligence,
 )
+from ..supply_chain_workspace_audit import build_workspace_audit_payload, resolve_supply_chain_audit_workspace_dir
 from .server_common import (
     _is_string_object_dict,
 )

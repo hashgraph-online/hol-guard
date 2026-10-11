@@ -11,32 +11,11 @@ import struct
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol
-from uuid import uuid4
 
-from .native_context import ensure_resident_prerequisite
-from .native_execution import _resident_request
-from .native_store_policy import _payload
-
-
-class _OperationStore(Protocol):
-    def list_guard_operations(self, session_id: str | None = None, limit: int = 100) -> list[dict[str, object]]: ...
-
-    def get_guard_operation_for_approval_request(self, request_id: str) -> dict[str, object] | None: ...
-
-
-_DEFAULT_PROXY_TIMEOUT_SECONDS = 5.0
 _DEFAULT_SOCKET_PATH = Path.home() / ".codex" / "app-server-control" / "app-server-control.sock"
 _MAX_WEBSOCKET_HEADER_BYTES = 16_384
 _MAX_WEBSOCKET_FRAME_BYTES = 1_000_000
 _WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-_CONTINUE_FEATURE = "codex-thread-continue-v1"
-_CONTINUE_REQUEST_SCHEMA = "guard-codex-thread-continue-request.v1"
-_CONTINUE_RESULT_SCHEMA = "guard-codex-thread-continue-result.v1"
-_CONTINUE_MAX_REQUEST_BYTES = 1024 * 1024
-_CONTINUE_MAX_TIMEOUT_MS = 60_000
-_CONTINUE_TRANSPORT_GRACE_SECONDS = 5.0
-_CONTINUE_UNAVAILABLE = "native_codex_thread_continue_unavailable"
 _THREAD_ID_KEYS = (
     "codex_thread_id",
     "thread_id",
@@ -118,82 +97,6 @@ def codex_resume_metadata_from_hook_payload(
     if command_text is not None:
         metadata["command_text"] = command_text
     return metadata
-
-
-def resume_codex_thread_for_request(
-    *,
-    store: _OperationStore,
-    request_id: str,
-    action: str,
-    timeout_seconds: float = _DEFAULT_PROXY_TIMEOUT_SECONDS,
-) -> dict[str, object] | None:
-    """Send a guarded continuation prompt to the Codex thread that queued a request.
-
-    The resident owns the continuation: it picks the thread and socket from the
-    stored metadata, checks the socket and speaks the app-server protocol. An
-    unavailable resident sends nothing and reports the continuation as failed.
-    """
-
-    operation = _find_codex_operation_for_request(store, request_id)
-    if operation is None:
-        return None
-    metadata = operation.get("metadata")
-    if not isinstance(metadata, dict):
-        return None
-    home = getattr(store, "guard_home", None)
-    timeout_ms = max(1, min(_CONTINUE_MAX_TIMEOUT_MS, int(timeout_seconds * 1000)))
-    wire: dict[str, object] = {
-        "schema": _CONTINUE_REQUEST_SCHEMA,
-        "request_id": f"codex-thread-continue-{uuid4().hex}",
-        "approval_request_id": request_id,
-        "action": action,
-        "metadata": metadata,
-        "home_dir": str(Path.home()),
-        "temp_dir": tempfile.gettempdir(),
-        "cwd": os.getcwd(),
-        "timeout_ms": timeout_ms,
-    }
-    reply = _continue_in_resident(wire, Path(home), timeout_ms) if isinstance(home, (str, Path)) else None
-    if reply is None or "result" not in reply:
-        return {"status": "failed", "reason": _CONTINUE_UNAVAILABLE}
-    result = reply["result"]
-    if result is None:
-        return None
-    if not isinstance(result, dict):
-        return {"status": "failed", "reason": _CONTINUE_UNAVAILABLE}
-    return result
-
-
-def _continue_in_resident(wire: dict[str, object], home: Path, timeout_ms: int) -> dict[str, object] | None:
-    if not ensure_resident_prerequisite(home):
-        return None
-    try:
-        response = _resident_request(
-            operation="codex_thread_continue",
-            request=wire,
-            guard_home=home,
-            timeout_seconds=timeout_ms / 1000 + _CONTINUE_TRANSPORT_GRACE_SECONDS,
-            required_feature=_CONTINUE_FEATURE,
-            response_schema=_CONTINUE_RESULT_SCHEMA,
-            max_request_bytes=_CONTINUE_MAX_REQUEST_BYTES,
-            record_success=False,
-        )
-    except (TypeError, ValueError, OSError, RuntimeError):
-        return None
-    return _payload(response, wire, home)
-
-
-def _find_codex_operation_for_request(store: _OperationStore, request_id: str) -> dict[str, object] | None:
-    operation = store.get_guard_operation_for_approval_request(request_id)
-    if operation is not None and str(operation.get("harness")) == "codex":
-        return operation
-    for operation in store.list_guard_operations(limit=1000):
-        if str(operation.get("harness")) != "codex":
-            continue
-        request_ids = operation.get("approval_request_ids")
-        if isinstance(request_ids, list) and request_id in {str(item) for item in request_ids}:
-            return operation
-    return None
 
 
 def _send_websocket_handshake(client: socket.socket) -> bytes:

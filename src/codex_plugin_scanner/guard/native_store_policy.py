@@ -139,6 +139,7 @@ def native_claim_approval_reuse_decisions(
     decisions: Sequence[Mapping[str, object]],
     now: str,
     evidence: IntegrityEvidence,
+    consume_local_once: bool = False,
 ) -> bool:
     """Ask the resident to claim a batch of saved allows; ``False`` on no answer."""
 
@@ -151,6 +152,8 @@ def native_claim_approval_reuse_decisions(
         "now": now,
         **{key: value for key, value in evidence.items() if value is not None},
     }
+    if consume_local_once:
+        request["consume_local_once"] = True
     try:
         response = _resident_request(
             operation="claim_approval_reuse_decisions",

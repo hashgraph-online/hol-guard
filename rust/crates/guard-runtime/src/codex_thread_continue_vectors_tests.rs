@@ -15,11 +15,10 @@ use std::thread;
 use std::time::Duration;
 
 use base64ct::{Base64, Encoding};
-use guard_contracts::{CodexThreadContinueRequestV1, CODEX_THREAD_CONTINUE_REQUEST_SCHEMA};
 use serde_json::{json, Map, Value};
 use sha1::{Digest, Sha1};
 
-use super::continue_thread;
+use super::{continue_thread, ContinueRequest};
 
 const VECTORS: &str =
     include_str!("../testdata/codex_app_server/codex_thread_continue_vectors.json");
@@ -113,15 +112,13 @@ fn replay(vector: &Value, request_id: &str, timeout_ms: u64, base: &Path) -> (Va
         "regular_file" => fs::write(&socket_path, b"").expect("regular file"),
         _ => {}
     }
-    let request = CodexThreadContinueRequestV1 {
-        schema: CODEX_THREAD_CONTINUE_REQUEST_SCHEMA.to_owned(),
-        request_id: "vector".to_owned(),
-        approval_request_id: request_id.to_owned(),
-        action: vector["action"].as_str().unwrap_or("allow").to_owned(),
-        metadata: metadata.clone(),
-        home_dir: Some("/nonexistent-codex-vector-home".to_owned()),
-        temp_dir: std::env::temp_dir().to_str().map(str::to_owned),
-        cwd: Some(base_text),
+    let temp_dir = std::env::temp_dir();
+    let request = ContinueRequest {
+        approval_request_id: request_id,
+        action: vector["action"].as_str().unwrap_or("allow"),
+        home_dir: Some("/nonexistent-codex-vector-home"),
+        temp_dir: temp_dir.to_str(),
+        cwd: Some(&base_text),
         timeout_ms,
     };
     let result = match &metadata {

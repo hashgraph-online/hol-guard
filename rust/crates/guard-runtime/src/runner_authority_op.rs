@@ -29,7 +29,7 @@ use super::{
 
 pub(crate) const ERR_INVALID: &str = "native_runner_authority_invalid";
 const ERR_SCHEMA: &str = "native_runner_authority_schema_mismatch";
-const ERR_TOO_LARGE: &str = "native_runner_authority_request_too_large";
+pub(crate) const ERR_TOO_LARGE: &str = "native_runner_authority_request_too_large";
 const ERR_RESPONSE_TOO_LARGE: &str = "native_runner_authority_response_too_large";
 const ERR_KIND: &str = "native_runner_authority_unknown_kind";
 
@@ -59,6 +59,7 @@ pub(crate) fn dispatch(kind: &str, args: &Value) -> KindResult {
     match kind {
         "detector_authority" => detector::detector_authority(args),
         "detector_composition" => detector::detector_composition(args),
+        "skill_content_risk" => detector::skill_content_risk(args),
         "current_authority_actions" => detector::current_authority_actions(args),
         "request_overrides" => detector::request_overrides(args),
         "claim_partition" => detector::claim_partition(args),

@@ -16,7 +16,7 @@ from .codex_daemon_hook_auth import (
     _http_json_response,
     _verify_challenge_response,
 )
-from .codex_daemon_hook_transport import _with_remaining_hint
+from .codex_daemon_hook_transport import _daemon_generation_identity, _with_remaining_hint
 
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000
@@ -157,10 +157,6 @@ def _read_hook_response(
     if response.status != 200:
         raise _DaemonResponseError(response.status, text.strip(), authenticated=True)
     return text
-
-
-def _daemon_generation_identity(state: Mapping[str, object]) -> tuple[object, ...]:
-    return tuple(state.get(field) for field in ("state_id", "auth_token_id", "host", "port", "pid", "started_at"))
 
 
 def _event_name(data: str) -> str:

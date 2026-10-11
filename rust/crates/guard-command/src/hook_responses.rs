@@ -6,6 +6,7 @@
 
 use serde_json::{json, Map, Value};
 
+pub mod cli_documents;
 mod containment;
 mod prompt_risk;
 

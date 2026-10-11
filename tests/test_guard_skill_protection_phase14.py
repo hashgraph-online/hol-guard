@@ -12,6 +12,8 @@ from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
 from codex_plugin_scanner.guard.runtime.skill_protection import detect_skill_content_risk
 from tests.native_detector_support import NativeDetector
 
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
+
 _PACKAGE_INSTALL_SKILL = """\
 ---
 name: package-installer

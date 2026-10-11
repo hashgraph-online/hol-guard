@@ -33029,6 +33029,12 @@ const GENERIC_ERROR_BODY = "Reload this page, or go back home and try again.";
 const DASHBOARD_RELOAD_LABEL = "Reload dashboard";
 const DASHBOARD_GO_HOME_LABEL = "Go home";
 const DASHBOARD_TRY_AGAIN_LABEL = "Try again";
+const AUTO_RETRY_DELAY_MS = 1500;
+const AUTO_RETRY_WINDOW_MS = 3e4;
+function shouldAutoRetry(error, lastAutoRetryAt, now2) {
+  if (dashboardErrorCopy(error).kind !== "generic") return false;
+  return lastAutoRetryAt === null || now2 - lastAutoRetryAt >= AUTO_RETRY_WINDOW_MS;
+}
 function dashboardErrorCopy(error) {
   if (error && isChunkLoadError(error)) {
     return {
@@ -33043,16 +33049,43 @@ function dashboardErrorCopy(error) {
     body: GENERIC_ERROR_BODY
   };
 }
+function showsRetryPlaceholder(state, lastAutoRetryAt, now2) {
+  if (state.retrying) return true;
+  return !state.retryDecided && shouldAutoRetry(state.error, lastAutoRetryAt, now2);
+}
 class ErrorBoundary extends reactExports.Component {
+  lastAutoRetryAt = null;
+  retryTimer = null;
   constructor(props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retrying: false, retryDecided: false };
   }
   static getDerivedStateFromError(error) {
-    return { hasError: true, error };
+    return { hasError: true, error, retrying: false, retryDecided: false };
   }
   componentDidCatch(error, errorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo);
+    const now2 = Date.now();
+    if (!shouldAutoRetry(error, this.lastAutoRetryAt, now2)) {
+      this.setState({ retryDecided: true });
+      return;
+    }
+    this.lastAutoRetryAt = now2;
+    this.setState({ retrying: true, retryDecided: true });
+    this.clearRetryTimer();
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.setState({ hasError: false, error: null, retrying: false, retryDecided: false });
+    }, AUTO_RETRY_DELAY_MS);
+  }
+  componentWillUnmount() {
+    this.clearRetryTimer();
+  }
+  clearRetryTimer() {
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
   handleReload = () => {
     if (this.props.reload) {
@@ -33062,15 +33095,20 @@ class ErrorBoundary extends reactExports.Component {
     window.location.reload();
   };
   handleGoHome = () => {
-    this.setState({ hasError: false, error: null });
+    this.clearRetryTimer();
+    this.setState({ hasError: false, error: null, retrying: false, retryDecided: false });
     this.props.onReset?.();
   };
   handleTryAgain = () => {
-    this.setState({ hasError: false, error: null });
+    this.clearRetryTimer();
+    this.setState({ hasError: false, error: null, retrying: false, retryDecided: false });
   };
   render() {
     if (!this.state.hasError) {
       return this.props.children;
+    }
+    if (showsRetryPlaceholder(this.state, this.lastAutoRetryAt, Date.now())) {
+      return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "py-12", "aria-busy": "true" });
     }
     if (this.props.fallback) {
       return this.props.fallback;

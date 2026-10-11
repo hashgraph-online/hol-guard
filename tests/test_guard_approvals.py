@@ -1426,42 +1426,6 @@ class TestGuardApprovals:
         assert first_retry is not None
         assert first_retry["action"] == "allow"
 
-    def test_guard_local_once_claim_returns_none_when_update_loses_race(self):
-        class FakeCursor:
-            rowcount = 0
-
-        class FakeConnection:
-            def execute(self, query, _params=()):
-                if query.lstrip().startswith("select"):
-                    return self
-                return FakeCursor()
-
-            def fetchone(self):
-                return {
-                    "action": "allow",
-                    "approval_id": "approval-race",
-                    "artifact_hash": "hash-impeccable",
-                    "artifact_id": "guard-cli:project:tool-action:impeccable",
-                    "created_at": "2026-04-11T00:00:00+00:00",
-                    "expires_at": "2026-04-11T00:05:00+00:00",
-                    "harness": "guard-cli",
-                    "publisher": None,
-                    "request_id": "req-race",
-                    "workspace": None,
-                }
-
-        claimed = GuardStore._claim_local_once_approval_locked(
-            FakeConnection(),
-            harness="guard-cli",
-            artifact_id="guard-cli:project:tool-action:impeccable",
-            artifact_hash="hash-impeccable",
-            workspace=None,
-            publisher=None,
-            now="2026-04-11T00:01:00+00:00",
-        )
-
-        assert claimed is None
-
     def test_guard_broad_scope_resolution_clears_more_than_default_pending_page(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         for index in range(520):

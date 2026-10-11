@@ -231,6 +231,48 @@ fn hook_authority_state_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
     .unwrap()
 }
 
+fn codex_request_resume_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "operation": "codex_request_resume",
+        "request": {
+            "schema": guard_contracts::CODEX_REQUEST_RESUME_REQUEST_SCHEMA,
+            "approval_request_id": "approval-1",
+            "call": "status",
+            "now": "2026-10-11T15:00:00+00:00",
+            "store_path": store_path.to_string_lossy(),
+            "guard_home": guard_home.to_string_lossy(),
+            "busy_timeout_ms": 1000,
+            "timeout_ms": 1000,
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn resident_refuses_codex_request_resume_for_a_foreign_store() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let other =
+        std::env::temp_dir().join(format!("hol-guard-foreign-resume-{}", std::process::id()));
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &codex_request_resume_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&other, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_eq!(
+        evaluate(&root, &root.join("nested").join("guard.db")),
+        mismatch
+    );
+    assert_eq!(evaluate(&root, &root.join("other.db")), mismatch);
+    assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
+    let _ = fs::remove_dir_all(&root);
+}
+
 #[test]
 fn resident_refuses_hook_authority_state_for_a_foreign_store() {
     let root = root();

@@ -75,7 +75,7 @@ fn evaluate(request: &ClaimApprovalReuseDecisionsRequestV1) -> Result<Value, Str
         local_once_key_id: request.local_once_integrity_key_id.as_deref(),
         policy_bundle_identities: request.policy_bundle_decision_identities.as_deref(),
     };
-    let claimed = crate::claim_reuse::claim_approval_reuse_decisions(
+    let claimed = crate::claim_reuse::claim_approval_reuse_decisions_with(
         &connection,
         &request.decisions,
         &now,
@@ -88,6 +88,7 @@ fn evaluate(request: &ClaimApprovalReuseDecisionsRequestV1) -> Result<Value, Str
                 request.evidence_binding.as_ref(),
             )
         },
+        request.consume_local_once,
     )
     .map_err(|_| "native_claim_approval_reuse_store_error".to_owned())?;
     Ok(serde_json::json!({ "claimed": claimed }))

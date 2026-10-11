@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, cast
 from .native_business_source_store import ANCHOR_FILE_NAME, SOURCE_FILE_NAME
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_command_control_binding import read_native_command_control_binding
+from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
 from .native_policy_effective import compose_effective_native_policies
 from .native_policy_snapshot_codec import _digest_v3
 from .native_policy_snapshot_constants import (
@@ -195,22 +196,17 @@ class NativePolicySnapshotPublisherInputs:
         # resident is definitively stale.
         return not generations or max(generations) == resident_generation
 
+    @staticmethod
+    def _overlay_paths(workspaces: tuple[Path, ...]) -> tuple[Path, ...]:
+        return tuple(workspace / name for workspace in workspaces for name in WORKSPACE_CONFIG_FILENAMES)
+
     def _workspace_policy_paths(self) -> tuple[Path, ...]:
         with self._condition:
-            workspaces = tuple(self._workspace_paths)
-        paths: list[Path] = []
-        for workspace in workspaces:
-            paths.extend(workspace / filename for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml"))
-        return tuple(paths)
+            return self._overlay_paths(tuple(self._workspace_paths))
 
     def _pending_workspace_policy_paths(self) -> set[str]:
         with self._condition:
-            pending = tuple(self._pending_workspace_paths)
-        return {
-            str(workspace / filename)
-            for workspace in pending
-            for filename in (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
-        }
+            return {str(path) for path in self._overlay_paths(tuple(self._pending_workspace_paths))}
 
     def _compiled_effective_policy(
         self, *, settled_only: bool = False, workspaces: frozenset[Path] | None = None

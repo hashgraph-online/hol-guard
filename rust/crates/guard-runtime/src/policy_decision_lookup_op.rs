@@ -1407,12 +1407,16 @@ fn evaluate_in_connection(
     let mut reported_local_once_failures: Vec<Value> = Vec::new();
     let local_once_hashes: Vec<String> = {
         let mut v = Vec::new();
-        for h in [
-            artifact_hash.map(str::to_string),
-            runtime_exact_match_key.clone(),
-        ]
-        .into_iter()
-        .flatten()
+        // The exact peek matches only the caller-supplied hash; the id-derived
+        // runtime-exact fallback belongs to ordinary policy lookups.
+        let runtime_fallback = if request.local_once_only {
+            None
+        } else {
+            runtime_exact_match_key.clone()
+        };
+        for h in [artifact_hash.map(str::to_string), runtime_fallback]
+            .into_iter()
+            .flatten()
         {
             if !v.contains(&h) {
                 v.push(h);
@@ -1476,6 +1480,23 @@ fn evaluate_in_connection(
             local_once_hash = Some(lo_hash.clone());
             break;
         }
+    }
+    if request.local_once_only {
+        // The exact local-once peek never reads policy rows or consumes.
+        flush_events(conn, &events, current_time)
+            .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
+        let trust_status = trust_status_from_state(&integrity_state);
+        if let Some(ref mut ignored) = ignored_local_integrity {
+            ignored["trust_status"] = trust_status.clone();
+        }
+        return Ok(lookup_result(
+            conn,
+            local_once_decision,
+            ignored_local_integrity,
+            trust_status,
+            false,
+            starting_revision,
+        ));
     }
     if local_once_decision.is_some() {
         selected_payload = local_once_decision.clone();

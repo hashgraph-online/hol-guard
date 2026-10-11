@@ -54,6 +54,10 @@ pub struct PolicyDecisionLookupRequestV1 {
     /// Mirror of the Python signature default (`consume_one_shot=True`).
     #[serde(default = "default_true")]
     pub consume_one_shot: bool,
+    /// Peek only the exact local-once approval and skip the policy rows. The
+    /// local-once peek of `peek_local_once_approval` callers; never consumes.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub local_once_only: bool,
     /// `_refresh_policy_integrity_state(...)` output captured by Python just
     /// before dispatch: `mode`/`enforcement`/`generation`/`degraded_reasons`/
     /// `backend`/`setup_available`/`key_id`/`runtime_protection`/... .
@@ -79,6 +83,10 @@ pub struct PolicyDecisionLookupRequestV1 {
 
 fn default_true() -> bool {
     true
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

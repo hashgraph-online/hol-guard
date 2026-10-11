@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from .codex_hook_compatibility import compatible_bridge_argv_hashes, retained_bridge_generations
+from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .codex_hook_file_integrity import (
     CodexHookIntegrityError,
     canonical_path,
@@ -49,7 +50,6 @@ if TYPE_CHECKING:
 
 CODEX_AUTHORITY_REPAIR_ACTION = "apps.repair.codex-authority"
 
-MANAGED_CODEX_HOOK_EVENTS = ("PreToolUse", "PermissionRequest", "UserPromptSubmit", "PostToolUse")
 _TRANSPORT_PACKAGE_ROLES = (
     "bridge",
     "bridge_resume",

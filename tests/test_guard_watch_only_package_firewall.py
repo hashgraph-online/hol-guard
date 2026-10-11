@@ -230,7 +230,7 @@ def test_final_watch_only_refresh_preserves_unused_one_shot_package_approval(
     )
 
     marker.unlink()
-    monkeypatch.setattr(store, "claim_local_once_approval", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(store, "claim_approval_reuse_decision", lambda *_args, **_kwargs: False)
     denied_payload, denied_exit_code = build_protect_payload(
         command=command,
         store=store,

@@ -488,7 +488,7 @@ class TestGuardProtect:
         assert mcp_output["targets"][0]["artifact_id"] == "install:gemini:mcp:remote-risk"
 
     def test_guard_protect_keeps_gemini_stdio_mcp_targets_local(self) -> None:
-        request = protect.parse_protect_command(
+        request, verdict = protect._native_protect(
             [
                 "gemini",
                 "mcp",
@@ -497,11 +497,64 @@ class TestGuardProtect:
                 "https://example.invalid/not-a-remote-endpoint",
                 "--transport",
                 "stdio",
-            ]
+            ],
+            guard_home=None,
+            store=None,
         )
 
         assert request.targets[0].source_url is None
-        assert "registers a remote server endpoint" not in protect._request_risk_signals(request)
+        assert "registers a remote server endpoint" not in verdict.risk_signals
+
+    def test_native_protect_sends_absolute_store_paths(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        seen: dict[str, Path | None] = {}
+
+        def capture(command, *, guard_home, store_path):
+            seen["guard_home"] = guard_home
+            seen["store_path"] = store_path
+            return (
+                {
+                    "command": list(command),
+                    "install_kind": "package_install",
+                    "executor": "npm",
+                    "package_manager": "npm",
+                    "harness": None,
+                    "targets": [
+                        {
+                            "artifact_id": "install:npm:lodash",
+                            "artifact_name": "lodash",
+                            "artifact_type": "npm_package",
+                            "ecosystem": "npm",
+                            "package_name": "lodash",
+                            "package_url": None,
+                            "raw_spec": "lodash",
+                            "version": None,
+                            "source_url": None,
+                            "harness": None,
+                        }
+                    ],
+                },
+                {"action": "allow", "reason": "ok", "risk_signals": [], "matched_advisories": []},
+            )
+
+        monkeypatch.setattr(protect, "native_protect_request", capture)
+        store = type("Store", (), {})()
+        store.guard_home = "relative-guard-home"
+        store.path = "relative-guard-home/guard.db"
+
+        request, verdict = protect._native_protect(
+            ["npm", "install", "lodash"],
+            guard_home=None,
+            store=store,
+        )
+
+        expected_home = Path("relative-guard-home").expanduser().resolve(strict=False)
+        expected_store = Path("relative-guard-home/guard.db").expanduser().resolve(strict=False)
+        assert seen["guard_home"] == expected_home
+        assert seen["store_path"] == expected_store
+        assert expected_home.is_absolute()
+        assert expected_store.is_absolute()
+        assert request.targets[0].package_name == "lodash"
+        assert verdict.action == "allow"
 
     def test_guard_protect_excludes_npm_prefix_destination_from_targets(self, tmp_path: Path) -> None:
         install_dir = tmp_path / "agent" / "npm"

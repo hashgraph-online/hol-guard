@@ -12,6 +12,7 @@ fn request(kind: &str) -> HookRenderRequestV1 {
         linked_reason: None,
         reason_code: None,
         reason: None,
+        cli: None,
     }
 }
 
@@ -69,4 +70,43 @@ fn oversized_request_is_rejected() {
         evaluate_hook_render_request(&req).unwrap_err(),
         "native_hook_render_too_large"
     );
+}
+
+#[test]
+fn cli_kinds_wrap_the_composed_outcome() {
+    let mut req = request("cli_document");
+    req.harness = "claude-code".to_owned();
+    req.cli = Some(json!({
+        "canonical_harness": "claude-code", "event_name": "PreToolUse",
+        "policy_action": "block", "reason": "no",
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(payload["response"]["decision"], "block");
+
+    req.cli = Some(json!({"canonical_harness": "copilot", "event_name": "Stop"}));
+    req.harness = "copilot".to_owned();
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "fallback");
+
+    req.kind = "cli_response".to_owned();
+    req.harness = "codex".to_owned();
+    req.cli = Some(
+        json!({"canonical_harness": "codex", "event_name": "PreToolUse", "policy_action": "allow"}),
+    );
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "silent");
+}
+
+#[test]
+fn cli_kinds_require_params() {
+    let result = decode(evaluate_hook_render_request(&request("cli_response")).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
 }

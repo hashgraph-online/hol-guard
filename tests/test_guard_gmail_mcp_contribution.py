@@ -16,9 +16,9 @@ from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
     validate_mcp_contribution,
 )
-from codex_plugin_scanner.guard.runtime.mcp_server_grants import apply_contributed_mcp_decision
 
 from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+from .mcp_extension_driver import apply_contributed_mcp_decision
 from .test_guard_mcp_server_grants import _AuthorityStore, _layer
 from .test_native_source_program import build as build
 from .test_native_source_program import canonical

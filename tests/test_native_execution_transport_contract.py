@@ -168,7 +168,7 @@ def test_versioned_operation_replies_validate_schema_before_status(
 
 
 def test_hook_render_bound_error_is_not_a_resident_outage(transport, tmp_path):
-    transport.status.capabilities.features = ("resident-protocol-v2", "hook-render-v1")
+    transport.status.capabilities.features = ("resident-protocol-v2", "hook-render-v2")
     reply = {
         "schema": "guard-hook-render-result.v1",
         "status": "error",
@@ -182,7 +182,7 @@ def test_hook_render_bound_error_is_not_a_resident_outage(transport, tmp_path):
         request={"schema": "guard-hook-render-request.v1"},
         guard_home=tmp_path,
         timeout_seconds=1.0,
-        required_feature="hook-render-v1",
+        required_feature="hook-render-v2",
         response_schema="guard-hook-render-result.v1",
         record_success=False,
     )
@@ -192,7 +192,7 @@ def test_hook_render_bound_error_is_not_a_resident_outage(transport, tmp_path):
 
 
 def test_hook_render_unknown_status_still_records_a_failure(transport, tmp_path):
-    transport.status.capabilities.features = ("resident-protocol-v2", "hook-render-v1")
+    transport.status.capabilities.features = ("resident-protocol-v2", "hook-render-v2")
     reply = {"schema": "guard-hook-render-result.v1", "status": "boom", "code": "native_hook_render_invalid"}
     transport.client.return_value = json.dumps(reply).encode()
     assert (
@@ -201,7 +201,7 @@ def test_hook_render_unknown_status_still_records_a_failure(transport, tmp_path)
             request={},
             guard_home=tmp_path,
             timeout_seconds=1.0,
-            required_feature="hook-render-v1",
+            required_feature="hook-render-v2",
             response_schema="guard-hook-render-result.v1",
             record_success=False,
         )

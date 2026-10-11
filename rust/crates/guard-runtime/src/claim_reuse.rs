@@ -339,6 +339,20 @@ pub fn claim_approval_reuse_decisions(
     evidence: &ClaimEvidence<'_>,
     bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
 ) -> rusqlite::Result<bool> {
+    claim_approval_reuse_decisions_with(connection, decisions, now, evidence, bound, false)
+}
+
+/// Like [`claim_approval_reuse_decisions`]; `consume_local_once` consumes every
+/// local-once member, including the package-request approvals that the shared
+/// disposition retains for reuse.
+pub fn claim_approval_reuse_decisions_with(
+    connection: &Connection,
+    decisions: &[Value],
+    now: &str,
+    evidence: &ClaimEvidence<'_>,
+    bound: &dyn Fn(&Connection, &[Member<'_>]) -> rusqlite::Result<bool>,
+    consume_local_once: bool,
+) -> rusqlite::Result<bool> {
     let Ok((unique, expected_revision)) = unique_members(decisions) else {
         return Ok(false);
     };
@@ -347,9 +361,16 @@ pub fn claim_approval_reuse_decisions(
     }
     let mut members: Vec<Member<'_>> = Vec::with_capacity(unique.len());
     for decision in unique {
-        let Some(disposition) = approval_reuse_claim_disposition(decision) else {
+        let Some(mut disposition) = approval_reuse_claim_disposition(decision) else {
             return Ok(false);
         };
+        let local_once_member = decision
+            .get("approval_id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.is_empty());
+        if consume_local_once && local_once_member {
+            disposition = "consumed";
+        }
         members.push((decision, disposition));
     }
     connection.execute_batch("BEGIN IMMEDIATE")?;

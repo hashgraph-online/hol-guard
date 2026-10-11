@@ -24,6 +24,7 @@ else:  # pragma: no cover - runtime compatibility
 
 from .action_lattice import coerce_guard_action, normalize_guard_action
 from .approval_gate import ApprovalGateGrant, public_config, require_settings_write
+from .approval_wait_limits import MAX_APPROVAL_WAIT_TIMEOUT_SECONDS
 from .config_file_io import ConfigFileTrustError, read_config_file_bytes
 from .config_mutation import notify_native_policy_mutation, record_posture_change_if_needed
 from .config_preset_support import apply_named_posture_harness_policy
@@ -123,8 +124,6 @@ GUARD_HOME_METADATA_FILES = frozenset(
 )
 GUARD_DB_BACKUP_TIMEOUT_SECONDS = 5.0
 GUARD_DB_BACKUP_SLEEP_SECONDS = 0.05
-WORKSPACE_CONFIG_FILENAMES = (".ai-plugin-scanner-guard.toml", ".hol-guard.toml")
-MAX_APPROVAL_WAIT_TIMEOUT_SECONDS = 600
 
 VALID_GUARD_ACTIONS = frozenset(GUARD_ACTION_VALUES)
 VALID_GUARD_MODES = {"observe", "prompt", "enforce"}
