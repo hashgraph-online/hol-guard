@@ -54,7 +54,9 @@ def _marker_parts(marker_payload: Mapping[str, object]) -> list[str]:
 
 
 class StoreReviewEventOutboxMixin:
-    def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any:
+    def _native_store_call(
+        self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+    ) -> Any:
         timeout_seconds = sqlite_connect_timeout_seconds()
         if timeout_seconds <= 0:
             raise TimeoutError("Guard storage operation deadline expired.")
@@ -78,7 +80,9 @@ class StoreReviewEventOutboxMixin:
                     method=method,
                     args=args,
                     deadline_monotonic=deadline,
-                    busy_timeout_seconds=timeout_seconds,
+                    busy_timeout_seconds=timeout_seconds
+                    if busy_timeout_seconds is None
+                    else min(timeout_seconds, busy_timeout_seconds),
                 )
             except sqlite3.DatabaseError as error:
                 failure = error
