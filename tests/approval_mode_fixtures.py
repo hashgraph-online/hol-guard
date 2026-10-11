@@ -38,6 +38,7 @@ def approval_questionnaire_mode(monkeypatch: pytest.MonkeyPatch, tmp_path) -> No
             loaded["blocked_request_mode"] = "ask"
         return loaded
 
+    monkeypatch.setattr(config.GuardConfig, "__init__", init_with_questionnaire)
     monkeypatch.setattr(config, "load_native_guard_config", load_with_questionnaire)
 
     original_store_init = GuardStore.__init__
