@@ -68,6 +68,7 @@ from ..native_mcp_proxy_decision import (
     package_facts,
     tool_facts,
 )
+from ..native_mcp_stdio_exchange import mcp_stdio_session_exchange_native
 from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
 from ..runtime.approval_context import (
@@ -236,6 +237,7 @@ class _NativeMcpChildIo:
         self._session_id = session_id
         self._guard_home = guard_home
         self._pending: deque[str] = deque()
+        self._injected: deque[_ChildOutputFrame] = deque()
         self.exit_code: int | None = None
 
     # stdin side ------------------------------------------------------------
@@ -254,6 +256,52 @@ class _NativeMcpChildIo:
     def flush(self) -> None:  # resident op is already synchronous/flushed
         return None
 
+    def idle(self) -> bool:
+        """No locally queued frame is waiting to be delivered."""
+        return not self._pending and not self._injected
+
+    def exchange(
+        self,
+        message: Mapping[str, object],
+        *,
+        quiet_seconds: float,
+        response_timeout_seconds: float,
+    ) -> dict[str, Any] | bool:
+        """Quiet edge, write and response in one resident round trip.
+
+        Returns the correlated response, or whether ``message`` was written.
+        Whatever else the child said is queued so the relay reads it exactly as
+        it would have read it from separate ``send`` and ``recv`` calls.
+        """
+        outcome = mcp_stdio_session_exchange_native(
+            self._session_id,
+            message,
+            guard_home=self._guard_home,
+            quiet_seconds=quiet_seconds,
+            response_timeout_seconds=response_timeout_seconds,
+        )
+        if outcome is None:
+            raise RuntimeError("native MCP session exchange failed")
+        kind = outcome["outcome"]
+        written = outcome.get("written") is True
+        frame = outcome.get("frame")
+        if kind == "response" and isinstance(frame, dict):
+            return cast("dict[str, Any]", frame)
+        if kind in {"boundary", "event"} and frame is not None:
+            self._pending.append(json.dumps(frame) + "\n")
+        elif kind == "timeout":
+            self._injected.append(
+                _ChildOutputFrame(
+                    error=ProxyIoTimeoutError(source="child_response", timeout_seconds=response_timeout_seconds)
+                )
+            )
+        elif kind == "eof" and written:
+            code = outcome.get("exit_code")
+            if isinstance(code, int) and not isinstance(code, bool):
+                self.exit_code = code
+            self._injected.append(_ChildOutputFrame())
+        return written
+
     def writelines(self, lines: Iterable[str]) -> None:
         for line in lines:
             self.write(line)
@@ -266,6 +314,8 @@ class _NativeMcpChildIo:
         # Test/injection seam: locally-queued frames are delivered before the
         # resident so callers can synthesize inbound child events (e.g.
         # `tools/list_changed`) without a native inject op.
+        if self._injected:
+            return self._injected.popleft()
         if self._pending:
             return _ChildOutputFrame(line=self._pending.popleft())
         result = mcp_stdio_session_recv_native(
@@ -3092,6 +3142,21 @@ class RuntimeMcpGuardProxy:
             fingerprint=fingerprint,
         )
 
+    def _can_exchange(
+        self,
+        child_stdin: IO[str] | _NativeMcpChildIo,
+        child_stdout: IO[str] | _NativeMcpChildIo,
+    ) -> bool:
+        """True when the quiet edge, write and response can ride one resident round trip.
+
+        Frames already queued on the proxy side (injected or locally pending)
+        are an unfinished drain, so the legacy path must run them first.
+        """
+        if not isinstance(child_stdin, _NativeMcpChildIo) or child_stdin is not child_stdout:
+            return False
+        injected = self._child_output_queue
+        return child_stdin.idle() and (injected is None or injected.empty())
+
     def _forward_message(
         self,
         message: dict[str, Any],
@@ -3105,25 +3170,44 @@ class RuntimeMcpGuardProxy:
         expected_catalog_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         request_id = message.get("id")
-        if (
-            str(message.get("method", "")) == "tools/call"
+        catalog = (
+            (expected_catalog_generation, expected_catalog_state, expected_catalog_fingerprint)
+            if str(message.get("method", "")) == "tools/call"
             and expected_catalog_generation is not None
             and expected_catalog_state is not None
             and expected_catalog_fingerprint is not None
+            else None
+        )
+        written = False
+        if catalog is not None and request_id is not None and self._can_exchange(child_stdin, child_stdout):
+            if not self._catalog_authority_matches(generation=catalog[0], state=catalog[1], fingerprint=catalog[2]):
+                raise _ToolCatalogBoundaryChangedError(_TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED)
+            exchanged = cast("_NativeMcpChildIo", child_stdin).exchange(
+                message,
+                quiet_seconds=_TOOLS_CALL_PREWRITE_QUIET_SECONDS,
+                response_timeout_seconds=self._child_response_timeout_seconds(),
+            )
+            if isinstance(exchanged, dict):
+                return exchanged
+            written = exchanged
+        if (
+            catalog is not None
+            and not written
             and not self._drain_and_validate_catalog_authority(
                 child_stdin=child_stdin,
                 child_stdout=child_stdout,
                 client_input=client_input,
                 server_output=server_output,
-                generation=expected_catalog_generation,
-                state=expected_catalog_state,
-                fingerprint=expected_catalog_fingerprint,
+                generation=catalog[0],
+                state=catalog[1],
+                fingerprint=catalog[2],
                 quiet_seconds=_TOOLS_CALL_PREWRITE_QUIET_SECONDS,
             )
         ):
             raise _ToolCatalogBoundaryChangedError(_TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED)
-        child_stdin.write(json.dumps(message) + "\n")
-        child_stdin.flush()
+        if not written:
+            child_stdin.write(json.dumps(message) + "\n")
+            child_stdin.flush()
         while True:
             buffered_response = self._pop_buffered_child_response(request_id)
             if buffered_response is not None:
