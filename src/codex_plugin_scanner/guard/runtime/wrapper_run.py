@@ -12,6 +12,7 @@ from ..config import GuardConfig
 from ..models import HarnessDetection
 from ..store import GuardStore
 from . import runner_native_authority as _authority
+from .actions import GuardActionEnvelope
 from .approval_reuse import (
     APPROVAL_REUSE_CLAIM_FAILED,
     APPROVAL_REUSE_LAUNCH_IDENTITY_UNVERIFIED,
@@ -55,7 +56,7 @@ def _detector_pass(
     config: GuardConfig,
     *,
     default_action: str | None,
-    action_envelope: Mapping[str, Any],
+    action_envelope: GuardActionEnvelope,
     context: HarnessContext,
     pending_approval_claims: list[tuple[Mapping[str, object], str, str]] | None = None,
 ) -> tuple[dict[str, Any], Any, GuardConfig]:
