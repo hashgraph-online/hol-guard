@@ -9,7 +9,7 @@ import json
 from pathlib import Path
 from typing import Final
 
-SCHEMA: Final = "hol-guard-rust-pretool-no-python.v3"
+SCHEMA: Final = "hol-guard-rust-pretool-no-python.v4"
 
 
 def read(path: Path) -> str:
@@ -234,6 +234,16 @@ def _contract_failures(root: Path) -> list[str]:
             ("evaluate_pre_tool_envelope", "guard-pre-tool-result.v1"),
         ),
         (
+            # PostToolUse is decided by the same native edge: the Rust review,
+            # then the authenticated policy join, before any harness rendering.
+            root / "rust/crates/guard-hook-core/src/lib.rs",
+            ("pub fn review_post_tool",),
+        ),
+        (
+            root / "rust/crates/guard-runtime/src/edge.rs",
+            ("let native = review_post_tool(&request);", "apply_post_tool_policy"),
+        ),
+        (
             root / "rust/crates/guard-runtime/src/oneshot.rs",
             ("fn evaluate_pre_tool_bytes", "pre_tool_response", "evaluate_pre_tool_request"),
         ),
@@ -312,6 +322,13 @@ def _worker_failures(root: Path) -> list[str]:
     )
     if "_review_raw_hook_native" not in function_calls(native_edge_snapshot):
         failures.append("HookWorkerNativeMixin._review_native_edge_with_snapshot does not invoke the native hook edge")
+    # Both PreToolUse and PostToolUse responses are rendered from the native
+    # edge result in this one function; Python only transports and renders.
+    for rendered in ("harness_json_from_native_pre_tool", "harness_json_from_native_post_tool"):
+        if rendered not in function_calls(native_edge_snapshot):
+            failures.append(f"HookWorkerNativeMixin._review_native_edge_with_snapshot does not render via {rendered}")
+    if "review_post_tool" in read(native_hook) or "review_post_tool" in read(hook_worker):
+        failures.append("worker decides PostToolUse in Python instead of the native edge")
     raw_edge_review = function_node(hook_worker, "_review_raw_hook_native", class_name="HookWorker")
     if "review_raw_hook_native" not in function_calls(raw_edge_review):
         failures.append("HookWorker._review_raw_hook_native does not invoke review_raw_hook_native")

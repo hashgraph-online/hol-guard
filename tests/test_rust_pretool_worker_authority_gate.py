@@ -74,3 +74,35 @@ def test_missing_native_authority_link_fails_closed(
     assert call in source
     path.write_text(source.replace(call, replacement, 1), encoding="utf-8")
     assert expected in GATE["_worker_failures"](worker_checkout)
+
+
+@pytest.mark.parametrize(
+    ("call", "replacement", "expected"),
+    [
+        (
+            "harness_json_from_native_post_tool(native_harness, native_result)",
+            "unavailable_render(native_harness, native_result)",
+            "does not render via harness_json_from_native_post_tool",
+        ),
+        (
+            "harness_json_from_native_pre_tool(native_harness, native_result),\n                harness=",
+            "unavailable_render(native_harness, native_result),\n                harness=",
+            "does not render via harness_json_from_native_pre_tool",
+        ),
+    ],
+)
+def test_pre_and_post_tool_must_render_from_native_edge_result(
+    worker_checkout: Path,
+    call: str,
+    replacement: str,
+    expected: str,
+) -> None:
+    path = worker_checkout / WORKER_DIR / "hook_worker_native.py"
+    source = path.read_text(encoding="utf-8")
+    assert call in source
+    path.write_text(source.replace(call, replacement), encoding="utf-8")
+    assert any(expected in failure for failure in GATE["_worker_failures"](worker_checkout))
+
+
+def test_native_pre_and_post_tool_contract_tokens_present() -> None:
+    assert GATE["_contract_failures"](ROOT) == []

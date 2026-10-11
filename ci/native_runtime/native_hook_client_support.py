@@ -185,6 +185,8 @@ def _push_snapshot(runtime: Path, state_dir: Path, request: bytes) -> None:
     except (UnicodeDecodeError, json.JSONDecodeError, TypeError):
         raise AssertionError("native policy push failed: native_policy_snapshot_ack_invalid") from None
     assert isinstance(acknowledgement, dict)
+    # Surface a typed refusal (exit 0 with an error body) instead of a KeyError.
+    assert "error" not in acknowledgement, f"native policy push refused: {acknowledgement}"
     assert acknowledgement["status"] == "accepted"
 
 

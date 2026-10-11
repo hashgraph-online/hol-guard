@@ -263,13 +263,26 @@ def _exercise_mode_invariants(
                 raise RuntimeError(f"native_default_auto_probe_failed: invalid mode response: {response}")
             # Legacy values are accepted but resolve to auto: the native
             # resident must decide exactly as it does with the variable unset.
+            # Current Claude PostToolUse contract: a non-blocking native
+            # outcome carries ``policy_action`` (allow/warn) plus the
+            # PostToolUse hook-specific envelope. It carries no ``continue``
+            # (that key only appears on terminal block responses) and no
+            # ``decision``; any block/stop key would mean the tool output was
+            # refused rather than passed through.
+            specific = response.get("hookSpecificOutput")
             _require(
-                response.get("continue") is True
+                response.get("policy_action") in {"allow", "warn"}
+                and isinstance(specific, dict)
+                and specific.get("hookEventName") == "PostToolUse"
+                and response.get("decision") != "block"
+                and response.get("continue") is not False
+                and "stopReason" not in response
                 and all(response.get(key) == baseline.get(key) for key in ("decision", "policy_action", "reason_code")),
                 {"mode": mode, "response": response, "baseline": baseline},
             )
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
+                "policy_action": response.get("policy_action"),
                 "reason_code": response.get("reason_code"),
                 "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
