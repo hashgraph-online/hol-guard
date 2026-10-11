@@ -18,8 +18,9 @@ from codex_plugin_scanner.guard.codex_skill_config import (
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
 from codex_plugin_scanner.guard.runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
-from codex_plugin_scanner.guard.runtime.runner import _detection_with_prompt_artifacts, evaluate_detection
+from codex_plugin_scanner.guard.runtime.guard_run_evaluation import _detection_with_prompt_artifacts
 from codex_plugin_scanner.guard.runtime.runner_native_authority import authority_error
+from codex_plugin_scanner.guard.runtime.wrapper_run import evaluate_detection
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")

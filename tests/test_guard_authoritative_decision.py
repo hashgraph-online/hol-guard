@@ -13,7 +13,9 @@ from codex_plugin_scanner.guard.adapters.base import HarnessAdapter, HarnessCont
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.consumer import service as consumer_service
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection
-from codex_plugin_scanner.guard.runtime import runner as guard_runner
+from codex_plugin_scanner.guard.runtime import guard_run_launch as guard_run_launch
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
 from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.decisions import (
@@ -365,20 +367,20 @@ def test_guard_run_fails_closed_before_launch_for_invalid_authority_contract(
         ) -> dict[str, str]:
             return dict(inherited)
 
-    monkeypatch.setattr(guard_runner, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
     monkeypatch.setattr(
-        guard_runner,
+        wrapper_run,
         "evaluate_detection",
         lambda *_args, **_kwargs: copy.deepcopy(contradictory),
     )
-    monkeypatch.setattr(guard_runner, "get_adapter", lambda _harness: _LaunchAdapter())
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: _LaunchAdapter())
     monkeypatch.setattr(
-        guard_runner.subprocess,
+        wrapper_run_finish.subprocess,
         "run",
         lambda *_args, **_kwargs: pytest.fail("contradictory decision state must not reach the launch sink"),
     )
 
-    result = guard_runner.guard_run(
+    result = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -428,10 +430,10 @@ def test_unanimous_allow_launches_without_a_new_prompt(
         def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
             return [sys.executable, "-c", "pass"]
 
-    monkeypatch.setattr(guard_runner, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
-    monkeypatch.setattr(guard_runner, "get_adapter", lambda _harness: _LaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: _LaunchAdapter())
 
-    output = guard_runner.guard_run(
+    output = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
@@ -479,8 +481,8 @@ def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
         def launch_command(self, _context: HarnessContext, _args: list[str]) -> list[str]:
             return [sys.executable, "-c", "pass"]
 
-    monkeypatch.setattr(guard_runner, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
-    monkeypatch.setattr(guard_runner, "get_adapter", lambda _harness: _LaunchAdapter())
+    monkeypatch.setattr(wrapper_run, "detect_harness", lambda *_args, **_kwargs: _detection(artifact))
+    monkeypatch.setattr(guard_run_launch, "get_adapter", lambda _harness: _LaunchAdapter())
 
     def _allow_once(
         _detection_value: HarnessDetection,
@@ -493,7 +495,7 @@ def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
         resolved["blocked"] = False
         return resolved
 
-    output = guard_runner.guard_run(
+    output = wrapper_run.guard_run(
         "codex",
         HarnessContext(
             home_dir=tmp_path,
