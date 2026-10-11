@@ -27,12 +27,69 @@ fn bare_name(value: &str) -> bool {
     !value.is_empty() && !value.contains(['/', '\\', '$', '`', '~', '*', '?', '[', '{'])
 }
 
+/// Options the runner forwards to pytest that only select, filter or format
+/// tests. Options that move pytest's temp, cache, config or root directories,
+/// load plugins, or write report files (`--basetemp`, `-c`, `-o`, `-p`,
+/// `--rootdir`, `--junitxml`, ...) are left to review, matching the options
+/// Guard already treats as mutating in a pytest invocation.
+const PYTEST_FLAGS: &[&str] = &[
+    "-q",
+    "-qq",
+    "-s",
+    "-v",
+    "-vv",
+    "-x",
+    "-l",
+    "-ra",
+    "-rA",
+    "--disable-warnings",
+    "--quiet",
+    "--verbose",
+    "--exitfirst",
+    "--showlocals",
+    "--no-header",
+    "--lf",
+    "--ff",
+    "--last-failed",
+    "--failed-first",
+    "--collect-only",
+    "--co",
+];
+const PYTEST_FLAGS_WITH_VALUES: &[&str] = &["-k", "-m", "--maxfail", "--tb", "--durations"];
+
+fn pytest_arguments(arguments: &[String]) -> bool {
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if !argument.starts_with('-') {
+            continue;
+        }
+        if PYTEST_FLAGS.contains(&argument.as_str()) {
+            continue;
+        }
+        if PYTEST_FLAGS_WITH_VALUES.contains(&argument.as_str()) {
+            if arguments.next().is_none() {
+                return false;
+            }
+            continue;
+        }
+        let inline_value = argument.split_once('=').is_some_and(|(flag, _)| {
+            flag.starts_with("--") && PYTEST_FLAGS_WITH_VALUES.contains(&flag)
+        });
+        if !inline_value {
+            return false;
+        }
+    }
+    true
+}
+
 fn runner_command(command: &[String]) -> bool {
     match command {
         [] => false,
         [exe, ..] if !bare_name(exe) => false,
-        [exe, ..] if matches!(exe.as_str(), "pytest" | "py.test") => true,
-        [exe, module, target, ..] => python_name(exe) && module == "-m" && target == "pytest",
+        [exe, rest @ ..] if matches!(exe.as_str(), "pytest" | "py.test") => pytest_arguments(rest),
+        [exe, module, target, rest @ ..] => {
+            python_name(exe) && module == "-m" && target == "pytest" && pytest_arguments(rest)
+        }
         _ => false,
     }
 }
@@ -141,6 +198,8 @@ mod tests {
             "pytest-contained --workspace . python3 -m pytest -q",
             "pytest-contained --workspace=. pytest -q",
             "pytest-contained pytest -q 2>&1",
+            "pytest-contained pytest -x -vv --tb=short tests/test_a.py",
+            "pytest-contained python3 -m pytest -k smoke --maxfail 1 tests",
         ] {
             assert!(
                 safe_pytest_contained_arguments(&args(command), Some(cwd)),
@@ -193,6 +252,17 @@ mod tests {
             "pytest-contained pytest 2>/dev/null",
             "pytest-contained pytest &&",
             "pytest-contained pytest -k a|b",
+            "pytest-contained pytest --basetemp=.",
+            "pytest-contained pytest --basetemp .",
+            "pytest-contained python3 -m pytest -p evil",
+            "pytest-contained pytest -c other.ini",
+            "pytest-contained pytest -o cache_dir=/tmp/x",
+            "pytest-contained pytest --rootdir=/",
+            "pytest-contained pytest --junitxml=report.xml",
+            "pytest-contained pytest --confcutdir=/",
+            "pytest-contained pytest --override-ini=addopts=",
+            "pytest-contained pytest -k",
+            "pytest-contained pytest --debug",
             "pytest -q",
             "run pytest-contained pytest",
         ] {
