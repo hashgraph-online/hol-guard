@@ -494,4 +494,8 @@ pub struct WorkspaceInventoryRequestV1 {
     /// Also report the lockfile warnings for `workspace_dir`.
     #[serde(default)]
     pub include_lockfile_warnings: bool,
+    /// Index of the first inventory item to return. The reply is capped, so a
+    /// large inventory is read as consecutive pages until `next_offset` is null.
+    #[serde(default)]
+    pub inventory_offset: usize,
 }

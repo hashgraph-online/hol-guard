@@ -5,7 +5,7 @@
 //! Python path produced.
 
 use super::*;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::PathBuf;
 
@@ -73,6 +73,7 @@ fn request(
         sbom_paths: sboms.to_vec(),
         files_only: mode == "files",
         include_lockfile_warnings: mode != "files",
+        inventory_offset: 0,
     }
 }
 
@@ -108,13 +109,15 @@ fn recorded_python_vectors_match() {
                     .replace("{TMP}", &scratch.0.display().to_string())
             })
             .collect();
-        let payload = run(&request(
+        let mut payload = run(&request(
             &workspace,
             before.as_deref(),
             &sboms,
             vector["mode"].as_str().unwrap(),
         ))
         .unwrap();
+        let next_offset = payload.as_object_mut().unwrap().remove("next_offset");
+        assert_eq!(next_offset, Some(Value::Null), "{name}");
         assert_eq!(payload, vector["expected"], "{name}");
     }
 }
@@ -169,4 +172,90 @@ fn oversized_sbom_is_skipped() {
     .unwrap();
     assert_eq!(payload["sbom_paths"], json!(["big-sbom.json"]));
     assert_eq!(payload["inventory"], json!([]));
+}
+
+#[test]
+fn relative_workspace_dirs_are_rejected() {
+    let mut request = request(Path::new("/tmp/unused-workspace"), None, &[], "inventory");
+    request.workspace_dir = "relative/workspace".into();
+    assert_eq!(
+        run(&request).unwrap_err(),
+        "native_workspace_inventory_invalid"
+    );
+    let scratch = Scratch::new("relative-before");
+    let mut request = request(&scratch.0, None, &[], "inventory");
+    request.before_workspace_dir = Some("relative/before".into());
+    assert_eq!(
+        run(&request).unwrap_err(),
+        "native_workspace_inventory_invalid"
+    );
+}
+
+#[test]
+fn large_inventory_is_returned_in_pages() {
+    let scratch = Scratch::new("paged");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let mut components = String::from(r#"{"bomFormat":"CycloneDX","components":["#);
+    for index in 0..12_000 {
+        if index > 0 {
+            components.push(',');
+        }
+        components.push_str(&format!(
+            r#"{{"name":"package-with-a-long-name-{index:05}","version":"1.0.0"}}"#
+        ));
+    }
+    components.push_str("]}");
+    fs::write(workspace.join("sbom.cdx.json"), components).unwrap();
+    let mut names: Vec<String> = Vec::new();
+    let mut pages = 0;
+    let mut request = request(
+        &workspace,
+        None,
+        &["sbom.cdx.json".to_owned()],
+        "inventory",
+    );
+    loop {
+        let bytes = evaluate_workspace_inventory(&request).unwrap();
+        assert!(bytes.len() < guard_contracts::MAX_NATIVE_RESPONSE_BYTES);
+        let payload = serde_json::from_slice::<Value>(&bytes).unwrap()["payload"].clone();
+        pages += 1;
+        for entry in payload["inventory"].as_array().unwrap() {
+            names.push(entry["name"].as_str().unwrap().to_owned());
+        }
+        match payload["next_offset"].as_u64() {
+            Some(next) => {
+                assert!(next as usize > request.inventory_offset);
+                request.inventory_offset = next as usize;
+            }
+            None => break,
+        }
+        assert!(pages < 64);
+    }
+    assert!(pages > 1);
+    assert_eq!(names.len(), 12_000);
+    assert_eq!(names[0], "package-with-a-long-name-00000");
+    assert_eq!(names[11_999], "package-with-a-long-name-11999");
+}
+
+#[test]
+fn inventory_row_larger_than_the_resident_reply_is_rejected() {
+    let scratch = Scratch::new("row-too-large");
+    let workspace = scratch.0.join("ws");
+    fs::create_dir_all(&workspace).unwrap();
+    let name = "n".repeat(crate::MAX_NATIVE_RESPONSE_BYTES);
+    let sbom = format!(
+        r#"{{"bomFormat":"CycloneDX","components":[{{"name":"{name}","version":"1"}}]}}"#
+    );
+    fs::write(workspace.join("sbom.cdx.json"), sbom).unwrap();
+    assert_eq!(
+        run(&request(
+            &workspace,
+            None,
+            &["sbom.cdx.json".to_owned()],
+            "inventory",
+        ))
+        .unwrap_err(),
+        "workspace_inventory_exceeds_resident_response"
+    );
 }

@@ -360,7 +360,7 @@ pub fn parse_manifest_dependency_changes(
     names.dedup();
     let changes = names
         .into_iter()
-        .filter(|name| before_deps.get(*name) != after_deps.get(*name))
+        .filter(|name| before_deps.get(name) != after_deps.get(name))
         .map(|name| ManifestDependencyChange {
             manifest_path: path.to_string(),
             package_name: name.clone(),
@@ -757,21 +757,12 @@ fn yarn_selector_name(selector: &str) -> Option<String> {
 // ---------------------------------------------------------------------------
 
 fn bun_lock_dependency_map(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
-    let versions_by_name = bun_lock_package_versions(text, deadline)?;
-    let mut dependencies = DepMap::new();
-    for (package_name, versions) in versions_by_name {
-        if let Some(version) = versions.first() {
-            dependencies.insert(package_name, version.clone());
-        }
-    }
-    Ok(dependencies)
+    bun_lock_first_versions(text, deadline)
 }
 
-/// `_bun_lock_package_versions` (:290-310).
-fn bun_lock_package_versions(
-    text: &str,
-    deadline: &Deadline,
-) -> ParseResult<BTreeMap<String, Vec<String>>> {
+/// `_bun_lock_package_versions` (:290-310) reduced to what `_bun_lock_dependency_map`
+/// keeps: the first version of each package, in first-seen document order.
+fn bun_lock_first_versions(text: &str, deadline: &Deadline) -> ParseResult<DepMap> {
     deadline.ensure()?;
     // loads_jsonc(text or "{}", deadline_check=...) (:292) — thread the
     // deadline into normalize_jsonc_checked so the check fires mid-pass.
@@ -792,7 +783,7 @@ fn bun_lock_package_versions(
     };
     // `payload.get("packages", {})` — dict.get returns the value of the LAST
     // occurrence of a duplicated key.
-    let mut versions_by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut first_versions = DepMap::new();
     // `payload.get("packages", {})` — a missing key yields the empty-dict
     // default and iterates nothing; a non-dict value is a shape error (:298).
     if let Some(packages) = jsonc_pairs_get(&payload_pairs, "packages") {
@@ -810,13 +801,12 @@ fn bun_lock_package_versions(
             let Some((package_name, version)) = bun_resolution_identity(resolution) else {
                 continue;
             };
-            let versions = versions_by_name.entry(package_name).or_default();
-            if !versions.contains(&version) {
-                versions.push(version);
+            if !first_versions.contains_key(&package_name) {
+                first_versions.insert(package_name, version);
             }
         }
     }
-    Ok(versions_by_name)
+    Ok(first_versions)
 }
 
 /// `dict.get(key)` semantics over `JsoncPairs::Object` pairs — the value of
@@ -1388,6 +1378,20 @@ mod tests {
     /// `_dependency_map_for_path("package.json", TEXT, deadline=inf)`
     /// → {'left-pad': '1.3.0', 'react': '^18.2.0', 'jest': '^29.0.0',
     ///    'lodash': '4.17.21'}
+    #[test]
+    fn bun_lock_keeps_document_order() {
+        let text = r#"{
+            "packages": {
+                "zeta": ["zeta@2.0.0"],
+                "alpha": ["alpha@1.0.0"]
+            }
+        }"#;
+        let deadline = Deadline::from_ms(GENEROUS);
+        let map = dependency_map_for_path("bun.lock", text, &deadline).unwrap();
+        let keys: Vec<&str> = map.keys().map(String::as_str).collect();
+        assert_eq!(keys, ["zeta", "alpha"]);
+    }
+
     #[test]
     fn package_json_keeps_dict_insertion_order() {
         let text =

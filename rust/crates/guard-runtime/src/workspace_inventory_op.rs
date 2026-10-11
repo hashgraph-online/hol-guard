@@ -261,12 +261,41 @@ fn lockfile_warnings(
     warnings
 }
 
-fn serialize_inventory(inventory: InventoryMap) -> Vec<Value> {
-    inventory
-        .into_values()
-        .into_iter()
-        .map(Value::Object)
-        .collect()
+/// Largest serialized inventory slice per reply. The resident reply is capped
+/// at 2 MiB, so the slice leaves room for the paths, diff and warnings.
+const INVENTORY_PAGE_BYTES: usize = 1_048_576;
+
+/// One page of the inventory starting at `offset` plus the offset of the next
+/// page, or `None` when the page reaches the end. A single item that cannot
+/// fit in a resident reply is an error. It is not omitted, and an offset past
+/// the inventory is not reported as an empty success.
+fn inventory_page(
+    inventory: InventoryMap,
+    offset: usize,
+) -> Result<(Vec<Value>, Option<usize>), String> {
+    let items = inventory.into_values();
+    let total = items.len();
+    if offset > total || (offset == total && total > 0) {
+        return Err(invalid());
+    }
+    let mut page = Vec::new();
+    let mut bytes = 0usize;
+    let mut index = offset;
+    for entry in items.into_iter().skip(offset) {
+        let value = Value::Object(entry);
+        let encoded = serde_json::to_vec(&value).map_err(|_| invalid())?;
+        if encoded.len() >= crate::MAX_NATIVE_RESPONSE_BYTES {
+            return Err("workspace_inventory_exceeds_resident_response".to_owned());
+        }
+        let size = encoded.len() + 1;
+        if !page.is_empty() && bytes + size > INVENTORY_PAGE_BYTES {
+            break;
+        }
+        bytes += size;
+        page.push(value);
+        index += 1;
+    }
+    Ok((page, (index < total).then_some(index)))
 }
 
 fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, String> {
@@ -278,6 +307,7 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
             "lockfile_paths": lockfile_paths,
             "sbom_paths": [],
             "inventory": [],
+            "next_offset": null,
             "diff": null,
             "lockfile_warnings": [],
         }));
@@ -302,11 +332,13 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
     } else {
         Vec::new()
     };
+    let (page, next_offset) = inventory_page(inventory, request.inventory_offset)?;
     Ok(json!({
         "manifest_paths": manifest_paths,
         "lockfile_paths": lockfile_paths,
         "sbom_paths": sbom_paths,
-        "inventory": serialize_inventory(inventory),
+        "inventory": page,
+        "next_offset": next_offset,
         "diff": diff,
         "lockfile_warnings": warnings,
     }))
@@ -322,6 +354,11 @@ pub(crate) fn evaluate_workspace_inventory(
     if request.request_id.is_empty()
         || request.guard_home.is_empty()
         || request.workspace_dir.is_empty()
+        || !expanduser(&request.workspace_dir).is_absolute()
+        || request
+            .before_workspace_dir
+            .as_deref()
+            .is_some_and(|path| !expanduser(path).is_absolute())
     {
         return Err(invalid());
     }
