@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 
-from ..native_prompt import extract_prompt_requests as extract_prompt_requests
-from ..native_prompt import should_force_reapproval as should_force_reapproval
 from ..store import GuardStore
 from . import runner_native_authority as _authority
 
