@@ -24,7 +24,8 @@ from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 from codex_plugin_scanner.guard.mdm import network_transport as transport_module
 from codex_plugin_scanner.guard.mdm import network_trust as trust_module
 from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
-from codex_plugin_scanner.guard.mdm.network import diagnose_endpoint, managed_requests_session, managed_urlopen
+from codex_plugin_scanner.guard.mdm.network import managed_requests_session, managed_urlopen
+from codex_plugin_scanner.guard.mdm.network_diagnostics import diagnose_endpoint
 
 
 class _OriginHandler(BaseHTTPRequestHandler):

@@ -15,7 +15,8 @@ from codex_plugin_scanner.guard.adapters.cursor_cli import (
     resolve_cursor_cli_entry,
 )
 from codex_plugin_scanner.guard.cli.install_commands import apply_managed_install
-from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
+from codex_plugin_scanner.guard.runtime import wrapper_run as wrapper_run
+from codex_plugin_scanner.guard.runtime import wrapper_run_finish
 from codex_plugin_scanner.guard.store import GuardStore
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
@@ -160,10 +161,10 @@ def test_guard_run_launches_cursor_agent_subcommand(
         captured["command"] = list(command)
         return _CompletedProcess()
 
-    monkeypatch.setattr(guard_runner_module.subprocess, "run", _fake_run)
+    monkeypatch.setattr(wrapper_run_finish.subprocess, "run", _fake_run)
 
     from codex_plugin_scanner.guard.config import load_guard_config
-    from codex_plugin_scanner.guard.runtime.runner import guard_run
+    from codex_plugin_scanner.guard.runtime.wrapper_run import guard_run
     from codex_plugin_scanner.guard.store import GuardStore
 
     store = GuardStore(context.guard_home)

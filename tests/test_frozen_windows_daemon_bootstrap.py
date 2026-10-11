@@ -75,6 +75,24 @@ def _diagnostics(env: dict[str, str]) -> str:
     return " | ".join(lines)
 
 
+def _full_diagnostics(env: dict[str, str]) -> str:
+    """Complete daemon journal records and complete log files for a failed packaged step."""
+
+    guard_home = Path(env["HOL_GUARD_HOME"])
+    sections = [_diagnostics(env)]
+    journal = guard_home / "daemon-lifecycle"
+    if journal.is_dir():
+        for entry in sorted(journal.iterdir()):
+            if entry.is_file():
+                sections.append(f"--- journal {entry.name} ---\n{_safe_read(entry)}")
+    logs = guard_home / "logs"
+    if logs.is_dir():
+        for entry in sorted(logs.rglob("*")):
+            if entry.is_file():
+                sections.append(f"--- {entry.name} ---\n{_safe_read(entry)}")
+    return "\n".join(sections)
+
+
 def _safe_read(path: Path) -> str:
     try:
         return path.read_text(errors="replace")
@@ -174,7 +192,9 @@ def test_packaged_windows_core_bootstrap_retry_and_repair(tmp_path: Path, native
         repaired = _json_result(_run_core(executable, repair_args, env=env))
         assert repaired["runtime_status"] == "restarted"
         repaired_status = _json_result(_run_core(executable, status_args, env=env))
-        assert repaired_status["running"] is True, (repaired_status, repaired, _diagnostics(env))
+        assert repaired_status["running"] is True
+    except (Exception, pytest.fail.Exception) as error:
+        pytest.fail(f"{error!r}\n{_full_diagnostics(env)}", pytrace=False)
     finally:
         cleanup = _run_core(executable, stop_args, env=env)
         assert cleanup.returncode == 0, f"stdout={cleanup.stdout!r}\nstderr={cleanup.stderr!r}"

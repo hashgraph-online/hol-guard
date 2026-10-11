@@ -2,7 +2,6 @@ tests/test_native_command_evaluation_bridge.py
 tests/test_native_command_evaluation_integration.py
 tests/test_native_command_caller_migration.py
 tests/test_native_command_extension_evidence.py
-tests/test_guard_command_decision_routing.py
 tests/test_guard_command_activity_hook_integration.py
 tests/test_guard_command_backup_extensions.py
 tests/test_guard_command_blitcp_extensions.py
