@@ -6,7 +6,6 @@ from __future__ import annotations
 
 # ruff: noqa: F403,F405
 from .store_base import *
-from .store_native_review_approvals import consume_native_review_approval as consume_native_retry
 
 
 class StoreApprovalsMixin:
@@ -21,17 +20,23 @@ class StoreApprovalsMixin:
         workspace: str | None,
         now: str,
     ) -> bool:
-        with self._connect() as connection:
-            return consume_native_retry(
-                connection,
-                harness=harness,
-                artifact_id=artifact_id,
-                artifact_name=artifact_name,
-                artifact_hash=artifact_hash,
-                launch_target=launch_target,
-                workspace=workspace,
-                now=now,
+        # The resident owns the identity grammar, the latest-decision rule, the
+        # five-minute window and the single spend; an unavailable resident
+        # raises a sqlite error, which the caller treats as no reuse.
+        return bool(
+            self._native_store_call(
+                "consume_native_review_approval",
+                {
+                    "harness": harness,
+                    "artifact_id": artifact_id,
+                    "artifact_name": artifact_name,
+                    "artifact_hash": artifact_hash,
+                    "launch_target": launch_target,
+                    "workspace": workspace,
+                    "now": now,
+                },
             )
+        )
 
     def add_approval_request(self, request: GuardApprovalRequest, now: str) -> str:
         with self._connect() as connection:

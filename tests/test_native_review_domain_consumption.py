@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-import sqlite3
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -18,7 +17,6 @@ from codex_plugin_scanner.guard.daemon.hook_native_review_approval import pause_
 from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_native_review_approvals import consume_native_review_approval
 from tests.test_native_command_observations import _edge, _observations, _receipt, _rehash
 from tests.test_native_review_policy_binding import _resign_identity
 
@@ -134,36 +132,6 @@ def test_policy_bound_review_has_only_one_concurrent_consumer(tmp_path: Path) ->
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert sorted(executor.map(lambda _: consume(), range(2))) == [False, True]
-
-
-@pytest.mark.parametrize(
-    "suffix",
-    [
-        ":",
-        ":" + "a" * 63,
-        ":" + "a" * 65,
-        ":" + "g" * 64,
-        ":" + "A" * 64,
-        ":" + "a" * 64 + ":extra",
-        ":" + "a" * 64 + "\n",
-    ],
-)
-def test_malformed_policy_domain_is_rejected_before_database_access(suffix: str) -> None:
-    binding = f"native-review-v4:{'a' * 64}:deny:review:review:native_sensitive_access_review"
-    with sqlite3.connect(":memory:") as connection:
-        statements: list[str] = []
-        connection.set_trace_callback(statements.append)
-        assert not consume_native_review_approval(
-            connection,
-            harness="claude-code",
-            artifact_id="claude-code:native-pretool:Bash",
-            artifact_name="Bash",
-            artifact_hash=binding + suffix,
-            launch_target="cat .env",
-            workspace=None,
-            now=datetime.now(timezone.utc).isoformat(),
-        )
-        assert not statements
 
 
 def test_policy_domain_cannot_be_stripped_or_substituted(tmp_path: Path) -> None:
