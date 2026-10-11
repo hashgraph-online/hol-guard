@@ -129,6 +129,6 @@ fn read_attestation_key(guard_home: &Path) -> Option<Vec<u8>> {
     (bytes.len() as u64 == size).then_some(bytes)
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "cursor_observer_proof_vectors_tests.rs"]
 mod vectors;
