@@ -59,6 +59,53 @@ pub(super) fn claude_grep_directory_scope_proven(
     walk_scope(&root, &filter, true).is_ok()
 }
 
+/// True when a Claude `Glob` returns only names under a verified directory
+/// whose whole reachable tree holds no sensitive file. The pattern must stay
+/// inside that directory: relative, no `..`, no alternation or escapes.
+pub(super) fn claude_glob_scope_proven(
+    payload: &Value,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some(root) = payload.as_object() else {
+        return false;
+    };
+    if root.get("tool_name").and_then(Value::as_str) != Some("Glob")
+        || ["toolInput", "tool_args", "arguments", "input", "parameters"]
+            .iter()
+            .any(|key| root.contains_key(*key))
+    {
+        return false;
+    }
+    let Some(input) = root.get("tool_input").and_then(Value::as_object) else {
+        return false;
+    };
+    if input
+        .keys()
+        .any(|key| !matches!(key.as_str(), "pattern" | "path"))
+    {
+        return false;
+    }
+    let Some(pattern) = input.get("pattern").and_then(Value::as_str) else {
+        return false;
+    };
+    if pattern.is_empty()
+        || pattern.len() > 1024
+        || pattern.starts_with(['/', '~', '\\'])
+        || pattern.contains(['\0', '\n', '\r', '$', '`', '\\', '{', '}', '(', ')', '!'])
+        || pattern.split('/').any(|part| part == "..")
+        || pattern.as_bytes().get(1) == Some(&b':')
+    {
+        return false;
+    }
+    let target = match input.get("path") {
+        None => ".",
+        Some(Value::String(path)) if !path.is_empty() => path.as_str(),
+        Some(_) => return false,
+    };
+    unfiltered_directory_scope_proven(target, home_dir, cwd)
+}
+
 /// Host-neutral variant for hosts whose search semantics are not modeled
 /// (Oh My Pi `grep`). No filter or ignore file narrows the scope: any
 /// sensitive file reachable below the directory fails the proof, so the

@@ -110,3 +110,64 @@ pub(super) fn safe_inline_expression(executable: &str, arguments: &[String]) -> 
     parser.whitespace();
     parser.position == parser.bytes.len()
 }
+
+fn numeric_source(source: &str) -> bool {
+    let mut parser = Expression {
+        bytes: source.as_bytes(),
+        position: 0,
+    };
+    if !parser.expression(0) {
+        return false;
+    }
+    parser.whitespace();
+    parser.position == parser.bytes.len()
+}
+
+/// A quoted literal with no escapes, interpolation prefix, or line breaks.
+fn plain_string_literal(source: &str) -> bool {
+    let source = source.trim();
+    let Some(quote) = source.chars().next().filter(|c| matches!(c, '"' | '\'')) else {
+        return false;
+    };
+    source.len() >= 2
+        && source.len() <= 202
+        && source.ends_with(quote)
+        && source[1..source.len() - 1]
+            .chars()
+            .all(|c| (c.is_ascii_graphic() || c == ' ') && c != '"' && c != '\'' && c != '\\')
+}
+
+fn call_argument<'a>(statement: &'a str, callee: &str) -> Option<&'a str> {
+    statement
+        .trim()
+        .strip_prefix(callee)?
+        .strip_prefix('(')?
+        .strip_suffix(')')
+}
+
+/// Python `print(<number expression | plain string>)` lines and comments only.
+pub(super) fn python_print_program(code: &str) -> bool {
+    let lines: Vec<&str> = code
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect();
+    code.len() <= 1024
+        && !lines.is_empty()
+        && lines.len() <= 16
+        && lines.iter().all(|line| {
+            call_argument(line, "print")
+                .is_some_and(|arg| numeric_source(arg) || plain_string_literal(arg))
+        })
+}
+
+/// One JavaScript expression statement: a number expression, a plain string,
+/// or `console.log` of one of those.
+pub(super) fn javascript_pure_program(code: &str) -> bool {
+    let code = code.trim().trim_end_matches(';').trim();
+    code.len() <= 256
+        && (numeric_source(code)
+            || plain_string_literal(code)
+            || call_argument(code, "console.log")
+                .is_some_and(|arg| numeric_source(arg) || plain_string_literal(arg)))
+}

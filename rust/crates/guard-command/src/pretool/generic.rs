@@ -8,6 +8,8 @@ mod command_rewrite;
 mod extract;
 #[path = "generic_omp.rs"]
 mod omp;
+#[path = "generic_pure_eval.rs"]
+mod pure_eval;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
@@ -171,9 +173,14 @@ fn evaluate_envelope(
     // skips the command authority but still passes the command controls below.
     let search_scope_proven = event == "PreToolUse"
         && harness == "claude-code"
-        && signals.tool_name.as_deref() == Some("Grep")
         && signals.url_values.is_empty()
-        && super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd);
+        && match signals.tool_name.as_deref() {
+            Some("Grep") => {
+                super::search_scope::claude_grep_directory_scope_proven(payload, home_dir, cwd)
+            }
+            Some("Glob") => super::search_scope::claude_glob_scope_proven(payload, home_dir, cwd),
+            _ => false,
+        };
     // Codex sends an edit as `apply_patch` with the patch body in `command`.
     // That body is an edit description, not shell, so it has its own proof.
     let apply_patch_proven = event == "PreToolUse"
@@ -295,6 +302,8 @@ fn evaluate_envelope(
         )
     } else if let Some(omp_result) = omp_result {
         omp_result
+    } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
+        pure_result
     } else if task_metadata {
         generic_result(
             generic_action(harness, event, PreToolActionTypeV1::Harness,

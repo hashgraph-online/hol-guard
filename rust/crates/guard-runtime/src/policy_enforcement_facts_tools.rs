@@ -202,7 +202,9 @@ pub(crate) fn risk_classes(
         PreToolActionTypeV1::Harness
             if matches!(
                 reason_code,
-                "native_agent_task_metadata" | "native_omp_agent_task"
+                "native_agent_task_metadata"
+                    | "native_omp_agent_task"
+                    | "native_pure_constant_eval"
             ) => {}
         PreToolActionTypeV1::Harness => risks.push("execution"),
         PreToolActionTypeV1::Unknown => {}

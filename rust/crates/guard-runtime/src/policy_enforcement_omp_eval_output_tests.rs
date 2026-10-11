@@ -124,3 +124,24 @@ fn read_only_eval_output_preserves_scans_and_installed_policy_floors() {
     assert!(super::super::eval_output::bounded_output_action(&request).is_none());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn constant_eval_proof_carries_no_execution_risk() {
+    use super::super::policy_enforcement_facts::risk_classes;
+    assert!(risk_classes(
+        PreToolActionTypeV1::Harness,
+        false,
+        "native_pure_constant_eval",
+        &[]
+    )
+    .is_empty());
+    assert_eq!(
+        risk_classes(
+            PreToolActionTypeV1::Harness,
+            false,
+            "native_omp_eval_other",
+            &[]
+        ),
+        vec!["execution"]
+    );
+}
