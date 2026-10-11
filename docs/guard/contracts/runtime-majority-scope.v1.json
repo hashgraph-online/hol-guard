@@ -609,20 +609,6 @@
       },
       {
         "path": [
-          "src/codex_plugin_scanner/guard/mcp/adapters.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_apply.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_recovery_state.py",
-          "src/codex_plugin_scanner/guard/mcp/policy_tools.py",
-          "src/codex_plugin_scanner/guard/mcp/registry.py",
-          "src/codex_plugin_scanner/guard/mcp/sanitizers.py",
-          "src/codex_plugin_scanner/guard/mcp/schemas.py",
-          "src/codex_plugin_scanner/guard/mcp/server.py",
-          "src/codex_plugin_scanner/guard/mcp/tools.py"
-        ],
-        "reason": "Reviewed: guard MCP server (mcp/*): the `guard mcp` stdio server answers tool calls (policy, registry, adapters) from agents, so it is an MCP-surface request route; classified in scope under the in-doubt rule. Entry: cli/commands_dispatch_local -> mcp/server."
-      },
-      {
-        "path": [
           "src/codex_plugin_scanner/guard/business_policy_document_import.py",
           "src/codex_plugin_scanner/guard/capabilities.py",
           "src/codex_plugin_scanner/guard/codex_binding_capture_join.py",
@@ -644,6 +630,27 @@
           "src/codex_plugin_scanner/guard/policy_bundle_decisions.py"
         ],
         "reason": "Reviewed: shared policy, inventory, store and consumer modules: consumer/service (runtime runner), capabilities, product_model (argv harness dispatch in the top-level CLI on every invocation), local_cli_*/local_mcp_grant_decision trust decisions (native_mcp_tool_policy), business_policy_document_import (policy snapshot publisher and recovery), store_* mixins on the policy/MCP/extension paths, skill_document_evidence, trust_metadata_boundary, inventory_item_description, text.py, runtime_transition_hook_probe (daemon/server), codex_binding_capture_join, cloud_exceptions (store_cloud_events) and policy_bundle_decisions (local_supply_chain policy-bundle handling)."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
+          "src/codex_plugin_scanner/guard/mdm/device_key_windows_api.py"
+        ],
+        "reason": "Reviewed: windows_current_user_sid and its token-API loader: native_policy_snapshot_windows_support lazily imports it to bind the Windows policy snapshot owner, so it runs when a snapshot is written; the rest of device_key_native is excluded by mdm-device-key-native-signing."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/mcp/adapters.py",
+          "src/codex_plugin_scanner/guard/mcp/policy_apply.py",
+          "src/codex_plugin_scanner/guard/mcp/policy_recovery_state.py",
+          "src/codex_plugin_scanner/guard/mcp/policy_tools.py",
+          "src/codex_plugin_scanner/guard/mcp/registry.py",
+          "src/codex_plugin_scanner/guard/mcp/sanitizers.py",
+          "src/codex_plugin_scanner/guard/mcp/schemas.py",
+          "src/codex_plugin_scanner/guard/mcp/server.py",
+          "src/codex_plugin_scanner/guard/mcp/tools.py"
+        ],
+        "reason": "Reviewed: the guard mcp serve stdio server (GuardMCPServer, tool registry, adapters, sanitizers, schemas) and its policy-authoring tools. The scope definition lists the MCP surface and tool calls as runtime, and these tools are invoked by coding agents with Guard-authored results, so they stay in scope even though the serve command is launched interactively rather than from a hook."
       }
     ],
     "tests": {
@@ -1003,6 +1010,76 @@
         "entry_points": [],
         "reason": "Payload builders for the guard settings explain/doctor/show commands and the runtime detector registry and perf listing commands.",
         "evidence": "The only callers are commands_dispatch_records.py and commands_dispatch_admin.py, which are excluded CLI dispatch modules, plus each other. They read settings and detector metadata for operator output and never feed a hook, run, protect or MCP decision. The runtime policy readers (effective policy config, stored policy decision, approval context token) stay in scope. The report validates that no retained symbol or in-scope module references the excluded names."
+      },
+      {
+        "id": "mdm-device-key-native-signing",
+        "category": "async_control_plane",
+        "path": "src/codex_plugin_scanner/guard/mdm/device_key_native.py",
+        "symbols": [
+          "_MAX_HELPER_OUTPUT_BYTES",
+          "_MAX_HELPER_STDERR_BYTES",
+          "_MAX_HEALTH_LEASE_CLAIMS_BYTES",
+          "_HELPER_TIMEOUT_SECONDS",
+          "_SYSTEM_SID",
+          "_P256_ORDER",
+          "_HEALTH_LEASE_KEYS",
+          "_HEALTH_KEY_REGISTRATION_KEYS",
+          "NativeKeyEvidence",
+          "NativeHealthLeaseSignature",
+          "_validated_canonical_health_lease_claims",
+          "_validated_canonical_protection_lease",
+          "_validated_canonical_health_key_registration",
+          "_validated_der_signature",
+          "windows_directory",
+          "_helper_invocation",
+          "run_helper",
+          "_sign_payload_with_device_key",
+          "sign_health_lease",
+          "sign_protection_lease",
+          "sign_health_key_registration",
+          "require_machine_context"
+        ],
+        "entry_points": [],
+        "reason": "Native device-key helper invocation and health-lease, protection-lease and health-key-registration signing for the MDM health reporter; windows_current_user_sid stays because the Windows policy snapshot lazily imports it to bind snapshot ownership.",
+        "evidence": "run_helper, the sign_* functions, require_machine_context and the canonical-claims validators are called only from mdm/device_key.py, which is reached only through mdm/integrity.py, mdm/continuity.py and mdm/health_*.py (the periodic MDM health and lease reporter, already excluded by mdm-health) and cli/commands_dispatch_mdm.py. The only in-scope importer of this module is native_policy_snapshot_windows_support._windows_owner_sid, a lazy import of windows_current_user_sid, which is retained together with the token API module it loads."
+      },
+      {
+        "id": "adapter-inventory-snapshot",
+        "category": "offline_reporting",
+        "path": "src/codex_plugin_scanner/guard/adapters/base.py",
+        "symbols": [
+          "HarnessAdapter.inventory_snapshot"
+        ],
+        "entry_points": [],
+        "reason": "HarnessAdapter.inventory_snapshot assembles the AIBOM inventory snapshot (including optional Cisco scans) for export and cloud inventory upload.",
+        "evidence": "No production code calls inventory_snapshot: the only references are the method definition and tests/test_guard_aibom_detection.py, which test the method directly. The AIBOM collection, upload and CLI modules (aibom_collection, aibom_commands, aibom_cli, aibom_content_upload) are already excluded by aibom-inventory and build snapshots through their own path. Its lazy imports of inventory_contract and inventory_cisco were the only in-scope edge to the inventory_contract assembly modules (items, metadata, redaction, scans, mcp, models, constants) and, through them, skill_document_evidence and trust_metadata_boundary. aibom_detection now imports fingerprint_mapping and fingerprint_text straight from inventory_contract_fingerprints, which stay in scope because adapter detect() hashes MCP server content synchronously during launch."
+      },
+      {
+        "id": "mcp-contribution-authoring-validation",
+        "category": "authoring_tooling",
+        "path": "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
+        "symbols": [
+          "contributions_dir",
+          "catalog_id_for_mcp_id",
+          "_reserved_direct_mcp_command",
+          "direct_mcp_command_name",
+          "_normalized_tool_name",
+          "remote_mcp_endpoint_identity",
+          "normalized_remote_server_name",
+          "load_mcp_contribution_payloads",
+          "validate_mcp_contribution_file",
+          "validate_mcp_contribution",
+          "mcp_tool_state",
+          "_load_from_directory",
+          "_frozen_runtime",
+          "_load_packaged_payloads",
+          "_finalize_payloads",
+          "_validator",
+          "_schema_bytes"
+        ],
+        "entry_points": [],
+        "reason": "The MCP server contribution loader, schema validator and catalog-id helpers serve extension authoring, the extension builder and the contributed-MCP catalog. The only runtime consumer is the remote URL normalizer used when resolving a Copilot runtime server identity, which stays in scope with its helpers.",
+        "evidence": "Only one in-scope module imports mcp_server_contribution: cli/commands_support_runtime_resolution.py, and it imports only normalized_remote_mcp_url. The excluded functions are reached from extension_builder/render_native.py, runtime/mcp_server_catalog.py and tests, none of which are in the runtime import closure. normalized_remote_mcp_url and its helpers (_valid_dns_hostname, _normalized_remote_component, _remove_remote_dot_segments, _normalized_remote_path, _normalized_remote_query) do not call any excluded function."
       }
     ],
     "dynamic_imports": [
