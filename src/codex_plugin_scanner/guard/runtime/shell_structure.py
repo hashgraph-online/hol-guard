@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from ..native_shell_helpers import call, runtime_key
 
@@ -72,7 +72,7 @@ class ShellScanState:
         if self._top_level is None or (self.quote, self.subshell_depth, self.in_backtick) != self._expected:
             self._top_level = call("top_level", "", state=[self.quote, self.subshell_depth, self.in_backtick])
             self._expected = (self.quote, self.subshell_depth, self.in_backtick)
-        return self._top_level
+        return cast(bool, self._top_level)
 
     def advance(self, command: str, index: int) -> int:
         key = (command, *runtime_key())
