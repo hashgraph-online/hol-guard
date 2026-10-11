@@ -29,7 +29,7 @@ use crate::shell_secret_read_support::{
     sed_file_operand_tokens, shell_segment_file_operand_tokens,
 };
 
-fn records() -> Vec<Value> {
+pub(crate) fn records() -> Vec<Value> {
     let bytes = include_bytes!("../tests/fixtures/sfrs/intermediate_tokens.json.gz");
     let mut text = String::new();
     flate2::read::GzDecoder::new(&bytes[..])
@@ -37,6 +37,16 @@ fn records() -> Vec<Value> {
         .expect("gzip");
     let document: Value = serde_json::from_str(&text).expect("json");
     document["tokens"].as_array().expect("tokens").clone()
+}
+
+pub(crate) fn script_records() -> Vec<Value> {
+    let bytes = include_bytes!("../tests/fixtures/sfrs/intermediate_tokens.json.gz");
+    let mut text = String::new();
+    flate2::read::GzDecoder::new(&bytes[..])
+        .read_to_string(&mut text)
+        .expect("gzip");
+    let document: Value = serde_json::from_str(&text).expect("json");
+    document["scripts"].as_array().expect("scripts").clone()
 }
 
 fn strings(value: &Value) -> Vec<String> {

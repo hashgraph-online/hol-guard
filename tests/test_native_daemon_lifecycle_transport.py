@@ -389,3 +389,75 @@ def test_the_resident_gets_only_the_budget_the_probe_wait_left(monkeypatch: pyte
     transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 12.0)
 
     assert timeouts == [pytest.approx(12.0 - 5 * transport._RUNTIME_PROBE_RETRY_SECONDS)]
+
+
+def test_a_lapsed_resident_deadline_is_retried_inside_the_caller_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    timeouts: list[float] = []
+
+    def request(**kwargs):
+        if len(timeouts) < 1:
+            timeouts.append(kwargs["timeout_seconds"])
+            clock[0] += 4.0
+            return None
+        return _answer(kwargs, timeouts)
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_request_deadline_exceeded")
+
+    payload = transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+
+    assert payload == {"ephemeral": False}
+    assert timeouts == [pytest.approx(30.0), pytest.approx(26.0)]
+
+
+def test_a_deadline_retry_stops_when_the_budget_is_spent(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    calls: list[int] = []
+
+    def request(**_kwargs):
+        calls.append(1)
+        clock[0] += 9.5
+        return None
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_client_deadline_exceeded")
+
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="native_client_deadline_exceeded"):
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 10.0)
+    assert len(calls) == 1
+
+
+def test_a_non_deadline_outage_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+    monkeypatch.setattr(transport, "_resident_request", lambda **_kw: calls.append(1))
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_client_connect_failed")
+
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="native_client_connect_failed"):
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+    assert len(calls) == 1
+
+
+def test_a_stale_deadline_code_is_not_read_as_the_next_attempts_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_resident_client import (
+        native_resident_client_failure_code,
+        record_native_resident_client_failure_code,
+    )
+
+    calls: list[int] = []
+
+    def request(**_kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            record_native_resident_client_failure_code("native_request_deadline_exceeded")
+        return None  # the second attempt never reaches the client and leaves no code
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "_runtime_unavailable_detail", lambda: "runtime_unavailable:x")
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", native_resident_client_failure_code)
+
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="runtime_unavailable:x"):
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+    assert len(calls) == 2

@@ -61,6 +61,8 @@ mod hook_adapter;
 pub use hook_adapter::*;
 mod hook_artifact_compose;
 pub use hook_artifact_compose::*;
+mod consumer_artifact_compose;
+pub use consumer_artifact_compose::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
 mod contributed_mcp_decision;

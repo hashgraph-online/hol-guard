@@ -57,6 +57,10 @@ def test_hook_worker_auto_is_native_first(
                 "model_output_action": "allow_original",
                 "reason_code": "native_allow",
             },
+            "harness_response": {
+                "policy_action": "allow",
+                "hookSpecificOutput": {"hookEventName": "PostToolUse"},
+            },
         }
 
     monkeypatch.setattr(

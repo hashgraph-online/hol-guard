@@ -26,7 +26,6 @@ from codex_plugin_scanner.guard.runtime.decisions import (
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.types import GuardVerdict, GuardVerdictAction
 from tests.guard_authority_gate_support import evaluation_authority_error, runner_native_authority
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
@@ -56,18 +55,34 @@ def _detection(artifact: GuardArtifact | None) -> HarnessDetection:
     )
 
 
-def _scoring_verdict(action: GuardVerdictAction) -> GuardVerdict:
-    return GuardVerdict(
-        action=action,
-        severity=1,
-        confidence=0.9,
-        reasons=(f"scanner recommends {action}",),
-        recommended_next_actions=(),
-        suppressible=True,
-        review_priority="low",
-        evidence_sources=("artifact",),
-        provenance_state="none",
-    )
+_SCORING_SIGNALS: dict[str, tuple[tuple[int, float], ...]] = {
+    "allow": (),
+    "warn": ((5, 0.6),),
+    "require_reapproval": ((7, 0.6),),
+    "block": ((9, 0.9),),
+}
+
+
+def _scoring_inputs(action: str) -> dict[str, object]:
+    """Native scoring inputs for which the resident recommends ``action``."""
+
+    return {
+        "signals": [
+            {
+                "severity": severity,
+                "confidence": confidence,
+                "explanation": f"scanner recommends {action}",
+                "family": "network",
+                "evidence_source": "artifact",
+            }
+            for severity, confidence in _SCORING_SIGNALS[action]
+        ],
+        "deltas": [],
+        "provenance_source_kind": "none",
+        "publisher_trust": "unknown",
+        "prior_approvals": 0,
+        "prior_incidents": 0,
+    }
 
 
 def _runtime_signal(
@@ -135,8 +150,8 @@ def test_evaluate_detection_does_not_serialize_scoring_allow_as_the_enforced_ver
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
 
     output = consumer_service.evaluate_detection(
@@ -172,8 +187,8 @@ def test_removed_artifact_uses_the_authoritative_action_instead_of_a_hard_coded_
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     consumer_service.evaluate_detection(
         _detection(artifact),
@@ -422,8 +437,8 @@ def test_unanimous_allow_launches_without_a_new_prompt(
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
 
     class _LaunchAdapter(HarnessAdapter):
@@ -473,8 +488,8 @@ def test_exact_allow_once_keeps_scoring_recommendation_diagnostic_at_launch(
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("require_reapproval"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("require_reapproval"),
     )
 
     class _LaunchAdapter(HarnessAdapter):
@@ -532,7 +547,7 @@ def test_policy_and_scoring_pairs_have_one_final_projection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     policy_action: str,
-    scoring_action: GuardVerdictAction,
+    scoring_action: str,
     expected_action: str,
 ) -> None:
     artifact = _artifact(tmp_path)
@@ -545,8 +560,8 @@ def test_policy_and_scoring_pairs_have_one_final_projection(
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict(scoring_action),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs(scoring_action),
     )
 
     output = consumer_service.evaluate_detection(
@@ -579,8 +594,8 @@ def test_first_unchanged_changed_and_persisted_surfaces_share_authority(
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
 
     first = consumer_service.evaluate_detection(
@@ -621,8 +636,8 @@ def test_authoritative_schema_rejects_contradictory_alias_and_enforcement_state(
     )
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     output = consumer_service.evaluate_detection(
         _detection(artifact), store, config, default_action="allow", persist=False
@@ -769,8 +784,8 @@ def test_runtime_detector_signals_require_their_exact_composed_authority(
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     output = consumer_service.evaluate_detection(
         _detection(artifact),
@@ -816,8 +831,8 @@ def test_terminal_runtime_detector_signal_is_bound_without_synthetic_scanner_evi
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     output = consumer_service.evaluate_detection(
         _detection(artifact),
@@ -908,8 +923,8 @@ def test_trusted_request_trace_requires_matching_outer_evidence(
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     output = consumer_service.evaluate_detection(
         _detection(artifact),
@@ -944,8 +959,8 @@ def test_outer_approval_reuse_action_cannot_contradict_launch_authority(
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     output = consumer_service.evaluate_detection(
         _detection(artifact),
@@ -973,8 +988,8 @@ def test_finalized_saved_allow_requires_an_exact_atomic_claim_proof(
     artifact = _artifact(tmp_path)
     monkeypatch.setattr(
         consumer_service,
-        "score_verdict",
-        lambda *_args, **_kwargs: _scoring_verdict("allow"),
+        "_scoring_inputs",
+        lambda *_args, **_kwargs: _scoring_inputs("allow"),
     )
     output = consumer_service.evaluate_detection(
         _detection(artifact),

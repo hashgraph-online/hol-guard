@@ -9,6 +9,7 @@ points. This script depends on the Python implementation and is retired with it.
 
 from __future__ import annotations
 
+import ast
 import gzip
 import json
 import os
@@ -18,13 +19,117 @@ from pathlib import Path
 from codex_plugin_scanner.guard.runtime.secret_file_request_services import (
     local_read_operands,
     read_only_filters,
+    docker_requests,
     request_artifacts,
     shell_quote_tokens,
+    shell_static_safety,
     shell_tokenization,
 )
 
 MAX_TEXTS = 6000
-HOST_MARKERS = ("michaelkantor", "runner2-port", "hol-guard/.venv", "/home/runner", "/private/var/folders", "~/.codex")
+HOST_MARKERS = ("michaelkantor", "runner2-port", "hol-guard/.venv", "/home/runner", "/var/folders", "~/.codex")
+
+
+DOCKER_EXTRAS = (
+    "docker run alpine true",
+    "docker login registry.example",
+    "docker push example/app:1",
+    "docker ps",
+    "docker --help",
+    "docker build --help",
+    "docker build -t app .",
+    "docker build --build-arg API_TOKEN=abc .",
+    "docker build --build-arg TOKEN .",
+    "docker build --build-arg NAME=$SECRET_KEY .",
+    "docker build --secret id=x,src=.env .",
+    "docker build -o type=local,dest=out .",
+    "docker build --label token=ghp_abc .",
+    "docker buildx build --push -t app .",
+    "docker buildx --builder b build --secret id=x .",
+    "docker buildx ls",
+    "docker buildx build --build-arg PASSWORD=x .",
+    "docker compose up -d",
+    "docker compose ps",
+    "docker compose exec web sh",
+    "docker compose run web true",
+    "docker compose --env-file prod.env up",
+    "docker compose -f a.yml -p proj config",
+    "docker compose build --build-arg API_KEY=x",
+    "docker compose frobnicate",
+    "docker compose -- up",
+    "docker compose -- run web",
+    "docker --context prod ps",
+    "docker --context default ps",
+    "docker -c prod ps",
+    "docker -cprod ps",
+    "docker -H tcp://host:2375 ps",
+    "docker -Htcp://host ps",
+    "docker --host=ssh://u@h ps",
+    "docker --tlsverify ps",
+    "docker --tls ps",
+    "docker --config /tmp/x ps",
+    "docker --config=/tmp/x ps",
+    "DOCKER_HOST=tcp://h:1 docker ps",
+    "DOCKER_HOST=unix:///var/run/docker.sock docker ps",
+    "DOCKER_CONTEXT=prod docker ps",
+    "DOCKER_CONTEXT=default docker ps",
+    "DOCKER_TLS_VERIFY=1 docker ps",
+    "DOCKER_TLS_VERIFY=0 docker ps",
+    "DOCKER_CERT_PATH=/x docker ps",
+    "DOCKER_CONFIG=/x docker ps",
+    "export DOCKER_HOST=tcp://h:1 && docker ps",
+    "export DOCKER_HOST=unix:///x; docker ps",
+    "export DOCKER_CONTEXT=prod; docker compose ps",
+    "env DOCKER_HOST=tcp://h docker ps",
+    "env -i DOCKER_HOST=tcp://h docker ps",
+    "env -u DOCKER_HOST docker ps",
+    "env -S 'docker run x'",
+    "env docker run x",
+    "env",
+    "env FOO=1",
+    "sudo docker ps",
+    "cd /tmp && docker ps && docker login",
+    "docker ps | docker run x",
+    "docker ps && echo hi > .docker/config.json",
+    "cat ~/.docker/config.json",
+    "docker --debug ps",
+    "docker -D run x",
+    "docker -l debug build -t a .",
+    "docker image build --build-arg X=1 .",
+    "docker builder build .",
+)
+
+
+SCRIPT_EXTRAS = (
+    "import os as o; o.remove('x')",
+    "import os, sys as s",
+    "import os.path as p",
+    "import json as j, subprocess",
+    "from subprocess import run as r",
+    "from os import path",
+    "from os import path as p",
+    "from os.path import join as j",
+    "from .os import path as p",
+    "from collections import OrderedDict as od",
+    "from os import (\n    path as p,\n)",
+    "if True:\n    import shutil as sh",
+    "x = 1; import pathlib as pl",
+    "print('import os as o')",
+    "# import os as o\nprint(1)",
+    "x = \"\"\"\nimport os as o\n\"\"\"",
+    "import os as",
+    "def broken(:\n  import os as o",
+    "sleep 1",
+    "sleep 1.5",
+    "import time; time.sleep(2)",
+    "time.sleep( 3 )",
+    "print(open('f').read())",
+    "open('f', 'w').write('x')",
+    "Path('f').write_text('x')",
+    "print(1)",
+    "",
+    "  ",
+)
 
 
 def _walk(value: object, found: set[str]) -> None:
@@ -47,6 +152,7 @@ def _corpus(fixture_dir: Path) -> list[str]:
         document = json.loads(gzip.decompress(path.read_bytes()))
         for vector in document["vectors"]:
             _walk(vector["args"], found)
+    found.update(DOCKER_EXTRAS)
     return sorted(found)[:MAX_TEXTS]
 
 
@@ -107,6 +213,45 @@ def _quote_tokens(text: str) -> dict[str, object]:
     }
 
 
+def _static(text: str, parts: list[str], segments: list[list[str]]) -> dict[str, object]:
+    safety = shell_static_safety
+    cwd, root = Path("/sfrs-nonexistent-cwd"), Path("/sfrs-nonexistent-root")
+    return {
+        "jq": [safety._github_jq_filter_args_are_safe(segment[1:]) for segment in segments],
+        "texts": list(safety._script_interpreter_texts(parts)),
+        "redirections": [safety._without_safe_inspection_redirections(segment) for segment in segments],
+        "syntax": [safety._shell_syntax_check_segment_is_safe(segment[0], segment[1:]) for segment in segments],
+        "escapes": [safety._shell_token_escapes_root(part, cwd=cwd, root=root) for part in parts],
+        "substitution": [safety._shell_token_has_command_substitution(part) for part in parts],
+        "interpreter": [
+            [safety._is_python_interpreter_command(part), safety._is_script_interpreter_command(part)] for part in parts
+        ],
+        "payloads": [
+            [None if (found := safety._interpreter_flag_payload(parts, index)) is None else [found.script_text, found.tokens_consumed]]
+            for index in range(len(parts))
+        ],
+    }
+
+
+def _parses(text: str) -> bool:
+    try:
+        ast.parse(text)
+    except (SyntaxError, ValueError):
+        return False
+    return True
+
+
+def _script(text: str) -> dict[str, object]:
+    safety = shell_static_safety
+    return {
+        "text": text,
+        "parses": _parses(text),
+        "aliased": safety._script_has_aliased_risky_import(text),
+        "wait": safety._script_is_benign_wait(text),
+        "observer": safety._script_is_read_only_observer(text),
+    }
+
+
 def _record(text: str) -> dict[str, object]:
     parts = shell_tokenization._split_shell_parts(text)
     segments = shell_tokenization._iter_shell_command_segments(parts)
@@ -126,18 +271,22 @@ def _record(text: str) -> dict[str, object]:
             ]
             for segment in segments
         ],
+        "docker_reason": docker_requests._docker_sensitive_reason(text),
         "names": [request_artifacts._normalized_shell_command_name(part) for part in parts],
         "filters": _filters(segments, parts),
         "operands": _operands(segments, parts),
         "quote": _quote_tokens(text),
+        "static": _static(text, parts, segments),
     }
 
 
 def main() -> None:
     fixture_dir = Path(sys.argv[1])
     os.environ.pop("RIPGREP_CONFIG_PATH", None)
-    records = [_record(text) for text in _corpus(fixture_dir)]
-    document = {"schema": "sfrs-intermediate.v1", "tokens": records}
+    corpus = _corpus(fixture_dir)
+    records = [_record(text) for text in corpus]
+    scripts = sorted({*SCRIPT_EXTRAS, *(text for record in records for text in record["static"]["texts"])})
+    document = {"schema": "sfrs-intermediate.v1", "tokens": records, "scripts": [_script(text) for text in scripts]}
     out = fixture_dir / "intermediate_tokens.json.gz"
     out.write_bytes(gzip.compress(json.dumps(document, sort_keys=True).encode("utf-8"), mtime=0))
     print(f"{len(records)} records -> {out}")

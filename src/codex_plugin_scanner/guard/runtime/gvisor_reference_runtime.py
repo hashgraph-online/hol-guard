@@ -12,7 +12,7 @@ import hashlib
 import os
 import re
 import subprocess
-import tempfile
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,11 +33,37 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _limit_output_files() -> None:
-    """Hard-limit each inherited output file before executing runsc."""
-    import resource
+class _BoundedDrain:
+    """Drain one pipe to EOF while keeping only the first ``_MAX_CAPTURE_BYTES``.
 
-    resource.setrlimit(resource.RLIMIT_FSIZE, (_MAX_CAPTURE_BYTES, _MAX_CAPTURE_BYTES))
+    runsc must not inherit an ``RLIMIT_FSIZE``: current releases write sandbox setup
+    files larger than the capture bound and fail to start under it. Capturing through a
+    pipe keeps the bound in Guard's memory instead of on disk, and draining past the
+    bound keeps a noisy workload from blocking on a full pipe.
+    """
+
+    def __init__(self, read_fd: int) -> None:
+        self._read_fd = read_fd
+        self._chunks: list[bytes] = []
+        self._kept = 0
+        self._thread = threading.Thread(target=self._drain, daemon=True)
+        self._thread.start()
+
+    def _drain(self) -> None:
+        try:
+            while chunk := os.read(self._read_fd, 65_536):
+                room = _MAX_CAPTURE_BYTES - self._kept
+                if room > 0:
+                    kept = chunk[:room]
+                    self._chunks.append(kept)
+                    self._kept += len(kept)
+        finally:
+            os.close(self._read_fd)
+
+    def captured(self, deadline: float) -> bytes:
+        """Wait until EOF or ``deadline`` (``time.monotonic``), then snapshot."""
+        self._thread.join(max(0.0, deadline - time.monotonic()))
+        return b"".join(tuple(self._chunks))
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,39 +178,39 @@ class GVisorReferenceRuntime:
         stderr = b""
         exit_code = 125
         cleanup_complete = False
+        cleaned = False
+        stdout_read, stdout_write = os.pipe()
+        stderr_read, stderr_write = os.pipe()
+        stdout_drain = _BoundedDrain(stdout_read)
+        stderr_drain = _BoundedDrain(stderr_read)
         try:
-            with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
-                try:
-                    completed = subprocess.run(
-                        command,
-                        check=False,
-                        stdout=stdout_file,
-                        stderr=stderr_file,
-                        timeout=timeout_seconds,
-                        env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"},
-                        preexec_fn=_limit_output_files,
-                    )
-                    exit_code = completed.returncode
-                except subprocess.TimeoutExpired:
-                    timed_out = True
-                    exit_code = 124
-                _ = stdout_file.seek(0)
-                _ = stderr_file.seek(0)
-                stdout = stdout_file.read(_MAX_CAPTURE_BYTES)
-                stderr = stderr_file.read(_MAX_CAPTURE_BYTES)
-        finally:
             try:
-                cleanup = subprocess.run(
-                    (*self._base_command(), "delete", "--force", execution_instance),
+                completed = subprocess.run(
+                    command,
                     check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=10,
+                    stdout=stdout_write,
+                    stderr=stderr_write,
+                    timeout=timeout_seconds,
                     env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"},
                 )
-                cleanup_complete = cleanup.returncode in {0, 128}
+                exit_code = completed.returncode
             except subprocess.TimeoutExpired:
-                cleanup_complete = False
+                timed_out = True
+                exit_code = 124
+            finally:
+                os.close(stdout_write)
+                os.close(stderr_write)
+            if timed_out:
+                # The timeout killed only the runsc parent. The sandbox still holds
+                # the pipe write ends, so delete it before waiting for EOF.
+                cleanup_complete = self._force_delete(execution_instance)
+                cleaned = True
+            drain_deadline = time.monotonic() + 10
+            stdout = stdout_drain.captured(drain_deadline)
+            stderr = stderr_drain.captured(drain_deadline)
+        finally:
+            if not cleaned:
+                cleanup_complete = self._force_delete(execution_instance)
 
         duration_ms = (time.monotonic_ns() - started) // 1_000_000
         return GVisorRunResult(
@@ -198,6 +224,20 @@ class GVisorReferenceRuntime:
             timed_out=timed_out,
             cleanup_complete=cleanup_complete,
         )
+
+    def _force_delete(self, execution_instance: str) -> bool:
+        try:
+            cleanup = subprocess.run(
+                (*self._base_command(), "delete", "--force", execution_instance),
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=10,
+                env={"PATH": "/usr/sbin:/usr/bin:/sbin:/bin"},
+            )
+        except subprocess.TimeoutExpired:
+            return False
+        return cleanup.returncode in {0, 128}
 
     def cancel(self, execution_instance: str) -> bool:
         """Idempotently signal and delete one Guard-owned execution instance."""

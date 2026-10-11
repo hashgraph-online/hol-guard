@@ -142,8 +142,13 @@ mod sfrs_agent_guidance;
 mod sfrs_benign_reads;
 mod sfrs_constants;
 mod sfrs_docker_args;
+#[cfg(test)]
+mod sfrs_docker_vectors;
+mod sfrs_interpreter_scripts;
+mod sfrs_jq;
 mod sfrs_json;
 mod sfrs_patterns;
+mod sfrs_python_imports;
 mod sfrs_quote_tokens;
 mod sfrs_read_only_filters;
 pub mod sfrs_replay;
@@ -154,8 +159,12 @@ mod sfrs_search_filters;
 mod sfrs_selectors;
 mod sfrs_shell_tokens;
 mod sfrs_shlex;
+mod sfrs_static_safety;
+#[cfg(test)]
+mod sfrs_static_vectors;
 #[cfg(test)]
 mod sfrs_token_vectors;
+mod sfrs_tool_request;
 mod shell_command_wrappers;
 pub mod shell_execution_context;
 mod shell_execution_context_support;

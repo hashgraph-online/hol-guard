@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import os
 import shutil
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -42,6 +42,13 @@ def _bundle(name: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     (path / "config.json").write_text("{}", encoding="utf-8")
     return path
+
+
+def _write_fd(output: object, payload: bytes) -> None:
+    assert isinstance(output, int)
+    view = memoryview(payload)
+    while view:
+        view = view[os.write(output, view) :]
 
 
 class TestConfiguration:
@@ -105,9 +112,7 @@ class TestExecution:
 
         def invoke(command: tuple[str, ...], **kwargs: object) -> MagicMock:
             if "run" in command:
-                output = kwargs["stdout"]
-                assert isinstance(output, io.BufferedIOBase)
-                output.write(b"ok\n")
+                _write_fd(kwargs["stdout"], b"ok\n")
             return MagicMock(returncode=0)
 
         run.side_effect = invoke
@@ -132,9 +137,7 @@ class TestExecution:
 
         def invoke(command: tuple[str, ...], **kwargs: object) -> MagicMock:
             if "run" in command:
-                output = kwargs["stdout"]
-                assert isinstance(output, io.BufferedIOBase)
-                output.write(b"partial")
+                _write_fd(kwargs["stdout"], b"partial")
                 raise __import__("subprocess").TimeoutExpired(("runsc",), 1)
             return MagicMock(returncode=0)
 
@@ -146,19 +149,49 @@ class TestExecution:
         assert run.call_count == 2
 
     @patch("subprocess.run")
+    def test_timeout_deletes_the_sandbox_before_waiting_for_output(self, run: MagicMock) -> None:
+        _bundle("guard-held")
+        held: list[int] = []
+
+        def invoke(command: tuple[str, ...], **kwargs: object) -> MagicMock:
+            if "run" in command:
+                # The sandbox keeps its own copy of stdout after runsc is killed.
+                held.append(os.dup(kwargs["stdout"]))
+                _write_fd(kwargs["stdout"], b"partial")
+                raise __import__("subprocess").TimeoutExpired(("runsc",), 1)
+            _write_fd(held[0], b"-tail")
+            os.close(held.pop())
+            return MagicMock(returncode=0)
+
+        run.side_effect = invoke
+        started = time.monotonic()
+        result = _runner().run("guard-held", timeout_seconds=1)
+        assert time.monotonic() - started < 5
+        assert result.timed_out is True
+        assert result.cleanup_complete is True
+        assert result.stdout_bytes == len(b"partial-tail")
+        assert run.call_count == 2
+
+    @patch("subprocess.run")
     def test_output_capture_is_hard_bounded(self, run: MagicMock) -> None:
         _bundle("guard-output")
 
         def invoke(command: tuple[str, ...], **kwargs: object) -> MagicMock:
             if "run" in command:
-                output = kwargs["stdout"]
-                assert isinstance(output, io.BufferedIOBase)
-                output.write(b"x" * 2_097_152)
+                _write_fd(kwargs["stdout"], b"x" * 2_097_152)
             return MagicMock(returncode=0)
 
         run.side_effect = invoke
         result = _runner().run("guard-output")
         assert result.stdout_bytes == 1_048_576
+        assert result.stdout_digest == framed_digest("guard.runsc-stdout.v1", {"bytes": (b"x" * 1_048_576).hex()})
+
+    @patch("subprocess.run")
+    def test_runsc_does_not_inherit_a_file_size_limit(self, run: MagicMock) -> None:
+        _bundle("guard-limits")
+        run.return_value = MagicMock(returncode=0)
+        _ = _runner().run("guard-limits")
+        assert "preexec_fn" not in run.call_args_list[0].kwargs
 
     @patch("subprocess.run")
     def test_cancel_is_idempotent_and_validated(self, run: MagicMock) -> None:
