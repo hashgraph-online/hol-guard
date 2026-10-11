@@ -114,9 +114,22 @@ fn replays_every_recorded_inventory_scenario() {
                 match step["error"].as_object() {
                     None => {
                         assert_eq!(reply["status"], "ok", "{label}: {reply}");
-                        if COMPARED_PAYLOADS.contains(&step["method"].as_str().unwrap()) {
+                        let method = step["method"].as_str().unwrap();
+                        if COMPARED_PAYLOADS.contains(&method) {
+                            let payload = if matches!(
+                                method,
+                                "list_artifact_snapshots" | "list_artifact_inventory"
+                            ) {
+                                assert!(
+                                    reply["payload"]["next"].is_null(),
+                                    "{label}: recorded fixture must fit in one page"
+                                );
+                                reply["payload"]["rows"].clone()
+                            } else {
+                                reply["payload"].clone()
+                            };
                             assert_eq!(
-                                normalize(&reply["payload"]),
+                                normalize(&payload),
                                 normalize(&step["native_payload"]),
                                 "{label}"
                             );

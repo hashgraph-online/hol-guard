@@ -44,7 +44,7 @@ class StoreInventoryMixin:
         return json.loads(str(row["snapshot_json"]))
 
     def list_snapshots(self, harness: str) -> dict[str, dict[str, object]]:
-        rows = self._native_store_call("list_artifact_snapshots", {"harness": harness})
+        rows = self._resident_inventory_rows("list_artifact_snapshots", {"harness": harness})
         return {str(row["artifact_id"]): json.loads(str(row["snapshot_json"])) for row in rows}
 
     def delete_snapshot(self, harness: str, artifact_id: str) -> None:
@@ -126,7 +126,35 @@ class StoreInventoryMixin:
         )
 
     def list_inventory(self, harness: str | None = None) -> list[dict[str, object]]:
-        return self._native_store_call("list_artifact_inventory", {"harness": harness})
+        return self._resident_inventory_rows("list_artifact_inventory", {"harness": harness})
+
+    def _resident_inventory_rows(self, method: str, args: dict[str, object]) -> list[dict[str, object]]:
+        """Follow resident pages until the ordered result is exhausted.
+
+        Each reply stays under the resident response cap. A resident failure or a
+        cursor that does not advance raises, and the rows already collected are
+        not returned as a complete inventory.
+        """
+
+        rows: list[dict[str, object]] = []
+        cursor: dict[str, object] | None = None
+        while True:
+            page_args = dict(args)
+            if cursor is not None:
+                page_args["after"] = cursor
+            page = self._native_store_call(method, page_args)
+            if not isinstance(page, dict):
+                raise ValueError("native_inventory_page_invalid")
+            batch = page.get("rows")
+            if not isinstance(batch, list) or not all(isinstance(row, dict) for row in batch):
+                raise ValueError("native_inventory_page_invalid")
+            rows.extend(dict(row) for row in batch)
+            following = page.get("next")
+            if following is None:
+                return rows
+            if not isinstance(following, dict) or following == cursor:
+                raise ValueError("native_inventory_page_stalled")
+            cursor = dict(following)
 
     def find_inventory_item(self, artifact_id: str) -> dict[str, object] | None:
         return self._native_store_call("find_artifact_inventory_item", {"artifact_id": artifact_id})
