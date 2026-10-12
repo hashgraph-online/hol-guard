@@ -4,6 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
@@ -22,6 +23,56 @@ pub(crate) enum Entry {
 }
 
 pub(crate) type Tree = BTreeMap<String, Entry>;
+
+/// Spellings of the scratch directory an implementation emits: one on POSIX;
+/// on Windows also doubled backslashes (`repr`, JSON) and forward slashes.
+pub(crate) fn root_forms(root: &str) -> Vec<String> {
+    if root.contains('\\') {
+        vec![
+            root.replace('\\', "\\\\"),
+            root.to_owned(),
+            root.replace('\\', "/"),
+        ]
+    } else {
+        vec![root.to_owned()]
+    }
+}
+
+pub(crate) fn replace_root_bytes(data: &[u8], root: &str) -> Vec<u8> {
+    root_forms(root)
+        .iter()
+        .fold(data.to_vec(), |current, form| {
+            replace_bytes(&current, form.as_bytes(), ROOT_TOKEN.as_bytes())
+        })
+}
+
+pub(crate) fn replace_root_text(text: &str, root: &str) -> String {
+    root_forms(root)
+        .iter()
+        .fold(text.to_owned(), |current, form| {
+            current.replace(form, ROOT_TOKEN)
+        })
+}
+
+/// `st_mode & 0o111` as Python reports it for a regular file.
+#[cfg(unix)]
+fn exec_bits(meta: &fs::Metadata, _path: &Path) -> u32 {
+    meta.permissions().mode() & 0o111
+}
+
+/// Windows has no mode bits; `os.stat` synthesises the exec bits from the extension.
+#[cfg(windows)]
+fn exec_bits(_meta: &fs::Metadata, path: &Path) -> u32 {
+    let extension = path
+        .extension()
+        .map(|ext| ext.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    if matches!(extension.as_str(), "exe" | "cmd" | "bat" | "com") {
+        0o111
+    } else {
+        0
+    }
+}
 
 pub(crate) fn sha(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
@@ -73,6 +124,20 @@ pub(crate) fn remap_text(text: &str, map: &BTreeMap<String, String>) -> String {
     out
 }
 
+/// Replace the scratch directory in every string of `value` with the token.
+pub(crate) fn tokenise(value: &Value, root: &str) -> Value {
+    match value {
+        Value::String(text) => Value::String(replace_root_text(text, root)),
+        Value::Array(items) => Value::Array(items.iter().map(|v| tokenise(v, root)).collect()),
+        Value::Object(map) => Value::Object(
+            map.iter()
+                .map(|(key, item)| (replace_root_text(key, root), tokenise(item, root)))
+                .collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
 pub(crate) fn substitute(value: &Value, from: &str, to: &str) -> Value {
     match value {
         Value::String(text) => Value::String(text.replace(from, to)),
@@ -115,7 +180,7 @@ pub(crate) fn snapshot(root: &Path) -> Tree {
                 .strip_prefix(base)
                 .expect("relative")
                 .to_string_lossy()
-                .into_owned();
+                .replace('\\', "/");
             let meta = fs::symlink_metadata(&path).expect("lstat");
             if meta.file_type().is_symlink() {
                 let target = fs::read_link(&path).expect("readlink");
@@ -127,7 +192,7 @@ pub(crate) fn snapshot(root: &Path) -> Tree {
                 tree.insert(
                     relative,
                     Entry::File {
-                        exec: meta.permissions().mode() & 0o111,
+                        exec: exec_bits(&meta, &path),
                         data: fs::read(&path).expect("read"),
                     },
                 );
@@ -160,7 +225,7 @@ pub(crate) fn collect_hashes(tree: &Tree, root: &str, map: &mut BTreeMap<String,
         candidates.push(attested);
     }
     for data in candidates {
-        let normalised = replace_bytes(&data, root.as_bytes(), ROOT_TOKEN.as_bytes());
+        let normalised = replace_root_bytes(&data, root);
         if normalised != data {
             map.insert(sha(&data), sha(&normalised));
         }
@@ -168,7 +233,7 @@ pub(crate) fn collect_hashes(tree: &Tree, root: &str, map: &mut BTreeMap<String,
 }
 
 pub(crate) fn normalised_bytes(data: &[u8], root: &str, map: &BTreeMap<String, String>) -> Vec<u8> {
-    let data = replace_bytes(data, root.as_bytes(), ROOT_TOKEN.as_bytes());
+    let data = replace_root_bytes(data, root);
     match String::from_utf8(data.clone()) {
         Ok(text) => remap_text(&text, map).into_bytes(),
         Err(_) => data,
@@ -180,7 +245,7 @@ pub(crate) fn tree_digest(tree: &Tree, root: &str, map: &BTreeMap<String, String
     for (relative, entry) in tree {
         let item = match entry {
             Entry::Dir => json!(["d"]),
-            Entry::Link(target) => json!(["l", target.replace(root, ROOT_TOKEN)]),
+            Entry::Link(target) => json!(["l", replace_root_text(target, root)]),
             Entry::File { exec, data } => {
                 json!(["f", exec, sha(&normalised_bytes(data, root, map))])
             }
@@ -196,7 +261,7 @@ pub(crate) fn tree_files(tree: &Tree, root: &str, map: &BTreeMap<String, String>
         let item = match entry {
             Entry::Dir => json!({"kind": "dir"}),
             Entry::Link(target) => {
-                json!({"kind": "symlink", "target": target.replace(root, ROOT_TOKEN)})
+                json!({"kind": "symlink", "target": replace_root_text(target, root)})
             }
             Entry::File { exec, data } => {
                 let bytes = normalised_bytes(data, root, map);

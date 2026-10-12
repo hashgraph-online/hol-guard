@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::{json, Map, Value};
 
-use super::pyfs::{py_join, py_name, ReadError};
+use super::pyfs::ReadError;
 use super::values::{py_is_space, py_splitlines, py_strip};
 use super::{ShimContext, ShimFacts, ShimResult, GUARD_PROFILE_MARKER, PACKAGE_PROFILE_MARKER};
 use crate::command_launcher_floors::shlex_quote;
@@ -62,10 +62,10 @@ pub(crate) fn is_transient_path(facts: &ShimFacts, path: &str) -> bool {
             continue;
         }
         let inside = facts.resolve(path).and_then(|resolved| {
-            facts.resolve(&facts.expanduser(value)).map(|root| {
-                resolved == root
-                    || resolved.starts_with(&format!("{}/", root.trim_end_matches('/')))
-            })
+            facts
+                .expanduser(value)
+                .and_then(|expanded| facts.resolve(&expanded))
+                .map(|root| facts.is_within(&resolved, &root))
         });
         match inside {
             Ok(true) => return true,
@@ -81,22 +81,25 @@ pub(crate) fn is_transient_path(facts: &ShimFacts, path: &str) -> bool {
 }
 
 fn shell_name(facts: &ShimFacts) -> String {
-    py_name(facts.environ.get("SHELL").map_or("", String::as_str))
+    facts.name(facts.environ.get("SHELL").map_or("", String::as_str))
 }
 
 fn primary_target(facts: &ShimFacts, home: &str, shim_dir: &str) -> (String, String) {
     let marker = PACKAGE_PROFILE_MARKER;
     match shell_name(facts).as_str() {
         "fish" => (
-            py_join(&py_join(&py_join(home, ".config"), "fish"), "config.fish"),
+            facts.join(
+                &facts.join(&facts.join(home, ".config"), "fish"),
+                "config.fish",
+            ),
             format!("{marker}\n{}", fish_path_prepend(shim_dir)),
         ),
         "bash" => (
-            py_join(home, ".bashrc"),
+            facts.join(home, ".bashrc"),
             format!("{marker}\n{}", posix_path_export(shim_dir)),
         ),
         _ => (
-            py_join(home, ".zshrc"),
+            facts.join(home, ".zshrc"),
             format!("{marker}\n{}", posix_path_export(shim_dir)),
         ),
     }
@@ -105,12 +108,12 @@ fn primary_target(facts: &ShimFacts, home: &str, shim_dir: &str) -> (String, Str
 /// `_bash_login_profile_path`.
 fn bash_login_profile_path(facts: &ShimFacts, home: &str) -> String {
     for name in [".bash_profile", ".bash_login"] {
-        let candidate = py_join(home, name);
+        let candidate = facts.join(home, name);
         if facts.exists(&candidate) {
             return candidate;
         }
     }
-    py_join(home, ".profile")
+    facts.join(home, ".profile")
 }
 
 /// `_package_shim_profile_targets`.
@@ -122,7 +125,7 @@ pub(crate) fn profile_targets(
     let bash_export = format!("{PACKAGE_PROFILE_MARKER}\n{}", posix_path_export(shim_dir));
     let candidates = [
         primary_target(facts, home, shim_dir),
-        (py_join(home, ".bashrc"), bash_export.clone()),
+        (facts.join(home, ".bashrc"), bash_export.clone()),
         (bash_login_profile_path(facts, home), bash_export),
     ];
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -262,7 +265,7 @@ fn upsert_managed_profile_block(
     export_line: &str,
     marker: &str,
 ) -> ShimResult<bool> {
-    facts.mkdir_parents(&super::pyfs::py_parent(profile_path))?;
+    facts.mkdir_parents(&facts.parent(profile_path))?;
     let existing = if facts.exists(profile_path) {
         facts
             .read_text(profile_path)
@@ -331,12 +334,15 @@ pub fn remove_guard_profile_blocks(context: &ShimContext) -> ShimResult<Value> {
     let mut changed_paths: Vec<String> = Vec::new();
     let mut removed_paths: Vec<String> = Vec::new();
     let candidates = [
-        py_join(home, ".bashrc"),
-        py_join(home, ".bash_profile"),
-        py_join(home, ".bash_login"),
-        py_join(home, ".profile"),
-        py_join(home, ".zshrc"),
-        py_join(&py_join(&py_join(home, ".config"), "fish"), "config.fish"),
+        facts.join(home, ".bashrc"),
+        facts.join(home, ".bash_profile"),
+        facts.join(home, ".bash_login"),
+        facts.join(home, ".profile"),
+        facts.join(home, ".zshrc"),
+        facts.join(
+            &facts.join(&facts.join(home, ".config"), "fish"),
+            "config.fish",
+        ),
     ];
     for path in candidates {
         if !facts.exists(&path) {

@@ -9,7 +9,6 @@ use super::generate::build_package_manager_python_shim;
 use super::manifest::{installed_managers, load_with_state};
 use super::path_order::{detect_system_package_managers, get_path_order_status};
 use super::profile::{path_export_hints, profile_status};
-use super::pyfs::{py_join, py_parent};
 use super::values::{dict_items, py_strip, string_items, string_map};
 use super::{
     package_shim_command, package_shim_supported_managers, ShimContext, ShimFacts, ShimResult,
@@ -68,20 +67,23 @@ pub fn package_shim_status(
     let mut bypasses: Vec<Value> = Vec::new();
     let mut details: Vec<Value> = Vec::new();
     let effective_path = path_env.unwrap_or_else(|| context.env_path());
-    let resolved_shim_dir = facts.resolve(&facts.expanduser(&shim_dir))?;
+    let resolved_shim_dir = facts.resolve(&facts.expanduser(&shim_dir)?)?;
     let mut path_contains_shim_dir = false;
     for entry in effective_path
         .split(context.pathsep())
         .filter(|entry| !entry.is_empty())
     {
-        if facts.resolve(&facts.expanduser(entry))? == resolved_shim_dir {
+        if facts.path_eq(
+            &facts.resolve(&facts.expanduser(entry)?)?,
+            &resolved_shim_dir,
+        ) {
             path_contains_shim_dir = true;
             break;
         }
     }
     for manager in &installed {
         let command = package_shim_command(manager).unwrap_or(manager);
-        let shim_path = py_join(&shim_dir, command);
+        let shim_path = facts.join(&shim_dir, command);
         let exists = facts.exists(&shim_path);
         let path_status = get_path_order_status(context, manager, path_env)?;
         let integrity = if exists {
@@ -191,7 +193,10 @@ fn recoverable_managers(facts: &ShimFacts, status: &Map<String, Value>) -> Vec<S
     if supported.is_empty() {
         return Vec::new();
     }
-    let Ok(shim_dir) = facts.resolve(&facts.expanduser(&shim_dir_value)) else {
+    let Ok(shim_dir) = facts
+        .expanduser(&shim_dir_value)
+        .and_then(|expanded| facts.resolve(&expanded))
+    else {
         return Vec::new();
     };
     if !facts.exists(&shim_dir) || !facts.is_dir(&shim_dir) {
@@ -199,14 +204,14 @@ fn recoverable_managers(facts: &ShimFacts, status: &Map<String, Value>) -> Vec<S
     }
     let mut recovered: BTreeSet<String> = BTreeSet::new();
     for manager in supported {
-        let candidate = py_join(&shim_dir, &manager);
+        let candidate = facts.join(&shim_dir, &manager);
         if facts.is_symlink(&candidate) || !facts.is_file(&candidate) {
             continue;
         }
         let Ok(resolved) = facts.resolve(&candidate) else {
             continue;
         };
-        if !facts.exists(&resolved) || py_parent(&resolved) != shim_dir {
+        if !facts.exists(&resolved) || !facts.path_eq(&facts.parent(&resolved), &shim_dir) {
             continue;
         }
         let too_large = std::fs::metadata(facts.fs_path(&resolved))
@@ -309,7 +314,7 @@ fn enrich_status(
                 "real_binary_found": false,
                 "real_binary_path": null,
                 "real_binary_path_index": null,
-                "shim_path": if shim_dir.is_empty() { Value::Null } else { json!(py_join(&shim_dir, manager)) },
+                "shim_path": if shim_dir.is_empty() { Value::Null } else { json!(facts.join(&shim_dir, manager)) },
                 "system_binary_detected": detected.contains(manager),
                 "recovered_without_manifest": true,
             }));

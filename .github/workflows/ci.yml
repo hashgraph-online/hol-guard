@@ -758,6 +758,20 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/ci-job-windows-native-runtime
 
+  windows-shim-admin:
+    needs: [plan]
+    if: >-
+      !cancelled() &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/ci-job-windows-shim-admin
+
   windows-packaged-daemon:
     needs: [plan, native-command-evaluators, windows-native-runtime]
     if: >-
@@ -821,7 +835,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-packaged-daemon, macos-native-runtime, macos-skill-identity]
+    needs: [plan, native-workspace, native-command-evaluators, native-release-size, quality, coverage-plan, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -855,7 +869,7 @@ jobs:
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
                       "dashboard","cisco-full","pi-exact-continuation","cross-platform",
-                      "windows-native-runtime","windows-packaged-daemon",
+                      "windows-native-runtime","windows-shim-admin","windows-packaged-daemon",
                       "macos-native-runtime","macos-skill-identity"]
           missing = [j for j in always_on + required if j not in needs]
           if missing:

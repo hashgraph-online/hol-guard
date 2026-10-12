@@ -2,14 +2,13 @@
 
 use serde_json::{json, Map, Value};
 
-use super::pyfs::{py_join, py_name, py_parent};
 use super::{
     package_shim_command, package_shim_supported_managers, ShimContext, ShimFacts, ShimResult,
 };
 
-fn has_package_shim_layout(candidate: &str) -> bool {
-    let parent = py_parent(candidate);
-    py_name(&parent) == "bin" && py_name(&py_parent(&parent)) == "package-shims"
+fn has_package_shim_layout(facts: &ShimFacts, candidate: &str) -> bool {
+    let parent = facts.parent(candidate);
+    facts.name(&parent) == "bin" && facts.name(&facts.parent(&parent)) == "package-shims"
 }
 
 fn is_trusted_package_shim_binary(
@@ -18,8 +17,7 @@ fn is_trusted_package_shim_binary(
     trusted_shim_dir: &str,
 ) -> ShimResult<bool> {
     let resolved = facts.resolve(candidate)?;
-    let inside = resolved == trusted_shim_dir
-        || resolved.starts_with(&format!("{}/", trusted_shim_dir.trim_end_matches('/')));
+    let inside = facts.is_within(&resolved, trusted_shim_dir);
     Ok(inside && facts.is_file(candidate))
 }
 
@@ -28,7 +26,7 @@ fn is_foreign_package_shim_binary(
     candidate: &str,
     trusted_shim_dir: &str,
 ) -> ShimResult<bool> {
-    Ok(has_package_shim_layout(candidate)
+    Ok(has_package_shim_layout(facts, candidate)
         && !is_trusted_package_shim_binary(facts, candidate, trusted_shim_dir)?)
 }
 
@@ -51,8 +49,8 @@ pub fn get_path_order_status(
             "shim_dir": null,
         })));
     };
-    let shim_dir = facts.resolve(&facts.expanduser(&context.shim_dir()))?;
-    let shim_path = py_join(&shim_dir, command);
+    let shim_dir = facts.resolve(&facts.expanduser(&context.shim_dir())?)?;
+    let shim_path = facts.join(&shim_dir, command);
     let effective_path = path_env.unwrap_or_else(|| context.env_path());
     let mut shim_dir_index: Option<usize> = None;
     let mut real_dir_index: Option<usize> = None;
@@ -60,13 +58,16 @@ pub fn get_path_order_status(
     let mut foreign_shim_path: Option<String> = None;
     let mut real_binary_path: Option<String> = None;
     for (index, entry) in effective_path.split(context.pathsep()).enumerate() {
-        let directory = facts.resolve(&facts.expanduser(entry))?;
-        if directory == shim_dir && shim_dir_index.is_none() {
+        let directory = facts.resolve(&facts.expanduser(entry)?)?;
+        if facts.path_eq(&directory, &shim_dir) && shim_dir_index.is_none() {
             shim_dir_index = Some(index);
             continue;
         }
-        let candidate = py_join(&directory, command);
-        if !facts.exists(&candidate) || !facts.is_file(&candidate) || candidate == shim_path {
+        let candidate = facts.join(&directory, command);
+        if !facts.exists(&candidate)
+            || !facts.is_file(&candidate)
+            || facts.path_eq(&candidate, &shim_path)
+        {
             continue;
         }
         if is_foreign_package_shim_binary(facts, &candidate, &shim_dir)? {

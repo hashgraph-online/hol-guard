@@ -129,6 +129,17 @@ def test_required_aggregate_includes_the_windows_native_lane() -> None:
     gated = ast.literal_eval(lane_gated.group(1))
     assert "windows-native-runtime" in gated
     assert "windows-packaged-daemon" in gated
+    assert "windows-shim-admin" in required["needs"]
+    assert "windows-shim-admin" in gated
+
+
+def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> None:
+    """Keep the Windows shim path model verified on a real Windows host."""
+    job = load_ci_workflow()["jobs"]["windows-shim-admin"]
+    assert job["runs-on"] == "windows-latest"
+    commands = "\n".join(step.get("run", "") for step in composite_action_steps("ci-job-windows-shim-admin"))
+    assert "-p guard-command --test shim_admin_vectors" in commands
+    assert "-p hol-guard-runtime --bin hol-guard-runtime shim_op" in commands
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

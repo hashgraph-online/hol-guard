@@ -1,6 +1,5 @@
 //! Generation of the package-shim source and the Windows launcher.
 
-use super::pyfs::py_join;
 use super::template::{Dyn, Line, TEMPLATE, TRUSTED_CLI_LAUNCHER};
 use super::values::{py_float_repr, py_repr_list};
 use super::{ShimContext, ShimFacts, ShimResult};
@@ -96,36 +95,36 @@ pub(crate) fn build_package_manager_python_shim(
 }
 
 /// `is_transient_appimage_path`.
-pub(crate) fn is_transient_appimage_path(facts: &ShimFacts, value: &str) -> bool {
-    let expanded = facts.expanduser(value);
+pub(crate) fn is_transient_appimage_path(facts: &ShimFacts, value: &str) -> ShimResult<bool> {
+    let expanded = facts.expanduser(value)?;
     let normalized = facts.absolute(&expanded).replace('\\', "/").to_lowercase();
-    normalized.contains("/tmp/.mount_") || normalized.contains("/private/tmp/.mount_")
+    Ok(normalized.contains("/tmp/.mount_") || normalized.contains("/private/tmp/.mount_"))
 }
 
 /// `_build_windows_script(posix_path)` for a package shim.
-pub(crate) fn build_windows_script(facts: &ShimFacts, posix_path: &str) -> String {
+pub(crate) fn build_windows_script(facts: &ShimFacts, posix_path: &str) -> ShimResult<String> {
     let interpreter = package_shim_interpreter(facts);
-    if is_transient_appimage_path(facts, &interpreter) {
-        return [
+    if is_transient_appimage_path(facts, &interpreter)? {
+        return Ok([
             "@echo off",
             "echo HOL Guard needs a durable Windows install before this launcher can run. 1>&2",
             "exit /b 127",
             "",
         ]
-        .join("\r\n");
+        .join("\r\n"));
     }
-    [
+    Ok([
         "@echo off".to_owned(),
         format!("\"{interpreter}\" \"{posix_path}\" %*"),
         String::new(),
     ]
-    .join("\r\n")
+    .join("\r\n"))
 }
 
 /// The launcher paths a shim install writes for `command`.
-pub(crate) fn launcher_paths(shim_dir: &str, command: &str) -> (String, String) {
+pub(crate) fn launcher_paths(facts: &ShimFacts, shim_dir: &str, command: &str) -> (String, String) {
     (
-        py_join(shim_dir, command),
-        py_join(shim_dir, &format!("{command}.cmd")),
+        facts.join(shim_dir, command),
+        facts.join(shim_dir, &format!("{command}.cmd")),
     )
 }

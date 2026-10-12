@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 
 use super::generate::{needs_shell_wrapper, package_shim_interpreter};
-use super::pyfs::{py_join, py_norm};
 use super::values::{parse_py_str_list, py_repr_list, py_splitlines, py_strip, sha256_hex};
 use super::{ShimFacts, ShimResult};
 use crate::codex_output_py::shlex_split;
@@ -12,8 +11,8 @@ use crate::command_launcher_floors::shlex_quote;
 const SIDECAR_ATTESTATION_MARK: &[u8] = b"\n# hol-guard-sidecar\n";
 
 /// `frozen_package_shim_python_path`.
-pub(crate) fn sidecar_path(shim_dir: &str, command: &str) -> String {
-    py_join(shim_dir, &format!(".{command}.py"))
+pub(crate) fn sidecar_path(facts: &ShimFacts, shim_dir: &str, command: &str) -> String {
+    facts.join(shim_dir, &format!(".{command}.py"))
 }
 
 /// `package_shim_shell_wrapper`.
@@ -41,9 +40,9 @@ fn wrapper_argv(wrapper: &[u8]) -> Option<Vec<String>> {
 }
 
 /// `package_shim_wrapper_interpreter`.
-pub(crate) fn wrapper_interpreter(wrapper: &[u8]) -> Option<String> {
+pub(crate) fn wrapper_interpreter(facts: &ShimFacts, wrapper: &[u8]) -> Option<String> {
     if let Some(tokens) = wrapper_argv(wrapper) {
-        return Some(py_norm(&tokens[1]));
+        return Some(facts.norm(&tokens[1]));
     }
     let text = std::str::from_utf8(wrapper).ok()?;
     for line in py_splitlines(text) {
@@ -51,7 +50,7 @@ pub(crate) fn wrapper_interpreter(wrapper: &[u8]) -> Option<String> {
         if stripped.starts_with("#!") && !stripped.starts_with("#!/bin/sh") {
             let interpreter = py_strip(&stripped[2..]);
             if !interpreter.is_empty() {
-                return Some(py_norm(interpreter));
+                return Some(facts.norm(interpreter));
             }
         }
     }
@@ -60,7 +59,7 @@ pub(crate) fn wrapper_interpreter(wrapper: &[u8]) -> Option<String> {
 
 fn path_aliases(facts: &ShimFacts, path: &str) -> BTreeSet<String> {
     let mut names = BTreeSet::new();
-    names.insert(py_norm(path));
+    names.insert(facts.norm(path));
     if let Ok(resolved) = facts.resolve(path) {
         names.insert(resolved);
     }
@@ -82,7 +81,7 @@ fn trusted_frozen_cli_path(facts: &ShimFacts, path: &str) -> bool {
 }
 
 fn interpreter_runnable(facts: &ShimFacts, wrapper: &[u8]) -> bool {
-    wrapper_interpreter(wrapper)
+    wrapper_interpreter(facts, wrapper)
         .is_none_or(|interpreter| trusted_frozen_cli_path(facts, &interpreter))
 }
 
@@ -125,15 +124,15 @@ pub(crate) fn runtime_binding_is_current(
     if !needs_shell_wrapper(facts) {
         return Some(true);
     }
-    let sidecar = sidecar_path(shim_dir, command);
+    let sidecar = sidecar_path(facts, shim_dir, command);
     if facts.is_symlink(&sidecar) || !facts.is_file(&sidecar) {
         return None;
     }
     let sidecar_bytes = facts.read_bytes(&sidecar).ok()?;
-    let wrapper_binding = wrapper_interpreter(installed_wrapper)?;
-    let sidecar_binding = wrapper_interpreter(&sidecar_bytes)?;
+    let wrapper_binding = wrapper_interpreter(facts, installed_wrapper)?;
+    let sidecar_binding = wrapper_interpreter(facts, &sidecar_bytes)?;
     let base = base_command(&sidecar_bytes)?;
-    let base_binding = py_norm(base.first()?);
+    let base_binding = facts.norm(base.first()?);
     let bindings = [wrapper_binding, sidecar_binding, base_binding];
     if !bindings
         .iter()
@@ -221,7 +220,7 @@ pub(crate) fn expected_executable_bytes(
     if !needs_shell_wrapper(facts) {
         return python_source.as_bytes().to_vec();
     }
-    shell_wrapper(facts, &sidecar_path(shim_dir, command)).into_bytes()
+    shell_wrapper(facts, &sidecar_path(facts, shim_dir, command)).into_bytes()
 }
 
 /// `expected_package_shim_attestation_bytes`.
@@ -252,7 +251,7 @@ pub(crate) fn installed_attestation_bytes(
         return Ok(bytes);
     }
     bytes.extend_from_slice(SIDECAR_ATTESTATION_MARK);
-    let sidecar = sidecar_path(shim_dir, command);
+    let sidecar = sidecar_path(facts, shim_dir, command);
     if facts.is_symlink(&sidecar) || !facts.is_file(&sidecar) {
         return Ok(bytes);
     }
@@ -286,7 +285,7 @@ fn content_matches_generated(
     if normalized_content(installed_wrapper) != normalized_content(&expected_wrapper) {
         return Ok(false);
     }
-    let sidecar = sidecar_path(shim_dir, command);
+    let sidecar = sidecar_path(facts, shim_dir, command);
     if facts.is_symlink(&sidecar) || !facts.is_file(&sidecar) {
         return Ok(false);
     }
@@ -310,7 +309,7 @@ fn integrity_ok(
     if !interpreter_runnable(facts, installed_wrapper) {
         return Ok(false);
     }
-    let sidecar = sidecar_path(shim_dir, command);
+    let sidecar = sidecar_path(facts, shim_dir, command);
     if needs_shell_wrapper(facts) && facts.is_file(&sidecar) && !facts.is_symlink(&sidecar) {
         let sidecar_bytes = facts
             .read_bytes(&sidecar)

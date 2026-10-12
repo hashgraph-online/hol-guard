@@ -137,12 +137,13 @@ fn evaluate(request: &ShimAdminRequestV2) -> Result<Value, Failure> {
             detail: Some("guard_home must not be empty".to_owned()),
         });
     }
-    // The native path model is POSIX (`PurePosixPath`); drive letters and
-    // backslashes would be mis-compared, so a Windows request fails closed.
-    if request.facts.windows {
+    // The path model follows `facts.windows` (`os.name == "nt"`), but the
+    // filesystem operations are the host's: a request whose flavour differs from
+    // the host's would resolve one platform's spelling on the other's filesystem.
+    if request.facts.windows != cfg!(windows) {
         return Err(Failure {
             code: UNSUPPORTED_PLATFORM,
-            detail: Some("windows path semantics are not implemented".to_owned()),
+            detail: Some("path flavour does not match the host platform".to_owned()),
         });
     }
     if matches!(request.subop.as_str(), "install" | "activate" | "repair")
@@ -236,7 +237,7 @@ mod tests {
                 python_version: [3, 12],
                 import_root: "/opt/guard/src".to_owned(),
                 argv0: None,
-                windows: false,
+                windows: cfg!(windows),
                 sqlite_connect_timeout_seconds: 30.0,
                 now: "2026-01-01T00:00:00+00:00".to_owned(),
             },
@@ -249,10 +250,55 @@ mod tests {
     }
 
     #[test]
-    fn windows_requests_fail_closed() {
-        let mut windows = request("status");
-        windows.facts.windows = true;
-        assert_eq!(decode(&windows).code, UNSUPPORTED_PLATFORM);
+    fn a_path_flavour_that_differs_from_the_host_fails_closed() {
+        let mut mismatched = request("status");
+        mismatched.facts.windows = !cfg!(windows);
+        assert_eq!(decode(&mismatched).code, UNSUPPORTED_PLATFORM);
+    }
+
+    /// Shim install and status through the resident op with Windows paths: the
+    /// regression this guards is a Windows request being refused or mis-resolved.
+    #[cfg(windows)]
+    #[test]
+    fn windows_install_and_status_run_through_the_op() {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |elapsed| elapsed.as_nanos());
+        let base = std::env::temp_dir().join(format!("hol-shim-op-{}-{nanos}", std::process::id()));
+        let guard_home = base.join("guard");
+        let home = base.join("home");
+        std::fs::create_dir_all(&home).expect("home");
+        let mut install = request("install");
+        install.guard_home = guard_home.to_string_lossy().into_owned();
+        install.home_dir = Some(home.to_string_lossy().into_owned());
+        install.managers = Some(vec!["npm".to_owned()]);
+        install.facts.home = home.to_string_lossy().into_owned();
+        install.facts.cwd = base.to_string_lossy().into_owned();
+        install.facts.executable = base
+            .join("py")
+            .join("python.exe")
+            .to_string_lossy()
+            .into_owned();
+        install.facts.environ = BTreeMap::from([
+            ("USERPROFILE".to_owned(), install.facts.home.clone()),
+            ("PATH".to_owned(), String::new()),
+            ("PATHEXT".to_owned(), ".COM;.EXE;.BAT;.CMD".to_owned()),
+        ]);
+        let installed = decode(&install);
+        assert_eq!(installed.status, "ok", "{:?}", installed.detail);
+        let shim_dir = guard_home.join("package-shims").join("bin");
+        assert!(shim_dir.join("npm").is_file(), "posix launcher missing");
+        let launcher = std::fs::read_to_string(shim_dir.join("npm.cmd")).expect("cmd launcher");
+        assert!(launcher.starts_with("@echo off"), "{launcher}");
+        assert!(launcher.contains("python.exe"), "{launcher}");
+        let mut status = install.clone();
+        status.subop = "status".to_owned();
+        status.managers = None;
+        let reported = decode(&status);
+        assert_eq!(reported.status, "ok", "{:?}", reported.detail);
+        let text = serde_json::to_string(&reported.result).expect("status json");
+        assert!(text.contains("npm"), "{text}");
+        let _ = std::fs::remove_dir_all(&base);
     }
 
     #[test]

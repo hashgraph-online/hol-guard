@@ -6,11 +6,11 @@
 //! `guard_command::shims`, and compares every call's JSON result, the whole-tree
 //! digest after each call, and the final tree. Scratch-directory-dependent text
 //! and content digests are normalised exactly as the recorder does.
-#![cfg(unix)]
 
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Read;
+#[cfg(unix)]
 use std::os::unix::fs::{symlink, PermissionsExt};
 use std::path::{Path, PathBuf};
 
@@ -22,10 +22,17 @@ use serde_json::{json, Value};
 mod normalise;
 
 use normalise::{
-    collect_hashes, remap_value, snapshot, substitute, tree_digest, tree_files, ROOT_TOKEN,
+    collect_hashes, remap_value, snapshot, substitute, tokenise, tree_digest, tree_files,
+    ROOT_TOKEN,
 };
 
+// The POSIX fixture is recorded on a POSIX host and the Windows one on Windows:
+// pathlib's `WindowsPath` cannot be built elsewhere, so each replays only on its
+// own platform.
+#[cfg(unix)]
 const FIXTURE: &[u8] = include_bytes!("fixtures/shim_admin_vectors.v1.json.gz");
+#[cfg(windows)]
+const FIXTURE: &[u8] = include_bytes!("fixtures/shim_admin_vectors_windows.v1.json.gz");
 const TRANSIENT_FRAGMENTS: [&str; 6] = [
     "/var/folders/",
     "/private/var/folders/",
@@ -34,7 +41,10 @@ const TRANSIENT_FRAGMENTS: [&str; 6] = [
     "/temp/",
     "pytest-of-",
 ];
+#[cfg(unix)]
 const MIN_SCENARIOS_RUN: usize = 300;
+#[cfg(windows)]
+const MIN_SCENARIOS_RUN: usize = 150;
 
 fn apply_step(root: &Path, step: &Value) {
     let path = root.join(step["path"].as_str().expect("step path"));
@@ -48,12 +58,15 @@ fn apply_step(root: &Path, step: &Value) {
                 None => step["text"].as_str().expect("text").as_bytes().to_vec(),
             };
             fs::write(&path, data).expect("write");
-            let mode = if step.get("exec").and_then(Value::as_bool) == Some(true) {
-                0o755
-            } else {
-                0o644
-            };
-            fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("chmod");
+            #[cfg(unix)]
+            {
+                let mode = if step.get("exec").and_then(Value::as_bool) == Some(true) {
+                    0o755
+                } else {
+                    0o644
+                };
+                fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("chmod");
+            }
         }
         "append" => {
             use std::io::Write;
@@ -66,6 +79,7 @@ fn apply_step(root: &Path, step: &Value) {
                 .expect("append");
         }
         "mkdir" => fs::create_dir_all(&path).expect("mkdir"),
+        #[cfg(unix)]
         "symlink" => {
             fs::create_dir_all(path.parent().expect("parent")).expect("mkdir parent");
             symlink(step["target"].as_str().expect("target"), &path).expect("symlink");
@@ -182,15 +196,26 @@ fn root_base() -> PathBuf {
     let default = Path::new(env!("CARGO_TARGET_TMPDIR")).with_file_name("shim-vectors");
     let base = std::env::var_os("SHIM_VECTOR_ROOT_BASE").map_or(default, PathBuf::from);
     fs::create_dir_all(&base).expect("root base");
-    let base = fs::canonicalize(base).expect("canonical base");
+    let base = plain_path(fs::canonicalize(base).expect("canonical base"));
     assert!(
         base.to_string_lossy()
             .chars()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '/' | '-')),
+            .all(|c| c.is_ascii_alphanumeric()
+                || matches!(c, '.' | '_' | '/' | '-')
+                || (cfg!(windows) && matches!(c, '\\' | ':'))),
         "root base {} has characters the vectors do not model",
         base.display()
     );
     base
+}
+
+/// `canonicalize` yields `\\?\C:\...` on Windows; Python's `realpath` does not.
+fn plain_path(path: PathBuf) -> PathBuf {
+    let text = path.to_string_lossy();
+    match text.strip_prefix("\\\\?\\") {
+        Some(rest) if !rest.starts_with("UNC\\") => PathBuf::from(rest),
+        _ => path,
+    }
 }
 
 fn first_difference(left: &Value, right: &Value) -> String {
@@ -261,7 +286,7 @@ fn run_scenario(scenario: &Value, base: &Path, index: usize) -> Vec<String> {
         let expected = &expected_calls[call_index];
         match (&outcome, expected["ok"].as_bool().expect("ok")) {
             (Ok(result), true) => {
-                let got = remap_value(&substitute(result, &root_text, ROOT_TOKEN), &hashes);
+                let got = remap_value(&tokenise(result, &root_text), &hashes);
                 if got != expected["result"] {
                     failures.push(format!(
                         "{name} call {call_index} ({}): result {}",

@@ -15,6 +15,12 @@ pinned per scenario (see ``shim_admin_vector_support``), so the Rust replay need
 no interpreter. Output is gzip JSON at
 ``rust/crates/guard-command/tests/fixtures/shim_admin_vectors.v1.json.gz``.
 
+``--platform windows`` records the Windows scenarios and must run on a real
+Windows host, because the old code's ``ntpath``/``PureWindowsPath`` semantics,
+extension-based executable bits and ``.cmd`` line endings cannot be reproduced
+by patching ``os.name`` elsewhere. Its output goes to
+``shim_admin_vectors_windows.v1.json.gz`` next to the POSIX fixture.
+
 The scratch directory must not be transient (``/tmp``, ``/var/folders``...) because
 shell-profile writes are skipped for transient guard homes.
 """
@@ -47,8 +53,11 @@ from shim_admin_vector_support import (
     tree_files,
     undo_facts,
 )
+from shim_admin_vector_windows_scenarios import all_windows_scenarios
 
-OUT = Path(__file__).resolve().parents[2] / "rust/crates/guard-command/tests/fixtures/shim_admin_vectors.v1.json.gz"
+FIXTURES = Path(__file__).resolve().parents[2] / "rust/crates/guard-command/tests/fixtures"
+OUT = FIXTURES / "shim_admin_vectors.v1.json.gz"
+OUT_WINDOWS = FIXTURES / "shim_admin_vectors_windows.v1.json.gz"
 
 
 def apply_step(root: str, step: dict[str, object]) -> None:
@@ -146,8 +155,11 @@ def record_scenario(scenario: dict[str, object], work_base: str) -> dict[str, ob
             collect_hashes(snapshot(root), root, hash_map)
             os.chdir(str(facts["cwd"]))
             try:
-                outcome: dict[str, object] = {"ok": True, "result": run_call(shims, context, str(step["subop"]), step["args"])}
-            except Exception as error:  # noqa: BLE001 - the recorder keeps the failure shape
+                outcome: dict[str, object] = {
+                    "ok": True,
+                    "result": run_call(shims, context, str(step["subop"]), step["args"]),
+                }
+            except Exception as error:
                 outcome = {"ok": False, "error": type(error).__name__}
             after = snapshot(root)
             collect_hashes(after, root, hash_map)
@@ -184,16 +196,34 @@ def git_revision() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--work-base", default=str(Path.home() / ".cache" / "rtm-shim-vectors-work"))
-    parser.add_argument("--out", default=str(OUT))
+    parser.add_argument(
+        "--platform",
+        choices=("posix", "windows"),
+        default="windows" if os.name == "nt" else "posix",
+        help="windows records the nt scenarios and must run on a real Windows host",
+    )
+    parser.add_argument("--out", default="")
     parser.add_argument("--only", default="")
+    parser.add_argument("--revision", default="", help="git revision of the Python implementation being recorded")
     args = parser.parse_args()
     work_base = Path(args.work_base)
     work_base.mkdir(parents=True, exist_ok=True)
     resolved = os.path.realpath(work_base)
-    if is_transient_root(resolved + "/"):
+    if args.platform == "posix" and is_transient_root(resolved + "/"):
         print(f"work base {resolved} is transient; pass --work-base outside temp dirs", file=sys.stderr)
         return 2
-    scenarios = [*all_install_status_scenarios(), *all_state_scenarios(), *all_profile_scenarios()]
+    if (args.platform == "windows") != (os.name == "nt"):
+        print(f"--platform {args.platform} needs a matching host (os.name={os.name})", file=sys.stderr)
+        return 2
+    if args.platform == "windows":
+        scenarios = all_windows_scenarios()
+    else:
+        # Scenarios that pretend to be Windows are recorded on a real Windows host.
+        scenarios = [
+            item
+            for item in (*all_install_status_scenarios(), *all_state_scenarios(), *all_profile_scenarios())
+            if not item["facts"].get("windows")  # type: ignore[union-attr]
+        ]
     names = [str(item["name"]) for item in scenarios]
     if len(set(names)) != len(names):
         duplicates = sorted({name for name in names if names.count(name) > 1})
@@ -205,10 +235,10 @@ def main() -> int:
     document = {
         "schema": "guard-shim-admin-vectors.v1",
         "recorded_from": "codex_plugin_scanner.guard.shims (pre-cutover Python)",
-        "recorded_at_revision": git_revision(),
+        "recorded_at_revision": args.revision or git_revision(),
         "scenarios": recorded,
     }
-    out = Path(args.out)
+    out = Path(args.out or (OUT_WINDOWS if args.platform == "windows" else OUT))
     out.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
     with gzip.GzipFile(filename="", mode="wb", fileobj=out.open("wb"), mtime=0, compresslevel=9) as handle:

@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
+use super::winpath::{nt_is_within, nt_join, nt_normcase, nt_normpath, WinPath};
 use super::{ShimFacts, ShimResult};
 use crate::codex_output_py::PyPath;
 
@@ -93,9 +94,72 @@ pub(crate) fn universal_newlines(text: &str) -> String {
 }
 
 impl ShimFacts {
+    /// `str(Path(path))` in the request's path flavour.
+    pub(crate) fn norm(&self, path: &str) -> String {
+        if self.windows {
+            WinPath::new(path).to_string()
+        } else {
+            py_norm(path)
+        }
+    }
+
+    /// `str(Path(base) / child)`.
+    pub(crate) fn join(&self, base: &str, child: &str) -> String {
+        if self.windows {
+            WinPath::new(base).join(child).to_string()
+        } else {
+            py_join(base, child)
+        }
+    }
+
+    /// `Path(path).name`.
+    pub(crate) fn name(&self, path: &str) -> String {
+        if self.windows {
+            WinPath::new(path).name()
+        } else {
+            py_name(path)
+        }
+    }
+
+    /// `str(Path(path).parent)`.
+    pub(crate) fn parent(&self, path: &str) -> String {
+        if self.windows {
+            WinPath::new(path).parent().to_string()
+        } else {
+            py_parent(path)
+        }
+    }
+
+    /// `Path(path).is_absolute()`.
+    pub(crate) fn is_abs(&self, path: &str) -> bool {
+        if self.windows {
+            WinPath::new(path).is_absolute()
+        } else {
+            is_absolute(path)
+        }
+    }
+
+    /// `Path(left) == Path(right)`: case- and separator-insensitive on Windows.
+    pub(crate) fn path_eq(&self, left: &str, right: &str) -> bool {
+        if self.windows {
+            nt_normcase(&WinPath::new(left).to_string())
+                == nt_normcase(&WinPath::new(right).to_string())
+        } else {
+            left == right
+        }
+    }
+
+    /// `Path(path).relative_to(Path(root))` succeeding (`path` is `root` or below it).
+    pub(crate) fn is_within(&self, path: &str, root: &str) -> bool {
+        if self.windows {
+            return nt_is_within(path, root);
+        }
+        path == root || path.starts_with(&format!("{}/", root.trim_end_matches('/')))
+    }
+
     /// A filesystem path for `path`, absolutised against the facts' cwd.
     pub(crate) fn fs_path(&self, path: &str) -> PathBuf {
-        if is_absolute(path) {
+        if self.is_abs(path) {
             PathBuf::from(path)
         } else if path.is_empty() {
             PathBuf::from(&self.cwd)
@@ -123,7 +187,14 @@ impl ShimFacts {
     /// `Path.expanduser()`; only `~` and `~/...` are expanded. Python also
     /// resolves `~name` through the user database and raises when the user is
     /// unknown; the resident does not consult it and leaves such paths as is.
-    pub(crate) fn expanduser(&self, path: &str) -> String {
+    pub(crate) fn expanduser(&self, path: &str) -> ShimResult<String> {
+        if self.windows {
+            return self.expanduser_nt(path);
+        }
+        Ok(self.posix_expanduser(path))
+    }
+
+    fn posix_expanduser(&self, path: &str) -> String {
         let norm = py_norm(path);
         let first = norm.split('/').next().unwrap_or("");
         if norm.starts_with('/') || first != "~" {
@@ -148,7 +219,10 @@ impl ShimFacts {
 
     /// `os.path.abspath(os.path.expanduser(path))`.
     pub(crate) fn expanded_abspath(&self, path: &str) -> String {
-        let expanded = self.expanduser(path);
+        if self.windows {
+            return nt_normpath(&nt_join(&self.cwd, &self.expanduser_os_nt(path)));
+        }
+        let expanded = self.posix_expanduser(path);
         if is_absolute(&expanded) {
             py_normpath(&expanded)
         } else {
@@ -158,11 +232,14 @@ impl ShimFacts {
 
     /// `Path.absolute()` (no symlink resolution, no `..` collapsing).
     pub(crate) fn absolute(&self, path: &str) -> String {
-        py_join(&self.cwd, path)
+        self.join(&self.cwd, path)
     }
 
-    /// `Path.resolve()` (non-strict): `posixpath` real-path semantics.
+    /// `Path.resolve()` (non-strict): `posixpath` or `ntpath` real-path semantics.
     pub(crate) fn resolve(&self, path: &str) -> ShimResult<String> {
+        if self.windows {
+            return Ok(self.resolve_nt(path));
+        }
         let absolute = if is_absolute(path) {
             path.to_owned()
         } else {
@@ -228,12 +305,12 @@ impl ShimFacts {
 
     /// `os.access(path, X_OK)`.
     #[cfg(unix)]
-    fn access_executable(&self, path: &str) -> bool {
+    pub(super) fn access_executable(&self, path: &str) -> bool {
         nix::unistd::access(&self.fs_path(path), nix::unistd::AccessFlags::X_OK).is_ok()
     }
 
     #[cfg(not(unix))]
-    fn access_executable(&self, _path: &str) -> bool {
+    pub(super) fn access_executable(&self, _path: &str) -> bool {
         true
     }
 
@@ -244,6 +321,9 @@ impl ShimFacts {
 
     /// `shutil.which(command, path=search_path)` with the facts' environment.
     pub(crate) fn which(&self, command: &str, search_path: &str) -> Option<String> {
+        if self.windows {
+            return self.which_nt(command, search_path);
+        }
         let check = |candidate: &str| {
             self.exists(candidate) && self.access_executable(candidate) && !self.is_dir(candidate)
         };
@@ -253,66 +333,24 @@ impl ShimFacts {
         if search_path.is_empty() {
             return None;
         }
-        let names = self.which_names(command);
         let mut seen: Vec<String> = Vec::new();
-        for directory in search_path.split(self.pathsep_str()) {
-            let normalized = if self.windows {
-                directory.to_lowercase().replace('/', "\\")
-            } else {
-                directory.to_owned()
-            };
-            if seen.contains(&normalized) {
+        for directory in search_path.split(':') {
+            if seen.iter().any(|entry| entry == directory) {
                 continue;
             }
-            seen.push(normalized);
-            for name in &names {
-                let candidate = if directory.is_empty() {
-                    name.clone()
-                } else if directory.ends_with('/') {
-                    format!("{directory}{name}")
-                } else {
-                    format!("{directory}/{name}")
-                };
-                if check(&candidate) {
-                    return Some(candidate);
-                }
+            seen.push(directory.to_owned());
+            let candidate = if directory.is_empty() {
+                command.to_owned()
+            } else if directory.ends_with('/') {
+                format!("{directory}{command}")
+            } else {
+                format!("{directory}/{command}")
+            };
+            if check(&candidate) {
+                return Some(candidate);
             }
         }
         None
-    }
-
-    fn pathsep_str(&self) -> &'static str {
-        if self.windows {
-            ";"
-        } else {
-            ":"
-        }
-    }
-
-    fn which_names(&self, command: &str) -> Vec<String> {
-        if !self.windows {
-            return vec![command.to_owned()];
-        }
-        let pathext = self
-            .environ
-            .get("PATHEXT")
-            .cloned()
-            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD;.VBS;.JS;.WS;.MSC".to_owned());
-        let extensions: Vec<String> = pathext
-            .split(';')
-            .filter(|ext| !ext.is_empty())
-            .map(str::to_owned)
-            .collect();
-        let lowered = command.to_lowercase();
-        if extensions
-            .iter()
-            .any(|ext| lowered.ends_with(&ext.to_lowercase()))
-        {
-            return vec![command.to_owned()];
-        }
-        let mut names = vec![command.to_owned()];
-        names.extend(extensions.iter().map(|ext| format!("{command}{ext}")));
-        names
     }
 
     pub(crate) fn read_bytes(&self, path: &str) -> Result<Vec<u8>, ReadError> {

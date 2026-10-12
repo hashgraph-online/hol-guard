@@ -317,7 +317,7 @@ pub fn probe_package_shim_intercepts(
             results.push(skipped(manager, "unsupported_manager"));
             continue;
         };
-        let (shim_path, _) = launcher_paths(&shim_dir, command);
+        let (shim_path, _) = launcher_paths(facts, &shim_dir, command);
         if !facts.exists(&shim_path) {
             results.push(skipped(manager, "shim_missing"));
             continue;

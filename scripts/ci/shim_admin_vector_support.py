@@ -40,11 +40,30 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def root_forms(root: str) -> list[str]:
+    """Spellings of a scratch directory that implementations emit.
+
+    On POSIX there is one. On Windows the same directory also appears with doubled
+    backslashes (inside ``repr`` and JSON strings) and with forward slashes.
+    """
+
+    forms = [root]
+    if "\\" in root:
+        forms = [root.replace("\\", "\\\\"), root, root.replace("\\", "/")]
+    return forms
+
+
+def replace_root(text: str, root: str, token: str = ROOT_TOKEN) -> str:
+    for form in root_forms(root):
+        text = text.replace(form, token)
+    return text
+
+
 def substitute(value: object, root: str, token: str = ROOT_TOKEN) -> object:
     """Replace every occurrence of ``root`` in strings (and keys) of a JSON value."""
 
     if isinstance(value, str):
-        return value.replace(root, token)
+        return replace_root(value, root, token)
     if isinstance(value, list):
         return [substitute(item, root, token) for item in value]
     if isinstance(value, dict):
@@ -110,17 +129,22 @@ def hash_candidates(tree: dict[str, dict[str, object]]) -> dict[str, bytes]:
 
 
 def collect_hashes(tree: dict[str, dict[str, object]], root: str, hash_map: dict[str, str]) -> None:
-    token = root.encode("utf-8")
     for data in hash_candidates(tree).values():
-        normalised = data.replace(token, ROOT_TOKEN.encode("utf-8"))
+        normalised = replace_root_bytes(data, root)
         if normalised != data:
             hash_map[sha256_hex(data)] = sha256_hex(normalised)
+
+
+def replace_root_bytes(data: bytes, root: str) -> bytes:
+    for form in root_forms(root):
+        data = data.replace(form.encode("utf-8"), ROOT_TOKEN.encode("utf-8"))
+    return data
 
 
 def normalised_bytes(data: bytes, root: str, hash_map: dict[str, str]) -> bytes:
     """File bytes with the scratch directory and known digests made run-independent."""
 
-    data = data.replace(root.encode("utf-8"), ROOT_TOKEN.encode("utf-8"))
+    data = replace_root_bytes(data, root)
     try:
         text = data.decode("utf-8")
     except UnicodeDecodeError:
@@ -134,7 +158,7 @@ def tree_digest(tree: dict[str, dict[str, object]], root: str, hash_map: dict[st
         if entry["kind"] == "dir":
             digest[relative] = ["d"]
         elif entry["kind"] == "symlink":
-            digest[relative] = ["l", str(entry["target"]).replace(root, ROOT_TOKEN)]
+            digest[relative] = ["l", replace_root(str(entry["target"]), root)]
         else:
             data = entry["data"]
             assert isinstance(data, bytes)
@@ -150,7 +174,7 @@ def tree_files(tree: dict[str, dict[str, object]], root: str, hash_map: dict[str
         if entry["kind"] == "dir":
             files[relative] = {"kind": "dir"}
         elif entry["kind"] == "symlink":
-            files[relative] = {"kind": "symlink", "target": str(entry["target"]).replace(root, ROOT_TOKEN)}
+            files[relative] = {"kind": "symlink", "target": replace_root(str(entry["target"]), root)}
         else:
             data = entry["data"]
             assert isinstance(data, bytes)
@@ -203,7 +227,8 @@ def install_facts(facts: dict[str, object]) -> list[tuple[object, str, object]]:
         sys_overrides["frozen"] = True
     sys_proxy = _Proxy(sys, sys_overrides, hidden=() if facts["frozen"] else ("frozen",))
     os_overrides: dict[str, object] = {}
-    if facts["windows"]:
+    # A real Windows run needs no patching; a POSIX host cannot model ``ntpath``.
+    if facts["windows"] and os.name != "nt":
         os_overrides = {"name": "nt", "pathsep": ";"}
     os_proxy = _Proxy(os, os_overrides)
     frozen_cli = str(facts["frozen_cli"])

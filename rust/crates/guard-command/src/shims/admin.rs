@@ -11,7 +11,6 @@ use super::path_order::get_path_order_status;
 use super::profile::{
     ensure_package_shim_path_in_shell_profile, path_export_hint, path_export_hints,
 };
-use super::pyfs::py_name;
 use super::status::package_shim_status;
 use super::values::{dict_items, py_strip, sha256_hex, string_map};
 use super::{package_shim_command, ShimContext, ShimResult};
@@ -32,7 +31,7 @@ fn command_program_name(context: &ShimContext) -> String {
     let Some(argv0) = context.facts.argv0.as_deref() else {
         return "hol-guard".to_owned();
     };
-    let name = py_name(argv0);
+    let name = context.facts.name(argv0);
     let candidate = py_strip(&name);
     if candidate.is_empty() {
         "hol-guard".to_owned()
@@ -45,15 +44,15 @@ fn command_program_name(context: &ShimContext) -> String {
 fn write_shim_files(context: &ShimContext, command: &str, shim_dir: &str) -> ShimResult<String> {
     let facts = &context.facts;
     let python_source = build_package_manager_python_shim(context, command)?;
-    let (posix_path, windows_path) = launcher_paths(shim_dir, command);
+    let (posix_path, windows_path) = launcher_paths(facts, shim_dir, command);
     if needs_shell_wrapper(facts) {
-        let python_path = sidecar_path(shim_dir, command);
+        let python_path = sidecar_path(facts, shim_dir, command);
         facts.write_text(&python_path, &python_source)?;
         facts.write_text(&posix_path, &shell_wrapper(facts, &python_path))?;
-        facts.write_text(&windows_path, &build_windows_script(facts, &python_path))?;
+        facts.write_text(&windows_path, &build_windows_script(facts, &python_path)?)?;
     } else {
         facts.write_text(&posix_path, &python_source)?;
-        facts.write_text(&windows_path, &build_windows_script(facts, &posix_path))?;
+        facts.write_text(&windows_path, &build_windows_script(facts, &posix_path)?)?;
     }
     facts.add_executable_bits(&posix_path)?;
     Ok(posix_path)
@@ -241,8 +240,12 @@ pub fn uninstall_package_shims(
     let mut removed_paths: Vec<String> = Vec::new();
     for manager in &requested {
         let command = package_shim_command(manager).unwrap_or(manager);
-        let (posix_path, windows_path) = launcher_paths(&shim_dir, command);
-        for candidate in [posix_path, windows_path, sidecar_path(&shim_dir, command)] {
+        let (posix_path, windows_path) = launcher_paths(facts, &shim_dir, command);
+        for candidate in [
+            posix_path,
+            windows_path,
+            sidecar_path(facts, &shim_dir, command),
+        ] {
             if facts.exists(&candidate) {
                 facts.unlink(&candidate)?;
                 removed_paths.push(candidate);
