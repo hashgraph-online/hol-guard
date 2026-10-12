@@ -156,7 +156,7 @@ def _valid(action: str, value: Any) -> bool:
         and all(
             type(r) is dict
             and set(r) == set(shape)
-            and all(type(r[k]) is t and (t is not int or r[k] >= 0) for k, t in shape.items())
+            and all(type(r[k]) is t and (t is not int or cast(int, r[k]) >= 0) for k, t in shape.items())
             and (action != "normalization" or all(type(s) is str for s in cast(list[Any], r["wrapper_chain"])))
             for r in rows
         )
