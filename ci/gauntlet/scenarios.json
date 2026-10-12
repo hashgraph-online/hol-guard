@@ -48,7 +48,7 @@
       "oracle": "commands",
       "commands": [
         "cat 'src/path with spaces.ts'",
-        "cat 'src/café.ts'",
+        "cat 'src/caf\u00e9.ts'",
         "head -1 src/one.ts",
         "tail -1 src/one.ts"
       ],
@@ -574,6 +574,53 @@
         "grep -c retry {{home}}/other-project/notes.md",
         "ls",
         "ls -la"
+      ]
+    },
+    {
+      "id": "omp-native-shell-inspect-skill-doc",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Inspect my skill doc and the notes next to it: run each listed command once, in order, then summarize what the skill doc says and how big the notes are.",
+      "commands": [
+        "cat {{home}}/.agent/skills/x/SKILL.md",
+        "ls {{home}}/.agent/artifacts",
+        "grep -rln retry {{home}}/other-project",
+        "find {{home}}/other-project -name '*.md'",
+        "wc -l {{home}}/other-project/notes.md",
+        "cd src && ls",
+        "ls -R {{home}}/.agent"
+      ]
+    },
+    {
+      "id": "omp-native-shell-check-git-state",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Check where things stand: run each listed command once, in order, and tell me the state of this repository and of the sibling project.",
+      "commands": [
+        "git -C {{home}}/other-project status",
+        "git status && git log --oneline -3",
+        "python3 --version",
+        "git log --oneline -3"
+      ]
+    },
+    {
+      "id": "omp-native-shell-build-and-test",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Prepare a build directory and run the quick check: run each listed command once, in order, and tell me whether the check passed.",
+      "commands": [
+        "mkdir -p build/out",
+        "git hash-object README.md",
+        "python3 test_calc.py"
       ]
     },
     {

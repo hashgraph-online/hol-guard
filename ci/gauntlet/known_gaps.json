@@ -1,0 +1,6 @@
+{
+  "known_gaps": {
+    "omp-native-shell-inspect-skill-doc": "Reading a project skill document and running find with -name are reviewed or warned on first contact (recorded in the benign false-positive gate as cat-skill-doc and find-name).",
+    "omp-native-shell-check-git-state": "git -C with a sibling path and nested-repo git inspection are reviewed or warned on first contact (recorded in the benign false-positive gate as git-dash-C-status and git-nested-*)."
+  }
+}

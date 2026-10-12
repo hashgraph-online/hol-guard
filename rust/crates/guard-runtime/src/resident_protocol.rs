@@ -50,6 +50,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         "rule-contract-v2".into(),
         "pre-tool-command-model-shadow-v1".into(),
         "resident-command-model-shadow-v1".into(),
+        "rich-command-model-v1".into(),
         "pre-tool-command-authority-v1".into(),
         "pre-tool-generic-authority-v1".into(),
         guard_contracts::NATIVE_COMMAND_PROGRAM_CAPABILITY.into(),
@@ -126,6 +127,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
 pub(crate) enum ResidentOperationV1 {
     ArchiveAcquisition(guard_contracts::ArchiveAcquisitionRequestV1),
     CommandModel(CommandModelRequestV1),
+    RichCommandModel(crate::rich_command_model_op::RichCommandModelRequest),
     PreToolUse(CommandModelRequestV1),
     PolicySnapshotPush(Value),
     ApprovalChallenge(ApprovalChallengeRequestV3),
@@ -144,6 +146,7 @@ pub(crate) enum ResidentOperationV1 {
     CommandEffectDecideBatch(CommandEffectBatchRequestV1),
     ApprovalReuseDecide(ApprovalReuseRequestV1),
     GithubCliClassify(GithubCliClassifyRequestV1),
+    GithubWorkflowPrepare(guard_contracts::GithubWorkflowPrepareRequestV1),
     ProtectRequest(ProtectRequestRequestV1),
     ClaimApprovalReuseDecisions(ClaimApprovalReuseDecisionsRequestV1),
     ApprovalReuseDiagnostic(ApprovalReuseDiagnosticRequestV1),

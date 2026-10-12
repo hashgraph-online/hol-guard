@@ -23,7 +23,7 @@ from .native_runtime_resilience import (
     native_record_resident_failure,
     native_record_resident_success,
 )
-from .runtime.command_model import CanonicalCommand, CommandSegment
+from .runtime.command_model import CanonicalCommand, _canonical_from_wire
 
 _MAX_REQUEST_BYTES = 64 * 1024
 _MAX_SEGMENTS = 128
@@ -339,99 +339,22 @@ def _canonical_command_from_native(
     if validated is None:
         return None
 
-    normalized_text = validated.get("normalized_text")
-    raw_segments = validated.get("segments")
-    if not isinstance(normalized_text, str) or not isinstance(raw_segments, list):
-        return None
-    if validated.get("confidence") == "uncertain":
-        uncertainty_reason = validated.get("uncertainty_reason")
-        if not isinstance(uncertainty_reason, str):
+    value = {**validated, "raw_text": command.strip(), "redirects": [], "embedded_commands": []}
+    identity = value.get("security_identity")
+    if identity is not None:
+        if not isinstance(identity, str) or not identity.startswith("command-security-v2:"):
             return None
-        return CanonicalCommand(
-            raw_text=command.strip(),
-            normalized_text=normalized_text,
-            dialect="posix",
-            transport="shell_string",
-            extraction_provenance="guard-shell",
-            wrapper_chain=(),
-            segments=(),
-            redirects=(),
-            embedded_commands=(),
-            confidence="uncertain",
-            uncertainty_reason=uncertainty_reason,
-        )
-
-    segments: list[CommandSegment] = []
-    for raw_segment in raw_segments:
-        if not isinstance(raw_segment, dict):
+        digest = identity.removeprefix("command-security-v2:")
+        if len(digest) != 64 or any(character not in "0123456789abcdef" for character in digest):
             return None
-        text = raw_segment.get("text")
-        tokens = raw_segment.get("tokens")
-        executable = raw_segment.get("executable")
-        arguments = raw_segment.get("arguments")
-        environment_names = raw_segment.get("environment_names")
-        path_overridden = raw_segment.get("path_overridden")
-        execution_context = raw_segment.get("execution_context")
-        raw_pipeline_index = raw_segment.get("pipeline_index")
-        span = raw_segment.get("span")
-        if (
-            not isinstance(text, str)
-            or not isinstance(tokens, list)
-            or not all(isinstance(value, str) for value in tokens)
-            or (executable is not None and not isinstance(executable, str))
-            or not isinstance(arguments, list)
-            or not all(isinstance(value, str) for value in arguments)
-            or not isinstance(environment_names, list)
-            or not all(isinstance(value, str) for value in environment_names)
-            or not isinstance(path_overridden, bool)
-            or not isinstance(execution_context, str)
-            or not isinstance(raw_pipeline_index, int)
-            or isinstance(raw_pipeline_index, bool)
-            or raw_pipeline_index < 0
-            or not isinstance(span, dict)
-        ):
-            return None
-        raw_start = span.get("start")
-        raw_end = span.get("end")
-        if (
-            not isinstance(raw_start, int)
-            or isinstance(raw_start, bool)
-            or not isinstance(raw_end, int)
-            or isinstance(raw_end, bool)
-        ):
-            return None
-        pipeline_index = raw_pipeline_index
-        segments.append(
-            CommandSegment(
-                text=text,
-                tokens=tuple(tokens),
-                executable=executable,
-                arguments=tuple(arguments),
-                environment_names=tuple(environment_names),
-                wrapper_chain=tuple(raw_segment["wrapper_chain"]),
-                path_overridden=path_overridden,
-                execution_context=execution_context,
-                pipeline_index=pipeline_index,
-                start=raw_start,
-                end=raw_end,
-            )
-        )
-
-    canonical = CanonicalCommand(
-        raw_text=command.strip(),
-        normalized_text=normalized_text,
-        dialect="posix",
-        transport="shell_string",
-        extraction_provenance="guard-shell",
-        wrapper_chain=tuple(validated["wrapper_chain"]),
-        segments=tuple(segments),
-        redirects=(),
-        embedded_commands=(),
-        confidence="exact",
-        uncertainty_reason=None,
-    )
+    else:
+        # Older exact shadow payloads omit the identity; keep their lazy API.
+        value["security_identity"] = ""
+    canonical = _canonical_from_wire(value)
     if validated.get("path_overridden") is not canonical.path_overridden:
         return None
+    if identity is None:
+        object.__setattr__(canonical, "_bound_identity", None)
     return canonical
 
 

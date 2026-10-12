@@ -329,6 +329,11 @@ class RuntimeHookEvidenceWriter:
         source = record.preview_source
         if source is None:
             return record
+        if not record.has_command:
+            # No row is ever written for a command-less record (Pre needs one, an
+            # unpaired Post needs one, a correlated Post carries no preview), so
+            # the native round trip would produce a string nothing reads.
+            return replace(record, preview_source=None)
         preview: str | None = None
         try:
             with hook_adapter_memo(self._guard_home):

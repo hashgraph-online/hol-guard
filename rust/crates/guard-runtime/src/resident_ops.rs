@@ -91,6 +91,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ArchiveAcquisition(request) => {
                 crate::archive_acquisition_op::evaluate_archive_acquisition_request(&request)
             }
+            ResidentOperationV1::RichCommandModel(request) => {
+                crate::rich_command_model_op::evaluate(&request)
+            }
             ResidentOperationV1::CommandModel(request) => {
                 crate::oneshot::evaluate_command_model_request(&request)
             }
@@ -218,6 +221,11 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
+            ResidentOperationV1::GithubWorkflowPrepare(request) => {
+                crate::github_workflow_prepare_op::evaluate_github_workflow_prepare_request(
+                    &request,
+                )
+            }
             ResidentOperationV1::ProtectRequest(request) => {
                 crate::protect_request_op::evaluate_protect_request_op(&request)
             }
@@ -342,7 +350,10 @@ pub(crate) fn evaluate_resident_bytes(
                 crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
             }
             ResidentOperationV1::RequestContextBuild(request) => {
-                crate::request_context_op::evaluate_request_context_request(&request)
+                crate::request_context_op::evaluate_request_context_request_with_store(
+                    &request,
+                    policy_store,
+                )
             }
             #[cfg(unix)]
             ResidentOperationV1::SkillDirectoryIdentity(request) => {
@@ -507,6 +518,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::McpToolEvidence(request) => Some(&request.guard_home),
         ResidentOperationV1::LocalMcpGrantDecide(request) => Some(&request.guard_home),
         ResidentOperationV1::ContributedMcpDecide(request) => Some(&request.guard_home),
+        ResidentOperationV1::RichCommandModel(request) => Some(&request.guard_home),
         ResidentOperationV1::RequestContextBuild(request) => Some(&request.guard_home),
         ResidentOperationV1::SkillDirectoryIdentity(request) => Some(&request.guard_home),
         ResidentOperationV1::ProtectRequest(request) => Some(&request.guard_home),
@@ -529,6 +541,7 @@ fn operation_store_path(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::PackageAuditProjection(request) => match &request.query {
             guard_contracts::PackageAuditQueryV1::Receipt(query) => query.store_path.as_deref(),
             guard_contracts::PackageAuditQueryV1::Aliases(query) => Some(&query.store_path),
+            guard_contracts::PackageAuditQueryV1::CloudPayload(query) => Some(&query.store_path),
             _ => None,
         },
         ResidentOperationV1::PolicyDecisionLookup(request) => Some(&request.store_path),

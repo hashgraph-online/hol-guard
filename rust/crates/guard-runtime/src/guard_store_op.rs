@@ -27,6 +27,7 @@ use crate::guard_store_cmd_feedback as feedback;
 use crate::guard_store_cmd_lifecycle as lifecycle;
 use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
+use crate::guard_store_connect as connect;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_native_review_consume as native_review_consume;
@@ -109,9 +110,12 @@ fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> 
     apply_pragmas(&connection)?;
     // A total read only writes for the one-time rebuild a migration requests;
     // every other call stays lock-free.
-    let kind = if request.method == "count_receipts"
+    let args = Args(&request.args);
+    let kind = if (request.method == "count_receipts"
         && kind == Kind::Read
-        && receipt_rollups::rebuild_pending(&connection)?
+        && receipt_rollups::rebuild_pending(&connection)?)
+        || (connect::is_state_read(&request.method)
+            && connect::read_persists_expiry(&connection, &args)?)
     {
         Kind::Write
     } else {
@@ -124,7 +128,6 @@ fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> 
         Kind::Snapshot => connection.execute_batch("BEGIN")?,
         Kind::Read => {}
     }
-    let args = Args(&request.args);
     let outcome = dispatch(&connection, &request.source, &request.method, &args);
     let payload = match outcome {
         Ok(payload) => payload,
@@ -323,6 +326,8 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "reconcile_receipt_events"
         | "maintain_storage"
         | "managed_keyring_reconcile" => Kind::Write,
+        _ if connect::is_state_read(method) => Kind::Read,
+        _ if connect::handles(method) => Kind::Write,
         _ => return None,
     })
 }
@@ -479,6 +484,7 @@ fn dispatch(
         "reconcile_receipt_events" => receipt_reads::reconcile_events(connection, args),
         "maintain_storage" => storage_maintenance::maintain(connection, args),
         "run_storage_housekeeping" => storage_maintenance::housekeeping(connection),
+        _ if connect::handles(method) => connect::dispatch(connection, method, args),
         _ if state_ops::handles(method) => state_ops::dispatch(connection, method, args),
         _ => Err(StoreError::Invalid("native_guard_store_method_unknown")),
     }

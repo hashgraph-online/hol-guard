@@ -740,7 +740,6 @@
           "src/codex_plugin_scanner/guard/adapters/claude_code.py",
           "src/codex_plugin_scanner/guard/aibom_detection.py",
           "src/codex_plugin_scanner/guard/codex_config.py",
-          "src/codex_plugin_scanner/guard/codex_skill_config.py",
           "src/codex_plugin_scanner/guard/inventory_agent_types.py",
           "src/codex_plugin_scanner/guard/inventory_contract_constants.py",
           "src/codex_plugin_scanner/guard/inventory_contract_fingerprints.py",
@@ -766,10 +765,9 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
-          "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
-          "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py"
+          "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py"
         ],
-        "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so all three are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
+        "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so both are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
       },
       {
         "path": [

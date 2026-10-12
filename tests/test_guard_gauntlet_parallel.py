@@ -257,6 +257,8 @@ def _run(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, jobs: int, name: str) 
         def kill(self) -> None: ...
 
     monkeypatch.setattr(runner, "run_case", fake_run_case)
+    # A fake all-pass run would make every recorded known gap stale; staleness has its own tests.
+    monkeypatch.setattr(runner, "stale_gaps", lambda _report: [])
     monkeypatch.setattr(runner, "SubprocessCaseWorker", Handle)
     monkeypatch.setattr(parallel.time, "sleep", _no_sleep)
     report = runner.run_suite(

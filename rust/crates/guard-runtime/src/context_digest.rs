@@ -26,8 +26,8 @@ use crate::resident_diagnostics::{observe, observe_value, Phase};
 
 const TOKEN_VERSION: u64 = 1;
 const TOKEN_DOMAIN: &str = "hol.guard.approval-context";
-const CONFIGURED_ENV_HASH_DOMAIN: &[u8] = b"hol.guard.configured-environment:v1\0";
-const CONFIGURED_HEADER_HASH_DOMAIN: &[u8] = b"hol.guard.configured-headers:v1\0";
+pub(crate) const CONFIGURED_ENV_HASH_DOMAIN: &[u8] = b"hol.guard.configured-environment:v1\0";
+pub(crate) const CONFIGURED_HEADER_HASH_DOMAIN: &[u8] = b"hol.guard.configured-headers:v1\0";
 const TOKEN_HASH_FIELDS: [&str; 5] = ["identity", "content", "capabilities", "policy", "sandbox"];
 
 pub(super) const ERR_COMPONENT: &str = "native_context_component_invalid";
@@ -310,7 +310,7 @@ pub(crate) fn python_strip(text: &str) -> &str {
     text.trim_matches(|ch: char| is_python_space(ch))
 }
 
-fn configured_values_hash(
+pub(crate) fn configured_values_hash(
     values: Option<&Value>,
     configured_keys: Option<&[String]>,
     domain: &[u8],
@@ -648,6 +648,14 @@ fn evaluate_request(
                 request,
             )?);
         }
+        ContextDigestKindV1::CustomExtensionContinuity { request } => {
+            result.custom_extension_continuity =
+                Some(super::custom_extension_continuity::evaluate(request)?);
+        }
+        ContextDigestKindV1::ManagedControlsPolicyFields { request } => {
+            result.managed_controls_policy_fields =
+                Some(super::managed_controls_policy_fields::evaluate(request)?);
+        }
         ContextDigestKindV1::LocalCliIdentity { source } => {
             result.local_cli_identity =
                 super::context_digest_local_cli::local_cli_identity(source)?;
@@ -853,6 +861,8 @@ fn evaluate_context_digest_request_inner(
         runtime_resolved_argv: None,
         tool_catalog: None,
         local_cli_identity: None,
+        custom_extension_continuity: None,
+        managed_controls_policy_fields: None,
         package_json_scripts: None,
         custom_extension_suggestion: None,
     };

@@ -54,6 +54,28 @@ function publicNativeObservation(body: unknown): JsonRecord | undefined {
   };
 }
 
+const TEXT_KEYS = ["systemMessage", "message", "stopReason", "additionalContext", "permissionDecisionReason"];
+
+// Names of response fields that carry text the harness would render; mirrors interruptions.py.
+// Only names are recorded, never the text. Text counts from either level, so an empty top-level
+// string never shadows a non-empty hookSpecificOutput one; other keys prefer the nested value.
+function renderedFields(body: unknown): string[] {
+  if (!body || typeof body !== "object") return [];
+  const response = body as JsonRecord;
+  const nested = response.hookSpecificOutput;
+  const specific: JsonRecord = nested && typeof nested === "object" ? (nested as JsonRecord) : {};
+  const hasText = (key: string): boolean =>
+    [response, specific].some(source => typeof source[key] === "string" && (source[key] as string).trim() !== "");
+  const present = (value: unknown): boolean => value != null && !(typeof value === "string" && value.trim() === "");
+  const flat: JsonRecord = { ...response };
+  for (const [key, value] of Object.entries(specific)) if (present(value) || !(key in flat)) flat[key] = value;
+  const fields = TEXT_KEYS.filter(hasText);
+  const loud = flat.notice === "warning" || flat.notice === "excerpt";
+  if (loud) fields.push("notice");
+  if (hasText("reason") && (loud || flat.policy_action === "warn")) fields.push("reason");
+  return fields.sort();
+}
+
 function record(value: Record<string, unknown>): void {
   if (!logPath) throw new Error("Gauntlet observer log is not configured");
   appendFileSync(logPath, JSON.stringify(value) + "\n", { mode: 0o600 });
@@ -113,6 +135,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
       decision: body.decision,
       policy_action: body.policy_action,
       reason_code: body.reason_code,
+      rendered_fields: renderedFields(body),
       model_output_action: body.model_output_action,
       reviewed_output_sha256: body.reviewed_output_sha256,
       response_sha256: createHash("sha256").update(JSON.stringify(body)).digest("hex"),

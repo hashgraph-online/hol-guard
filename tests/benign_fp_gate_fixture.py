@@ -15,11 +15,15 @@ never exercises:
 * repositories below HOME in a parent directory that is not itself a
   repository (``~/Code/org/app-portal`` and ``~/Code/org/service-api``), each
   with ``.github`` metadata, the layout agents use when they search a child
-  repository by absolute path or inspect a sibling with ``git -C``.
+  repository by absolute path or inspect a sibling with ``git -C``;
+* an installed, gitignored ``node_modules`` in the working directory with the
+  project's locked CLI packages, so a runner such as ``npx`` resolves to a
+  content-hashed local binary instead of a registry fetch.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -108,6 +112,30 @@ def _write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+_NODE_PACKAGES = {"vitest": "3.2.4", "wrangler": "4.20.0"}
+
+
+def _node_toolchain(workspace: Path) -> None:
+    dependencies = {name: f"^{version}" for name, version in _NODE_PACKAGES.items()}
+    locked = {
+        f"node_modules/{name}": {"version": version, "integrity": "sha512-fixture"}
+        for name, version in _NODE_PACKAGES.items()
+    }
+    _write(workspace / "package.json", json.dumps({"private": True, "devDependencies": dependencies}) + "\n")
+    _write(workspace / "package-lock.json", json.dumps({"lockfileVersion": 3, "packages": locked}) + "\n")
+    _write(workspace / "tests" / "sample.test.ts", "export const sample = 1;\n")
+    for name, version in _NODE_PACKAGES.items():
+        package = workspace / "node_modules" / name
+        manifest = {"name": name, "version": version, "bin": {name: f"./bin/{name}.js"}}
+        _write(package / "package.json", json.dumps(manifest) + "\n")
+        script = package / "bin" / f"{name}.js"
+        _write(script, f"#!/usr/bin/env node\nconsole.log('{name} {version}');\n")
+        script.chmod(0o755)
+        shim = workspace / "node_modules" / ".bin" / name
+        shim.parent.mkdir(parents=True, exist_ok=True)
+        shim.symlink_to(Path("..") / name / "bin" / f"{name}.js")
+
+
 def build_fixture(root: Path) -> BenignFixture:
     root = root.resolve()
     home = root / "home"
@@ -136,6 +164,7 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(parent, "add", "-A", home=home)
     _git(parent, "commit", "--quiet", "-m", "fixture base", home=home)
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
+    _node_toolchain(worktree)
 
     # Untracked child repository nested inside the parent working tree.
     nested.mkdir(parents=True)

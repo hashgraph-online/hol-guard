@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 from typing import cast
 
 from .managed_controls_policy_fields import (
@@ -150,6 +151,7 @@ def parsed_managed_controls_from_validated_policy_bundle(
     registry: CommandSafetyExtensionRegistry,
     negotiated_capabilities: frozenset[str],
     package_firewall_supported: bool = False,
+    guard_home: Path | None = None,
 ):
     """Parse Extension semantics from an already authenticated v2 envelope."""
 
@@ -161,6 +163,7 @@ def parsed_managed_controls_from_validated_policy_bundle(
         registry=registry,
         negotiated_capabilities=negotiated_capabilities,
         package_firewall_supported=package_firewall_supported,
+        guard_home=guard_home,
     )
 
 

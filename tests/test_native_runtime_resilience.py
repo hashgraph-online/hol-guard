@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard import native_runtime_resilience as resilience
 from codex_plugin_scanner.guard.native_runtime_resilience import (
     native_oneshot_lease,
     native_record_integrity_failure,
@@ -95,6 +98,33 @@ def test_integrity_failure_quarantines_without_exposing_arbitrary_text(tmp_path:
     still_quarantined = native_runtime_health_snapshot(identity, tmp_path)
     assert still_quarantined.state == "quarantined"
     assert still_quarantined.circuit_open is True
+
+
+def test_privacy_safe_key_is_computed_outside_the_state_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    owned: list[bool] = []
+    original = resilience._privacy_safe_key
+
+    def checking(identity_sha256: str, guard_home: Path) -> str:
+        owned.append(resilience._STATE_LOCK._is_owned())
+        return original(identity_sha256, guard_home)
+
+    monkeypatch.setattr(resilience, "_privacy_safe_key", checking)
+    identity = _identity("f")
+    native_record_starting(identity, tmp_path)
+    native_record_resident_failure(identity, tmp_path, reason="native_resident_failed")
+    native_record_resident_success(identity, tmp_path)
+    native_record_overload(identity, tmp_path)
+    native_record_integrity_failure(identity, tmp_path, reason="bad")
+    native_runtime_health_snapshot(identity, tmp_path)
+    with native_oneshot_lease(identity, tmp_path) as acquired:
+        assert acquired is False
+
+    assert owned and not any(owned)
+    snapshot = native_runtime_health_snapshot(identity, tmp_path)
+    assert snapshot.state == "quarantined"
+    assert snapshot.starts == 1
+    assert snapshot.resident_failures == 1
+    assert snapshot.overloads == 1
 
 
 def test_compatibility_mismatches_are_recoverable() -> None:

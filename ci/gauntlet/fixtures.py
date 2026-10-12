@@ -270,9 +270,12 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
 LFS_GITCONFIG = (
     '[filter "lfs"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n'
     "\tprocess = git-lfs filter-process\n\trequired = true\n"
+    "[gpg]\n\tprogram = gpg\n"
+    "[core]\n\thooksPath = ~/.config/git/hooks\n"
 )
 
 
+CALC_TEST = "def add(a, b):\n    return a + b\n\n\nassert add(2, 3) == 5\nprint('calc ok')\n"
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
 HOME_ARTIFACT_DOC = "# Synthetic artifact\nInert build report text.\n"
 SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three attempts.\n"
@@ -285,6 +288,7 @@ def _git(args: tuple[str, ...], cwd: Path, environment: dict[str, str]) -> None:
 def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str]) -> Path:
     """Add developer-machine shapes and return the linked worktree the agent works in."""
     (home / ".gitconfig").write_text(LFS_GITCONFIG, encoding="utf-8", newline="\n")
+    (home / ".config/git/hooks").mkdir(parents=True)
     for relative, text in (
         (".agent/skills/x/SKILL.md", HOME_SKILL_DOC),
         (".agent/artifacts/report.md", HOME_ARTIFACT_DOC),
@@ -293,12 +297,22 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str]) -
         target = home / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8", newline="\n")
+    sibling = home / "other-project"
+    for args in (
+        ("init", "--quiet"),
+        ("config", "user.name", "Gauntlet Fixture"),
+        ("config", "user.email", "gauntlet@example.invalid"),
+        ("add", "notes.md"),
+        ("commit", "--quiet", "-m", "Synthetic sibling baseline"),
+    ):
+        _git(args, sibling, environment)
     (main / ".agents/skills/x").mkdir(parents=True)
+    (main / "test_calc.py").write_text(CALC_TEST, encoding="utf-8", newline="\n")
     (main / ".agents/skills/x/SKILL.md").write_text("# Synthetic skill\nInert text.\n", encoding="utf-8")
     (main / "src/password-reset-email.tsx").write_text("export const mail = 1;\n", encoding="utf-8")
     (main / "app/registry/[slug]").mkdir(parents=True)
     (main / "app/registry/[slug]/page.tsx").write_text("export default 1;\n", encoding="utf-8")
-    _git(("add", ".agents", "src", "app"), main, environment)
+    _git(("add", ".agents", "src", "app", "test_calc.py"), main, environment)
     _git(("commit", "--quiet", "-m", "Synthetic shapes"), main, environment)
     # Agents routinely run inside a linked worktree whose main checkout is a sibling.
     worktree = home / "project-feature"

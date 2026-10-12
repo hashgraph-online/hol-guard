@@ -9,6 +9,7 @@ from typing import Any
 
 from . import local_supply_chain as _lsc
 from .mdm.network import managed_urlopen
+from .native_package_audit_projection import native_batch_url
 
 _CLOUD_AUDIT_MAX_PAGES = 100
 
@@ -28,6 +29,7 @@ def _should_use_cloud_workspace_audit(
 
 def _run_cloud_workspace_audit(
     *,
+    store: Any,
     request_payload: dict[str, object],
     auth_context: dict[str, object] | None = None,
     sync_url: str | None = None,
@@ -40,13 +42,13 @@ def _run_cloud_workspace_audit(
     if resolved_auth_context is None:
         if not isinstance(sync_url, str) or not sync_url or not isinstance(token, str) or not token:
             raise TypeError("auth_context or sync_url/token is required")
-        request_url = _lsc._normalized_supply_chain_batch_url(sync_url, workspace_id)
+        request_url = native_batch_url(store, sync_url, workspace_id)
         request_headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
     else:
-        request_url = _lsc._normalized_supply_chain_batch_url(str(resolved_auth_context["sync_url"]), workspace_id)
+        request_url = native_batch_url(store, str(resolved_auth_context["sync_url"]), workspace_id)
     aggregated_packages: list[dict[str, object]] = []
     aggregated_processed_count = 0
     aggregated_reasons: list[dict[str, object]] = []
@@ -133,24 +135,3 @@ def _run_cloud_workspace_audit(
     merged_response["totalPackages"] = max(aggregated_total_packages, len(aggregated_packages))
     merged_response["reasons"] = aggregated_reasons
     return (merged_response, None)
-
-
-def _normalize_cloud_audit_response(response: dict[str, object]) -> dict[str, object]:
-    return {
-        "decision": str(response.get("decision") or "monitor"),
-        "packages": list(_dict_items(response.get("packages"))),
-        "reasons": list(_dict_items(response.get("reasons"))),
-        "enforcement": str(response.get("enforcement") or "premium_cloud"),
-        "entitlement_state": str(response.get("entitlementState") or "premium"),
-        "cache_status": str(response.get("cacheStatus") or "miss"),
-        "processed_count": _lsc._int_value(response.get("processedCount")) or 0,
-        "total_packages": _lsc._int_value(response.get("totalPackages")) or 0,
-        "status": str(response.get("status") or "completed"),
-        "workspace_id": str(response.get("workspaceId") or ""),
-    }
-
-
-def _dict_items(value: object) -> tuple[dict[str, object], ...]:
-    if not isinstance(value, list):
-        return ()
-    return tuple(item for item in value if isinstance(item, dict))

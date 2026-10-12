@@ -145,6 +145,10 @@ def catalog_digest(path: Path = CATALOG) -> str:
     return digest_file(path)
 
 
+# Protection cases and the Watch case expect Guard to speak; only trusted baseline ids may use these.
+EXEMPT_ORACLES = frozenset({"watch-command", "mixed-read-batch"})
+
+
 def retain_trusted_cases(candidate: tuple[Scenario, ...], trusted: tuple[Scenario, ...]) -> None:
     """Allow additional data cases, never removal or weakening of the trusted core."""
     from dataclasses import replace
@@ -154,3 +158,7 @@ def retain_trusted_cases(candidate: tuple[Scenario, ...], trusted: tuple[Scenari
         supplied = by_id.get(baseline.id)
         if supplied is None or replace(supplied, prompt="") != replace(baseline, prompt=""):
             raise ValueError("candidate changed a trusted scenario contract: " + baseline.id)
+    trusted_ids = {baseline.id for baseline in trusted}
+    for scenario in candidate:
+        if scenario.id not in trusted_ids and scenario.oracle in EXEMPT_ORACLES:
+            raise ValueError("candidate added a case with an interruption-exempt oracle: " + scenario.id)

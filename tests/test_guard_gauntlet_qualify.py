@@ -254,6 +254,7 @@ def _summary(cases: list[dict[str, Any]], passed: bool, qualified: bool = True) 
         "merge_qualified": passed and qualified,
         "stopped_early": False,
         "cases": cases,
+        "interruptions": {"benign_cases": 1, "benign_interruptions": 0},
         "inference_usage": {"prompt_tokens": 5, "rounds": 1, "rounds_with_usage": 1},
     }
 

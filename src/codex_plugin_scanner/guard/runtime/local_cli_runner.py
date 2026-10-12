@@ -64,14 +64,19 @@ def runner_local_bin(
     *,
     cwd: Path,
     home_dir: Path | None,
+    guard_home: Path | None = None,
     reject_target: Callable[[str], bool] | None = None,
 ) -> dict[str, object] | None:
-    """Return content-hashed local-bin evidence for a runner command, or ``None``."""
+    """Return content-hashed local-bin evidence for a runner command, or ``None``.
+
+    ``guard_home`` names the Guard home whose resident parses the command; without
+    it the parser falls back to the default home under the user's home directory.
+    """
 
     from .package_intent_parser import parse_package_intent
 
     try:
-        intent = parse_package_intent(command, workspace=cwd, home_dir=home_dir)
+        intent = parse_package_intent(command, workspace=cwd, home_dir=home_dir, guard_home=guard_home)
     except Exception:
         return None
     executions = getattr(intent, "local_executions", None) if intent is not None else None

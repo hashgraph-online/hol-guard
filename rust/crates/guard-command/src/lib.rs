@@ -72,6 +72,7 @@ mod command_verified_read_candidates;
 #[cfg(test)]
 mod command_verified_read_candidates_tests;
 mod command_workspace_write_candidates;
+pub mod content_sensitivity;
 pub mod contributed_mcp_decision;
 mod contributed_mcp_url;
 mod data_flow;
@@ -91,6 +92,7 @@ pub mod github_command_capabilities;
 mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
 pub mod github_workflow_authorization;
+pub mod github_workflow_descriptor;
 pub mod github_workflow_operations;
 mod home_path_text;
 pub mod homebrew_intent;
@@ -135,6 +137,7 @@ mod powershell_floors;
 mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
+pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
 pub mod environment_secret_dump;
@@ -372,6 +375,12 @@ struct RawSegment {
 }
 
 pub fn parse_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
+    let mut command = parse_command_unbound(request)?;
+    command.security_identity = canonical_command::command_security_identity(&command);
+    Ok(command)
+}
+
+fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
     let raw = request.command.trim();
     if request.dialect == "powershell" && request.transport == "shell_string" && !raw.is_empty() {
         return Ok(parse_explicit_powershell(request, raw));
@@ -658,6 +667,7 @@ mod restricted_archive_peer;
 mod restricted_archive_stream;
 pub mod restricted_archive_transport;
 mod restricted_archive_write;
+pub mod restricted_command;
 #[cfg(unix)]
 pub mod restricted_pytest;
 pub mod resume_template;

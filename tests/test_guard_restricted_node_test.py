@@ -17,6 +17,7 @@ from codex_plugin_scanner.guard.runtime.restricted_node_test import (
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_mutable_shell_entrypoint_is_not_a_node_runtime(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text("{}", encoding="utf-8")
     impostor = tmp_path / "node"
@@ -68,6 +69,7 @@ def test_linux_process_budget_counts_existing_threads(monkeypatch: pytest.Monkey
             sandbox._current_user_process_ceiling()
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.parametrize(
     "argv",
     [
@@ -84,12 +86,14 @@ def test_non_test_and_shell_forms_are_not_delegated(argv: list[str], tmp_path: P
         prepare_restricted_node_test(argv, workspace=tmp_path)
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_bounded_heap_option_is_preserved_for_direct_node_test() -> None:
     assert _node_runtime_args(["node", "--max-old-space-size=12288", "--test"]) == ("--max-old-space-size=12288",)
     with pytest.raises(RestrictedPytestError):
         _node_runtime_args(["node", "--max-old-space-size=999999", "--test"])
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("node") is None, reason="requires Node and Seatbelt")
 def test_actual_node_runner_preserves_cwd_and_denies_sensitive_effects(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")

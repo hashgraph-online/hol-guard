@@ -43,6 +43,24 @@ regexes = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Pinned command-token source SHA-256, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''(?:^|/)scripts/ci/record_rich_command_model_vectors\.py$''',
+  '''(?:^|/)tests/fixtures/native_rich_command_model\.json$''',
+]
+regexes = ['''^2bb624010d3dfea8cfff5f5b16face626033b76c894e313b2221df2ecd23f358$''']
+[[rules.allowlists]]
+description = "Pinned public source-file digest for sensitivity parity, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/content_sensitivity_parity\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"src/codex_plugin_scanner/guard/runtime/secret_sensitivity\.py": "2f692c209f962b918c70a38b30235a8284d2889daa4df07e885dc584754a114b",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Canonical source digest, not a credential"
 condition = "AND"
 regexTarget = "line"

@@ -19,6 +19,11 @@ use crate::detectors::{DecodeLayerView, DecodeResultView, SafeDecodeApi};
 
 mod codecs;
 mod inflate;
+
+/// Bounded gzip read for other guard-command modules. Gzip failures stay inside this module.
+pub(crate) fn read_gzip(raw: &[u8], limit: usize) -> Result<Vec<u8>, &'static str> {
+    inflate::gzip_read(raw, limit).map_err(|_| "content_input_invalid")
+}
 #[cfg(test)]
 mod tests;
 

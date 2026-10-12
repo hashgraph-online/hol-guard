@@ -12,6 +12,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_prompt import fixture_authorization
+from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
@@ -21,7 +22,7 @@ from .fixtures import create_fixture, digest_file, filesystem_checks, scenario_f
 from .guard_tap import GuardTap, read_tap
 from .harness_judge import assess_harness_case, guard_decisions
 from .harnesses import CredentialSeed, adapter, credential_environment, read_transcript
-from .host_process import clean_environment, run_process
+from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import redact_value
 from .provider import LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, configure_github_review_controls
@@ -71,10 +72,12 @@ def install_harness_hooks(name: str, daemon: Any, *, home: Path, guard_home: Pat
 
 
 def harness_environment(
-    spec: Any, home: Path, agent_dir: Path, canary: str, login_environment: dict[str, str]
+    spec: Any, home: Path, agent_dir: Path, canary: str, login_environment: dict[str, str], *, realistic: bool = False
 ) -> dict[str, str]:
     """The harness CLI's environment: clean, with its config home pinned inside the fixture."""
     environment = clean_environment(home, agent_dir, canary)
+    if realistic:
+        environment = realistic_environment(environment, home)
     environment.update(spec.extra_env)
     environment.update(spec.home_environment(home))
     environment.update(login_environment)
@@ -94,7 +97,8 @@ def run_harness_case(
 ) -> dict[str, Any]:
     """Exercise one scenario through a real harness CLI and its installed Guard hooks."""
     spec = adapter(harness)
-    fixture = create_fixture(root / scenario_fixture_name(scenario.id))
+    realistic = scenario.oracle == "native-tools"
+    fixture = create_fixture(root / scenario_fixture_name(scenario.id), realistic=realistic)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log, tap_log = private / "agent.jsonl", private / "stderr.txt", private / "guard-tap.jsonl"
@@ -140,7 +144,11 @@ def run_harness_case(
                 guard_home.mkdir(mode=0o700)
                 (guard_home / "config.toml").write_text('protection_posture = "watch"\nmode = "observe"\n')
             daemon = probe._start_installed_daemon(
-                guard_home=guard_home, home=fixture.home, workspace=fixture.workspace, identity=identity
+                guard_home=guard_home,
+                home=fixture.home,
+                workspace=fixture.workspace,
+                identity=identity,
+                register_workspace_policy=not realistic,
             )
             if scenario.oracle == "blocked-extension":
                 case["extension_control"] = configure_extension_permission_denial(
@@ -150,7 +158,10 @@ def run_harness_case(
                 case["extension_control"] = configure_github_review_controls(daemon, guard_home)
             if scenario.id in BUSINESS_CASES:
                 case["business_policy"] = install_business_policy(daemon, guard_home)
-            policy_snapshot = probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            # Native-tools cases run first-contact, with no pre-bound workspace policy, like a fresh install.
+            policy_snapshot = (
+                None if realistic else probe._prepare_installed_daemon_workspace(daemon, fixture.workspace)
+            )
             if scenario.id in BUSINESS_CASES:
                 publisher = daemon._server.hook_worker.policy_snapshot_publisher
                 case["business_policy"] = bind_business_snapshot(
@@ -167,7 +178,14 @@ def run_harness_case(
                 harness, daemon, home=fixture.home, guard_home=guard_home, workspace=fixture.workspace
             )
             before = worker.store.count_approval_requests(status=None)
-            environment = harness_environment(spec, fixture.home, private / "agent", fixture.canary, login_environment)
+            approval_ids_before = {
+                str(row.get("request_id"))
+                for row in worker.store.list_approval_requests(status=None, limit=200)
+                if isinstance(row, dict) and row.get("request_id")
+            }
+            environment = harness_environment(
+                spec, fixture.home, private / "agent", fixture.canary, login_environment, realistic=realistic
+            )
             if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
             spec.prepare_context(fixture.workspace, context)
@@ -193,6 +211,7 @@ def run_harness_case(
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["native_routes"] = worker.metrics.snapshot().get("routes", {})
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
+            case["approval_rows"] = approval_rows(worker.store, approval_ids_before)
             case["egress_requests"] = list(collector.requests)
             case["raw_transcript_sha256"] = digest_file(raw_log)
             case["transcript"] = redact_value(read_transcript(harness, raw_log), replacements)

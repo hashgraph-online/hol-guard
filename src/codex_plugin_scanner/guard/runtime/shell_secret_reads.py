@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..native_rich_command_model import NativeCommandModelError
 from ._shell_execution_context_support import (
     SHELL_CWD_UNRESOLVED_PARENT_SHELL,
     SHELL_CWD_WORKSPACE_ESCAPE,
@@ -160,7 +161,10 @@ def assess_shell_reads(
                 )
                 if literal_context.complete:
                     context = literal_context
-        raw_model = parse_shell_command(text, cwd=current_cwd, home_dir=home_dir, normalize_wrappers=False)
+        try:
+            raw_model = parse_shell_command(text, cwd=current_cwd, home_dir=home_dir, normalize_wrappers=False)
+        except NativeCommandModelError:
+            return ShellReadAssessment(tuple(dict.fromkeys(sensitive)), tuple(sources), requested, True)
         raw_segments = tuple(segment for segment in raw_model.segments if segment.execution_context.startswith("top:"))
         aligned = len(raw_segments) == len(context.segments)
         heredocs = extract_heredocs(raw_model.normalized_text)

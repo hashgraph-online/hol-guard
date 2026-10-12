@@ -511,6 +511,27 @@ def test_native_context_digest_names_a_mismatched_request_id(tmp_path: Path, mon
     assert "sha_matches=True" in reason
 
 
+def test_custom_extension_continuity_request_errors_are_contract_codes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refused continuity request is a resident answer, not a transport failure."""
+
+    def _transport(*_args: object, **kwargs: object) -> bytes:
+        payload = json.loads(_ok_result(json.loads(kwargs["payload"])["request"]))
+        payload.update(status="error", code="native_custom_extension_continuity_invalid_request")
+        del payload["digest"]
+        return json.dumps(payload).encode("utf-8")
+
+    _stub_digest_client(monkeypatch, transport=_transport)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    result = native_context.native_context_digest(
+        "custom_extension_continuity", {"request": {"operation": "plan"}}, guard_home=guard_home
+    )
+    assert result is not None
+    assert result["code"] == "native_custom_extension_continuity_invalid_request"
+
+
 def test_unavailable_errors_report_the_transport_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`*_unavailable` must say *why*: a callers that has no fallback needs the reason."""
 

@@ -185,6 +185,23 @@ def _replay_extension_needs(monkeypatch, store: _ReplayStore) -> None:
     monkeypatch.setattr(native_mcp_tool_policy._Effects, "run", run)
 
 
+def _with_inline_diagnostics(observations: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Python diagnoses a lookup miss in the lookup effect, so no separate diagnostic round trip is sent."""
+    folded: list[dict[str, object]] = []
+    for observation in copy.deepcopy(observations):
+        need = observation["need"]
+        if need["kind"] != "reuse_diagnostic":  # type: ignore[index]
+            folded.append(observation)
+            continue
+        lookup = next(
+            item
+            for item in reversed(folded)
+            if item["need"]["kind"] == "policy_lookup" and item["need"]["phase"] == need["phase"]  # type: ignore[index]
+        )
+        lookup["result"]["reuse_diagnostic"] = observation["result"]  # type: ignore[index]
+    return folded
+
+
 @pytest.mark.parametrize("vector", _VECTORS, ids=[item["name"] for item in _VECTORS])
 def test_resident_reproduces_recorded_python_decision(vector, monkeypatch, native_context_digest: Path) -> None:
     home = native_context_digest
@@ -229,7 +246,7 @@ def test_resident_reproduces_recorded_python_decision(vector, monkeypatch, nativ
 
     assert _expected_view(decision) == vector["expected"]
     # Python executed exactly the recorded effects, in the recorded order.
-    assert sent[-1] == observations
+    assert sent[-1] == _with_inline_diagnostics(observations)
     if vector["expected"]["post_claim_authority"] == "fresh":
         assert decision.post_claim_authority is not None
         if provided:

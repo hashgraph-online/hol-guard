@@ -317,6 +317,45 @@ def test_writer_drains_accepted_records_on_shutdown(tmp_path: Path) -> None:
     assert writer.stats()["durable_pending"] == 0
 
 
+def test_writer_derives_invocation_preview_only_for_records_that_carry_a_command(tmp_path: Path) -> None:
+    previewed: list[object] = []
+    persisted: list[tuple[bool, object]] = []
+
+    def preview(payload: object) -> str:
+        previewed.append(payload)
+        return "echo hi"
+
+    def record(**kwargs: object) -> bool:
+        persisted.append((bool(kwargs["has_command"]), kwargs["invocation_preview"]))
+        return True
+
+    with (
+        patch(
+            "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.build_invocation_preview_from_payload",
+            side_effect=preview,
+        ),
+        patch(
+            "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_deferred_post_hook_command_activity",
+            side_effect=record,
+        ),
+    ):
+        writer = RuntimeHookEvidenceWriter(
+            store=GuardStore(tmp_path / "guard-home"),
+            batch_wait_seconds=0.025,
+        )
+        for payload in ({"tool_name": "read", "tool_input": {"path": "docs/readme.md"}}, {"command": "echo hi"}):
+            assert writer.submit_command_activity(
+                harness="pi",
+                event="PostToolUse",
+                payload=payload,
+                succeeded=True,
+            )
+        assert writer.stop(timeout_seconds=1)
+
+    assert previewed == [{"command": "echo hi"}]
+    assert persisted == [(False, None), (True, "echo hi")]
+
+
 def test_writer_recovers_accepted_record_after_failed_process(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     journal = guard_home / "runtime-hook-evidence.jsonl"

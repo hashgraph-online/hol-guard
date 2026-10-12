@@ -1,14 +1,14 @@
 use super::*;
 use std::path::PathBuf;
 
-fn tmp_store(tag: &str) -> PathBuf {
+pub(crate) fn tmp_store(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("hg-pdl-{tag}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     dir.join("guard.db")
 }
 
 /// Minimal `guard.db` schema matching the columns the op selects/inserts.
-fn seed_store(path: &std::path::Path) {
+pub(crate) fn seed_store(path: &std::path::Path) {
     let conn = Connection::open(path).unwrap();
     conn.execute_batch(
         "create table policy_decisions (

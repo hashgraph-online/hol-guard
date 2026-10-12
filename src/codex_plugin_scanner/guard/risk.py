@@ -164,7 +164,8 @@ def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, .
             )
         )
 
-    for secret_class in sorted(classify_secret_paths(combined)):
+    secret_classes = classify_secret_paths(combined)
+    for secret_class in sorted(secret_classes):
         signals.append(
             GuardSignal(
                 signal_id=f"secret:path:{secret_class}",
@@ -178,7 +179,7 @@ def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, .
                 rule_version=_RULE_VERSION,
             )
         )
-    if classify_secret_paths(combined):
+    if secret_classes:
         signals.append(
             GuardSignal(
                 signal_id="secret:sensitive-local-files",

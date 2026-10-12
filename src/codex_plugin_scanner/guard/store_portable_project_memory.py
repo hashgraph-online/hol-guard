@@ -14,7 +14,7 @@ from .project_identity import (
     resolve_portable_project_identity,
 )
 from .store_base import PolicyDecisionLookupResult
-from .store_policy import _most_restrictive_policy_lookup
+from .store_policy import _most_restrictive_policy_lookup, memory_lookup_candidates
 
 _PROJECT_IDENTITY_CACHE_MAX_ITEMS = 128
 _PROJECT_IDENTITY_CACHE: dict[tuple[str, int], str] = {}
@@ -104,6 +104,47 @@ class StorePortableProjectMemoryMixin:
             **operation,
             "metadata": enrich_project_identity_metadata(metadata),
         }
+
+    def mcp_policy_lookup_input(
+        self,
+        harness: str,
+        artifact_id: str,
+        *,
+        workspace: str | None,
+        memory_command: str | None,
+        memory_artifact_type: str | None,
+        memory_artifact_name: str | None,
+    ) -> dict[str, object]:
+        """Ship the keyring-facing evidence once so the resident can read saved policy itself.
+
+        The resident runs the same non-consuming probes this class composes in
+        ``resolve_policy_decision_lookup`` (direct, exact-command and memory ids,
+        portable Git workspace, most restrictive wins) over one store connection.
+        """
+        evidence = self.policy_lookup_evidence()
+        exact_ids, memory_id = memory_lookup_candidates(
+            harness,
+            artifact_id,
+            memory_command=memory_command,
+            memory_artifact_type=memory_artifact_type,
+            memory_artifact_name=memory_artifact_name,
+        )
+        lookup: dict[str, object] = {
+            "store_path": str(self.path),
+            "guard_home": str(self.guard_home),
+            "now": evidence.now,
+            "candidate_artifact_ids": [artifact_id, *exact_ids, *([memory_id] if memory_id else [])],
+            "portable_workspace": self._portable_project_workspace(workspace),
+            "integrity_state": evidence.integrity_state,
+            "integrity_key_b64": evidence.integrity_key_b64,
+            "integrity_key_id": evidence.integrity_key_id,
+            "local_once_integrity_key_b64": evidence.local_once_integrity_key_b64,
+            "local_once_integrity_key_id": evidence.local_once_integrity_key_id,
+            "policy_bundle_decision_identities": evidence.policy_bundle_decision_identities,
+            "degraded_trust_status": evidence.degraded_trust_status,
+            "diagnostic_empty": not evidence.has_saved_rows,
+        }
+        return lookup
 
     def resolve_policy_decision_lookup(
         self,

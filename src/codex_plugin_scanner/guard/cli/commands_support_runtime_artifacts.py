@@ -4,7 +4,11 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from ..native_codex_tool_output import codex_tool_output_native
+from ..native_context import bound_context_digest_home
+from ..native_rich_command_model import NativeCommandModelError
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.direct_vitest import (
@@ -535,7 +539,30 @@ def _compound_runtime_artifact(
     )
 
 
-def _hook_runtime_artifact(
+def _hook_runtime_artifact(**kwargs: Any) -> GuardArtifact | None:
+    try:
+        with bound_context_digest_home(kwargs.get("guard_home")):
+            return _hook_runtime_artifact_with_native(**kwargs)
+    except NativeCommandModelError:
+        harness = _canonical_harness_name(kwargs["harness"])
+        return GuardArtifact(
+            artifact_id=f"{harness}:native-command-unavailable",
+            name="native command runtime unavailable",
+            harness=harness,
+            artifact_type="tool_action_request",
+            source_scope="project",
+            config_path=str(
+                _runtime_policy_path(harness, kwargs["home_dir"], kwargs.get("workspace"), payload=kwargs["payload"])
+            ),
+            metadata={
+                "guard_default_action": "block",
+                "native_command_evaluation_status": "unavailable",
+                "runtime_request_reason": "Native command runtime is unavailable; repair it before retrying.",
+            },
+        )
+
+
+def _hook_runtime_artifact_with_native(
     *,
     harness: str,
     payload: dict[str, object],

@@ -165,8 +165,9 @@ def test_intel_binaries_are_cross_compiled_but_executed_only_on_native_intel():
     assert prepare["env"]["CROSS_COMPILED"] == "${{ matrix.cross == true }}"
     script = next(step for step in prepare["steps"] if step.get("name") == "Compile canonical release inputs")["run"]
     guard = script.index('if [[ "$CROSS_COMPILED" != "true" ]]; then')
-    assert guard < script.index("build_native_command_program.py") < script.index("self-test") < script.index("fi\n")
-    assert script.index("fi\n") < script.index("prepared_native.py pack")
+    closed = script.index("fi\n", script.index("self-test"))
+    assert guard < script.index("build_native_command_program.py") < script.index("self-test") < closed
+    assert closed < script.index("prepared_native.py pack")
     wheels = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]
     runners = {leg["target"]: leg["runner"] for leg in wheels["strategy"]["matrix"]["include"]}
     assert runners["x86_64-apple-darwin"] == "macos-15-intel"

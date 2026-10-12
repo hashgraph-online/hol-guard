@@ -35,11 +35,12 @@ from .cleanup import cleanup_case_resources
 from .evidence import assess_case, sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import create_fixture, create_run_root, digest_file, filesystem_checks, scenario_fixture_name
-from .host_process import clean_environment, run_process
+from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
     public_native_extension_evidence,
     public_native_receipt,
 )
+from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
 from .native_tools import cleanup_private_temp
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
@@ -187,6 +188,8 @@ def run_case(
             )
             case["guard_extension_sha256"] = digest_file(extension)
             environment = clean_environment(fixture.home, agent_dir, fixture.canary)
+            if first_contact:
+                environment = realistic_environment(environment, fixture.home)
             if scenario.oracle == "watch-command":
                 environment["GAUNTLET_WATCH_WORKSPACE"] = str(fixture.workspace)
             if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
@@ -330,6 +333,8 @@ def run_suite(
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
         raise ValueError("expected source SHA must be a full Git commit")
     jobs = validate_jobs(jobs)
+    if KNOWN_GAPS.is_file():
+        load_known_gaps()  # a malformed gap file aborts before any case runs
     output = output.resolve()
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     executable = omp or shutil.which("omp")
@@ -465,10 +470,13 @@ def run_suite(
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
     report.setdefault("inference_usage", inference_usage(output / "cases", ()))
     report["stopped_early"] = len(report["cases"]) < len(selected)
+    report.update(report_sections(report["cases"]))
     report["pass"] = (
         report["full_profile"]
         and len(report["cases"]) == len(selected)
         and all(c["outcome"] == "pass" for c in report["cases"])
+        and not report["interruptions"]["benign_interruptions"]
+        and not stale_gaps(report["known_gaps"])
     )
     report["source_unchanged"] = source_identity(REPO, candidate_sha) == binding and report["runner_files"] == {
         p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()

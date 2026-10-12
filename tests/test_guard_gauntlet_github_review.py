@@ -9,7 +9,7 @@ from pathlib import Path
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.fixtures import SETTINGS_AFTER, create_fixture, filesystem_checks
 from ci.gauntlet.input_evidence import redact_value
-from ci.gauntlet.native_tools import _linked_worktree_error
+from ci.gauntlet.native_tools import _linked_worktree_error, native_tools_scope_error
 from ci.gauntlet.proofs import required_checks
 from ci.gauntlet.review_fixtures import (
     DELETE_COMMAND,
@@ -94,6 +94,17 @@ def test_linked_worktree_scope_requires_the_requested_steps():
     assert _linked_worktree_error(done[:3]) is not None
     assert _linked_worktree_error([done[1], done[0], *done[2:]]) is not None
     assert _linked_worktree_error([done[0], done[2], done[3]]) is not None
+    # Scope alone still rejects a wrong checkout but not missing steps.
+    assert _linked_worktree_error(done[:1], require_steps=False) is None
+    assert _linked_worktree_error([call("edit", "{{workspace}}/src/settings.ts")], require_steps=False) is not None
+
+
+def test_worktree_scope_is_checked_even_when_guard_denied_a_call():
+    scenario = SCENARIOS[WORKTREE_CASE]
+    stray = [{"id": "1", "name": "edit", "args": {"path": "{{workspace}}/src/settings.ts"}}]
+    assert native_tools_scope_error(scenario, stray, {}, guard_denied=True) is not None
+    inside = [{"id": "1", "name": "read", "args": {"path": "{{home}}/review-worktree/src/settings.ts"}}]
+    assert native_tools_scope_error(scenario, inside, {}, guard_denied=True) is None
 
 
 def test_linked_worktree_paths_survive_evidence_redaction(tmp_path):

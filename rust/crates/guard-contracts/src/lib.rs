@@ -11,6 +11,8 @@ mod approval_reuse;
 pub use approval_reuse::*;
 mod github_cli_classify;
 pub use github_cli_classify::*;
+mod github_workflow_prepare;
+pub use github_workflow_prepare::*;
 mod protect_request;
 pub use protect_request::*;
 mod git_execution_safety;
