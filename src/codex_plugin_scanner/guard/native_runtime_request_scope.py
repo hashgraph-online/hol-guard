@@ -5,11 +5,13 @@ One hook request validates the runtime binary once: review paths probe
 the whole binary.  The request-scoped store shares that single validation.
 Every new hook request still re-validates, and Windows keeps uncached hashing
 across requests (``native_binary_identity._CACHE_ENABLED`` is POSIX-only).
+Candidate discovery — which in force mode scans installed distribution
+metadata — also runs once per request; nothing is reused across requests.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -47,6 +49,11 @@ _REQUEST_STATUS: ContextVar[dict[_RequestKey, NativeRuntimeStatus] | None] = Con
     default=None,
 )
 
+_REQUEST_CANDIDATES: ContextVar[dict[tuple[str, str | None], tuple[Path, ...]] | None] = ContextVar(
+    "guard_native_runtime_candidates_request",
+    default=None,
+)
+
 
 @contextmanager
 def native_status_request_scope() -> Iterator[dict[_RequestKey, NativeRuntimeStatus]]:
@@ -57,10 +64,13 @@ def native_status_request_scope() -> Iterator[dict[_RequestKey, NativeRuntimeSta
         yield existing
         return
     scope: dict[_RequestKey, NativeRuntimeStatus] = {}
+    candidates: dict[tuple[str, str | None], tuple[Path, ...]] = {}
     token = _REQUEST_STATUS.set(scope)
+    candidates_token = _REQUEST_CANDIDATES.set(candidates)
     try:
         yield scope
     finally:
+        _REQUEST_CANDIDATES.reset(candidates_token)
         _REQUEST_STATUS.reset(token)
 
 
@@ -91,3 +101,17 @@ def remember_scoped_status(key: _RequestKey, status: NativeRuntimeStatus) -> Non
     scope = _REQUEST_STATUS.get()
     if scope is not None and status.identity is not None:
         scope[key] = status
+
+
+def scoped_candidates(
+    key: tuple[str, str | None],
+    discover: Callable[[], tuple[Path, ...]],
+) -> tuple[Path, ...]:
+    """Return the request-scoped candidates for ``key``, discovering once."""
+
+    scope = _REQUEST_CANDIDATES.get()
+    if scope is None:
+        return discover()
+    if key not in scope:
+        scope[key] = discover()
+    return scope[key]

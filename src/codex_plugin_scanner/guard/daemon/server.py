@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
@@ -1349,6 +1349,14 @@ class _GuardDaemonHandler(
         parsed = urlparse(self.path)
         self._touch_runtime_heartbeat(parsed.path)
         path_parts = [part for part in parsed.path.split("/") if part]
+        hook_path = len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]
+        # One hook request shares a single native-binary validation across
+        # route classification, its decision, approval/review, queue, and
+        # response handling.
+        with native_status_request_scope() if hook_path else nullcontext():
+            self._dispatch_post(parsed, path_parts)
+
+    def _dispatch_post(self, parsed: Any, path_parts: list[str]) -> None:
         if parsed.path in {"/v1/connect/requests", "/v1/connect/complete", "/v1/connect/result"}:
             self._write_legacy_pairing_disabled()
             return
@@ -1440,10 +1448,7 @@ class _GuardDaemonHandler(
             )
             return
         if len(path_parts) == 3 and path_parts[:2] == ["v1", "hooks"]:
-            # One hook request shares a single native-binary validation across
-            # its decision, approval/review, queue, and response handling.
-            with native_status_request_scope():
-                self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
+            self._handle_runtime_hook(payload, parsed.query, default_harness=path_parts[2])
             return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "hooks"] and path_parts[3] == "readiness":
             self._handle_hook_readiness(payload, parsed.query, default_harness=path_parts[2])

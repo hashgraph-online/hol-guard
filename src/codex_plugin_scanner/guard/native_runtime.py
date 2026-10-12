@@ -33,6 +33,7 @@ from .native_runtime_process_cache import (
 from .native_runtime_request_scope import (
     _resolved_candidate_path,
     remember_scoped_status,
+    scoped_candidates,
     scoped_status,
 )
 from .native_runtime_resilience import (
@@ -91,6 +92,13 @@ def _bundled_runtime_candidate() -> Path:
 
 
 def _runtime_candidates() -> tuple[Path, ...]:
+    return scoped_candidates(
+        (native_mode(), os.environ.get(_NATIVE_BINARY_ENV)),
+        _discover_runtime_candidates,
+    )
+
+
+def _discover_runtime_candidates() -> tuple[Path, ...]:
     mode = native_mode()
     candidates: list[Path] = []
     override = os.environ.get(_NATIVE_BINARY_ENV)
@@ -377,8 +385,11 @@ def native_runtime_status(*, deadline_monotonic: float | None = None) -> NativeR
     key = _status_request_key(candidates)
     if (cached := scoped_status(key)) is not None:
         identity = cached.identity
-        resolved = {_resolved_candidate_path(candidate) for candidate in candidates}
-        if identity is not None and identity.path in resolved and _scoped_manifest_still_valid(cached):
+        if (
+            identity is not None
+            and any(_resolved_candidate_path(candidate) == identity.path for candidate in candidates)
+            and _scoped_manifest_still_valid(cached)
+        ):
             return cached
     expired = deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
     if not expired and (process := process_status(key, candidates)) is not None:
