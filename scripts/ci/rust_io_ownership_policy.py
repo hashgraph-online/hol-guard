@@ -56,6 +56,7 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         # Extracted binary identity validation; no command or policy semantics.
         "src/codex_plugin_scanner/guard/native_binary_identity.py",
         "src/codex_plugin_scanner/guard/native_context.py",
+        "src/codex_plugin_scanner/guard/native_content_sensitivity.py",
         # Bounded non-secret reason code for resident prerequisite failures.
         "src/codex_plugin_scanner/guard/native_resident_prerequisite_reason.py",
         "src/codex_plugin_scanner/guard/native_resident_client.py",

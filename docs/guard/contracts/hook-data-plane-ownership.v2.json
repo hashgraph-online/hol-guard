@@ -396,6 +396,7 @@
     "src/codex_plugin_scanner/guard/native_archive_acquisition.py",
     "src/codex_plugin_scanner/guard/native_direct_tool_context.py",
     "src/codex_plugin_scanner/guard/native_critical_floor.py",
+    "src/codex_plugin_scanner/guard/native_content_sensitivity.py",
     "src/codex_plugin_scanner/guard/native_approval_protocol.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_portal.py",
     "src/codex_plugin_scanner/guard/native_approval_v4_protocol.py",

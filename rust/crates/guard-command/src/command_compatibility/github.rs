@@ -97,6 +97,20 @@ fn classify(original: &[String], literal_dollars: bool) -> Capabilities {
     }) {
         return None;
     }
+    // Every `gh` read accepts a `--jq`/`-q` response filter; none may read the
+    // environment or load jq modules.
+    let mut filters = original.iter().enumerate().filter_map(|(index, value)| {
+        value
+            .strip_prefix("--jq=")
+            .or_else(|| (value.starts_with("-q") && value.len() > 2).then(|| &value[2..]))
+            .or_else(|| {
+                matches!(value.as_str(), "--jq" | "-q")
+                    .then(|| original.get(index + 1).map_or("", String::as_str))
+            })
+    });
+    if filters.any(|filter| !api::jq_is_static(filter)) {
+        return None;
+    }
     options::validate_selectors(original)?;
     let args = options::strip_globals(original)?;
     let Some(top) = args.first().map(|value| value.to_ascii_lowercase()) else {

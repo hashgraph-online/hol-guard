@@ -72,6 +72,7 @@ mod command_verified_read_candidates;
 #[cfg(test)]
 mod command_verified_read_candidates_tests;
 mod command_workspace_write_candidates;
+pub mod content_sensitivity;
 pub mod contributed_mcp_decision;
 mod contributed_mcp_url;
 mod data_flow;

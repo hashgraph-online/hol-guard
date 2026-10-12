@@ -92,6 +92,7 @@ mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 #[cfg(unix)]
 mod contained_op;
+mod content_sensitivity_op;
 mod context_digest;
 mod context_digest_json;
 mod context_digest_local_cli;
@@ -283,6 +284,8 @@ mod mcp_tool_policy_decision;
 mod mcp_tool_policy_extension;
 mod mcp_tool_policy_flow;
 mod mcp_tool_policy_grants;
+mod mcp_tool_policy_lookup;
+mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod native_exact_action_op;
 mod native_hook_receipt;

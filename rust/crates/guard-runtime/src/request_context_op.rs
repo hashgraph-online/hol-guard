@@ -47,14 +47,22 @@ impl Budget {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_request_context_request(
     request: &RequestContextRequestV1,
+) -> Result<Vec<u8>, String> {
+    evaluate_request_context_request_with_store(request, None)
+}
+
+pub(crate) fn evaluate_request_context_request_with_store(
+    request: &RequestContextRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request)?;
     if request.schema != REQUEST_CONTEXT_REQUEST_SCHEMA {
         return Err("native_request_context_schema_mismatch".to_owned());
     }
-    let (status, code, payload) = match decide(request) {
+    let (status, code, payload) = match decide(request, store) {
         Ok(payload) => ("ok".to_owned(), "ok".to_owned(), Some(payload)),
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
@@ -282,9 +290,18 @@ pub(crate) fn build_with_shell_report(
     }))
 }
 
-fn decide(request: &RequestContextRequestV1) -> Result<Value, &'static str> {
+fn decide(
+    request: &RequestContextRequestV1,
+    store: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Value, &'static str> {
     let budget = admit(request)?;
     let payload = match &request.action {
+        RequestContextKindV1::ContentSensitivity(body) => crate::content_sensitivity_op::evaluate(
+            body,
+            &budget,
+            store,
+            Path::new(&request.guard_home),
+        )?,
         RequestContextKindV1::RestrictedPytest { operation, input } => {
             crate::restricted_pytest_op::evaluate(operation, input, &budget)?
         }

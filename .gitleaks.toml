@@ -43,6 +43,15 @@ regexes = [
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Pinned public source-file digest for sensitivity parity, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/content_sensitivity_parity\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"src/codex_plugin_scanner/guard/runtime/secret_sensitivity\.py": "2f692c209f962b918c70a38b30235a8284d2889daa4df07e885dc584754a114b",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
 description = "Canonical source digest, not a credential"
 condition = "AND"
 regexTarget = "line"

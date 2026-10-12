@@ -213,20 +213,18 @@ impl CompiledNativeCommandControls {
         context: crate::pretool::PathContext<'_>,
     ) -> PreToolResultV1 {
         let observed = match command {
-            Some(command) => self.program.observe_with_context(
-                command,
-                &self.active_extensions,
-                deadline,
-                context,
-            ),
-            None => Ok(NativeCommandObservationBatchV1::default()),
+            Some(command) => self.observe_command(command, deadline, context),
+            None => Ok((NativeCommandObservationBatchV1::default(), None)),
         };
-        let mut batch = match observed {
-            Ok(batch) => batch,
-            Err(_) => NativeCommandObservationBatchV1 {
-                evaluation_error: Some("native_command_evaluation_failed".to_owned()),
-                ..Default::default()
-            },
+        let (mut batch, unmodeled) = match observed {
+            Ok(observed) => observed,
+            Err(_) => (
+                NativeCommandObservationBatchV1 {
+                    evaluation_error: Some("native_command_evaluation_failed".to_owned()),
+                    ..Default::default()
+                },
+                None,
+            ),
         };
         let delegated_floor = if batch.evaluation_error.is_none() {
             match self.delegated_observations(command, tool, packages, &mut batch, deadline) {
@@ -258,7 +256,8 @@ impl CompiledNativeCommandControls {
         };
         // An uncertain observation may belong to any of its candidate owners,
         // so it takes the strongest of their floors and never less than review.
-        let mut uncertain_floor: Option<&'static str> = None;
+        // An unmodeled command already carries the floor of its possible owners.
+        let mut uncertain_floor: Option<&'static str> = unmodeled;
         for observation in &batch.observations {
             if !observation.uncertainty_reasons.is_empty() {
                 let candidate = match self.rule_indices.get(&observation.rule_id) {
@@ -446,6 +445,25 @@ impl CompiledNativeCommandControls {
             }
             covered.extend(observation.effective_segment_indexes.iter().copied());
         }
+        // An enabled GitHub permission-only owner (a proven read or routine
+        // review-thread resolution) runs last so it never hides an ungranted rule.
+        // A segment is covered only when every GitHub permission it needs is
+        // enabled, so `gh auth status` needs both its local and remote reads.
+        let enabled = &self.explicitly_enabled_permissions;
+        let (mut granted, mut withheld) = (BTreeSet::new(), BTreeSet::new());
+        for item in &batch.permission_observations {
+            let id = &item.permission_id;
+            if item.mcp_tool.is_some() || !id.starts_with("command.github.permission.") {
+                continue;
+            }
+            let target = if item.uncertainty_reasons.is_empty() && enabled.contains(id) {
+                &mut granted
+            } else {
+                &mut withheld
+            };
+            target.extend(item.matcher_evidence.iter().map(|e| e.segment_index));
+        }
+        covered.extend(granted.difference(&withheld).copied());
         // Delegated package-firewall ownership is not execution consent. Only
         // verified rule observations or the native benign proof can cover a
         // segment; an extra unclassified command retains its own review.
@@ -459,6 +477,8 @@ pub(crate) use delegated::normalized_tool;
 
 #[path = "native_command_controls_floor.rs"]
 mod floor;
+#[path = "native_command_unmodeled.rs"]
+mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
 
 #[cfg(test)]

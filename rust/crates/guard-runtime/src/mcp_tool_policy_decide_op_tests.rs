@@ -23,6 +23,8 @@ fn request(subject: &Value, claim: bool, observations: &[Value]) -> McpToolPolic
                 result: item["result"].clone(),
             })
             .collect(),
+        proxy: None,
+        lookup: None,
     }
 }
 
@@ -157,4 +159,139 @@ fn reply_binds_request_id_and_digest() {
         reply["request_sha256"],
         request_digest(&req).expect("digest")
     );
+}
+
+fn facts_of(payload: &Value) -> Value {
+    json!({
+        "action": payload["action"],
+        "source": payload["source"],
+        "current_action": payload["current_action"],
+        "saved_action": payload["saved_action"],
+        "approval_reuse_status": payload["approval_reuse_status"],
+        "approval_reuse_reason_code": payload["approval_reuse_reason_code"],
+        "has_pending": !payload["pending_approval_reuse_decision"].is_null(),
+    })
+}
+
+fn separate_proxy_checks(payload: &Value, input: &Value) -> Value {
+    use guard_contracts::McpProxyQueryV1;
+    let mut tool = facts_of(payload);
+    let gate = crate::mcp_proxy_decision_op::decide(
+        &serde_json::from_value::<McpProxyQueryV1>(json!({
+            "check": "saved_allow_gate",
+            "catalog_state": input["catalog_state"],
+            "decision": tool,
+        }))
+        .expect("gate query"),
+    );
+    if gate["disable"] == true {
+        tool["action"] = gate["action"].clone();
+        tool["source"] = gate["source"].clone();
+        tool["approval_reuse_status"] = gate["approval_reuse_status"].clone();
+        tool["approval_reuse_reason_code"] = gate["approval_reuse_reason_code"].clone();
+        tool["has_pending"] = json!(false);
+    }
+    let route = crate::mcp_proxy_decision_op::decide(
+        &serde_json::from_value::<McpProxyQueryV1>(json!({
+            "check": "route_tool_call",
+            "mode": input["mode"],
+            "package_present": input["package_present"],
+            "asks_for_approval": input["asks_for_approval"],
+            "inline_available": input["inline_available"],
+            "tool_name": input["tool_name"],
+            "decision": tool,
+        }))
+        .expect("route query"),
+    );
+    json!({"gate": gate, "route": route})
+}
+
+#[test]
+fn folded_gate_and_route_equal_the_separate_proxy_checks() {
+    let doc = vectors();
+    let mut inputs = Vec::new();
+    for catalog_state in ["complete", "partial"] {
+        for mode in ["enforce", "observe"] {
+            for package_present in [false, true] {
+                for asks in [false, true] {
+                    inputs.push(json!({
+                        "catalog_state": catalog_state,
+                        "mode": mode,
+                        "package_present": package_present,
+                        "asks_for_approval": asks,
+                        "inline_available": asks,
+                        "tool_name": "tool",
+                    }));
+                }
+            }
+        }
+    }
+    let mut checked = 0;
+    for vector in doc["vectors"].as_array().expect("vectors") {
+        let subject = &doc["subjects"][vector["subject"].as_str().expect("subject key")];
+        let observed = vector["observations"].as_array().expect("observations");
+        for input in &inputs {
+            let mut req = request(subject, false, observed);
+            req.proxy = Some(serde_json::from_value(input.clone()).expect("proxy input"));
+            let reply = run(&req);
+            if reply["status"] != "ok" {
+                continue;
+            }
+            let mut payload = reply["payload"].clone();
+            let folded = payload.as_object_mut().expect("object").remove("proxy");
+            assert_eq!(
+                folded.expect("proxy present"),
+                separate_proxy_checks(&payload, input),
+                "{} {input}",
+                vector["name"]
+            );
+            checked += 1;
+        }
+    }
+    assert!(checked >= 500, "only {checked} proxy checks ran");
+}
+
+#[test]
+fn proxy_is_absent_unless_requested() {
+    let doc = vectors();
+    let vector = &doc["vectors"][0];
+    let subject = &doc["subjects"][vector["subject"].as_str().expect("key")];
+    let observed = vector["observations"].as_array().expect("obs");
+    let reply = run(&request(subject, false, observed));
+    assert!(reply["payload"].get("proxy").is_none(), "{reply}");
+}
+
+#[test]
+fn inline_reuse_diagnostic_replaces_the_separate_effect() {
+    let doc = vectors();
+    let mut checked = 0;
+    for vector in doc["vectors"].as_array().expect("vectors") {
+        let subject = &doc["subjects"][vector["subject"].as_str().expect("subject key")];
+        let claim = vector["claim_saved_approval"].as_bool().expect("claim");
+        let mut observed = vector["observations"].as_array().expect("obs").clone();
+        let mut folded = false;
+        while let Some(at) = observed
+            .iter()
+            .position(|item| item["need"]["kind"] == "reuse_diagnostic")
+        {
+            let diagnosed = observed.remove(at);
+            let lookup = observed[..at]
+                .iter_mut()
+                .rfind(|item| {
+                    item["need"]["kind"] == "policy_lookup"
+                        && item["need"]["phase"] == diagnosed["need"]["phase"]
+                })
+                .expect("lookup precedes the diagnostic");
+            lookup["result"]["reuse_diagnostic"] = diagnosed["result"].clone();
+            folded = true;
+        }
+        if !folded {
+            continue;
+        }
+        let reply = run(&request(subject, claim, &observed));
+        assert_eq!(reply["status"], "ok", "{}: {reply}", vector["name"]);
+        assert_eq!(reply["payload"], vector["expected"], "{}", vector["name"]);
+        checked += 1;
+    }
+    assert!(checked > 0, "no vector exercises the reuse diagnostic");
 }

@@ -344,7 +344,10 @@ pub(crate) fn evaluate_resident_bytes(
                 crate::local_mcp_grant_op::evaluate_local_mcp_grant_request(&request)
             }
             ResidentOperationV1::RequestContextBuild(request) => {
-                crate::request_context_op::evaluate_request_context_request(&request)
+                crate::request_context_op::evaluate_request_context_request_with_store(
+                    &request,
+                    policy_store,
+                )
             }
             #[cfg(unix)]
             ResidentOperationV1::SkillDirectoryIdentity(request) => {

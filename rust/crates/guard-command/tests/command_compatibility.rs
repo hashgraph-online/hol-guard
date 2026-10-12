@@ -194,7 +194,7 @@ fn github_api_query_suffix_preserves_merge_authorization() {
 }
 
 #[test]
-fn graphql_queries_are_remote_reads_and_mutations_stay_owned_unsupported() {
+fn graphql_queries_are_remote_reads_and_mutations_are_owned_rules() {
     let query = compatibility_observations(
         &model("gh api graphql -f 'query=query{viewer{login}}'"),
         None,
@@ -212,7 +212,14 @@ fn graphql_queries_are_remote_reads_and_mutations_stay_owned_unsupported() {
     )
     .unwrap();
     assert_eq!(mutation.rule_matches.len(), 1);
-    assert_eq!(mutation.rule_matches[0].rule_id, "command.github.unknown");
-    assert!(mutation.rule_matches[0].uncertainty);
+    assert_eq!(mutation.rule_matches[0].rule_id, "command.github.mutation");
+    assert!(!mutation.rule_matches[0].uncertainty);
     assert!(mutation.permission_matches.is_empty());
+    let unread_input =
+        compatibility_observations(&model("gh api graphql --input -"), None).unwrap();
+    assert_eq!(
+        unread_input.rule_matches[0].rule_id,
+        "command.github.unknown"
+    );
+    assert!(unread_input.rule_matches[0].uncertainty);
 }

@@ -68,7 +68,7 @@
       "variant_remainder": 0
     },
     {
-      "basis": "inherited GitHub GraphQL grammar records owned unknown uncertainty. Uncertain attribution takes the strongest candidate owner floor and never less than review; disabled controls still block.",
+      "basis": "static GitHub GraphQL mutations are attributed to the owning capability instead of unknown uncertainty. That owner floor is review; disabled controls still block.",
       "expected": {
         "decision_plane_floor": "block",
         "evaluation_error": null,
@@ -77,9 +77,7 @@
         "native_floor": "review",
         "native_reason": "native_command_review_required",
         "path_overridden": false,
-        "uncertain_rule_ids": [
-          "command.github.unknown"
-        ]
+        "uncertain_rule_ids": []
       },
       "group_id": "adversarial:graphql|all",
       "membership": {
@@ -745,9 +743,7 @@
         "native_floor": "review",
         "native_reason": "native_command_review_required",
         "path_overridden": false,
-        "uncertain_rule_ids": [
-          "command.github.unknown"
-        ]
+        "uncertain_rule_ids": []
       },
       "group_id": "workflow:github-remote:resolve-thread-regression|all",
       "membership": {
