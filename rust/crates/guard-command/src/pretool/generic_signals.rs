@@ -1,5 +1,21 @@
 use super::*;
 
+/// Keys whose string value may carry JSON-encoded tool arguments.
+pub(crate) const EMBEDDED_ARGUMENT_KEYS: [&str; 12] = [
+    "toolArgs",
+    "tool_args",
+    "toolArgsJson",
+    "tool_input",
+    "toolInput",
+    "toolArguments",
+    "tool_arguments",
+    "arguments",
+    "args",
+    "input",
+    "parameters",
+    "params",
+];
+
 pub(crate) fn extract_generic_signals(
     payload: &Value,
 ) -> Result<GenericSignals, GenericExtractionError> {
@@ -15,20 +31,7 @@ pub(crate) fn extract_generic_signals(
     // their nested fields join the same bounded signal surface.
     let mut embedded = Vec::new();
     for record in &maps {
-        for key in [
-            "toolArgs",
-            "tool_args",
-            "toolArgsJson",
-            "tool_input",
-            "toolInput",
-            "toolArguments",
-            "tool_arguments",
-            "arguments",
-            "args",
-            "input",
-            "parameters",
-            "params",
-        ] {
+        for key in EMBEDDED_ARGUMENT_KEYS {
             if let Some(Value::String(text)) = record.get(key) {
                 let trimmed = text.trim();
                 if !(trimmed.starts_with('{') || trimmed.starts_with('['))

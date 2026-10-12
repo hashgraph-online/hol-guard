@@ -5,6 +5,8 @@ import {
   supplyChainFixAllButtonLabel,
   supplyChainFixAllIsPending,
   supplyChainFixAllRequiresConnection,
+  supplyChainFixAllCanRepair,
+  supplyChainFixAllAccessState,
 } from "./supply-chain-fix-all";
 import type { PackageFirewallStatusResponse } from "./guard-types";
 import type { SupplyChainIssue } from "./supply-chain-issues";
@@ -41,8 +43,8 @@ const markup = renderToStaticMarkup(
 );
 
 assert(markup.includes("Restore supply-chain protection"), "recovery heading is visible");
-assert(markup.includes("Fix all"), "one aggregate repair action is visible");
-assert(markup.includes("Fix 2 open issues"), "summary reports the bounded repair scope");
+assert(markup.includes("Restore protection"), "one aggregate repair action is visible");
+assert(markup.includes("2 issues to resolve"), "summary reports the bounded repair scope");
 assert(markup.includes("View issue details"), "issues remain available through progressive disclosure");
 assert(!markup.includes("Package installs are not protected yet"), "details start collapsed");
 assert(markup.includes('aria-live="polite"'), "the result live region exists before repair starts");
@@ -83,8 +85,8 @@ const duplicateFailureMarkup = renderToStaticMarkup(
   />,
 );
 assert(
-  duplicateFailureMarkup.match(/Retry this step\./g)?.length === 2,
-  "duplicate failure messages render as distinct rows",
+  duplicateFailureMarkup.match(/Retry this step\./g)?.length === 1,
+  "duplicate failure explanations render once",
 );
 
 function firewallStatus(
@@ -129,6 +131,16 @@ function firewallStatus(
     connect_flow: null,
   };
 }
+
+assert(supplyChainFixAllCanRepair(firewallStatus("paid_entitlement_active", { allowed: true })), "paid access can install missing protection during guided repair");
+assert(!supplyChainFixAllCanRepair(firewallStatus("paid_guard_cloud_required")), "unpaid first activation is not attempted");
+assert(supplyChainFixAllCanRepair(firewallStatus("paid_guard_cloud_required", { installed: true })), "existing protection remains locally repairable");
+const accessMarkup = renderToStaticMarkup(<SupplyChainRecovery issues={issues} state={supplyChainFixAllAccessState()} onFixAll={() => undefined} />);
+assert(accessMarkup.includes("Check Cloud access"), "access failure offers an access check, not another password retry");
+assert(!accessMarkup.includes("Retry remaining"), "Cloud denial does not repeat the repair loop");
+assert(accessMarkup.includes("local approval password cannot change Cloud access"), "billing and local proof are distinguished");
+const repeatedSummaryMarkup = renderToStaticMarkup(<SupplyChainRecovery issues={issues} state={{ phase: "error", message: "Denied.", failedSteps: ["Denied."], completedSteps: [] }} onFixAll={() => undefined} />);
+assert(repeatedSummaryMarkup.match(/Denied\./g)?.length === 1, "summary is not repeated as a failed step");
 
 assert(
   !supplyChainFixAllRequiresConnection(firewallStatus("paid_guard_cloud_required")),

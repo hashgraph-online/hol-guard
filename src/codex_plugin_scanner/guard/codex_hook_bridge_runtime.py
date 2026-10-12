@@ -2,11 +2,36 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 import json
+import re
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, TypedDict
+
+_BASE64URL_ARGUMENT = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def decode_bridge_config_argument(argument: str) -> str:
+    """Return the JSON text of a bridge config argument.
+
+    POSIX installs pass the JSON itself. Windows installs pass unpadded
+    base64url text because the Windows shells cannot carry JSON quotes intact.
+    """
+
+    if argument.startswith("{"):
+        return argument
+    if not _BASE64URL_ARGUMENT.fullmatch(argument):
+        raise ValueError("bridge config argument is neither JSON nor base64url")
+    try:
+        text = base64.urlsafe_b64decode(argument + "=" * (-len(argument) % 4)).decode("utf-8")
+    except (binascii.Error, UnicodeDecodeError) as exc:
+        raise ValueError("bridge config argument is not valid base64url") from exc
+    if not text.startswith("{"):
+        raise ValueError("bridge config argument does not encode a JSON object")
+    return text
 
 
 class BridgeConfig(TypedDict):
@@ -38,11 +63,18 @@ class TrustedHookLaunch(Protocol):
 
 
 def bounded_hook_input(limit: int) -> str | None:
-    data = sys.stdin.read(limit + 1)
-    try:
-        encoded_size = len(data.encode("utf-8"))
-    except UnicodeError:
-        return None
+    # Codex sends UTF-8; text-mode stdin would decode it with the Windows code page.
+    stream = getattr(sys.stdin, "buffer", None)
+    if stream is None:
+        data = sys.stdin.read(limit + 1)
+        try:
+            encoded_size = len(data.encode("utf-8"))
+        except UnicodeError:
+            return None
+    else:
+        raw = stream.read(limit + 1)
+        encoded_size = len(raw)
+        data = raw.decode("utf-8-sig", errors="replace")
     if encoded_size > limit:
         return None
     return data if data.strip() else "{}"
@@ -74,8 +106,8 @@ def bridge_config_from_argv(argv: Sequence[str], *, timeout_grace_seconds: int) 
     if len(argv) != 2:
         raise SystemExit("codex_daemon_hook_bridge expects one JSON config argument")
     try:
-        payload = json.loads(argv[1])
-    except json.JSONDecodeError as exc:
+        payload = json.loads(decode_bridge_config_argument(argv[1]))
+    except ValueError as exc:
         raise SystemExit("codex_daemon_hook_bridge config must be a JSON object") from exc
     if not isinstance(payload, dict):
         raise SystemExit("codex_daemon_hook_bridge config must be a JSON object")

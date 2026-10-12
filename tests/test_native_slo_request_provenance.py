@@ -7,7 +7,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.hook_process_worker import HookProcessReview
 from scripts.native_slo_route_provenance import RequestRouteTracker
 
 
@@ -16,43 +15,44 @@ class _FixtureObject:
         self.__dict__.update(values)
 
 
-class _Runner:
+class _Worker:
     def __init__(self, barrier: threading.Barrier | None = None) -> None:
         self.barrier = barrier
         self.records: list[object] = []
+        self.metrics = _FixtureObject(record_route=self._record_route_metric)
 
     def _record_route_metric(self, route: object) -> None:
         self.records.append(route)
 
-    def review(self, *, payload: dict[str, object]) -> HookProcessReview:
+    def review_http_payload(self, *, payload: dict[str, object]) -> object:
         if payload.get("retry"):
-            return self.review(payload={**payload, "retry": False})
+            return self.review_http_payload(payload={**payload, "retry": False})
         if self.barrier is not None:
             self.barrier.wait(timeout=5)
-        self._record_route_metric(payload.get("route"))
+        self.metrics.record_route(payload.get("route"))
         if payload.get("empty"):
-            return HookProcessReview(None, None)
+            return _FixtureObject(payload=None, reason_code=None)
         if payload.get("failed"):
-            return HookProcessReview(None, "daemon_hook_process_deadline_exhausted")
-        return HookProcessReview({"decision": "allow"}, None)
+            return _FixtureObject(payload=None, reason_code="daemon_hook_process_deadline_exhausted")
+        return {"decision": "allow"}
 
 
 def test_overlapping_worker_results_preserve_individual_routes() -> None:
-    runner = _Runner(threading.Barrier(4))
-    tracker = RequestRouteTracker(runner)
+    worker = _Worker(threading.Barrier(4))
+    tracker = RequestRouteTracker(worker)
     routes = ["native_resident", "native_fail_safe", "native_oneshot", "python_semantic"]
 
     def observe(route: str) -> str:
         original = {"route": route}
         request, token = tracker.begin(original)
         assert original == {"route": route}
-        runner.review(payload=request)
+        worker.review_http_payload(payload=request)
         return tracker.finish(token)
 
     try:
         with ThreadPoolExecutor(max_workers=4) as executor:
             assert list(executor.map(observe, routes)) == routes
-        assert sorted(runner.records) == sorted(routes)
+        assert sorted(worker.records) == sorted(routes)
         assert not tracker._active
     finally:
         tracker.close()
@@ -60,52 +60,52 @@ def test_overlapping_worker_results_preserve_individual_routes() -> None:
 
 @pytest.mark.parametrize("payload", [{"route": "unrecognized"}, {"route": "native_resident", "empty": True}, {}])
 def test_missing_or_invalid_route_cannot_claim_resident(payload: dict[str, object]) -> None:
-    runner = _Runner()
-    tracker = RequestRouteTracker(runner)
+    worker = _Worker()
+    tracker = RequestRouteTracker(worker)
     try:
         request, token = tracker.begin(payload)
-        runner.review(payload=request)
+        worker.review_http_payload(payload=request)
         assert tracker.finish(token) == "native_fail_safe"
     finally:
         tracker.close()
 
 
 def test_terminal_failure_keeps_route_without_claiming_allowed_decision() -> None:
-    runner = _Runner()
-    tracker = RequestRouteTracker(runner)
+    worker = _Worker()
+    tracker = RequestRouteTracker(worker)
     try:
         request, token = tracker.begin({"route": "native_resident", "failed": True})
-        result = runner.review(payload=request)
-        assert result.payload is None
-        assert result.reason_code == "daemon_hook_process_deadline_exhausted"
+        result = worker.review_http_payload(payload=request)
+        assert result.payload is None  # type: ignore[union-attr]
+        assert result.reason_code == "daemon_hook_process_deadline_exhausted"  # type: ignore[union-attr]
         assert tracker.finish(token) == "native_resident"
     finally:
         tracker.close()
 
 
-def test_retry_preserves_the_terminal_result_and_close_restores_runner() -> None:
-    runner = _Runner()
-    review, record = runner.review, runner._record_route_metric
-    tracker = RequestRouteTracker(runner)
+def test_retry_preserves_the_terminal_result_and_close_restores_worker() -> None:
+    worker = _Worker()
+    review, record = worker.review_http_payload, worker.metrics.record_route
+    tracker = RequestRouteTracker(worker)
     request, token = tracker.begin({"route": "native_resident", "retry": True})
-    runner.review(payload=request)
+    worker.review_http_payload(payload=request)
     assert tracker.finish(token) == "native_resident"
     tracker.close()
     tracker.close()
-    assert runner.review == review
-    assert runner._record_route_metric == record
+    assert worker.review_http_payload == review
+    assert worker.metrics.record_route == record
     with pytest.raises(RuntimeError, match="route tracker is closed"):
         tracker.begin({})
 
 
 def test_late_result_cannot_recreate_finished_token() -> None:
     barrier = threading.Barrier(2)
-    runner = _Runner(barrier)
-    tracker = RequestRouteTracker(runner)
+    worker = _Worker(barrier)
+    tracker = RequestRouteTracker(worker)
     request, token = tracker.begin({"route": "native_resident"})
     try:
         with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(runner.review, payload=request)
+            future = executor.submit(worker.review_http_payload, payload=request)
             assert tracker.finish(token) == "native_fail_safe"
             barrier.wait(timeout=5)
             future.result(timeout=5)
@@ -115,9 +115,7 @@ def test_late_result_cannot_recreate_finished_token() -> None:
         tracker.close()
 
 
-def test_direct_http_worker_records_request_local_route_and_is_restored() -> None:
-    runner = _Runner()
-
+def test_http_worker_records_request_local_route_and_is_restored() -> None:
     class Worker:
         def __init__(self) -> None:
             self.metrics = _FixtureObject(record_route=lambda route: None)
@@ -128,7 +126,7 @@ def test_direct_http_worker_records_request_local_route_and_is_restored() -> Non
 
     worker = Worker()
     original_review, original_record = worker.review_http_payload, worker.metrics.record_route
-    tracker = RequestRouteTracker(runner, worker)
+    tracker = RequestRouteTracker(worker)
     try:
         request, token = tracker.begin({})
         assert worker.review_http_payload(payload=request) == {"decision": "allow"}

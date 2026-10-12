@@ -161,8 +161,7 @@ def test_generated_path_gate_permits_removal_but_rejects_reintroduction():
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
     owned = "".join(re.findall(r"owned\+?='([^']+)'", run))
     protected = subprocess.run(["grep", "-E", owned], input=result.stdout, text=True, capture_output=True, check=True)
-    expected = [path for path in paths if path != "contracts/extensions/trust-class-map.v1.json"]
-    assert protected.stdout.splitlines() == [path for path in expected for _ in range(2)]
+    assert protected.stdout.splitlines() == [path for path in paths for _ in range(2)]
 
 
 def test_regeneration_prs_cannot_track_ignored_package_projections():
@@ -178,4 +177,4 @@ def test_regeneration_prs_cannot_track_ignored_package_projections():
     files = [{"filename": path, "status": status} for status in ("removed", "added", "modified")]
     files.append({"filename": "contracts/extensions/trust-class-map.v1.json", "status": "modified"})
     result = subprocess.run(["jq", "-r", query], input=json.dumps(files), text=True, capture_output=True, check=True)
-    assert result.stdout.splitlines() == [path, path]
+    assert result.stdout.splitlines() == [path, path, "contracts/extensions/trust-class-map.v1.json"]

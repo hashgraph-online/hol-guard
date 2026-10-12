@@ -1,33 +1,29 @@
-"""Transactional persistence for command activity evidence."""
+"""Persistence entry points for command activity evidence.
+
+Writes run in the native resident (``guard_store`` op), which owns the SQL, the
+rollups and the replay arbitration. Python validates inputs and serializes the
+evidence; it never recomputes what the resident persists.
+"""
 
 # pyright: reportPrivateUsage=false, reportUnusedCallResult=false
 
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
-from .runtime.command_activity_contract import (
-    CommandActivity,
-    CommandActivityEvidence,
-    CommandActivityMatch,
-    CorrelationHandle,
-)
+from .runtime.command_activity_contract import CommandActivityEvidence
 from .runtime.command_activity_display import INVOCATION_PREVIEW_MAX_CHARS
 from .runtime.command_shadow_evaluation import CommandShadowObservation
-from .store_command_activity_lifecycle import (
-    COMMAND_PERSISTENCE_ERROR_DOMAIN,
-    SHADOW_PERSISTENCE_ERROR_DOMAIN,
-    recover_command_activity_persistence,
-)
-from .store_command_activity_rollups import record_command_activity_rollups
-from .store_command_shadow import record_command_shadow_observation
+from .store_command_activity_wire import evidence_wire, shadow_wire
 
 
 class _ConnectionOwner(Protocol):
     def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+
+    def _native_store_call(self, method: str, args: Mapping[str, object]) -> Any: ...
 
 
 class StoreCommandActivityMixin:
@@ -43,44 +39,17 @@ class StoreCommandActivityMixin:
 
         _validate_command_activity_write(evidence, shadow)
         preview = _validated_invocation_preview(invocation_preview)
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            existing = cast(
-                sqlite3.Row | None,
-                connection.execute(
-                    "select * from command_activity where activity_id = ?",
-                    (evidence.activity.activity_id,),
-                ).fetchone(),
+        return bool(
+            self._native_store_call(
+                "record_command_activity",
+                {
+                    "evidence": evidence_wire(evidence),
+                    "shadow": shadow_wire(shadow),
+                    "shadow_evaluation_succeeded": shadow_evaluation_succeeded,
+                    "invocation_preview": preview,
+                },
             )
-            if existing is not None:
-                _require_exact_replay(connection, evidence, existing)
-                if shadow is not None:
-                    if (
-                        connection.execute(
-                            "select 1 from command_activity_shadow_evaluations where activity_id = ?",
-                            (shadow.activity_id,),
-                        ).fetchone()
-                        is None
-                    ):
-                        raise ValueError("command shadow replay is missing persisted evidence")
-                    record_command_shadow_observation(connection, shadow)
-                return False
-            if (
-                connection.execute(
-                    "select 1 from command_activity_rollup_membership where activity_id = ?",
-                    (evidence.activity.activity_id,),
-                ).fetchone()
-                is not None
-            ):
-                return False
-            _record_new_command_activity(
-                connection,
-                evidence,
-                shadow=shadow,
-                shadow_evaluation_succeeded=shadow_evaluation_succeeded,
-                invocation_preview=preview,
-            )
-            return True
+        )
 
     def probe_command_activity_persistence(
         self: _ConnectionOwner,
@@ -92,32 +61,14 @@ class StoreCommandActivityMixin:
         """Exercise and roll back the real command and shadow write path."""
 
         _validate_command_activity_write(evidence, shadow)
-        with self._connect() as connection:
-            connection.execute("begin immediate")
-            connection.execute("savepoint command_activity_repair_probe")
-            try:
-                _record_new_command_activity(
-                    connection,
-                    evidence,
-                    shadow=shadow,
-                    shadow_evaluation_succeeded=shadow_evaluation_succeeded,
-                    invocation_preview=None,
-                )
-            except BaseException:
-                connection.execute("rollback to command_activity_repair_probe")
-                connection.execute("release command_activity_repair_probe")
-                raise
-            connection.execute("rollback to command_activity_repair_probe")
-            connection.execute("release command_activity_repair_probe")
-            recover_command_activity_persistence(
-                connection,
-                error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
-            )
-            if shadow is not None or shadow_evaluation_succeeded:
-                recover_command_activity_persistence(
-                    connection,
-                    error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
-                )
+        self._native_store_call(
+            "probe_command_activity_persistence",
+            {
+                "evidence": evidence_wire(evidence),
+                "shadow": shadow_wire(shadow),
+                "shadow_evaluation_succeeded": shadow_evaluation_succeeded,
+            },
+        )
 
     def count_command_activities(self: _ConnectionOwner) -> int:
         with self._connect() as connection:
@@ -170,182 +121,3 @@ def _validated_invocation_preview(value: str | None) -> str | None:
     if not stripped or len(stripped) > INVOCATION_PREVIEW_MAX_CHARS:
         raise ValueError("invalid_invocation_preview")
     return stripped
-
-
-def _record_new_command_activity(
-    connection: sqlite3.Connection,
-    evidence: CommandActivityEvidence,
-    *,
-    shadow: CommandShadowObservation | None,
-    shadow_evaluation_succeeded: bool,
-    invocation_preview: str | None = None,
-) -> None:
-    connection.execute(
-        """
-        insert into command_activity (
-          activity_id, occurred_at, harness, hook_phase, execution_status,
-          proof_level, policy_action, decision_reason_code, controlling_rule_id,
-          parse_confidence, uncertainty_class, match_count, prompted,
-          approval_reuse_status, receipt_link_status, receipt_id,
-          evaluation_latency_bucket, persistence_latency_bucket, schema_version
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        _activity_values(evidence.activity),
-    )
-    if invocation_preview is not None:
-        connection.execute(
-            """
-            insert into command_activity_invocation (activity_id, invocation_preview)
-            values (?, ?)
-            """,
-            (evidence.activity.activity_id, invocation_preview),
-        )
-    connection.executemany(
-        """
-        insert into command_activity_matches (
-          activity_id, ordinal, extension_id, extension_version, rule_id,
-          rule_version, match_class, severity, default_floor,
-          safe_variant_id, schema_version
-        ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        tuple(_match_values(item) for item in evidence.matches),
-    )
-    connection.executemany(
-        """
-        insert into command_activity_match_effects (
-          activity_id, ordinal, effect_class
-        ) values (?, ?, ?)
-        """,
-        _effect_values(evidence),
-    )
-    connection.executemany(
-        """
-        insert into command_activity_correlations (
-          activity_id, kind, harness, key_id, digest
-        ) values (?, ?, ?, ?, ?)
-        """,
-        _correlation_values(evidence.activity),
-    )
-    if shadow is not None:
-        record_command_shadow_observation(connection, shadow)
-    record_command_activity_rollups(connection, evidence)
-    recover_command_activity_persistence(
-        connection,
-        error_domain=COMMAND_PERSISTENCE_ERROR_DOMAIN,
-    )
-    if shadow is not None or shadow_evaluation_succeeded:
-        recover_command_activity_persistence(
-            connection,
-            error_domain=SHADOW_PERSISTENCE_ERROR_DOMAIN,
-        )
-
-
-def _require_exact_replay(
-    connection: sqlite3.Connection,
-    evidence: CommandActivityEvidence,
-    existing: sqlite3.Row,
-) -> None:
-    persisted_activity = _row_values(existing)
-    persisted_matches = _query_values(
-        connection,
-        "select * from command_activity_matches where activity_id = ? order by ordinal",
-        evidence.activity.activity_id,
-    )
-    persisted_correlations = _query_values(
-        connection,
-        "select * from command_activity_correlations where activity_id = ? order by kind",
-        evidence.activity.activity_id,
-    )
-    persisted_effects = _query_values(
-        connection,
-        """
-        select * from command_activity_match_effects
-        where activity_id = ? order by ordinal, effect_class
-        """,
-        evidence.activity.activity_id,
-    )
-    expected_matches = tuple(_match_values(item) for item in evidence.matches)
-    expected_effects = _effect_values(evidence)
-    expected_correlations = tuple(sorted(_correlation_values(evidence.activity), key=lambda item: str(item[1])))
-    if (
-        persisted_activity != _activity_values(evidence.activity)
-        or persisted_matches != expected_matches
-        or persisted_effects != expected_effects
-        or persisted_correlations != expected_correlations
-    ):
-        raise ValueError("conflicting command activity replay")
-
-
-def _query_values(
-    connection: sqlite3.Connection,
-    query: str,
-    activity_id: str,
-) -> tuple[tuple[object, ...], ...]:
-    rows = cast(
-        list[sqlite3.Row],
-        connection.execute(query, (activity_id,)).fetchall(),
-    )
-    return tuple(_row_values(row) for row in rows)
-
-
-def _row_values(row: sqlite3.Row) -> tuple[object, ...]:
-    return tuple(cast(Sequence[object], row))
-
-
-def _activity_values(activity: CommandActivity) -> tuple[object, ...]:
-    return (
-        activity.activity_id,
-        activity.occurred_at.isoformat(),
-        activity.harness,
-        activity.hook_phase.value,
-        activity.execution_status.value,
-        activity.proof_level.value,
-        activity.policy_action,
-        activity.decision_reason_code.value if activity.decision_reason_code is not None else None,
-        activity.controlling_rule_id,
-        activity.parse_confidence.value if activity.parse_confidence is not None else None,
-        activity.uncertainty_class.value if activity.uncertainty_class is not None else None,
-        activity.match_count,
-        int(activity.prompted),
-        activity.approval_reuse_status.value,
-        activity.receipt_link_status.value,
-        activity.receipt_id,
-        activity.evaluation_latency_bucket.value,
-        activity.persistence_latency_bucket.value,
-        activity.schema_version,
-    )
-
-
-def _match_values(match: CommandActivityMatch) -> tuple[object, ...]:
-    return (
-        match.activity_id,
-        match.ordinal,
-        match.identity.extension_id,
-        match.identity.extension_version,
-        match.identity.rule_id,
-        match.identity.rule_version,
-        match.match_class.value,
-        match.severity.value,
-        match.default_floor,
-        match.safe_variant_id,
-        match.schema_version,
-    )
-
-
-def _effect_values(evidence: CommandActivityEvidence) -> tuple[tuple[object, ...], ...]:
-    return tuple(
-        (match.activity_id, match.ordinal, effect.value)
-        for match in evidence.matches
-        for effect in sorted(match.effect_claims, key=lambda item: item.value)
-    )
-
-
-def _correlation_values(activity: CommandActivity) -> tuple[tuple[object, ...], ...]:
-    handles = tuple(
-        handle for handle in (activity.request_correlation, activity.session_correlation) if handle is not None
-    )
-    return tuple(_correlation_value(activity.activity_id, handle) for handle in handles)
-
-
-def _correlation_value(activity_id: str, handle: CorrelationHandle) -> tuple[object, ...]:
-    return (activity_id, handle.kind.value, handle.harness, handle.key_id, handle.digest)

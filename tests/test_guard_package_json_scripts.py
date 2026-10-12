@@ -10,11 +10,12 @@ from codex_plugin_scanner.guard.runtime.package_json_script_memory import (
     refresh_package_script_catalogs,
 )
 from codex_plugin_scanner.guard.runtime.package_json_scripts import (
-    command_id_for_script,
-    commands_from_package_scripts,
+    package_script_command_tokens,
     recognize_package_json_scripts,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
 
 
 def _write_package(
@@ -89,47 +90,47 @@ def test_directory_and_prefix_pastes_use_that_package_json(tmp_path: Path) -> No
     assert from_prefix.focused_script == "guard:reddit-targeting:audit"
 
 
-def test_focused_nested_script_sorts_first() -> None:
-    commands = commands_from_package_scripts(
-        {
+def test_focused_nested_script_sorts_first(tmp_path: Path) -> None:
+    project = _write_package(
+        tmp_path / "app",
+        scripts={
             "build": "vite build",
             "guard:reddit-targeting:audit": "tsx audit.ts",
             "guard": "tsx guard.ts",
         },
-        runner="npm",
-        focused_script="guard:reddit-targeting:audit",
+        lock=None,
     )
-    script_names = [command.name for command in commands if command.command_id not in {"root", "other"}]
+    discovery = recognize_package_json_scripts("npm run guard:reddit-targeting:audit", cwd=project, home_dir=tmp_path)
+    assert discovery is not None
+    script_names = [command.name for command in discovery.commands if command.command_id not in {"root", "other"}]
     assert script_names[0] == "guard:reddit-targeting:audit"
+    assert discovery.summary.endswith(" guard:reddit-targeting:audit is listed first.")
 
 
-def test_command_id_splits_colon_namespaces() -> None:
-    assert command_id_for_script("guard:reddit-targeting:audit") == "guard.reddit-targeting.audit"
+def test_command_id_splits_colon_namespaces(tmp_path: Path) -> None:
+    project = _write_package(tmp_path / "app", scripts={"guard:reddit-targeting:audit": "tsx audit.ts"})
+    tokens = package_script_command_tokens("npm run guard:reddit-targeting:audit", cwd=project, home_dir=tmp_path)
+    assert tokens == ("guard", "reddit-targeting", "audit")
 
 
-def test_reserved_script_names_do_not_alias_synthetic_commands() -> None:
-    commands = commands_from_package_scripts(
-        {"root": "echo root", "other": "echo other"},
-        runner="npm",
-        focused_script=None,
-    )
-    named = {command.name: command.command_id for command in commands}
+def test_reserved_script_names_do_not_alias_synthetic_commands(tmp_path: Path) -> None:
+    project = _write_package(tmp_path / "app", scripts={"root": "echo root", "other": "echo other"}, lock=None)
+    discovery = recognize_package_json_scripts("npm run", cwd=project, home_dir=tmp_path)
+    assert discovery is not None
+    named = {command.name: command.command_id for command in discovery.commands}
     assert named["root"] != "root"
     assert named["other"] != "other"
 
 
 def test_dotted_script_live_tokens_match_catalog(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.runtime.package_json_scripts import package_script_command_tokens
-
     project = _write_package(tmp_path / "app", scripts={"db.migrate": "prisma migrate deploy"})
     discovery = recognize_package_json_scripts("npm run db.migrate", cwd=project, home_dir=tmp_path)
     assert discovery is not None
-    command_id = command_id_for_script("db.migrate")
+    tokens = package_script_command_tokens("npm run db.migrate", cwd=project, home_dir=tmp_path)
+    assert tokens
+    command_id = ".".join(tokens)
     assert command_id != "other"
     assert any(command.command_id == command_id for command in discovery.commands)
-    tokens = package_script_command_tokens("npm run db.migrate", cwd=project, home_dir=tmp_path)
-    assert tokens is not None
-    assert ".".join(tokens) == command_id
 
 
 def test_recognize_explains_missing_package_json(tmp_path: Path) -> None:
@@ -407,3 +408,45 @@ def test_missing_package_json_is_hidden_from_public_list(tmp_path: Path) -> None
         if isinstance(item, dict) and item.get("surface") == "package-scripts"
     }
     assert "gone" not in labels
+
+
+def test_native_failure_is_reported_so_grant_callers_fail_closed(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.native_local_cli_identity import track_local_cli_identity_failures
+    from codex_plugin_scanner.guard.runtime import package_json_scripts
+
+    project = _write_package(tmp_path / "app", scripts={"build": "vite build"})
+    replies: list[object] = [
+        None,
+        {"status": "ok", "package_json_scripts": {"runner": "npm"}},
+        {"status": "ok"},
+    ]
+    monkeypatch.setattr(package_json_scripts, "native_context_digest", lambda *_args, **_kwargs: replies.pop(0))
+    with track_local_cli_identity_failures() as failures:
+        for _ in range(3):
+            assert (
+                package_json_scripts.identify_package_json_scripts("npm run build", cwd=project, home_dir=tmp_path)
+                is None
+            )
+    assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]
+
+
+def test_command_tokens_raise_on_native_failure_instead_of_generic_argv(tmp_path: Path, monkeypatch) -> None:
+    import pytest
+
+    from codex_plugin_scanner.guard.native_local_cli_identity import (
+        LocalCliIdentityUnavailableError,
+        track_local_cli_identity_failures,
+    )
+    from codex_plugin_scanner.guard.runtime import package_json_scripts
+
+    project = _write_package(tmp_path / "app", scripts={"build": "vite build"})
+    replies: list[object] = [None, {"status": "ok", "package_json_scripts": {"runner": "npm"}}, {"status": "ok"}]
+    monkeypatch.setattr(package_json_scripts, "native_context_digest", lambda *_args, **_kwargs: replies.pop(0))
+    with track_local_cli_identity_failures() as failures:
+        for _ in range(2):
+            with pytest.raises(LocalCliIdentityUnavailableError):
+                package_json_scripts.package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path)
+        assert (
+            package_json_scripts.package_script_command_tokens("npm run build", cwd=project, home_dir=tmp_path) is None
+        )
+    assert failures == ["native_package_json_scripts_unavailable", "native_package_json_scripts_malformed"]

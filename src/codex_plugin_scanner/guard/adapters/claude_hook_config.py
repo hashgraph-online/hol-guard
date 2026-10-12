@@ -152,6 +152,68 @@ def is_guard_hook_handler(handler: object) -> bool:
     return False
 
 
+CLAUDE_GUARD_REQUIRED_HOOK_EVENTS = ("PreToolUse", "PermissionRequest")
+
+
+def missing_guard_hook_events(payload: dict[str, object]) -> list[str]:
+    """Required hook events whose Guard handler does not cover the protected tools."""
+
+    hooks = payload.get("hooks")
+    missing: list[str] = []
+    for event in CLAUDE_GUARD_REQUIRED_HOOK_EVENTS:
+        entries = hooks.get(event) if isinstance(hooks, dict) else None
+        if not isinstance(entries, list) or not any(_entry_covers_guard_tools(entry) for entry in entries):
+            missing.append(event)
+    return missing
+
+
+def mark_missing_guard_hooks(
+    diagnostics: dict[str, object], settings_path: object, settings: dict[str, object]
+) -> None:
+    """Downgrade an "active" setup whose settings file lost the Guard hook entries.
+
+    The launcher shim alone makes Guard look managed, so confirm the entries.
+    """
+
+    missing = missing_guard_hook_events(settings)
+    if not missing:
+        return
+    warnings = diagnostics.get("warnings")
+    diagnostics["warnings"] = [
+        *(warnings if isinstance(warnings, list) else []),
+        f"Managed Claude Code hooks are missing from {settings_path} ({', '.join(missing)}). "
+        "Run `hol-guard repair` or `hol-guard install claude-code` to restore protection.",
+    ]
+    diagnostics["setup_status"] = "broken"
+
+
+def _matcher_covers_guard_tools(matcher: object) -> bool:
+    """An omitted matcher matches every tool. A set matcher must still name each protected tool."""
+
+    if matcher is None:
+        return True
+    if not isinstance(matcher, str):
+        return False
+    installed = {part.strip() for part in matcher.split("|") if part.strip()}
+    required = {part.strip() for part in CLAUDE_GUARD_TOOL_MATCHER.split("|") if part.strip()}
+    return required <= installed
+
+
+def _entry_covers_guard_tools(entry: object) -> bool:
+    if not _entry_has_guard_handler(entry) or not isinstance(entry, dict):
+        return False
+    return _matcher_covers_guard_tools(entry.get("matcher"))
+
+
+def _entry_has_guard_handler(entry: object) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    if is_guard_hook_handler(entry):
+        return True
+    handlers = entry.get("hooks")
+    return isinstance(handlers, list) and any(is_guard_hook_handler(handler) for handler in handlers)
+
+
 def merge_hook_group(
     entries: list[object],
     matcher: str | None,
@@ -190,16 +252,6 @@ def merge_hook_group(
     return normalized
 
 
-def group_has_handler(entry: object, handler: dict[str, object]) -> bool:
-    if not isinstance(entry, dict):
-        return False
-    hooks = entry.get("hooks")
-    if not isinstance(hooks, list):
-        return False
-    expected_identity = handler_identity(handler)
-    return any(isinstance(hook, dict) and handler_identity(hook) == expected_identity for hook in hooks)
-
-
 def prune_guard_hook_entries(entries: list[object]) -> list[object]:
     remaining: list[object] = []
     for entry in entries:
@@ -217,29 +269,4 @@ def prune_guard_hook_entries(entries: list[object]) -> list[object]:
             updated_entry = dict(entry)
             updated_entry["hooks"] = filtered_hooks
             remaining.append(updated_entry)
-    return remaining
-
-
-def remove_hook_entry(entries: list[object], handler: dict[str, object]) -> list[object]:
-    remaining: list[object] = []
-    expected_identity = handler_identity(handler)
-    for entry in entries:
-        if not isinstance(entry, dict):
-            remaining.append(entry)
-            continue
-        if is_guard_hook_handler(entry):
-            continue
-        if group_has_handler(entry, handler):
-            hooks = entry.get("hooks")
-            if not isinstance(hooks, list):
-                continue
-            filtered_hooks = [
-                item for item in hooks if not (isinstance(item, dict) and handler_identity(item) == expected_identity)
-            ]
-            if filtered_hooks:
-                updated_entry = dict(entry)
-                updated_entry["hooks"] = filtered_hooks
-                remaining.append(updated_entry)
-            continue
-        remaining.append(entry)
     return remaining

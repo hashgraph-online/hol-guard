@@ -9,7 +9,8 @@ fn python_runtime_name(name: &str) -> bool {
     })
 }
 
-fn python_inline_eval_args(arguments: &[String]) -> bool {
+/// Strip capability-reducing isolation flags; anything else ends the prefix.
+fn python_after_isolation_flags(arguments: &[String]) -> Option<&[String]> {
     let mut rest = arguments;
     let mut flags = 0_u8;
     while let Some(flag) = rest.first() {
@@ -20,12 +21,117 @@ fn python_inline_eval_args(arguments: &[String]) -> bool {
             _ => break,
         };
         if flags & bits != 0 {
-            return false;
+            return None;
         }
         flags |= bits;
         rest = &rest[1..];
     }
-    matches!(rest, [flag, _program] if flag == "-c")
+    Some(rest)
+}
+
+fn python_inline_eval_args(arguments: &[String]) -> bool {
+    python_after_isolation_flags(arguments)
+        .is_some_and(|rest| matches!(rest, [flag, _program] if flag == "-c"))
+}
+
+/// `python3 test_calc.py`: a test-named workspace script. Run read-only it is
+/// no more capable than inline evaluation of the same file, so it shares that
+/// boundary. Other scripts usually write, so they stay reviewed.
+fn python_test_script_args(arguments: &[String]) -> bool {
+    python_after_isolation_flags(arguments).is_some_and(|rest| {
+        matches!(rest, [script, ..] if workspace_relative(script) && test_script_name(script))
+    })
+}
+
+fn test_script_name(script: &str) -> bool {
+    let name = script.rsplit('/').next().unwrap_or(script);
+    let Some(stem) = name.strip_suffix(".py") else {
+        return false;
+    };
+    stem.bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+        && (stem.starts_with("test_")
+            || stem.ends_with("_test")
+            || matches!(stem, "test" | "tests" | "runtests" | "run_tests"))
+}
+
+/// `math.test.ts`, `api.spec.mjs`, `test_calc.js`: the usual JavaScript and
+/// TypeScript test file names.
+fn node_test_script_name(script: &str) -> bool {
+    let name = script.rsplit('/').next().unwrap_or(script);
+    let Some((stem, extension)) = name.rsplit_once('.') else {
+        return false;
+    };
+    matches!(
+        extension,
+        "js" | "mjs" | "cjs" | "jsx" | "ts" | "mts" | "cts" | "tsx"
+    ) && stem
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+        && (stem.ends_with(".test")
+            || stem.ends_with(".spec")
+            || stem.starts_with("test_")
+            || stem.ends_with("_test")
+            || matches!(stem, "test" | "tests"))
+}
+
+/// Type stripping and warning filters change how Node loads and reports a
+/// script, not what the script can reach.
+fn node_after_script_flags(arguments: &[String]) -> &[String] {
+    let mut rest = arguments;
+    while let [flag, tail @ ..] = rest {
+        let neutral = matches!(
+            flag.as_str(),
+            "--experimental-strip-types" | "--experimental-transform-types" | "--no-warnings"
+        ) || flag.strip_prefix("--disable-warning=").is_some_and(|code| {
+            !code.is_empty()
+                && code.len() <= 64
+                && code
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+        });
+        if !neutral {
+            break;
+        }
+        rest = tail;
+    }
+    rest
+}
+
+/// `node --experimental-strip-types math.test.ts`: a test-named workspace
+/// script shares the inline evaluation boundary, as Python test scripts do.
+fn node_test_script_args(arguments: &[String]) -> bool {
+    matches!(node_after_script_flags(arguments), [script, ..]
+        if workspace_relative(script) && node_test_script_name(script))
+}
+
+/// `tsx math.test.ts` in its installed forms. The sink loads the file through
+/// the package's own loader inside the Vitest transform boundary.
+fn tsx_test_script_args(name: &str, arguments: &[String]) -> bool {
+    let rest = match (name, arguments) {
+        ("tsx", rest) => rest,
+        ("npx", [flag, tool, rest @ ..]) if flag == "--no-install" && tool == "tsx" => rest,
+        ("npx", [tool, rest @ ..]) if tool == "tsx" => rest,
+        ("node" | "nodejs", [entry, rest @ ..])
+            if entry
+                .replace('\\', "/")
+                .ends_with("/node_modules/tsx/dist/cli.mjs") =>
+        {
+            rest
+        }
+        // The sink's own launch form, which the hook authorizes again before
+        // running it. Typed directly, the sink does not prepare it.
+        ("node" | "nodejs", [flag, loader, rest @ ..])
+            if flag == "--import"
+                && loader
+                    .replace('\\', "/")
+                    .ends_with("/node_modules/tsx/dist/loader.mjs") =>
+        {
+            rest
+        }
+        _ => return false,
+    };
+    matches!(rest, [script, ..] if workspace_relative(script) && node_test_script_name(script))
 }
 
 /// Classify a direct pytest invocation for delegation, never direct allowance.
@@ -52,6 +158,21 @@ pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
         }
         _ => false,
     }
+}
+
+fn executable_is_bunx(executable: &str) -> bool {
+    super::executable_basename(executable) == "bunx"
+}
+
+/// A lexical subdirectory; the sink resolves it and rejects escapes.
+fn workspace_relative(directory: &str) -> bool {
+    !directory.is_empty()
+        && !directory.starts_with(['-', '/', '~', '$'])
+        && !directory.contains(['\\', '$', '`'])
+        && directory
+            .trim_end_matches('/')
+            .split('/')
+            .all(|part| !part.is_empty() && part != "..")
 }
 
 pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
@@ -104,10 +225,19 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         arguments
     };
     match (super::executable_basename(executable), arguments) {
-        (name, args) if python_runtime_name(name) && python_inline_eval_args(args) => {
+        (name, args)
+            if python_runtime_name(name)
+                && (python_inline_eval_args(args) || python_test_script_args(args)) =>
+        {
             return Some("native_python_eval_readonly_containment_required");
         }
         ("node" | "nodejs", [flag, _program]) if matches!(flag.as_str(), "-e" | "--eval") => {
+            return Some("native_node_eval_readonly_containment_required");
+        }
+        (name, args) if tsx_test_script_args(name, args) => {
+            return Some("native_vitest_readonly_containment_required");
+        }
+        ("node" | "nodejs", args) if node_test_script_args(args) => {
             return Some("native_node_eval_readonly_containment_required");
         }
         _ => {}
@@ -169,7 +299,10 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_node_tool_readonly_containment_required");
     }
     if super::executable_basename(executable) == "git"
-        && super::git_helper_context::git_helper_context_required(model)
+        && super::git_helper_context::git_helper_context_required(
+            model,
+            super::PathContext::default(),
+        )
     {
         return Some("native_git_readonly_containment_required");
     }
@@ -188,6 +321,22 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
                 || matches!(arguments, [wrapper, flag, tool, run, ..] if wrapper == "x" && flag == "--no-install" && tool == "vitest" && run == "run")
         }
         "bunx" | "npx" => {
+            let arguments = match arguments {
+                [flag, directory, rest @ ..]
+                    if executable_is_bunx(executable)
+                        && flag == "--cwd"
+                        && workspace_relative(directory) =>
+                {
+                    rest
+                }
+                [flag, rest @ ..]
+                    if executable_is_bunx(executable)
+                        && flag.strip_prefix("--cwd=").is_some_and(workspace_relative) =>
+                {
+                    rest
+                }
+                rest => rest,
+            };
             matches!(arguments, [tool, run, ..] if tool == "vitest" && run == "run")
                 || matches!(arguments, [flag, tool, run, ..] if flag == "--no-install" && tool == "vitest" && run == "run")
         }

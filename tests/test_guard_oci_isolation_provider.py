@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from codex_plugin_scanner.guard.native_runner_authority import native_runner_authority
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
     AtomicGuaranteeKind,
@@ -29,11 +30,15 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import (
 from codex_plugin_scanner.guard.runtime.oci_isolation_provider import (
     OCIIsolationProvider,
     OCISeccompProfile,
-    _compute_bundle_digest,
-    _map_guarantees,
-    _validate_bundle,
     build_oci_evidence,
+    evaluate_oci_evidence,
 )
+
+pytestmark = pytest.mark.usefixtures("native_approval_reuse_runtime")
+
+
+def _digest(spec):
+    return native_runner_authority("oci_bundle_digest", {"spec": spec})["digest"]
 
 
 @pytest.fixture
@@ -316,7 +321,7 @@ class TestEvidenceBuilding:
 class TestBundleValidation:
     def test_valid_bundle(self, minimal_bundle, tmp_path):
         (tmp_path / "rootfs").mkdir()
-        assert _validate_bundle(build_oci_evidence(minimal_bundle, bundle_root=tmp_path)) == ()
+        assert evaluate_oci_evidence(build_oci_evidence(minimal_bundle, bundle_root=tmp_path))[0] == ()
 
     def test_root_user_violation(self):
         ev = build_oci_evidence(
@@ -326,7 +331,7 @@ class TestBundleValidation:
                 "process": {"user": {"uid": 0, "gid": 0}},
             }
         )
-        violations = _validate_bundle(ev)
+        violations = evaluate_oci_evidence(ev)[0]
         assert "running as root (uid=0)" in violations
 
     def test_host_mount_violation(self):
@@ -340,7 +345,7 @@ class TestBundleValidation:
                 ],
             }
         )
-        violations = _validate_bundle(ev)
+        violations = evaluate_oci_evidence(ev)[0]
         assert "/etc" in violations
 
     def test_host_network_violation(self):
@@ -351,7 +356,7 @@ class TestBundleValidation:
                 "linux": {"network": {"mode": "host"}},
             }
         )
-        violations = _validate_bundle(ev)
+        violations = evaluate_oci_evidence(ev)[0]
         assert "host network mode" in violations
 
     def test_host_namespace_violation(self):
@@ -362,7 +367,7 @@ class TestBundleValidation:
                 "linux": {"namespaces": [{"type": "pid", "host": True}]},
             }
         )
-        violations = _validate_bundle(ev)
+        violations = evaluate_oci_evidence(ev)[0]
         assert "pid namespace not isolated" in violations
 
 
@@ -388,7 +393,7 @@ class TestGuaranteeMapping:
                 "mounts": [{"destination": "/", "type": "none", "options": ["readonly"]}],
             }
         )
-        guarantees = _map_guarantees(ev, ())
+        guarantees = evaluate_oci_evidence(ev, ())[1]
         for g in guarantees[:9]:
             assert g.enforced is True
             assert g.boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
@@ -401,14 +406,14 @@ class TestGuaranteeMapping:
                 "linux": {"capabilities": {"effective": ["CAP_SYS_ADMIN"]}},
             }
         )
-        guarantees = _map_guarantees(ev, ("dangerous capabilities",))
+        guarantees = evaluate_oci_evidence(ev, ("dangerous capabilities",))[1]
         for g in guarantees:
             assert g.enforced is False
             assert g.boundary is GuardExecutionAssuranceBoundary.OBSERVED_HOST
 
     def test_absent_guarantees_denied(self):
         ev = build_oci_evidence({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        guarantees = _map_guarantees(ev, ())
+        guarantees = evaluate_oci_evidence(ev, ())[1]
         absent_kinds = {AtomicGuaranteeKind.KERNEL_HARDWARE, AtomicGuaranteeKind.TENANT}
         for g in guarantees:
             if g.kind in absent_kinds:
@@ -829,29 +834,29 @@ class TestCancelCleanup:
 
 class TestDigestComputation:
     def test_deterministic(self):
-        d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
-        d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
+        d1 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
+        d2 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
         assert d1 == d2
 
     def test_differs_on_change(self):
-        d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "a"}})
-        d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "b"}})
+        d1 = _digest({"ociVersion": "1.0.2", "root": {"path": "a"}})
+        d2 = _digest({"ociVersion": "1.0.2", "root": {"path": "b"}})
         assert d1 != d2
 
     def test_ignores_unrecognized_keys(self):
-        d1 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}, "x": 1})
-        d2 = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
+        d1 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}, "x": 1})
+        d2 = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs"}})
         assert d1 == d2
 
     def test_nested_mapping_order_is_deterministic(self):
-        first = _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": "rootfs", "readonly": True}})
-        second = _compute_bundle_digest({"root": {"readonly": True, "path": "rootfs"}, "ociVersion": "1.0.2"})
+        first = _digest({"ociVersion": "1.0.2", "root": {"path": "rootfs", "readonly": True}})
+        second = _digest({"root": {"readonly": True, "path": "rootfs"}, "ociVersion": "1.0.2"})
 
         assert first == second
 
-    def test_rejects_unsupported_values(self):
-        with pytest.raises(ValueError, match="unsupported OCI spec field type: set"):
-            _compute_bundle_digest({"ociVersion": "1.0.2", "root": {"path": {"unsupported"}}})
+    def test_rejects_values_the_owner_cannot_encode(self):
+        with pytest.raises(ValueError, match="native_runner_authority_component_unencodable"):
+            _digest({"ociVersion": "1.0.2", "root": {"path": {"unsupported"}}})
 
 
 # === Unknown features lower assurance ===
@@ -874,7 +879,7 @@ class TestUnknownFeaturesLowerAssurance:
                 "linux": {"someUnsupportedFeature": "x"},
             }
         )
-        guarantees = _map_guarantees(ev, ())
+        guarantees = evaluate_oci_evidence(ev, ())[1]
         for g in guarantees:
             if g.enforced:
                 assert g.boundary is GuardExecutionAssuranceBoundary.OS_ISOLATED
@@ -892,7 +897,7 @@ class TestUnknownFeaturesLowerAssurance:
                 "process": {"user": {"uid": 1000}},
             }
         )
-        violations = _validate_bundle(ev)
+        violations = evaluate_oci_evidence(ev)[0]
         assert len(violations) > 0
 
     def test_missing_seccomp(self):
@@ -913,5 +918,5 @@ class TestUnknownFeaturesLowerAssurance:
         )
         assert ev.lsm.enabled is True
         assert ev.lsm.profile_name == "guard-default"
-        guarantees = _map_guarantees(ev, ())
+        guarantees = evaluate_oci_evidence(ev, ())[1]
         assert len(guarantees) == 11

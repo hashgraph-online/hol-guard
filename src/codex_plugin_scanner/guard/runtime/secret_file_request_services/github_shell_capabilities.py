@@ -7,13 +7,12 @@ from pathlib import Path
 
 from ..env_wrapper import parse_env_wrapper
 from ..github_capability_contract import GitHubCommandAssessment, github_assessment
-from ..github_command_capabilities import _github_repository_selector_is_safe
-from ..github_rest_capabilities import _PR_HEAD_OID_ENDPOINT
 from ..github_shell_capabilities import GitHubShellAnalysis
 from ..github_shell_capabilities import classify_github_shell_capabilities as _classify_github_shell_capabilities
 from ..interpreter_options import shell_interpreter_command_payload as _shell_interpreter_command_payload
 from .constants_core import _READ_ONLY_LOOKUP_FILTERS, _SHELL_COMMAND_STRING_INTERPRETERS
 from .constants_patterns import _SHELL_ASSIGNMENT_PATTERN, _SHELL_COMMAND_SEPARATORS, _SHELL_COMMAND_WRAPPERS
+from .github_selector_patterns import github_pr_head_oid_endpoint_matches, github_repository_selector_is_safe
 from .read_only_filters import _github_output_filter_segment_is_safe
 from .request_artifacts import _normalized_shell_command_name
 from .shell_quote_tokens import (
@@ -152,7 +151,7 @@ def _github_environment_requires_review(assignments: tuple[tuple[str, str], ...]
     if github_host is not None and github_host.casefold() != "github.com":
         return True
     github_repo = normalized.get("GH_REPO")
-    return github_repo is not None and not _github_repository_selector_is_safe(github_repo)
+    return github_repo is not None and not github_repository_selector_is_safe(github_repo)
 
 
 def _persistent_github_environment_requires_review(parts: list[str]) -> bool:
@@ -248,7 +247,7 @@ def _github_shell_has_dynamic_arguments(command_text: str) -> bool:
 
 def github_argument_token_has_untrusted_expansion(token: str) -> bool:
     unquoted = token[1:-1] if len(token) >= 2 and token[0] == token[-1] and token[0] in {"'", '"'} else token
-    if _PR_HEAD_OID_ENDPOINT.fullmatch(unquoted):
+    if github_pr_head_oid_endpoint_matches(unquoted):
         return False
     return _shell_token_has_expansion(token)
 

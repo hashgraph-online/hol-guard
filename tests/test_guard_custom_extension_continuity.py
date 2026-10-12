@@ -429,3 +429,88 @@ def test_observation_hash_change_after_preflight_aborts_old_identity_apply(
     result = apply_verified_custom_extension_continuity(restarted, _bundle(identity), now=_NOW)
     assert result["items"][identity.cli_id]["status"] == "changed_identity"
     assert restarted.read_local_cli_grant(identity.cli_id) is None
+
+
+def test_native_outage_applies_nothing_and_hides_public_state(tmp_path: Path, monkeypatch) -> None:
+    from codex_plugin_scanner.guard.runtime import custom_extension_continuity
+
+    store = GuardStore(tmp_path / "guard-home")
+    identity = _identity()
+    _observe(store, identity)
+    _ = apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
+    before = store.read_local_cli_revision()
+    monkeypatch.setattr(custom_extension_continuity, "native_context_digest", lambda *_args, **_kwargs: None)
+
+    with pytest.raises(CustomExtensionContinuityError, match="unavailable"):
+        _ = apply_verified_custom_extension_continuity(store, _bundle(identity, revision=2), now=_NOW)
+    with pytest.raises(CustomExtensionContinuityError, match="unavailable"):
+        _ = record_local_custom_extension_mutation(
+            store, identity=identity, state="unset", expected_revision=before, command_states={}, now=_NOW
+        )
+    assert store.read_local_cli_revision() == before
+    assert continuity_state_for_local_items(store, now=_NOW) == {}
+
+
+def _fake_plan(monkeypatch, homes: list[object] | None = None, **overrides: object) -> None:
+    from codex_plugin_scanner.guard.runtime import custom_extension_continuity
+
+    answer: dict[str, object] = {
+        "error": None,
+        "authority_updates": [],
+        "events": [],
+        "observation_preconditions": {},
+        "state": {"items": {}},
+        "state_item_order": [],
+        "write_last_good": False,
+        "removals": None,
+        "v2": False,
+        **overrides,
+    }
+
+    def _digest(_kind: str, _payload: object, **kwargs: object) -> dict[str, object]:
+        if homes is not None:
+            homes.append(kwargs.get("guard_home"))
+        return {"status": "ok", "custom_extension_continuity": answer}
+
+    monkeypatch.setattr(custom_extension_continuity, "native_context_digest", _digest)
+
+
+def test_authority_update_without_an_observation_guard_is_refused(tmp_path: Path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    identity = _identity()
+    _observe(store, identity)
+    update = {
+        "cli_id": identity.cli_id,
+        "name": identity.name,
+        "kind": identity.kind,
+        "identity_hash": identity.identity_hash,
+        "example_label": identity.example_label,
+        "interpreter_name": identity.interpreter_name,
+        "state": "allowed",
+        "commands": {},
+    }
+    for preconditions in ({}, {identity.cli_id: None}):
+        _fake_plan(monkeypatch, authority_updates=[update], observation_preconditions=preconditions)
+        with pytest.raises(CustomExtensionContinuityError, match="malformed"):
+            _ = apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
+    assert store.read_local_cli_grant(identity.cli_id) is None
+
+
+@pytest.mark.parametrize("order", [["a", "a"], ["a", 1], ["a", "b"], "a"])
+def test_native_item_order_must_name_each_item_once(tmp_path: Path, monkeypatch, order: object) -> None:
+    store = GuardStore(tmp_path / "guard-home")
+    identity = _identity()
+    _observe(store, identity)
+    _fake_plan(monkeypatch, state={"items": {"a": {}}}, state_item_order=order)
+    with pytest.raises(CustomExtensionContinuityError, match="malformed"):
+        _ = apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
+
+
+def test_native_planner_uses_the_store_guard_home(tmp_path: Path, monkeypatch) -> None:
+    store = GuardStore(tmp_path / "custom-home")
+    identity = _identity()
+    _observe(store, identity)
+    homes: list[object] = []
+    _fake_plan(monkeypatch, homes)
+    _ = apply_verified_custom_extension_continuity(store, _bundle(identity), now=_NOW)
+    assert homes == [store.guard_home]

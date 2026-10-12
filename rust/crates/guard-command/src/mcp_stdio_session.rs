@@ -48,6 +48,9 @@ const SESSION_FRAME_LIMIT: usize = 1_000_000;
 /// a fast child blocks the reader instead of the pump dying at a fixed count.
 const SESSION_QUEUE: usize = 256;
 
+/// How long an unfinished child frame may extend the pre-write quiet edge.
+const QUIET_EXTENSION_LIMIT: Duration = Duration::from_secs(1);
+
 /// Maximum cross-correlated buffered responses held per response key.
 const MAX_BUFFERED_PER_KEY: usize = 8;
 
@@ -56,6 +59,16 @@ const MAX_BUFFERED_PER_KEY: usize = 8;
 pub enum SessionReadError {
     /// The drain pump hung up: child stdout closed or the pump thread died.
     Eof,
+}
+
+/// Outcome of a pre-write quiet edge.
+pub enum QuietEdge {
+    /// The child stayed silent for the whole quiet window.
+    Silent,
+    /// A complete child frame arrived before the write could proceed.
+    Event(SessionEvent),
+    /// The child still holds an unfinished frame past `QUIET_EXTENSION_LIMIT`.
+    Busy,
 }
 
 /// Persistent stdout pump for the session data plane. Unlike the probe
@@ -67,6 +80,7 @@ fn session_pump(
     mut stdout: std::process::ChildStdout,
     tx: mpsc::SyncSender<Value>,
     cancel: Arc<AtomicBool>,
+    partial: Arc<AtomicBool>,
 ) {
     let mut buffer: Vec<u8> = Vec::new();
     loop {
@@ -78,6 +92,9 @@ fn session_pump(
             Ok(0) | Err(_) => return,
             Ok(n) => n,
         };
+        // Visible before the frame completes, so a pre-write quiet edge can tell
+        // that the child has started a frame it has not finished yet.
+        partial.store(true, Ordering::Release);
         buffer.extend_from_slice(&chunk[..n]);
         // A single in-flight frame may not exceed the cap; drop undecodable
         // head bytes so one malformed frame cannot wedge the session.
@@ -95,6 +112,7 @@ fn session_pump(
         if buffer.len() > SESSION_FRAME_LIMIT {
             buffer.clear();
         }
+        partial.store(!buffer.is_empty(), Ordering::Release);
     }
 }
 
@@ -186,6 +204,8 @@ pub struct LiveMcpSession {
     writer: SessionWriter,
     child_pid: i32,
     inbox: mpsc::Receiver<Value>,
+    /// True while the drain pump holds the start of a frame that has not completed.
+    partial: Arc<AtomicBool>,
     cancellation: Arc<AtomicBool>,
     _drain: Option<thread::JoinHandle<()>>,
     /// Buffered child responses keyed by `response_key(id)` that arrived while
@@ -299,12 +319,15 @@ impl LiveMcpSession {
         let child_pid = child.id() as i32;
         let (tx, rx) = mpsc::sync_channel::<Value>(SESSION_QUEUE);
         let cancel_tx = Arc::clone(&cancellation);
-        let drain = thread::spawn(move || session_pump(stdout, tx, cancel_tx));
+        let partial = Arc::new(AtomicBool::new(false));
+        let partial_tx = Arc::clone(&partial);
+        let drain = thread::spawn(move || session_pump(stdout, tx, cancel_tx, partial_tx));
         Ok((
             LiveMcpSession {
                 writer,
                 child_pid,
                 inbox: rx,
+                partial,
                 cancellation,
                 _drain: Some(drain),
                 buffered_child: ResponseBuffers::default(),
@@ -394,6 +417,32 @@ impl LiveMcpSession {
             // Unclassified object: treat as a notification-shaped frame
             // and let the control plane decide.
             return Ok(Some(SessionEvent::ChildNotification(msg)));
+        }
+    }
+
+    /// Pre-write quiet edge: like `next_event(quiet)`, but while the child has
+    /// started a frame it has not finished, keep waiting (bounded by
+    /// `QUIET_EXTENSION_LIMIT`) so a catalog-change notification that is
+    /// mid-flight is seen before a guarded call is written. A child still
+    /// holding a frame open when the extension expires yields `Busy` — the
+    /// caller must not treat it as silence and write anyway.
+    pub fn next_event_quiet(&mut self, quiet: Duration) -> Result<QuietEdge, SessionReadError> {
+        let limit = Instant::now() + quiet + QUIET_EXTENSION_LIMIT;
+        loop {
+            if let Some(event) = self.next_event(quiet)? {
+                return Ok(QuietEdge::Event(event));
+            }
+            if !self.partial.load(Ordering::Acquire) {
+                // The pump can finish and enqueue a frame between the read
+                // timing out and this load — drain it before calling silence.
+                if let Some(event) = self.next_event(Duration::ZERO)? {
+                    return Ok(QuietEdge::Event(event));
+                }
+                return Ok(QuietEdge::Silent);
+            }
+            if Instant::now() >= limit {
+                return Ok(QuietEdge::Busy);
+            }
         }
     }
 

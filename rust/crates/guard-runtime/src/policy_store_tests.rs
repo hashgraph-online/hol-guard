@@ -342,6 +342,7 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
             source_ref_external_allowed: false,
             execution_environment: None,
         },
+        recording_only: false,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
@@ -383,6 +384,7 @@ fn authenticated_edge_preserves_clean_default_warning() {
             source_ref_external_allowed: false,
             execution_environment: None,
         },
+        recording_only: false,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
@@ -427,6 +429,7 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             source_ref_external_allowed: false,
             execution_environment: None,
         },
+        recording_only: false,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();

@@ -62,6 +62,8 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
 }) {
   const risk = riskScore(item);
   const riskLevel = riskLevelFromScore(risk);
+  const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const riskLabel = nativeDisplayOnly ? "Risk: unassessed" : `Risk: ${riskLevel}`;
   const category = resolveQueueCategory(item);
   const CategoryIcon = iconForQueueCategory(category.id);
   const preview = queueItemPreview(item);
@@ -156,12 +158,12 @@ export function QueueItemRow({ item, active, readState, index, onOpenRequest, se
           </div>
           <span
             role="img"
-            aria-label={`Risk: ${riskLevel}`}
+            aria-label={riskLabel}
             className="group/icon relative flex h-2 w-2 shrink-0 items-center justify-center"
           >
-            <span className={`h-2 w-2 rounded-full ${riskIndicatorClass(riskLevel)}`} />
+            <span className={`h-2 w-2 rounded-full ${nativeDisplayOnly ? "bg-slate-400" : riskIndicatorClass(riskLevel)}`} />
             <span className="pointer-events-none absolute right-0 top-full z-50 mt-1.5 whitespace-nowrap rounded-md bg-brand-blue px-2 py-1 text-[10px] font-medium text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/icon:opacity-100">
-              {`Risk: ${riskLevel}`}
+              {riskLabel}
             </span>
           </span>
           <span

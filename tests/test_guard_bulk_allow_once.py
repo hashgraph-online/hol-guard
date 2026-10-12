@@ -6,6 +6,7 @@ import json
 import urllib.request
 from collections.abc import Sequence
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import cast
 from urllib.parse import parse_qs, urlparse
@@ -24,6 +25,13 @@ from codex_plugin_scanner.guard.approvals import (
 )
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
+from codex_plugin_scanner.guard.native_approval_bulk_eligibility import (
+    _MAX_REQUEST_BYTES,
+    _eligible_chunks,
+    _item,
+    _wire_bytes,
+    native_bulk_allow_once_eligibility,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.totp import totp_code_at_counter
 
@@ -125,7 +133,7 @@ def test_is_bulk_allow_once_eligible_plain_file_read(tmp_path: Path) -> None:
     store.add_approval_request(plain, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-plain")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_file_read_request_artifact_type(tmp_path: Path) -> None:
@@ -134,7 +142,7 @@ def test_is_bulk_allow_once_eligible_file_read_request_artifact_type(tmp_path: P
     store.add_approval_request(request, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-artifact-type")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_rejects_secret_file_read(tmp_path: Path) -> None:
@@ -162,7 +170,7 @@ def test_is_bulk_allow_once_eligible_rejects_secret_file_read(tmp_path: Path) ->
     store.add_approval_request(secret, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-secret")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_is_bulk_allow_once_eligible_rejects_secret_path_without_signal(tmp_path: Path) -> None:
@@ -171,7 +179,7 @@ def test_is_bulk_allow_once_eligible_rejects_secret_path_without_signal(tmp_path
     store.add_approval_request(secret_path, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-secret-path")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def _shell_request(
@@ -232,7 +240,7 @@ def test_is_bulk_allow_once_eligible_rejects_blocked(tmp_path: Path) -> None:
     store.add_approval_request(blocked, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-blocked")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_allow_once_never_overrides_sandbox_required(tmp_path: Path) -> None:
@@ -243,7 +251,7 @@ def test_bulk_allow_once_never_overrides_sandbox_required(tmp_path: Path) -> Non
     stored = store.get_approval_request("req-sandbox")
     assert stored is not None
     assert stored["policy_action"] == "sandbox-required"
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
     result = bulk_allow_read_only_once(
         store=store,
@@ -264,7 +272,7 @@ def test_is_bulk_allow_once_eligible_allows_shell_command(tmp_path: Path) -> Non
     store.add_approval_request(shell, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-shell")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_bulk_eligibility_ignores_generated_exfiltration_warning(tmp_path: Path) -> None:
@@ -278,7 +286,7 @@ def test_bulk_eligibility_ignores_generated_exfiltration_warning(tmp_path: Path)
 
     stored = store.get_approval_request("req-remote-read")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_bulk_eligibility_still_rejects_exfiltration_action_text(tmp_path: Path) -> None:
@@ -288,7 +296,7 @@ def test_bulk_eligibility_still_rejects_exfiltration_action_text(tmp_path: Path)
 
     stored = store.get_approval_request("req-exfiltration")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_eligibility_scans_full_prompt_text(tmp_path: Path) -> None:
@@ -301,7 +309,7 @@ def test_bulk_eligibility_scans_full_prompt_text(tmp_path: Path) -> None:
 
     stored = store.get_approval_request("req-long-prompt")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_eligibility_scans_raw_command_text(tmp_path: Path) -> None:
@@ -315,7 +323,7 @@ def test_bulk_eligibility_scans_raw_command_text(tmp_path: Path) -> None:
 
     stored = store.get_approval_request("req-raw-command")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_eligibility_ignores_generated_secret_warning_for_plain_read(tmp_path: Path) -> None:
@@ -329,7 +337,7 @@ def test_bulk_eligibility_ignores_generated_secret_warning_for_plain_read(tmp_pa
 
     stored = store.get_approval_request("req-plain-warning")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_allows_destructive_shell(tmp_path: Path) -> None:
@@ -341,7 +349,7 @@ def test_is_bulk_allow_once_eligible_allows_destructive_shell(tmp_path: Path) ->
     store.add_approval_request(destructive, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-rmrf")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is True
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is True
 
 
 def test_is_bulk_allow_once_eligible_rejects_encoded_shell(tmp_path: Path) -> None:
@@ -354,7 +362,7 @@ def test_is_bulk_allow_once_eligible_rejects_encoded_shell(tmp_path: Path) -> No
     store.add_approval_request(encoded, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-b64")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_is_bulk_allow_once_eligible_rejects_prompt_injection(tmp_path: Path) -> None:
@@ -381,7 +389,7 @@ def test_is_bulk_allow_once_eligible_rejects_prompt_injection(tmp_path: Path) ->
     store.add_approval_request(injection, "2026-06-16T00:00:00+00:00")
     stored = store.get_approval_request("req-injection")
     assert stored is not None
-    assert is_bulk_allow_once_eligible(stored) is False
+    assert is_bulk_allow_once_eligible(stored, guard_home=store.guard_home) is False
 
 
 def test_bulk_allow_read_only_once_requires_gate(tmp_path: Path) -> None:
@@ -630,3 +638,106 @@ def test_bulk_allow_read_once_daemon_route(tmp_path: Path) -> None:
         assert store.get_approval_request("req-plain")["status"] == "resolved"
     finally:
         daemon.stop()
+
+
+def test_bulk_chunks_encode_each_item_once_and_match_the_wire() -> None:
+    """Chunk bounds come from one encoding per item plus the array separator.
+
+    The packed calls stay within the resident byte cap, and a packed call is
+    not split while the next item still fits.
+    """
+
+    from codex_plugin_scanner.guard import native_approval_bulk_eligibility as bulk
+
+    home = str(Path.home())
+    text = "routine context " * 20_000
+    fitting = [
+        _item(
+            {
+                "policy_action": "allow",
+                "action_envelope_json": {"prompt_text": text, "note": "café"},
+            }
+        )
+        for _ in range(24)
+    ]
+    huge = _item(
+        {
+            "policy_action": "allow",
+            "action_envelope_json": {"prompt_text": "routine context " * 300_000},
+        }
+    )
+    items = [huge, *fitting]
+    calls = 0
+    real = bulk._wire_bytes
+
+    def _counting(encoded: Sequence[object], *, home_dir: str) -> int:
+        nonlocal calls
+        calls += 1
+        return real(encoded, home_dir=home_dir)
+
+    bulk._wire_bytes = _counting
+    try:
+        verdicts, chunks = _eligible_chunks(items, home_dir=home)
+    finally:
+        bulk._wire_bytes = real
+
+    assert calls == len(items) + 1
+    assert verdicts[0] is False
+    assert verdicts[1:] == [None] * len(fitting)
+    assert [index for chunk in chunks for index in chunk] == list(range(1, len(items)))
+    assert len(chunks) > 1
+    assert _wire_bytes([huge], home_dir=home) > _MAX_REQUEST_BYTES
+    for earlier, nxt in pairwise(chunks):
+        packed = [items[index] for index in earlier]
+        assert _wire_bytes(packed, home_dir=home) <= _MAX_REQUEST_BYTES
+        overflow = [items[index] for index in [*earlier, nxt[0]]]
+        assert _wire_bytes(overflow, home_dir=home) > _MAX_REQUEST_BYTES
+    last = [items[index] for index in chunks[-1]]
+    assert _wire_bytes(last, home_dir=home) <= _MAX_REQUEST_BYTES
+
+
+def test_bulk_allow_splits_large_prompts_and_skips_one_that_cannot_fit(tmp_path: Path) -> None:
+    """Prompts that exceed one resident call still approve.
+
+    A prompt that cannot fit in a call by itself is ineligible and is not sent.
+    The other request in that call is still judged.
+    """
+
+    store = _store(tmp_path)
+    _enable_gate(store)
+    bulky = "routine context " * 50_000
+    request_ids = [f"req-large-{index}" for index in range(6)]
+    for request_id in request_ids:
+        store.add_approval_request(
+            _shell_request(request_id, command="npm test", prompt_text=bulky),
+            "2026-06-16T00:00:00+00:00",
+        )
+    stored = [store.get_approval_request(request_id) for request_id in request_ids]
+    assert all(row is not None for row in stored)
+    together = [_item(row) for row in stored]
+    assert _wire_bytes(together, home_dir=str(Path.home())) > _MAX_REQUEST_BYTES
+
+    oversized = dict(stored[0])
+    envelope = oversized["action_envelope_json"]
+    if isinstance(envelope, str):
+        envelope = json.loads(envelope)
+    envelope = dict(envelope)
+    envelope["prompt_text"] = "routine context " * 300_000
+    oversized["action_envelope_json"] = envelope
+    verdicts = native_bulk_allow_once_eligibility(
+        [oversized, stored[1]],
+        guard_home=store.guard_home,
+    )
+    assert verdicts == [False, True]
+
+    split = bulk_allow_read_only_once(
+        store=store,
+        request_ids=request_ids,
+        approval_gate_input=ApprovalGateInput(password=PASSWORD),
+        now="2026-06-16T00:01:00+00:00",
+    )
+
+    assert split["resolved_count"] == 6
+    assert split["failed"] == []
+    for request_id in request_ids:
+        assert store.get_approval_request(request_id)["status"] == "resolved"

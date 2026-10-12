@@ -49,6 +49,7 @@ def test_raw_hook_bridge_records_control_fence_rejection_without_retry(
         capabilities=SimpleNamespace(
             features=(
                 "hook-envelope-v2",
+                "hook-harness-response-v1",
                 "native-resident-client-v1",
                 "pre-tool-generic-authority-v1",
                 "git-execution-context-v1",

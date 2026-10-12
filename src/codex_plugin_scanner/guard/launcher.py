@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -22,11 +23,14 @@ def merge_guard_launcher_env(env: Mapping[str, str] | None = None, *, pin_packag
     """Preserve launcher import context while optionally pinning the current package."""
 
     merged: dict[str, str] = {}
-    pythonpath = (
-        str(Path(__file__).resolve().parents[2])
-        if pin_package
-        else _normalize_launcher_pythonpath(os.environ.get("PYTHONPATH"))
-    )
+    if pin_package and getattr(sys, "frozen", False):
+        # A frozen build imports from its own archive; its package root is a
+        # per-process extraction directory that disappears after this run.
+        pythonpath = ""
+    elif pin_package:
+        pythonpath = str(Path(__file__).resolve().parents[2])
+    else:
+        pythonpath = _normalize_launcher_pythonpath(os.environ.get("PYTHONPATH"))
     if pythonpath:
         merged["PYTHONPATH"] = pythonpath
     for key, value in (env or {}).items():

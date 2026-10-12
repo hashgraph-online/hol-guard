@@ -14,26 +14,33 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_texts,
 )
 from codex_plugin_scanner.guard.cli.commands_support_native_search import native_post_tool_search_is_read_only
-from codex_plugin_scanner.guard.runtime.actions import _command_from_payload, normalize_harness_payload
+from codex_plugin_scanner.guard.runtime.actions import command_text_from_tool_payload, normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     _read_only_lookup_filter_grep_args_are_safe,
 )
 
 
+@pytest.fixture(autouse=True)
+def _bound_native_runtime(native_approval_reuse_runtime):
+    """Command text views are answered by the compiled resident; bind it, never emulate it."""
+
+    return native_approval_reuse_runtime
+
+
 def test_command_from_payload_recognizes_pattern():
-    assert _command_from_payload({"pattern": "TODO|FIXME", "path": "src/"}) == "TODO|FIXME"
+    assert command_text_from_tool_payload("", {"pattern": "TODO|FIXME", "path": "src/"}) == "TODO|FIXME"
 
 
 def test_command_from_payload_recognizes_query():
-    assert _command_from_payload({"query": "test_function", "path": "."}) == "test_function"
+    assert command_text_from_tool_payload("", {"query": "test_function", "path": "."}) == "test_function"
 
 
 def test_command_from_payload_recognizes_search():
-    assert _command_from_payload({"search": "password"}) == "password"
+    assert command_text_from_tool_payload("", {"search": "password"}) == "password"
 
 
 def test_command_from_payload_recognizes_regex():
-    assert _command_from_payload({"regex": r"\d{4}"}) == r"\d{4}"
+    assert command_text_from_tool_payload("", {"regex": r"\d{4}"}) == r"\d{4}"
 
 
 def test_native_grep_of_external_source_directory_is_read_only(tmp_path):
@@ -314,7 +321,7 @@ def test_common_reader_unsafe_variants_are_not_source_inspection(tmp_path, comma
 
 
 def test_command_from_payload_preserves_command_priority():
-    assert _command_from_payload({"command": "ls -la", "pattern": "foo"}) == "ls -la"
+    assert command_text_from_tool_payload("", {"command": "ls -la", "pattern": "foo"}) == "ls -la"
 
 
 def test_hook_command_text_recognizes_pattern():

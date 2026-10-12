@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .daemon_pid_liveness import DAEMON_PID_LIVENESS_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -188,9 +189,7 @@ def _daemon_hook_result(
     pid = state.get("pid")
     if not isinstance(pid, int) or pid <= 0:
         return (None, None)
-    try:
-        os.kill(pid, 0)
-    except OSError:
+    if not _daemon_pid_is_alive(pid):
         return (None, "transport-failure")
     # Probe /healthz before sending the hook payload and auth token.
     # Ensures the listener is actually the Guard daemon, not a spoofed process.
@@ -582,5 +581,5 @@ def _cursor_read_file_permission(permission: str) -> str:
     return "allow"
 
 '''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
-    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE
+    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE + "\n" + DAEMON_PID_LIVENESS_TEMPLATE
 )

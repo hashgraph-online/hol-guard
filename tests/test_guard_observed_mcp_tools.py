@@ -11,6 +11,8 @@ from codex_plugin_scanner.guard.runtime.observed_mcp_tools import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def test_observed_connector_enrollment_uses_stored_catalog_and_requires_trust(
     tmp_path: Path,
@@ -91,6 +93,9 @@ def test_permission_mutation_retires_native_readiness_before_writing(
         command_states={tool.command_id: "allow"},
     )
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (b"f" * 32, "fixture-key"))
+    # The observed connector's choices are compiled by the real guard-store
+    # resident; give it the fixture verifier before the first publish.
+    store._provision_resident_verifier()
     refresh = threading.Event()
     entered = threading.Event()
     release = threading.Event()
@@ -100,7 +105,7 @@ def test_permission_mutation_retires_native_readiness_before_writing(
         if refresh.is_set():
             entered.set()
             assert release.wait(10)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store, status_provider=_status, client_request=client_request, poll_interval_seconds=60
@@ -216,8 +221,9 @@ def test_discovery_preserves_choices_and_never_approves_new_tools(
     assert store.read_local_cli_command_states(tool.identity.cli_id)[tool.command_id] == "allow"
     assert native_observed_mcp_tool_actions(store) == {"codex:" + tool.qualified_name: "allow"}
     assert store.read_local_cli_revision() == 1
-    from codex_plugin_scanner.guard.local_cli_trust import matching_local_mcp_grant
     from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
+
+    from .mcp_extension_driver import matching_local_mcp_grant
 
     def artifact(name: str):
         return build_tool_call_artifact(
@@ -402,11 +408,3 @@ def test_large_tool_catalog_is_authenticated_in_native_snapshot(tmp_path: Path) 
     signing["effective_policy"]["mcp_tool_actions"]["codex:mcp__server__tool_0"] = "block"
     changed = json.dumps(signing, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     assert hmac.new(b"k" * 32, POLICY_SNAPSHOT_INTEGRITY_DOMAIN + changed, hashlib.sha256).hexdigest() != expected
-
-
-def test_native_policy_never_accepts_namespace_wide_allow() -> None:
-    from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
-    from codex_plugin_scanner.guard.native_policy_snapshot_policy import _observed_mcp_action_map
-
-    with pytest.raises(NativePolicySnapshotError):
-        _observed_mcp_action_map({"codex:mcp__server__*": "allow"})

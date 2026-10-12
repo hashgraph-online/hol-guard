@@ -8,6 +8,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import PurePosixPath
 from typing import Any
 
+from .business_policy import BUSINESS_ORDINARY_READ
 from .catalog import Scenario
 from .fixtures import SECURITY_NOTES, SOURCE, SOURCE_FILES
 
@@ -84,7 +85,8 @@ def _discovery(texts: list[str | None]) -> bool:
     """Full discovery returns every source; bounded discovery returns five distinct sources."""
     if any(text is None for text in texts):
         return False
-    lines = [text.splitlines() for text in texts if text is not None]
+    # Windows find joins discovered paths with a backslash; source names hold none.
+    lines = [text.replace("\\", "/").splitlines() for text in texts if text is not None]
     return (
         all(len(rows) == len(SOURCE_FILES) and set(rows) == set(SOURCE_FILES) for rows in lines[:2])
         and len(lines[2]) == 5
@@ -112,6 +114,8 @@ def _od(text: str | None) -> bool:
 
 def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bool:
     """A successful host status cannot replace the required read, search or transformation."""
+    if scenario.id == BUSINESS_ORDINARY_READ:
+        return len(calls) == 1 and _text(calls[0]) == SOURCE
     if scenario.id not in OUTPUT_SCENARIOS:
         return True
     if len(calls) != len(scenario.commands):
@@ -140,6 +144,9 @@ def command_outputs_match(scenario: Scenario, calls: list[dict[str, Any]]) -> bo
             if "ordinary" in line
         }
         rows = texts[0].splitlines() if texts[0] is not None else []
+        # Windows grep joins recursive results with a backslash. Normalize only
+        # the path before the first colon, never the matched line.
+        rows = [path.replace("\\", "/") + sep + rest for path, sep, rest in (row.partition(":") for row in rows)]
         return len(rows) == len(expected) and set(rows) == expected
     if identifier == "bounded-od-byte-check":
         return _od(texts[0])

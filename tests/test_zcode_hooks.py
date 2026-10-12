@@ -14,7 +14,6 @@ from codex_plugin_scanner.guard.adapters.zcode_hooks import (
     zcode_hook_response_from_guard,
     zcode_hook_should_block,
 )
-from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _native_hook_permission_decision
 from codex_plugin_scanner.guard.runtime.actions import (
     normalize_harness_payload,
     normalize_zcode_hook_payload,
@@ -141,8 +140,8 @@ class TestZCodeHookResponses:
         reason = "HOL Guard requires the native command extension policy before this action can execute."
         enriched = zcode_authority_block_reason(reason)
         assert enriched.startswith(reason)
-        assert "hol-guard command controls acknowledge-degraded" in enriched
         assert "hol-guard command controls recover-authority" in enriched
+        assert "acknowledge-degraded" not in enriched
 
     def test_authority_block_reason_is_idempotent(self) -> None:
         once = zcode_authority_block_reason(
@@ -159,8 +158,7 @@ class TestZCodeHookResponses:
             reason="HOL Guard requires the native command extension policy before this action can execute.",
         )
         assert (
-            "hol-guard command controls acknowledge-degraded"
-            in payload["hookSpecificOutput"]["permissionDecisionReason"]
+            "hol-guard command controls recover-authority" in payload["hookSpecificOutput"]["permissionDecisionReason"]
         )
 
     def test_should_block_flags_blocking_actions(self) -> None:
@@ -197,16 +195,3 @@ class TestZCodeHookResponses:
         emit_zcode_hook_response(policy_action="review", reason="Approval required.", output_stream=stream)
         payload = json.loads(stream.getvalue())
         assert payload["hookSpecificOutput"]["permissionDecision"] == "ask"
-
-
-class TestZCodePermissionDecisionGates:
-    def test_review_tier_asks_for_zcode(self) -> None:
-        assert _native_hook_permission_decision("review", harness="zcode") == "ask"
-        assert _native_hook_permission_decision("require-reapproval", harness="zcode") == "ask"
-
-    def test_hard_denials_stay_deny_for_zcode(self) -> None:
-        assert _native_hook_permission_decision("block", harness="zcode") == "deny"
-        assert _native_hook_permission_decision("sandbox-required", harness="zcode") == "deny"
-
-    def test_allow_stays_allow_for_zcode(self) -> None:
-        assert _native_hook_permission_decision("allow", harness="zcode") == "allow"

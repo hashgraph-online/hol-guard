@@ -6,10 +6,7 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native, _request_payload
-from codex_plugin_scanner.guard.runtime.command_critical_floors import command_critical_floor_factors
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.effect_decision import EffectDecisionRequest, evaluate_effect_decision
 from tests.native_command_test_support import real_native_review_fixture
 
 
@@ -36,12 +33,6 @@ def _native_action(command: str) -> tuple[GuardAction, str | None]:
         native_extension_evidence=fixture.payload,
     )
     return evaluation.decision_plane.action, None
-
-
-def _critical_factor_action(command: str) -> GuardAction:
-    canonical = parse_shell_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    factors = command_critical_floor_factors(canonical)
-    return evaluate_effect_decision(EffectDecisionRequest(factors=factors)).action
 
 
 CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
@@ -123,6 +114,10 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("hol-guard capability consume --capability-id x --replay-sequence 2", "block"),
     ("hol-guard capability --verbose consume --capability-id x", "block"),
     ("hol-guard uninstall --all", "block"),
+    ("hol-guard hooks remove --all", "block"),
+    ("hol-guard hooks remove --stop-daemon", "block"),
+    ("xargs hol-guard hooks remove --all", "block"),
+    ("sh -c 'hol-guard hooks remove --all'", "block"),
     ("hol-guard policy disable", "block"),
     ("hol-guard clear --all", "block"),
     ("xargs hol-guard uninstall --all", "block"),
@@ -183,6 +178,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("getfacl workspace/service", "review"),
     ("systemctl status service", "review"),
     ("hol-guard uninstall --help --installation-id fixture", "review"),
+    ("hol-guard hooks remove --help", "review"),
     ("hol-guard help uninstall", "review"),
     (
         "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"
@@ -190,16 +186,6 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
         "review",
     ),
 )
-
-
-@pytest.mark.parametrize(("command", "expected"), CRITICAL_COMMAND_FLOORS)
-def test_security_critical_commands_retain_exact_floors(command: str, expected: GuardAction) -> None:
-    assert _critical_factor_action(command) == expected
-
-
-def test_launcher_ambiguity_fanout_fails_closed() -> None:
-    options = " ".join(f"--unknown value-{index}" for index in range(300))
-    assert _critical_factor_action(f"parallel {options} printf safe") == "block"
 
 
 def test_native_command_model_rejects_input_above_transport_budget() -> None:
@@ -275,11 +261,6 @@ CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
 )
 
 NATIVE_STRICTER_NEAR_MISSES = frozenset[str]()
-
-
-@pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)
-def test_security_floors_do_not_widen_near_misses_to_block(command: str) -> None:
-    assert _critical_factor_action(command) != "block"
 
 
 @pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)

@@ -513,3 +513,95 @@ def test_pypi_absence_passes() -> None:
     fetcher = FakeFetcher({url: _http_error(url, 404)})
 
     assert_pypi_release_absent(VERSION, fetcher=fetcher)
+
+
+def _local_wheels_only_dist(tmp_path: Path) -> Path:
+    dist = tmp_path / "pypi-hol-guard"
+    dist.mkdir()
+    (dist / WHEEL).write_bytes(WHEEL_BYTES)
+    return dist
+
+
+def test_local_hashes_require_sdist_unless_wheels_only(tmp_path: Path) -> None:
+    dist = _local_wheels_only_dist(tmp_path)
+
+    with pytest.raises(RegistryVerificationError, match="wheel and sdist"):
+        compute_local_distribution_hashes(dist, VERSION)
+    assert compute_local_distribution_hashes(dist, VERSION, require_sdist=False) == {WHEEL: _sha(WHEEL_BYTES)}
+
+
+def _local_full_dist(tmp_path: Path, sdist_bytes: bytes = SDIST_BYTES) -> Path:
+    dist = _local_wheels_only_dist(tmp_path)
+    (dist / SDIST).write_bytes(sdist_bytes)
+    return dist
+
+
+@pytest.mark.parametrize(
+    ("local_has_sdist", "remote_files"),
+    [
+        (False, {WHEEL: (WHEEL_BYTES, None)}),
+        (True, {WHEEL: (WHEEL_BYTES, None)}),
+        (True, {WHEEL: (WHEEL_BYTES, None), SDIST: (SDIST_BYTES, None)}),
+    ],
+    ids=["wheels-dir", "full-dir", "full-dir-with-matching-registry-sdist"],
+)
+def test_wheels_only_verification_compares_wheels(
+    tmp_path: Path, local_has_sdist: bool, remote_files: dict[str, tuple[bytes, str | None]]
+) -> None:
+    dist = _local_full_dist(tmp_path) if local_has_sdist else _local_wheels_only_dist(tmp_path)
+    fetcher = FakeFetcher({_release_url(Registry.PYPI): _release_payload(Registry.PYPI, remote_files)})
+
+    result = verify_registry_release(Registry.PYPI, VERSION, dist, fetcher=fetcher, wheels_only=True)
+
+    assert result.status == "exact"
+    assert result.files == (WHEEL,)
+
+
+@pytest.mark.parametrize("local_sdist", [None, b"other-sdist"], ids=["no-local-sdist", "different-local-sdist"])
+def test_wheels_only_verification_rejects_unverified_registry_sdist(tmp_path: Path, local_sdist: bytes | None) -> None:
+    dist = _local_wheels_only_dist(tmp_path) if local_sdist is None else _local_full_dist(tmp_path, local_sdist)
+    payload = _release_payload(Registry.PYPI, {WHEEL: (WHEEL_BYTES, None), SDIST: (SDIST_BYTES, None)})
+    fetcher = FakeFetcher({_release_url(Registry.PYPI): payload})
+
+    with pytest.raises(RegistryVerificationError, match="unverified source distribution"):
+        verify_registry_release(Registry.PYPI, VERSION, dist, fetcher=fetcher, wheels_only=True, retry_attempts=1)
+
+
+def test_wheels_only_verification_downloads_only_compared_files(tmp_path: Path) -> None:
+    dist = _local_full_dist(tmp_path)
+    payload = _release_payload(Registry.PYPI, {WHEEL: (WHEEL_BYTES, None), SDIST: (SDIST_BYTES, None)})
+    fetcher = FakeFetcher({_release_url(Registry.PYPI): payload, _file_url(Registry.PYPI, WHEEL): WHEEL_BYTES})
+    download_dir = tmp_path / "verified"
+
+    result = verify_registry_release(
+        Registry.PYPI, VERSION, dist, fetcher=fetcher, wheels_only=True, download_dir=download_dir
+    )
+
+    assert result.downloaded_paths == (download_dir / WHEEL,)
+    assert sorted(path.name for path in download_dir.iterdir()) == [WHEEL]
+
+
+def test_wheels_only_verification_still_rejects_wheel_mismatch(tmp_path: Path) -> None:
+    dist = _local_wheels_only_dist(tmp_path)
+    payload = _release_payload(Registry.PYPI, {WHEEL: (b"other-wheel", None)})
+    fetcher = FakeFetcher({_release_url(Registry.PYPI): payload})
+
+    with pytest.raises(RegistryVerificationError):
+        verify_registry_release(
+            Registry.PYPI,
+            VERSION,
+            dist,
+            fetcher=fetcher,
+            wheels_only=True,
+            retry_attempts=1,
+        )
+
+
+def test_verify_release_cli_wheels_only(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    dist = _local_wheels_only_dist(tmp_path)
+    payload = _release_payload(Registry.PYPI, {WHEEL: (WHEEL_BYTES, None)})
+    fetcher = FakeFetcher({_release_url(Registry.PYPI): payload})
+
+    argv = ["verify-release", "--registry", "pypi", "--version", VERSION, "--dist-dir", str(dist), "--wheels-only"]
+    assert main(argv, fetcher=fetcher) == 0
+    assert json.loads(capsys.readouterr().out)["status"] == "exact"

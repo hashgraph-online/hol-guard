@@ -28,6 +28,9 @@ const ED25519_SIGNATURE_HEX_BYTES: usize = 128;
 #[path = "workspace_review_decision_claims.rs"]
 mod claim_semantics;
 use claim_semantics::consume_or_replay_claim;
+#[path = "workspace_review_decision_semantics.rs"]
+mod semantics;
+pub(crate) use semantics::{owned_request_digest, semantic_decision_digest};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WorkspaceReviewDecisionContext<'a> {
@@ -65,6 +68,7 @@ pub(crate) struct VerifiedWorkspaceReviewDecision {
     pub(crate) retry_scope_binding: String,
     pub(crate) request_snapshot_digest: Option<String>,
     pub(crate) envelope_digest: String,
+    pub(crate) observed_at_ms: u64,
     /// True only when the same durable claim is being resumed after a lost
     /// response. It is never a second acceptance of the envelope.
     pub(crate) replayed: bool,
@@ -132,38 +136,6 @@ pub(crate) fn signing_bytes(
 ) -> Result<Vec<u8>, String> {
     canonical_json_bytes(&signing_value(envelope)?)
         .map_err(|_| "native_workspace_review_decision_invalid".to_owned())
-}
-
-/// Digest durable semantics independently of transport lifetime and signer
-/// rotation; excluding the claim id keeps a new id from creating a second grant.
-pub(crate) fn semantic_decision_digest(
-    envelope: &WorkspaceReviewDecisionEnvelopeV1,
-) -> Result<String, String> {
-    let value = serde_json::json!({
-        "schema": envelope.schema,
-        "version": envelope.version,
-        "purpose": envelope.purpose,
-        "workspace_binding": envelope.workspace_binding,
-        "device_binding": envelope.device_binding,
-        "installation_binding": envelope.installation_binding,
-        "scope_binding": envelope.scope_binding,
-        "request_binding": envelope.request_binding,
-        "action_binding": envelope.action_binding,
-        "intent_binding": envelope.intent_binding,
-        "revision_binding": envelope.revision_binding,
-        "policy_binding": envelope.policy_binding,
-        "retry_scope_binding": envelope.retry_scope_binding,
-        "delivery_mode": envelope.delivery_mode,
-        "decision": envelope.decision,
-    });
-    let canonical = canonical_json_bytes(&value)
-        .map_err(|_| "native_workspace_review_decision_invalid".to_owned())?;
-    let mut preimage = Vec::with_capacity(
-        NATIVE_WORKSPACE_REVIEW_SEMANTIC_DECISION_DOMAIN.len() + canonical.len(),
-    );
-    preimage.extend_from_slice(NATIVE_WORKSPACE_REVIEW_SEMANTIC_DECISION_DOMAIN);
-    preimage.extend_from_slice(&canonical);
-    Ok(digest_bytes(&preimage))
 }
 
 fn canonical_envelope_bytes(
@@ -321,6 +293,7 @@ fn verify_envelope_mode(
         retry_scope_binding: envelope.retry_scope_binding.clone(),
         request_snapshot_digest: None,
         envelope_digest: digest_bytes(&canonical),
+        observed_at_ms: now_ms,
         replayed: false,
     };
     Ok((verified, canonical))

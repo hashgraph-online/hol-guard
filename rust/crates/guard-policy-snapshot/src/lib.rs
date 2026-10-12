@@ -310,7 +310,8 @@ fn valid_selector_key(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
 }
 
-fn normalized_harness_selector(value: &str) -> Option<String> {
+/// Canonical harness selector shared with the resident MCP policy composition.
+pub fn normalized_harness_selector(value: &str) -> Option<String> {
     if !valid_selector_key(value) {
         return None;
     }
@@ -361,7 +362,9 @@ pub use observed_mcp::{
 };
 use observed_mcp::{validate_mcp_provider_actions, validate_mcp_tool_actions};
 
-fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
+/// Shape and bound checks for one effective policy, shared with the publisher
+/// composition so both reject exactly the same inputs.
+pub fn validate_effective_policy(policy: &EffectiveNativePolicyV3) -> Result<(), SnapshotError> {
     for action in [
         &policy.default_action,
         &policy.unknown_publisher_action,

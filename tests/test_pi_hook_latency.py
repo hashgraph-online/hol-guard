@@ -25,7 +25,6 @@ pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 class _DaemonInternals(Protocol):
     auth_token: str
-    hook_process_runner: object
 
 
 def _daemon_internals(daemon: GuardDaemonServer) -> _DaemonInternals:
@@ -145,7 +144,7 @@ def test_pi_hook_is_not_queued_behind_unrelated_overlay_free_review(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     monkeypatch.setattr(_daemon_internals(daemon).hook_worker, "review_http_payload", fake_review)
     daemon.start()
-    _daemon_internals(daemon).runtime_hook_process_scheduler.set_active_limit(2)
+    _daemon_internals(daemon).runtime_hook_scheduler.set_active_limit(2)
     first_result: list[dict[str, object]] = []
 
     def run_first() -> None:

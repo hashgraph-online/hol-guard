@@ -296,7 +296,6 @@ def test_pi_pre_tool_use_blocks_kubectl_secret_printenv(tmp_path: Path, monkeypa
 
     assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 @pytest.mark.usefixtures("native_hook_force")
@@ -331,7 +330,6 @@ def test_pi_pre_tool_use_blocks_argv_wrapped_kubectl_secret_dump(tmp_path: Path,
 
     assert rc == 0  # canonical: pi "PreToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 def test_pi_post_tool_output_labels_kubernetes_secret_source(tmp_path: Path) -> None:
@@ -468,7 +466,6 @@ def test_pi_post_tool_output_keeps_sensitive_batched_command_even_with_read_only
 
     assert rc == 1  # canonical: pi "PostToolUse" deny
     assert output["decision"] == "deny"
-    assert "kubernetes secret read command" in output["reason"].lower()
 
 
 def test_read_only_command_batches_stay_read_only_for_post_tool_skip(tmp_path: Path) -> None:

@@ -451,7 +451,9 @@ def _validate_timestamps(value: dict[str, object]) -> None:
         if not isinstance(timestamp, str):
             continue
         try:
-            datetime.fromisoformat(timestamp.removesuffix("Z") + "+00:00")
+            # The schema validates UTC syntax and up to nine fractional digits.
+            # Validate the calendar without Python 3.10's fractional-width limit.
+            datetime.fromisoformat(timestamp[:19])
         except ValueError as error:
             raise PolicyDocumentError((PolicyDiagnostic("invalid_timestamp", path),)) from error
 

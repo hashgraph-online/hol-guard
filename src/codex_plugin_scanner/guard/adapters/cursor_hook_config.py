@@ -15,6 +15,11 @@ from pathlib import Path
 
 from ..models import GuardArtifact
 from .base import HarnessContext
+from .cursor_hook_events import (
+    CURSOR_FILE_MUTATION_TOOL_MATCHER,
+    cursor_entry_guards_file_mutations,
+    unsupported_cursor_hook_events,
+)
 from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
 from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
@@ -25,7 +30,7 @@ _BLOCKING_MANAGED_HOOK_EVENTS = (
     "beforeShellExecution",
     "beforeMCPExecution",
     "beforeReadFile",
-    "beforeWriteFile",
+    "preToolUse",
 )
 _OBSERVER_MANAGED_HOOK_EVENTS = ("afterShellExecution", "afterMCPExecution")
 _MANAGED_HOOK_EVENTS = _BLOCKING_MANAGED_HOOK_EVENTS + _OBSERVER_MANAGED_HOOK_EVENTS
@@ -172,7 +177,31 @@ def _managed_hook_entry(
         "timeout": _MANAGED_HOOK_TIMEOUT_SECONDS,
         "failClosed": event_name in _BLOCKING_MANAGED_HOOK_EVENTS,
     }
+    if event_name == "preToolUse":
+        entry["matcher"] = CURSOR_FILE_MUTATION_TOOL_MATCHER
     return entry
+
+
+def _retire_managed_hook_events(hooks: dict[str, object], *, script_path: Path) -> None:
+    """Drop Guard entries under events Cursor rejects, such as the retired beforeWriteFile.
+
+    Another tool's entry under such an event still makes Cursor ignore every hook,
+    so install stops with the event names instead of reporting protection.
+    """
+
+    for event_name in unsupported_cursor_hook_events(hooks):
+        remaining = _strip_managed_hook_entries(hooks[event_name], script_path=script_path)
+        if remaining:
+            hooks[event_name] = remaining
+        else:
+            hooks.pop(event_name, None)
+    unsupported = unsupported_cursor_hook_events(hooks)
+    if unsupported:
+        raise RuntimeError(
+            "guard_cursor_hook_unsupported_events:"
+            + ",".join(unsupported)
+            + ": Cursor ignores hooks.json while it names these events; remove or rename them, then reinstall."
+        )
 
 
 def _strip_managed_hook_entries(entries: object, *, script_path: Path) -> list[object]:
@@ -329,10 +358,12 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
 
     Exact attested CLI/script identity stays repair work. Extra third-party
     hook entries must not fail machine-wide protection health while Guard still
-    intercepts shell, MCP, file-read, and file-write events.
+    intercepts shell, MCP, file-read, and file-write events. Cursor ignores
+    the whole file when it names an unknown event, and a preToolUse entry only
+    guards writes while it fails closed and matches every file mutation tool.
     """
 
-    if not isinstance(hooks, dict):
+    if not isinstance(hooks, dict) or unsupported_cursor_hook_events(hooks):
         return False
     for event_name in _BLOCKING_MANAGED_HOOK_EVENTS:
         entries = hooks.get(event_name)
@@ -347,6 +378,8 @@ def live_guard_cursor_hooks_intercept(hooks: object) -> bool:
                 continue
             script_path = _live_cursor_hook_script_path(command)
             if script_path is None or not script_path.is_file():
+                continue
+            if event_name == "preToolUse" and not cursor_entry_guards_file_mutations(entry):
                 continue
             matched = True
             break

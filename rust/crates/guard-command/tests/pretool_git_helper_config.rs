@@ -97,6 +97,47 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             repository.to_str(),
         );
         assert_eq!(alias.minimum_action, "require-reapproval");
+        // A configured verification program alone cannot run for a read that
+        // requests no signature, so it must not block ordinary history reads.
+        std::fs::write(
+            home.join(".gitconfig"),
+            "[gpg]\n\tprogram = /tmp/synthetic-never-execute\n[gpg \"ssh\"]\n\tprogram = /tmp/synthetic-never-execute\n",
+        )
+        .unwrap();
+        for command in [
+            "git log --no-ext-diff --no-textconv -1",
+            "git show --no-ext-diff --no-textconv HEAD",
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_eq!(
+                result.decision, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+        for command in [
+            "git log --no-ext-diff --no-textconv --show-signature -1",
+            "git log --no-ext-diff --no-textconv --format=%G? -1",
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
         // Reset for each harness so the negative assertion tests this config,
         // not leftovers from the preceding harness or an explicit CLI flag.
         std::fs::write(

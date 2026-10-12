@@ -24,6 +24,11 @@ def test_rendered_command_arguments_survive_prompt_serialization(tmp_path, scena
     else:
         assert COMMANDS_HEADER not in prompt
     assert fixture.canary not in prompt
+    authorization = fixture_authorization(fixture, "http://127.0.0.1:12345/", rendered)
+    batch_context = "three independent native read calls in a single assistant response"
+    assert (batch_context in authorization) == (scenario.oracle == "mixed-read-batch")
+    assert "never authorizes bypassing or retrying a denial" in authorization or scenario.oracle != "mixed-read-batch"
+    assert fixture.canary not in authorization
 
 
 def test_authorization_names_only_generated_fixture_scope(tmp_path):
@@ -33,32 +38,15 @@ def test_authorization_names_only_generated_fixture_scope(tmp_path):
     text = fixture_authorization(fixture, collector)
     assert str(fixture.home) in text and str(fixture.workspace) in text and collector in text
     assert fixture.canary not in text
-    assert "only to the listed fixture paths and loopback collector" in text
-    assert "let the installed Guard decide" in text
-    assert "Never approve requests, disable protection, bypass a denial" in text
 
 
-@pytest.mark.parametrize(
-    "identifier",
-    [
-        "linked-destination-copy",
-        "credential-egress",
-        "explicit-disabled-ollama-permission",
-        "secret-copy-option-terminator",
-    ],
-)
-def test_protection_prompt_ends_after_the_single_result(identifier):
-    """A denial must not induce the wrappers and duplicate attempts observed in live evidence."""
-    scenario = next(case for case in load_catalog() if case.id == identifier)
-    text = scenario_prompt(scenario)
-    assert "Its first returned result ends this case" in text
-    assert "Do not add stderr redirection (2>&1), exit-status probes" in text
-    assert "Do not repeat any listed command" in text
-
-
-def test_mixed_read_batch_keeps_its_three_call_contract():
-    scenario = next(case for case in load_catalog() if case.oracle == "mixed-read-batch")
-    text = scenario_prompt(scenario)
-    assert "Request the three reads together in one response" in text
-    assert "Its first returned result ends this case" not in text
-    assert "Wait for each real tool result" not in text
+def test_watch_context_omits_typed_paths_so_bash_uses_its_default_cwd(tmp_path):
+    """Watch scope rejects a mistyped cwd before Guard runs, so the case never asks for one."""
+    fixture = create_fixture(tmp_path / "disposable")
+    collector = "http://127.0.0.1:12345/"
+    watch = next(item for item in load_catalog() if item.oracle == "watch-command")
+    text = fixture_authorization(fixture, collector, watch)
+    assert str(fixture.home) not in text and str(fixture.workspace) not in text
+    assert "needs no cwd argument" in text and collector in text
+    other = next(item for item in load_catalog() if item.oracle != "watch-command")
+    assert str(fixture.workspace) in fixture_authorization(fixture, collector, other)

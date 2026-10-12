@@ -60,7 +60,7 @@ fn request(root: &std::path::Path, output: &str) -> NativeHookRequestV1 {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 #[test]
 fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     let root = TestRoot::new();
@@ -97,7 +97,7 @@ fn formatted_reads_require_complete_scanned_output_and_clean_source() {
     assert_eq!(review_post_tool(&base).reason_code, "source_secret_match");
 }
 
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 #[test]
 fn formatted_reads_fail_closed_without_descriptor_verified_source_reads() {
     let root = TestRoot::new();

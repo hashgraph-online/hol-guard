@@ -70,7 +70,12 @@ pub(super) fn request_payload_identity(
     Ok(Value::Object(identity))
 }
 
-pub(super) fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
+/// True when the snapshot's own `generation` agrees with the claimed one.
+pub(crate) fn policy_generation_matches(snapshot: &Value, generation: u64) -> bool {
+    generation != 0 && snapshot.get("generation").and_then(Value::as_u64) == Some(generation)
+}
+
+pub(crate) fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
     let object = snapshot.as_object();
     let runtime_identity = object
         .and_then(|value| value.get("runtime_identity"))

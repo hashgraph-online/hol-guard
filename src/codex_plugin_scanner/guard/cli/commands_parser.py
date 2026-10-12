@@ -14,6 +14,8 @@ from ._commands_shared import _GUARD_HELP_GROUPS
 from .commands_parser_cloud import _configure_guard_cloud_parsers
 from .commands_parser_cloud_review import configure_guard_cloud_review_parser
 from .commands_parser_desktop import _configure_guard_desktop_parser
+from .commands_remove_hooks import configure_guard_hooks_parser
+from .commands_repair import configure_guard_repair_parser
 from .commands_parser_helpers import (
     _add_aibom_cli_args,
     _add_guard_cisco_mode_arg,
@@ -55,7 +57,7 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         required=True,
         parser_class=FriendlyArgumentParser,
         metavar=(
-            "{start,status,risk-report,dashboard,init,apps,bootstrap,detect,install,update,uninstall,package-shims,run,protect,preflight,scan,diff,"
+            "{start,status,risk-report,dashboard,init,apps,bootstrap,detect,install,update,uninstall,hooks,repair,package-shims,run,protect,preflight,scan,diff,"
             "test-eval,command,extensions,verified-read,contained-write,mdm,"
             "receipts,inventory,abom,aibom,approvals,explain,allow,deny,policies,trust,exceptions,advisories,events,doctor,connect,"
             "remote-pair,disconnect,"
@@ -63,6 +65,8 @@ def _configure_guard_parser(guard_parser: argparse.ArgumentParser) -> None:
         ),
     )
     _configure_guard_local_parsers(guard_subparsers)
+    configure_guard_hooks_parser(guard_subparsers)
+    configure_guard_repair_parser(guard_subparsers)
     configure_extension_builder_parser(guard_subparsers)
     configure_guard_risk_report_parser(guard_subparsers)
     _configure_guard_desktop_parser(guard_subparsers)

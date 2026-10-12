@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from collections.abc import Mapping
 from pathlib import Path
+from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 from .native_command_control_binding import capture_native_command_control_binding
+from .native_policy_effective import effective_native_policy_v3
 from .native_policy_snapshot_codec import _digest_v3, _valid_digest_v3, derive_native_policy_verifier_key
 from .native_policy_snapshot_constants import (
     _MAX_GENERATION,
@@ -15,15 +18,12 @@ from .native_policy_snapshot_constants import (
     _RUST_GENERATION_FLOOR_NAME,
     _RUST_SNAPSHOT_STATE_NAME,
     _VALID_INPUT_MODES,
+    BUSINESS_NATIVE_TIMEOUT_SECONDS,
     NATIVE_RUNTIME_STATE_DIRECTORY,
     POLICY_SNAPSHOT_MAX_EXPIRY_MS,
     NativePolicySnapshotError,
 )
-from .native_policy_snapshot_contract import (
-    _snapshot_policy_digest_v3,
-    _valid_u64_v3,
-    effective_native_policy_v3,
-)
+from .native_policy_snapshot_contract import _valid_u64_v3
 from .native_policy_snapshot_policy import _config_value, _scope_digest_v3
 from .native_policy_snapshot_storage import (
     _read_v3_generation_state,
@@ -34,6 +34,11 @@ from .native_policy_snapshot_windows_key import provision_native_policy_verifier
 
 if TYPE_CHECKING:
     from .config import GuardConfig
+
+
+_SEMANTIC_DIGESTS: OrderedDict[tuple[str | None, ...], tuple[str, str]] = OrderedDict()
+_SEMANTIC_LOCK = Lock()
+_SEMANTIC_LIMIT = 32
 
 
 def _snapshot_api() -> Any:
@@ -115,40 +120,57 @@ def _snapshot_inputs_v3(
     business_policy: Mapping[str, object] | None = None,
     deadline_monotonic: float | None = None,
 ) -> tuple[dict[str, object], str, str, str, str]:
-    effective_policy = effective_native_policy_v3(config)
+    from .native_policy_snapshot_business_bridge import require_native_snapshot_runtime
+
+    # Refuse on the selected resident's availability and deadline before any
+    # composer spawn, so a missing consumer keeps its specific reason.
+    require_native_snapshot_runtime(business=business_policy is not None)
+    effective_policy = effective_native_policy_v3(config, deadline_monotonic=deadline_monotonic)
     raw_mode = _config_value(config, "mode", "prompt")
     if not isinstance(raw_mode, str) or raw_mode not in _VALID_INPUT_MODES:
         raise NativePolicySnapshotError("native_policy_snapshot_mode_invalid")
     mode = "observe" if raw_mode == "observe" or effective_policy["protection_posture"] == "watch" else "enforce"
     scope_digest = _scope_digest_v3(guard_home)
-    if business_policy is not None:
-        # A synthetic, non-installed constructor value supplies Rust's semantic
-        # identity. Generation/times/key do not participate in policy identity.
-        semantic = _snapshot_api().build_policy_snapshot_v3(
-            config=config,
-            guard_home=guard_home,
-            runtime_identity=runtime_identity,
-            rule_digest=rule_digest,
-            verifier_key=bytes(32),
-            generation=1,
-            issued_at_ms=0,
-            expires_at_ms=1,
-            command_extensions=command_extensions,
-            business_policy=business_policy,
-            deadline_monotonic=deadline_monotonic,
-        )
-        return effective_policy, mode, str(semantic["config_digest"]), str(semantic["policy_digest"]), scope_digest
-    config_digest = _digest_v3(effective_policy)
-    policy_digest = _snapshot_policy_digest_v3(
-        config_digest=config_digest,
-        effective_policy=effective_policy,
-        mode=mode,
-        rule_digest=rule_digest,
-        runtime_identity=runtime_identity,
-        scope_digest=scope_digest,
-        command_extensions=command_extensions,
+    # A synthetic, non-installed constructor value supplies Rust's semantic
+    # identity. Generation/times/key do not participate in policy identity, so
+    # the pure result is memoized per runtime and input digest.
+    # A memoized result never outlives the resident's availability: fail closed
+    # before consulting it.
+    require_native_snapshot_runtime(business=business_policy is not None)
+    memo_key = (
+        runtime_identity,
+        rule_digest,
+        mode,
+        scope_digest,
+        _digest_v3(effective_policy),
+        None if command_extensions is None else _digest_v3(command_extensions),
+        None if business_policy is None else _digest_v3(business_policy),
     )
-    return effective_policy, mode, config_digest, policy_digest, scope_digest
+    with _SEMANTIC_LOCK:
+        remembered = _SEMANTIC_DIGESTS.get(memo_key)
+        if remembered is not None:
+            _SEMANTIC_DIGESTS.move_to_end(memo_key)
+    if remembered is not None:
+        return effective_policy, mode, remembered[0], remembered[1], scope_digest
+    semantic = _snapshot_api().build_policy_snapshot_v3(
+        config=config,
+        guard_home=guard_home,
+        runtime_identity=runtime_identity,
+        rule_digest=rule_digest,
+        verifier_key=bytes(32),
+        generation=1,
+        issued_at_ms=0,
+        expires_at_ms=1,
+        command_extensions=command_extensions,
+        business_policy=business_policy,
+        deadline_monotonic=deadline_monotonic,
+    )
+    digests = (str(semantic["config_digest"]), str(semantic["policy_digest"]))
+    with _SEMANTIC_LOCK:
+        _SEMANTIC_DIGESTS[memo_key] = digests
+        while len(_SEMANTIC_DIGESTS) > _SEMANTIC_LIMIT:
+            _SEMANTIC_DIGESTS.popitem(last=False)
+    return effective_policy, mode, digests[0], digests[1], scope_digest
 
 
 def _snapshot_matches_inputs_v3(
@@ -347,7 +369,12 @@ def native_policy_snapshot_v3(
 
     from .native_policy_snapshot_business_bridge import begin_business_deadline, end_business_deadline
 
-    deadline_token = begin_business_deadline(deadline_monotonic) if business_policy is not None else None
+    if deadline_monotonic is None:
+        # One budget for a cold capability probe plus the build and inspect
+        # exchanges, so the generation lock is not held for a fresh native
+        # budget per call.
+        deadline_monotonic = time.monotonic() + 3 * BUSINESS_NATIVE_TIMEOUT_SECONDS
+    deadline_token = begin_business_deadline(deadline_monotonic)
     verifier_key: bytes | None = None
     try:
         _validate_snapshot_request_v3(
@@ -427,5 +454,4 @@ def native_policy_snapshot_v3(
         # only the purpose-specific verifier-derived key id and MAC.
         verifier_key = None
         policy_integrity_key = b""
-        if deadline_token is not None:
-            end_business_deadline(deadline_token)
+        end_business_deadline(deadline_token)

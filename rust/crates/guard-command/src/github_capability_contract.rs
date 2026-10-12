@@ -486,32 +486,19 @@ pub fn github_cli_invocation_is_help(normalized: &[String]) -> bool {
 pub fn combine_github_assessments(
     assessments: &[GitHubCommandAssessment],
 ) -> Option<GitHubCommandAssessment> {
-    if assessments.is_empty() {
-        return None;
+    match assessments {
+        [] => None,
+        [single] => Some(single.clone()),
+        _ => {
+            let capabilities: Vec<GitHubCommandCapability> = assessments
+                .iter()
+                .flat_map(|a| a.capabilities.iter().copied())
+                .collect();
+            Some(github_assessment(
+                &capabilities,
+                "github.shell.combined-capabilities",
+                "The shell composition contains multiple GitHub capabilities.",
+            ))
+        }
     }
-    let mut capabilities: Vec<GitHubCommandCapability> = assessments
-        .iter()
-        .flat_map(|a| a.capabilities.iter().copied())
-        .collect();
-    capabilities.sort_by_key(|c| c.rank());
-    capabilities.dedup();
-    let strongest = assessments
-        .iter()
-        .map(|a| a.capability)
-        .max_by_key(|c| c.rank())
-        .unwrap();
-    Some(GitHubCommandAssessment {
-        capability: strongest,
-        reason_code: assessments
-            .iter()
-            .map(|a| a.reason_code.clone())
-            .collect::<Vec<_>>()
-            .join(";"),
-        detail: assessments
-            .iter()
-            .map(|a| a.detail.clone())
-            .collect::<Vec<_>>()
-            .join(";"),
-        capabilities,
-    })
 }

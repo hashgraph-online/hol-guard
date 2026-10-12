@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import difflib
 import itertools
-from datetime import datetime
 
 from .policy_document import GuardPolicyDocument, PolicyRule
 from .policy_document_types import PolicyDocumentDiff
@@ -116,8 +115,13 @@ def _restrictive_lifetime_relaxed(previous: PolicyRule, current: PolicyRule) -> 
         return current_expiry is not None
     if current_expiry is None:
         return False
-    return datetime.fromisoformat(current_expiry.replace("Z", "+00:00")) < datetime.fromisoformat(
-        previous_expiry.replace("Z", "+00:00")
+    # Validated UTC timestamps sort by calendar seconds, then exact nanoseconds.
+    # datetime.fromisoformat rejects some schema-permitted fractions on Python 3.10.
+    current_seconds, _, current_fraction = current_expiry[:-1].partition(".")
+    previous_seconds, _, previous_fraction = previous_expiry[:-1].partition(".")
+    return (current_seconds, current_fraction.ljust(9, "0")) < (
+        previous_seconds,
+        previous_fraction.ljust(9, "0"),
     )
 
 

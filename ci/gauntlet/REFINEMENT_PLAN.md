@@ -83,7 +83,8 @@ actual inference through pinned OMP and the matching native Guard build can
 establish product qualification.
 
 The first live Qwen 3.6 pass in an x86-64 Ubuntu VM exposed an SDK integration
-gap: OMP 18.1.18 appends `Wall time: ... seconds` to successful Bash results.
+gap: OMP appends `Wall time: ... seconds` to successful Bash results (first
+seen on 18.1.18, unchanged in the pinned 18.4.12).
 Normalize only that terminal footer when it matches numeric result metadata;
 retain stdout exactly and keep the original public tool result unchanged.
 Regression checks must cover the SDK's exact-tie rounding, malformed metadata,

@@ -16,6 +16,9 @@ inputs:
     # Publishing explicitly selects a separate trusted build cache.
     description: Shared native build cache family; keep the established namespace.
     default: native-wheel
+  save-main-cache:
+    description: Also save this Windows producer's successful scheduled or manual main build.
+    default: "false"
 
 runs:
   using: composite
@@ -44,8 +47,17 @@ runs:
         prefix-key: v0-rust
         workspaces: rust
         shared-key: ${{ inputs.targets && format('{0}-{1}', inputs.cache-key, inputs.targets) || inputs.cache-key }}
-        cache-workspace-crates: true
+        # actions/checkout gives every source a fresh mtime, so Cargo rebuilds
+        # workspace crates regardless; caching them only spends the 10 GB
+        # Actions budget and evicts useful dependency entries.
+        cache-workspace-crates: false
         # Cache paths also determine Actions' archive version. Preserve the
         # old path set so the trusted pre-migration cache can actually restore.
         cache-bin: true
-        save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        # Only the opted-in Windows release producer may warm main outside push.
+        # Other scheduled/manual jobs and all PR refs remain cache readers.
+        save-if: >-
+          ${{ github.ref == 'refs/heads/main' &&
+              (github.event_name == 'push' ||
+               (inputs.save-main-cache == 'true' && runner.os == 'Windows' &&
+                (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'))) }}

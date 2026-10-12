@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import bridge as bridge_module
 from codex_plugin_scanner.guard import config as guard_config_module
 from codex_plugin_scanner.guard.config import (
     GuardHomeMigrationError,
@@ -696,25 +695,6 @@ def test_load_guard_config_preserves_home_action_aliases_when_workspace_tries_to
     config = load_guard_config(guard_home, workspace_dir)
 
     assert config.harness_actions == {"codex": "review"}
-
-
-def test_run_bridge_uses_resolved_guard_home_by_default(tmp_path, monkeypatch):
-    expected_guard_home = tmp_path / ".hol-guard"
-    captured: dict[str, Path] = {}
-
-    class _FakeGuardBridge:
-        def __init__(self, *, config, store, backend):
-            captured["guard_home"] = store.guard_home
-
-        def run(self) -> None:
-            return
-
-    monkeypatch.setattr(bridge_module, "resolve_guard_home", lambda: expected_guard_home)
-    monkeypatch.setattr(bridge_module, "GuardBridge", _FakeGuardBridge)
-
-    bridge_module.run_bridge(dry_run=True)
-
-    assert captured["guard_home"] == expected_guard_home
 
 
 def test_sandbox_analysis_default_is_off(tmp_path: Path) -> None:

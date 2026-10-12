@@ -17,7 +17,6 @@ def _normalized_url(url: str):
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     tool_call_risk_categories,
-    tool_call_risk_signals,
     tool_call_risk_summary,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
@@ -104,14 +103,6 @@ class TestBrowserMcpCurrentBehavior:
         categories = tool_call_risk_categories(artifact, arguments)
         assert "outbound_network" not in categories
         assert "browser_navigation" in categories
-
-    def test_navigate_page_risk_signals_mention_outbound_network(self) -> None:
-        """HGBM045 prep: current risk signals for browser navigation."""
-        artifact, arguments = _browser_artifact(
-            arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
-        )
-        signals = tool_call_risk_signals(artifact, arguments)
-        assert len(signals) > 0
 
     def test_navigate_page_risk_summary_is_non_empty(self) -> None:
         """HGBM046 prep: current risk summary for browser navigation."""
@@ -667,17 +658,6 @@ class TestBrowserRiskClassifierIntegration:
         )
         categories = tool_call_risk_categories(artifact, arguments)
         assert "outbound_network" in categories
-
-    def test_browser_risk_signals_mention_intent(self) -> None:
-        """HGBM045: Browser-specific signal text names intent and target."""
-        artifact, arguments = _browser_artifact(
-            arguments={"type": "url", "url": "https://hol.org/guard/integrations/slack"},
-        )
-        signals = tool_call_risk_signals(artifact, arguments)
-        assert len(signals) > 0
-        # At least one signal should mention browser or navigation
-        combined = " ".join(signals).lower()
-        assert "browser" in combined or "navigation" in combined
 
     def test_browser_risk_summary_is_informative(self) -> None:
         """HGBM046: Browser-specific risk summary."""

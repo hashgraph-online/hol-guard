@@ -8,7 +8,13 @@ import {
 } from "../local-cli-api";
 import { ProtectionModuleRow } from "./components/protection-primitives";
 import {
+  customExtensionBadge,
+  customExtensionDisplayName,
+  profileSetupCommand,
+} from "./custom-extension-profile";
+import {
   continuityCopy,
+  customExtensionActionLabel,
   customExtensionRowDescription,
   customExtensionStateLabel,
 } from "./local-cli-panel-copy";
@@ -17,20 +23,27 @@ import { mcpCatalogCopy } from "./mcp-catalog-state";
 const CUSTOM_EXTENSION_PREVIEW_COUNT = 8;
 const CUSTOM_EXTENSION_PAGE_SIZE = 25;
 
-function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string) => void }) {
-  const cliId = props.item.cli_id;
-  const onOpen = props.onOpen;
+function CustomExtensionRow(props: {
+  item: LocalCliItem; onOpen: (cliId: string) => void; onSetUp?: (command: string) => void;
+}) {
+  const { item, onOpen, onSetUp } = props;
   const handleOpen = useCallback(() => {
-    onOpen(cliId);
-  }, [cliId, onOpen]);
+    const setup = item.seeded === true ? profileSetupCommand(item) : null;
+    if (setup !== null && onSetUp) onSetUp(setup);
+    else onOpen(item.cli_id);
+  }, [item, onOpen, onSetUp]);
+  const action = customExtensionActionLabel(item);
   const continuity = continuityCopy(props.item);
   const catalog = mcpCatalogCopy(props.item);
   return (
     <ProtectionModuleRow
       extensionId={props.item.cli_id}
-      name={props.item.name}
+      name={customExtensionDisplayName(props.item)}
       description={customExtensionRowDescription(props.item, catalog?.title ?? null)}
       behavior={continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item)}
+      brand={props.item.brand}
+      badge={customExtensionBadge(props.item) ?? undefined}
+      actionLabel={action ?? undefined}
       custom
       executables={[props.item.name]}
       onOpen={handleOpen}
@@ -101,6 +114,8 @@ function CustomExtensionEmptyState(props: {
  */
 interface CustomExtensionsSectionProps {
   items: LocalCliItem[];
+  seededItems?: LocalCliItem[];
+  onSetUp?: (command: string) => void;
   onOpen: (cliId: string) => void;
   onAdd: () => void;
   discovering?: boolean;
@@ -113,9 +128,9 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(0);
   const rowsId = useId();
-  const all = useMemo(() => connectorWorkspaceItems(props.items), [props.items]);
-  const added = useMemo(() => search ? connectorWorkspaceItems(props.items, search) : all,
-    [props.items, search, all]);
+  const all = useMemo(() => connectorWorkspaceItems(props.items, "", props.seededItems), [props.items, props.seededItems]);
+  const added = useMemo(() => search ? connectorWorkspaceItems(props.items, search, props.seededItems) : all,
+    [props.items, props.seededItems, search, all]);
   const searchable = all.length > CUSTOM_EXTENSION_PREVIEW_COUNT || search !== "";
   const filteredOut = props.filteredOut === true && search === "";
   const needsReview = added.filter(customExtensionNeedsReview);
@@ -181,7 +196,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
             </p>
           ) : null}
           {visibleNeedsReview.map((item) => (
-            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
+            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} onSetUp={props.onSetUp} />
           ))}
           {grouped && visibleReviewed.length > 0 ? (
             <p className="mt-6 text-xs font-semibold text-brand-dark/55">
@@ -189,7 +204,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
             </p>
           ) : null}
           {visibleReviewed.map((item) => (
-            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
+            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} onSetUp={props.onSetUp} />
           ))}
           {!showAll && added.length > visible.length ? (
             <div className="mt-4 flex flex-wrap items-center gap-3">

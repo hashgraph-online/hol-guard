@@ -7,6 +7,7 @@ import {
   emptyReceiptsPayload,
   freeStateSnapshot,
 } from "./fixture-states";
+import { routeCatalogV2, type CatalogFixture } from "./extension-control-fixtures";
 
 const DAEMON = "guardDaemon=http://127.0.0.1:4175";
 const catalogDigest = "a".repeat(64);
@@ -36,6 +37,7 @@ async function mountRecoveryFixture(page: Page, setup?: {
   initialHealth?: "tampered" | "unenrolled";
 }): Promise<void> {
   let repaired = false;
+  await routeCatalogV2(page, () => catalog as unknown as CatalogFixture);
   await page.route("**/v1/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;

@@ -20,22 +20,20 @@ from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_pre_hook_command_activity_best_effort,
 )
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import (
     DAEMON_DISCOVERY_PROTOCOL_VERSION,
     load_authenticated_daemon_state,
 )
 from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from codex_plugin_scanner.guard.daemon.server import (
-    GuardDaemonServer,
-    _GuardDaemonHttpServer,
-)
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer, _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
 from codex_plugin_scanner.guard.sqlite_tuning import (
     sqlite_connect_timeout_override,
     sqlite_connect_timeout_seconds,
     sqlite_operation_deadline_monotonic,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
@@ -65,7 +63,13 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", empty_inventory)
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Hold the native hook edge unavailable so the burst exercises storage
+    # contention rather than real native review latency.
+    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
+    # Route policy is answered by the resident; start its stream before the
+    # store is locked so the test measures storage contention only.
+    assert native_route_facts("POST", "/v1/daemon/identity-challenge", guard_home=store.guard_home)
     blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
@@ -115,6 +119,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
         daemon.stop()
 
 
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -129,7 +134,22 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Hold the native hook edge unavailable so the burst exercises storage
+    # contention rather than real native review latency.
+    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
+    # Route policy is answered by the resident, which needs the home's verifier
+    # key (provisioned through the store) and a started stream. Establish both
+    # before the store is locked so the burst measures storage contention only.
+    # Warm one resident per ask slot at once, so the burst does not pay spawns.
+    with ThreadPoolExecutor(max_workers=_MAX_CONCURRENT_ASKS) as warmup:
+        warmed = list(
+            warmup.map(
+                lambda _index: native_route_facts("POST", "/v1/hooks/pi", guard_home=store.guard_home),
+                range(_MAX_CONCURRENT_ASKS * 2),
+            )
+        )
+    assert all(facts.requires_header_token for facts in warmed)
     blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
     _ = blocker.execute("begin exclusive")
     endpoint = (
@@ -145,6 +165,9 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
                     "hook_event_name": "PreToolUse",
                     "tool_name": "Bash",
                     "tool_input": {"command": f"echo bounded-{index}"},
+                    # Keep the daemon deadline inside the client timeout so the
+                    # burst measures bounded fail-safe denial, not native review.
+                    "guard_remaining_seconds": 1.0,
                 }
             ).encode(),
             headers={
@@ -170,17 +193,12 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         blocker.close()
 
     try:
-        assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
-        )
-        worker_stats = daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
+        scheduler_stats = daemon._server.runtime_hook_scheduler.stats()  # pyright: ignore[reportPrivateUsage]
         resumed_payload, resumed_elapsed = review(100)
-        assert worker_stats["timeouts"] == 0
-        assert worker_stats["ready"] >= 1
-        # Storage recovery does not enable the explicitly disabled native authority.
+        assert scheduler_stats["active"] == 0
+        assert scheduler_stats["queued"] == 0
+        # Storage recovery never turns an unavailable native authority into an allow.
         assert resumed_payload.get("policy_action") == "block"
-        assert resumed_payload.get("reason_code") == "native_hook_disabled"
         assert resumed_elapsed < 1.0
     finally:
         daemon.stop()
@@ -398,8 +416,8 @@ def test_storage_maintenance_failure_requests_immediate_retry(
 
     daemon = object.__new__(GuardDaemonServer)
     object.__setattr__(daemon, "_server", SimpleNamespace(store=FailingStore()))
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "load_guard_config",
         lambda _guard_home: SimpleNamespace(evidence_retain_days=30),
     )

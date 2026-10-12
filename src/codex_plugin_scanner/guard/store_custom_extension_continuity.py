@@ -10,6 +10,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .runtime.local_cli_commands import (
+    OTHER_COMMAND_ID,
+    ROOT_COMMAND_ID,
+    LocalCliCommand,
     LocalCliCommandState,
     is_local_cli_command_id,
     is_local_cli_command_state,
@@ -33,6 +36,7 @@ class CustomExtensionContinuityMutation:
     requires_protected_extension_authority: bool = False
     required_negotiated_capability: str | None = None
     provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None
+    catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None = None
 
 
 class StoreCustomExtensionContinuityMixin:
@@ -51,6 +55,7 @@ class StoreCustomExtensionContinuityMixin:
         sync_preconditions: Mapping[str, object] | None = None,
         observation_preconditions: Mapping[str, object] | None = None,
         provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None,
+        catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None = None,
     ) -> int:
         """Commit exact local authority, continuity state, and receipts together."""
 
@@ -63,6 +68,7 @@ class StoreCustomExtensionContinuityMixin:
             sync_preconditions=sync_preconditions or {},
             observation_preconditions=observation_preconditions or {},
             provider_updates=provider_updates,
+            catalog_seeds=catalog_seeds,
         )
         with self._connect() as connection:
             _ = connection.execute("begin immediate")
@@ -93,6 +99,7 @@ def apply_custom_extension_continuity_mutation_locked(
         raise ValueError("local_cli_revision_conflict")
     _require_sync_preconditions(connection, mutation.sync_preconditions)
     _require_observation_preconditions(connection, mutation.observation_preconditions)
+    _seed_default_catalogs(connection, mutation.catalog_seeds or {})
     for identity, state, command_states in mutation.authority_updates:
         current_revision = _write_local_cli_grant(
             connection,
@@ -119,6 +126,44 @@ def apply_custom_extension_continuity_mutation_locked(
     _write_events(connection, mutation.events, occurred_at=mutation.updated_at)
     boundary("after_event")
     return current_revision
+
+
+def _seed_default_catalogs(
+    connection: sqlite3.Connection,
+    seeds: Mapping[str, Sequence[LocalCliCommand]],
+) -> None:
+    """Store a curated catalog only where the stored one holds just the defaults.
+
+    Runs after the revision check, so a rejected mutation leaves the catalog
+    untouched. Default commands stay in the seed, so no saved rule is dropped.
+    """
+
+    for cli_id, commands in seeds.items():
+        rows = connection.execute("select command_id from local_cli_command where cli_id = ?", (cli_id,)).fetchall()
+        if any(str(row[0]) not in {ROOT_COMMAND_ID, OTHER_COMMAND_ID} for row in rows):
+            continue
+        if not {ROOT_COMMAND_ID, OTHER_COMMAND_ID} <= {command.command_id for command in commands}:
+            raise ValueError("invalid local CLI catalog seed")
+        _ = connection.execute("delete from local_cli_command where cli_id = ?", (cli_id,))
+        for index, command in enumerate(commands):
+            if not is_local_cli_command_id(command.command_id):
+                raise ValueError("invalid local CLI command id")
+            _ = connection.execute(
+                """
+                insert into local_cli_command (
+                    cli_id, command_id, name, usage, description, parent_id, sort_index
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cli_id,
+                    command.command_id,
+                    command.name[:120],
+                    command.usage[:160],
+                    command.description[:240],
+                    command.parent_id,
+                    index,
+                ),
+            )
 
 
 def _validate_authority_updates(

@@ -12,6 +12,7 @@ from .policy_integrity import POLICY_INTEGRITY_VERSION
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
+from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 
 def _facade_store_attr(name: str, fallback: object) -> object:
@@ -278,6 +279,8 @@ class StoreSecretPolicyIntegrityMixin:
             return None
         if isinstance(secret_store, MirroredPolicyIntegritySecretStore):
             return secret_store.get_secret(secret_id)
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return self._get_secret_from_store(secret_store, secret_id)
         if isinstance(secret_store, FallbackSecretStore):
             fallback_value = self._get_secret_from_store(secret_store.fallback, secret_id)
             if fallback_value is not None:
@@ -421,6 +424,8 @@ class StoreSecretPolicyIntegrityMixin:
         secret_store = self._policy_integrity_secret_store
         if secret_store is None or self._policy_integrity_secret_store_is_unavailable(secret_store):
             return "unavailable"
+        if isinstance(secret_store, WindowsPolicyIntegritySecretStore):
+            return _secret_store_backend_name(secret_store.fallback)
         return _secret_store_backend_name(secret_store)
 
     def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
@@ -646,24 +651,6 @@ class StoreSecretPolicyIntegrityMixin:
             """,
             _REMOTE_POLICY_SOURCE_PARAMS,
         ).fetchone()
-        return int(row["total"]) if row is not None else 0
-
-    @staticmethod
-    def _count_local_policy_rows(
-        connection: sqlite3.Connection,
-        *,
-        harness: str | None = None,
-    ) -> int:
-        query = f"""
-            select count(*) as total
-            from policy_decisions
-            where source not in {_REMOTE_POLICY_SOURCE_PLACEHOLDERS}
-        """
-        params: tuple[object, ...] = _REMOTE_POLICY_SOURCE_PARAMS
-        if harness is not None:
-            query += " and harness = ?"
-            params = (*params, harness)
-        row = connection.execute(query, params).fetchone()
         return int(row["total"]) if row is not None else 0
 
     def _advance_policy_integrity_generation(
@@ -1138,45 +1125,6 @@ class StoreSecretPolicyIntegrityMixin:
             degraded_mode=mode != "protected",
             trusted_generation=trusted_generation,
         )
-
-    @staticmethod
-    def _policy_row_payload(
-        row: sqlite3.Row,
-        *,
-        integrity_result: PolicyIntegrityVerificationResult | None = None,
-        state: dict[str, object] | None = None,
-    ) -> dict[str, object]:
-        source = str(row["source"])
-        payload: dict[str, object] = {
-            "action": str(row["action"]),
-            "artifact_hash": row["artifact_hash"],
-            "artifact_id": row["artifact_id"],
-            "decision_id": int(row["decision_id"]) if row["decision_id"] is not None else None,
-            "expires_at": row["expires_at"],
-            "harness": str(row["harness"]),
-            "owner": row["owner"],
-            "publisher": row["publisher"],
-            "reason": row["reason"],
-            "scope": str(row["scope"]),
-            "source": source,
-            "updated_at": str(row["updated_at"]),
-            "workspace": row["workspace"],
-        }
-        if integrity_result is not None and not is_remote_policy_source(source):
-            payload["integrity_status"] = integrity_result.status
-            payload["integrity_message"] = integrity_result.message
-        if state is not None and not is_remote_policy_source(source):
-            payload["integrity_mode"] = state.get("mode")
-            payload["integrity_enforcement"] = state.get("enforcement")
-        if row["integrity_version"] is not None:
-            payload["integrity_version"] = int(row["integrity_version"])
-        if row["integrity_generation"] is not None:
-            payload["integrity_generation"] = int(row["integrity_generation"])
-        if row["integrity_key_id"] is not None:
-            payload["integrity_key_id"] = str(row["integrity_key_id"])
-        if row["signed_at"] is not None:
-            payload["signed_at"] = str(row["signed_at"])
-        return payload
 
     def _repair_store_permissions(self) -> None:
         _set_private_mode_compat(self.guard_home, _GUARD_STORE_PRIVATE_DIR_MODE)

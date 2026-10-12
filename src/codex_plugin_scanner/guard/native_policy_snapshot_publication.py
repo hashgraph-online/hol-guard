@@ -14,8 +14,15 @@ from .native_policy_snapshot_constants import (
     _REQUIRED_PUBLISH_FEATURES,
     NativePolicySnapshotError,
 )
+from .native_policy_snapshot_harness_postures import (
+    HARNESS_POSTURES_BINDING_KEY,
+    valid_harness_postures,
+    write_harness_postures_sidecar,
+)
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 
@@ -146,10 +153,15 @@ class NativePolicySnapshotPublicationMixin:
             for _ in range(2):
                 with publisher._condition:
                     publish_epoch = publisher._epoch
+                    # Compile exactly this set. A workspace registered later
+                    # stays pending for the next publish; compiling its overlay
+                    # now would make the ACKed digest disagree with the
+                    # settled-only reconcile and withdraw readiness home-wide.
+                    compiled_workspaces = frozenset(publisher._workspace_paths)
                 local_cli_revision = publisher._current_local_cli_revision()
                 provider_reader = getattr(publisher.store, "read_mcp_provider_authority_hash", None)
                 provider_authority_hash = provider_reader() if callable(provider_reader) else None
-                context = publisher._publication_context()
+                context = publisher._publication_context(workspaces=compiled_workspaces)
                 if context is None:
                     return
                 with publisher._condition:
@@ -261,12 +273,24 @@ class NativePolicySnapshotPublicationMixin:
                         publisher._source_control_fingerprint(command_extensions, business_source),
                     )
                     publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
+                    # Per-harness posture rides this same ACK: capture the
+                    # overrides compiled into the snapshot being acknowledged,
+                    # never a later re-read of config.toml.
+                    # Bind only what the sidecar write persisted, so daemon hooks
+                    # and readers of the signed file never disagree.
+                    publisher._harness_postures = write_harness_postures_sidecar(
+                        publisher.store,
+                        generation=cast(int, snapshot["generation"]),
+                        policy_digest=cast(str, snapshot["policy_digest"]),
+                        postures=valid_harness_postures(config.get(HARNESS_POSTURES_BINDING_KEY)),
+                    )
                     publisher._acked = True
                     publisher._last_error = None
                     publisher._renewal_after_generation = None
                     publisher._failure_count = 0
                     publisher._retry_not_before_monotonic = None
                     publisher._schedule_renewal_locked(snapshot)
+                    publisher._commit_workspace_readiness_locked(compiled_workspaces)
                     publisher._condition.notify_all()
         except NativePolicySnapshotError as error:
             publisher._record_error(str(error))
@@ -275,6 +299,8 @@ class NativePolicySnapshotPublicationMixin:
 
     def _publication_context(
         self,
+        *,
+        workspaces: frozenset[Path] | None = None,
     ) -> tuple[Any, Any, bytes, Mapping[str, object], Mapping[str, object], Callable[..., bytes | None]] | None:
         publisher = cast("NativePolicySnapshotPublisher", self)
         status_provider = publisher._status_provider
@@ -285,9 +311,6 @@ class NativePolicySnapshotPublicationMixin:
         status = status_provider()
         with publisher._condition:
             publisher._last_runtime_status = status
-        if getattr(status, "mode", None) not in {"auto", "force", "shadow"}:
-            publisher._record_error("native_policy_snapshot_native_disabled")
-            return None
         identity = getattr(status, "identity", None)
         capabilities = getattr(status, "capabilities", None)
         if (
@@ -318,7 +341,7 @@ class NativePolicySnapshotPublicationMixin:
             ):
                 publisher._record_error("native_policy_snapshot_integrity_key_unavailable")
                 return None
-            config = publisher._compiled_effective_policy()
+            config = publisher._compiled_effective_policy(workspaces=workspaces)
             command_extensions = publisher._compiled_command_extensions()
             client = publisher._client_request
             if client is None:
@@ -328,7 +351,3 @@ class NativePolicySnapshotPublicationMixin:
             return identity, capabilities, material[0], config, command_extensions, client
         finally:
             material = None
-
-    @staticmethod
-    def _decode_ack(output: bytes | None) -> dict[str, object] | None:
-        return _publisher_api()._decode_ack_v3(output)

@@ -113,6 +113,7 @@ fn evaluate_with_path(
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",
@@ -123,6 +124,8 @@ fn evaluate_with_path(
         guard_command::pretool::PathContext {
             home_dir: home.to_str(),
             cwd: repository.to_str(),
+            cdpath_unset: false,
+            rustup_override_absent: false,
         },
         Some(&context),
     )

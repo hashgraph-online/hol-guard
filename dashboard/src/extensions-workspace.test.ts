@@ -26,6 +26,7 @@ import {
 } from "./extension-policy-panel";
 import { quickApplyPermissionIds } from "./protection-center/components/quick-apply-toolbar";
 import { PatternSearchConsole } from "./protection-center/components/pattern-search-console";
+import { catalogReadModelFromCatalog } from "./extension-catalog-v2";
 
 // Every authority action failure maps to plain language with a next step;
 // raw protocol codes never reach the operator.
@@ -353,6 +354,7 @@ assert.deepEqual(
 // leave silently disabled controls.
 const lockedSearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
   catalog: [extension],
+  readModel: catalogReadModelFromCatalog({ schema_version: "1.0.0", catalog_digest: "a".repeat(64), extensions: [extension] }),
   effective: { ...effective, health: "recovery-required", failures: [{ code: "fixture-state" }] },
   query: "git",
   onRefresh: () => undefined,
@@ -363,6 +365,7 @@ assert.match(lockedSearchMarkup, /Settings cannot be changed until Guard verifie
 assert.match(lockedSearchMarkup, /aria-pressed="false"[^>]*disabled/, "locked quick-apply controls stay disabled while they explain why");
 const healthySearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
   catalog: [extension],
+  readModel: catalogReadModelFromCatalog({ schema_version: "1.0.0", catalog_digest: "a".repeat(64), extensions: [extension] }),
   effective,
   query: "git",
   onRefresh: () => undefined,

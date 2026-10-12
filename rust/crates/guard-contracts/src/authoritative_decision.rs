@@ -569,7 +569,7 @@ pub fn validate_composition_trace(
         }
     }
 
-    let saved_allow_override = matches!(current_action, Some(Value::String(s)) if s=="review")
+    let saved_allow_override = matches!(current_action, Some(Value::String(s)) if s=="review" || s=="require-reapproval")
         && matches!(parsed.get("saved_action"), Some(Value::String(s)) if s=="allow")
         && saved_state_present
         && matches!(action, GuardAction::Allow | GuardAction::Warn);
@@ -901,8 +901,10 @@ fn validate_artifact_approval_projection(
         bail!("composition_trace.trusted_request_override must match outer evidence");
     }
 
-    let saved_allow_reuse = current_action == GuardAction::Review
-        && saved_action == Some(GuardAction::Allow)
+    let saved_allow_reuse = matches!(
+        current_action,
+        GuardAction::Review | GuardAction::RequireReapproval
+    ) && saved_action == Some(GuardAction::Allow)
         && reuse_action == GuardAction::Allow
         && reuse_status == "accepted"
         && reuse_reason == APPROVAL_REUSE_ACCEPTED_REASON
@@ -926,8 +928,9 @@ fn validate_artifact_approval_projection(
     };
     if let Some(runtime_action) = trace.get("runtime_detector_action") {
         let parsed = parse_guard_action_value(runtime_action)?;
-        let detector_review_approved =
-            parsed == GuardAction::Review && (trusted_applied || saved_allow_reuse);
+        let detector_review_approved = (parsed == GuardAction::Review && trusted_applied)
+            || (matches!(parsed, GuardAction::Review | GuardAction::RequireReapproval)
+                && saved_allow_reuse);
         if !detector_review_approved {
             expected_action = most_restrictive_guard_action(
                 &[json!(expected_action.as_str()), runtime_action.clone()],

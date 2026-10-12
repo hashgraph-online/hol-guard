@@ -39,7 +39,7 @@ pub struct GoogleLoginChallenge {
     client_id: String,
     hosted_domains: BTreeSet<String>,
     nonce: String,
-    namespace_key: [u8; 32],
+    identity_key: [u8; 32],
     created_at: u64,
     expected_account_binding: Option<String>,
 }
@@ -68,12 +68,12 @@ impl GoogleLoginChallenge {
     pub fn new(
         client_id: String,
         hosted_domains: Vec<String>,
-        namespace_key: [u8; 32],
+        identity_key: [u8; 32],
     ) -> Result<Self, IdentityError> {
         if !bounded_ascii(&client_id, 512)
             || hosted_domains.is_empty()
             || hosted_domains.len() > 256
-            || namespace_key == [0; 32]
+            || identity_key == [0; 32]
         {
             return Err(IdentityError::Invalid);
         }
@@ -91,7 +91,7 @@ impl GoogleLoginChallenge {
             client_id,
             hosted_domains: domains,
             nonce: Base64UrlUnpadded::encode_string(&random),
-            namespace_key,
+            identity_key,
             created_at: now()?,
             expected_account_binding: None,
         })
@@ -182,7 +182,7 @@ impl GoogleLoginChallenge {
             .min(self.created_at.saturating_add(LIFETIME))
             .min(c.iat.saturating_add(LIFETIME));
         let account_binding = binding(
-            &self.namespace_key,
+            &self.identity_key,
             b"hol-guard.google-account.v1\0",
             &[ISSUER, &self.client_id, &c.hd, &c.sub],
         );
@@ -197,7 +197,7 @@ impl GoogleLoginChallenge {
             sender: sender::VerifiedSender::from_claims(c.email, c.email_verified),
             account_binding,
             tenant_binding: binding(
-                &self.namespace_key,
+                &self.identity_key,
                 b"hol-guard.google-tenant.v1\0",
                 &[ISSUER, &c.hd],
             ),

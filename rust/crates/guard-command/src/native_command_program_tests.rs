@@ -416,11 +416,7 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
         .permission_observations
         .iter()
         .any(|item| item.permission_id == "command.github.permission.read-remote"));
-    for command in [
-        "gh api graphql -f query='{ viewer { login } }'",
-        "git cat-file -p HEAD",
-        "docker compose ps",
-    ] {
+    for command in ["git cat-file -p HEAD", "docker compose ps"] {
         let result = decision(command, &unrestricted);
         assert_eq!(result.minimum_action, "review", "{command}");
         assert!(!result.explicitly_benign, "{command}");
@@ -430,3 +426,15 @@ fn compatibility_safe_commands_and_ruleless_permissions_obey_controls() {
 
 #[path = "native_command_program_control_tests.rs"]
 mod controls;
+
+#[test]
+fn program_budget_matches_delivery_manifest() {
+    let manifest: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../../contracts/catalog-delivery/limits.json"
+    ))
+    .unwrap();
+    assert_eq!(
+        manifest["max_native_command_program_bytes"].as_u64(),
+        Some(MAX_PROGRAM_BYTES as u64)
+    );
+}

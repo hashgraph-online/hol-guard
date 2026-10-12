@@ -8,10 +8,9 @@ import re
 import stat
 import threading
 import time
-from collections.abc import Callable, Generator, Iterable
+from collections.abc import Generator, Iterable
 from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
-from functools import wraps
 from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO
@@ -214,12 +213,3 @@ def codex_lifecycle_locks(context: HarnessContext) -> Generator[None, None, None
         for _identity, root in targets:
             stack.enter_context(_target_lock(root))
         yield
-
-
-def serialized_codex_lifecycle(method: Callable[..., dict[str, object]]) -> Callable[..., dict[str, object]]:
-    @wraps(method)
-    def wrapped(self: object, context: HarnessContext) -> dict[str, object]:
-        with codex_lifecycle_locks(context):
-            return method(self, context)
-
-    return wrapped

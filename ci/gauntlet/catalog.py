@@ -8,7 +8,9 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from .extension_adapters import extension_adapter
 from .fixtures import digest_file
+from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
 WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
@@ -106,13 +108,21 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "blocked-read",
             "blocked-command",
             "blocked-extension",
+            "blocked-package",
+            "native-tools",
         }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
         if (
-            scenario.oracle in {"blocked-command", "blocked-extension", "home-copy-task"}
+            scenario.oracle in {"blocked-command", "blocked-extension", "blocked-package", "home-copy-task"}
             and len(scenario.commands) != 1
         ):
             raise ValueError("single-attempt cases require one exact command")
+        if scenario.oracle == "native-tools" and (scenario.expectation != "allow" or not scenario.required_tools):
+            raise ValueError("native-tools cases are allow-only and must name their required tools")
+        if scenario.oracle == "blocked-extension":
+            extension_adapter(scenario.commands[0])
+        if (scenario.oracle == "blocked-package") != (scenario.id in PACKAGE_BLOCK_REASONS):
+            raise ValueError("package protection cases must name their package evaluator verdict")
         if scenario.oracle == "commands" and not scenario.commands:
             raise ValueError("command cases cannot be empty")
         if scenario.oracle == "watch-command" and (
@@ -139,6 +149,10 @@ def catalog_digest(path: Path = CATALOG) -> str:
     return digest_file(path)
 
 
+# Protection cases and the Watch case expect Guard to speak; only trusted baseline ids may use these.
+EXEMPT_ORACLES = frozenset({"watch-command", "mixed-read-batch"})
+
+
 def retain_trusted_cases(candidate: tuple[Scenario, ...], trusted: tuple[Scenario, ...]) -> None:
     """Allow additional data cases, never removal or weakening of the trusted core."""
     from dataclasses import replace
@@ -148,3 +162,7 @@ def retain_trusted_cases(candidate: tuple[Scenario, ...], trusted: tuple[Scenari
         supplied = by_id.get(baseline.id)
         if supplied is None or replace(supplied, prompt="") != replace(baseline, prompt=""):
             raise ValueError("candidate changed a trusted scenario contract: " + baseline.id)
+    trusted_ids = {baseline.id for baseline in trusted}
+    for scenario in candidate:
+        if scenario.id not in trusted_ids and scenario.oracle in EXEMPT_ORACLES:
+            raise ValueError("candidate added a case with an interruption-exempt oracle: " + scenario.id)

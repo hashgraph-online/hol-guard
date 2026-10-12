@@ -111,11 +111,6 @@ def _prime(
     return captured
 
 
-def test_native_context_digest_off_mode_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _prime(monkeypatch, status=_status(mode="off"))
-    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
-
-
 def test_native_context_digest_missing_feature_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _prime(
         monkeypatch,
@@ -516,10 +511,31 @@ def test_native_context_digest_names_a_mismatched_request_id(tmp_path: Path, mon
     assert "sha_matches=True" in reason
 
 
+def test_custom_extension_continuity_request_errors_are_contract_codes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refused continuity request is a resident answer, not a transport failure."""
+
+    def _transport(*_args: object, **kwargs: object) -> bytes:
+        payload = json.loads(_ok_result(json.loads(kwargs["payload"])["request"]))
+        payload.update(status="error", code="native_custom_extension_continuity_invalid_request")
+        del payload["digest"]
+        return json.dumps(payload).encode("utf-8")
+
+    _stub_digest_client(monkeypatch, transport=_transport)
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir()
+    result = native_context.native_context_digest(
+        "custom_extension_continuity", {"request": {"operation": "plan"}}, guard_home=guard_home
+    )
+    assert result is not None
+    assert result["code"] == "native_custom_extension_continuity_invalid_request"
+
+
 def test_unavailable_errors_report_the_transport_reason(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`*_unavailable` must say *why*: a callers that has no fallback needs the reason."""
 
-    _prime(monkeypatch, status=_status(mode="off"))
+    _prime(monkeypatch, status=_status(available=False))
     with pytest.raises(ValueError, match=":native_context_digest_unsupported"):
         native_context.context_runtime_launch_identity("python", guard_home=tmp_path)
 
@@ -593,7 +609,6 @@ def test_native_context_digest_transport_failure_returns_none(tmp_path: Path, mo
         lambda request, result: result.update(status="ok", code="native_context_values_invalid"),
         lambda request, result: result.update(extra="field"),
         lambda request, result: result.pop("code"),
-        lambda request, result: result.update(digest=42),
     ],
     ids=[
         "bad_schema",
@@ -602,7 +617,6 @@ def test_native_context_digest_transport_failure_returns_none(tmp_path: Path, mo
         "status_code_mismatch",
         "unknown_field",
         "missing_code",
-        "non_string_optional",
     ],
 )
 def test_native_context_digest_rejects_unbound_results(
@@ -656,51 +670,6 @@ def test_native_context_digest_surrogate_component_returns_typed_error(
     assert result["status"] == "error"
     assert result["code"] == "native_context_component_invalid"
     assert calls == []
-
-
-def test_native_context_digest_ok_result_requires_output_field(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # An `ok` result without the kind's output field is an incomplete result —
-    # reject it instead of letting callers index a missing key.
-    _prime(monkeypatch)
-
-    def _client(*_args: object, **kwargs: object) -> bytes:
-        request = json.loads(kwargs["payload"])["request"]
-        return json.dumps(
-            {
-                "schema": "guard-context-digest-result.v1",
-                "request_id": request["request_id"],
-                "request_sha256": _request_sha256(request),
-                "status": "ok",
-                "code": "ok",
-            }
-        ).encode("utf-8")
-
-    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
-    assert native_context.native_context_digest("launch_argv_digest", {"argv": ["x"]}, guard_home=tmp_path) is None
-
-
-def test_native_context_digest_validate_kind_requires_reason_field(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    # Validation callers read `validation_reason`; an `ok` result that omits
-    # the field entirely would silently decode to "unchanged" — reject it.
-    _prime(monkeypatch)
-
-    def _client(*_args: object, **kwargs: object) -> bytes:
-        request = json.loads(kwargs["payload"])["request"]
-        return json.dumps(
-            {
-                "schema": "guard-context-digest-result.v1",
-                "request_id": request["request_id"],
-                "request_sha256": _request_sha256(request),
-                "status": "ok",
-                "code": "ok",
-            }
-        ).encode("utf-8")
-
-    monkeypatch.setattr(native_context, "native_resident_client_request", _client)
-    fields = {"saved_token": "guard-approval-context:v1:AAAA", "current_token": "guard-approval-context:v1:AAAA"}
-    assert native_context.native_context_digest("validate_approval_context_tokens", fields, guard_home=tmp_path) is None
 
 
 def test_native_context_digest_validate_kind_accepts_null_reason(

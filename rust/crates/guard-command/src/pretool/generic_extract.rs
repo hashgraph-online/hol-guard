@@ -168,8 +168,15 @@ fn command_from_value_at_depth(
         Value::String(text) => {
             let trimmed = text.trim();
             if trimmed.starts_with('[') || trimmed.starts_with('{') {
-                let parsed = parse_strict_nested_json(trimmed.as_bytes())?;
-                return command_from_value_at_depth(&parsed, depth.saturating_add(1));
+                match parse_strict_nested_json(trimmed.as_bytes()) {
+                    Ok(parsed) => {
+                        return command_from_value_at_depth(&parsed, depth.saturating_add(1));
+                    }
+                    // PowerShell commands open with type literals such as
+                    // `[System.IO.File]::`; text that is not JSON is the command.
+                    Err(GenericExtractionError::Malformed) => {}
+                    Err(error) => return Err(error),
+                }
             }
             Ok(vec![bounded_string(value)?])
         }
@@ -316,8 +323,8 @@ use prompt::{
 
 #[path = "generic_nested_json.rs"]
 mod nested_json;
-use nested_json::parse_strict_nested_json;
+pub(super) use nested_json::parse_strict_nested_json;
 
 #[path = "generic_signals.rs"]
 mod signals;
-pub(super) use signals::extract_generic_signals;
+pub(super) use signals::{extract_generic_signals, EMBEDDED_ARGUMENT_KEYS};

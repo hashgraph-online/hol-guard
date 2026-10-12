@@ -28,7 +28,10 @@ def guard_recovery_is_disabled(guard_home: Path) -> bool:
         # Invalid or unavailable config must not suppress a valid recovery.
         del error
         return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
+    # A harness overridden to Protected keeps enforcing under a global Watch, so
+    # its hooks still need a recoverable daemon.
+    enforcing_override = any(posture != "watch" for posture in (config.harness_postures or {}).values())
+    return protection_is_off(posture=config.protection_posture, mode=config.mode) and not enforcing_override
 
 
 def recover_guard_daemon_after_hook_failure(

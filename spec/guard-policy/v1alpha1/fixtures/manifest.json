@@ -1,7 +1,8 @@
 {
   "valid": [
     "valid/basic.yaml",
-    "valid/extensions-and-scalars.yaml"
+    "valid/extensions-and-scalars.yaml",
+    "valid/business-selector.yaml"
   ],
   "invalid": {
     "invalid/anchor-alias.yaml": "yaml_anchor",

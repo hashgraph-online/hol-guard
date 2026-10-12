@@ -1,0 +1,2882 @@
+{
+ "cases": [
+  {
+   "accepted": true,
+   "kind": "canonical_sha256",
+   "name": "digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "digest_empty",
+   "payload": {
+    "code": "ok",
+    "digest": "",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "canonical_sha256",
+   "name": "digest_error_status_without_output",
+   "payload": {
+    "code": "native_context_values_invalid",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "error"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "build_approval_context_token",
+   "name": "token_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok",
+    "token": "guard-approval-context:v1:AA"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "build_approval_context_token",
+   "name": "token_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "configured_environment_hash",
+   "name": "configured_environment_hash_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "configured_environment_hash",
+   "name": "configured_environment_hash_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "configured_headers_hash",
+   "name": "configured_headers_hash_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "configured_headers_hash",
+   "name": "configured_headers_hash_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "launch_argv_digest",
+   "name": "launch_argv_digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "launch_argv_digest",
+   "name": "launch_argv_digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "opaque_material_digest",
+   "name": "opaque_material_digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "opaque_material_digest",
+   "name": "opaque_material_digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_content_digest",
+   "name": "mcp_tool_content_digest_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_content_digest",
+   "name": "mcp_tool_content_digest_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_environment_policy",
+   "name": "env_values_ok",
+   "payload": {
+    "code": "ok",
+    "environment_values": {
+     "A": "abababababababababababababababababababababababababababababababab",
+     "B": null
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_environment_policy",
+   "name": "env_values_empty",
+   "payload": {
+    "code": "ok",
+    "environment_values": {},
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_environment_policy",
+   "name": "env_values_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_environment_policy",
+   "name": "env_values_bad_digest",
+   "payload": {
+    "code": "ok",
+    "environment_values": {
+     "A": "xyz"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_environment_policy",
+   "name": "env_values_upper_digest",
+   "payload": {
+    "code": "ok",
+    "environment_values": {
+     "A": "ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_environment_policy",
+   "name": "env_values_short_digest",
+   "payload": {
+    "code": "ok",
+    "environment_values": {
+     "A": "abababababababababababababababababababababababababababababababa"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "validate_approval_context_tokens",
+   "name": "validation_reason_null",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok",
+    "validation_reason": null
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "validate_approval_context",
+   "name": "validation_reason_text",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok",
+    "validation_reason": "approval_reuse_identity_changed"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "validate_approval_context_tokens",
+   "name": "validation_reason_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "validate_approval_context",
+   "name": "validation_reason_missing2",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_ok",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [
+      {
+       "digest": "abababababababababababababababababababababababababababababababab",
+       "name": "n"
+      }
+     ],
+     "digest": "abababababababababababababababababababababababababababababababab",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_null",
+   "payload": {
+    "code": "ok",
+    "package_context": null,
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_scanner_evidence",
+   "name": "package_context_scanner_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_bad_digest",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [
+      {
+       "digest": "abababababababababababababababababababababababababababababababab",
+       "name": "n"
+      }
+     ],
+     "digest": "nope",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_no_components",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [],
+     "digest": "abababababababababababababababababababababababababababababababab",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_execution_context_from_evidence",
+   "name": "package_context_bad_component_digest",
+   "payload": {
+    "code": "ok",
+    "package_context": {
+     "components": [
+      {
+       "digest": "zz",
+       "name": "n"
+      }
+     ],
+     "digest": "abababababababababababababababababababababababababababababababab",
+     "non_portable_reason": null,
+     "portable": true
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_bad_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "x",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_bad_env_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "x",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_identity",
+   "name": "server_identity_bad_identity_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_server_identity": {
+     "args_hash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "config_path": "p",
+     "env_keys": [],
+     "env_values_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "x",
+     "package_name": null,
+     "package_source": "s",
+     "package_version": null,
+     "transport": "stdio"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "schema_hash": "abababababababababababababababababababababababababababababababab",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_bad_schema_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "schema_hash": "x",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_bad_description_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "x",
+     "identity_hash": "abababababababababababababababababababababababababababababababab",
+     "schema_hash": "abababababababababababababababababababababababababababababababab",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_identity",
+   "name": "tool_identity_bad_identity_hash",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_identity": {
+     "description_hash": "abababababababababababababababababababababababababababababababab",
+     "identity_hash": "x",
+     "schema_hash": "abababababababababababababababababababababababababababababababab",
+     "server_hash": "x",
+     "tool_name": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_bad_argsHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "x",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_bad_commandHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "x",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_bad_envValuesHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "x",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_bad_identityHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "x",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_bad_transportHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "x"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_dep_hash_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": "abababababababababababababababababababababababababababababababab",
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_dep_hash_bad",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": "x",
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_publisher_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": "publisher:abababababababababababababababababababababababababababababababab",
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_publisher_bare",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": "abababababababababababababababababababababababababababababababab",
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_publisher_short",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": "publisher:abc",
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_extra_key",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "extra": "x",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_missing_key",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_env_keys_bad",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      1
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_env_keys_not_list",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": "A",
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_non_string_command",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": 3,
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_server_descriptor",
+   "name": "server_descriptor_non_string_optional",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": 3,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "descriptor_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "mcp_descriptor": {
+     "argsHash": "abababababababababababababababababababababababababababababababab",
+     "command": "c",
+     "commandHash": "abababababababababababababababababababababababababababababababab",
+     "configPath": "p",
+     "dependencyHash": null,
+     "envKeys": [
+      "A"
+     ],
+     "envValuesHash": "abababababababababababababababababababababababababababababababab",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "packageName": null,
+     "packageSource": "s",
+     "packageVersion": null,
+     "publisherStableId": null,
+     "transport": "stdio",
+     "transportHash": "abababababababababababababababababababababababababababababababab"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_manifest",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "manifest",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_bad_scope",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "weird",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_bad_identity",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "x",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_bad_descriptionHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "x",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_null_descriptionHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": null,
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_bad_descriptorHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": "x",
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_null_descriptorHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_bad_schemaHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "x",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_null_schemaHash",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": null,
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_extra_key",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "envKeys": [],
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x",
+     "toolName": "t"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_missing_key",
+   "payload": {
+    "code": "ok",
+    "mcp_descriptor": {
+     "descriptionHash": "abababababababababababababababababababababababababababababababab",
+     "descriptorHash": null,
+     "hashScope": "full",
+     "identityHash": "abababababababababababababababababababababababababababababababab",
+     "schemaHash": "abababababababababababababababababababababababababababababababab",
+     "serverHash": "x"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_descriptor",
+   "name": "tool_descriptor_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_server_ok",
+   "payload": {
+    "browser_mcp": {
+     "is_browser": true,
+     "operation": "server"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "browser_wrong_kind",
+   "payload": {
+    "browser_mcp": {
+     "is_browser": true,
+     "operation": "server"
+    },
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "secret_access",
+     "outbound_network"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_empty",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_risk",
+   "name": "risk_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_risk",
+   "name": "risk_unknown",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "bogus"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_risk",
+   "name": "risk_duplicate",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "secret_access",
+     "secret_access"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "risk_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "mcp_tool_risk": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "build_mcp_tool_approval_hash",
+   "name": "approval_hash_ok",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "mcp_tool_risk": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "build_mcp_tool_approval_hash",
+   "name": "approval_hash_missing_risk",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "build_mcp_tool_approval_hash",
+   "name": "approval_hash_bad_risk",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "mcp_tool_risk": [
+     "zzz"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_filesystem_access",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "filesystem_access"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_command_execution",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "command_execution"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_destructive_mutation",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "destructive_mutation"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_outbound_network",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "outbound_network"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_privileged_system_mutation",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "privileged_system_mutation"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_secret_access",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "secret_access"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_tool_schema_mismatch",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "tool_schema_mismatch"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_navigation",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_navigation"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_inspection",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_inspection"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_interaction",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_interaction"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_transfer",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_transfer"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_privileged",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_privileged"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_external_domain",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_external_domain"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_shared_profile",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_shared_profile"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_risk",
+   "name": "risk_category_browser_sensitive_surface",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_risk": [
+     "browser_sensitive_surface"
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "policy_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_allow",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_warn",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "warn",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_review",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "review",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_require-reapproval",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "require-reapproval",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_sandbox-required",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "sandbox-required",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_block",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "block",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_action_deny",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "deny",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_source_heuristic",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "heuristic",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_source_browser-routine",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "browser-routine",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_source_policy",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_source_risk-policy",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "risk-policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_source_other",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "other",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_summary_no_risk",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "no_risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_summary_risk",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_tool_policy",
+   "name": "policy_summary_configuration_stricter",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "configuration_stricter"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_summary_other",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "other"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_bad_category",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "zzz"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_duplicate_category",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access",
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_extra_key",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "extra": 1,
+     "risk_categories": [
+      "secret_access"
+     ],
+     "source": "policy",
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "mcp_tool_policy",
+   "name": "policy_missing_key",
+   "payload": {
+    "code": "ok",
+    "mcp_tool_policy": {
+     "action": "allow",
+     "risk_categories": [
+      "secret_access"
+     ],
+     "summary_code": "risk"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_launcher_token",
+   "name": "launcher_ok",
+   "payload": {
+    "code": "ok",
+    "package_launcher": {
+     "package": "x"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_launcher_token",
+   "name": "launcher_null_package",
+   "payload": {
+    "code": "ok",
+    "package_launcher": {
+     "package": null
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_launcher_token",
+   "name": "launcher_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identity",
+   "name": "local_cli_identity_own_kind",
+   "payload": {
+    "code": "ok",
+    "local_cli_identity": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "local_cli_identity_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "local_cli_identity": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "managed_controls_policy_fields",
+   "name": "managed_controls_policy_fields_own_kind",
+   "payload": {
+    "code": "ok",
+    "managed_controls_policy_fields": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "managed_controls_policy_fields_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "managed_controls_policy_fields": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "package_json_scripts",
+   "name": "package_json_scripts_own_kind",
+   "payload": {
+    "code": "ok",
+    "package_json_scripts": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "package_json_scripts_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "package_json_scripts": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "custom_extension_suggestion",
+   "name": "custom_extension_suggestion_own_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_suggestion": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "custom_extension_suggestion_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_suggestion": {
+     "x": 1
+    },
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "custom_extension_continuity",
+   "name": "custom_extension_continuity_own_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_continuity": {
+     "x": 1
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "custom_extension_continuity_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "custom_extension_continuity": {
+     "x": 1
+    },
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_ok",
+   "payload": {
+    "code": "ok",
+    "local_cli_identities": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_nonempty",
+   "payload": {
+    "code": "ok",
+    "local_cli_identities": [
+     {
+      "cli_id": "x"
+     }
+    ],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "canonical_sha256",
+   "name": "local_cli_identities_wrong_kind",
+   "payload": {
+    "code": "ok",
+    "digest": "abababababababababababababababababababababababababababababababab",
+    "local_cli_identities": [],
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "local_cli_identify",
+   "name": "local_cli_identify_error_without_output",
+   "payload": {
+    "code": "native_local_cli_identify_deadline",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "error"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "runtime_hook_approval_context",
+   "name": "hook_approval_context_runtime_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "generic_hook_approval_context",
+   "name": "hook_approval_context_generic_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_ok",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": [
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_null_intent",
+   "payload": {
+    "browser_mcp": {
+     "intent": null,
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_version_2",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 2,
+      "volatile_fields_dropped": [
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_duplicate_flags",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies",
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": [
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "browser_mcp",
+   "name": "browser_normalize_duplicate_dropped",
+   "payload": {
+    "browser_mcp": {
+     "intent": {
+      "intent": "browser.navigation",
+      "mcp_schema_hash": null,
+      "mcp_server_identity_hash": null,
+      "mcp_server_name": "s",
+      "mcp_tool_identity_hash": null,
+      "mcp_tool_name": "t",
+      "method": "navigate",
+      "operation": "navigate",
+      "profile_mode": "isolated",
+      "sensitive_surface_flags": [
+       "cookies"
+      ],
+      "target_domain": null,
+      "target_origin": null,
+      "target_path_prefix": null,
+      "target_url": null,
+      "version": 1,
+      "volatile_fields_dropped": [
+       "a",
+       "a"
+      ]
+     },
+     "operation": "normalize"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_classify_ok",
+   "payload": {
+    "browser_mcp": {
+     "intent": "browser.inspect",
+     "operation": "classify"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "browser_mcp",
+   "name": "browser_display_ok",
+   "payload": {
+    "browser_mcp": {
+     "operation": "display",
+     "target": "x"
+    },
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "custom_extension_continuity",
+   "name": "custom_extension_continuity_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "managed_controls_policy_fields",
+   "name": "managed_controls_missing",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "launch_argv_digest_unknown",
+   "name": "unconstrained_kind_empty_ok",
+   "payload": {
+    "code": "ok",
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": true,
+   "kind": "mcp_launch_environment",
+   "name": "mcp_launch_env_ok",
+   "payload": {
+    "code": "ok",
+    "mcp_launch_environment": {
+     "A": "b"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "ok"
+   }
+  },
+  {
+   "accepted": false,
+   "kind": "package_environment_policy",
+   "name": "error_with_bad_env_digest",
+   "payload": {
+    "code": "native_context_values_invalid",
+    "environment_values": {
+     "A": "x"
+    },
+    "request_id": "r",
+    "request_sha256": "s",
+    "schema": "guard-context-digest-result.v1",
+    "status": "error"
+   }
+  }
+ ],
+ "schema": "guard-context-digest-result-check-vectors.v1"
+}

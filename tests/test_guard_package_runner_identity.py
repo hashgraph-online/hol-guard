@@ -11,6 +11,13 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import build_packa
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 
 
+@pytest.fixture(autouse=True)
+def _native_package_intent(package_intent_native):
+    """Parse intents through the resident authority."""
+
+    return package_intent_native
+
+
 def _write_executable(path: Path, marker: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(f"#!/bin/sh\n# {marker}\nexit 0\n", encoding="utf-8")

@@ -1711,42 +1711,42 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_script", "warn"),
                 ("persistence", "warn"),
                 ("guard_bypass", "warn"),
-                ("cloud_advisory", "warn"),
+                ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
             ],
         ),
         (
             "balanced",
             &[
-                ("local_secret_read", "review"),
-                ("credential_exfiltration", "block"),
-                ("data_flow_exfiltration", "block"),
-                ("destructive_shell", "block"),
-                ("encoded_execution", "block"),
+                ("local_secret_read", "require-reapproval"),
+                ("credential_exfiltration", "require-reapproval"),
+                ("data_flow_exfiltration", "require-reapproval"),
+                ("destructive_shell", "require-reapproval"),
+                ("encoded_execution", "require-reapproval"),
                 ("network_egress", "warn"),
-                ("prompt_injection", "review"),
+                ("prompt_injection", "require-reapproval"),
                 ("mcp_dangerous_tool", "require-reapproval"),
-                ("malicious_skill", "block"),
-                ("package_script", "review"),
-                ("persistence", "review"),
+                ("malicious_skill", "require-reapproval"),
+                ("package_script", "warn"),
+                ("persistence", "require-reapproval"),
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
-                ("encoded_exfiltration", "block"),
+                ("encoded_exfiltration", "require-reapproval"),
             ],
         ),
         (
             "strict",
             &[
-                ("local_secret_read", "block"),
-                ("credential_exfiltration", "block"),
+                ("local_secret_read", "require-reapproval"),
+                ("credential_exfiltration", "require-reapproval"),
                 ("data_flow_exfiltration", "block"),
-                ("destructive_shell", "block"),
-                ("encoded_execution", "block"),
-                ("network_egress", "warn"),
+                ("destructive_shell", "require-reapproval"),
+                ("encoded_execution", "require-reapproval"),
+                ("network_egress", "require-reapproval"),
                 ("prompt_injection", "block"),
                 ("mcp_dangerous_tool", "block"),
                 ("malicious_skill", "block"),
-                ("package_script", "block"),
+                ("package_script", "require-reapproval"),
                 ("persistence", "block"),
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
@@ -1803,7 +1803,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
         .unwrap_or(&[])
 }
 
-fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
+pub fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
     security_level_risk_rows(level)
         .iter()
         .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
@@ -1863,7 +1863,7 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
         .map(|(_, rows)| *rows)
 }
 
-fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
+pub fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
     posture_risk_rows(posture).map(|rows| {
         rows.iter()
             .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
@@ -2614,10 +2614,18 @@ fn workspace_has_project_markers(workspace_dir: &Path) -> bool {
 /// `managed_install_audit_workspace_dirs` — active installs first, then by
 /// `updated_at` desc; deduped, stripped non-empty workspaces.
 pub fn managed_install_audit_workspace_dirs(store: &dyn SupplyChainStore) -> Vec<String> {
-    let mut installs = store.list_managed_installs();
+    managed_install_audit_workspace_dirs_from(store.list_managed_installs())
+}
+
+/// `managed_install_audit_workspace_dirs` over an already-listed install set:
+/// active installs first, then newest `updated_at`, deduplicated by the
+/// stripped workspace string.
+pub fn managed_install_audit_workspace_dirs_from(mut installs: Vec<Value>) -> Vec<String> {
     installs.sort_by(|a, b| {
         let a_key = (
-            if a.get("active").and_then(Value::as_bool).unwrap_or(false) {
+            if a.get("active")
+                .is_some_and(crate::target_identities::py_truthy)
+            {
                 1
             } else {
                 0
@@ -2628,7 +2636,9 @@ pub fn managed_install_audit_workspace_dirs(store: &dyn SupplyChainStore) -> Vec
                 .to_string(),
         );
         let b_key = (
-            if b.get("active").and_then(Value::as_bool).unwrap_or(false) {
+            if b.get("active")
+                .is_some_and(crate::target_identities::py_truthy)
+            {
                 1
             } else {
                 0
@@ -2680,15 +2690,24 @@ fn managed_workspace_audit_candidates(
     store: &dyn SupplyChainStore,
     workspace_dir: Option<&Path>,
 ) -> Vec<PathBuf> {
+    managed_workspace_audit_candidates_for(
+        &managed_install_audit_workspace_dirs(store),
+        workspace_dir,
+    )
+}
+
+/// `_managed_workspace_audit_candidates` over the ordered managed workspace
+/// strings: the explicit workspace first, then each managed one, kept when it
+/// resolves to an existing directory with project markers.
+pub fn managed_workspace_audit_candidates_for(
+    managed_dirs: &[String],
+    workspace_dir: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut raw: Vec<PathBuf> = Vec::new();
     if let Some(dir) = workspace_dir {
         raw.push(dir.to_path_buf());
     }
-    raw.extend(
-        managed_install_audit_workspace_dirs(store)
-            .iter()
-            .map(|entry| expand_tilde(entry)),
-    );
+    raw.extend(managed_dirs.iter().map(|entry| expand_tilde(entry)));
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
     for candidate in raw {
@@ -3132,7 +3151,12 @@ pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
     if matched_policy.get("artifact_id").and_then(Value::as_str) != Some("family:package-request") {
         return false;
     }
-    if matched_policy.get("artifact_hash").is_some() {
+    // Python reads `artifact_hash is None`: a stored row carries the column, so
+    // JSON null means "absent" exactly like a missing key.
+    if matched_policy
+        .get("artifact_hash")
+        .is_some_and(|hash| !hash.is_null())
+    {
         return false;
     }
     if !matches!(scope, Some("harness") | Some("global")) {

@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import stat
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -40,7 +42,7 @@ def source_sha(value: str) -> str:
 
 
 def selected_files(root: Path) -> list[Path]:
-    paths = [root / name for name in FILES]
+    paths = [root / name for name in FILES if name != "contracts/extensions/trust-class-map.v1.json"]
     for name in DIRECTORIES:
         directory = root / name
         if directory.is_symlink():
@@ -58,12 +60,50 @@ def selected_files(root: Path) -> list[Path]:
     return sorted(paths)
 
 
-def create_bundle(root: Path, output: Path, expected_sha: str) -> dict:
+def create_bundle(root: Path, output: Path, expected_sha: str, *, resolve_claimants: bool = False) -> dict:
     expected_sha = source_sha(expected_sha)
     actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True, timeout=15).strip()
     if actual != expected_sha:
         raise ValueError("snapshot checkout does not match the requested source")
     files = {path.relative_to(root).as_posix(): path.read_bytes() for path in selected_files(root)}
+    for name, data in files.items():
+        if name.startswith(("contributions/", "contracts/extensions/trust/")):
+            committed = subprocess.run(
+                ["git", "show", f"{expected_sha}:{name}"],
+                cwd=root,
+                capture_output=True,
+                timeout=15,
+                check=False,
+            )
+            if committed.returncode or committed.stdout != data:
+                raise ValueError(f"snapshot public input must match its committed source: {name}")
+    scripts_dir = str(Path(__file__).resolve().parent)
+    sys.path.insert(0, scripts_dir)
+    try:
+        from extension_claim_github_history import SnapshotClaimHistory
+        from extension_claim_provenance import populate_snapshot_claimants
+        from extension_trust_projection import repository_trust_map
+        from notify_merged_extension_claimants import GitHubApi
+    finally:
+        # Leaving scripts/ first on sys.path lets scripts/ci shadow the ci
+        # namespace package for every later import in the same process.
+        sys.path.remove(scripts_dir)
+
+    if resolve_claimants:
+        client = GitHubApi(os.environ.get("GH_TOKEN", ""), "hashgraph-online/hol-guard", source_root=root)
+        claimants = populate_snapshot_claimants(files, client, expected_sha, batch_history=SnapshotClaimHistory)
+        files["docs/guard/extensions/claim-invitations.v1.json"] = (json.dumps({
+            "schemaVersion": "guard.extension-claim-invitations.v1",
+            "sourceSha": expected_sha,
+            "entries": [{"extensionId": key, "githubId": owner.github_id, "pullRequest": owner.pull_request}
+                        for key, owner in sorted(claimants.items())],
+        }, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+    files["contracts/extensions/trust-class-map.v1.json"] = (
+        json.dumps(repository_trust_map(root), sort_keys=True, separators=(",", ":")) + "\n"
+    ).encode()
+    if len(files) > MAX_FILES or sum(map(len, files.values())) > MAX_BYTES:
+        raise ValueError("snapshot exceeds inventory or byte limit")
     catalog = json.loads(files[FILES[0]])
     manifest = {
         "schema": SCHEMA,
@@ -133,12 +173,13 @@ def main() -> None:
     parser.add_argument("--source-sha", required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--verify", action="store_true")
+    parser.add_argument("--resolve-claimants", action="store_true")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     result = (
         verify_bundle(args.output, args.source_sha)
         if args.verify
-        else create_bundle(root, args.output, args.source_sha)
+        else create_bundle(root, args.output, args.source_sha, resolve_claimants=args.resolve_claimants)
     )
     print(json.dumps({"ok": True, "source_sha": result["source_sha"], "files": len(result["files"])}))
 

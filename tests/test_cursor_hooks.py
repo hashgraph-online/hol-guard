@@ -114,18 +114,6 @@ def _trusted_cursor_after_shell_env(
     }
 
 
-def test_managed_hook_events_exclude_pretooluse() -> None:
-    assert "preToolUse" not in _MANAGED_HOOK_EVENTS
-    assert _MANAGED_HOOK_EVENTS == (
-        "beforeShellExecution",
-        "beforeMCPExecution",
-        "beforeReadFile",
-        "beforeWriteFile",
-        "afterShellExecution",
-        "afterMCPExecution",
-    )
-
-
 def test_prepare_cursor_hook_payload_maps_before_read_file() -> None:
     payload = prepare_cursor_hook_payload(
         {
@@ -718,11 +706,9 @@ def test_cursor_hook_timeout_kills_descendants_without_package_import(
     assert not marker.exists()
 
 
-def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
+def test_cursor_hook_script_follows_a_live_daemon_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from codex_plugin_scanner.guard.adapters.cursor_hooks import cursor_hook_script_source
-    # The daemon fast path asserts the off-mode denial surface; pin the mode so
-    # a native-regression ambient env does not force a live native review.
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
 
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard"
@@ -760,10 +746,8 @@ def test_cursor_hook_script_uses_daemon_fast_path(tmp_path: Path, monkeypatch: p
     finally:
         daemon.stop()
 
-    assert proc.returncode == 2
-    response = json.loads(proc.stdout)
-    assert response["permission"] == "deny"
-    assert "explicitly disabled" in response["user_message"]
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {"permission": "allow"}
 
 
 @pytest.mark.parametrize(
@@ -1119,54 +1103,6 @@ def test_strip_managed_hook_entries_removes_hol_guard_pretooluse(tmp_path: Path)
     assert stripped == [{"command": "lean-ctx hook rewrite", "matcher": "Shell"}]
 
 
-def test_install_cursor_hooks_strips_legacy_pretooluse_entry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    home = tmp_path / "home"
-    guard_home = tmp_path / "guard"
-    workspace = tmp_path / "workspace"
-    home.mkdir()
-    guard_home.mkdir()
-    workspace.mkdir()
-    cursor_dir = home / ".cursor"
-    cursor_dir.mkdir()
-    script_path = cursor_dir / "hooks" / "hol-guard-cursor-hook.py"
-    hooks_path = cursor_dir / "hooks.json"
-    hooks_path.write_text(
-        json.dumps(
-            {
-                "version": 1,
-                "hooks": {
-                    "preToolUse": [
-                        {"command": "lean-ctx hook rewrite", "matcher": "Shell"},
-                        {
-                            "command": str(script_path),
-                            "failClosed": True,
-                            "matcher": "Shell|Read",
-                            "timeout": 35,
-                        },
-                    ]
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.adapters.cursor_hooks._resolve_guard_cli_command",
-        lambda _context: ["hol-guard"],
-    )
-    context = HarnessContext(home_dir=home, guard_home=guard_home, workspace_dir=workspace)
-    result = install_cursor_hooks(context)
-    installed = json.loads(hooks_path.read_text(encoding="utf-8"))
-    pre_tool_use = installed["hooks"].get("preToolUse")
-    if pre_tool_use is not None:
-        assert all("hol-guard-cursor-hook.py" not in str(entry.get("command", "")) for entry in pre_tool_use)
-    assert "beforeShellExecution" in installed["hooks"]
-    assert result["managed_hook_events"] == list(_MANAGED_HOOK_EVENTS)
-    for event_name in _MANAGED_HOOK_EVENTS:
-        entry = installed["hooks"][event_name][-1]
-        assert entry["timeout"] == _MANAGED_HOOK_TIMEOUT_SECONDS
-
-
 def test_install_cursor_hooks_preserves_top_level_event_entries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1328,6 +1264,75 @@ def test_cursor_after_shell_requires_observer_fields(tmp_path: Path) -> None:
         ),
     )
     assert saved is False
+
+
+def test_cursor_after_shell_refuses_pending_state_that_expires_during_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import datetime, timedelta
+
+    from codex_plugin_scanner.guard.adapters.cursor_hooks import prepare_cursor_hook_payload
+    from codex_plugin_scanner.guard.cli import commands as guard_commands_module
+    from codex_plugin_scanner.guard.cli import commands_support_permission_store as permission_store
+    from codex_plugin_scanner.guard.store import GuardStore
+
+    home_dir = tmp_path / "home"
+    workspace_dir = tmp_path / "workspace"
+    workspace_dir.mkdir()
+    store = GuardStore(home_dir)
+    conversation_id = "conv-cursor-expiry-boundary"
+    command = "rm -rf ./hol-guard-cursor-native-test-marker"
+    generation_id = "gen-cursor-expiry-boundary"
+    _record_cursor_pending_for_test(
+        store=store,
+        guard_home=home_dir,
+        guard_commands_module=guard_commands_module,
+        conversation_id=conversation_id,
+        command=command,
+        workspace_dir=workspace_dir,
+        generation_id=generation_id,
+    )
+    pending = guard_commands_module._load_cursor_pending_shell_permission(
+        store,
+        conversation_id=conversation_id,
+        command=command,
+    )
+    assert pending is not None
+    saved_at = datetime.fromisoformat(str(pending["saved_at"]))
+    clocks = iter(
+        (
+            (saved_at + timedelta(seconds=29 * 60)).isoformat(),
+            (saved_at + timedelta(seconds=31 * 60)).isoformat(),
+        )
+    )
+    monkeypatch.setattr(permission_store, "_now", lambda: next(clocks))
+    payload = prepare_cursor_hook_payload(
+        {
+            "conversation_id": conversation_id,
+            "generation_id": generation_id,
+            "hook_event_name": "afterShellExecution",
+            "command": command,
+            "cwd": str(workspace_dir),
+            "duration": 15,
+        }
+    )
+    saved = guard_commands_module._persist_cursor_native_permission_after_shell(
+        store=store,
+        payload=payload,
+        harness="cursor",
+        home_dir=home_dir,
+        guard_home=home_dir,
+        workspace=workspace_dir,
+        hook_env=_trusted_cursor_after_shell_env(
+            home_dir,
+            conversation_id=conversation_id,
+            command=command,
+            workspace_dir=workspace_dir,
+            approval_binding=generation_id,
+        ),
+    )
+    assert saved is False
+    assert guard_commands_module._load_cursor_native_shell_allowance(store, payload) is None
 
 
 def test_cursor_hook_should_block() -> None:

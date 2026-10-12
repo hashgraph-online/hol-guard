@@ -30,7 +30,7 @@ from .codex_binding_capture_crypto import (
     verify_row_hmac,
 )
 from .codex_binding_capture_crypto import receipt_projection as _receipt_projection
-from .codex_hook_manifest import MANAGED_CODEX_HOOK_EVENTS
+from .codex_hook_events import MANAGED_CODEX_HOOK_EVENTS
 from .daemon.hook_request_parsing import runtime_hook_event_name
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")

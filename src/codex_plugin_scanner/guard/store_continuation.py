@@ -253,6 +253,7 @@ class StoreContinuationMixin:
         *,
         request_id: str,
         approval_decision: Mapping[str, object],
+        consumes_approval: bool,
         now: str,
     ) -> bool:
         approval_id = approval_decision.get("approval_id")
@@ -264,7 +265,7 @@ class StoreContinuationMixin:
             or isinstance(authority_revision, bool)
             or authority_revision < 0
             or approval_decision.get("action") != "allow"
-            or self.approval_reuse_claim_disposition(approval_decision) != "consumed"
+            or not consumes_approval
         ):
             return False
         integrity_key, integrity_key_id = self._policy_integrity_secret_material(create=False)
@@ -364,12 +365,17 @@ class StoreContinuationMixin:
     ) -> bool:
         """Finalize continuation evidence and optionally consume exact allow authority atomically."""
 
+        # Ask the resident before the write lock is held; no answer means no claim.
+        consumes_approval = (
+            approval_decision is not None and self.approval_reuse_claim_disposition(approval_decision) == "consumed"
+        )
         with self._connect() as connection:
             connection.execute("begin immediate")
             if approval_decision is not None and not self._claim_continuation_approval_authority(
                 connection,
                 request_id=request_id,
                 approval_decision=approval_decision,
+                consumes_approval=consumes_approval,
                 now=now,
             ):
                 connection.rollback()

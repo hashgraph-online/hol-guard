@@ -72,6 +72,7 @@ const KNOWN_SKILL_DOC_ROOTS: &[&str] = &[
     ".codex/superpowers/skills",
     ".codex/skills",
     ".agents/skills",
+    ".agent/skills",
     ".claude/skills",
 ];
 
@@ -269,6 +270,28 @@ fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
     None
 }
 
+fn known_artifact_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
+    let lexical = resolve_candidate(target, None, home).ok()?;
+    let root = home.join(".agent/artifacts");
+    let relative = lexical.strip_prefix(&root).ok()?;
+    if contains_symlink_component(&lexical)
+        || lexical
+            .extension()
+            .is_none_or(|extension| extension != "md")
+        || relative.components().any(|component| match component {
+            Component::Normal(value) => {
+                value.to_string_lossy().starts_with('.')
+                    || sensitive_external_filename(Path::new(value))
+            }
+            _ => true,
+        })
+    {
+        return None;
+    }
+    let real = fs::canonicalize(lexical).ok()?;
+    real.is_file().then_some(real)
+}
+
 pub fn classify_source_path(
     target: &str,
     cwd: &Path,
@@ -301,6 +324,9 @@ pub fn classify_source_path(
         return SourcePathDecision::deny("sensitive_basename");
     }
     if let Some(home) = home {
+        if let Some(artifact_path) = known_artifact_doc_path(stripped, home) {
+            return SourcePathDecision::allow("known_artifact_doc_path", artifact_path);
+        }
         if let Some(skill_path) = known_skill_doc_path(stripped, home) {
             return SourcePathDecision::allow("known_skill_doc_path", skill_path);
         }

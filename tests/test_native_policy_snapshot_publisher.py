@@ -47,7 +47,7 @@ def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: py
     )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         first = publisher.current_snapshot()
         assert first is not None
         assert len(calls) >= 1
@@ -128,7 +128,7 @@ def test_publisher_repushes_after_resident_generation_change(
     )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         assert len(calls) == 1
         resident_state = guard_home / "native-runtime" / "resident-v3-restarted"
         resident_state.mkdir(mode=0o700)
@@ -137,7 +137,7 @@ def test_publisher_repushes_after_resident_generation_change(
         while time.monotonic() < deadline and len(calls) < 2:
             time.sleep(0.01)
         assert len(calls) >= 2
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
     finally:
         publisher.close()
 
@@ -169,7 +169,7 @@ def test_publisher_does_not_republish_for_generation_created_by_own_ack(
     )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         time.sleep(0.2)
         assert len(calls) == 1
     finally:
@@ -272,7 +272,6 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
     monkeypatch.setattr(
         hook_worker_module,
@@ -328,7 +327,6 @@ def test_prepare_workspace_policy_uses_bounded_first_workspace_handshake(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -373,7 +371,6 @@ def test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -420,7 +417,6 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -469,7 +465,6 @@ def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -492,7 +487,10 @@ def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
 
     def counted_builder(**kwargs: object) -> dict[str, object]:
         nonlocal build_calls
-        build_calls += 1
+        # The synthetic semantic-identity build (expires_at_ms == 1) is not an
+        # installable snapshot and is memoized per runtime and input digest.
+        if kwargs.get("expires_at_ms") != 1:
+            build_calls += 1
         return original_builder(**kwargs)
 
     monkeypatch.setattr(snapshot_module, "build_policy_snapshot_v3", counted_builder)

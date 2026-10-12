@@ -57,9 +57,6 @@ def test_exact_cloud_authority_is_invisible_to_generic_lookup_and_request_bound(
     assert exact is not None
     assert exact["authority_kind"] == "exact-cloud"
     assert exact["request_id"] == request.request_id
-    approval_id = exact["approval_id"]
-    assert isinstance(approval_id, str)
-    assert store.claim_local_once_approval(approval_id, claimed_at=resolved_at) is False
     assert store.claim_approval_reuse_decision(exact, now=resolved_at) is False
 
     assert store.peek_exact_cloud_local_once_approval(request_id="caller-chosen-request", now=resolved_at) is None

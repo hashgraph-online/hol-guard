@@ -265,6 +265,16 @@
   max-width: none;
 }
 
+@media (max-width: 47.999rem) {
+  .guard-shell-content:has(.guard-shell-workspace[data-view="inbox"]) {
+    height: calc(100dvh - var(--guard-shell-mobile-header-height) - var(--guard-shell-mobile-nav-height) - env(safe-area-inset-bottom));
+    min-height: 0;
+    overflow-y: auto;
+    padding-bottom: 0;
+    scroll-padding-block: 1rem;
+  }
+}
+
 .guard-shell-workspace[data-view="about"] {
   max-width: 72rem;
 }

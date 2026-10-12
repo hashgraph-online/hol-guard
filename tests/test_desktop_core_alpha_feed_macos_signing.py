@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import os
 import struct
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
@@ -119,7 +122,10 @@ def test_reused_core_assets_skip_native_runtime_verifier() -> None:
     verify = next(
         step for step in steps if step.get("name") == "Verify exact Apple identity, notarization, and Core contract"
     )
-    assert build.get("if") == "steps.release.outputs.available == 'true' && steps.existing.outputs.mode == 'build'"
+    assert build.get("if") == (
+        "steps.release.outputs.available == 'true' && steps.registry.outputs.registry_ready == 'true'"
+        " && steps.existing.outputs.mode == 'build'"
+    )
     assert "verify_pyinstaller_native_runtime.py" in str(build.get("run"))
     assert "verify_pyinstaller_native_runtime.py" not in str(verify.get("run"))
 
@@ -221,3 +227,97 @@ def test_verifier_rejects_parent_traversal_cookie_runtime(
 
     with pytest.raises(ValueError, match="archive-relative"):
         module.verify(archive, "TEAM123")
+
+
+NOTARIZE_SCRIPT = ROOT / "scripts" / "release" / "notarize_core_archives.sh"
+ONEFILE_ZIP = "core-update-notary.zip"
+ONEDIR_ZIP = "hol-guard-core-1.2.3-aarch64-apple-darwin.onedir.zip"
+
+
+def _run_notarization(tmp_path: Path, outcomes: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    stubs = tmp_path / "bin"
+    stubs.mkdir()
+    xcrun = stubs / "xcrun"
+    # Each archive's outcome is keyed by file name: an Apple status, "crash" for a failed submit,
+    # or "accepted-then-exit" for an Accepted result from a submit that still exits nonzero.
+    # Every submission waits until both have started, so a serial run times out instead of passing.
+    xcrun.write_text(
+        "#!/bin/bash\n"
+        'archive=$(basename "$3")\n'
+        'echo "$archive" >> "$STATE/submitted.txt"\n'
+        'touch "$STATE/started.$archive"\n'
+        "for _ in $(seq 100); do\n"
+        '  [[ $(find "$STATE" -name "started.*" | wc -l) -ge 2 ]] && break\n'
+        "  sleep 0.05\n"
+        "done\n"
+        '[[ $(find "$STATE" -name "started.*" | wc -l) -ge 2 ]] || { echo "submissions ran serially" >&2; exit 9; }\n'
+        'outcome=$(jq -r --arg archive "$archive" \'.[$archive]\' "$OUTCOMES")\n'
+        'if [[ "$outcome" == "crash" ]]; then exit 3; fi\n'
+        'if [[ "$outcome" == "accepted-then-exit" ]]; then jq -n \'{status: "Accepted"}\'; exit 4; fi\n'
+        "jq -n --arg status \"$outcome\" '{status: $status}'\n",
+        encoding="utf-8",
+    )
+    xcrun.chmod(0o755)
+    state = tmp_path / "state"
+    state.mkdir()
+    outcomes_file = tmp_path / "outcomes.json"
+    outcomes_file.write_text(json.dumps(outcomes), encoding="utf-8")
+    env = {
+        **os.environ,
+        "PATH": f"{stubs}{os.pathsep}{os.environ['PATH']}",
+        "STATE": str(state),
+        "OUTCOMES": str(outcomes_file),
+        "APPLE_ID": "id",
+        "APPLE_PASSWORD": "password",
+        "APPLE_TEAM_ID": "TEAM123",
+    }
+    return subprocess.run(
+        [
+            "bash",
+            str(NOTARIZE_SCRIPT),
+            str(tmp_path / ONEFILE_ZIP),
+            str(tmp_path / "notary-result.json"),
+            str(tmp_path / ONEDIR_ZIP),
+            str(tmp_path / "notary-result-onedir.json"),
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_notarization_submits_both_archives_concurrently_and_requires_both_accepted(tmp_path: Path) -> None:
+    result = _run_notarization(tmp_path, {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "Accepted"})
+    assert result.returncode == 0, result.stderr
+    submitted = (tmp_path / "state" / "submitted.txt").read_text(encoding="utf-8").split()
+    assert sorted(submitted) == sorted([ONEFILE_ZIP, ONEDIR_ZIP])
+    assert json.loads((tmp_path / "notary-result.json").read_text(encoding="utf-8"))["status"] == "Accepted"
+    assert json.loads((tmp_path / "notary-result-onedir.json").read_text(encoding="utf-8"))["status"] == "Accepted"
+    assert "--wait" in NOTARIZE_SCRIPT.read_text(encoding="utf-8")
+
+
+def test_feed_notarizes_both_archives_through_the_shared_script() -> None:
+    step = next(step for step in _publish_steps() if step.get("name") == "Sign and notarize new Core sidecar")
+    run = str(step["run"])
+    assert "bash scripts/release/notarize_core_archives.sh" in run
+    assert '"$RUNNER_TEMP/core-update-notary.zip" "$RUNNER_TEMP/notary-result.json"' in run
+    assert '.onedir.zip" \\\n  "$RUNNER_TEMP/notary-result-onedir.json"' in run
+    assert "notarytool" not in run
+
+
+@pytest.mark.parametrize(
+    "outcomes",
+    [
+        {ONEFILE_ZIP: "Invalid", ONEDIR_ZIP: "Accepted"},
+        {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "Invalid"},
+        {ONEFILE_ZIP: "crash", ONEDIR_ZIP: "Accepted"},
+        {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "crash"},
+        {ONEFILE_ZIP: "accepted-then-exit", ONEDIR_ZIP: "Accepted"},
+        {ONEFILE_ZIP: "Accepted", ONEDIR_ZIP: "accepted-then-exit"},
+    ],
+)
+def test_notarization_fails_when_either_archive_is_not_accepted(tmp_path: Path, outcomes: dict[str, str]) -> None:
+    result = _run_notarization(tmp_path, outcomes)
+    assert result.returncode != 0
+    assert "submissions ran serially" not in result.stderr

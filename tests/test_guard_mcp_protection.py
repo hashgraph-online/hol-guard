@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_mcp_tool_policy
 from codex_plugin_scanner.guard.adapters.mcp_servers import managed_stdio_servers
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.mcp_tool_calls import (
@@ -18,10 +19,9 @@ from codex_plugin_scanner.guard.mcp_tool_calls import (
 from codex_plugin_scanner.guard.models import GuardArtifact, HarnessDetection, PolicyDecision
 from codex_plugin_scanner.guard.runtime.mcp_protection import (
     build_mcp_server_identity,
-    build_mcp_tool_identity,
-    mcp_server_identity_metadata,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 pytestmark = pytest.mark.usefixtures("_native_mcp_identity_authority")
 
@@ -125,10 +125,9 @@ def test_mcp_server_identity_binds_configured_env_values_without_exposing_them()
     assert first == reordered
     assert first.env_values_hash != changed.env_values_hash
     assert first.identity_hash != changed.identity_hash
-    serialized = str(mcp_server_identity_metadata(first))
+    serialized = str(asdict(first))
     assert secret_v1 not in serialized
     assert secret_v2 not in serialized
-    assert mcp_server_identity_metadata(first)["env_values_hash"] == first.env_values_hash
 
 
 def test_managed_stdio_servers_emit_server_identity() -> None:
@@ -366,26 +365,37 @@ def test_evaluate_tool_call_honors_strict_mcp_risk_action(tmp_path) -> None:
 
 
 @pytest.mark.parametrize(
-    "projection",
+    "reply",
     [
-        None,
-        {"action": "future-action", "source": "policy", "summary_code": "risk", "risk_categories": []},
-        {"action": "allow", "source": "future-source", "summary_code": "no_risk", "risk_categories": []},
-        {
-            "action": "allow",
-            "source": "policy",
-            "summary_code": "risk",
-            "risk_categories": ["secret_access", "secret_access"],
-        },
+        "unavailable",
+        "unbound_digest",
+        {"status": "ok", "code": "ok", "payload": {"action": "future-action"}},
+        {"status": "ok", "code": "ok", "payload": None},
+        {"status": "need", "code": "need", "payload": {"kind": "future_effect"}},
+        {"status": "error", "code": "native_mcp_tool_policy_decide_observation_invalid", "payload": None},
     ],
 )
 def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
     tmp_path,
     monkeypatch,
-    projection,
+    reply,
 ) -> None:
-    from codex_plugin_scanner.guard import native_context
+    from codex_plugin_scanner.guard import native_mcp_tool_policy
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
 
+    def fake_resident(*, request, **_kwargs):
+        if reply == "unavailable":
+            return None
+        digest = "sha256:" + ("0" * 64 if reply == "unbound_digest" else _canonical_request_sha256(request))
+        body = {"status": "ok", "code": "ok", "payload": None} if reply == "unbound_digest" else reply
+        return {
+            "schema": "guard-mcp-tool-policy-decide-result.v1",
+            "request_id": request["request_id"],
+            "request_sha256": digest,
+            **body,
+        }
+
+    monkeypatch.setattr(native_mcp_tool_policy, "_resident_request", fake_resident)
     artifact = build_tool_call_artifact(
         harness="codex",
         server_name="workspace",
@@ -394,14 +404,6 @@ def test_evaluate_tool_call_rejects_unavailable_or_malformed_native_policy(
         config_path=".mcp.json",
         transport="stdio",
     )
-    native_digest = native_context.native_context_digest
-
-    def reject_policy(operation, *args, **kwargs):
-        if operation == "mcp_tool_policy":
-            return None if projection is None else {"status": "ok", "mcp_tool_policy": projection}
-        return native_digest(operation, *args, **kwargs)
-
-    monkeypatch.setattr(native_context, "native_context_digest", reject_policy)
     with pytest.raises(ValueError, match="native_mcp_tool_policy_unavailable"):
         evaluate_tool_call(
             store=GuardStore(tmp_path / "guard-home"),
@@ -451,6 +453,7 @@ def test_evaluate_tool_call_unknown_stored_action_requires_review(
         transport="stdio",
     )
     store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(native_mcp_tool_policy, "_lookup_input", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(
         store,
         "resolve_policy_decision_lookup_with_memory_pattern",

@@ -11,22 +11,17 @@ from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from ..runtime.data_flow_sink import data_flow_sink_type
+from ..runtime.package_request_evaluation import strip_review_evidence_tail as _strip_review_evidence_tail
 
 if TYPE_CHECKING:
     from ._commands_shared import _HOOK_DAEMON_UNREACHABLE_REASON_MARKER, _now
-    from .commands_support_prompts import _prompt_request_classes, _prompt_requires_hard_block
+    from .commands_support_prompts import _prompt_request_classes
 
 
-from ..action_lattice import coerce_guard_action
 from ..models import GuardAction
-from ..native_context import is_unbound_context_digest
-from ..proxy._env import _build_scrubbed_env
-from ..runtime.approval_context import (
-    approval_context_tokens_validation_reason,
-    build_approval_context_token,
-    build_configured_environment_hash,
-    build_runtime_launch_identity,
-)
+from ..native_data_flow import detect_data_flow_exfiltration
+from ..native_hook_approval_context import native_hook_approval_context_token, runtime_hook_approval_context_inputs
+from ..runtime.approval_context import approval_context_tokens_validation_reason
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from ..store import (
@@ -38,9 +33,7 @@ from ..text import ensure_terminal_punctuation as _ensure_terminal_punctuation
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_runtime_artifact_policy import (
-    _resolve_configured_risk_action,
     _runtime_artifact_command_action_floor,
-    _runtime_artifact_guard_default_action,
     _runtime_artifact_policy_action,
 )
 
@@ -248,14 +241,6 @@ def _terminalize_runtime_action_copy(response_payload: dict[str, object]) -> Non
                 user_copy["harness_message"] = _terminal_action_message(harness_message)
             user_copy["dashboard_url"] = None
 
-def _strip_review_evidence_tail(message: str) -> str:
-    stripped = message.strip()
-    lower_stripped = stripped.lower()
-    for suffix in ("Review evidence: .", "Review evidence:.", "Review evidence:"):
-        if lower_stripped.endswith(suffix.lower()):
-            return stripped[: -len(suffix)].rstrip()
-    return stripped
-
 def _strip_legacy_approval_center_sentence(message: str) -> str:
     lower_message = message.lower()
     start = lower_message.find("open hol guard to approve or keep this blocked:")
@@ -462,151 +447,33 @@ def _runtime_hook_approval_context_token(
 ) -> str:
     """Bind a saved hook approval to the exact reviewed runtime context.
 
-    The returned token intentionally partitions context into independently
-    comparable dimensions.  Values are hashed by ``approval_context`` and are
-    never serialized into the stored token itself.
+    The resident composes the context dimensions and returns the token.
     """
 
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    shell_context_present = bool(
-        metadata.get("shell_execution_context_hash") or metadata.get("shell_execution_context_hashes")
-    )
-    # Reuse requires the producer's explicit completeness proof.  Missing or
-    # malformed legacy metadata fails closed instead of being inferred from a
-    # separate reason-code field.
-    shell_context_complete = metadata.get("shell_execution_context_complete") is True
-    raw_effective_cwds = metadata.get("shell_execution_effective_cwds")
-    effective_cwd_values = raw_effective_cwds if isinstance(raw_effective_cwds, list) else []
-    shell_effective_cwds = tuple(
-        _normalized_runtime_context_path(Path(value))
-        for value in effective_cwd_values
-        if isinstance(value, str) and value.strip()
-    )
-    launch_cwd = Path(shell_effective_cwds[-1]) if shell_effective_cwds else runtime_workspace or Path.cwd()
-    if shell_effective_cwds:
-        effective_cwd = shell_effective_cwds[-1]
-    elif shell_context_present:
-        effective_cwd = None
-    else:
-        effective_cwd = _normalized_runtime_context_path(runtime_workspace or Path.cwd())
-    configured_workspace = (
-        _normalized_runtime_context_path(config.workspace) if config.workspace is not None else None
-    )
-    envelope_workspace = (
-        _normalized_runtime_context_path(Path(action_envelope.workspace))
-        if action_envelope is not None and action_envelope.workspace is not None
-        else None
-    )
-    executable_identity: object
-    shell_executable_identities: tuple[dict[str, object], ...] | None = None
-    if shell_context_present and not shell_context_complete:
-        executable_identity = {
-            "status": "unresolved_shell_execution_context",
-            "reason_code": metadata.get("shell_execution_context_reason_code")
-            or metadata.get("shell_execution_context_reason_codes"),
-            "reuse_nonce": secrets.token_hex(16),
-        }
-        shell_executable_identities = (
-            {
-                "cwd": None,
-                "identity": executable_identity,
-            },
-        )
-    elif workflow_approval_record is not None:
-        # GitHub workflow capabilities intentionally permit a retry after an
-        # executable's original bytes are restored. Their signed binding
-        # already covers the canonical executable content, command, workspace,
-        # environment, configuration, manifests, lockfiles, and sandbox. Do
-        # not add mutable inode timestamps to that independently verified
-        # identity or an exact restored retry can never reach the capability
-        # claim that revalidates it.
-        executable_identity = {
-            "launch_cwd": _normalized_runtime_context_path(launch_cwd),
-            "record": workflow_approval_record.to_dict(),
-            "status": "github_workflow_capability_bound",
-        }
-        if shell_context_present:
-            shell_executable_identities = tuple(
-                {
-                    "cwd": cwd,
-                    "identity": {
-                        "launch_cwd": cwd,
-                        "record": workflow_approval_record.to_dict(),
-                        "status": "github_workflow_capability_bound",
-                    },
-                }
-                for cwd in shell_effective_cwds
-            )
-    else:
-        executable_identity = _runtime_hook_executable_identity(
-            artifact,
-            launch_cwd=launch_cwd,
-        )
-        if shell_context_present:
-            shell_executable_identities = tuple(
-                {
-                    "cwd": cwd,
-                    "identity": _runtime_hook_executable_identity(
-                        artifact,
-                        launch_cwd=Path(cwd),
-                    ),
-                }
-                for cwd in shell_effective_cwds
-            )
-    return build_approval_context_token(
-        identity={
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_type": artifact.artifact_type,
-            "config_path": artifact.config_path,
-            "configured_workspace": configured_workspace,
-            "cwd": effective_cwd,
-            "shell_effective_cwds": shell_effective_cwds,
-            "shell_executables": shell_executable_identities,
-            "envelope_workspace": envelope_workspace,
-            "envelope_workspace_hash": action_envelope.workspace_hash if action_envelope is not None else None,
-            "executable": executable_identity,
-            "guard_home": _normalized_runtime_context_path(config.guard_home),
-            "harness": artifact.harness,
-            "publisher": artifact.publisher,
-            "source_scope": artifact.source_scope,
+    inputs = runtime_hook_approval_context_inputs(
+        artifact=artifact,
+        content_hash=content_hash,
+        runtime_workspace=runtime_workspace,
+        action_envelope=action_envelope,
+        config=config,
+        policy_config=_runtime_hook_effective_policy_config(config),
+        evaluator_policy_version=_RUNTIME_HOOK_EVALUATOR_POLICY_VERSION,
+        composition={
+            "current_action": current_action,
+            "current_config_action": current_config_action,
+            "data_flow_action": data_flow_action,
+            "package_action": package_action,
+            "scanner_action": scanner_action,
+            "trusted_cli_action": trusted_cli_action,
+            "untrusted_payload_action": untrusted_payload_action,
         },
-        content={
-            "artifact_content_hash": content_hash,
-            "command_security_identity": metadata.get("command_security_identity"),
-            "interpreter_executable_identities": metadata.get("interpreter_executable_identities"),
-            "shell_execution_context_hash": metadata.get("shell_execution_context_hash"),
-            "shell_execution_context_hashes": metadata.get("shell_execution_context_hashes"),
-            "shell_execution_context_reason_code": metadata.get("shell_execution_context_reason_code"),
-            "shell_execution_context_reason_codes": metadata.get("shell_execution_context_reason_codes"),
-        },
-        capabilities={
-            "action_envelope": _runtime_hook_action_capabilities(action_envelope),
-            "artifact_type": artifact.artifact_type,
-            "data_flow_signals": [_runtime_hook_evidence_payload(item) for item in data_flow_signals],
-            "risk_classes": _runtime_artifact_risk_classes(artifact),
-            "scanner_evidence": [_runtime_hook_evidence_payload(item) for item in scanner_evidence],
-            "transport": artifact.transport,
-        },
-        policy={
-            "config": _runtime_hook_effective_policy_config(config),
-            "evaluator_policy_version": _RUNTIME_HOOK_EVALUATOR_POLICY_VERSION,
-            "composition": {
-                "current_action": current_action,
-                "current_config_action": current_config_action,
-                "data_flow_action": data_flow_action,
-                "package_action": package_action,
-                "scanner_action": scanner_action,
-                "trusted_cli_action": trusted_cli_action,
-                "untrusted_payload_action": untrusted_payload_action,
-            },
-        },
-        sandbox={
-            "analysis": config.sandbox_analysis,
-            "permission_mode": _runtime_hook_permission_mode(action_envelope),
-            "required": current_action == "sandbox-required",
-        },
+        current_action=current_action,
+        risk_classes=_runtime_artifact_risk_classes(artifact),
+        data_flow_signals=data_flow_signals,
+        scanner_evidence=scanner_evidence,
+        workflow_approval_record=workflow_approval_record,
     )
+    return native_hook_approval_context_token("runtime_hook_approval_context", inputs)
 
 
 def _runtime_hook_effective_policy_config(config: GuardConfig) -> dict[str, object]:
@@ -643,131 +510,6 @@ def _runtime_hook_effective_policy_config(config: GuardConfig) -> dict[str, obje
         "subprocess_action": config.subprocess_action,
         "unknown_publisher_action": config.unknown_publisher_action,
     }
-
-
-def _runtime_hook_action_capabilities(action_envelope: GuardActionEnvelope | None) -> dict[str, object] | None:
-    if action_envelope is None:
-        return None
-    return {
-        "action_type": action_envelope.action_type,
-        "mcp_server": action_envelope.mcp_server,
-        "mcp_tool": action_envelope.mcp_tool,
-        "network_hosts": list(action_envelope.network_hosts),
-        "package_intent_kind": action_envelope.package_intent_kind,
-        "package_manager": action_envelope.package_manager,
-        "package_name": action_envelope.package_name,
-        "package_targets": list(action_envelope.package_targets),
-        "script_name": action_envelope.script_name,
-        "target_paths": list(action_envelope.target_paths),
-        "tool_name": action_envelope.tool_name,
-    }
-
-
-def _runtime_hook_permission_mode(action_envelope: GuardActionEnvelope | None) -> str | None:
-    if action_envelope is None:
-        return None
-    raw_payload = action_envelope.raw_payload_redacted
-    return _optional_string(raw_payload.get("permission_mode")) or _optional_string(raw_payload.get("permissionMode"))
-
-
-def _runtime_hook_evidence_payload(value: object) -> object:
-    if isinstance(value, Mapping):
-        return {str(key): item for key, item in value.items()}
-    to_dict = getattr(value, "to_dict", None)
-    return to_dict() if callable(to_dict) else str(value)
-
-
-def _runtime_hook_executable_identity(
-    artifact: GuardArtifact,
-    *,
-    launch_cwd: Path,
-) -> dict[str, object]:
-    metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
-    raw_environment = metadata.get("env")
-    configured_environment = (
-        {
-            str(key): str(value)
-            for key, value in raw_environment.items()
-            if isinstance(key, str) and isinstance(value, str)
-        }
-        if isinstance(raw_environment, Mapping)
-        else {}
-    )
-    raw_env_keys = metadata.get("env_keys")
-    configured_env_keys = tuple(
-        sorted(
-            {
-                *configured_environment,
-                *(
-                    (item for item in raw_env_keys if isinstance(item, str) and item)
-                    if isinstance(raw_env_keys, Sequence) and not isinstance(raw_env_keys, str)
-                    else ()
-                ),
-            }
-        )
-    )
-    provided_env_values_hash = _optional_string(
-        metadata.get("env_values_hash") or metadata.get("envValuesHash")
-    )
-    computed_env_values_hash = (
-        build_configured_environment_hash(
-            configured_environment,
-            configured_keys=configured_env_keys,
-        )
-        if configured_environment or not configured_env_keys
-        else None
-    )
-    launch_env = _build_scrubbed_env(configured_environment)
-    launch_identity = build_runtime_launch_identity(
-        artifact.command,
-        args=artifact.args,
-        structured_command=artifact.artifact_type != "tool_action_request",
-        search_path=launch_env.get("PATH"),
-        cwd=launch_cwd,
-        launch_env=launch_env,
-    )
-    missing_value_keys = tuple(key for key in configured_env_keys if key not in configured_environment)
-    unavailable_values = bool(missing_value_keys) and provided_env_values_hash is None
-    code_loading_keys = {"BASH_ENV", "ENV", "NODE_OPTIONS", "PYTHONINSPECT", "PYTHONPATH", "ZDOTDIR"}
-    unresolved_code_loading_environment = bool(code_loading_keys.intersection(missing_value_keys))
-    configured_environment_identity: dict[str, object] = {
-        "computed_values_hash": computed_env_values_hash,
-        "keys": list(configured_env_keys),
-        "provided_values_hash": provided_env_values_hash,
-        "values_hash": provided_env_values_hash if missing_value_keys else computed_env_values_hash,
-        "provided_values_hash_matches": (
-            provided_env_values_hash == computed_env_values_hash
-            if provided_env_values_hash is not None
-            and computed_env_values_hash is not None
-            and not is_unbound_context_digest(provided_env_values_hash)
-            and not is_unbound_context_digest(computed_env_values_hash)
-            else None
-        ),
-        "status": (
-            "unproven"
-            if unavailable_values or unresolved_code_loading_environment
-            else "verified"
-        ),
-    }
-    if unavailable_values or unresolved_code_loading_environment:
-        configured_environment_identity["reuse_nonce"] = secrets.token_hex(16)
-    return {
-        "artifact_command": artifact.command,
-        "artifact_tool": metadata.get("tool_name"),
-        "configured_environment": configured_environment_identity,
-        "launch_argv_sha256": launch_identity["argv_sha256"],
-        "launch_cwd": launch_identity["launch_cwd"],
-        "resolved_artifact_command": launch_identity["executable"],
-        "resolved_entrypoint": launch_identity["entrypoint"],
-        "transport": artifact.transport,
-    }
-
-
-def _normalized_runtime_context_path(path: Path) -> str:
-    try:
-        return str(path.expanduser().resolve(strict=False))
-    except (OSError, RuntimeError):
-        return str(path.expanduser().absolute())
 
 
 def _remembered_rule_rejection_reason(
@@ -816,37 +558,6 @@ def _runtime_artifact_exact_match_context(artifact: GuardArtifact) -> str | None
     )
 
 
-def _apply_explicit_posture_action(
-    config: GuardConfig,
-    artifact: GuardArtifact,
-    risk_class: str,
-    action: str | None,
-) -> GuardAction:
-    from ..protection_posture import apply_posture_confidence
-
-    resolved = coerce_guard_action(action) or "require-reapproval"
-    confidence = _artifact_risk_confidence(artifact)
-    next_action = apply_posture_confidence(
-        posture=config.protection_posture,
-        explicit=config.protection_posture_explicit,
-        risk_class=risk_class,
-        action=resolved,
-        confidence=confidence,
-        persistence_writes_launch_agent=_artifact_writes_launch_agent(artifact),
-        injection_disables_guard=_prompt_requires_hard_block(artifact),
-        skill_is_known_bad=_artifact_skill_is_known_bad(artifact),
-    )
-    if next_action == "block" and resolved != "block":
-        from ..protection_events import record_protection_event
-
-        record_protection_event(
-            config.guard_home,
-            "guard.protection.auto_stop",
-            {"risk_class": risk_class, "confidence": str(confidence or "")},
-        )
-    return next_action
-
-
 def _artifact_risk_confidence(artifact: GuardArtifact) -> object:
     confidence = artifact.metadata.get("risk_confidence")
     if confidence is None:
@@ -888,10 +599,11 @@ def _runtime_action_data_flow_signals(
     action_envelope: GuardActionEnvelope | None,
     *,
     workspace: Path | None,
+    guard_home: Path | None = None,
 ) -> tuple[RiskSignalV2, ...]:
     if action_envelope is None:
         return ()
-    return detect_data_flow_exfiltration(action_envelope, workspace=workspace)
+    return detect_data_flow_exfiltration(action_envelope, workspace=workspace, guard_home=guard_home)
 
 def _runtime_data_flow_summary(signals: tuple[RiskSignalV2, ...]) -> str:
     sink_type = _runtime_data_flow_sink_type(signals)
@@ -944,6 +656,7 @@ def _guard_settings_payload(config: GuardConfig) -> dict[str, object]:
 
 
 def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import (
         posture_help,
         posture_label,
@@ -959,11 +672,13 @@ def _guard_settings_explain_payload(config: GuardConfig) -> dict[str, object]:
         "description": posture_help(config.protection_posture),
         "security_level": config.security_level,
         "protection_off": status["protection_off"],
+        **harness_posture_summary(config),
         "effective_risk_actions": effective,
     }
 
 
 def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
+    from ..harness_posture import harness_posture_summary
     from ..protection_posture import protection_status_fields
 
     issues: list[dict[str, str]] = []
@@ -997,6 +712,7 @@ def _guard_settings_doctor_payload(config: GuardConfig) -> dict[str, object]:
         "issues": issues,
         "healthy": len(issues) == 0,
         **protection_status_fields(posture=config.protection_posture, mode=config.mode),
+        **harness_posture_summary(config),
     }
 
 
@@ -1076,9 +792,8 @@ __all__ = [
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",
-    "_native_hook_reason_for_harness", "_resolve_configured_risk_action", "_runtime_action_data_flow_signals",
-    "_runtime_artifact_command_action_floor", "_runtime_artifact_guard_default_action",
-    "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
+    "_native_hook_reason_for_harness", "_runtime_action_data_flow_signals",
+    "_runtime_artifact_command_action_floor", "_runtime_artifact_policy_action", "_runtime_artifact_risk_classes",
     "_runtime_data_flow_sink_type", "_runtime_data_flow_summary", "_runtime_detector_perf_payload",
     "_runtime_detector_registry_payload", "_runtime_stored_policy_action", "_strip_cloud_inbox_urls",
     "_strip_legacy_approval_center_sentence", "_strip_review_evidence_tail", "_terminal_action_message",

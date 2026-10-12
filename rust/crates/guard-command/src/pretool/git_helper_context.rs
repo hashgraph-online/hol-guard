@@ -1,28 +1,52 @@
-use super::{exact_safe_command, executable_basename, git_config, PathContext};
+use super::{exact_safe_command_with_context, executable_basename, git_config, PathContext};
 use crate::CanonicalCommandV1;
 
-pub(super) fn git_helper_context_required(model: &CanonicalCommandV1) -> bool {
-    exact_safe_command(model, true)
-        && model.segments.iter().any(|segment| {
-            segment.executable.as_deref().is_some_and(|executable| {
-                executable_basename(executable) == "git"
-                    && segment.arguments.first().is_some_and(|subcommand| {
-                        let option_end = segment
-                            .arguments
+pub(super) fn git_helper_context_required(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> bool {
+    if !exact_safe_command_with_context(model, true, context) {
+        return false;
+    }
+    // A relative `-C` after a verified `cd` resolves against the destination.
+    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let context = PathContext {
+        cwd: destination.as_deref().or(context.cwd),
+        ..context
+    };
+    model.segments.iter().any(|segment| {
+        segment.executable.as_deref().is_some_and(|executable| {
+            executable_basename(executable) == "git"
+                    // Leading `-C`/`-P` options precede the subcommand.
+                    && crate::command_compatibility::git_inspection_arguments(
+                        &segment.arguments,
+                        context,
+                    )
+                    .is_some_and(|arguments| {
+                        let option_end = arguments
                             .iter()
                             .position(|argument| argument == "--")
-                            .unwrap_or(segment.arguments.len());
-                        let active_options = &segment.arguments[1..option_end];
-                        matches!(subcommand.as_str(), "diff" | "log" | "show")
-                            && !(active_options
+                            .unwrap_or(arguments.len());
+                        let active_options = &arguments[1..option_end];
+                        match arguments[0].as_str() {
+                            "diff" | "log" | "show" => !(active_options
                                 .iter()
                                 .any(|argument| argument == "--no-ext-diff")
                                 && active_options
                                     .iter()
-                                    .any(|argument| argument == "--no-textconv"))
+                                    .any(|argument| argument == "--no-textconv")),
+                            // A clean filter is the only helper hash-object runs.
+                            "hash-object" => {
+                                !super::git_hash_object::filters_disabled(&arguments[1..])
+                            }
+                            // The probe screens the printed entries for credentials.
+                            "config" => super::git_config_reads::read_form(&arguments[1..])
+                                .is_some(),
+                            _ => false,
+                        }
                     })
-            })
         })
+    })
 }
 
 /// Only a harness-stamped execution environment can prove which configuration
@@ -36,17 +60,36 @@ pub(super) fn git_helpers_proven_inert(
     let Some(environment) = execution_environment else {
         return false;
     };
-    model.segments.iter().all(|segment| {
+    // After a verified `cd`, the Git process reads configuration from the new
+    // directory, so the probe must run there rather than in the reported cwd.
+    let destination = super::segment_proof::verified_cwd_compound_context(model, context);
+    let context = PathContext {
+        cwd: destination.as_deref().or(context.cwd),
+        ..context
+    };
+    model.segments.iter().enumerate().all(|(index, segment)| {
         segment.executable.as_deref().is_none_or(|executable| {
             executable_basename(executable) != "git"
                 || (segment.environment_names.is_empty()
+                    && super::directory_targets::drive_targets_quoted(segment)
+                    && super::directory_targets::home_targets_unquoted(segment)
                     && git_config::execution_free(
                         executable,
                         &segment.arguments,
                         context,
                         deadline,
                         Some(environment),
+                        stdout_piped(model, index),
                     ) == Some(true))
         })
     })
+}
+
+/// Git starts a pager only when its standard output is a terminal. The parser
+/// rejects stdout redirection, so a following pipeline stage proves a pipe.
+pub(super) fn stdout_piped(model: &CanonicalCommandV1, index: usize) -> bool {
+    match (model.segments.get(index), model.segments.get(index + 1)) {
+        (Some(segment), Some(next)) => next.pipeline_index == segment.pipeline_index + 1,
+        _ => false,
+    }
 }

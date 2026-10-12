@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 mod client_stream;
 #[path = "managed_resident_containment.rs"]
 mod containment;
+#[path = "managed_resident_handoff.rs"]
+mod handoff;
 #[path = "managed_resident_lease.rs"]
 mod lease;
 pub(crate) use lease::client_request;
@@ -84,10 +86,12 @@ fn managed_owner_liveness(
     state_base: &Path,
     owner_process_id: u32,
     owner_start_marker: String,
+    runtime_digest: &str,
 ) -> Arc<AtomicBool> {
     let alive = Arc::new(AtomicBool::new(true));
     let watcher_alive = Arc::clone(&alive);
     let base = state_base.to_owned();
+    let digest = runtime_digest.to_owned();
     thread::spawn(move || {
         let mut no_lease_since = None;
         loop {
@@ -97,7 +101,10 @@ fn managed_owner_liveness(
             }
             let owner_alive = process_start_marker(owner_process_id)
                 .is_ok_and(|actual| actual == owner_start_marker);
-            if owner_alive || lease::any_live_for_home(&base) {
+            // Only clients of this runtime keep an ownerless resident alive.
+            // A newer runtime's clients must not pin an older resident that
+            // holds the home-wide owner lock and blocks their own resident.
+            if owner_alive || lease::any_live(&base, &digest) {
                 no_lease_since = None;
             } else {
                 let started = no_lease_since.get_or_insert_with(Instant::now);
@@ -116,8 +123,14 @@ fn combine_liveness(
     state_base: &Path,
     owner_process_id: u32,
     owner_start_marker: String,
+    runtime_digest: &str,
 ) -> Arc<AtomicBool> {
-    let owner_alive = managed_owner_liveness(state_base, owner_process_id, owner_start_marker);
+    let owner_alive = managed_owner_liveness(
+        state_base,
+        owner_process_id,
+        owner_start_marker,
+        runtime_digest,
+    );
     let supervisor_alive = crate::resident_stdin_liveness();
     let combined = Arc::new(AtomicBool::new(true));
     let combined_watcher = Arc::clone(&combined);
@@ -172,7 +185,19 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
         let _ = restart_budget::clear(&scope);
         return Ok(());
     }
+    // Clean up after a resident that died without a shutdown request, so
+    // the next stop reports an empty scope instead of a stale generation.
+    containment::retire_exited_states(&scope, &digest)?;
     Err("native_resident_stop_unavailable".to_owned())
+}
+
+/// Forget the crash-loop history of this runtime's resident so the next
+/// request may start it immediately.  This only lifts the restart pacing; the
+/// resident itself is still started by the normal authenticated client path.
+pub(crate) fn reset_restart_budget(state_base: &Path) -> Result<(), String> {
+    let digest = runtime_digest()?;
+    let scope = state_scope(state_base, &digest)?;
+    restart_budget::clear(&scope)
 }
 
 pub(crate) fn serve_managed(
@@ -182,24 +207,55 @@ pub(crate) fn serve_managed(
     expected_digest: &str,
 ) -> Result<(), String> {
     MANAGED_SHUTDOWN_REQUESTED.store(false, Ordering::Release);
+    let startup_started = crate::resident_diagnostics::enabled().then(Instant::now);
     if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest {
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }
     let owner_start_marker = process_start_marker(owner_process_id)?;
     let scope = state_scope(state_base, expected_digest)?;
-    let _owner_lock = acquire_managed_owner_lock(state_base)?;
-    let policy_store = std::sync::Arc::new(
-        crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+    let owner_lock = acquire_managed_owner_lock(state_base)?;
+    // Build the immutable catalog read snapshot off the request path so the
+    // first catalog_read does not pay for it; failures surface on that read.
+    thread::spawn(|| {
+        let _ = guard_command::catalog_read_model::packaged_catalog_read_snapshot();
+    });
+    // Initialize before fallible policy startup so every client can see a
+    // resident still starting. This guard drops before owner_lock on all exits.
+    let _diagnostic_lifetime =
+        crate::resident_diagnostics::install_managed_sink(state_base, &owner_lock);
+    crate::resident_diagnostics::start(crate::resident_diagnostics::Phase::ResidentStartup);
+    let startup = (|| -> Result<_, String> {
+        let policy_store = std::sync::Arc::new(
+            crate::policy_store::PolicySnapshotStore::new_with_resident_generation(
+                state_base,
+                expected_digest,
+                generation,
+            )?,
+        );
+        let token = crate::read_resident_auth_token()?;
+        let owner_alive = combine_liveness(
             state_base,
+            owner_process_id,
+            owner_start_marker,
             expected_digest,
-            generation,
-        )?,
-    );
-    let token = crate::read_resident_auth_token()?;
-    let owner_alive = combine_liveness(state_base, owner_process_id, owner_start_marker);
+        );
+        Ok((policy_store, token, owner_alive))
+    })();
+    if let Some(started) = startup_started {
+        crate::resident_diagnostics::finish_since(
+            crate::resident_diagnostics::Phase::ResidentStartup,
+            if startup.is_ok() {
+                crate::resident_diagnostics::Status::Ok
+            } else {
+                crate::resident_diagnostics::Status::Error
+            },
+            started,
+        );
+    }
+    let (policy_store, token, owner_alive) = startup?;
     if cfg!(unix) {
         managed_resident_transport::serve_unix_managed(
-            (&scope, &_owner_lock),
+            (&scope, &owner_lock),
             policy_store,
             generation,
             owner_process_id,
@@ -283,6 +339,7 @@ pub(crate) fn supervise_managed_for_owner(
         let child_done = Arc::new(AtomicBool::new(false));
         let watcher_done = Arc::clone(&child_done);
         let watcher_base = state_base.to_owned();
+        let watcher_digest = expected_digest.to_owned();
         let watcher = thread::spawn(move || {
             let mut no_lease_since = None;
             loop {
@@ -295,7 +352,7 @@ pub(crate) fn supervise_managed_for_owner(
                 let owner_alive = owner_start_marker.as_deref().is_some_and(|expected| {
                     process_start_marker(owner_process_id).is_ok_and(|actual| actual == expected)
                 });
-                if owner_alive || lease::any_live_for_home(&watcher_base) {
+                if owner_alive || lease::any_live(&watcher_base, &watcher_digest) {
                     no_lease_since = None;
                 } else {
                     let started = no_lease_since.get_or_insert_with(Instant::now);
@@ -336,12 +393,46 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
         .ok_or_else(|| "native_resident_owner_process_invalid".to_owned())
 }
 
+/// Upper bound on a caller-supplied deadline. Every operation is capped at nine
+/// seconds except the skill-directory scan, whose bounded tree walk may
+/// legitimately read hundreds of megabytes and is granted a longer ceiling.
+const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
+const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
+/// Contained local runners honour the caller's process timeout (up to ten
+/// minutes) plus a minute of transport slack for the probe and snapshot, so their budget must not be clamped to the
+/// nine-second ceiling that would abort a legitimate test run mid-flight. The
+/// package-shim admin op shares it: a probe runs each installed shim under its
+/// own per-shim timeout.
+const CONTAINED_RUNNER_TIMEOUT_CEILING_MS: u64 = 670_000;
+/// A Codex resume retry waits up to a minute for the app server to accept
+/// the turn and up to its busy timeout for the store; the caller adds five
+/// seconds of transport grace.
+const CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS: u64 =
+    guard_contracts::CODEX_REQUEST_RESUME_MAX_TIMEOUT_MS
+        + guard_contracts::CODEX_REQUEST_RESUME_MAX_BUSY_TIMEOUT_MS
+        + 5_000;
+
 pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
-    let budget = crate::strict_json_value(payload)
-        .ok()
+    let value = crate::strict_json_value(payload).ok();
+    let ceiling = match value
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+    {
+        Some("skill_directory_identity" | "package_context_build") => SKILL_SCAN_TIMEOUT_CEILING_MS,
+        Some(
+            "contained_node_execute"
+            | "contained_typescript_execute"
+            | "contained_package_script_execute"
+            | "shim_admin",
+        ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
+        Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
+        _ => CLIENT_TIMEOUT_CEILING_MS,
+    };
+    let budget = value
+        .as_ref()
         .and_then(|value| value.get("deadline_budget_ms")?.as_u64())
         .unwrap_or(750)
-        .clamp(1, 9_000);
+        .clamp(1, ceiling);
     Duration::from_millis(budget)
 }
 

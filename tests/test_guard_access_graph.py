@@ -5,15 +5,10 @@ from codex_plugin_scanner.guard.adapters.mcp_servers import (
     proxy_cli_args,
     stable_mcp_server_identifier,
 )
-from codex_plugin_scanner.guard.capabilities import (
-    normalize_artifact_capabilities,
-    normalized_capability_categories,
-)
 from codex_plugin_scanner.guard.mcp_tool_calls import (
     build_tool_call_artifact,
     tool_call_risk_categories,
 )
-from codex_plugin_scanner.guard.models import GuardArtifact
 
 
 def test_stable_mcp_server_identifier_survives_config_path_changes() -> None:
@@ -246,29 +241,6 @@ def test_stable_mcp_server_identifier_redacts_arbitrary_one_segment_absolute_pat
     )
 
     assert stable_mcp_server_identifier(first) == stable_mcp_server_identifier(second)
-
-
-def test_normalized_capability_categories_include_mcp_tool_risk_families() -> None:
-    artifact = GuardArtifact(
-        artifact_id="mcp:filesystem",
-        name="Filesystem MCP",
-        harness="codex",
-        artifact_type="mcp_server",
-        source_scope="user",
-        config_path="/Users/alice/.codex/config.toml",
-        command="node",
-        args=("server.js", "--root", "/workspace", ".env"),
-        transport="stdio",
-        metadata={"env_keys": ["FILESYSTEM_API_TOKEN"]},
-    )
-
-    categories = normalized_capability_categories(normalize_artifact_capabilities(artifact))
-
-    assert categories == (
-        "execution",
-        "filesystem",
-        "secret",
-    )
 
 
 def test_tool_call_risk_categories_are_emitted_from_runtime_arguments() -> None:

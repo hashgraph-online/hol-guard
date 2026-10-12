@@ -47,7 +47,7 @@ def checkout(tmp_path, monkeypatch):
     # Seed a legacy aggregate copy; authored bindings remain the authority.
     write_json(
         tmp_path,
-        "contracts/extensions/trust-class-map.v1.json",
+        "contracts/extensions/build-trust-class-map.v1.json",
         {
             "schemaVersion": "guard.extension-trust-class-map.v1",
             "publishers": {
@@ -61,7 +61,7 @@ def checkout(tmp_path, monkeypatch):
             },
         },
     )
-    trust = tmp_path / "contracts/extensions/trust-class-map.v1.json"
+    trust = tmp_path / "contracts/extensions/build-trust-class-map.v1.json"
     monkeypatch.setattr(refresh, "ROOT", tmp_path)
     monkeypatch.setattr(refresh, "TRUST_MAP", trust)
     monkeypatch.setattr(refresh, "TRUST_BINDINGS", bindings_dir)
@@ -99,7 +99,7 @@ def test_missing_command_and_mcp_ids_are_external_without_changing_reviewed_clas
     assert _read_binding(bindings_dir, "command.git")["trustClass"] == "first-party"
     assert _read_binding(bindings_dir, "command.cloud.aws")["trustClass"] == "trusted-library"
     # The aggregate projection is regenerated from bindings for packaged runtimes.
-    aggregate = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())
+    aggregate = json.loads((root / "contracts/extensions/build-trust-class-map.v1.json").read_bytes())
     assert "command.new-cli" in aggregate["classes"]["external"]
     assert "command.mcp-new-server" in aggregate["classes"]["external"]
     assert all(path.read_bytes() == content for path, content in before.items())
@@ -113,7 +113,9 @@ def test_legacy_descriptor_only_cannot_create_a_trust_binding(checkout):
     assert not (bindings_dir / "command.orphan.v1.json").exists()
     assert (
         "command.orphan"
-        not in json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())["classes"]["external"]
+        not in json.loads((root / "contracts/extensions/build-trust-class-map.v1.json").read_bytes())["classes"][
+            "external"
+        ]
     )
 
 
@@ -142,7 +144,7 @@ def test_malformed_binding_is_not_silently_replaced(checkout):
 
 def test_hand_edited_aggregate_cannot_change_binding_policy(checkout):
     root, bindings_dir = checkout
-    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    trust = root / "contracts/extensions/build-trust-class-map.v1.json"
     payload = json.loads(trust.read_bytes())
     payload["classes"]["first-party"].append("command.hand-edited")
     payload["classes"]["first-party"].append("command.existing")
@@ -163,14 +165,14 @@ def test_reviewed_binding_changes_regenerate_a_stale_legacy_map(checkout):
     payload["trustClass"] = "trusted-library"
     binding.write_text(json.dumps(payload))
     assert refresh.sync_trust_map()
-    classes = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())["classes"]
+    classes = json.loads((root / "contracts/extensions/build-trust-class-map.v1.json").read_bytes())["classes"]
     assert "command.existing" in classes["trusted-library"]
     assert "command.existing" not in classes["external"]
 
 
 def test_absent_aggregate_is_generated_from_bindings(checkout):
     root, _bindings_dir = checkout
-    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    trust = root / "contracts/extensions/build-trust-class-map.v1.json"
     trust.unlink()
     assert refresh.main(["--trust-only"]) == 0
     assert json.loads(trust.read_bytes()) == refresh._projected_aggregate()
@@ -181,7 +183,7 @@ def test_refresh_uses_build_generator_bytes_without_rewrite_churn(checkout):
     from scripts.build_native_command_program import canonical_bytes
 
     root, _bindings_dir = checkout
-    trust = root / "contracts/extensions/trust-class-map.v1.json"
+    trust = root / "contracts/extensions/build-trust-class-map.v1.json"
     expected = canonical_bytes(refresh._projected_aggregate())
     trust.write_bytes(expected)
     assert refresh.sync_trust_map() is False
@@ -222,7 +224,7 @@ def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):
         timeout=30,
     )
     assert json.loads(completed.stdout)["ok"] is True
-    aggregate = json.loads((root / "contracts/extensions/trust-class-map.v1.json").read_bytes())
+    aggregate = json.loads((root / "contracts/extensions/build-trust-class-map.v1.json").read_bytes())
     assert aggregate["classes"]["external"] == [
         "command.existing",
         "command.mcp-new-server",
@@ -234,12 +236,30 @@ def test_stale_contributor_branch_prepares_on_merge_without_rebase(checkout):
     assert json.loads(contribution.read_bytes()) == {"id": "mcp.new-server"}
 
 
+def test_trust_binding_parser_imports_without_installed_dependencies():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-S",
+            "-c",
+            "import sys; sys.path.insert(0, 'src'); "
+            "from codex_plugin_scanner.guard.runtime.extension_trust import trust_binding_index; "
+            "assert 'codex_plugin_scanner.scanner' not in sys.modules",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_builder_stages_trust_before_dependency_install_and_native_build():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/extension-builder-ci.yml").read_text())
+    workflow = yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text())
     events = workflow.get("on", workflow.get(True))
-    assert "pull_request" in events and "pull_request_target" not in events
+    assert "pull_request_target" not in events
     assert workflow["permissions"] == {"contents": "read"}
-    steps = workflow["jobs"]["authoring"]["steps"]
+    steps = workflow["jobs"]["extension-builder"]["steps"]
     checkout_step = next(step for step in steps if step.get("uses", "").startswith("actions/checkout@"))
     assert "ref" not in checkout_step["with"]  # Use GitHub's merge checkout, not the stale PR head.
     trust = next(i for i, step in enumerate(steps) if "--trust-only" in step.get("run", ""))
@@ -260,6 +280,11 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
         "test_guard_extension_trust.py",
         "test_guard_extension_contribution.py",
         "test_guard_mcp_server_contribution.py",
-        "test_extension_builder_ci_preparation.py",
     ):
         assert path in steps[tests]["run"]
+    verifier = "scripts/ci/verify_extension_builder_install.py"
+    install_wheel = next(step for step in steps if verifier in step.get("run", ""))
+    assert (ROOT / verifier).is_file()
+    quality = next(step for step in steps if step.get("name") == "Check authoring source quality")
+    assert verifier in quality["run"]
+    assert verifier in install_wheel["run"]

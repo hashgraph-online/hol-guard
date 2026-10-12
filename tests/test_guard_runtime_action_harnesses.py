@@ -350,9 +350,8 @@ def test_hook_runtime_helpers_survive_action_normalizer_first_import(tmp_path: P
 
     script = "\n".join(
         (
-            "from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload",
-            "normalize_harness_payload('kimi', 'PreToolUse', "
-            "{'tool_name': 'Bash', 'tool_input': {'command': 'printf safe'}})",
+            "from codex_plugin_scanner.guard.runtime.actions import action_envelope_harnesses",
+            "assert 'kimi' in action_envelope_harnesses()",
             "from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _artifact_id_from_event",
             "from codex_plugin_scanner.guard.cli.commands_support_codex_paths import _collect_codex_tool_response_text",
             "assert _artifact_id_from_event('pi', {'tool_name': 'Bash'}).endswith(':Bash')",

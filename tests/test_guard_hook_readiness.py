@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import time
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,6 +11,7 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.native_daemon_route import native_route_facts
 
 
 class _FakeHandler:
@@ -70,26 +72,15 @@ def _daemon(*, prepared: dict[str, object] | None) -> SimpleNamespace:
             time.sleep(0.02)
             return prepared
 
-    class Runner:
-        def __init__(self) -> None:
-            self.calls: list[float] = []
-
-        def wait_for_capacity(self, *, minimum_workers: int, timeout_seconds: float) -> bool:
-            assert minimum_workers == 1
-            self.calls.append(timeout_seconds)
-            return prepared is not None
-
     return SimpleNamespace(
         hook_worker=Worker(),
-        hook_process_runner=Runner(),
         diagnostics=SimpleNamespace(record_exception=lambda _code: None),
     )
 
 
 def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None:
-    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     server = _daemon(prepared=None)
-    server.store = SimpleNamespace(get_managed_install=lambda _harness: {"active": False})
+    server.store = SimpleNamespace(get_managed_install=lambda _harness: {"active": False}, connection_scope=nullcontext)
     handler = _FakeHandler(server)
     handler._handle_hook_readiness({}, "", default_harness="grok")
     assert handler.responses == [
@@ -98,11 +89,9 @@ def test_unmanaged_readiness_does_not_prepare_native_policy(monkeypatch) -> None
             200,
         )
     ]
-    assert server.hook_process_runner.calls == []
 
 
 def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = _daemon(prepared={"snapshot_generation": 1})
@@ -126,12 +115,9 @@ def test_workspace_readiness_waits_for_delayed_native_ack(monkeypatch, tmp_path:
             200,
         )
     ]
-    assert daemon.hook_process_runner.calls
-    assert daemon.hook_process_runner.calls[0] < 25
 
 
 def test_workspace_readiness_stays_fail_closed_when_native_ack_is_unready(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(daemon_server_module, "_native_mode_requires_rust", lambda: True)
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = _daemon(prepared=None)
@@ -144,10 +130,11 @@ def test_workspace_readiness_stays_fail_closed_when_native_ack_is_unready(monkey
     )
 
     assert handler.responses == [({"ready": False, "reason_code": "native_policy_not_ready"}, 503)]
-    assert daemon.hook_process_runner.calls == []
 
 
-def test_pi_source_prepares_workspace_before_timed_tool_review(tmp_path: Path) -> None:
+def test_pi_source_prepares_workspace_before_timed_tool_review(
+    tmp_path: Path, native_approval_reuse_runtime: Path
+) -> None:
     source = managed_extension_source(
         guard_home=tmp_path / "guard-home",
         home_dir=tmp_path,
@@ -169,10 +156,9 @@ def test_pi_source_prepares_workspace_before_timed_tool_review(tmp_path: Path) -
     assert "native_route !== 'native_resident'" in source
     assert "if (connection === null || connection.stateId === null)" in source
     assert '"authenticated-control-plane-failure"' in source
-    assert daemon_server_module._GuardDaemonHandler._requires_header_token(
-        "/v1/hooks/omp/readiness",
-        ["v1", "hooks", "omp", "readiness"],
-    )
+    assert native_route_facts(
+        "POST", "/v1/hooks/omp/readiness", guard_home=native_approval_reuse_runtime
+    ).requires_header_token
     assert "'X-Guard-Token': connection.authToken" in source[readiness_request : readiness_request + 700]
     assert "prepareGuardWorkspaceForTurn(contextCwd(ctx) ?? process.cwd())" in source
     assert 'pi.on("session_start", async (_event, ctx) => {' in source

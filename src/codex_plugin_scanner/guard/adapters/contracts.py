@@ -169,16 +169,6 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
     )
 
 
-def all_setup_contracts() -> tuple[HarnessSetupContract, ...]:
-    """Return guided setup metadata for all supported harnesses."""
-
-    return tuple(
-        setup_contract
-        for contract in HARNESS_CONTRACTS
-        if (setup_contract := setup_contract_for(contract.harness)) is not None
-    )
-
-
 def harness_contracts_table() -> str:
     """Return a Markdown table summarising all harness contracts."""
     return render_harness_contracts(HARNESS_CONTRACTS)
@@ -201,29 +191,6 @@ def harness_capability_report(
         build_id=build_id,
         commit=commit,
         requested_host=requested_host,
-        host_version_scope=host_version_scope,
-        os_arch=os_arch,
-        local_hosted=local_hosted,
-    )
-
-
-def capability_report_for(
-    harness: str,
-    *,
-    build_id: str = "unknown",
-    commit: str = "unknown",
-    host_version_scope: str | None = None,
-    os_arch: str | None = None,
-    local_hosted: str | None = None,
-) -> HarnessCapabilityReport:
-    """Return one event report, including an explicit row for unknown hosts."""
-
-    from .capability_report import capability_report_for as build_for_host
-
-    return build_for_host(
-        harness,
-        build_id=build_id,
-        commit=commit,
         host_version_scope=host_version_scope,
         os_arch=os_arch,
         local_hosted=local_hosted,

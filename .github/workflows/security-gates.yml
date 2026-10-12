@@ -79,7 +79,7 @@ jobs:
           docker run --rm
           -v "$PWD/.github/tools/mcpb-cli:/workdir:ro"
           -v "$RUNNER_TEMP/mcpb-forge-openvex.json:/verified-openvex.json:ro"
-          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
@@ -92,7 +92,7 @@ jobs:
         run: >
           docker run --rm
           -v "$PWD:/workdir"
-          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL

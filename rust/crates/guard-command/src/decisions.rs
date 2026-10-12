@@ -268,7 +268,7 @@ fn parse_confidence(v: &Value) -> Res<RiskConfidenceLabel> {
     parse_risk_confidence(v).map_err(|e| DecisionError(e.0.to_string()))
 }
 /// `_parse_signals`.
-fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
+pub fn parse_signals(v: &Value) -> Res<Vec<RiskSignalV2>> {
     let arr = match v {
         Value::Array(a) => a,
         _ => return err("signals must be a list"),
@@ -624,9 +624,17 @@ fn dashboard_detail_from_signals(signals: &[RiskSignalV2], fallback: &str) -> St
 This command sends local secret to {sink_type} without exposing the raw secret in Guard evidence."
         );
     }
+    // Python's `max` keeps the FIRST of equally confident signals; Rust's
+    // `max_by_key` would keep the last, so the tie is broken explicitly.
     let strongest = signals
         .iter()
-        .max_by_key(|item| confidence_rank(item.confidence))
+        .reduce(|best, item| {
+            if confidence_rank(item.confidence) > confidence_rank(best.confidence) {
+                item
+            } else {
+                best
+            }
+        })
         .unwrap();
     strongest.plain_reason.clone()
 }
@@ -894,11 +902,13 @@ pub fn validate_composition_trace(action: GuardAction, trace: &Map<String, Value
             }
         }
     }
-    let saved_allow_override = current_action == Some(GuardAction::Review)
-        && parsed["saved_action"]
-            .as_str()
-            .and_then(GuardAction::from_canonical)
-            == Some(GuardAction::Allow)
+    let saved_allow_override = matches!(
+        current_action,
+        Some(GuardAction::Review | GuardAction::RequireReapproval)
+    ) && parsed["saved_action"]
+        .as_str()
+        .and_then(GuardAction::from_canonical)
+        == Some(GuardAction::Allow)
         && saved_state_present
         && matches!(action, GuardAction::Allow | GuardAction::Warn);
     let explicit_approval_override = (trusted_override
@@ -1207,8 +1217,10 @@ fn validate_artifact_approval_projection(
         return err("composition_trace.trusted_request_override must match outer evidence");
     }
 
-    let saved_allow_reuse = current_action == GuardAction::Review
-        && saved_action == Some(GuardAction::Allow)
+    let saved_allow_reuse = matches!(
+        current_action,
+        GuardAction::Review | GuardAction::RequireReapproval
+    ) && saved_action == Some(GuardAction::Allow)
         && reuse_action == GuardAction::Allow
         && reuse_status == Some("accepted")
         && reuse_reason == APPROVAL_REUSE_ACCEPTED_REASON
@@ -1233,8 +1245,12 @@ fn validate_artifact_approval_projection(
     if let Some(rt) = trace.get("runtime_detector_action") {
         if !rt.is_null() {
             let parsed_runtime_action = parse_guard_action(rt)?;
-            let detector_review_was_approved = parsed_runtime_action == GuardAction::Review
-                && (trusted_applied || saved_allow_reuse);
+            let detector_review_was_approved = (parsed_runtime_action == GuardAction::Review
+                && trusted_applied)
+                || (matches!(
+                    parsed_runtime_action,
+                    GuardAction::Review | GuardAction::RequireReapproval
+                ) && saved_allow_reuse);
             if !detector_review_was_approved {
                 expected_action = most_restrictive_of(expected_action, parsed_runtime_action);
             }

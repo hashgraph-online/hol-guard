@@ -71,9 +71,13 @@ class StoreApprovalQueriesMixin:
                 exclude_watch_only=exclude_watch_only,
             )
 
-    def get_approval_request(self, request_id: str) -> dict[str, object] | None:
+    def get_approval_request(self, request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         with self._connect() as connection:
-            return load_approval_request(connection, request_id)
+            return load_approval_request(connection, request_id, derive_scope=derive_scope)
+
+    def get_approval_extension_allow_hint(self, request_id: str) -> dict[str, object] | None:
+        with self._connect() as connection:
+            return get_approval_extension_allow_hint(connection, request_id)
 
     def get_raw_approval_request_snapshot(self, request_id: str) -> dict[str, object] | None:
         with self._connect() as connection:

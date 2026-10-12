@@ -33,7 +33,10 @@ from .cursor_cli import (
     resolve_cursor_cli_entry,
 )
 from .cursor_hook_config import detect_managed_cursor_hook_artifact
-from .cursor_hooks import cursor_hooks_path, install_cursor_hooks, prepare_cursor_hooks, uninstall_cursor_hooks
+from .cursor_hooks import cursor_hooks_path
+
+# isort: split
+from .cursor_hooks import install_cursor_hooks, prepare_cursor_hooks, uninstall_cursor_hooks
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,

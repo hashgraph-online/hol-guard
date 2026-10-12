@@ -10,7 +10,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from .package_evidence_common import read_json_with_integrity
-from .restricted_node_test import prepare_restricted_node_test
+from .restricted_node_test import nearest_project_root, prepare_restricted_node_test
 from .restricted_pytest_model import (
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TOOL_READ_ONLY_PROFILE_VERSION,
@@ -63,7 +63,8 @@ def prepare_restricted_node_tool(
             raise RestrictedPytestError(
                 "node_tool_invalid_command", "Only direct lint/typecheck scripts are supported."
             )
-        manifest, _digest = read_json_with_integrity(workspace / "package.json")
+        package = nearest_project_root(cwd or workspace, workspace, "package.json")
+        manifest, _digest = read_json_with_integrity(package / "package.json")
         scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
         if isinstance(scripts, dict) and any(scripts.get(phase + args[1]) for phase in ("pre", "post")):
             raise RestrictedPytestError(
@@ -130,8 +131,9 @@ def prepare_restricted_node_tool(
         if not any(value == "--configLoader" or value.startswith("--configLoader=") for value in args):
             args = (*args, "--configLoader", "runner")
     try:
-        entry = (base.workspace / "node_modules" / _ENTRIES[name]).resolve(strict=True)
-        if not entry.is_file() or not _path_is_within(entry, base.workspace / "node_modules"):
+        modules = nearest_project_root(base.cwd, base.workspace, "node_modules/" + _ENTRIES[name]) / "node_modules"
+        entry = (modules / _ENTRIES[name]).resolve(strict=True)
+        if not entry.is_file() or not _path_is_within(entry, modules):
             raise OSError("external tool entrypoint")
         if expected_entry is not None and expected_entry.resolve(strict=True) != entry:
             raise OSError("unexpected tool entrypoint")

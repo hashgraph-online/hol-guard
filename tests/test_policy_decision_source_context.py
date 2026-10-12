@@ -341,7 +341,8 @@ def test_list_policy_decisions_enriches_harness_exact_match_policy_from_receipt(
     with store._connect() as connection:
         row = connection.execute("select * from policy_decisions").fetchone()
         assert row is not None
-        direct_item = GuardStore._policy_decision_dict_from_row(connection, row)
+        direct_item = GuardStore._policy_decision_dict_from_row(row)
+    store._attach_policy_source_contexts([direct_item])
     assert direct_item["source_receipt_id"] == "receipt-exact-1"
     assert direct_item["remembered_command"] == "pnpm install lodash"
 
@@ -385,7 +386,8 @@ def test_list_policy_decisions_does_not_fall_back_across_regular_hash_mismatch(t
     with store._connect() as connection:
         row = connection.execute("select * from policy_decisions").fetchone()
         assert row is not None
-        direct_item = GuardStore._policy_decision_dict_from_row(connection, row)
+        direct_item = GuardStore._policy_decision_dict_from_row(row)
+    store._attach_policy_source_contexts([direct_item])
     assert "source_receipt_id" not in direct_item
     assert "remembered_command" not in direct_item
 

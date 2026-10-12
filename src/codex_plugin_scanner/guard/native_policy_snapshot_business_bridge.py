@@ -1,4 +1,7 @@
-"""Thin offline native content bridge; no business decision or admission."""
+"""Thin native snapshot build/inspect bridge; no policy decision or admission.
+
+Every snapshot, with or without a business binding, is built and content-checked
+by the resident-owned ops. Python never recalculates digests or verdicts."""
 
 from __future__ import annotations
 
@@ -16,7 +19,11 @@ from .native_policy_snapshot_codec import (
     _strict_json_loads_v3,
     _valid_digest_v3,
 )
-from .native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_BYTES, NativePolicySnapshotError
+from .native_policy_snapshot_constants import (
+    BUSINESS_NATIVE_TIMEOUT_SECONDS,
+    POLICY_SNAPSHOT_MAX_BYTES,
+    NativePolicySnapshotError,
+)
 
 if TYPE_CHECKING:
     from .native_runtime_values import NativeRuntimeStatus
@@ -46,7 +53,11 @@ def end_business_deadline(token: Token[float | None]) -> None:
 
 def _remaining_timeout() -> float:
     deadline = _DEADLINE.get()
-    remaining = 5.0 if deadline is None else min(5.0, deadline - time.monotonic())
+    remaining = (
+        BUSINESS_NATIVE_TIMEOUT_SECONDS
+        if deadline is None
+        else min(BUSINESS_NATIVE_TIMEOUT_SECONDS, deadline - time.monotonic())
+    )
     if remaining <= 0:
         raise NativePolicySnapshotError("native_policy_snapshot_deadline_exceeded")
     return remaining
@@ -78,16 +89,14 @@ def capture_business_binding(value: Mapping[str, object]) -> dict[str, object]:
     return cast(dict[str, object], result)
 
 
-def _selected_runtime() -> NativeRuntimeStatus:
+def _selected_runtime(*, business: bool = True) -> NativeRuntimeStatus:
     from .native_runtime import native_runtime_status
 
     _remaining_timeout()
     status = native_runtime_status(deadline_monotonic=_DEADLINE.get())
-    required = {
-        "native-policy-snapshot-build-v1",
-        "native-policy-snapshot-inspect-v1",
-        "native-business-policy-retained-floor-v1",
-    }
+    required = {"native-policy-snapshot-build-v1", "native-policy-snapshot-inspect-v1"}
+    if business:
+        required.add("native-business-policy-retained-floor-v1")
     if (
         not status.available
         or not status.compatible
@@ -97,6 +106,12 @@ def _selected_runtime() -> NativeRuntimeStatus:
     ):
         raise NativePolicySnapshotError("native_business_policy_consumer_unavailable")
     return status
+
+
+def require_native_snapshot_runtime(*, business: bool) -> None:
+    """Fail closed unless the selected resident exposes the build/inspect ops."""
+
+    _selected_runtime(business=business)
 
 
 def _native_content_operation(
@@ -109,7 +124,7 @@ def _native_content_operation(
 
     if command not in {"policy-snapshot-build", "policy-snapshot-inspect"}:
         raise NativePolicySnapshotError("native_business_policy_consumer_unavailable")
-    selected = status if status is not None else _selected_runtime()
+    selected = status if status is not None else _selected_runtime(business="business_policy" in value)
     assert selected.identity is not None
     # CPython JSON/subprocess serialization creates immutable key copies for
     # constructor requests. Reference cleanup is best effort, not zeroization
@@ -158,7 +173,7 @@ def _validate_business_snapshot_content(
         integrity = value.get("integrity")
         if isinstance(integrity, Mapping) and integrity.get("mac") == "":
             value["integrity"] = {**integrity, "mac": "0" * 64}
-    status = _selected_runtime()
+    status = _selected_runtime(business="business_policy" in value)
     assert status.identity is not None
     digest = _digest_v3(value)
     key = (status.identity.sha256, digest)
@@ -176,7 +191,7 @@ def _validate_business_snapshot_content(
         or result.get("version") != 1
         or result.get("authenticity") != "not_checked"
         or result.get("currentness") != "not_checked"
-        or result.get("business_policy_present") is not True
+        or result.get("business_policy_present") is not ("business_policy" in value)
         or any(
             not _valid_digest_v3(result.get(field)) for field in ("snapshot_digest", "config_digest", "policy_digest")
         )
@@ -220,10 +235,13 @@ def _build_native_business_snapshot(request: Mapping[str, object]) -> dict[str, 
         "issued_at_ms",
         "expires_at_ms",
         "business_policy",
+        "command_extensions",
     ):
-        if result.get(field) != request.get(field):
+        if (field in result) != (field in request) or result.get(field) != request.get(field):
             raise NativePolicySnapshotError("native_business_policy_content_invalid")
-    if result.get("command_extensions") != request.get("command_extensions"):
-        raise NativePolicySnapshotError("native_business_policy_content_invalid")
-    validate_business_snapshot_content(result)
+    if "business_policy" in result:
+        # The constructor already ran the resident's full validation and the
+        # caller re-checks the MAC. A business binding additionally takes the
+        # inspection exchange so its retained-floor projection is confirmed.
+        validate_business_snapshot_content(result)
     return cast(dict[str, object], result)

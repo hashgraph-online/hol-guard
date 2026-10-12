@@ -38,6 +38,7 @@ _is_guard_hook_command = _hook_config.is_guard_hook_command
 _is_guard_hook_url = _hook_config.is_guard_hook_url
 _manifest_notes = _hook_config.manifest_notes
 _merge_hook_group = _hook_config.merge_hook_group
+_mark_missing_guard_hooks = _hook_config.mark_missing_guard_hooks
 _prune_guard_hook_entries = _hook_config.prune_guard_hook_entries
 _remove_unsupported_guard_hook_groups = _hook_config.remove_unsupported_guard_hook_groups
 _sync_runtime_hook_groups = _hook_config.sync_runtime_hook_groups
@@ -395,21 +396,6 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         return _shell_command(command)
 
     @staticmethod
-    def _daemon_hook_command(context: HarnessContext) -> str:
-        command = ClaudeCodeHarnessAdapter._daemon_hook_command_parts(context)
-        return _shell_command(command)
-
-    @staticmethod
-    def _session_start_command(context: HarnessContext) -> str:
-        command = ClaudeCodeHarnessAdapter._session_start_command_parts(context)
-        return _shell_command(command)
-
-    @staticmethod
-    def _hook_http_url(context: HarnessContext) -> str:
-        daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
-        return _hook_argv.hook_http_url(context, daemon_url=daemon_url)
-
-    @staticmethod
     def _daemon_hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
         fallback_daemon_url = load_guard_daemon_url(context.guard_home) or guard_daemon_url_for_home(context.guard_home)
         return _hook_argv.daemon_hook_command_parts(context, fallback_daemon_url=fallback_daemon_url)
@@ -440,6 +426,13 @@ class ClaudeCodeHarnessAdapter(HarnessAdapter):
         _remove_unsupported_guard_hook_groups(hooks)
         settings_path.parent.mkdir(parents=True, exist_ok=True)
         settings_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        payload = super().diagnostics(context)
+        if payload.get("setup_status") == "active":
+            settings_path = _claude_managed_settings_path(context)
+            _mark_missing_guard_hooks(payload, settings_path, _json_payload(settings_path))
+        return payload
 
     def runtime_probe(self, context: HarnessContext) -> dict[str, object] | None:
         resolved_executable = self.resolved_executable(context)

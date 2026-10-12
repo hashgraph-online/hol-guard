@@ -9,12 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
+from codex_plugin_scanner.guard.adapters import devin_config, get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
 from codex_plugin_scanner.guard.adapters.devin_config import (
     DEVIN_GUARD_TOOL_MATCHER,
     GUARD_MANAGED_MARKER,
+    append_devin_skill_artifacts,
     is_guard_managed_hook_command,
     load_devin_jsonc,
 )
@@ -177,6 +178,41 @@ class TestDevinDetect:
         assert ("global-agents", "global") in skills
         assert ("project-devin", "project") in skills
         assert ("project-agents", "project") in skills
+
+    def test_discovery_issues_in_two_roots_keep_distinct_artifact_ids(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from codex_plugin_scanner.guard.portable_skill_directory_support import incomplete_skill_directory_identity
+        from codex_plugin_scanner.guard.skill_directory_identity_contract import (
+            SkillDocumentDiscovery,
+            SkillDocumentDiscoveryIssue,
+        )
+
+        def fake_discovery(root: Path, **_kwargs: object) -> SkillDocumentDiscovery:
+            issue = SkillDocumentDiscoveryIssue(
+                path=root / "group",
+                relative_path="group",
+                failure_reason="unreadable_entry",
+                issue_id="same-issue-id",
+                identity=incomplete_skill_directory_identity("unreadable_entry"),
+            )
+            return SkillDocumentDiscovery(documents=(), issues=(issue,))
+
+        monkeypatch.setattr(devin_config, "discover_skill_documents", fake_discovery)
+        artifacts: list = []
+        for root in (tmp_path / ".devin" / "skills", tmp_path / ".agents" / "skills"):
+            append_devin_skill_artifacts(
+                artifacts=artifacts,
+                found_paths=[],
+                warnings=[],
+                skill_root=root,
+                identity_scope_root=tmp_path,
+                scope="project",
+            )
+
+        ids = [artifact.artifact_id for artifact in artifacts]
+        assert len(ids) == 2
+        assert len(set(ids)) == 2
 
     def test_guard_managed_hooks_excluded_from_artifacts(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)

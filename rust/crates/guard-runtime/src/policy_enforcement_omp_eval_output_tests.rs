@@ -1,0 +1,203 @@
+use super::*;
+
+#[test]
+fn yield_report_output_preserves_intrinsic_and_installed_blocks() {
+    let mut request = post_request(json!({
+        "tool_name":"yield", "tool_input":{"type":"result", "data":{"summary":"Read complete", "report":"synthetic reference", "files":[]}},
+        "tool_response":{"content":[{"type":"text", "text":"synthetic reference"}]}
+    }));
+    request.harness = "omp".into();
+    assert_eq!(
+        super::super::eval_output::bounded_output_action(&request),
+        Some(PreToolActionTypeV1::Harness)
+    );
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "block".into());
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        guard_hook_core::review_post_tool(&request),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow", "{}", result.reason_code);
+    for floor in ["intrinsic", "default", "harness"] {
+        let mut blocked = effective.clone();
+        if floor == "default" {
+            blocked.default_action = "block".into();
+        }
+        if floor == "harness" {
+            blocked.harness_actions.insert("omp".into(), "block".into());
+        }
+        let scanned = if floor == "intrinsic" {
+            HookReviewResponseV1::deny("source_secret_match", "sensitive output")
+        } else {
+            HookReviewResponseV1::allow("output_scan_allow")
+        };
+        let result = apply_post_tool_policy(
+            &snapshot(blocked),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            scanned,
+        )
+        .unwrap();
+        assert_eq!(result.decision, "deny", "{floor}");
+    }
+    request.payload["tool_input"]["data"]["command"] = json!("extra operation");
+    assert!(super::super::eval_output::bounded_output_action(&request).is_none());
+}
+
+#[test]
+fn read_only_eval_output_preserves_scans_and_installed_policy_floors() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/omp-eval-output-tests")
+        .join(format!("home-{}", std::process::id()));
+    let project = root.join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let project = root.join("project");
+    std::fs::write(project.join("README.md"), "synthetic reference\n").unwrap();
+    let mut request = post_request(json!({
+        "tool_name":"eval", "tool_input":{"language":"js","code":"display(await read('README.md'))"},
+        "tool_response":"synthetic reference\n"
+    }));
+    request.harness = "omp".into();
+    request.home_dir = root.to_str().unwrap().into();
+    request.cwd = Some(project.to_str().unwrap().into());
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "block".into());
+    let scanned = guard_hook_core::review_post_tool(&request);
+    assert_eq!(scanned.reason_code, "output_scan_allow");
+    let result = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        scanned,
+    )
+    .unwrap();
+    assert_eq!(result.decision, "allow");
+    for reason in ["native_output_subprocess_review", "source_secret_match"] {
+        let scanned = if reason == "source_secret_match" {
+            HookReviewResponseV1::deny(reason, "sensitive output")
+        } else {
+            HookReviewResponseV1::allow(reason)
+        };
+        let result = apply_post_tool_policy(
+            &snapshot(effective.clone()),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            scanned,
+        )
+        .unwrap();
+        assert_eq!(result.decision, "deny", "{reason}");
+    }
+    for denied_policy in ["default", "harness"] {
+        let mut denied = effective.clone();
+        if denied_policy == "default" {
+            denied.default_action = "block".into();
+        } else {
+            denied.harness_actions.insert("omp".into(), "block".into());
+        }
+        let result = apply_post_tool_policy(
+            &snapshot(denied),
+            &request,
+            GuardHookPayloadKindV2::Inline,
+            HookReviewResponseV1::allow("output_scan_allow"),
+        )
+        .unwrap();
+        assert_eq!(result.decision, "deny", "{denied_policy}");
+    }
+    for code in [
+        "await tool.bash({command:'cat README.md'})",
+        "await read(path)",
+        "await writeFile('x','data')",
+    ] {
+        let mut unsafe_request = request.clone();
+        unsafe_request.payload["tool_input"]["code"] = json!(code);
+        assert!(super::super::eval_output::bounded_output_action(&unsafe_request).is_none());
+    }
+    request.harness = "codex".into();
+    assert!(super::super::eval_output::bounded_output_action(&request).is_none());
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn constant_eval_proof_carries_no_execution_risk() {
+    use super::super::policy_enforcement_facts::risk_classes;
+    assert!(risk_classes(
+        PreToolActionTypeV1::Harness,
+        false,
+        "native_pure_constant_eval",
+        &[]
+    )
+    .is_empty());
+    assert!(risk_classes(
+        PreToolActionTypeV1::McpTool,
+        false,
+        "native_pure_constant_eval",
+        &[]
+    )
+    .is_empty());
+    assert_eq!(
+        risk_classes(PreToolActionTypeV1::McpTool, false, "native_mcp_other", &[]),
+        vec!["mcp_dangerous_tool"]
+    );
+    assert_eq!(
+        risk_classes(
+            PreToolActionTypeV1::Harness,
+            false,
+            "native_omp_eval_other",
+            &[]
+        ),
+        vec!["execution"]
+    );
+}
+
+#[test]
+fn constant_eval_mcp_tool_needs_no_publisher_identity() {
+    let payload = json!({
+        "tool_name": "mcp__node_repl__js",
+        "tool_input": {"code": "1+1", "timeout_ms": 1000, "title": "calc"}
+    });
+    let mut proven = generic_result("allow");
+    proven.action.harness = "zcode".into();
+    proven.action.action_type = PreToolActionTypeV1::McpTool;
+    proven.action.operation = PreToolOperationV1::Call;
+    proven.reason_code = "native_pure_constant_eval".into();
+    let allowed =
+        apply_pre_tool_policy(&snapshot(policy("allow")), &payload, proven.clone()).unwrap();
+    assert_eq!(allowed.decision, "allow");
+    assert_eq!(allowed.reason_code, "native_pure_constant_eval");
+
+    let mut unproven = proven;
+    unproven.reason_code = "native_test".into();
+    let reviewed = apply_pre_tool_policy(&snapshot(policy("allow")), &payload, unproven).unwrap();
+    assert_eq!(reviewed.decision, "deny");
+    assert_eq!(reviewed.reason_code, "native_policy_review_required");
+}
+
+#[test]
+fn constant_eval_with_an_object_publisher_keeps_the_unknown_publisher_floor() {
+    for key in ["publisher", "artifact"] {
+        let payload = json!({
+            "tool_name": "mcp__node_repl__js",
+            "tool_input": {"code": "1+1", "timeout_ms": 1000, "title": "calc"},
+            key: {"name": "unverified"}
+        });
+        let mut proven = generic_result("allow");
+        proven.action.harness = "zcode".into();
+        proven.action.action_type = PreToolActionTypeV1::McpTool;
+        proven.action.operation = PreToolOperationV1::Call;
+        proven.reason_code = "native_pure_constant_eval".into();
+        let reviewed = apply_pre_tool_policy(&snapshot(policy("allow")), &payload, proven).unwrap();
+        assert_eq!(reviewed.decision, "deny", "{key}");
+        assert_eq!(
+            reviewed.reason_code, "native_policy_review_required",
+            "{key}"
+        );
+    }
+}

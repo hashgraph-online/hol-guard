@@ -13,6 +13,7 @@ import re
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from ..native_rich_command_model import NativeCommandModelError
 from ._shell_execution_context_support import (
     SHELL_CWD_UNRESOLVED_PARENT_SHELL,
     SHELL_CWD_WORKSPACE_ESCAPE,
@@ -49,7 +50,7 @@ from ._shell_secret_read_support import (
 from .command_model import parse_shell_command
 from .data_flow import extract_heredocs
 from .home_path_text import expand_home, normalize_path
-from .shell_execution_context import model_shell_execution_context
+from .shell_execution_context import SHELL_CWD_NATIVE_UNAVAILABLE, model_shell_execution_context
 from .shell_read_literal_wrapper import literal_shell_read_payload
 
 
@@ -117,6 +118,11 @@ def assess_shell_reads(
             home_dir=home_dir,
         )
         if not context.segments:
+            if context.reason_code == SHELL_CWD_NATIVE_UNAVAILABLE:
+                # No model is not "no reads": the resident could not say what
+                # this text touches, so the read floors must stay in force.
+                incomplete = True
+                continue
             if any(marker in text for marker in (".env", "credentials", ".npmrc", ".pypirc", ".netrc")):
                 incomplete = True
             continue
@@ -155,7 +161,10 @@ def assess_shell_reads(
                 )
                 if literal_context.complete:
                     context = literal_context
-        raw_model = parse_shell_command(text, cwd=current_cwd, home_dir=home_dir, normalize_wrappers=False)
+        try:
+            raw_model = parse_shell_command(text, cwd=current_cwd, home_dir=home_dir, normalize_wrappers=False)
+        except NativeCommandModelError:
+            return ShellReadAssessment(tuple(dict.fromkeys(sensitive)), tuple(sources), requested, True)
         raw_segments = tuple(segment for segment in raw_model.segments if segment.execution_context.startswith("top:"))
         aligned = len(raw_segments) == len(context.segments)
         heredocs = extract_heredocs(raw_model.normalized_text)

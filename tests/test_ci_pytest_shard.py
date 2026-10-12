@@ -15,10 +15,6 @@ from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "ci" / "pytest_shard.py"
-SCHEDULING_SENSITIVE_NODE = (
-    "tests/test_guard_hook_process_runner.py::"
-    "test_scheduler_and_runner_complete_48_routine_reviews_without_capacity_denial"
-)
 STORAGE_LIVENESS_NODE = (
     "tests/test_guard_daemon_storage_liveness.py::test_locked_storage_hook_burst_fails_safe_without_stranding_daemon"
 )
@@ -60,7 +56,8 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     plan_action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     plan_steps = plan_action["runs"]["steps"]
     collector = next(step["run"] for step in plan_steps if "build_pytest_shard_plan.py" in step.get("run", ""))
-    assert "cancel-in-progress: true" in workflow
+    # Main queues its runs; PRs still cancel stale in-flight runs.
+    assert "cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}" in workflow
     assert "CI_UV_CACHE_DEPENDENCY_GLOB" in workflow
     assert "actions: read" in workflow
     assert "**/pyproject.toml" not in workflow
@@ -71,7 +68,14 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "test-plan" not in jobs
     assert "tests" not in jobs
     assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
-    for name in ("coverage-plan", "compatibility", "cisco-full", "cross-platform", "windows-updater"):
+    for name in (
+        "coverage-plan",
+        "compatibility",
+        "cisco-full",
+        "cross-platform",
+        "windows-packaged-daemon",
+        "macos-skill-identity",
+    ):
         needs = jobs[name]["needs"]
         assert "native-command-evaluators" in (needs if isinstance(needs, list) else [needs])
         resources = [
@@ -100,7 +104,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "if" not in native_steps[upload_index]
 
     for planner, executor, version, env_name, count, width in (
-        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 128, 3),
+        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 256, 3),
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
@@ -159,7 +163,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     redundant_deselections = re.findall(r"--deselect '?([^'\s]+)'?", coverage_job)
     assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS
     assert coverage_job.count("--deselect ") == len(set(redundant_deselections))
-    assert {SCHEDULING_SENSITIVE_NODE, STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
+    assert {STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
     assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
     timing_setup = next(
         step
@@ -178,7 +182,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
-    assert 'test "${#reports[@]}" -eq 128' in sonar_setup
+    assert 'test "${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in sonar_setup
     assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
     gate = jobs["ci-python-312"]
     assert gate["name"] == "ci (3.12)"
@@ -194,11 +198,10 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     }
 
     cache_consumers = (
-        ("compatibility", "deep-compatibility", 1),
-        ("deep-compatibility", "mutation-baseline", 1),
-        ("mutation-baseline", "ci-python-312", 1),
-        ("cross-platform", "windows-updater", 2),
-        ("windows-updater", None, 2),
+        ("compatibility", "ci-python-312", 1),
+        ("cross-platform", "windows-native-runtime", 2),
+        ("windows-packaged-daemon", "macos-native-runtime", 2),
+        ("macos-skill-identity", "required", 2),
     )
     for job_name, next_job_name, expected_count in cache_consumers:
         job = _workflow_job(workflow, job_name, next_job_name)
@@ -231,7 +234,8 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
     assert properties["sonar.tests"] == "tests,rust"
     assert properties["sonar.test.inclusions"] == (
         "**/test_*.py,rust/**/tests/**/*.rs,rust/**/*_tests.rs,"
-        "rust/crates/guard-command/testdata/generate_*_fixtures.py"
+        "rust/crates/guard-command/testdata/generate_*_fixtures.py,"
+        "rust/crates/guard-runtime/testdata/**/*.py"
     )
     assert properties["sonar.rust.cargo.manifestPaths"] == "rust/Cargo.toml"
     assert "src/codex_plugin_scanner/guard/daemon/static/**" in properties["sonar.exclusions"]

@@ -48,6 +48,9 @@ def snapshot_esbuild(workspace: Path, private_root: Path) -> tuple[Path, Path, s
         source = (modules / "@esbuild" / f"{system}-{cpu}" / "bin/esbuild").resolve(strict=True)
         if not _path_is_within(source, modules):
             raise ValueError("external image")
+        # Another local account can replace a group- or world-writable image
+        # before this copy. The private 0500 file is only as trustworthy as
+        # the bytes read here, so those write bits stay a refusal.
         descriptor = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         with os.fdopen(descriptor, "rb") as stream:
             metadata = os.fstat(stream.fileno())

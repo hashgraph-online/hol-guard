@@ -32,6 +32,7 @@ def daemon_managed_controls_candidate(
             policy_bundle,
             registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
             negotiated_capabilities=capabilities,
+            guard_home=store.guard_home,
         )
     except ManagedControlsPolicyError as error:
         return None, capabilities, None, error.code

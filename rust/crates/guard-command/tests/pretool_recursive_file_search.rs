@@ -172,10 +172,12 @@ fn recursive_search_checks_every_reachable_path() {
                 format!("rg -n ordinary {}/__tests__/", root.display()),
                 true,
             ),
+            // rg skips the hidden `.env`, exactly as for the relative spelling.
             (
                 format!("rg -n ordinary {}/unsafe-tests/", root.display()),
-                false,
+                true,
             ),
+            ("rg -n ordinary unsafe-tests/".to_owned(), true),
             ("grep -Rn ordinary test-alias/".to_owned(), false),
             ("grep -rn ordinary __tests__/ src/".to_owned(), false),
             ("grep -rn -e ordinary __tests__/".to_owned(), true),

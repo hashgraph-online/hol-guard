@@ -16,10 +16,8 @@ from .secret_file_request_services import constants_patterns as _constants_patte
 from .secret_file_request_services import credential_exfiltration as _credential_exfiltration
 from .secret_file_request_services import destructive_shell_detection as _destructive_shell_detection
 from .secret_file_request_services import developer_inspection as _developer_inspection
-from .secret_file_request_services import developer_routines as _developer_routines
 from .secret_file_request_services import docker_requests as _docker_requests
 from .secret_file_request_services import encoded_payloads as _encoded_payloads
-from .secret_file_request_services import git_routines as _git_routines
 from .secret_file_request_services import github_pr_body_safety as _github_pr_body_safety
 from .secret_file_request_services import github_pr_ephemeral_body as _github_pr_ephemeral_body
 from .secret_file_request_services import github_pr_expansion as _github_pr_expansion
@@ -41,7 +39,6 @@ from .secret_file_request_services import read_only_filters as _read_only_filter
 from .secret_file_request_services import request_artifacts as _request_artifacts
 from .secret_file_request_services import request_models as _request_models
 from .secret_file_request_services import sensitive_read_pipeline as _sensitive_read_pipeline
-from .secret_file_request_services import shell_environment as _shell_environment
 from .secret_file_request_services import shell_quote_parsing as _shell_quote_parsing
 from .secret_file_request_services import shell_request_classifier as _shell_request_classifier
 from .secret_file_request_services import shell_static_safety as _shell_static_safety
@@ -56,9 +53,6 @@ from .secret_file_request_services.benign_requests import (
 )
 from .secret_file_request_services.benign_requests import (
     is_explicitly_benign_native_file_read_request as is_explicitly_benign_native_file_read_request,
-)
-from .secret_file_request_services.benign_requests import (
-    is_explicitly_benign_tool_action_request as is_explicitly_benign_tool_action_request,
 )
 from .secret_file_request_services.constants_core import _SHELL_TOOL_NAMES as _SHELL_TOOL_NAMES
 from .secret_file_request_services.constants_core import COMMAND_CANDIDATE_LIST_KEYS as COMMAND_CANDIDATE_LIST_KEYS
@@ -167,10 +161,7 @@ _SERVICE_MODULES = (
     _interpreter_identity,
     _shell_request_classifier,
     _tool_action_requests,
-    _git_routines,
-    _developer_routines,
     _benign_requests,
-    _shell_environment,
 )
 for _service_module in _SERVICE_MODULES:
     _service_exports = getattr(_service_module, "__all__", None)
@@ -185,9 +176,8 @@ for _service_module in _SERVICE_MODULES:
 _COMPATIBILITY_OVERRIDE_TARGETS = {
     "BUILT_IN_COMMAND_EXTENSION_REGISTRY": (_shell_request_classifier,),
     "evaluate_command": (_benign_requests,),
-    "is_trusted_absolute_command_path": (_developer_routines, _interpreter_trust),
+    "is_trusted_absolute_command_path": (_interpreter_trust,),
     "model_shell_execution_context": (
-        _developer_routines,
         _shell_request_classifier,
         _tool_action_requests,
         _source_edit_context,
@@ -195,7 +185,6 @@ _COMPATIBILITY_OVERRIDE_TARGETS = {
         _interpreter_identity,
         _shell_quote_parsing,
         _developer_inspection,
-        _git_routines,
     ),
 }
 _compatibility_override_state: tuple[object, ...] | None = None
@@ -276,7 +265,6 @@ __all__ = [
     "extract_sensitive_file_write_request",
     "extract_sensitive_tool_action_request",
     "is_explicitly_benign_native_file_read_request",
-    "is_explicitly_benign_tool_action_request",
     "is_file_read_tool_name",
     "literal_cd_execution_context",
     "low_risk_compound_developer_execution_context",

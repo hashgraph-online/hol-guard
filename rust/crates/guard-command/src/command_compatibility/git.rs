@@ -1,5 +1,8 @@
 use super::{CommandSegmentV1, CompatibilityObservations};
 
+#[path = "git_fetch.rs"]
+mod git_fetch;
+
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
     ("worktree", "command.git.worktree"),
@@ -81,6 +84,48 @@ fn bounded_inspection(arguments: &[String]) -> bool {
             .all(|part| !matches!(part, "" | "." | ".."))
 }
 
+/// A staged-index diff that prints to stdout like `git diff HEAD`, which the
+/// ordinary diff proof already admits. The staged content is no more private
+/// than the working tree beside it, so the shared read proof (configuration
+/// probe, textconv and sensitive-pathspec screens) decides it. Forms that
+/// write a file or compare against another revision keep the index owner.
+fn bounded_cached_diff(arguments: &[String]) -> bool {
+    arguments
+        .iter()
+        .take_while(|argument| argument.as_str() != "--")
+        .all(|argument| {
+            let option = argument.as_str();
+            matches!(
+                option,
+                "--cached"
+                    | "--staged"
+                    | "HEAD"
+                    | "--check"
+                    | "--stat"
+                    | "--numstat"
+                    | "--shortstat"
+                    | "--summary"
+                    | "--name-only"
+                    | "--name-status"
+                    | "--patch"
+                    | "-p"
+                    | "--quiet"
+                    | "--exit-code"
+                    | "--no-color"
+                    | "--color=never"
+                    | "--no-ext-diff"
+                    | "--no-textconv"
+            ) || option
+                .strip_prefix("-U")
+                .or_else(|| option.strip_prefix("--unified="))
+                .is_some_and(|lines| {
+                    !lines.is_empty()
+                        && lines.len() <= 6
+                        && lines.bytes().all(|b| b.is_ascii_digit())
+                })
+        })
+}
+
 fn read_only_plumbing(arguments: &[String]) -> bool {
     let Some((command, rest)) = arguments.split_first() else {
         return false;
@@ -100,6 +145,7 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
                 .collect();
             operands.len() == 1 && !operands[0].starts_with('-')
         }
+        "config" if crate::pretool::git_config_reads::read_form(rest).is_some() => true,
         "config" => {
             let mut reads = false;
             for argument in rest {
@@ -166,13 +212,32 @@ pub(super) fn inspection_arguments<'a>(
         {
             return None;
         }
+        // Like `cd`, an absolute Windows target must be its exact canonical spelling.
+        #[cfg(windows)]
+        if std::path::Path::new(target).is_absolute()
+            && !crate::pretool::directory_targets::exact_existing_drive_target(target)
+        {
+            return None;
+        }
         saw_change_directory = true;
         index += 1;
     }
     let remaining = arguments.get(index..)?;
     matches!(
         remaining.first().map(String::as_str),
-        Some("status" | "diff" | "log" | "show" | "rev-parse" | "ls-files" | "remote")
+        Some(
+            "status"
+                | "diff"
+                | "log"
+                | "show"
+                | "branch"
+                | "hash-object"
+                | "rev-parse"
+                | "ls-files"
+                | "remote"
+                | "worktree"
+                | "config"
+        )
     )
     .then_some(remaining)
 }
@@ -199,7 +264,9 @@ pub(super) fn observe_with_context(
         return;
     };
     let command = arguments[command_index].as_str();
-    let inspection = inspection_arguments(arguments, context);
+    let inspection = inspection_arguments(arguments, context)
+        .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
+        .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment));
     let plumbing = (command_index == 0 && read_only_plumbing(arguments))
         || inspection.is_some_and(read_only_plumbing);
     if plumbing {
@@ -207,7 +274,19 @@ pub(super) fn observe_with_context(
         // extension can still block it.
         result.permission("command.git.permission.ls-files", index, false);
     }
+    // A proven pure listing is read-only inspection, not branch mutation.
+    let branch_listing = command == "branch"
+        && inspection.is_some_and(|remaining| {
+            crate::pretool::git_branch_listing::is_listing(&remaining[1..])
+        });
+    // Printing object ids of named files writes nothing to the repository.
+    let hash_read = command == "hash-object"
+        && inspection.is_some_and(|remaining| {
+            crate::pretool::git_hash_object::read_operands(&remaining[1..]).is_some()
+        });
     if plumbing
+        || branch_listing
+        || hash_read
         || (command_index == 0 && bounded_inspection(arguments))
         || inspection.is_some_and(bounded_inspection)
     {
@@ -243,15 +322,20 @@ pub(super) fn observe_with_context(
         }
     }
     if command == "fetch" {
-        // Proving a named origin requires repository/configuration bindings
-        // unavailable in CanonicalCommandV1. Never claim the Python exemption.
-        result.rule("command.git.unverified-fetch", index, true);
+        // Repository/configuration bindings are unavailable in
+        // CanonicalCommandV1, so Guard still never proves the fetch benign.
+        // A plain named-origin refresh is a definite review rule, though, so an
+        // explicit Allow of its permission can settle it. Every wrapped,
+        // option-prefixed, URL, or otherwise non-exact form stays uncertain.
+        let plain = git_fetch::plain_origin_refresh(segment, command_index);
+        result.rule("command.git.unverified-fetch", index, !plain);
     }
     if command == "diff"
         && arguments[command_index + 1..]
             .iter()
             .take_while(|argument| argument.as_str() != "--")
             .any(|argument| matches!(argument.as_str(), "--cached" | "--staged"))
+        && !inspection.is_some_and(|remaining| bounded_cached_diff(&remaining[1..]))
     {
         result.rule("command.git.index-inspection", index, true);
     }
@@ -294,6 +378,41 @@ mod tests {
             "git apply --check workspace/patches/change.patch",
         ] {
             assert!(observations(command).rule_matches.is_empty(), "{command}");
+        }
+    }
+
+    #[test]
+    fn bounded_cached_diffs_leave_the_index_owner_to_the_read_proof() {
+        let owns_index = |command: &str| {
+            observations(command)
+                .rule_matches
+                .iter()
+                .any(|item| item.rule_id == "command.git.index-inspection")
+        };
+        for command in [
+            "git diff --cached",
+            "git diff --staged",
+            "git diff --cached --check",
+            "git diff --cached --numstat",
+            "git diff --cached --quiet",
+            "git diff --cached --stat",
+            "git diff --staged --name-only",
+            "git diff --cached --name-status HEAD",
+            "git diff --cached -U3 -- src/main.rs",
+            "git diff --no-ext-diff --cached --quiet",
+        ] {
+            assert!(!owns_index(command), "{command}");
+        }
+        for command in [
+            "git diff --staged --output=patch",
+            "git diff --cached -o patch",
+            "git diff --cached --ext-diff",
+            "git diff --cached --textconv",
+            "git diff --cached origin/main",
+            "git diff --cached src/main.rs",
+            "git -c diff.external=payload diff --cached",
+        ] {
+            assert!(owns_index(command), "{command}");
         }
     }
 

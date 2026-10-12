@@ -3,16 +3,24 @@ name: Release Please
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      alpha_version:
+        description: Optional test alpha cut from main; "next" picks the next X.Y+1.0aN
+        type: string
+        default: next
 
 permissions: {}
 
 concurrency:
-  group: hol-guard-release-please-${{ github.ref }}
+  # Alpha requests queue apart so they never displace a pending stable run.
+  group: hol-guard-release-please-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   release-please:
     name: Open or tag the next stable release
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -76,4 +84,56 @@ jobs:
             -f release_channel=stable \
             -f release_train=main \
             -f release_version="$VERSION" \
+            -f expected_sha="$SHA"
+
+  dispatch-alpha-publish:
+    name: Dispatch optional alpha publish
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Check out release API token tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+          path: .release-api-token
+          sparse-checkout: .github/actions/release-api-token
+          sparse-checkout-cone-mode: false
+      # The dispatch keeps the workflow token: publish authorizes bot dispatches by its actor ID.
+      - name: Route gh through the rate-limit retry wrapper
+        uses: ./.release-api-token/.github/actions/release-api-token
+      - name: Dispatch an alpha of the current main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ACTOR_ID: ${{ github.actor_id }}
+          ALPHA_VERSION: ${{ inputs.alpha_version }}
+        run: |
+          # The publish workflow trusts this bot dispatch, so only maintainers may request it.
+          if [[ "$ACTOR_ID" != "6068672" && "$ACTOR_ID" != "301892678" ]]; then
+            echo "Alpha releases may only be requested by an authorized maintainer" >&2
+            exit 1
+          fi
+          if [[ -z "$ALPHA_VERSION" ]]; then
+            ALPHA_VERSION=next
+          fi
+          if [[ "$ALPHA_VERSION" != "next" && ! "$ALPHA_VERSION" =~ ^[0-9]+\.[0-9]+\.0a[1-9][0-9]*$ ]]; then
+            echo "Alpha version must be \"next\" or a canonical X.Y.0aN" >&2
+            exit 1
+          fi
+          # Publish runs on the main ref and requires this exact commit, so pin the
+          # current main head rather than the possibly older SHA this run started on.
+          SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/heads/main" --jq .sha)
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Could not resolve the main head to a full commit SHA" >&2
+            exit 1
+          fi
+          gh workflow run "Publish to PyPI" --repo "$GITHUB_REPOSITORY" --ref main \
+            -f release_channel=alpha \
+            -f release_train=main \
+            -f release_version="$ALPHA_VERSION" \
             -f expected_sha="$SHA"

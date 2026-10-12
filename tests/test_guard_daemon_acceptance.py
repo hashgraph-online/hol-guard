@@ -37,6 +37,7 @@ def test_packaged_correctness_workloads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     native_hook_force: Path,
+    pytestconfig: pytest.Config,
 ) -> None:
     # Coverage tracing inflates every request round trip; scale the transport
     # admission deadline and the latency SLA budgets so the workload verdicts
@@ -48,6 +49,10 @@ def test_packaged_correctness_workloads(
         daemon_server_module._RUNTIME_HOOK_ADMISSION_TIMEOUT_SECONDS * coverage_scale,
     )
     result = run_workload(workload, root=tmp_path)
+    reporter = pytestconfig.pluginmanager.get_plugin("terminalreporter")
+    if reporter is not None:
+        # Passing runs hide their latency; keep the headroom visible in CI logs.
+        reporter.write_line(f"\nworkload {workload['id']}: p95_ms={result.p95_ms:.1f} p99_ms={result.p99_ms:.1f}")
     expected_secrets = sum(
         (client["requests"] + workload["secret_stride"] - 1) // workload["secret_stride"]
         for client in workload["clients"]
