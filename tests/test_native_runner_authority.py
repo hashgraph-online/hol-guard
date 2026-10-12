@@ -9,6 +9,7 @@ changed behaviour.
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -212,6 +213,36 @@ def test_bound_refusals_never_open_the_availability_circuit(monkeypatch: pytest.
         with pytest.raises(NativeRunnerAuthorityError, match="invalid"):
             _call(tmp_path)
     assert not native_runtime_health_snapshot("0" * 64, tmp_path).circuit_open
+
+
+def test_timeout_seconds_widens_the_bounded_deadline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    _force_available(monkeypatch)
+    budgets: list[int] = []
+    deadlines: list[float] = []
+
+    def capture(*, payload: bytes, deadline_monotonic: float, **_: object) -> bytes:
+        envelope = json.loads(payload)
+        budgets.append(envelope["deadline_budget_ms"])
+        deadlines.append(deadline_monotonic - time.monotonic())
+        request = envelope["request"]
+        return json.dumps(
+            {
+                "schema": module._RESULT_SCHEMA,
+                "request_id": request["request_id"],
+                "request_sha256": module._canonical_request_sha256(request),
+                "status": "ok",
+                "code": "ok",
+                "payload": {},
+            }
+        ).encode()
+
+    monkeypatch.setattr(module, "native_resident_client_request", capture)
+    assert native_runner_authority("detector_composition", {"signals": []}, tmp_path) == {}
+    assert native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=8.0) == {}
+    assert budgets == [5000, 8000]
+    assert deadlines[1] > deadlines[0]
+    native_runner_authority("detector_composition", {"signals": []}, tmp_path, timeout_seconds=60.0)
+    assert budgets[-1] == module._MAX_DEADLINE_BUDGET_MS
 
 
 def test_oversized_request_is_refused_before_the_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

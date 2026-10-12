@@ -76,6 +76,15 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _reset_aibom_mcp_native_backoff() -> None:
+    """One outage's MCP-enrichment backoff must not leak into the next test."""
+
+    from codex_plugin_scanner.guard import aibom_detection
+
+    aibom_detection._mcp_native_backoff_until = 0.0
+
+
+@pytest.fixture(autouse=True)
 def _default_off_daemon_route_policy(
     request: pytest.FixtureRequest,
     _default_unit_test_native_mode: bool,

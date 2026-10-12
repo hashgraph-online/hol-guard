@@ -15,23 +15,46 @@ pub(crate) struct Rule {
     path: Option<String>,
 }
 
-/// `Path.expanduser()` for `~` and `~/...`. `~user` is deliberately left
-/// unexpanded and the home directory is supplied by the caller, so the
-/// resident never reads its own environment for a client's home.
+/// `Path.expanduser()` for `~`, `~/...` and `~name/...`. A named user that the
+/// system cannot resolve, like CPython, is left unexpanded; the caller's own
+/// home is supplied so the resident never reads its own environment for a
+/// client's home.
 fn expanduser(value: &str, user_home: Option<&str>) -> PathBuf {
     let path = py_path(value);
     let mut parts = path.components();
-    match (parts.next(), user_home) {
-        (Some(std::path::Component::Normal(first)), Some(home)) if first == "~" => {
-            let mut out = PathBuf::from(home.trim_end_matches('/'));
-            if out.as_os_str().is_empty() {
-                out.push("/");
-            }
-            out.extend(parts);
-            out
+    let Some(std::path::Component::Normal(first)) = parts.next() else {
+        return path;
+    };
+    if first == "~" {
+        let Some(home) = user_home else {
+            return path;
+        };
+        let mut out = PathBuf::from(home.trim_end_matches('/'));
+        if out.as_os_str().is_empty() {
+            out.push("/");
         }
-        _ => path,
+        out.extend(parts);
+        return out;
     }
+    if let Some(name) = first.to_str().and_then(|text| text.strip_prefix('~')) {
+        if let Some(mut out) = named_user_home(name) {
+            out.extend(parts);
+            return out;
+        }
+    }
+    path
+}
+
+/// `pwd.getpwnam(name).pw_dir`: `~name` expands only on Unix; Windows Python
+/// leaves it alone, so the resident does too.
+#[cfg(unix)]
+fn named_user_home(name: &str) -> Option<PathBuf> {
+    nix::unistd::User::from_name(name).ok()??.dir.into()
+}
+
+#[cfg(not(unix))]
+fn named_user_home(_name: &str) -> Option<PathBuf> {
+    None
 }
 
 fn absolute_resolved(
@@ -160,4 +183,51 @@ pub(crate) fn resolve_enabled(
         }
     }
     Ok(resolved.unwrap_or(true))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn named_user_tilde_expands_to_that_users_home() {
+        let me = nix::unistd::User::from_uid(nix::unistd::Uid::current())
+            .unwrap()
+            .unwrap();
+        let name = me.name;
+        assert_eq!(
+            expanduser(&format!("~{name}/skills/s"), Some("/ignored")),
+            me.dir.join("skills/s")
+        );
+        assert_eq!(
+            expanduser("~no-such-user-hol-guard/skills/s", Some("/base")),
+            py_path("~no-such-user-hol-guard/skills/s")
+        );
+    }
+
+    #[test]
+    fn named_user_rule_disables_a_matching_skill() {
+        let me = nix::unistd::User::from_uid(nix::unistd::Uid::current())
+            .unwrap()
+            .unwrap();
+        let skill_dir = me.dir.join("skills/off");
+        let rule = Rule {
+            enabled: false,
+            name: None,
+            path: Some(
+                expanduser(&format!("~{}/skills/off", me.name), None)
+                    .to_str()
+                    .unwrap()
+                    .to_owned(),
+            ),
+        };
+        assert!(!resolve_enabled(
+            &format!("{}/SKILL.md", skill_dir.to_str().unwrap()),
+            "off",
+            &[rule],
+            Path::new("/home"),
+            None,
+        )
+        .unwrap());
+    }
 }

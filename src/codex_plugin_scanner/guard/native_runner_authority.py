@@ -58,8 +58,17 @@ def _fail(status: Any, guard_home: Path, code: str) -> NativeRunnerAuthorityErro
     return NativeRunnerAuthorityError(code)
 
 
-def native_runner_authority(kind: str, args: Mapping[str, Any], guard_home: Path | None = None) -> dict[str, Any]:
-    """Run one authority ``kind`` in the resident and return its bound payload."""
+def native_runner_authority(
+    kind: str,
+    args: Mapping[str, Any],
+    guard_home: Path | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Run one authority ``kind`` in the resident and return its bound payload.
+
+    ``timeout_seconds`` widens the per-call budget for file-heavy kinds; the
+    envelope deadline stays bounded by ``_MAX_DEADLINE_BUDGET_MS``.
+    """
 
     guard_home = _resolve_digest_home(guard_home)
     request: dict[str, Any] = {
@@ -89,7 +98,7 @@ def native_runner_authority(kind: str, args: Mapping[str, Any], guard_home: Path
         )
     try:
         request_sha256 = _canonical_request_sha256(request)
-        budget_seconds = _TIMEOUT_SECONDS
+        budget_seconds = _TIMEOUT_SECONDS if timeout_seconds is None else float(timeout_seconds)
         if not native_resident_client_ready(status.identity.path, guard_home):
             budget_seconds += _COLD_START_ALLOWANCE_SECONDS
         deadline_budget_ms = max(1, min(_MAX_DEADLINE_BUDGET_MS, int(budget_seconds * 1_000)))

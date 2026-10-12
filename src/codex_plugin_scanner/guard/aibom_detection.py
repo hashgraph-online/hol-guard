@@ -13,6 +13,7 @@ validate as approval context.
 from __future__ import annotations
 
 import os
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, Literal
@@ -116,9 +117,15 @@ def instruction_role_for_path(path: Path) -> InstructionRole | None:
     return None
 
 
+# Discovery kinds hash instruction documents, walk docs/* and compute skill
+# directory identities in one resident call, so they get a wider budget than
+# the default launch-path deadline while staying inside the envelope cap.
+_AIBOM_DISCOVERY_TIMEOUT_SECONDS = 8.0
+
+
 def _native(kind: str, args: Mapping[str, Any]) -> dict[str, Any]:
     try:
-        return native_runner_authority(kind, args)
+        return native_runner_authority(kind, args, timeout_seconds=_AIBOM_DISCOVERY_TIMEOUT_SECONDS)
     except NativeRunnerAuthorityError as error:
         raise NativeAibomError(str(error)) from error
 
@@ -438,6 +445,13 @@ def _unbound_mcp_digests(request: Mapping[str, object]) -> dict[str, object]:
     }
 
 
+# One resident outage should not cost a full deadline per configured server:
+# after the first failure the remaining enrichments fall back to unbound
+# digests until the retry window passes.
+_MCP_NATIVE_RETRY_SECONDS = 30.0
+_mcp_native_backoff_until = 0.0
+
+
 def enrich_mcp_server_metadata(
     metadata: dict[str, object],
     *,
@@ -448,6 +462,7 @@ def enrich_mcp_server_metadata(
     configured_environment: Mapping[str, object] | None = None,
     configured_headers: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    global _mcp_native_backoff_until
     raw_env = configured_environment if configured_environment is not None else metadata.get("env")
     raw_headers = configured_headers if configured_headers is not None else metadata.get("headers")
     request: dict[str, object] = {
@@ -463,11 +478,15 @@ def enrich_mcp_server_metadata(
         "header_values_hash": _explicit_hash(metadata.get("header_values_hash")),
         "label": str(metadata.get("name", "mcp")),
     }
-    try:
-        answer = native_runner_authority("aibom_mcp_metadata", request)
-    except NativeRunnerAuthorityError as error:
-        if str(error).startswith("native_runner_authority_aibom_"):
-            raise NativeAibomError(str(error)) from error
+    answer = None
+    if time.monotonic() >= _mcp_native_backoff_until:
+        try:
+            answer = native_runner_authority("aibom_mcp_metadata", request)
+        except NativeRunnerAuthorityError as error:
+            if str(error).startswith("native_runner_authority_aibom_"):
+                raise NativeAibomError(str(error)) from error
+            _mcp_native_backoff_until = time.monotonic() + _MCP_NATIVE_RETRY_SECONDS
+    if answer is None:
         answer = _unbound_mcp_digests(request)
     enriched = dict(metadata)
     for key in ("env_keys", "headers_keys", "env_values_hash", "header_values_hash", "content_hash", "versionInfo"):

@@ -585,7 +585,7 @@ def test_workspace_skills_excluded_for_hermes_inventory_snapshot(tmp_path: Path)
 
 
 def _unavailable_native(monkeypatch: pytest.MonkeyPatch) -> None:
-    def refuse(kind: str, args: object, guard_home: object = None) -> dict[str, object]:
+    def refuse(kind: str, args: object, guard_home: object = None, **_kwargs: object) -> dict[str, object]:
         raise NativeRunnerAuthorityError("native_runner_authority_unavailable")
 
     monkeypatch.setattr(aibom_detection, "native_runner_authority", refuse)
@@ -597,8 +597,10 @@ def _recording_native(
 ) -> list[tuple[str, dict[str, object]]]:
     calls: list[tuple[str, dict[str, object]]] = []
 
-    def answer_with(kind: str, args: dict[str, object], guard_home: object = None) -> dict[str, object]:
-        calls.append((kind, args))
+    def answer_with(
+        kind: str, args: dict[str, object], guard_home: object = None, **kwargs: object
+    ) -> dict[str, object]:
+        calls.append((kind, {**args, **kwargs}))
         return answer
 
     monkeypatch.setattr(aibom_detection, "native_runner_authority", answer_with)
@@ -653,6 +655,48 @@ def test_mcp_metadata_degrades_to_unbound_sentinels_without_native(monkeypatch: 
     assert "secret" not in json.dumps(enriched["versionInfo"])
     assert enriched["versionInfo"]["versionLabel"] == "svc"
     assert enriched["versionInfo"]["contentHash"] == enriched["content_hash"]
+
+
+def test_mcp_metadata_one_outage_short_circuits_the_rest_of_a_pass(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def refuse(kind: str, args: object, guard_home: object = None, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+
+    monkeypatch.setattr(aibom_detection, "native_runner_authority", refuse)
+    monkeypatch.setattr(aibom_detection, "_mcp_native_backoff_until", 0.0)
+    for _ in range(3):
+        enriched = enrich_mcp_server_metadata(
+            {"name": "svc"},
+            command="npx",
+            args=(),
+            url=None,
+            transport="stdio",
+        )
+        assert str(enriched["content_hash"]).startswith("guard-context-unbound:")
+    assert calls == 1
+
+
+def test_mcp_metadata_retries_after_the_backoff_window(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+    now = 1000.0
+
+    def refuse(kind: str, args: object, guard_home: object = None, **_kwargs: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        raise NativeRunnerAuthorityError("native_runner_authority_resident_unavailable")
+
+    monkeypatch.setattr(aibom_detection, "native_runner_authority", refuse)
+    monkeypatch.setattr(aibom_detection, "_mcp_native_backoff_until", 0.0)
+    monkeypatch.setattr(aibom_detection.time, "monotonic", lambda: now)
+    enrich_mcp_server_metadata({"name": "a"}, command="c", args=(), url=None, transport="stdio")
+    enrich_mcp_server_metadata({"name": "b"}, command="c", args=(), url=None, transport="stdio")
+    assert calls == 1
+    now += aibom_detection._MCP_NATIVE_RETRY_SECONDS
+    enrich_mcp_server_metadata({"name": "c"}, command="c", args=(), url=None, transport="stdio")
+    assert calls == 2
 
 
 def test_merge_applies_native_plan_to_callers_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
