@@ -34,38 +34,12 @@ pub(crate) fn py_join(base: &Path, value: &str) -> PathBuf {
     out
 }
 
-/// Non-strict `Path.resolve()`: symlinks resolve for the existing prefix and
-/// the remainder is appended lexically. A link loop or unreadable ancestor is
-/// an error, never a partial answer.
+/// Non-strict `Path.resolve()`, shared with the compound-git resolver so the
+/// two cannot diverge: symlinks resolve over the existing prefix, the remainder
+/// is appended lexically, and the result never carries a Windows verbatim
+/// prefix. A link loop or a relative input is an error, never a partial answer.
 pub(crate) fn resolve(path: &Path) -> Result<PathBuf, ()> {
-    let mut existing = path.to_path_buf();
-    let mut tail: Vec<std::ffi::OsString> = Vec::new();
-    loop {
-        match fs::canonicalize(&existing) {
-            Ok(mut real) => {
-                for part in tail.iter().rev() {
-                    if part == ".." {
-                        real.pop();
-                    } else {
-                        real.push(part);
-                    }
-                }
-                return Ok(real);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                let name = match existing.components().next_back() {
-                    Some(Component::Normal(name)) => name.to_os_string(),
-                    Some(Component::ParentDir) => "..".into(),
-                    _ => return Err(()),
-                };
-                tail.push(name);
-                if !existing.pop() {
-                    return Err(());
-                }
-            }
-            Err(_) => return Err(()),
-        }
-    }
+    super::compound_git_paths::resolve(path).ok_or(())
 }
 
 pub(crate) fn is_file(path: &Path) -> bool {
@@ -146,13 +120,14 @@ pub(crate) const ERR_NON_UTF8: &str = "native_runner_authority_aibom_non_utf8_pa
 
 /// A directory entry name, or a typed refusal for a non-UTF-8 name that could
 /// hide matching content: it can never be carried in JSON, and silently
-/// dropping it would omit content from inventory. `strict` refuses every such
-/// name (a recursive walk may need to descend into it); otherwise only a name
-/// ending in `suffix` is refused.
+/// dropping it would omit content from inventory. A name ending in `suffix` is
+/// always refused; with `descend`, a real directory is refused too because a
+/// recursive walk would have to enter it. Any other non-UTF-8 entry (an image,
+/// a binary) cannot match and is skipped.
 fn entry_name(
     entry: &fs::DirEntry,
     suffix: &str,
-    strict: bool,
+    descend: bool,
 ) -> Result<Option<String>, &'static str> {
     match entry.file_name().into_string() {
         Ok(name) => Ok(Some(name)),
@@ -160,12 +135,13 @@ fn entry_name(
             #[cfg(unix)]
             {
                 use std::os::unix::ffi::OsStrExt;
-                if strict || raw.as_bytes().ends_with(suffix.as_bytes()) {
+                let is_real_dir = descend && entry.file_type().is_ok_and(|kind| kind.is_dir());
+                if is_real_dir || raw.as_bytes().ends_with(suffix.as_bytes()) {
                     return Err(ERR_NON_UTF8);
                 }
             }
             #[cfg(not(unix))]
-            let _ = (raw, suffix, strict);
+            let _ = (raw, suffix, descend, entry);
             Ok(None)
         }
     }
@@ -299,4 +275,38 @@ pub(crate) fn instruction_role_for_path(path: &Path) -> Option<&'static str> {
         }
     }
     None
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    #[test]
+    fn non_utf8_names_only_refuse_when_they_could_match() {
+        let root = fs::canonicalize(std::env::temp_dir())
+            .unwrap()
+            .join(format!("aibom-paths-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("docs/a.md"), "a").unwrap();
+        fs::write(
+            root.join("docs").join(OsStr::from_bytes(b"img\xff.png")),
+            "x",
+        )
+        .unwrap();
+        let found = recursive_markdown_files(&root, &root.join("docs")).unwrap();
+        assert_eq!(found, vec![root.join("docs/a.md")]);
+        fs::write(
+            root.join("docs").join(OsStr::from_bytes(b"bad\xff.md")),
+            "x",
+        )
+        .unwrap();
+        assert_eq!(
+            recursive_markdown_files(&root, &root.join("docs")),
+            Err(ERR_NON_UTF8)
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
 }

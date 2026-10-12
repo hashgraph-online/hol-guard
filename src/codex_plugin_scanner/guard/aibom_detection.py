@@ -465,7 +465,9 @@ def enrich_mcp_server_metadata(
     }
     try:
         answer = native_runner_authority("aibom_mcp_metadata", request)
-    except NativeRunnerAuthorityError:
+    except NativeRunnerAuthorityError as error:
+        if str(error).startswith("native_runner_authority_aibom_"):
+            raise NativeAibomError(str(error)) from error
         answer = _unbound_mcp_digests(request)
     enriched = dict(metadata)
     for key in ("env_keys", "headers_keys", "env_values_hash", "header_values_hash", "content_hash", "versionInfo"):
