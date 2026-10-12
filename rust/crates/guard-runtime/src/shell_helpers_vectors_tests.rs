@@ -301,7 +301,7 @@ fn paged_results_reuse_prepared_values_and_serialized_fragments() {
             .len(),
         1
     );
-    let large = json!({"command": "echo ".repeat(100_000), "spans": []});
+    let large = json!({"command": "echo ".repeat(100_000), "heredocs": []});
     let masked = prepared_result("masked_bodies", &large, deadline).unwrap();
     assert_eq!(
         page_result(&masked, 0).unwrap()["result_sha256"],
