@@ -353,7 +353,7 @@ fn exchange_locked(
         return err_result("mcp_exchange_requires_request_id");
     };
     let quiet = Duration::from_millis(exchange.quiet_ms.min(MAX_QUIET_MS));
-    match entry.session.next_event(quiet) {
+    match entry.session.next_event_quiet(quiet) {
         Ok(None) => {}
         Ok(Some(event)) => {
             let (kind, frame) = event_parts(event);
@@ -366,9 +366,7 @@ fn exchange_locked(
     if let Err(code) = entry.session.write(message) {
         return err_result(&code);
     }
-    let deadline = std::time::Instant::now()
-        + Duration::from_millis(exchange.response_timeout_ms.min(MAX_RESPONSE_MS));
-    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+    let remaining = Duration::from_millis(exchange.response_timeout_ms.min(MAX_RESPONSE_MS));
     match entry.session.next_event(remaining) {
         Ok(None) => exchange_outcome("timeout", true, None, None, None),
         Err(guard_command::mcp_stdio_session::SessionReadError::Eof) => {

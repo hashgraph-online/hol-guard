@@ -319,6 +319,23 @@ fn exchange_returns_a_frame_seen_during_the_quiet_edge_without_writing() {
 }
 
 #[test]
+fn exchange_waits_for_a_notification_that_is_still_arriving() {
+    let _g = LOCK.lock().unwrap();
+    let id = "exchange-partial-boundary";
+    // The notification starts before the quiet edge ends and finishes after it.
+    let script = r#"printf '%s' '{"jsonrpc":"2.0","method":"notifications/tools/'; sleep 1; printf '%s\n' 'list_changed"}'; cat"#;
+    assert_eq!(
+        decode(session_open(&open_req(id, vec!["/bin/sh", "-c", script])).unwrap())["status"],
+        "opened"
+    );
+    let reply = exchange(id, json!({"jsonrpc":"2.0","id":3,"result":{}}), 600, 2000);
+    assert_eq!(reply["payload"]["outcome"], "boundary", "{reply:?}");
+    assert_eq!(reply["payload"]["written"], false);
+    assert_eq!(reply["payload"]["event_kind"], "child_notification");
+    close(id);
+}
+
+#[test]
 fn exchange_times_out_after_writing_when_the_child_stays_silent() {
     let _g = LOCK.lock().unwrap();
     let id = "exchange-timeout";
