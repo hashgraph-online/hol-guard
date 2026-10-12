@@ -349,11 +349,11 @@ mod runner_sync_url;
 mod runtime_cli;
 mod runtime_detector_run_op;
 mod secrets_cli;
-mod shell_helpers_op;
 #[cfg(all(test, unix))]
 #[allow(dead_code, clippy::pedantic)]
 #[path = "../../guard-command/tests/sfrs_support/mod.rs"]
 mod sfrs_support;
+mod shell_helpers_op;
 mod shim_op;
 #[cfg(unix)]
 mod skill_directory_identity_op;
