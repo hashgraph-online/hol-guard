@@ -6,13 +6,13 @@ import pytest
 
 import codex_plugin_scanner.guard.local_supply_chain as local_supply_chain_module
 from codex_plugin_scanner.guard.config import GuardConfig
-from codex_plugin_scanner.guard.local_supply_chain import (
-    build_package_protect_payload,
-    compose_current_package_policy_action,
-)
+from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import (
     GuardArtifact,
     PolicyDecision,
+)
+from codex_plugin_scanner.guard.native_package_approval_hash import (
+    native_package_current_action as compose_current_package_policy_action,
 )
 from codex_plugin_scanner.guard.runtime.package_intent_common import build_package_request_artifact
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent

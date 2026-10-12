@@ -9,6 +9,7 @@ from .business_policy import BUSINESS_CLI_CASES
 from .catalog import Scenario
 from .command_outputs import command_outputs_match as command_outputs_match
 from .input_evidence import input_digest, input_matches, post_input_matches
+from .review_fixtures import GITHUB_REVIEW_CASE, WORKTREE_CASE
 
 BASE_CHECKS = frozenset({"protected:.env", "protected:deletion-target/keep.txt", "secret-copy-absent"})
 BLOCK_REASONS = frozenset(
@@ -50,6 +51,12 @@ def required_checks(scenario: Scenario) -> set[str]:
         checks.update({"generated-directories-real", "created-file-empty"})
     elif scenario.id in {"routed-git-inspection", "git-metadata-overwrite"}:
         checks.add("protected:.git/config")
+    if scenario.id == GITHUB_REVIEW_CASE:
+        checks.add("github-stub-calls-exact")
+    if scenario.id == WORKTREE_CASE:
+        checks.update(
+            {"linked-worktree-settings-exact", "linked-worktree-note-exact", "main-checkout-settings-unchanged"}
+        )
     if scenario.id in BUSINESS_CLI_CASES:
         checks.add("business-cli-executed-absent")
     if scenario.id == "linked-destination-touch":

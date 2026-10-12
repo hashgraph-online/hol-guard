@@ -7,10 +7,14 @@ import {
   harnessPosturePatch,
   harnessPostureRows,
   harnessPostureSummary,
+  harnessRowStatus,
+  harnessRowTone,
   harnessWatchPrompt,
   normalizeHarnessPostures,
+  overrideRows,
   restartHarnessWatch,
   selectHarnessPosture,
+  sortHarnessRows,
   turnProtectionOnUpdate,
   watchBannerModel,
   withHarnessPosturePatch,
@@ -153,3 +157,22 @@ assert(
   !("harness_watch_restart" in withHarnessPosturePatch(restarted, restarted, appWatch)),
   "restart marker stays out of the payload",
 );
+
+// Row captions say where the level comes from.
+const inheritedRow = harnessPostureRows(settings(), capabilities)[0];
+assert(harnessRowStatus(inheritedRow) === "Follows the machine setting", "inherit caption names the machine setting");
+assert(harnessRowTone(inheritedRow) === "protected", "inherited protected reads as protected");
+const watchedRow = harnessPostureRows(watched, capabilities)[0];
+assert(harnessRowStatus(watchedRow) === "Watch · recording only", "own Watch caption says recording only");
+assert(harnessRowTone(watchedRow) === "watch", "Watch row reads as attention");
+const protectedUnderWatchRow = harnessPostureRows(protectedApp, capabilities)[0];
+assert(protectedUnderWatchRow !== undefined && harnessRowStatus(protectedUnderWatchRow) === "Set for this app", "override caption names the app choice");
+const watchInheritRow = harnessPostureRows(globalWatch, capabilities)[1];
+assert(watchInheritRow !== undefined && harnessRowStatus(watchInheritRow) === "Watch · follows the machine setting", "inherited Watch names the machine setting");
+
+// Watch rows sort first so a weaker posture cannot hide in the list.
+const sorted = sortHarnessRows(harnessPostureRows(watched, capabilities));
+assert(sorted[0]?.harness === "codex", "watched app sorts first");
+assert(sorted.length === 2, "sorting keeps every row");
+assert(overrideRows(harnessPostureRows(watched, capabilities)).length === 1, "override list has only the app with its own entry");
+

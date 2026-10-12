@@ -57,7 +57,20 @@ def test_macos_skill_identity_consumes_the_ci_runtime() -> None:
         for step in load_ci_workflow()["jobs"]["cross-platform"]["steps"]
         if step.get("name") == "Run cross-platform skill-directory identity regressions"
     )
-    assert _pytest_files(steps[regression]) == _pytest_files(windows_step) != []
+    windows_files = _pytest_files(windows_step)
+    macos_files = _pytest_files(steps[regression])
+    # Adapter and AIBOM discovery run in the native resident, which only the
+    # macOS lane builds; every other file must match the Windows lane exactly.
+    native_only = {
+        "tests/test_gemini_adapter.py",
+        "tests/test_gemini_skill_directory_identity.py",
+        "tests/test_antigravity_adapter.py",
+        "tests/test_guard_aibom_detection.py",
+        "tests/test_guard_aibom_skill_directory_identity.py",
+    }
+    assert windows_files != []
+    assert [name for name in macos_files if name not in native_only] == windows_files
+    assert native_only <= set(macos_files)
 
 
 def test_required_aggregate_includes_the_macos_native_lane() -> None:

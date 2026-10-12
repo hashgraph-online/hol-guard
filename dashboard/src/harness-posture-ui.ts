@@ -194,6 +194,32 @@ export function harnessPostureSummary(rows: HarnessPostureRow[]): string {
   return `${watching.length} of ${rows.length} apps in Watch: ${joinNames(watching.map((row) => row.displayName))}.`;
 }
 
+/** Whether a row should read as protected (calm) or Watch (attention) at a glance. */
+export function harnessRowTone(row: HarnessPostureRow): "protected" | "watch" {
+  return row.effective === "watch" ? "watch" : "protected";
+}
+
+/** One-line caption for a row that says where its level comes from. */
+export function harnessRowStatus(row: HarnessPostureRow): string {
+  if (row.effective === "watch") {
+    return row.hasOverride ? "Watch · recording only" : "Watch · follows the machine setting";
+  }
+  if (!row.hasOverride) return "Follows the machine setting";
+  return "Set for this app";
+}
+
+/** Rows in Watch first so a weaker posture is impossible to miss, then the given order. */
+export function sortHarnessRows(rows: HarnessPostureRow[]): HarnessPostureRow[] {
+  const watching = rows.filter((row) => row.effective === "watch");
+  const rest = rows.filter((row) => row.effective !== "watch");
+  return [...watching, ...rest];
+}
+
+/** Rows that carry their own entry instead of inheriting the machine posture. */
+export function overrideRows(rows: HarnessPostureRow[]): HarnessPostureRow[] {
+  return rows.filter((row) => row.hasOverride);
+}
+
 /** Confirmation copy for putting one app in Watch, given what the other apps will do. */
 export function harnessWatchPrompt(rows: HarnessPostureRow[], harness: string): string {
   const row = rows.find((candidate) => candidate.harness === harness);

@@ -10,6 +10,7 @@ fallback.
 
 from __future__ import annotations
 
+import socket
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -133,3 +134,110 @@ def native_empty_audit_outcome(
     if set(payload) != {"audit_outcome", "message"} or not isinstance(outcome, str) or not isinstance(message, str):
         raise NativePackageAuditProjectionError("Native empty audit outcome invalid")
     return outcome, message
+
+
+def _machine_name() -> str | None:
+    try:
+        machine = socket.gethostname().strip()
+    except OSError:
+        return None
+    return machine or None
+
+
+def native_cloud_audit_payload(
+    store: Any,
+    *,
+    workspace_dir: Path,
+    workspace_id: str,
+    inventory_digest: str,
+    sbom_paths: Sequence[str] = (),
+    before_workspace_dir: Path | None = None,
+    include_lockfile_warnings: bool = False,
+    mode: str = "paged",
+    page_size: int | None = None,
+) -> dict[str, object]:
+    """Return the resident-built Cloud workspace-audit request payload.
+
+    The resident rebuilds the inventory from the options of the
+    ``native_workspace_inventory`` read that reported ``inventory_digest`` and
+    rejects a workspace whose snapshot no longer matches it.
+    """
+
+    query: dict[str, object] = {
+        "query": "cloud_payload",
+        "workspace_dir": str(workspace_dir),
+        "workspace_id": workspace_id,
+        "store_path": str(store.path),
+        "inventory_workspace_dir": str(Path(workspace_dir).expanduser().absolute()),
+        "sbom_paths": [str(path) for path in sbom_paths],
+        "include_lockfile_warnings": include_lockfile_warnings,
+        "inventory_digest": inventory_digest,
+        "mode": mode,
+    }
+    machine = _machine_name()
+    if machine is not None:
+        query["machine"] = machine
+    if before_workspace_dir is not None:
+        query["before_workspace_dir"] = str(Path(before_workspace_dir).expanduser().absolute())
+    if page_size is not None:
+        query["page_size"] = page_size
+    payload = _send(query, store)
+    if not isinstance(payload.get("packages"), list) or not isinstance(payload.get("workspaceFingerprint"), str):
+        raise NativePackageAuditProjectionError("Native cloud audit payload invalid")
+    return payload
+
+
+def native_batch_url(
+    store: Any,
+    sync_url: str,
+    workspace_id: str,
+    *,
+    job_id: str | None = None,
+    page_size: int | None = None,
+) -> str:
+    """Return the resident-normalised Cloud batch (or batch-job) URL."""
+
+    query: dict[str, object] = {"query": "batch_url", "sync_url": sync_url, "workspace_id": workspace_id}
+    if job_id is not None:
+        query["job_id"] = job_id
+        query["page_size"] = 1 if page_size is None else page_size
+    payload = _send(query, store)
+    url = payload.get("url")
+    if set(payload) != {"url"} or not isinstance(url, str) or not url:
+        raise NativePackageAuditProjectionError("Native cloud audit url invalid")
+    return url
+
+
+def native_normalize_cloud_audit_response(store: Any, response: dict[str, object]) -> dict[str, object]:
+    """Return the resident's local-summary shape for a Cloud audit response."""
+
+    payload = _send({"query": "cloud_normalize", "response": response}, store)
+    if not isinstance(payload.get("decision"), str) or not isinstance(payload.get("packages"), list):
+        raise NativePackageAuditProjectionError("Native cloud audit response invalid")
+    return payload
+
+
+def native_managed_workspaces(
+    store: Any,
+    *,
+    candidates: bool,
+    workspace_dir: Path | None = None,
+) -> tuple[str, ...]:
+    """Return the ordered managed audit workspaces, or the resolved audit candidates."""
+
+    query: dict[str, object] = {
+        "query": "workspace_candidates",
+        "installs": list(store.list_managed_installs()),
+        "candidates": candidates,
+    }
+    if workspace_dir is not None:
+        query["workspace_dir"] = str(workspace_dir)
+    payload = _send(query, store)
+    workspaces = payload.get("workspaces")
+    if (
+        set(payload) != {"workspaces"}
+        or not isinstance(workspaces, list)
+        or not all(isinstance(item, str) for item in workspaces)
+    ):
+        raise NativePackageAuditProjectionError("Native managed workspaces invalid")
+    return tuple(workspaces)

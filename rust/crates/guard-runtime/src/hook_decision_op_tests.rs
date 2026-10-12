@@ -58,6 +58,10 @@ fn matches_language_neutral_vectors() {
     assert!(vectors.len() > 80);
     for vector in vectors {
         let name = vector["name"].as_str().unwrap();
+        // The native tool-action classifier is a unix-only module.
+        if cfg!(not(unix)) && vector.get("requires_unix") == Some(&json!(true)) {
+            continue;
+        }
         if let Some(code) = vector.get("error") {
             assert_eq!(
                 rejection(&vector["query"]).as_deref(),

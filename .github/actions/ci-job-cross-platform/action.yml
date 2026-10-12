@@ -40,13 +40,13 @@ runs:
   - name: Run cross-platform skill-directory identity regressions
     # macOS runs these against the native runtime in the macos-skill-identity
     # job; Windows has no native op and uses the portable Python implementation.
+    # Adapter and AIBOM discovery suites need the resident and run only there.
     if: runner.os == 'Windows'
     run: uv run --no-sync pytest tests/test_guard_skill_directory_identity.py
       tests/test_guard_skill_directory_identity_discovery.py tests/test_guard_skill_directory_identity_downstream.py tests/test_guard_skill_directory_identity_links.py
       tests/test_guard_skill_directory_identity_vectors.py
-      tests/test_guard_consumer_skill_directory_identity.py tests/test_guard_runner_skill_directory_identity.py tests/test_gemini_adapter.py
-      tests/test_gemini_skill_directory_identity.py tests/test_antigravity_adapter.py tests/test_guard_aibom_detection.py
-      tests/test_guard_aibom_content_upload_batches.py tests/test_guard_aibom_skill_directory_identity.py --tb=short
+      tests/test_guard_consumer_skill_directory_identity.py tests/test_guard_runner_skill_directory_identity.py
+      tests/test_guard_aibom_content_upload_batches.py --tb=short
     shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
   - name: Run Windows Codex hook process-tree regressions
     if: runner.os == 'Windows'

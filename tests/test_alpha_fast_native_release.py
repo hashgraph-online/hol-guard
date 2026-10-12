@@ -112,7 +112,9 @@ def test_alpha_native_wheels_never_reach_pypi() -> None:
     assert "--artifact-set pure" in plan
     publishers = [s for s in steps if "gh-action-pypi-publish" in s.get("uses", "")]
     assert [s["with"]["packages-dir"] for s in publishers] == ["upload-dist-hol-guard/", "dist-plugin-scanner/"]
-    verify = "\n".join(s.get("run", "") for s in steps if "retry_verify_published.py --registry pypi" in s.get("run", ""))
+    verify = "\n".join(
+        s.get("run", "") for s in steps if "retry_verify_published.py --registry pypi" in s.get("run", "")
+    )
     assert "--artifact-set pure" in verify
     # The only other alpha upload target is the TestPyPI index, never PyPI or a stable release.
     testpypi = [s for s in PUBLISH["publish-alpha-testpypi"]["steps"] if "gh-action-pypi-publish" in s.get("uses", "")]
@@ -151,6 +153,52 @@ def test_resolve_job_mirrors_build_alpha_version_rules() -> None:
     ):
         assert token in script
         assert token in build
+
+
+def test_windows_alpha_compile_lowers_only_workspace_opt_level() -> None:
+    prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
+    expression = prepare["env"]["ALPHA_WORKSPACE_OPT_LEVEL"]
+    assert expression == "${{ matrix.target == 'x86_64-pc-windows-msvc' && '0' || '' }}"
+    legs = prepare["strategy"]["matrix"]["include"]
+    assert len(legs) == 4
+    targets = [leg["target"] for leg in legs]
+    assert targets.count("x86_64-pc-windows-msvc") == 1
+    step = next(s for s in prepare["steps"] if s.get("name") == "Compile canonical release inputs")
+    script = step["run"]
+    export = script.index("CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16")
+    guard = script.index('[[ "$FAST_CODEGEN" == "true" && -n "$ALPHA_WORKSPACE_OPT_LEVEL" ]]')
+    assert export < guard < script.index("cargo build")
+    assert "workspace_opt_profile.py" in script
+    builds = [line for line in script.splitlines() if line.strip().startswith("cargo build")]
+    assert len(builds) == 1
+    assert '${cargo_config[@]+"${cargo_config[@]}"}' in builds[0]
+    # The determinism workflow's compile matrix must stay identical to this one.
+    determinism = load_workflow(ROOT / ".github/workflows/release-native-determinism.yml")["jobs"]["compare"]
+    assert determinism["strategy"]["matrix"]["include"] == legs
+
+
+def test_alpha_prerelease_still_waits_for_pypi_while_overlapping_it() -> None:
+    job = PUBLISH["release-alpha"]
+    assert "publish-alpha-pypi" not in job["needs"]
+    assert job["needs"] == ["build", "assemble-native-guard-distributions", "reserve-alpha-tag"]
+    condition = " ".join(job["if"].split())
+    assert "needs.publish-alpha-pypi" not in condition
+    assert "needs.assemble-native-guard-distributions.result == 'success'" in condition
+    assert "needs.reserve-alpha-tag.result == 'success'" in condition
+    assert job["permissions"]["actions"] == "read"
+    names = [step.get("name") for step in job["steps"]]
+    wait = next(step for step in job["steps"] if step.get("name") == "Wait for the PyPI publication to succeed")
+    assert names.index("Generate release notes") < names.index("Wait for the PyPI publication to succeed")
+    assert names.index("Wait for the PyPI publication to succeed") < names.index("Refresh release API token")
+    assert names.index("Refresh release API token") < names.index("Create discoverable alpha prerelease")
+    assert wait["env"]["GH_TOKEN"] == "${{ github.token }}"
+    notes = next(step for step in job["steps"] if step.get("name") == "Generate release notes")
+    prerelease = next(step for step in job["steps"] if step.get("name") == "Create discoverable alpha prerelease")
+    assert notes["env"]["GH_TOKEN"] == "${{ steps.release-token.outputs.token }}"
+    assert prerelease["env"]["GH_TOKEN"] == "${{ steps.release-token-after-pypi.outputs.token }}"
+    publish_name = PUBLISH["publish-alpha-pypi"]["name"]
+    assert "wait_for_run_job.py" in wait["run"]
+    assert f'--job-name "{publish_name}"' in wait["run"]
 
 
 def test_native_prepare_version_pattern_accepts_only_canonical_alpha_suffix() -> None:

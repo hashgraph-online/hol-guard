@@ -2614,10 +2614,18 @@ fn workspace_has_project_markers(workspace_dir: &Path) -> bool {
 /// `managed_install_audit_workspace_dirs` — active installs first, then by
 /// `updated_at` desc; deduped, stripped non-empty workspaces.
 pub fn managed_install_audit_workspace_dirs(store: &dyn SupplyChainStore) -> Vec<String> {
-    let mut installs = store.list_managed_installs();
+    managed_install_audit_workspace_dirs_from(store.list_managed_installs())
+}
+
+/// `managed_install_audit_workspace_dirs` over an already-listed install set:
+/// active installs first, then newest `updated_at`, deduplicated by the
+/// stripped workspace string.
+pub fn managed_install_audit_workspace_dirs_from(mut installs: Vec<Value>) -> Vec<String> {
     installs.sort_by(|a, b| {
         let a_key = (
-            if a.get("active").and_then(Value::as_bool).unwrap_or(false) {
+            if a.get("active")
+                .is_some_and(crate::target_identities::py_truthy)
+            {
                 1
             } else {
                 0
@@ -2628,7 +2636,9 @@ pub fn managed_install_audit_workspace_dirs(store: &dyn SupplyChainStore) -> Vec
                 .to_string(),
         );
         let b_key = (
-            if b.get("active").and_then(Value::as_bool).unwrap_or(false) {
+            if b.get("active")
+                .is_some_and(crate::target_identities::py_truthy)
+            {
                 1
             } else {
                 0
@@ -2680,15 +2690,24 @@ fn managed_workspace_audit_candidates(
     store: &dyn SupplyChainStore,
     workspace_dir: Option<&Path>,
 ) -> Vec<PathBuf> {
+    managed_workspace_audit_candidates_for(
+        &managed_install_audit_workspace_dirs(store),
+        workspace_dir,
+    )
+}
+
+/// `_managed_workspace_audit_candidates` over the ordered managed workspace
+/// strings: the explicit workspace first, then each managed one, kept when it
+/// resolves to an existing directory with project markers.
+pub fn managed_workspace_audit_candidates_for(
+    managed_dirs: &[String],
+    workspace_dir: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut raw: Vec<PathBuf> = Vec::new();
     if let Some(dir) = workspace_dir {
         raw.push(dir.to_path_buf());
     }
-    raw.extend(
-        managed_install_audit_workspace_dirs(store)
-            .iter()
-            .map(|entry| expand_tilde(entry)),
-    );
+    raw.extend(managed_dirs.iter().map(|entry| expand_tilde(entry)));
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
     for candidate in raw {

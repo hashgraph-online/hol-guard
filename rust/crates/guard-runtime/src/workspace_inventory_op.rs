@@ -321,14 +321,78 @@ fn package_target(request: &WorkspaceInventoryRequestV1) -> Result<Value, String
     Ok(target)
 }
 
+/// The full inventory of one workspace and the digest that pins it. Page 1
+/// of the inventory op and the Cloud audit payload both derive it, so the
+/// payload can be checked against the exact snapshot the caller reported.
+pub(crate) struct InventorySnapshot {
+    pub(crate) manifest_paths: Vec<String>,
+    pub(crate) lockfile_paths: Vec<String>,
+    pub(crate) sbom_paths: Vec<String>,
+    pub(crate) items: Vec<Value>,
+    pub(crate) diff: Value,
+    pub(crate) warnings: Vec<Value>,
+    pub(crate) digest: String,
+}
+
+pub(crate) fn inventory_snapshot(
+    after_dir: &str,
+    before_dir: Option<&str>,
+    requested_sbom_paths: &[String],
+    include_lockfile_warnings: bool,
+) -> Result<InventorySnapshot, String> {
+    let (manifest_paths, lockfile_paths) = workspace_files(after_dir);
+    let sbom_paths = resolve_sbom_paths(after_dir, requested_sbom_paths);
+    let workspace = expanduser(after_dir);
+    let mut reader = DependencyReader::new(&workspace);
+    let (mut inventory, diff) = match before_dir {
+        Some(before_dir) => {
+            let (map, summary) =
+                diff_inventory(before_dir, after_dir, &manifest_paths, &lockfile_paths)?;
+            (map, summary)
+        }
+        None => (
+            inventory_from_paths(&mut reader, &manifest_paths, &lockfile_paths),
+            Value::Null,
+        ),
+    };
+    merge_sboms(&mut inventory, after_dir, &sbom_paths);
+    let warnings = if include_lockfile_warnings {
+        lockfile_warnings(&mut reader, &workspace, &lockfile_paths)
+    } else {
+        Vec::new()
+    };
+    let items: Vec<Value> = inventory
+        .into_values()
+        .into_iter()
+        .map(Value::Object)
+        .collect();
+    let digest = snapshot_digest(&json!({
+        "manifest_paths": manifest_paths,
+        "lockfile_paths": lockfile_paths,
+        "sbom_paths": sbom_paths,
+        "inventory": items,
+        "diff": diff,
+        "lockfile_warnings": warnings,
+    }))?;
+    Ok(InventorySnapshot {
+        manifest_paths,
+        lockfile_paths,
+        sbom_paths,
+        items,
+        diff,
+        warnings,
+        digest,
+    })
+}
+
 fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, String> {
     let after_dir = request.workspace_dir.as_str();
     let package_target = package_target(request)?;
-    let (manifest_paths, lockfile_paths) = workspace_files(after_dir);
     if request.files_only {
         if request.inventory_offset > 0 {
             return Err(invalid());
         }
+        let (manifest_paths, lockfile_paths) = workspace_files(after_dir);
         let digest = snapshot_digest(&json!({
             "manifest_paths": manifest_paths,
             "lockfile_paths": lockfile_paths,
@@ -350,39 +414,20 @@ fn inventory_payload(request: &WorkspaceInventoryRequestV1) -> Result<Value, Str
             "package_target": package_target,
         }));
     }
-    let sbom_paths = resolve_sbom_paths(after_dir, &request.sbom_paths);
-    let workspace = expanduser(after_dir);
-    let mut reader = DependencyReader::new(&workspace);
-    let (mut inventory, diff) = match request.before_workspace_dir.as_deref() {
-        Some(before_dir) => {
-            let (map, summary) =
-                diff_inventory(before_dir, after_dir, &manifest_paths, &lockfile_paths)?;
-            (map, summary)
-        }
-        None => (
-            inventory_from_paths(&mut reader, &manifest_paths, &lockfile_paths),
-            Value::Null,
-        ),
-    };
-    merge_sboms(&mut inventory, after_dir, &sbom_paths);
-    let warnings = if request.include_lockfile_warnings {
-        lockfile_warnings(&mut reader, &workspace, &lockfile_paths)
-    } else {
-        Vec::new()
-    };
-    let items: Vec<Value> = inventory
-        .into_values()
-        .into_iter()
-        .map(Value::Object)
-        .collect();
-    let digest = snapshot_digest(&json!({
-        "manifest_paths": manifest_paths,
-        "lockfile_paths": lockfile_paths,
-        "sbom_paths": sbom_paths,
-        "inventory": items,
-        "diff": diff,
-        "lockfile_warnings": warnings,
-    }))?;
+    let InventorySnapshot {
+        manifest_paths,
+        lockfile_paths,
+        sbom_paths,
+        items,
+        diff,
+        warnings,
+        digest,
+    } = inventory_snapshot(
+        after_dir,
+        request.before_workspace_dir.as_deref(),
+        &request.sbom_paths,
+        request.include_lockfile_warnings,
+    )?;
     if request.inventory_offset > 0 && request.inventory_digest.as_deref() != Some(digest.as_str())
     {
         return Err(invalid());

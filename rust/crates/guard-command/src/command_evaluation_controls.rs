@@ -45,11 +45,18 @@ pub fn authority_evidence(binding: &NativeCommandControlBindingV1) -> AuthorityE
 pub fn control_layers_from_binding(
     binding: &NativeCommandControlBindingV1,
 ) -> Result<Vec<ExtensionControlLayer>, &'static str> {
-    if binding.layers.len() > 2 {
+    control_layers_from_wire(&binding.layers)
+}
+
+/// Wire layers -> typed layers with structural validation only.
+pub fn control_layers_from_wire(
+    wire_layers: &[guard_contracts::NativeExtensionControlLayerV1],
+) -> Result<Vec<ExtensionControlLayer>, &'static str> {
+    if wire_layers.len() > 2 {
         return Err(ERR_BINDING);
     }
-    let mut layers = Vec::with_capacity(binding.layers.len());
-    for wire in &binding.layers {
+    let mut layers = Vec::with_capacity(wire_layers.len());
+    for wire in wire_layers {
         let kind = match wire.kind.as_str() {
             "local-admin" => ControlLayerKind::LocalAdmin,
             "signed-cloud" => ControlLayerKind::SignedCloud,

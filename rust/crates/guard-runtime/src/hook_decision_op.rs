@@ -3,7 +3,8 @@
 //! The Python hook transport gathers facts and renders host output; this op
 //! owns event and action normalization, composition of the current action,
 //! the lookups it permits, the final action, receipt/activity dispositions and
-//! the response directive. Every query is pure and fails closed: a malformed
+//! the response directive. It also settles Copilot tool calls
+//! (`copilot_settle`). Every query is pure and fails closed: a malformed
 //! request yields a `native_hook_decision_*` error, never a default verdict.
 
 use guard_contracts::{
@@ -14,6 +15,7 @@ use guard_contracts::{
 
 use crate::hook_decision_compose::{compose, Composed};
 use crate::hook_decision_finalize::{finalize, post_claim};
+use crate::hook_decision_settle::settle;
 
 pub(crate) fn evaluate_hook_decision_request(
     request: &HookDecisionRequestV1,
@@ -78,6 +80,16 @@ pub(crate) fn decide(query: &HookDecisionQueryV1) -> Result<HookDecisionPayloadV
                 inputs, &composed, settled,
             )?)))
         }
+        HookDecisionQueryV1::CopilotSettle { inputs } => Ok(match settle(inputs)? {
+            Ok(plan) => HookDecisionPayloadV1::CopilotSettle {
+                needs_facts: Vec::new(),
+                plan: Some(Box::new(plan)),
+            },
+            Err(fact) => HookDecisionPayloadV1::CopilotSettle {
+                needs_facts: vec![fact.to_owned()],
+                plan: None,
+            },
+        }),
     }
 }
 
@@ -111,6 +123,7 @@ fn composition(has_command_text: bool, c: &Composed) -> HookCompositionV1 {
         action_without_tool_grant: after(c.composed).as_str().to_owned(),
         permission_decision_reason: c.permission_reason.clone(),
         daemon_failure_reason: c.daemon_failure_reason.clone(),
+        verified_benign: c.verified_benign,
         token: HookTokenCompositionV1 {
             current_config_action: c.current_config.as_str().to_owned(),
             daemon_hint_disposition: c.daemon_disposition.map(str::to_owned),

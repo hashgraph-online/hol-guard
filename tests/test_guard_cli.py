@@ -5076,7 +5076,7 @@ args = ["-lc", "echo hi"]
         monkeypatch.setattr("codex_plugin_scanner.guard.adapters.codex._command_available", lambda command: True)
         monkeypatch.setattr(
             GuardStore,
-            "get_latest_guard_connect_state",
+            "get_effective_guard_connect_state",
             lambda self, *, now: {
                 "status": "retry_required",
                 "milestone": "first_sync_failed",

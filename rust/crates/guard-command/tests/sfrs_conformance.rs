@@ -83,6 +83,7 @@ fn check_entry(entry: &str) {
     }
     let mut failures = Vec::new();
     let mut compared = 0usize;
+    let mut resident_deferred = 0usize;
     for vector in &vectors {
         if vector.host_dependent {
             continue;
@@ -95,7 +96,24 @@ fn check_entry(entry: &str) {
             &vector.dir,
         )
         .unwrap_or_else(|error| json!({ "replay_error": error }));
-        let expected = vector.expected(&actual);
+        let actual =
+            if actual == json!({ guard_command::sfrs_replay::RESIDENT_HOST_REQUIRED: true }) {
+                // Replay failed closed where the resident would answer. A recorded
+                // null or `false` still has to match; any other result waits for
+                // the resident host.
+                match vector.expected(&Value::Null) {
+                    Value::Null => Value::Null,
+                    Value::Bool(false) => json!(false),
+                    _ => {
+                        resident_deferred += 1;
+                        continue;
+                    }
+                }
+            } else {
+                actual
+            };
+        let expected = normalize_identities(&vector.expected(&actual));
+        let actual = normalize_identities(&actual);
         compared += 1;
         if actual != expected {
             failures.push(format!(
@@ -105,6 +123,10 @@ fn check_entry(entry: &str) {
         }
     }
     assert!(compared > 0, "{entry}: every vector was skipped");
+    assert!(
+        resident_deferred * 5 <= compared,
+        "{entry}: {resident_deferred} resident-backed vectors deferred against {compared} compared"
+    );
     if let Some(dir) = std::env::var_os("SFRS_FAILURE_DIR") {
         let _ = fs::write(
             Path::new(&dir).join(format!("{entry}.txt")),
@@ -122,6 +144,43 @@ fn check_entry(entry: &str) {
             .collect::<Vec<_>>()
             .join("\n")
     );
+}
+
+/// Replace filesystem identities with first-seen ordinals.
+///
+/// Device, inode and timestamps differ on every materialization, so the
+/// comparison proves that identities keep their file type and are shared by
+/// the same positions rather than matching the recorded numbers.
+fn normalize_identities(value: &Value) -> Value {
+    fn walk(value: &Value, seen: &mut Vec<Value>) -> Value {
+        match value {
+            Value::Object(map) if map.get("$type") == Some(&json!("ShellPathIdentity")) => {
+                let key = json!([
+                    map.get("device"),
+                    map.get("inode"),
+                    map.get("change_time_ns")
+                ]);
+                let ordinal = seen
+                    .iter()
+                    .position(|item| *item == key)
+                    .unwrap_or_else(|| {
+                        seen.push(key);
+                        seen.len() - 1
+                    });
+                json!({ "$type": "ShellPathIdentity", "mode": map.get("mode"), "ordinal": ordinal })
+            }
+            Value::Object(map) => Value::Object(
+                map.iter()
+                    .map(|(key, item)| (key.clone(), walk(item, seen)))
+                    .collect(),
+            ),
+            Value::Array(items) => {
+                Value::Array(items.iter().map(|item| walk(item, seen)).collect())
+            }
+            other => other.clone(),
+        }
+    }
+    walk(value, &mut Vec::new())
 }
 
 #[test]

@@ -8,12 +8,12 @@
 
 use std::collections::BTreeMap;
 
-use guard_command::{review_codex_tool_output, Ctx, GitCheck, GitRun, InspectionHost};
+use guard_command::{review_codex_tool_output, Ctx, GitCheck, GitProbe, GitRun, InspectionHost};
 use guard_contracts::{
     CodexToolOutputActionV1, CodexToolOutputFactsV1, CodexToolOutputRequestV1,
-    CodexToolOutputResultV1, GitExecutionSafetyCheckV1, GitExecutionSafetyRequestV1,
-    CODEX_TOOL_OUTPUT_MAX_BYTES, CODEX_TOOL_OUTPUT_REQUEST_SCHEMA, CODEX_TOOL_OUTPUT_RESULT_SCHEMA,
-    GIT_EXECUTION_SAFETY_REQUEST_SCHEMA,
+    CodexToolOutputResultV1, CompoundGitSegmentV1, GitExecutionSafetyCheckV1,
+    GitExecutionSafetyRequestV1, CODEX_TOOL_OUTPUT_MAX_BYTES, CODEX_TOOL_OUTPUT_REQUEST_SCHEMA,
+    CODEX_TOOL_OUTPUT_RESULT_SCHEMA, GIT_EXECUTION_SAFETY_REQUEST_SCHEMA,
 };
 use guard_policy_snapshot::digest_bytes;
 
@@ -27,8 +27,8 @@ const MAX_COMMANDS: usize = 256;
 const MAX_ENVIRONMENT: usize = 128;
 const MAX_GROUPS: usize = 256;
 
-struct ResidentInspectionHost<'a> {
-    facts: &'a CodexToolOutputFactsV1,
+pub(crate) struct ResidentInspectionHost<'a> {
+    pub(crate) facts: &'a CodexToolOutputFactsV1,
 }
 
 impl ResidentInspectionHost<'_> {
@@ -38,6 +38,17 @@ impl ResidentInspectionHost<'_> {
         cwd: Option<&str>,
         arguments: &[String],
         git_path: Option<&str>,
+    ) -> bool {
+        self.git_request_allowed(check, cwd, arguments, git_path, None)
+    }
+
+    pub(crate) fn git_request_allowed(
+        &self,
+        check: GitExecutionSafetyCheckV1,
+        cwd: Option<&str>,
+        arguments: &[String],
+        git_path: Option<&str>,
+        reference: Option<&str>,
     ) -> bool {
         let request = GitExecutionSafetyRequestV1 {
             schema: GIT_EXECUTION_SAFETY_REQUEST_SCHEMA.to_owned(),
@@ -52,7 +63,7 @@ impl ResidentInspectionHost<'_> {
             git_path: git_path.map(str::to_owned),
             arguments: arguments.to_vec(),
             branch: None,
-            reference: None,
+            reference: reference.map(str::to_owned),
         };
         crate::git_execution_safety_checks::decide(&request).allowed
     }
@@ -61,6 +72,14 @@ impl ResidentInspectionHost<'_> {
 impl InspectionHost for ResidentInspectionHost<'_> {
     fn env(&self, name: &str) -> Option<String> {
         self.facts.environment.get(name).cloned()
+    }
+
+    fn environment(&self) -> Vec<(String, String)> {
+        self.facts
+            .environment
+            .iter()
+            .map(|(name, value)| (name.clone(), value.clone()))
+            .collect()
     }
 
     fn git_executable(&self) -> Option<String> {
@@ -88,6 +107,71 @@ impl InspectionHost for ResidentInspectionHost<'_> {
 
     fn run_git(&self, git: &str, args: &[String], cwd: &str) -> GitRun {
         run_pathspec_git(git, args, cwd, &self.facts.environment)
+    }
+
+    fn compound_git_chain(&self, segments: &[CompoundGitSegmentV1], complete: bool) -> bool {
+        self.svc_compound_chain(segments, complete)
+    }
+
+    fn git_inspection_segment(
+        &self,
+        segment: &CompoundGitSegmentV1,
+        home_dir: Option<&str>,
+    ) -> bool {
+        self.svc_inspection_segment(segment, home_dir)
+    }
+
+    fn cached_diff_pathspecs(&self, values: &[String]) -> bool {
+        self.svc_cached_diff_pathspecs(values)
+    }
+
+    fn git_show_config(
+        &self,
+        segment: &CompoundGitSegmentV1,
+        repository_path: Option<&str>,
+    ) -> bool {
+        self.svc_show_config(segment, repository_path)
+    }
+
+    fn git_log_execution_free_config(&self, cwd: &str, git: &str) -> bool {
+        self.svc_log_config(cwd, git)
+    }
+
+    fn standalone_git_routine(
+        &self,
+        segments: &[CompoundGitSegmentV1],
+        complete: bool,
+        home_dir: Option<&str>,
+    ) -> bool {
+        self.svc_standalone_routine(segments, complete, home_dir)
+    }
+
+    fn trusted_path_command(&self, command: &str, cwd: &str, home_dir: &str) -> bool {
+        self.svc_trusted_path_command(command, cwd, home_dir)
+    }
+
+    fn trusted_git_binary(&self, cwd: &str) -> Option<String> {
+        self.svc_trusted_git(cwd)
+    }
+
+    fn git_probe(&self, git: &str, args: &[String], cwd: &str) -> Option<GitProbe> {
+        self.svc_probe(git, args, cwd)
+    }
+
+    fn git_worktree_add_config(&self, git: &str, cwd: &str, reference: &str) -> bool {
+        self.svc_worktree_add_config(git, cwd, reference)
+    }
+
+    fn git_lfs_trusted(&self, cwd: &str) -> bool {
+        self.svc_trusted_path_command("git-lfs", cwd, &self.facts.home)
+    }
+
+    fn home_git_c_path(&self, command: &str) -> Option<String> {
+        self.svc_home_git_c_path(command)
+    }
+
+    fn git_object_existence_query(&self, command: &str, cwd: &str) -> bool {
+        self.svc_object_existence(command, cwd)
     }
 }
 

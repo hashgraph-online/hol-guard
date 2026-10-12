@@ -175,49 +175,62 @@ def run_native_hook_pipeline(
         fresh_artifact, fresh_artifact_hash, fresh_arguments = fresh_tool_call
         return fresh_config, fresh_artifact, fresh_artifact_hash, fresh_arguments
 
-    result = run_native_copilot_pretool(
-        args,
-        action_envelope=action_envelope,
-        config=config,
-        context=context,
-        copilot_hook_stage=copilot_hook_stage,
-        copilot_runtime_tool_call=copilot_runtime_tool_call,
-        output_stream=output_stream,
-        payload=payload,
-        runtime_workspace=runtime_workspace,
-        store=store,
-        fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
-        native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
-    )
-    if result is not None:
-        return result
-    copilot_permission_request = (
-        _copilot_runtime_tool_call(
-            payload=payload,
-            home_dir=context.home_dir,
-            workspace=runtime_workspace,
+    try:
+        result = run_native_copilot_pretool(
+            args,
+            action_envelope=action_envelope,
             config=config,
-            preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            context=context,
+            copilot_hook_stage=copilot_hook_stage,
+            copilot_runtime_tool_call=copilot_runtime_tool_call,
+            output_stream=output_stream,
+            payload=payload,
+            runtime_workspace=runtime_workspace,
+            store=store,
+            fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
+            native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
         )
-        if args.harness == "copilot" and _is_copilot_permission_request(payload)
-        else None
-    )
-    result = run_native_copilot_permission_request(
-        args,
-        action_envelope=action_envelope,
-        config=config,
-        context=context,
-        copilot_permission_request=copilot_permission_request,
-        guard_home=context.guard_home,
-        managed_install=managed_install,
-        output_stream=output_stream,
-        payload=payload,
-        runtime_workspace=runtime_workspace,
-        store=store,
-        fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
-    )
-    if result is not None:
-        return result
+        if result is not None:
+            return result
+        copilot_permission_request = (
+            _copilot_runtime_tool_call(
+                payload=payload,
+                home_dir=context.home_dir,
+                workspace=runtime_workspace,
+                config=config,
+                preferred_workspace_config="ide" if workspace_was_explicit else "cli",
+            )
+            if args.harness == "copilot" and _is_copilot_permission_request(payload)
+            else None
+        )
+        result = run_native_copilot_permission_request(
+            args,
+            action_envelope=action_envelope,
+            config=config,
+            context=context,
+            copilot_permission_request=copilot_permission_request,
+            guard_home=context.guard_home,
+            managed_install=managed_install,
+            output_stream=output_stream,
+            payload=payload,
+            runtime_workspace=runtime_workspace,
+            store=store,
+            fresh_tool_call_authority_provider=fresh_copilot_tool_call_authority,
+        )
+        if result is not None:
+            return result
+    except NativeHookDecisionError as error:
+        # Same outage shape as the generic path, keeping the resident's reason code.
+        return _emit_native_unavailable(
+            args,
+            payload=payload,
+            workspace=runtime_workspace,
+            context=context,
+            event_name=event_name,
+            reason_code=error.code,
+            worker=worker,
+            recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
+        )
     data_flow_signals = _runtime_action_data_flow_signals(
         action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
     )
