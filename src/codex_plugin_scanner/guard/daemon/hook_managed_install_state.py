@@ -20,6 +20,8 @@ _PROTECTED_ANSWER_TTL_SECONDS = 1.0
 _MAX_REMEMBERED_ANSWERS = 256
 _lock = threading.Lock()
 _protected_until: dict[tuple[str, str], tuple[int, float]] = {}
+_refresh_locks: dict[tuple[str, str], threading.Lock] = {}
+_REFRESH_WAIT_SECONDS = 0.5
 
 
 @lru_cache(maxsize=128)
@@ -52,6 +54,16 @@ def _remember_protected(key: tuple[str, str], revision: int) -> None:
         _protected_until[key] = (revision, time.monotonic() + _PROTECTED_ANSWER_TTL_SECONDS)
 
 
+def _refresh_lock_for(key: tuple[str, str]) -> threading.Lock:
+    with _lock:
+        refresh_lock = _refresh_locks.get(key)
+        if refresh_lock is None:
+            if len(_refresh_locks) >= _MAX_REMEMBERED_ANSWERS:
+                _refresh_locks.clear()
+            refresh_lock = _refresh_locks[key] = threading.Lock()
+        return refresh_lock
+
+
 def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
     """True when leftover hooks belong to an app Guard is not currently protecting."""
 
@@ -64,8 +76,31 @@ def _hook_harness_is_unmanaged(daemon_server: Any, harness: str) -> bool:
     canonical = _canonical_managed_harness(harness)
     store_path = getattr(store, "path", None)
     key = (str(store_path), canonical) if store_path is not None else None
-    if key is not None and _remembered_protected(key):
+    if key is None:
+        return _read_harness_is_unmanaged(store, getter, canonical, key)
+    if _remembered_protected(key):
         return False
+    # When the remembered answer expires every concurrent hook misses at once.
+    # One of them re-reads the store; the others wait for it and reuse the
+    # protected answer it remembers. An unmanaged answer is never remembered, so
+    # waiters that do not find one still read the store themselves.
+    refresh_lock = _refresh_lock_for(key)
+    acquired = refresh_lock.acquire(timeout=_REFRESH_WAIT_SECONDS)
+    try:
+        if acquired and _remembered_protected(key):
+            return False
+        return _read_harness_is_unmanaged(store, getter, canonical, key)
+    finally:
+        if acquired:
+            refresh_lock.release()
+
+
+def _read_harness_is_unmanaged(
+    store: Any,
+    getter: Any,
+    canonical: str,
+    key: tuple[str, str] | None,
+) -> bool:
     # Read the revision before the store so a concurrent write is never missed.
     revision = current_managed_install_revision()
     try:
